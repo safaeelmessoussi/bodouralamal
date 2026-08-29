@@ -120,6 +120,11 @@ deliberately does not publish its port. An overlay does:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
+The overlay also replaces the release HTTP server, which is permanently ACME-only plus an
+HTTPS redirect, with `nginx/dev/default.conf`. This is the only tier that serves the
+application directly over HTTP, and only on localhost; no runtime environment flag can
+weaken a release host into that mode.
+
 Two deliberate choices in that file:
 
 **It is not named `docker-compose.override.yml`**, precisely so Compose **cannot merge it

@@ -16,10 +16,12 @@ git clone <repository-url> && cd bodouralamal
 cp .env.example .env            # every Required value must be filled
 cp infra.env.example infra.env  # the Postgres password — must match DATABASE_URL
 
-docker compose up -d db minio
-docker compose run --rm api npx prisma migrate deploy
-docker compose run --rm api npm run seed:production
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db minio
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  run --rm api npx prisma migrate deploy
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  run --rm api npm run seed:production
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 curl http://localhost/healthz   # expect 200, all components green
 ```
@@ -27,7 +29,8 @@ curl http://localhost/healthz   # expect 200, all components green
 Then load development fixtures so there is something to look at:
 
 ```bash
-docker compose run --rm api npm run seed:fixtures
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  run --rm api npm run seed:fixtures
 ```
 
 Fixtures **refuse to run when `NODE_ENV=production`** — the same guard is the data-residency

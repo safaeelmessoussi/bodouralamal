@@ -175,10 +175,12 @@ git clone <repository-url> && cd bodouralamal
 cp .env.example .env             # fill every Required value
 cp infra.env.example infra.env   # the database password
 
-docker compose up -d db minio
-docker compose run --rm api npx prisma migrate deploy
-docker compose run --rm api npm run seed:production
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db minio
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  run --rm api npx prisma migrate deploy
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  run --rm api npm run seed:production
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 curl http://localhost/healthz    # expect 200, all components green
 ```

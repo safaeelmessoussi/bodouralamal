@@ -64,6 +64,14 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   --profile production up --no-build -d      # api, nginx, certbot
 
+#    FIRST DEPLOYMENT ONLY: issue the certificate through the live ACME path.
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  run --rm --entrypoint certbot certbot certonly \
+  --webroot -w /var/www/certbot -d <domain>
+
+#    Every deployment: generate/reconcile the ignored host-specific TLS block.
+bash scripts/deploy/enable-tls.sh <domain> production
+
 # 8  Verify
 curl https://<domain>/healthz                # 200, all components green
 
@@ -254,7 +262,7 @@ Three committed pieces make the Staging host reproducible from Git, and none hol
 |---|---|
 | `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
 | `docker-compose.staging.yml` | Hard container memory ceilings for a small VPS, on top of the soft budgets the base file already sets. It publishes no port, relaxes no limit and substitutes no security setting — an overlay that changed behaviour would be changing the very thing Staging exists to rehearse |
-| `scripts/deploy/enable-tls.sh` | Performs `tls.conf.example`'s manual steps 1–3 **idempotently**, refuses to run before the certificate exists, keeps the ACME location above the redirect, and recreates Nginx through the same exact-release plus environment overlays |
+| `scripts/deploy/enable-tls.sh` | Generates only the ignored host-specific TLS block, refuses to run before the certificate exists, and recreates Nginx through the same exact-release plus environment overlays; the committed release HTTP block already preserves ACME and redirects everything else |
 
 ```bash
 BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
@@ -262,12 +270,12 @@ BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
   -f docker-compose.staging.yml --profile production up --no-build -d
 ```
 
-`scripts/deploy/enable-tls.sh` exists because those steps were manual, un-rerunnable, and
-asked an operator to hand-edit a tracked file during the one window where the site is
-already public. Activating the TLS block **before** the certificate exists is worse than it
-sounds: `ssl_certificate` pointing at a missing file is a hard config error, so Nginx does
-not start at all. The script checks first. Invoke it with the environment tier while the
-pipeline's `BODOUR_RELEASE_TAG` remains exported:
+`scripts/deploy/enable-tls.sh` exists because activation was manual and un-rerunnable.
+Release HTTP now always serves ACME and redirects every other request to HTTPS; Local
+Development substitutes its HTTP application server only through `docker-compose.dev.yml`.
+The script therefore writes no tracked file. Activating the TLS block **before** the
+certificate exists is still a hard config error, so the script checks first. Invoke it with
+the environment tier while the pipeline's `BODOUR_RELEASE_TAG` remains exported:
 
 ```bash
 bash scripts/deploy/enable-tls.sh <domain> staging     # Staging host

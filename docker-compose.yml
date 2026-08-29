@@ -1,5 +1,5 @@
 # بذور الأمل platform — full stack (SRS §3.1, §16.1, §19.0/§19.1, TD-13).
-# Dev:        docker compose up -d            (certbot excluded via profile)
+# Dev:        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 # Production: use docker-compose.release.yml and --no-build (§19.1; see deployment runbook)
 #
 # App runtime config comes from .env (TD-13 inventory; cp .env.example .env).

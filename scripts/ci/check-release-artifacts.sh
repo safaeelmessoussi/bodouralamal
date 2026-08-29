@@ -10,6 +10,9 @@ workflow="$repo_root/.github/workflows/ci.yml"
 release="$repo_root/docker-compose.release.yml"
 deployment="$repo_root/docs/operations/deployment.md"
 tls_activation="$repo_root/scripts/deploy/enable-tls.sh"
+release_http="$repo_root/nginx/conf.d/default.conf"
+development_http="$repo_root/nginx/dev/default.conf"
+development_compose="$repo_root/docker-compose.dev.yml"
 
 fail() {
   printf 'release-artifacts guard: %s\n' "$1" >&2
@@ -58,5 +61,15 @@ grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.releas
   fail 'TLS activation must retain the Staging resource overlay'
 grep -Fq '"${compose[@]}" up --no-build -d --force-recreate --no-deps nginx' "$tls_activation" ||
   fail 'TLS activation must not rebuild or replace the exact web artifact'
+grep -Fq 'return 301 https://$host$request_uri;' "$release_http" ||
+  fail 'release HTTP must fail closed to HTTPS outside the ACME path'
+grep -Fq 'include /etc/nginx/snippets/app-routing.conf;' "$development_http" ||
+  fail 'Local Development must retain an explicit HTTP application route'
+grep -Fq './nginx/dev/default.conf:/etc/nginx/conf.d/default.conf:ro' "$development_compose" ||
+  fail 'the Local Development HTTP exception must exist only in its overlay'
+if grep -Fq 'nginx/conf.d/default.conf <<' "$tls_activation" ||
+  grep -Fq '> nginx/conf.d/default.conf' "$tls_activation"; then
+  fail 'TLS activation must not dirty the tracked deployment checkout'
+fi
 
 printf 'release-artifacts guard: exact-commit publication and no-build deployment verified\n'
