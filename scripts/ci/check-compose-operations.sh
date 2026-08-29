@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 compose="$repo_root/docker-compose.yml"
+deployment="$repo_root/docs/operations/deployment.md"
 
 fail() {
   printf 'compose-operations guard: %s\n' "$1" >&2
@@ -33,4 +34,9 @@ logging_count="$(grep -Ec '^    logging: \*bounded-local-logging$' "$compose")"
 [[ "$logging_count" -eq "$service_count" ]] ||
   fail "every base service must use bounded logging ($logging_count/$service_count do)"
 
-printf 'compose-operations guard: bounded logging covers all %s base services\n' "$service_count"
+grep -Fq 'test: ["CMD", "curl", "-fsS", "--max-time", "12", "http://127.0.0.1:3000/healthz"]' "$compose" ||
+  fail 'the API container must report whole-application readiness to Docker'
+grep -Fq 'curl --fail-with-body --silent --show-error --max-time 15 https://<domain>/healthz' "$deployment" ||
+  fail 'the deployment health probe must fail on HTTP 503 and bound its wait'
+
+printf 'compose-operations guard: bounded logs cover %s services and deployment health fails closed\n' "$service_count"

@@ -23,7 +23,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
   run --rm api npm run seed:production
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-curl http://localhost/healthz   # expect 200, all components green
+curl --fail-with-body --silent --show-error --max-time 15 http://localhost/healthz
 ```
 
 Then load development fixtures so there is something to look at:

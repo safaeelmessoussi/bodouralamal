@@ -1295,6 +1295,9 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
+  DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
+  command failure with a bounded timeout; a running Node process is not called ready.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts

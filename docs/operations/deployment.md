@@ -80,7 +80,9 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 bash scripts/deploy/enable-tls.sh <domain> production
 
 # 8  Verify
-curl https://<domain>/healthz                # 200, all components green
+curl --fail-with-body --silent --show-error --max-time 15 https://<domain>/healthz
+#    Any non-200 response, including a truthful 503 from a dependency/worker
+#    failure, stops the deployment verification instead of looking successful.
 
 # 9  The Super Admin performs their first Google login
 #    (the identity binds to the pre-provisioned account)

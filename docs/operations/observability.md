@@ -31,6 +31,12 @@ It checks:
 Returns `200`, or **`503` with per-component detail** so a failure names which dependency is
 down rather than reporting a generic outage.
 
+The API container runs this same whole-application probe as its Docker healthcheck. Database
+or storage failure, missing queue infrastructure, incomplete worker registration and stale
+workers therefore appear as `unhealthy` in `docker compose ps`; process liveness alone is not
+reported as readiness. Deployment uses curl's fail-on-HTTP-error mode with a 15-second ceiling,
+so the endpoint's truthful `503` cannot be mistaken for a successful verification command.
+
 The existing `components.database`, `components.storage`, and `components.jobs` fields remain
 stable. `components.queue` separates infrastructure from workers, while `details.jobs` gives a
 machine-readable reason and expected/registered/active counts. In particular,

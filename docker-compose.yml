@@ -39,6 +39,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    healthcheck:
+      # `/healthz` is green only when DB, storage, queue infrastructure and the
+      # complete live worker catalogue are ready. The runtime image carries curl.
+      test: ["CMD", "curl", "-fsS", "--max-time", "12", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 13s
+      retries: 4
+      start_period: 30s
     logging: *bounded-local-logging
     restart: unless-stopped
 

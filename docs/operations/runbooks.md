@@ -287,7 +287,7 @@ FROM claims GROUP BY email HAVING count(DISTINCT user_id) > 1;'
 docker compose run --rm api npx prisma migrate deploy
 
 # 4  Verify
-curl https://<domain>/healthz
+curl --fail-with-body --silent --show-error --max-time 15 https://<domain>/healthz
 ```
 
 If step 2a returns rows, **stop**. The migration will refuse the same state, deliberately.

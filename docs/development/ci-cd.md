@@ -41,7 +41,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
 | `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
-| `check-compose-operations.sh` | Any base-Compose service falling back to Docker's unbounded default logging driver, or drift in the shared size/file ceilings |
+| `check-compose-operations.sh` | Any base-Compose service falling back to unbounded logs; drift in the shared ceilings; or loss of whole-application Docker/deployment health probes |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |

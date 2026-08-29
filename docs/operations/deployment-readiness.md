@@ -46,6 +46,7 @@ Staging and current `develop` are different facts:
 | **IMPLEMENTED — AWAITS FIRST CI PUBLICATION** | Deployable images previously did not exist | CI now publishes API and web images only after all four existing jobs pass, tagged by the exact 40-character commit; the release overlay refuses an absent tag and deployment uses `--no-build` |
 | **IMPLEMENTED** | The checked-in environment template defaults to Development | Explicit Production/Staging overlays force the intended runtime tier; boot refuses non-HTTPS external and non-canonical/cross-origin storage URLs |
 | **IMPLEMENTED** | Docker's default container log driver is unbounded | Every base service resolves to one bounded local-log policy (10 MB × 5); a coverage guard fails when a service omits it |
+| **IMPLEMENTED** | Process liveness and a plain `curl` could look green while the platform was degraded | The API container healthcheck uses whole-application `/healthz`; deployment fails on non-200 responses and bounds the probe to 15 seconds |
 
 ## BLOCKS REAL USERS
 
