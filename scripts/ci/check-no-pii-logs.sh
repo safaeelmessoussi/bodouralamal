@@ -71,6 +71,14 @@ require 'contentSha256 === null' backend/src/services/content.service.ts \
 # grep prose: a comment explaining the forbidden form must not fail the guard.
 if ! (
   cd backend
+  node --input-type=module -e "await import('typescript')" >/dev/null 2>&1
+); then
+  echo 'ERROR: check-no-pii-logs.sh requires locked backend dependencies.' >&2
+  echo 'Run npm ci in backend before this syntax-aware guard.' >&2
+  exit 1
+fi
+if ! (
+  cd backend
   node --input-type=module <<'NODE'
 import fs from 'node:fs';
 import path from 'node:path';

@@ -51,8 +51,6 @@ jobs:
         run: bash scripts/ci/check-shared-layout.sh
       - name: Every Nginx header set carries HSTS
         run: bash scripts/ci/check-security-headers.sh
-      - name: Operational and audit logs contain no caller-supplied PII
-        run: bash scripts/ci/check-no-pii-logs.sh
       - name: The hero logo is a cleanly matted cut-out
         run: bash scripts/ci/check-logo-alpha.sh
       # Guards are protection only if they can fail. Three shipped depending on
@@ -155,6 +153,12 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      # The no-PII guard parses Production TypeScript with the compiler API so
+      # comments/examples cannot trigger false positives. Run it only after the
+      # locked backend dependencies exist; the dependency-free guard job cannot
+      # supply that parser on a clean checkout.
+      - name: Operational and audit logs contain no caller-supplied PII
+        run: bash ../scripts/ci/check-no-pii-logs.sh
       # **`prisma generate` is a BUILD STEP, not a developer convenience.**
       # `src/generated/prisma/**` is gitignored, so on a clean checkout it does
       # not exist and every file importing the client fails to typecheck —

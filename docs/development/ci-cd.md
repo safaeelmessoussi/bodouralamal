@@ -7,18 +7,20 @@ every pull request. A sixth release job runs only after all five succeed on a pu
 `develop`.
 
 ```
-guards      twenty-eight dependency-free guard scripts — mechanically checkable repository rules
+guards      twenty-seven dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
-backend     lint · exact typecheck · default tests · production build
+backend     syntax-aware no-PII guard · lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
 integration fresh PostgreSQL · MinIO · pg-boss · Nginx · all integration/API tests · isolation
 release     exact-commit API + web images → GHCR (develop push only, after all five pass)
 ```
 
-The contract job runs the remaining two guard scripts, so **all thirty committed
-`scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
-operate on the generated OpenAPI artifact and that job already installs the backend
-dependencies needed to regenerate it.
+The contract job runs the two OpenAPI-backed scripts and the backend job runs the remaining
+syntax-aware no-PII script, so **all thirty committed `scripts/ci/check-*.sh` checks execute in
+CI**. `check-no-pii-logs.sh` deliberately uses the TypeScript compiler API to distinguish
+executable direct `AuditLog` writes from comments and examples; it therefore runs after the
+backend's locked `npm ci`, never in the dependency-free guard job. The portability guard pins
+that placement so a warm Local `node_modules` cannot hide clean-checkout failure again.
 
 ## The guards
 

@@ -1161,6 +1161,10 @@ behavior-only test cannot observe the loaded Nginx format, while a source-only
 guard cannot prove the redaction code actually handles hostile values.
 The direct-write rule was mutation-tested with an otherwise unreachable
 `prisma.auditLog.create`: the guard named the exact service line and failed.
+Because that final check parses TypeScript rather than grepping comments, CI
+runs it after the backend's locked dependency install. `check-ci-portability.sh`
+refuses either moving it back into the dependency-free job or placing it before
+`npm ci`; this closes the clean-checkout failure that a warm Local install hid.
 
 ### An integration run must leave the database it found
 

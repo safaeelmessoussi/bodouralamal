@@ -1303,7 +1303,12 @@ was hiding behind it: the run went green on the first attempt.
   active assertions but correctly failed on a leaked normalized-email lock and an inexact
   scheduling-order restore; both fixtures now clean only their exact owned coordinates, and
   focused disposable reruns are isolation-clean. The final complete disposable rerun passed
-  **1887/1887 active assertions** with an identical all-table logical snapshot.
+  **1887/1887 active assertions** with an identical all-table logical snapshot. Hosted CI then
+  exposed a pre-existing clean-checkout mismatch: the syntax-aware no-PII guard needs the
+  TypeScript compiler but had been placed in the dependency-free job. It now runs after the
+  backend's locked install, with a portability guard pinning that exact boundary.
+  The first hosted disposable integration job itself completed successfully; its workflow was
+  red only because this older guard-placement defect skipped the release job.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
   command failure with a bounded timeout; a running Node process is not called ready.

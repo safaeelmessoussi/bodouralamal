@@ -29,6 +29,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ci_dir="$repo_root/scripts/ci"
+workflow="$repo_root/.github/workflows/ci.yml"
 
 # Tools that are NOT part of a base POSIX/coreutils environment and whose
 # absence would be swallowed by a pipeline condition.
@@ -47,4 +48,29 @@ if [[ -n "$offenders" ]]; then
   exit 1
 fi
 
-printf 'ci-portability guard: every CI guard searches with POSIX grep\n'
+# `check-no-pii-logs.sh` deliberately uses the TypeScript compiler API to
+# distinguish executable property access from comments and generated examples.
+# That is stronger than grep, but it also means the guard is NOT dependency
+# free. Pin its placement after the backend job's locked install so a warm Local
+# node_modules can never hide another clean-checkout failure.
+if awk '
+  /^  guards:/ { inside = 1 }
+  /^  contract:/ { inside = 0 }
+  inside && /check-no-pii-logs\.sh/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$workflow"; then
+  echo 'ci-portability guard: the TypeScript-backed no-PII guard cannot run in the dependency-free job.' >&2
+  exit 1
+fi
+if ! awk '
+  /^  backend:/ { inside = 1 }
+  /^  integration:/ { inside = 0 }
+  inside && /run: npm ci/ { installed = 1 }
+  inside && /run: bash \.\.\/scripts\/ci\/check-no-pii-logs\.sh/ && installed { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$workflow"; then
+  echo 'ci-portability guard: the syntax-aware no-PII guard must run after backend npm ci.' >&2
+  exit 1
+fi
+
+printf 'ci-portability guard: dependency-free searches are portable and the TypeScript guard follows npm ci\n'
