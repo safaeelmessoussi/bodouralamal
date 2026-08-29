@@ -48,7 +48,7 @@ export class InvalidEnvValueError extends Error {
   }
 }
 
-// NODE_ENV: TD-13 lists production | development; `test` is accepted as a
+// NODE_ENV: TD-13 lists production | development | test. `test` is the
 // non-production value for the §19.2 test runners (the §15.2 fixture guard
 // checks NODE_ENV != production, which `test` satisfies).
 /**

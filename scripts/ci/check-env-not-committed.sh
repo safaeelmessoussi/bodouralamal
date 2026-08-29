@@ -11,4 +11,19 @@ if [[ -n "$violations" ]]; then
   echo "$violations"
   exit 1
 fi
-echo "OK: no .env files committed."
+
+template=.env.example
+grep -Fq 'production | development | test' "$template" || {
+  echo "FAIL: .env.example does not enumerate every TD-13 NODE_ENV value." >&2
+  exit 1
+}
+grep -Fq 'It never changes error detail or' "$template" || {
+  echo "FAIL: .env.example lost Revision 104's environment-independent error boundary." >&2
+  exit 1
+}
+if grep -Fq 'controls the fixture guard (§15.2) and error' "$template"; then
+  echo "FAIL: .env.example still claims NODE_ENV changes error verbosity." >&2
+  exit 1
+fi
+
+echo "OK: no .env files committed; tracked template matches TD-13 / Revision 104."

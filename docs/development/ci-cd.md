@@ -26,7 +26,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 
 | Guard | Fails on |
 |---|---|
-| `check-env-not-committed.sh` | An `.env` file committed |
+| `check-env-not-committed.sh` | An `.env` file committed, or the tracked template dropping a `NODE_ENV` value / falsely claiming environment-dependent error detail |
 | `check-no-db-push.sh` | `prisma db push` appearing anywhere — it bypasses the migration history and **silently drops hand-written SQL** |
 | `check-migrations.sh` | Hand-written migration SQL missing from the history |
 | `check-migration-drop-rename.sh` | A `DROP`/`RENAME` without a contract-phase justification, flagged for human review |

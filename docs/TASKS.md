@@ -1303,7 +1303,8 @@ was hiding behind it: the run went green on the first attempt.
   `NODE_ENV=production` while Staging structurally remains fixture-permitting; boot rejects
   non-canonical/cross-origin storage routing, non-HTTPS external origins, and reuse of one
   signing key for access and onboarding tokens. The checked-in Development default can no
-  longer silently become the Production runtime tier.
+  longer silently become the Production runtime tier; its `NODE_ENV` guidance enumerates all
+  three TD-13 values and explicitly preserves Revision 104's uniform error boundary.
 - [x] **Exact-commit release artifacts** — after all four existing CI jobs pass on a
   `develop` push, CI publishes API and environment-independent web images to GHCR under the
   immutable 40-character commit tag and revision label. Staging/Production select both
