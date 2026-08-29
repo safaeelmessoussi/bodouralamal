@@ -115,6 +115,14 @@ const DAILY_AT_0330 = '30 3 * * *';
 const PG_BOSS_MAX_CONNECTIONS = 5;
 
 /**
+ * Docker grants the API 120 seconds (`stop_grace_period`). Stop accepting new
+ * work immediately, then give pg-boss most of that window to finish an active
+ * handler or durably return it to retry. The remaining 15 seconds belong to
+ * HTTP close, database-pool disconnect and process exit.
+ */
+export const JOB_SHUTDOWN_TIMEOUT_MS = 105_000;
+
+/**
  * TD-7 retry policy: exponential backoff, **max 5 attempts**, then dead-letter
  * with an Admin-visible failure. In pg-boss 12 this is a per-QUEUE option, not
  * a constructor one, so it is applied at `createQueue` for every queue.
@@ -439,7 +447,10 @@ export async function stopJobRunner(
   // Let in-flight handlers finish rather than severing them mid-transaction.
   readiness.stopping();
   try {
-    await boss.stop({ graceful: true });
+    await boss.stop({
+      graceful: true,
+      timeout: JOB_SHUTDOWN_TIMEOUT_MS,
+    });
   } finally {
     readiness.stopped();
   }

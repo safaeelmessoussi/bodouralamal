@@ -74,6 +74,16 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
   -out "$cert_dir/fullchain.pem" >/dev/null 2>&1
 
 "${compose[@]}" config --quiet
+stop_grace="$("${compose[@]}" config --format json | node -e '
+  let source = "";
+  process.stdin.on("data", (chunk) => { source += chunk; });
+  process.stdin.on("end", () => {
+    const config = JSON.parse(source);
+    process.stdout.write(String(config.services?.api?.stop_grace_period ?? ""));
+  });
+')"
+[[ "$stop_grace" == '2m0s' ]] ||
+  fail "the API stop grace period is not 2 minutes (found ${stop_grace:-<empty>})"
 "${compose[@]}" build api nginx
 "${compose[@]}" up --no-build -d --wait db minio
 "${compose[@]}" run --rm --no-deps minio-init

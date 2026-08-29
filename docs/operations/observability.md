@@ -147,10 +147,12 @@ A **log audit** is an explicit item on the deployment checklist.
 `LOG_LEVEL` defaults to `info`. **`debug` is prohibited in production**, where it would
 otherwise be the fastest route to the rule above being violated.
 
-## What is alerted
+## Required alerts — not implemented yet
 
-There is no alerting infrastructure. Failures surface where the people who can act on them
-will see them:
+There is currently **no Admin-visible operational-alert surface**. Terminal pg-boss rows remain
+durable and diagnosable through the SQL/log runbook, but the application does not project them,
+queue lag, backup failure, or certificate expiry onto the Admin dashboard. The table below is the
+binding TD-14/TD-16 target, not a description of current behaviour:
 
 | Condition | Surfaces as |
 |---|---|
@@ -161,6 +163,13 @@ will see them:
 
 **Backup failure is treated as critical** because running without offsite backup is *"an
 accepted emergency state measured in days, not weeks."*
+
+> **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require the
+> dashboard outcomes above, but TD-3 defines no operational-alert read, and the existing
+> `Notification` entity is deliberately restricted by Revisions 77–93 to targeted Session,
+> Event and Exam facts. Specify the smallest route/DTO and whether operational alarms use a new
+> entity or a derived read. Engineering must not smuggle platform-wide security/backup state into
+> a person's domain notification inbox or invent an undocumented endpoint.
 
 ## The audit log as an operational tool
 

@@ -25,7 +25,8 @@ const server = app.listen(config.PORT, () => {
 
 // R-3: pg-boss workers run inside the API container, keeping the VPS container
 // count and memory footprint low (§3.1).
-startJobRunner(boss, prisma, config, jobReadiness)
+const runnerStartup = startJobRunner(boss, prisma, config, jobReadiness);
+void runnerStartup
   .then(() => log('job runner started'))
   .catch((error: unknown) => {
     // TD-16: enqueues keep succeeding even with workers down, because they are
@@ -46,13 +47,47 @@ startJobRunner(boss, prisma, config, jobReadiness)
 
 /** Container stop must drain in-flight requests and jobs, not sever them
  *  mid-transaction. */
+let shutdownStarted = false;
+
+async function shutdown(): Promise<void> {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
+  const httpClosed = new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+  // Stop polling as soon as shutdown begins. If registration was still in
+  // flight, wait for that one startup promise first so no handler can be added
+  // after pg-boss has stopped.
+  const jobsStopped = runnerStartup
+    .catch(() => undefined)
+    .then(() => stopJobRunner(boss, jobReadiness));
+
+  const drains = await Promise.allSettled([httpClosed, jobsStopped]);
+  let failed = drains.some((result) => result.status === 'rejected');
+  try {
+    await prisma.$disconnect();
+  } catch {
+    failed = true;
+  }
+
+  if (failed) {
+    process.stderr.write(
+      `${JSON.stringify({
+        time: new Date().toISOString(),
+        level: 'error',
+        message: 'api graceful shutdown failed',
+      })}\n`,
+    );
+  }
+  process.exit(failed ? 1 : 0);
+}
+
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
-    server.close(() => {
-      void stopJobRunner(boss, jobReadiness)
-        .catch(() => undefined)
-        .then(() => prisma.$disconnect())
-        .finally(() => process.exit(0));
-    });
+    void shutdown();
   });
 }

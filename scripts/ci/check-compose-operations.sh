@@ -10,6 +10,7 @@ integration_runner="$repo_root/scripts/ci/test-integration.sh"
 integration_overlay="$repo_root/scripts/ci/fixtures/docker-compose.integration.yml"
 production_drill="$repo_root/scripts/deploy/verify-production-bootstrap.sh"
 production_drill_overlay="$repo_root/scripts/deploy/fixtures/docker-compose.production-drill.yml"
+job_runner="$repo_root/backend/src/jobs/runner.ts"
 
 fail() {
   printf 'compose-operations guard: %s\n' "$1" >&2
@@ -73,6 +74,14 @@ grep -Fq 'ports: !override' "$integration_overlay" ||
   fail 'the Production drill must not read operator-owned app/database env files'
 grep -Fq 'NODE_ENV: production' "$production_drill_overlay" ||
   fail 'the Production drill must exercise the Production runtime tier'
+grep -Fq 'stop_grace_period: 2m' "$compose" ||
+  fail 'the API must outlive its bounded pg-boss graceful-drain budget'
+grep -Fq 'export const JOB_SHUTDOWN_TIMEOUT_MS = 105_000;' "$job_runner" ||
+  fail 'pg-boss must retain a bounded drain budget below Docker termination'
+grep -Fq 'timeout: JOB_SHUTDOWN_TIMEOUT_MS' "$job_runner" ||
+  fail 'pg-boss shutdown must apply the bounded drain budget'
+grep -Fq "[[ \"\$stop_grace\" == '2m0s' ]]" "$production_drill" ||
+  fail 'the Production drill must prove the resolved API stop budget'
 [[ "$(grep -Ec '^      - "127\.0\.0\.1:\$\{BODOUR_PRODUCTION_DRILL_' "$production_drill_overlay")" -eq 2 ]] ||
   fail 'the Production drill may publish only its loopback HTTP/TLS edge'
 grep -Fq 'run --rm api npx prisma migrate deploy' "$production_drill" ||

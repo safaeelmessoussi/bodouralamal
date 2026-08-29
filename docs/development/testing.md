@@ -75,9 +75,11 @@ unbound Super Admin, absence of branches/rooms/groups/rosters/schedules/content 
 accounts, all three MinIO policies, and no host binding for PostgreSQL or MinIO. A generated
 one-day certificate activates the real TLS Nginx configuration on loopback; `nginx -T`, HSTS,
 CSP, public-bucket-root denial, the anonymous API boundary and the complete worker health payload
-are asserted. Finally it stops only its disposable MinIO, requires HTTPS health to become `503`
-and the API container to become `unhealthy`, restarts storage, and requires both signals to
-recover. Cleanup destroys the unique containers, volumes, network, images, and generated key.
+are asserted. The resolved API service must also carry the two-minute stop grace that outlives
+pg-boss's bounded 105-second drain. Finally the drill stops only its disposable MinIO, requires
+HTTPS health to become `503` and the API container to become `unhealthy`, restarts storage, and
+requires both signals to recover. Cleanup destroys the unique containers, volumes, network,
+images, and generated key.
 
 This is repository-side deployment evidence, not Staging or Production acceptance. It does not
 pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget, or rehearse

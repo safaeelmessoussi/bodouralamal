@@ -128,6 +128,13 @@ old coordinates so a late stale quarantine job cannot recreate retained bytes. S
 exceptions escape the handler and consume the ordinary TD-7 retry budget. No scheduler or
 handler selects `Trash.purge_after`.
 
+Container shutdown is part of the same durability boundary. SIGTERM closes the HTTP listener and
+stops pg-boss polling concurrently, so no new handler starts while requests drain. Active handlers
+receive 105 seconds to finish; after that pg-boss durably returns unfinished work to retry. Compose
+grants the API 120 seconds before SIGKILL, preserving 15 seconds for HTTP close, pool disconnect
+and process exit. Docker's ten-second default is deliberately not used: it would kill the process
+before either outcome was recorded.
+
 `backup.replicate` is still one of those gaps. The executable
 [backup/restore tooling](../operations/runbooks.md#creating-and-restoring-a-full-recovery-point)
 now produces a coherent encrypted recovery point and has passed a destructive disposable

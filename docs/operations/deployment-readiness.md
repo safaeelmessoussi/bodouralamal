@@ -55,6 +55,7 @@ Staging and current `develop` are different facts:
 |---|---|---|
 | **DOCUMENT OWNER DECISION REQUIRED** | R111 promises automatic de-identification after three days, but TD-7 has no account-purge job and older clauses still contradict the ratified design | Recorded in [`TASKS.md`](../TASKS.md#m7--hardening--launch-data); manual permanent de-identification remains the implemented path |
 | **DOCUMENT OWNER DECISION REQUIRED** | Audit identity email, exact content-coordinate wording, and required free-text evidence conflict with the current no-redundant-PII boundary | Recorded once in [`TASKS.md`](../TASKS.md#m7--hardening--launch-data); current code stays fail-closed |
+| **DOCUMENT OWNER ACTION REQUIRED** | TD-14/TD-16 require terminal-job, queue-lag, backup and TLS alarms on the Admin dashboard, but TD-3 has no operational-alert read and the existing Notification model is domain-only | Define the smallest route/DTO and storage/projection boundary; until then failures are durable and runbook-visible, not Admin-dashboard-visible |
 | **OWNER / LEGAL INPUT REQUIRED** | Final privacy/terms content and Moroccan retention choices cannot be invented by engineering | Legal placeholders remain visibly non-final; no launch claim may treat them as approved |
 | **OWNER OPERATION REQUIRED** | Branches, rooms, groups, and the real roster are intentionally absent from the Production seed | Enter through the authorised application flow after infrastructure acceptance; never import them into Staging |
 | **BLOCKED WITH DEPLOYMENT** | Supported object storage, offsite backup, restore proof, monitoring/alerts, and incident readiness | Close the corresponding deployment rows before real personal data is introduced |
@@ -67,7 +68,7 @@ Staging and current `develop` are different facts:
 | **OPEN** | Full automated J1–J8 and authenticated Staging E2E | Same-origin production-shaped browser run; no development-session backdoor |
 | **PARTIAL — INTEGRATION COMPLETE** | Permission/E2E/coverage gates in hosted CI | Full real-stack integration and all-table isolation now gate release; add the remaining gates only when each has isolated disposable infrastructure |
 | **OPEN** | Live edge-rate-limit, TLS-expiry, queue-lag, and backup-failure alert verification | Wire-observed signals on the target environment |
-| **OPEN** | Production-host resource, disk-exhaustion, restart, graceful-shutdown, and realistic-RTO drills | Results from the selected host and object store |
+| **PARTIAL — REPOSITORY SHUTDOWN BUDGET GREEN** | Production-host resource, disk-exhaustion, restart, graceful-shutdown, and realistic-RTO drills | API SIGTERM now stops HTTP/job intake concurrently, bounds pg-boss drain at 105 seconds and has a two-minute Docker grace period. Still observe recreate/restart, resource pressure and realistic RTO on the selected host/object store |
 
 ## Promotion rule
 

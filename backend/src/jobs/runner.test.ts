@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { JobRunnerReadiness } from './readiness.js';
-import { QUEUES, startJobRunner } from './runner.js';
+import {
+  JOB_SHUTDOWN_TIMEOUT_MS,
+  QUEUES,
+  startJobRunner,
+  stopJobRunner,
+} from './runner.js';
 
 const CONFIG: AppConfig = {
   DATABASE_URL: 'postgresql://unused:unused@127.0.0.1:1/unused',
@@ -186,5 +191,33 @@ describe('job runner startup readiness', () => {
       registered_workers: 2,
       active_workers: 2,
     });
+  });
+});
+
+describe('job runner shutdown readiness', () => {
+  it('becomes unready before waiting for the bounded graceful drain', async () => {
+    let finishStop: (() => void) | undefined;
+    const boss = {
+      stop: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishStop = resolve;
+          }),
+      ),
+      getWipData: vi.fn(() => []),
+    };
+    const readiness = new JobRunnerReadiness(boss);
+
+    const stopping = stopJobRunner(boss as unknown as PgBoss, readiness);
+
+    expect(readiness.snapshot().reason).toBe('stopping');
+    expect(boss.stop).toHaveBeenCalledWith({
+      graceful: true,
+      timeout: JOB_SHUTDOWN_TIMEOUT_MS,
+    });
+
+    finishStop?.();
+    await stopping;
+    expect(readiness.snapshot().reason).toBe('stopped');
   });
 });

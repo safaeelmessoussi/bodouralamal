@@ -29,6 +29,11 @@ services:
   api:
     image: bodour-api:dev
     build: ./backend
+    # pg-boss gets 105 seconds to finish or durably return in-flight work,
+    # leaving Docker 15 seconds for HTTP close, pool disconnect and exit. The
+    # Compose default is only 10 seconds, which would SIGKILL the process before
+    # its documented graceful shutdown could complete.
+    stop_grace_period: 2m
     env_file: .env
     environment:
       TZ: ${TZ:-Africa/Casablanca}

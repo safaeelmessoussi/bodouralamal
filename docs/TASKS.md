@@ -1323,6 +1323,10 @@ was hiding behind it: the run went green on the first attempt.
   Nginx edge, then stops MinIO and requires HTTPS `503` plus Docker `unhealthy` before recovery.
   This closes the repository-side bootstrap evidence, not the still-open real-VPS certificate,
   resource-budget, backup/restore and rollback rehearsal.
+- [x] **Bounded graceful API shutdown** — SIGTERM now closes HTTP and stops pg-boss polling
+  concurrently; active handlers have 105 seconds to finish or return durably to retry, inside a
+  two-minute Docker grace period. The Production drill asserts the resolved Compose value, and
+  focused tests prove readiness becomes `stopping` before the worker drain completes.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts
@@ -1350,6 +1354,12 @@ was hiding behind it: the run went green on the first attempt.
   without weakening valid presigned GET/PUT. **OWNER DECISION REQUIRED — OBJECT STORE:** select
   and fund a maintained patched replacement, then run the full compatibility/safeguarding/
   retention/backup regression listed in [Storage](architecture/storage.md#owner-decision-required--object-store)
+- [ ] **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require
+  terminal job failures, queue lag, backup failure and TLS expiry to surface on the Admin
+  dashboard. The implementation has no such read, TD-3 names no route, and R77–R93 deliberately
+  constrain `Notification` to targeted Session/Event/Exam facts. Define the smallest route/DTO
+  and whether this is a new entity or a derived projection; do not overload personal inboxes or
+  invent an undocumented endpoint. Until then failed jobs are durable and runbook-visible only.
 - [ ] TD-11a targets measured against ceiling-scale fixtures (§2.4); no N+1 / unbounded scans audit
 - [ ] Arabic RTL pass: complete ar catalog, error message_keys (fr/en post-MVP §10.1)
 - [ ] Nginx rate limits verified live (TD-13); presigned-URL permission audit

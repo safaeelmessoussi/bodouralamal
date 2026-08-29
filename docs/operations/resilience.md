@@ -75,6 +75,18 @@ retry beyond one**.
 
 > Retry belongs to the user action or the job layer, not hidden loops that stack latency.
 
+## Shutdown and restart
+
+SIGTERM makes the API stop accepting HTTP and background work together, then drains both. pg-boss
+gets a bounded 105 seconds to finish an active handler or durably return it to retry; the Compose
+API service gets 120 seconds before Docker may send SIGKILL, leaving 15 seconds for request close,
+database-pool disconnect and process exit. A process-local latch makes repeated SIGTERM/SIGINT
+signals no-ops after the first and prevents two competing drains.
+
+The repository-side Production drill asserts the resolved two-minute container budget. The
+remaining host row in the readiness ledger is intentionally narrower: recreate/restart under the
+selected VPS's actual load and resource limits still needs to be observed there.
+
 ## Concurrency failures are expected, not exceptional
 
 Worth listing under resilience because the temptation is to treat them as errors:
