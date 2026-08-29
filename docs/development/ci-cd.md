@@ -2,8 +2,8 @@
 
 # CI/CD
 
-GitHub Actions runs four parallel verification jobs on every push to `develop`/`main` and on
-every pull request. A fifth release job runs only after all four succeed on a push to
+GitHub Actions runs five parallel verification jobs on every push to `develop`/`main` and on
+every pull request. A sixth release job runs only after all five succeed on a push to
 `develop`.
 
 ```
@@ -11,7 +11,8 @@ guards      twenty-eight dependency-free guard scripts — mechanically checkabl
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
-release     exact-commit API + web images → GHCR (develop push only, after all four pass)
+integration fresh PostgreSQL · MinIO · pg-boss · Nginx · all integration/API tests · isolation
+release     exact-commit API + web images → GHCR (develop push only, after all five pass)
 ```
 
 The contract job runs the remaining two guard scripts, so **all thirty committed
@@ -165,12 +166,26 @@ and line; passing again once reverted.
 It enforces a rule where the failure is invisible to the person it harms: the wrong branch
 publishes a legal name where someone asked for a kunya.
 
+## The integration job
+
+`scripts/ci/test-integration.sh` creates a uniquely named disposable Compose project from the
+Production service graph plus `scripts/ci/fixtures/docker-compose.integration.yml`. Database,
+MinIO and Nginx ports bind to loopback only; the overlay removes inherited env files, supplies
+fixture-only credentials, runs all migrations and the actual Production and development seeds,
+and waits for the real whole-application health contract before Vitest starts. The trap always
+removes the project's containers, networks, volumes and its uniquely tagged images.
+
+Both Local Development and CI execute the same `scripts/test/run-integration-suite.sh`. It
+digests every application table before and after the serial suite and fails on residue,
+deletion, replacement or changed logical fields even when all assertions pass. CI therefore
+gates release publication on both the complete integration/API suite and exact all-table
+isolation; it never points at a shared developer database.
+
 ## What CI does not yet run
 
 The workflow is explicit that later milestones extend it, as **dedicated tasks recorded in
 the ledger** rather than drive-by additions:
 
-- Integration tests against a containerized database (run locally today)
 - Permission-matrix API tests generated from the matrix
 - Playwright end-to-end journeys
 - The ≥ 80 % coverage gate on services and policies

@@ -1,9 +1,9 @@
 # CI — SRS §19.2 gates (lint, typecheck, test runners, production builds,
 # TD-6a migration-presence check, `db push` ban, .env commit check, TD-6b
 # DROP/RENAME migration lint, OpenAPI↔TD-3 conformance).
-# Later milestones extend this file (testcontainers integration tests, TD-2
-# permission-matrix API tests, Playwright E2E, ≥80% coverage on /services and
-# /policies) — extensions are dedicated tasks, recorded in docs/CHANGES.log.
+# Later milestones extend this file (generated TD-2 permission-matrix tests,
+# Playwright E2E, ≥80% coverage on /services and /policies) — extensions are
+# dedicated tasks, recorded in docs/CHANGES.log.
 name: CI
 
 on:
@@ -168,6 +168,26 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  integration:
+    name: Integration — disposable real stack + all-table isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      # Integration tests execute from the host checkout while the API runs in
+      # its image. The generated client is gitignored, so a clean runner needs
+      # the same explicit generation step as the backend job.
+      - run: npx prisma generate
+        working-directory: backend
+      - run: bash scripts/ci/test-integration.sh
+
   frontend:
     name: Frontend — lint, typecheck, test, build
     runs-on: ubuntu-latest
@@ -190,7 +210,7 @@ jobs:
   release-images:
     name: Release — publish exact-commit API and web images
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: [guards, contract, backend, frontend]
+    needs: [guards, contract, backend, frontend, integration]
     runs-on: ubuntu-latest
     permissions:
       contents: read

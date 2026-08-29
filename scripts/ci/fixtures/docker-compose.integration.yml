@@ -1,0 +1,55 @@
+# Disposable full-stack integration overlay. It reuses docker-compose.yml's
+# real services/builds/configuration and changes only fixture credentials,
+# loopback host ports and the Local HTTP server needed by a host test runner.
+
+services:
+  api:
+    image: ${BODOUR_INTEGRATION_API_IMAGE:?set the disposable API image name}
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql://app:integration-stack-password@db:5432/bodour
+      GOOGLE_CLIENT_ID: integration-client-id.apps.example.com
+      GOOGLE_CLIENT_SECRET: integration-client-secret
+      JWT_SIGNING_KEY: integration-jwt-signing-key-with-more-than-thirty-two-bytes
+      ONBOARDING_TOKEN_KEY: integration-onboarding-key-with-more-than-thirty-two-bytes
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: integration-access-key
+      MINIO_SECRET_KEY: integration-secret-password
+      PUBLIC_BASE_URL: http://127.0.0.1:${BODOUR_INTEGRATION_HTTP_PORT:-58083}
+      STORAGE_BASE_URL: http://127.0.0.1:${BODOUR_INTEGRATION_HTTP_PORT:-58083}/storage
+      SUPER_ADMIN_EMAIL: integration-super-admin@example.com
+      SUPER_ADMIN_SEX: female
+      NODE_ENV: test
+      BACKUP_TARGET_SSH: ""
+      LIVEKIT_URL: ws://online-class.integration.invalid
+      LIVEKIT_API_URL: http://online-class.integration.invalid
+      LIVEKIT_API_KEY: integration-livekit-key
+      LIVEKIT_API_SECRET: integration-livekit-secret
+      RECORDING_STAGING_BUCKET: recordings-staging
+
+  db:
+    env_file: !reset []
+    environment:
+      POSTGRES_PASSWORD: integration-stack-password
+    ports:
+      - "127.0.0.1:${BODOUR_INTEGRATION_DB_PORT:-55438}:5432"
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: integration-access-key
+      MINIO_ROOT_PASSWORD: integration-secret-password
+    ports:
+      - "127.0.0.1:${BODOUR_INTEGRATION_MINIO_PORT:-59005}:9000"
+
+  minio-init:
+    environment:
+      MC_HOST_local: http://integration-access-key:integration-secret-password@minio:9000
+
+  nginx:
+    image: ${BODOUR_INTEGRATION_WEB_IMAGE:?set the disposable web image name}
+    ports: !override
+      - "127.0.0.1:${BODOUR_INTEGRATION_HTTP_PORT:-58083}:80"
+    volumes:
+      - ./nginx/dev/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/snippets/rate-limits.dev.conf:/etc/nginx/snippets/rate-limits.conf:ro
+      - ./nginx/snippets/media-origin.dev.conf:/etc/nginx/snippets/media-origin.conf:ro

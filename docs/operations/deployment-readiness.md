@@ -43,7 +43,7 @@ Staging and current `develop` are different facts:
 | **EXTERNAL ACCESS REQUIRED** | The current `develop` commit is not the accepted Staging commit | Provide/restore Staging host and deployment access, promote the exact green commit, and run same-origin authenticated acceptance |
 | **EXTERNAL ACCESS REQUIRED** | Production VPS, DNS, TLS issuance access, Google OAuth Production credentials, and GHCR read authority are not available in this workspace | Supply only those external inputs; never commit them |
 | **OPEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | Execute [the deployment pipeline](deployment.md#the-pipeline) from a clean VPS, including fresh migration/seed, health, storage, browser smoke, backup, and restore |
-| **IMPLEMENTED — AWAITS FIRST CI PUBLICATION** | Deployable images previously did not exist | CI now publishes API and web images only after all four existing jobs pass, tagged by the exact 40-character commit; the release overlay refuses an absent tag and deployment uses `--no-build` |
+| **IMPLEMENTED — AWAITS FIRST CI PUBLICATION** | Deployable images previously did not exist | CI now publishes API and web images only after all five verification jobs pass, tagged by the exact 40-character commit; the release overlay refuses an absent tag and deployment uses `--no-build` |
 | **IMPLEMENTED** | The checked-in environment template defaults to Development | Explicit Production/Staging overlays force the intended runtime tier; boot refuses non-HTTPS external and non-canonical/cross-origin storage URLs |
 | **IMPLEMENTED** | Docker's default container log driver is unbounded | Every base service resolves to one bounded local-log policy (10 MB × 5); a coverage guard fails when a service omits it |
 | **IMPLEMENTED** | Process liveness and a plain `curl` could look green while the platform was degraded | The API container healthcheck uses whole-application `/healthz`; deployment fails on non-200 responses and bounds the probe to 15 seconds |
@@ -64,7 +64,7 @@ Staging and current `develop` are different facts:
 |---|---|---|
 | **OPEN** | Ceiling-scale query/N+1 and latency audit | Measured fixtures at the documented ceiling, not development-row inference |
 | **OPEN** | Full automated J1–J8 and authenticated Staging E2E | Same-origin production-shaped browser run; no development-session backdoor |
-| **OPEN** | Integration/permission/E2E/coverage gates in hosted CI | Add only after each gate can run on isolated disposable infrastructure |
+| **PARTIAL — INTEGRATION COMPLETE** | Permission/E2E/coverage gates in hosted CI | Full real-stack integration and all-table isolation now gate release; add the remaining gates only when each has isolated disposable infrastructure |
 | **OPEN** | Live edge-rate-limit, TLS-expiry, queue-lag, and backup-failure alert verification | Wire-observed signals on the target environment |
 | **OPEN** | Production-host resource, disk-exhaustion, restart, graceful-shutdown, and realistic-RTO drills | Results from the selected host and object store |
 

@@ -24,7 +24,7 @@ fail() {
 
 grep -Fq "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'" "$workflow" ||
   fail 'release publication must be limited to pushes on develop'
-grep -Fq 'needs: [guards, contract, backend, frontend]' "$workflow" ||
+grep -Fq 'needs: [guards, contract, backend, frontend, integration]' "$workflow" ||
   fail 'release publication must wait for every verification job'
 grep -Fq 'packages: write' "$workflow" ||
   fail 'the release job must declare package publication authority'

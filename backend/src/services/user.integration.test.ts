@@ -23,9 +23,18 @@ const RUN = randomUUID();
 const TAG = `[preprov-test:${RUN}]`;
 
 let seq = 0;
+const ownedEmails = new Set<string>();
 const addr = () => {
   seq += 1;
-  return `preprov-${RUN}-${Date.now()}-${seq}@example.com`;
+  const email = `preprov-${RUN}-${Date.now()}-${seq}@example.com`;
+  ownedEmails.add(email);
+  return email;
+};
+
+const ownedEmail = (label: string): string => {
+  const email = `${label}-${RUN}@example.com`;
+  ownedEmails.add(email);
+  return email;
 };
 
 async function makeStaff(role: string): Promise<string> {
@@ -67,8 +76,9 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.normalizedEmailLock.deleteMany({
-    where: { email: { startsWith: "preprov-" } },
+    where: { email: { in: [...ownedEmails] } },
   });
+  ownedEmails.clear();
   // Branches created for the scope filter tests.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
@@ -606,6 +616,7 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
   it("TD-10 Revision 15: email search spans BOTH channels", async () => {
     const admin = await makeStaff("super_admin");
     // An unclaimed account: no identity row exists yet.
+    const unclaimedEmail = ownedEmail('findme-unclaimed');
     const unclaimed = await preProvision(
       prisma,
       await actorFor(prisma, admin),
@@ -613,7 +624,7 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
         nameArabic: `${TAG} غير مرتبطة`,
         // R80.1 — every creation path records a sex.
         sex: "female",
-        email: "findme-unclaimed@example.com",
+        email: unclaimedEmail,
       },
     );
     // A bound account: the address lives on UserIdentity.

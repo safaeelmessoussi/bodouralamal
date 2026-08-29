@@ -7,17 +7,16 @@ Four layers, each testing something the others structurally cannot.
 | Layer | Scope | Tooling | Gate |
 |---|---|---|---|
 | **Unit/default** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | CI on every push/PR |
-| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | Local only — CI infrastructure gap |
-| **API** | HTTP integration tests against the contract; child-context tests; envelope conformance | Vitest + a real stack | Local only — CI infrastructure gap |
+| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | CI on every push/PR, disposable stack |
+| **API** | HTTP integration tests against the contract; child-context tests; envelope conformance | Vitest + real Nginx/API/pg-boss | CI on every push/PR, disposable stack |
 | **Browser/E2E** | Journeys, RTL rendering, mandatory UI states, upload retry | Chrome over CDP | Manual — CI infrastructure gap |
 
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **276 backend tests across 28 files · 727 frontend tests across 57
-files**. The repository also contains **83 backend integration files**, but the workflow does
-not run them: they require an isolated real stack and database lifecycle that this CI slice
-does not yet provide.
+Current default CI totals: **315 backend tests · 891 frontend tests**. The repository also
+contains **91 backend integration files**; the dedicated workflow job now provisions their
+isolated real stack and database lifecycle rather than pointing them at Local Development.
 
 The backend total includes deterministic worker-readiness regression tests. They inject the
 clock and pg-boss live-worker view, so startup failure, incomplete registration, lost/stale
@@ -57,6 +56,9 @@ for g in scripts/ci/check-*.sh; do bash "$g"; done
 # Integration — needs the stack up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 bash scripts/dev/test-integration.sh
+
+# CI-equivalent integration — owns and destroys a uniquely named disposable stack
+bash scripts/ci/test-integration.sh
 
 # Destructive only to uniquely named disposable volumes and a local encrypted repository
 bash scripts/backup/verify-backup-restore.sh
@@ -1172,14 +1174,23 @@ suite-owned, tagged users first and deletes staffing only for those exact ids.
 The shared teaching-fixture helper also refuses empty, malformed, or reserved
 development-fixture tags before it can query anything.
 
-`scripts/dev/test-integration.sh` now enforces the general ownership rule. It
-takes a privacy-safe logical digest of every application base table before and
-after Vitest and fails if any table differs. The digest contains row counts and
+`scripts/test/run-integration-suite.sh` enforces the general ownership rule for
+both the Local wrapper and the disposable hosted-CI wrapper. It takes a
+privacy-safe logical digest of every application base table before and after
+Vitest and fails if any table differs. The digest contains row counts and
 hashes of every row's logical fields, excluding only `created_at` and
 `updated_at`; it prints no row data. This catches residue, deletion,
 replacement, changed relationships, and same-count mutation. A source guard
 also rejects integration cleanup whose `deleteMany` has no `where` clause or
 contains `undefined`.
+
+The first disposable hosted-CI run proved that this is not decorative: all
+**1887 active assertions passed**, but the gate still failed on one leaked
+`normalized_email_lock` and one changed `scheduling_type` digest. The first
+belonged to a fixed search-fixture email omitted from teardown; the second came
+from restoring only a whole-set order rather than each exact prior
+`display_order`. Exact owned-email tracking and exact-coordinate restoration
+make both focused suites isolation-clean.
 
 The bounded ownership audit found further teardown defects while the original
 fix was being proved:

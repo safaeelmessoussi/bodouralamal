@@ -1295,6 +1295,15 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [x] **Hosted real-stack integration gate** — every push/PR now builds a uniquely named
+  disposable PostgreSQL/MinIO/pg-boss/Nginx stack, deploys every migration, runs the actual
+  Production and fixture seeds, waits for whole-application health, and executes the complete
+  integration/API suite through the same all-table logical-isolation runner used locally.
+  Release publication depends on this fifth verification job. The first run passed **1887**
+  active assertions but correctly failed on a leaked normalized-email lock and an inexact
+  scheduling-order restore; both fixtures now clean only their exact owned coordinates, and
+  focused disposable reruns are isolation-clean. The final complete disposable rerun passed
+  **1887/1887 active assertions** with an identical all-table logical snapshot.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
   command failure with a bounded timeout; a running Node process is not called ready.

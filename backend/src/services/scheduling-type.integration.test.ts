@@ -202,8 +202,12 @@ describe('the catalogue is data, and the seed preserves what the Owner changed',
      * screen, not by anything here — a suite that mutates shared reference data
      * and does not put it back is precisely the P1.2 defect class.
      */
-    const before = (await listSchedulingTypes(prisma, superAdmin())).map((r) => r.id);
-    const flipped = [...before].reverse();
+    const before = (await listSchedulingTypes(prisma, superAdmin())).map((r) => ({
+      id: r.id,
+      displayOrder: r.displayOrder,
+    }));
+    const beforeIds = before.map((r) => r.id);
+    const flipped = [...beforeIds].reverse();
     try {
       await reorderSchedulingTypes(prisma, superAdmin(), flipped);
 
@@ -216,7 +220,15 @@ describe('the catalogue is data, and the seed preserves what the Owner changed',
       // `finally`, so a failed assertion above still leaves the catalogue as it
       // was found. Restoring only on success would make one red test corrupt
       // every later run.
-      await reorderSchedulingTypes(prisma, superAdmin(), before);
+      // Restore the exact coordinates, not merely the sequence. A migrated
+      // pre-marker catalogue can legitimately contain duplicate/gapped values;
+      // replaying the sequence through the domain reorder would normalize it
+      // to 1..n and silently mutate reference data the suite does not own.
+      await prisma.$transaction(
+        before.map(({ id, displayOrder }) =>
+          prisma.schedulingType.update({ where: { id }, data: { displayOrder } }),
+        ),
+      );
     }
   });
 
