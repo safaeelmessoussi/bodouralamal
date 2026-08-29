@@ -60,9 +60,28 @@ bash scripts/dev/test-integration.sh
 # CI-equivalent integration — owns and destroys a uniquely named disposable stack
 bash scripts/ci/test-integration.sh
 
+# Production-mode bootstrap/readiness — synthetic TLS, no fixtures, isolated volumes
+bash scripts/deploy/verify-production-bootstrap.sh
+
 # Destructive only to uniquely named disposable volumes and a local encrypted repository
 bash scripts/backup/verify-backup-restore.sh
 ```
+
+The Production bootstrap drill fills the gap the fixture-tier integration suite intentionally
+cannot cover. It builds the actual API/web images, resolves the Production Compose overlay with
+synthetic secrets, applies all migrations, executes the real Production seed twice, and compares
+every seeded row including ids and timestamps. It proves the exact reference counts, the single
+unbound Super Admin, absence of branches/rooms/groups/rosters/schedules/content and fixture/dev
+accounts, all three MinIO policies, and no host binding for PostgreSQL or MinIO. A generated
+one-day certificate activates the real TLS Nginx configuration on loopback; `nginx -T`, HSTS,
+CSP, public-bucket-root denial, the anonymous API boundary and the complete worker health payload
+are asserted. Finally it stops only its disposable MinIO, requires HTTPS health to become `503`
+and the API container to become `unhealthy`, restarts storage, and requires both signals to
+recover. Cleanup destroys the unique containers, volumes, network, images, and generated key.
+
+This is repository-side deployment evidence, not Staging or Production acceptance. It does not
+pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget, or rehearse
+rollback/restoration there; those remain separate host/external checks.
 
 The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
 creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,

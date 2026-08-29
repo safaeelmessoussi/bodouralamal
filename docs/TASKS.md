@@ -1317,7 +1317,12 @@ was hiding behind it: the run went green on the first attempt.
   dedicated upgrade task; do not mistake GitHub's temporary compatibility override for a fix.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
-  command failure with a bounded timeout; a running Node process is not called ready.
+  command failure with a bounded timeout; a running Node process is not called ready. A separate
+  isolated Production-mode drill now applies all migrations, executes and byte-compares the real
+  seed twice, proves the clean initial inventory and internal MinIO policies, loads the actual TLS
+  Nginx edge, then stops MinIO and requires HTTPS `503` plus Docker `unhealthy` before recovery.
+  This closes the repository-side bootstrap evidence, not the still-open real-VPS certificate,
+  resource-budget, backup/restore and rollback rehearsal.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts

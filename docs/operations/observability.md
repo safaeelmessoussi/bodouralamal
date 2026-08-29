@@ -43,6 +43,12 @@ machine-readable reason and expected/registered/active counts. In particular,
 `queue: "ok"` with `jobs: "down"` means enqueue storage exists but this process has no ready
 runner — schema presence alone is never a worker heartbeat.
 
+`bash scripts/deploy/verify-production-bootstrap.sh` proves this boundary against the actual
+Production-mode image and TLS edge, not a controller mock: it first requires all four components
+green, stops only its isolated MinIO, observes HTTPS `503` with `storage: "down"`, waits for the
+API container itself to become `unhealthy`, then restarts storage and requires both signals to
+recover. The drill publishes no database or object-store port and destroys its own volumes.
+
 ```json
 {
   "status": "degraded",

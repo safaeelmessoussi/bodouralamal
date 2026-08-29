@@ -303,6 +303,19 @@ applicable; TLS activation cannot silently replace the approved web image with a
 
 ## The dress rehearsal
 
+Before a host is involved, run the repository-side Production-mode boundary:
+
+```bash
+bash scripts/deploy/verify-production-bootstrap.sh
+```
+
+It owns a unique Compose project and synthetic one-day certificate, runs the real migration and
+Production seed commands twice, asserts the clean initial inventory, loads the actual TLS/Nginx
+configuration, and proves that storage loss makes both `/healthz` and Docker health fail before
+recovering. It deliberately builds local images so it can test an uncommitted candidate; hosted
+CI publication separately proves the exact-commit GHCR artifacts. Passing it is not a deployment
+claim and does not replace the checks below.
+
 Before launch, the full pipeline runs **on the production VPS itself**, because the staging
 topology exercises none of the VPS realities — memory ceilings, TLS automation, the backup
 pipeline. It is followed by user-acceptance testing with the branch coordinator, including a

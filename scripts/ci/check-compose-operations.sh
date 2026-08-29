@@ -8,6 +8,8 @@ deployment="$repo_root/docs/operations/deployment.md"
 workflow="$repo_root/.github/workflows/ci.yml"
 integration_runner="$repo_root/scripts/ci/test-integration.sh"
 integration_overlay="$repo_root/scripts/ci/fixtures/docker-compose.integration.yml"
+production_drill="$repo_root/scripts/deploy/verify-production-bootstrap.sh"
+production_drill_overlay="$repo_root/scripts/deploy/fixtures/docker-compose.production-drill.yml"
 
 fail() {
   printf 'compose-operations guard: %s\n' "$1" >&2
@@ -62,4 +64,33 @@ grep -Fq 'ports: !override' "$integration_overlay" ||
 [[ "$(grep -Ec '^      - "127\.0\.0\.1:\$\{BODOUR_INTEGRATION_' "$integration_overlay")" -eq 3 ]] ||
   fail 'every CI host port must bind loopback only'
 
-printf 'compose-operations guard: bounded logs, fail-closed health and isolated CI stack verified\n'
+# The hosted integration job runs in the fixture-permitting test tier. A
+# separate destructive-but-disposable drill must prove that the real image also
+# bootstraps with the stricter Production environment and TLS edge.
+[[ -x "$production_drill" && -f "$production_drill_overlay" ]] ||
+  fail 'the disposable Production bootstrap drill is missing or not executable'
+[[ "$(grep -Fc 'env_file: !reset []' "$production_drill_overlay")" -eq 2 ]] ||
+  fail 'the Production drill must not read operator-owned app/database env files'
+grep -Fq 'NODE_ENV: production' "$production_drill_overlay" ||
+  fail 'the Production drill must exercise the Production runtime tier'
+[[ "$(grep -Ec '^      - "127\.0\.0\.1:\$\{BODOUR_PRODUCTION_DRILL_' "$production_drill_overlay")" -eq 2 ]] ||
+  fail 'the Production drill may publish only its loopback HTTP/TLS edge'
+grep -Fq 'run --rm api npx prisma migrate deploy' "$production_drill" ||
+  fail 'the Production drill must apply the real forward migration history'
+[[ "$(grep -Fc 'run --rm api npm run seed:production' "$production_drill")" -eq 2 ]] ||
+  fail 'the Production drill must execute and compare the real seed twice'
+if grep -Fq 'seed:fixtures' "$production_drill"; then
+  fail 'the Production drill must never load fixture data'
+fi
+grep -Fq "docker inspect --format '{{json .HostConfig.PortBindings}}'" "$production_drill" ||
+  fail 'the Production drill must prove MinIO has no host binding'
+grep -Fq '"${compose[@]}" stop minio' "$production_drill" ||
+  fail 'the Production drill must exercise real storage degradation'
+grep -Fq "[[ \"\$status\" == '503' ]]" "$production_drill" ||
+  fail 'the Production drill must require degraded readiness to return 503'
+grep -Fq "[[ \"\$health_state\" == 'unhealthy' ]]" "$production_drill" ||
+  fail 'the Production drill must require Docker health to fail with readiness'
+grep -Fq 'down --volumes --remove-orphans' "$production_drill" ||
+  fail 'the Production drill must destroy its isolated volumes on every exit'
+
+printf 'compose-operations guard: bounded logs, fail-closed health and isolated CI/Production drills verified\n'

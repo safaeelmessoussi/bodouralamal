@@ -1,0 +1,54 @@
+# Disposable Production-mode bootstrap overlay. The caller supplies uniquely
+# named image tags, loopback ports, and a generated one-day TLS certificate.
+# It deliberately resets operator env files and publishes Nginx only.
+
+services:
+  api:
+    image: ${BODOUR_PRODUCTION_DRILL_API_IMAGE:?set the disposable API image name}
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql://app:production-drill-password@db:5432/bodour
+      GOOGLE_CLIENT_ID: production-drill-client.apps.invalid
+      GOOGLE_CLIENT_SECRET: production-drill-client-secret
+      JWT_SIGNING_KEY: production-drill-jwt-signing-key-with-more-than-thirty-two-bytes
+      ONBOARDING_TOKEN_KEY: production-drill-onboarding-key-with-more-than-thirty-two-bytes
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: production-drill-access-key
+      MINIO_SECRET_KEY: production-drill-secret-password
+      PUBLIC_BASE_URL: https://production-drill.invalid:${BODOUR_PRODUCTION_DRILL_HTTPS_PORT:-58443}
+      STORAGE_BASE_URL: https://production-drill.invalid:${BODOUR_PRODUCTION_DRILL_HTTPS_PORT:-58443}/storage
+      SUPER_ADMIN_EMAIL: production-bootstrap@example.invalid
+      SUPER_ADMIN_SEX: female
+      NODE_ENV: production
+      BACKUP_TARGET_SSH: restic@backup.invalid:/srv/bodour-production-drill
+      RECORDING_STAGING_BUCKET: recordings-staging
+      TZ: Africa/Casablanca
+      PORT: "3000"
+      LOG_LEVEL: info
+
+  db:
+    env_file: !reset []
+    environment:
+      POSTGRES_PASSWORD: production-drill-password
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: production-drill-access-key
+      MINIO_ROOT_PASSWORD: production-drill-secret-password
+
+  minio-init:
+    environment:
+      MC_HOST_local: http://production-drill-access-key:production-drill-secret-password@minio:9000
+
+  nginx:
+    image: ${BODOUR_PRODUCTION_DRILL_WEB_IMAGE:?set the disposable web image name}
+    ports: !override
+      - "127.0.0.1:${BODOUR_PRODUCTION_DRILL_HTTP_PORT:-58084}:80"
+      - "127.0.0.1:${BODOUR_PRODUCTION_DRILL_HTTPS_PORT:-58443}:443"
+    volumes: !override
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${BODOUR_PRODUCTION_DRILL_CONF_DIR:?set the generated Nginx conf directory}:/etc/nginx/conf.d:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/html:/usr/share/nginx/errors:ro
+      - ${BODOUR_PRODUCTION_DRILL_LETSENCRYPT_DIR:?set the generated certificate directory}:/etc/letsencrypt:ro
+      - ${BODOUR_PRODUCTION_DRILL_WWW_DIR:?set the generated ACME webroot}:/var/www/certbot:ro
