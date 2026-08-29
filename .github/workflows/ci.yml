@@ -63,6 +63,8 @@ jobs:
         run: bash scripts/ci/check-storage-edge.sh
       - name: Backup tooling stays encrypted, resident and fail-closed
         run: bash scripts/ci/check-backup-tooling.sh
+      - name: Releases use exact-commit artifacts and never target-host builds
+        run: bash scripts/ci/check-release-artifacts.sh
       - name: Storage retirement stays durable and automatic destruction stays disabled
         run: bash scripts/ci/check-storage-lifecycle.sh
       - name: Association terminology remains consistent
@@ -182,3 +184,42 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  release-images:
+    name: Release — publish exact-commit API and web images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [guards, contract, backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" |
+            docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Build and publish the exact-commit API image
+        run: |
+          set -euo pipefail
+          image_base="$(printf '%s' "ghcr.io/$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image="$image_base-api:$GITHUB_SHA"
+          docker build \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image" \
+            backend
+          docker push "$image"
+      - name: Build and publish the exact-commit web image
+        run: |
+          set -euo pipefail
+          image_base="$(printf '%s' "ghcr.io/$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image="$image_base-web:$GITHUB_SHA"
+          docker build \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image" \
+            frontend
+          docker push "$image"

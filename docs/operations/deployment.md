@@ -10,28 +10,42 @@ A deterministic pipeline from a clean VPS to a healthy platform. Ten steps, in o
 - A second Moroccan location for offsite backups
 - A domain with DNS control, for Let's Encrypt
 - Google OAuth client credentials — **allow days to weeks** for consent-screen verification
+- Read access to the repository's GitHub Container Registry packages. Authenticate Docker on
+  the host with a least-privilege token that can read packages; never put it in `.env`
 
 ## The pipeline
 
 ```bash
-# 1  Clone
+# 1  Check out the exact commit already approved for this environment
 git clone <repo> && cd <repo>
+export BODOUR_RELEASE_TAG='<approved 40-character commit>'
+printf '%s\n' "$BODOUR_RELEASE_TAG" | grep -Eq '^[0-9a-f]{40}$'
+git fetch origin
+git cat-file -e "${BODOUR_RELEASE_TAG}^{commit}"
+test "$(git rev-parse "${BODOUR_RELEASE_TAG}^{commit}")" = "$BODOUR_RELEASE_TAG"
+git switch --detach "$BODOUR_RELEASE_TAG"
+test -z "$(git status --porcelain)"
+test "$(git rev-parse HEAD)" = "$BODOUR_RELEASE_TAG"
 
 # 2  Configure
-cp .env.example .env          # fill every Required value
-cp infra.env.example infra.env # the Postgres password — must match DATABASE_URL
+test -f .env || cp .env.example .env
+test -f infra.env || cp infra.env.example infra.env
+#    On first deploy, fill every Required value. Never overwrite existing secrets
+#    from a template during an upgrade. The Postgres password must match DATABASE_URL.
 #    SUPER_ADMIN_EMAIL is needed for the FIRST deployment only
 
-# 3  Obtain the API image.
-#    CI does NOT publish one today — see "Where the API image comes from" below.
-#    Until it does, build it here with the stack DOWN:
-docker compose build api
+# 3  Pull the two exact-commit artifacts. A missing image stops deployment.
+docker compose -f docker-compose.yml -f docker-compose.release.yml pull api nginx
+test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
+  "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
+test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
+  "ghcr.io/safaeelmessoussi/bodouralamal-web:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 
 # 4  Existing deployment: stop the legacy cookie issuer, then start data services
 #    R101's next migration invalidates every live refresh session. The old API
 #    must not mint another narrow-path cookie after that one-time sweep.
-docker compose stop nginx api
-docker compose up -d db minio
+docker compose -f docker-compose.yml -f docker-compose.release.yml stop nginx api
+docker compose -f docker-compose.yml -f docker-compose.release.yml up --no-build -d db minio
 
 # 5  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
@@ -39,13 +53,16 @@ docker compose up -d db minio
 #    The normalized-email migration deliberately aborts if historical data
 #    already assigns one address to two Users. Follow the migration runbook;
 #    never clear or merge an identity merely to make deploy green.
-docker compose run --rm api npx prisma migrate deploy
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  run --rm api npx prisma migrate deploy
 
 # 6  Seed — idempotent, safe to re-run
-docker compose run --rm api npm run seed:production
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  run --rm api npm run seed:production
 
 # 7  Start the rest
-docker compose --profile production up -d    # api, nginx, certbot
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  --profile production up --no-build -d      # api, nginx, certbot
 
 # 8  Verify
 curl https://<domain>/healthz                # 200, all components green
@@ -56,9 +73,9 @@ curl https://<domain>/healthz                # 200, all components green
 # 10 Smoke test: journey J1 · backup dry run · restore drill
 ```
 
-## Where the API image comes from
+## Where the images come from
 
-**The intent is that images are built in CI and pulled**, never built on the server:
+API and web images are built in CI and pulled, never built on the server:
 
 > The frontend build peaks near **2 GB**, which will OOM or thrash a 4 GB box already running
 > PostgreSQL, MinIO, and Node.
@@ -66,28 +83,19 @@ curl https://<domain>/healthz                # 200, all components green
 This is also why the container memory pins have any headroom at all — the budget assumes no
 build ever competes with the running services.
 
-**As of 2026-08-25 that pipeline does not exist yet.** [CI](../development/ci-cd.md) runs
-lint, typecheck, tests and *verifies* the production builds, but it **publishes no container
-image and there is no registry** — the ci-cd page lists image publication among the things
-it deliberately does not do. This page previously instructed a `docker pull` from a registry
-that has never existed, which would fail on any first deployment.
+After all four existing jobs pass on a push to `develop`, [CI](../development/ci-cd.md)
+publishes two GHCR images under **only the exact 40-character source commit**. Each carries
+the same value in `org.opencontainers.image.revision`. There is no mutable `latest` tag and
+no deployment credential in CI.
 
-So until image publication ships, the documented fallback is the procedure:
+`docker-compose.release.yml` is the mandatory Staging/Production overlay. It refuses an
+absent `BODOUR_RELEASE_TAG`, selects both exact artifacts, and deployment always passes
+`--no-build`. A missing image or mismatched revision label is a hard stop. Building on the
+host is not a fallback.
 
-> **Bring the stack fully down, then build. Never with the stack running.**
-
-The frontend is built the same way and for the same reason. It is not committed, `nginx`
-bind-mounts `frontend/dist`, and it uses no `import.meta.env` at all — so **one artifact is
-valid for every environment** and nothing environment-specific is baked into it.
-
-Building it without installing Node on the host:
-
-```bash
-docker run --rm -v "$PWD/frontend":/app -w /app node:24.11.0-slim \
-  sh -c 'npm ci && npm run build'
-```
-
-On a 4 GB box, ensure swap exists first; the peak is what the warning above is about.
+The web image contains the static Vite output. The client uses same-origin API and storage
+paths and no `import.meta.env`, so one artifact is valid for every environment; nothing
+environment-specific is baked into it.
 
 ## Step 5 deserves its own paragraph
 
@@ -117,7 +125,7 @@ the new cookie.
 ## Rollback
 
 ```bash
-docker compose down
+docker compose -f docker-compose.yml -f docker-compose.release.yml down
 # restore the latest complete recovery point per the runbook
 ```
 
@@ -195,10 +203,11 @@ It is idempotent, it never deletes an Owner row, and the one row it restores
 (الطفل's المستوى 0) it restores **by id** — an un-delete of that specific row, not a
 resurrection by name that would leave a second one beside the historical row.
 
-Run it explicitly; it is never part of deploy:
+Run it explicitly with the same release overlay; it is never part of deploy:
 
 ```bash
-docker compose run --rm api npx tsx scripts/reconcile-reference-data.ts
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  run --rm api npx tsx scripts/reconcile-reference-data.ts
 ```
 
 Rooms are reconciled for the branches that exist, **matched through the Branch row by
@@ -239,16 +248,18 @@ Step 6 there is followed by `npm run seed:fixtures`, which is the only added ste
 **Never copy a development database or its MinIO objects into Staging.** A developer's
 database is not fixture data.
 
-Two committed pieces make the Staging host reproducible from Git, and neither holds a secret:
+Three committed pieces make the Staging host reproducible from Git, and none holds a secret:
 
 | File | What it is |
 |---|---|
+| `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
 | `docker-compose.staging.yml` | Hard container memory ceilings for a small VPS, on top of the soft budgets the base file already sets. It publishes no port, relaxes no limit and substitutes no security setting — an overlay that changed behaviour would be changing the very thing Staging exists to rehearse |
 | `scripts/deploy/enable-tls.sh` | Performs `tls.conf.example`'s manual steps 1–3 **idempotently**, refuses to run before the certificate exists, and keeps the ACME location above the redirect |
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.staging.yml \
-  --profile production up -d
+BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
+  docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.staging.yml --profile production up --no-build -d
 ```
 
 `scripts/deploy/enable-tls.sh` exists because those steps were manual, un-rerunnable, and

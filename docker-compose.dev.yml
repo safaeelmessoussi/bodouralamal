@@ -6,8 +6,8 @@
 # never 0.0.0.0, so nothing is exposed off the machine.
 #
 # It is a SEPARATE file, not docker-compose.override.yml, precisely so compose
-# cannot merge it automatically: §19.1's deployment steps run plain
-# `docker compose up -d` and must never pick this up.
+# cannot merge it automatically: §19.1's deployment steps explicitly select
+# the release overlay and must never pick this up.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #

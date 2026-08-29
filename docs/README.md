@@ -101,6 +101,7 @@ The technical core. Written for an engineer who has never seen the repository.
 ### [Operations](operations/README.md) — running it
 | | |
 |---|---|
+| [Deployment readiness](operations/deployment-readiness.md) | Live deployment, real-user, and hardening ledger |
 | [Environments](operations/environments.md) | Development, staging, production — and the data-residency firewall |
 | [Configuration](operations/configuration.md) | Every environment variable and runtime setting |
 | [Deployment](operations/deployment.md) | The deterministic pipeline to the production VPS |

@@ -9,6 +9,7 @@ do when something breaks.
 
 | | |
 |---|---|
+| [Deployment readiness](deployment-readiness.md) | Live ledger: deployment blockers, real-user blockers, and hardening |
 | [Environments](environments.md) | The three tiers, and the data-residency firewall between them |
 | [Configuration](configuration.md) | Every environment variable and runtime setting |
 | [Deployment](deployment.md) | The deterministic pipeline to the production VPS |
@@ -20,18 +21,18 @@ do when something breaks.
 
 Everything runs as **one `docker-compose` stack on a single Moroccan VPS**: Nginx, the Node
 API (with job workers in-process), PostgreSQL, MinIO, and Certbot. Nginx is the only
-container publishing host ports. Images are **built in CI and pulled**, never built on the
-server. Configuration is environment variables that the application validates at boot,
+container publishing host ports. Exact-commit API and web images are built in CI after the
+existing gates pass and pulled through the release overlay; the server never compiles them.
+Configuration is environment variables that the application validates at boot,
 failing fast and by name. Backups run nightly to a **second Moroccan location**, and the
 restore procedure is drilled before launch rather than trusted.
 
 ## Three things that will bite you if you skip them
 
-**Never build images on the VPS while the stack is running.** The frontend build peaks near
-2 GB and will exhaust a 4 GB box already running PostgreSQL, MinIO, and Node. The intent is
-CI-built images, but **CI publishes none today and there is no registry**, so building on the
-host with the stack **fully down** is currently the procedure, not an emergency fallback
-([why](deployment.md#where-the-api-image-comes-from)).
+**Never build images on the VPS.** The frontend build peaks near 2 GB and will exhaust a 4 GB
+box already running PostgreSQL, object storage, and Node. A missing exact-commit registry
+image stops deployment; it is never permission to build a substitute on the host
+([why](deployment.md#where-the-images-come-from)).
 
 **Take a `pg_dump` immediately before applying migrations** on any existing deployment.
 Migrations are forward-only in production — the dump *is* the rollback point, and it must

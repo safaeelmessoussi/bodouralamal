@@ -5,6 +5,10 @@
 `https://staging.bodouralamal.com` is deployed, healthy and accepted at
 `9d6dff139acaadbe8ae788b1df7a99984c5fea7f`, the exact commit that passed CI 4/4.
 
+That acceptance belongs to that commit. Later `develop` commits are not thereby accepted on
+Staging; current promotion state and blockers live in the
+[deployment-readiness ledger](operations/deployment-readiness.md).
+
 **Open items carried forward, none blocking:**
 
 - **Rule AX, remaining instance:** the Content **Recorder** dialog still takes its scope from
@@ -1291,6 +1295,13 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [x] **Exact-commit release artifacts** — after all four existing CI jobs pass on a
+  `develop` push, CI publishes API and environment-independent web images to GHCR under the
+  immutable 40-character commit tag and revision label. Staging/Production select both
+  through `docker-compose.release.yml`; a missing tag/image stops the run and documented
+  deployment uses `--no-build`. This closes the repository-side artifact gap, not the open
+  host/access, object-store, backup, or clean-host rehearsal blockers in the
+  [readiness ledger](operations/deployment-readiness.md).
 - [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;
   Nginx now applies the vendor-advised unsigned-trailer defence at every storage proxy path
   without weakening valid presigned GET/PUT. **OWNER DECISION REQUIRED — OBJECT STORE:** select

@@ -1,0 +1,19 @@
+# Exact-commit release overlay for Staging and Production (SRS §19.1).
+#
+# BODOUR_RELEASE_TAG is a deployment argument, not application runtime
+# configuration: set it to the full 40-character Git commit already checked out
+# on the host. CI publishes both images under exactly that immutable source tag.
+#
+#   BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
+#     docker compose -f docker-compose.yml -f docker-compose.release.yml \
+#     pull api nginx
+#
+# Every release command uses --no-build. A missing image therefore stops the
+# deployment instead of silently compiling a different artifact on the VPS.
+
+services:
+  api:
+    image: ghcr.io/safaeelmessoussi/bodouralamal-api:${BODOUR_RELEASE_TAG:?set BODOUR_RELEASE_TAG to the exact 40-character commit}
+
+  nginx:
+    image: ghcr.io/safaeelmessoussi/bodouralamal-web:${BODOUR_RELEASE_TAG:?set BODOUR_RELEASE_TAG to the exact 40-character commit}

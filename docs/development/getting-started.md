@@ -43,8 +43,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 It is **not** named `docker-compose.override.yml` on purpose, so Compose cannot merge it
-automatically — the deployment steps run a plain `docker compose up -d` and must never pick
-it up.
+automatically — deployment explicitly selects `docker-compose.release.yml` and must never
+pick this overlay up.
 
 Ports bind to `127.0.0.1` only, on **5433** (PostgreSQL) and **9001** (MinIO), because a host
 PostgreSQL commonly occupies 5432 and **a silent connection to the wrong database is far

@@ -2,17 +2,19 @@
 
 # CI/CD
 
-GitHub Actions, four parallel jobs, on every push to `develop`/`main` and on every pull
-request.
+GitHub Actions runs four parallel verification jobs on every push to `develop`/`main` and on
+every pull request. A fifth release job runs only after all four succeed on a push to
+`develop`.
 
 ```
-guards      twenty-four dependency-free guard scripts — mechanically checkable repository rules
+guards      twenty-seven dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
+release     exact-commit API + web images → GHCR (develop push only, after all four pass)
 ```
 
-The contract job runs the remaining two guard scripts, so **all twenty-six committed
+The contract job runs the remaining two guard scripts, so **all twenty-nine committed
 `scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
 operate on the generated OpenAPI artifact and that job already installs the backend
 dependencies needed to regenerate it.
@@ -38,6 +40,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-security-headers.sh` | An Nginx location declaring its own header set but dropping HSTS — `add_header` does not inherit, so the header is silently absent on the wire while the configuration still reads as if it were set |
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
+| `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
@@ -171,8 +174,6 @@ the ledger** rather than drive-by additions:
 - Playwright end-to-end journeys
 - The ≥ 80 % coverage gate on services and policies
 - Fatal `TD3_REQUIRE_COMPLETE=1` release completeness, pending Owner/SRS reconciliation
-- Container-image publication; the backend/frontend jobs verify application production builds
-  but do not publish deployable images
 
 ## The release flow (binding — Document Owner, 2026-08-25)
 
@@ -206,21 +207,25 @@ Each gate exists because the one before it cannot see what it sees:
 | **Staging** | TLS, real headers on the wire, container memory ceilings, worker registration, the storage boundary as the internet sees it. HSTS was configured and never sent, and only a `curl -I` against real TLS could have found it |
 | Production smoke | That this deployment, of this commit, on this host, is actually serving |
 
-**Commit-to-Staging traceability is part of the flow, not an extra.** The deployed commit is
-recorded on the host at `/opt/bodour/DEPLOYED_COMMIT` and the host tracks `develop` rather
-than a branch of its own, so *what is running* is answerable without guessing.
+**Commit-to-Staging traceability is part of the flow, not an extra.** The host checks out the
+approved commit detached by its full id and both runtime images carry that same id in their
+revision label. A newer `develop` commit therefore cannot overtake the approved version, and
+*what is running* is answerable from the checkout and images without an untracked marker.
 
 **A red gate stops promotion.** It is not a signal to be read later and worked around.
 
 ## Deployment
 
-There is **no automatic deployment to production.** The pipeline is
+There is **no automatic deployment to Staging or Production.** The pipeline is
 [deliberate and manual](../operations/deployment.md), ten steps, run by a human on the VPS.
 
-CI now verifies both application production builds. It **does not yet build or publish
-container images**; reconciling that with the production deployment procedure is a separate
-operations slice. The frontend build's ~2 GB peak remains the reason deployment must not
-compile it beside the running services.
+On a green `develop` push, the release job authenticates to GHCR with GitHub's ephemeral
+workflow token, builds the backend and the environment-independent web artifact from that
+clean checkout, and publishes each under the exact 40-character `GITHUB_SHA`. It creates no
+mutable `latest` tag and holds no VPS, DNS, TLS, OAuth, database, or deployment credential.
+The target host must pull that exact tag through `docker-compose.release.yml` and use
+`--no-build`; the frontend build's ~2 GB peak remains the reason host compilation is
+prohibited.
 
 Pushing to `develop` triggers an automatic **Vercel** build of the frontend in a
 fixture-pointing configuration that calls no real backend.

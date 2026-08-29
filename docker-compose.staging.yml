@@ -1,7 +1,8 @@
 # Staging overlay (SRS §19.0 Revision 104) — the Staging tier, not Preview.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.staging.yml \
-#     --profile production up -d
+#   BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
+#     docker compose -f docker-compose.yml -f docker-compose.release.yml \
+#     -f docker-compose.staging.yml --profile production up --no-build -d
 #
 # It is a SEPARATE file, never `docker-compose.override.yml`, for the same
 # reason the dev overlay is: Compose must not merge it by accident.

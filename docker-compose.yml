@@ -1,6 +1,6 @@
 # بذور الأمل platform — full stack (SRS §3.1, §16.1, §19.0/§19.1, TD-13).
 # Dev:        docker compose up -d            (certbot excluded via profile)
-# Production: docker compose --profile production up -d   (§19.1; images CI-built and pulled)
+# Production: use docker-compose.release.yml and --no-build (§19.1; see deployment runbook)
 #
 # App runtime config comes from .env (TD-13 inventory; cp .env.example .env).
 # Container-bootstrap credentials (Postgres superuser password) live in
@@ -112,7 +112,8 @@ services:
       "
 
   nginx:
-    image: nginx:stable-alpine
+    image: bodour-web:dev
+    build: ./frontend
     # **Reload periodically, or the renewal never reaches the browser.**
     # `certbot renew` writes a new certificate to disk; nginx keeps the old one
     # in memory until it reloads. Without this the certificate renews on the
@@ -130,7 +131,6 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./nginx/html:/usr/share/nginx/errors:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
       - certbot-www:/var/www/certbot:ro
       - certbot-conf:/etc/letsencrypt:ro
     depends_on:
@@ -138,7 +138,7 @@ services:
       - minio
     restart: unless-stopped
 
-  # Production only (§19.1): docker compose --profile production up -d
+  # Production only (§19.1): activate through the exact-commit release overlay.
   certbot:
     image: certbot/certbot
     profiles: ["production"]
