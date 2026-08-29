@@ -86,6 +86,8 @@ for invariant in \
   "host has a pending required reboot" \
   "Docker must use a local Unix socket, never a TCP daemon" \
   "rootless Docker is outside the backed-up/reboot-tested deployment topology" \
+  "sudo -n /usr/sbin/sshd -T -C" \
+  "cannot inspect effective SSH daemon policy with non-interactive root authority" \
   "SSH password login must be disabled" \
   "host firewall is not active" \
   "automatic Ubuntu security-update timer must be enabled" \
@@ -110,6 +112,8 @@ done
 
 grep -Fq 'bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PUBLIC_IPV4" "$MINIMUM_FREE_GIB"' "$deployment" ||
   fail 'deployment pipeline does not invoke the host preflight'
+grep -Fq 'NOPASSWD: /usr/sbin/sshd -T -C *' "$deployment" ||
+  fail 'deployment runbook does not provision the SSH-policy inspection authority'
 grep -Fq 'OWNER INPUT REQUIRED — PRIMARY DISK CAPACITY' "$readiness" ||
   fail 'readiness ledger must not invent a Production content-storage capacity'
 

@@ -63,7 +63,8 @@ bash scripts/ci/test-integration.sh
 # Production-mode bootstrap/readiness — synthetic TLS, no fixtures, isolated volumes
 bash scripts/deploy/verify-production-bootstrap.sh
 
-# Actual release host — read-only; requires installed secrets, DNS, GHCR and approved disk floor
+# Actual release host — read-only; requires installed secrets, DNS, GHCR, approved disk floor,
+# and non-interactive root authority for the root-only effective-SSH-policy inspection
 BODOUR_RELEASE_TAG=<40-char-commit> bash scripts/deploy/preflight-host.sh \
   production bodouralamal.com <expected-public-ipv4> <minimum-free-GiB>
 

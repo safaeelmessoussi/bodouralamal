@@ -53,7 +53,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
 | `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
-| `check-host-preflight.sh` | Loss of the executable clean-host gate, its pure version/domain/public-IP parser rules, the exact pipeline invocation, or the explicit Owner disk-capacity input |
+| `check-host-preflight.sh` | Loss of the executable clean-host gate, its pure version/domain/public-IP parser rules, root-authoritative effective-SSH-policy inspection, the exact pipeline invocation, or the explicit Owner disk-capacity input |
 | `check-compose-operations.sh` | Any base-Compose service falling back to unbounded logs; drift in the shared ceilings; or loss of whole-application Docker/deployment health probes |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |

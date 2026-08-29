@@ -14,7 +14,7 @@ deliberately narrow:
 | OS | Ubuntu Server **22.04 LTS or 24.04 LTS**, x86_64/AMD64; no derivative distribution |
 | Capacity | At least 4 GB RAM, swap present, and an **Owner-approved free-disk floor** on the filesystem holding Docker's data root |
 | Runtime | Docker Engine from Docker's official Ubuntu repository, local rootful system daemon enabled at boot; Docker Compose **2.24.4 or newer** |
-| Operator | One dedicated non-root deployment account, SSH public-key access only, member of `docker`; no shared login |
+| Operator | One dedicated non-root deployment account, SSH public-key access only, member of `docker`, with non-interactive root authority for the read-only `/usr/sbin/sshd -T -C …` preflight inspection; no shared login |
 | Checkout | `/opt/bodour`, owned by that account, not group/world-writable; approved commit checked out detached and clean |
 | State | Docker named volumes `bodour_db-data`, `bodour_minio-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage |
 | Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; only SSH and TCP 80/443 admitted externally |
@@ -62,12 +62,26 @@ sudo chown bodour-deploy:bodour-deploy /home/bodour-deploy/.ssh/authorized_keys
 sudo chmod 0600 /home/bodour-deploy/.ssh/authorized_keys
 sudo install -d -m 0755 /etc/ssh/sshd_config.d
 sudoedit /etc/ssh/sshd_config.d/60-bodour.conf
+sudoedit /etc/sudoers.d/60-bodour-preflight
+sudo chmod 0440 /etc/sudoers.d/60-bodour-preflight
+sudo visudo -cf /etc/sudoers.d/60-bodour-preflight
 ```
 
 The SSH drop-in must enable public keys and set `PermitRootLogin no`,
 `PasswordAuthentication no`, and `KbdInteractiveAuthentication no`. Validate with
 `sudo sshd -t`, open a **second** key-authenticated session as `bodour-deploy`, and only then
-close the provisioning session. Never disable the only working access path.
+close the provisioning session. Never disable the only working access path. The sudoers file
+contains exactly this command grant:
+
+```sudoers
+bodour-deploy ALL=(root) NOPASSWD: /usr/sbin/sshd -T -C *
+```
+
+`sshd -T` only renders effective policy, but it must read root-only host keys and included
+configuration to do so. Keep those files root-only; do not make them readable to satisfy
+preflight. The deployment account is already root-equivalent through its required Docker-group
+membership, but the explicit command remains narrow and auditable. Preflight uses `sudo -n`, so
+a missing or interactive grant fails before any runtime mutation.
 
 ```bash
 sudo ufw default deny incoming

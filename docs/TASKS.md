@@ -1341,7 +1341,9 @@ was hiding behind it: the run went green on the first attempt.
   secret files, exact IPv4/no-AAAA DNS, valid same-origin configuration, the audited service/
   port/volume/log/restart graph and both exact GHCR manifests. The disk floor remains an explicit
   Owner capacity input rather than an invented default; passing is readiness, never a deployment
-  or backup claim.
+  or backup claim. A real Staging run found that unprivileged `sshd -T` cannot read correctly
+  root-only host material; preflight now uses a pinned non-interactive root inspection command
+  instead of weakening SSH file permissions.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts

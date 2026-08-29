@@ -161,9 +161,10 @@ main() {
   [[ "$release_tag" =~ ^[0-9a-f]{40}$ ]] ||
     fail 'BODOUR_RELEASE_TAG must be the approved 40-character commit'
 
-  for command in git docker python3 sort stat df findmnt dig sshd systemctl systemd-analyze timedatectl; do
+  for command in git docker python3 sort stat df findmnt dig sudo systemctl systemd-analyze timedatectl; do
     require_command "$command"
   done
+  [[ -x /usr/sbin/sshd ]] || fail 'required SSH daemon is missing: /usr/sbin/sshd'
 
   # The published release images are built on linux/amd64. Ubuntu derivatives
   # are deliberately not treated as Ubuntu: Docker does not test them as such.
@@ -185,8 +186,11 @@ main() {
   [[ "$(stat -c '%U:%a' "$ssh_dir")" == "$(id -un):700" ]] ||
     fail 'deployment user .ssh directory must be owner-only mode 700'
   require_private_file "$ssh_dir/authorized_keys"
-  ssh_effective="$(sshd -T -C "user=$(id -un),host=$domain,addr=127.0.0.1")" ||
-    fail 'cannot inspect effective SSH daemon policy'
+  # sshd -T reads root-only host keys and included configuration even though it
+  # never starts a daemon. Keep those files private and grant only this
+  # non-interactive inspection command to the deployment account.
+  ssh_effective="$(sudo -n /usr/sbin/sshd -T -C "user=$(id -un),host=$domain,addr=127.0.0.1")" ||
+    fail 'cannot inspect effective SSH daemon policy with non-interactive root authority'
   grep -Fxq 'permitrootlogin no' <<<"$ssh_effective" || fail 'SSH root login must be disabled'
   grep -Fxq 'passwordauthentication no' <<<"$ssh_effective" || fail 'SSH password login must be disabled'
   grep -Fxq 'kbdinteractiveauthentication no' <<<"$ssh_effective" ||

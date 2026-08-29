@@ -17,6 +17,12 @@ Staging and current `develop` are different facts:
 - `https://staging.bodouralamal.com` was accepted at `9d6dff139acaadbe8ae788b1df7a99984c5fea7f`.
 - Changes after that commit, including the current Production-seed corrections, have **not**
   been accepted on Staging merely because they are on `develop`.
+- The Owner approved **20 GiB free as the Staging-only preflight floor** on 2026-08-29. This
+  does not answer Production capacity; the Production threshold remains a separate input after
+  the Moroccan VPS and storage topology are selected.
+- The authorized Staging reboot now has `ssh` and Docker enabled and active at boot. The first
+  executable preflight found and closed an effective `PermitRootLogin prohibit-password` drift;
+  root login is now disabled, key-only non-root access and `/healthz` remain green.
 - No evidence in this workspace establishes a Production deployment, Production host access,
   Production DNS control, or Production credentials. Production is treated as undeployed.
 
@@ -41,7 +47,7 @@ Staging and current `develop` are different facts:
 | **OWNER/SPEC DECISION REQUIRED** | `backup.replicate` is a TD-7 pg-boss job, while a coherent recovery point must stop Compose services and read Docker volumes; giving the API the Docker socket is explicitly rejected | Reconcile who schedules/executes the host-scoped operation without granting the API root-equivalent host control; then implement the nightly trigger and failure/staleness signal |
 | **OWNER INPUT REQUIRED** | The second Moroccan backup target and destructive retention horizon do not exist in repository configuration | Provision the target, pin its host key, escrow the restic and SSH credentials, and select retention as described in the [recovery runbook](runbooks.md#owner-decision-required--backup-target-and-retention) |
 | **OWNER INPUT REQUIRED — PRIMARY DISK CAPACITY** | The SRS gives audit growth and file caps but intentionally requires the Owner's recording/week and average-size estimate before sizing the VPS disk | Approve the minimum free GiB required at deployment and its growth alarm; host preflight requires that explicit value and refuses to invent a default |
-| **EXTERNAL ACCESS REQUIRED** | The current `develop` commit is not the accepted Staging commit | Provide/restore Staging host and deployment access, promote the exact green commit, and run same-origin authenticated acceptance |
+| **IN PROGRESS — STAGING PROMOTION** | The current `develop` commit is not the accepted Staging commit | Host access and reboot recovery are proven; complete the fail-closed host preflight, promote the exact green commit, and run same-origin acceptance |
 | **EXTERNAL ACCESS REQUIRED** | Production VPS, DNS, TLS issuance access, Google OAuth Production credentials, and GHCR read authority are not available in this workspace | Supply only those external inputs; never commit them |
 | **DOCUMENT OWNER APPROVAL REQUIRED** | GitHub now warns that `actions/checkout@v4` and `actions/setup-node@v4` target deprecated Node 20 and force-runs them on Node 24 | Approve the dedicated major tooling upgrade to the current v7 lines; their official action metadata uses `node24`, but SRS §3.1a prohibits an unapproved major upgrade |
 | **PARTIAL — DISPOSABLE PRODUCTION BOOTSTRAP GREEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | The isolated Production-mode drill now proves migrations, byte-stable repeat seed, clean inventory, internal MinIO policies, TLS/Nginx, an anonymous real-browser smoke, worker readiness, storage-degraded `503` + Docker `unhealthy`, and restart/recreation recovery. The browser loads the built same-origin login/public routes, validates security/runtime signals and reaches the real Production auth limiter without a fixture identity. Still execute [the deployment pipeline](deployment.md#the-pipeline) on a clean VPS, including GHCR pull, public certificate, authenticated smoke, backup, restore and rollback |
