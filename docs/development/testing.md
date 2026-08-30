@@ -108,10 +108,11 @@ it still means only *ready to deploy*: no container, migration, certificate or b
 
 The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
 creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
-restores them into empty replacements, validates the portable dump catalog, and reads both
-values back. Fixture mode structurally
-refuses SFTP so the drill cannot send local data to an external target. Its local 33-second
-result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
+restores them into empty replacements, reads both values back, then executes the portable dump
+into a second clean PostgreSQL database. It also pins the running container IDs across recovery
+creation and proves a wrong repository credential fails visibly before any service stops.
+Fixture mode structurally refuses SFTP so the drill cannot send local data to an external target.
+Its local under-one-minute result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
 Moroccan target and realistic Production volume still require the launch drill.
 
 The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL

@@ -52,7 +52,7 @@ Staging and current `develop` are different facts:
 | Web | One environment-independent Vite bundle served by Nginx; API and storage are boot-validated as exact same-origin paths |
 | TLS | Certbot webroot renewal plus periodic Nginx reload; activation remains a host operation |
 | Persistence | PostgreSQL, object storage, Certbot configuration, and ACME webroot are named volumes |
-| Recovery | Encrypted host-scoped recovery-point tooling passes a disposable drill; the remote target, retention, scheduling, alerting, and realistic host drill remain open |
+| Recovery | Encrypted host-scoped recovery-point tooling preflights the repository before outage, preserves exact container identities, and passes raw-volume plus clean logical-PostgreSQL restore; the remote target, retention, scheduling, alerting, vendor-specific object export, and realistic host drill remain open |
 
 ## BLOCKS DEPLOYMENT
 

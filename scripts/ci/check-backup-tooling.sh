@@ -29,8 +29,19 @@ grep -Fq 'pg_dump --username' "$create" ||
   fail 'the recovery point must contain a portable PostgreSQL dump'
 writer_stop="$(grep -nF 'stop --timeout "$stop_timeout" "${writer_services[@]}"' "$create" | cut -d: -f1)"
 storage_stop="$(grep -nF 'stop --timeout "$stop_timeout" "${services_before_db[@]}"' "$create" | cut -d: -f1)"
+repository_probe="$(grep -nF 'snapshots --no-lock' "$create" | cut -d: -f1)"
 [[ -n "$writer_stop" && -n "$storage_stop" && "$writer_stop" -lt "$storage_stop" ]] ||
   fail 'application writers must drain before storage is stopped'
+[[ -n "$repository_probe" && "$repository_probe" -lt "$writer_stop" ]] ||
+  fail 'the encrypted repository must be reachable before application writers stop'
+grep -Fq '"${compose[@]}" start "${running_services[@]}"' "$create" ||
+  fail 'backup cleanup must restart the exact existing containers'
+if grep -Fq '"${compose[@]}" up -d "${running_services[@]}"' "$create"; then
+  fail 'backup cleanup must not reconcile/recreate Production containers'
+fi
+grep -Fq 'exec -T db pg_restore --username app --dbname bodour_logical_restore' \
+  "$backup_dir/verify-backup-restore.sh" ||
+  fail 'the disposable drill must execute the portable PostgreSQL restore'
 
 if grep -rnE --include='*.sh' 'docker\.sock|--privileged' "$backup_dir" | grep -q .; then
   fail 'backup tooling must not grant a container Docker-host authority'

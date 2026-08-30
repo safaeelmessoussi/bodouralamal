@@ -11,6 +11,7 @@ repository="$workdir/repository"
 password_file="$workdir/restic-password"
 recovered_config="$workdir/recovered-config"
 fixture_config="$workdir/fixture.env"
+wrong_password_file="$workdir/wrong-restic-password"
 started_at="$(date +%s)"
 
 cleanup() {
@@ -33,10 +34,20 @@ trap cleanup EXIT INT TERM
 
 umask 077
 printf 'fixture-restic-password-with-sufficient-entropy\n' > "$password_file"
+printf 'deliberately-wrong-restic-password\n' > "$wrong_password_file"
 printf 'NODE_ENV=test\n' > "$fixture_config"
 mkdir -p "$repository"
 
+container_ids() {
+  for service in api db minio; do
+    printf '%s=%s\n' "$service" \
+      "$(docker compose --project-name "$project" --file "$compose_file" ps -q "$service")"
+  done
+}
+
 docker compose --project-name "$project" --file "$compose_file" up -d
+
+before_ids="$(container_ids)"
 
 "$repo_root/scripts/backup/create-recovery-point.sh" \
   --allow-fixtures \
@@ -50,6 +61,33 @@ docker compose --project-name "$project" --file "$compose_file" up -d
   --volume db-data \
   --volume minio-data \
   --config-file "$fixture_config"
+
+after_ids="$(container_ids)"
+[[ "$after_ids" == "$before_ids" ]] ||
+  { printf 'backup drill: recovery-point creation recreated a running container\n' >&2; exit 1; }
+
+# Repository failure is an operational alert, not an application outage. The
+# probe occurs before the writer stop, so a wrong password against the existing
+# encrypted repository must leave every exact container running and unchanged.
+if "$repo_root/scripts/backup/create-recovery-point.sh" \
+  --allow-fixtures \
+  --project "$project" \
+  --compose-file "$compose_file" \
+  --repository "$repository" \
+  --password-file "$wrong_password_file" \
+  --database-user app \
+  --database-name bodour \
+  --stop-timeout 3 \
+  --volume db-data \
+  --volume minio-data \
+  --config-file "$fixture_config" >"$workdir/expected-repository-failure.log" 2>&1; then
+  printf 'backup drill: wrong repository credential unexpectedly succeeded\n' >&2
+  exit 1
+fi
+[[ -s "$workdir/expected-repository-failure.log" ]] ||
+  { printf 'backup drill: repository failure was not visible\n' >&2; exit 1; }
+[[ "$(container_ids)" == "$before_ids" ]] ||
+  { printf 'backup drill: repository preflight failure stopped or recreated a service\n' >&2; exit 1; }
 
 # Simulate total loss of both named data volumes. These are uniquely named
 # disposable fixtures and are removed by the trap even if an assertion fails.
@@ -84,8 +122,22 @@ object_value="$(docker compose --project-name "$project" --file "$compose_file" 
 docker run --rm --volume "$recovered_config:/recovery:ro" postgres:18.4 \
   pg_restore --list /recovery/postgres.dump >/dev/null
 
+# The raw volume is the fast same-version disaster path. Independently restore
+# the portable dump into a clean database so the forward-migration rollback
+# artifact is proven executable rather than merely catalog-readable.
+docker compose --project-name "$project" --file "$compose_file" \
+  exec -T db createdb --username app bodour_logical_restore
+docker compose --project-name "$project" --file "$compose_file" \
+  exec -T db pg_restore --username app --dbname bodour_logical_restore \
+    --no-owner --no-privileges < "$recovered_config/postgres.dump"
+logical_value="$(docker compose --project-name "$project" --file "$compose_file" \
+  exec -T db psql -U app -d bodour_logical_restore -Atc \
+    'SELECT value FROM backup_drill WHERE id = 1')"
+[[ "$logical_value" == 'database-at-recovery-point' ]] ||
+  { printf 'backup drill: logical PostgreSQL restore mismatch\n' >&2; exit 1; }
+
 elapsed="$(( $(date +%s) - started_at ))"
 (( elapsed < 3600 )) ||
   { printf 'backup drill: RTO exceeded (%ss)\n' "$elapsed" >&2; exit 1; }
 
-printf 'backup drill: PostgreSQL + object volume + config restored in %ss (< 1 h RTO)\n' "$elapsed"
+printf 'backup drill: raw + logical PostgreSQL, object volume and config restored in %ss (< 1 h RTO)\n' "$elapsed"

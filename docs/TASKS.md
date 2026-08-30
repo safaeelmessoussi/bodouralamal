@@ -1412,11 +1412,14 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] Nginx rate limits verified live (TD-13); presigned-URL permission audit
 - [ ] Locked CLI restore script (`npm run db:restore`) wrapping restore + cascades + audit in one transaction; executed once on fixtures (§4.10, TD-8)
 - [~] backup + restore — pinned encrypted restic recovery-point creation, empty-target restore,
-  portable `pg_dump`, raw data/TLS/config volumes, fail-safe service restart and destructive
-  disposable drill are complete (**33 s**, DB + object + config recovered). **OWNER DECISION
+  portable `pg_dump`, raw data/TLS/config volumes, fail-safe exact-container restart and destructive
+  disposable drill are complete (under one minute, raw DB + actual clean-database `pg_restore` +
+  object + config recovered). Repository authority is checked before writers stop, and a wrong
+  credential is proven visible without stopping/recreating the running services. **OWNER DECISION
   REQUIRED — BACKUP TARGET AND RETENTION:** provision the second Moroccan SFTP location,
   escrow keys/password, and set retention. Still release-blocking: `backup.replicate` nightly
-  pg-boss automation, critical alert/staleness visibility, object-volume adaptation after the
+  pg-boss automation (an unmonitored cron substitute is explicitly not implemented), critical
+  alert/staleness visibility, object-volume adaptation after the
   P0.1 vendor decision, and realistic Production-host RTO drill
 - [~] **P0.3 permanent purge and staging lifecycle** — independently solvable safety work is
   complete: exact replacement/deletion obligations are transactionally durable; manual content

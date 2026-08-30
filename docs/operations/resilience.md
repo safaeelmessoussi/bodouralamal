@@ -17,8 +17,13 @@ Backup, restore, and what the platform does while a dependency is down.
 Both locations are inside Morocco, because backups are personal data and
 [`BR-18`](../reference/business-rules.md#br-18) makes no exception for them.
 
-The job runs nightly on cron. **Failure raises a critical Admin-visible alert**, and two
-consecutive failures escalate to the owner.
+The required steady state is a nightly run, a critical Admin-visible failure signal, and Owner
+escalation after two consecutive failures. **That scheduler/alert is not implemented yet.** TD-7
+names `backup.replicate` as a pg-boss job, while the coherent recovery operation must stop
+Compose services and read host volumes; granting the API Docker-host authority is rejected.
+The Document Owner must reconcile the execution boundary before launch. The host-scoped tool is
+ready and fails before writer outage when its encrypted target/credential preflight is invalid;
+an unmonitored cron entry is not represented here as the missing job.
 
 > Running without offsite backup is an accepted emergency state measured in **days, not
 > weeks**.

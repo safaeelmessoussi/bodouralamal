@@ -15,8 +15,11 @@ The repository now has host-scoped recovery tooling for the current Compose data
 point by stopping every running service except PostgreSQL, producing a portable custom-format
 `pg_dump`, stopping PostgreSQL, and backing up that dump, the cleanly stopped Docker data
 volumes, TLS state and recovery configuration into one encrypted restic snapshot. The exact
-pre-backup service set is restarted even on failure. The restic image is immutable by digest;
-the password file is root-only and is never included in the snapshot.
+pre-backup containers are restarted with `compose start` even on failure — never reconciled or
+recreated from whatever Compose overlays happen to be present at backup time. The encrypted
+repository/password/SSH path is proved before any writer stops, so an unavailable target fails
+visibly without causing an application outage. The restic image is immutable by digest; the
+password file is root-only and is never included in the snapshot.
 
 This is intentionally host-scoped. The API and its pg-boss workers are unprivileged
 containers; mounting the Docker socket into either would grant root-equivalent control of the
@@ -87,8 +90,10 @@ bash scripts/backup/verify-backup-restore.sh
 
 It creates uniquely named PostgreSQL/MinIO volumes and a local encrypted repository, records
 known database and object values, snapshots, destroys both volumes, restores into empty
-volumes, validates the portable dump catalog and reads both values back. The accepted run on
-2026-08-26 completed in **33 seconds**,
+volumes, reads both values back, and executes the portable dump into a second clean PostgreSQL
+database rather than treating a readable catalog as proof of restore. It also proves recovery
+creation preserves the exact container identities and that a wrong repository credential fails
+before stopping them. The accepted run on 2026-08-30 completed in **under one minute**,
 inside the one-hour RTO. It proves the tooling; only a drill on the selected Moroccan target
 with realistic data volume proves Production's RTO.
 

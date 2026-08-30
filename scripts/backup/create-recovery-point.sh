@@ -103,6 +103,25 @@ for logical in "${volume_names[@]}"; do
   actual_volumes["$logical"]="$(backup_resolve_volume "$project" "$logical")"
 done
 
+# Prove the encrypted repository and credentials before taking any service out
+# of rotation. A dead remote target must fail the operation without creating an
+# avoidable application outage.
+restic_base=(docker run --rm
+  --env RESTIC_PASSWORD_FILE=/run/secrets/restic-password
+  --volume "$password_file:/run/secrets/restic-password:ro")
+restic_repository="$repository"
+if backup_is_sftp_repository "$repository"; then
+  restic_base+=(--volume "$ssh_dir:/root/.ssh:ro")
+else
+  mkdir -p "$repository"
+  restic_base+=(--volume "$repository:/repository")
+  restic_repository='/repository'
+fi
+if ! "${restic_base[@]}" "$RESTIC_IMAGE" \
+  --repo "$restic_repository" snapshots --no-lock >/dev/null 2>&1; then
+  "${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" init
+fi
+
 umask 077
 workdir="$(mktemp -d /tmp/bodour-backup.XXXXXXXX)"
 snapshot_dir="$workdir/snapshot"
@@ -111,7 +130,10 @@ restarted=false
 
 restart_services() {
   $restarted && return 0
-  "${compose[@]}" up -d "${running_services[@]}"
+  # Start the exact containers that were running before the snapshot. `up -d`
+  # is a reconciliation command: with a missing release/tier overlay it can
+  # recreate Production from a different image or configuration.
+  "${compose[@]}" start "${running_services[@]}"
   restarted=true
 }
 
@@ -186,37 +208,21 @@ commit="$(git -C "$repo_root" rev-parse HEAD)"
   printf 'volumes=%s\n' "$(IFS=,; printf '%s' "${volume_names[*]}")"
 } > "$snapshot_dir/manifest.env"
 
-restic_docker=(docker run --rm
-  --env RESTIC_PASSWORD_FILE=/run/secrets/restic-password
-  --volume "$password_file:/run/secrets/restic-password:ro")
-restic_repository="$repository"
-if backup_is_sftp_repository "$repository"; then
-  restic_docker+=(--volume "$ssh_dir:/root/.ssh:ro")
-else
-  mkdir -p "$repository"
-  restic_docker+=(--volume "$repository:/repository")
-  restic_repository='/repository'
-fi
-restic_docker+=(--volume "$snapshot_dir:/snapshot:ro")
+restic_backup=("${restic_base[@]}" --volume "$snapshot_dir:/snapshot:ro")
 backup_paths=(/snapshot)
 for logical in "${volume_names[@]}"; do
-  restic_docker+=(--volume "${actual_volumes[$logical]}:/volumes/$logical:ro")
+  restic_backup+=(--volume "${actual_volumes[$logical]}:/volumes/$logical:ro")
   backup_paths+=("/volumes/$logical")
 done
 
-if ! "${restic_docker[@]}" "$RESTIC_IMAGE" \
-  --repo "$restic_repository" snapshots --no-lock >/dev/null 2>&1; then
-  "${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" init
-fi
-
-"${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" backup \
+"${restic_backup[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" backup \
   --host "$project" --tag bodour --tag "recovery-point:$recovery_point" \
   "${backup_paths[@]}"
 
 # Data services return before the repository verification. A slow remote check
 # must not extend the write outage after the immutable snapshot is complete.
 restart_services
-"${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" check
+"${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" check
 
 printf 'backup: recovery point %s complete and verified\n' "$recovery_point"
 printf 'backup: retention is intentionally unchanged; no forget/prune policy is configured\n'
