@@ -36,10 +36,28 @@ with a disposable compatibility proof before copying any real object. The replac
 support path-style SigV4 presigning through the same-origin `/storage` prefix (including an
 exact non-default Host port), ranged GET and HEAD, PUT, copy, delete, conditional reads/copies,
 object metadata, object-atomic writes, idempotent deletion, the three existing bucket policy
-shapes, the AWS SDK client, internal-only networking, health checks, and Moroccan primary and
-backup residency.
+shapes, the AWS SDK client, internal-only networking, authenticated `HeadBucket` for all three
+required buckets, and Moroccan primary and backup residency. The application `/healthz` now
+uses those S3 bucket checks with the same credentials as real work; it no longer depends on
+MinIO's private `/minio/health/live` URL. The container-level healthcheck, initializer and raw
+volume export remain vendor integration points and must be adapted after selection.
 
-After the Owner selects and pins a supported replacement, rerun: `nginx -t` and `nginx -T`;
+Bucket versioning, lifecycle and retention defaults are part of acceptance, not harmless
+provider settings. The current immutable-key model expects **versioning disabled**: it does not
+store object version IDs, and `DeleteObject` must retire the named bytes rather than leave a
+noncurrent version or delete marker that the purge contract cannot address. No provider
+lifecycle rule may expire canonical or quarantine objects, rewrite them, transition them to an
+unreadable tier, or automatically destroy staging/quarantine data; the existing bounded jobs
+own those decisions, and automatic quarantine destruction still requires the Owner decision
+below. Object Lock/retention must not silently prevent an authorised exact-key purge. A proposed
+vendor must prove these bucket settings from its real administrative API as well as passing the
+application behavior suite. Enabling versioning later requires an explicit design for exact
+version coordinates, deletion, restore and legal erasure; it is not a deployment toggle.
+
+After the Owner selects and pins a supported replacement, first prove all three buckets exist,
+authenticated `HeadBucket` succeeds, versioning is disabled, no unapproved lifecycle/Object
+Lock rule exists, and the replacement container's own healthcheck is truthful. Then rerun:
+`nginx -t` and `nginx -T`;
 the real signed private PUT/GET proxy round trip; signed public-staging PUT plus unsigned-read
 denials; the canonical public exact-coordinate GET/HEAD and method/root denial matrix; the
 complete B-01 safeguarding suite; B-02 placement and B-03 immutable finalization/replacement;

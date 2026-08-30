@@ -4,10 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { JobReadinessSnapshot } from '../jobs/readiness.js';
 import type { AppConfig } from '../lib/config.js';
+import type { StorageClients } from '../lib/storage.js';
 import { healthController } from './health.controller.js';
 
 const CONFIG = {
-  MINIO_ENDPOINT: 'http://storage.test',
+  RECORDING_STAGING_BUCKET: 'recordings-staging',
 } as AppConfig;
 
 const READY: JobReadinessSnapshot = {
@@ -38,8 +39,8 @@ function prismaWithQueue(present: boolean): PrismaClient {
 async function callHealth(
   worker: JobReadinessSnapshot,
   queuePresent = true,
+  storageSend = vi.fn().mockResolvedValue({}),
 ) {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })));
   let statusCode = 0;
   let body: unknown;
   const response = {
@@ -56,6 +57,7 @@ async function callHealth(
   await healthController(
     prismaWithQueue(queuePresent),
     CONFIG,
+    { internal: { send: storageSend } } as unknown as Pick<StorageClients, 'internal'>,
     { snapshot: () => worker },
   )({} as Request, response as unknown as Response);
 
@@ -68,7 +70,8 @@ afterEach(() => {
 
 describe('GET /healthz worker truthfulness', () => {
   it('returns healthy with queue infrastructure and the full live worker catalog', async () => {
-    const result = await callHealth(READY);
+    const storageSend = vi.fn().mockResolvedValue({});
+    const result = await callHealth(READY, true, storageSend);
 
     expect(result.statusCode).toBe(200);
     expect(result.body).toEqual({
@@ -80,6 +83,26 @@ describe('GET /healthz worker truthfulness', () => {
         queue: 'ok',
       },
       details: { jobs: READY },
+    });
+    expect(storageSend.mock.calls.map(([command]) => command.input.Bucket)).toEqual([
+      'public',
+      'private',
+      'recordings-staging',
+    ]);
+  });
+
+  it('fails readiness when any required S3 bucket is absent or unauthorized', async () => {
+    const storageSend = vi.fn(async (command: { input: { Bucket: string } }) => {
+      if (command.input.Bucket === 'private') throw new Error('AccessDenied');
+      return {};
+    });
+
+    const result = await callHealth(READY, true, storageSend);
+
+    expect(result.statusCode).toBe(503);
+    expect(result.body).toMatchObject({
+      status: 'degraded',
+      components: { database: 'ok', storage: 'down', queue: 'ok', jobs: 'ok' },
     });
   });
 

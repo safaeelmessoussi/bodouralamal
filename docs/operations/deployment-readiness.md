@@ -48,7 +48,7 @@ Staging and current `develop` are different facts:
 | External surface | Nginx alone publishes ports 80/443; PostgreSQL and object storage have no base-Compose host port |
 | Application | One Node/Express container; pg-boss workers run in the API process |
 | Data | PostgreSQL 18.4 named volume; migrations are forward-only |
-| Storage | Three internal MinIO buckets: public, private, recording staging; current pin remains release-blocked by the [object-store decision](../architecture/storage.md#owner-decision-required--object-store) |
+| Storage | Three internal buckets: public, private, recording staging. Application readiness uses authenticated S3 `HeadBucket` for all three; the current MinIO image/init/container-health/volume pin remains release-blocked by the [object-store decision](../architecture/storage.md#owner-decision-required--object-store) |
 | Web | One environment-independent Vite bundle served by Nginx; API and storage are boot-validated as exact same-origin paths |
 | TLS | Certbot webroot renewal plus periodic Nginx reload; activation remains a host operation |
 | Persistence | PostgreSQL, object storage, Certbot configuration, and ACME webroot are named volumes |
@@ -58,7 +58,7 @@ Staging and current `develop` are different facts:
 
 | Status | Blocker | Smallest completion boundary |
 |---|---|---|
-| **OWNER DECISION REQUIRED** | The pinned final MinIO OSS release is affected and unsupported | Select a maintained object store/vendor, then run the compatibility suite named in [Storage](../architecture/storage.md#owner-decision-required--object-store) |
+| **OWNER DECISION REQUIRED** | The pinned final MinIO OSS release is affected and unsupported | Select a maintained Moroccan-resident object store/vendor, explicitly prove bucket versioning/lifecycle/Object Lock settings, adapt the image/init/container probe and volume/export format, then run the compatibility suite named in [Storage](../architecture/storage.md#owner-decision-required--object-store). Application readiness is already generic authenticated S3 bucket access |
 | **OWNER/SPEC DECISION REQUIRED** | `backup.replicate` is a TD-7 pg-boss job, while a coherent recovery point must stop Compose services and read Docker volumes; giving the API the Docker socket is explicitly rejected | Reconcile who schedules/executes the host-scoped operation without granting the API root-equivalent host control; then implement the nightly trigger and failure/staleness signal |
 | **OWNER INPUT REQUIRED** | The second Moroccan backup target and destructive retention horizon do not exist in repository configuration | Provision the target, pin its host key, escrow the restic and SSH credentials, and select retention as described in the [recovery runbook](runbooks.md#owner-decision-required--backup-target-and-retention) |
 | **OWNER INPUT REQUIRED — PRIMARY DISK CAPACITY** | The SRS gives audit growth and file caps but intentionally requires the Owner's recording/week and average-size estimate before sizing the VPS disk | Approve the minimum free GiB required at deployment and its growth alarm; host preflight requires that explicit value and refuses to invent a default |

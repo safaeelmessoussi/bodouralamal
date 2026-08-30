@@ -110,7 +110,7 @@ columns speculatively is prohibited.**
 | Validation | **Zod 4.4.3** | One place where field limits are encoded, shared with the client |
 | Jobs | **pg-boss 12.26.2** | Postgres-backed, so **no Redis container**. On a 4 GB box, container count is a real budget — and it is what lets a job be enqueued *inside* the transaction that triggers it |
 | Database | **PostgreSQL 18.4** | ICU collation for correct Arabic sorting; partial and functional indexes; the job queue and rate-limit counters live here too |
-| Storage | **MinIO** | S3-compatible, self-hosted. Data residency rules out every managed object store |
+| Storage | **S3-compatible object store** | Current implementation is self-hosted MinIO; Production requires the supported Moroccan-resident product chosen through the [storage decision](storage.md#owner-decision-required--object-store). A managed service is admissible only with written Moroccan primary/backup residency and acceptable contract controls |
 | Client | **React 19.2.8** + **Vite 8.1.5** | Vite because the build is fast and the output is static. **Next.js is prohibited** — server-rendering would break the same-origin routing model |
 | Edge | **Nginx** stable-alpine + Certbot | Same-origin routing, TLS, rate limits, error-page mapping |
 | Tests | **Vitest 4.1.10** | Unit and integration in one runner |

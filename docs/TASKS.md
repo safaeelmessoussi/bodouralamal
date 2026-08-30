@@ -1392,7 +1392,13 @@ was hiding behind it: the run went green on the first attempt.
   [readiness ledger](operations/deployment-readiness.md).
 - [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;
   Nginx now applies the vendor-advised unsigned-trailer defence at every storage proxy path
-  without weakening valid presigned GET/PUT. **OWNER DECISION REQUIRED — OBJECT STORE:** select
+  without weakening valid presigned GET/PUT. Application readiness is now provider-independent:
+  it performs authenticated S3 `HeadBucket` against public, private and recording staging with
+  the same credentials used by real work, and fails if any required bucket/authority is absent.
+  The replacement contract also requires versioning disabled and refuses unapproved lifecycle
+  or Object Lock behavior because exact-key deletion carries no storage version ID. The Compose
+  image, initializer, container probe and raw-volume backup remain vendor integration points.
+  **OWNER DECISION REQUIRED — OBJECT STORE:** select
   and fund a maintained patched replacement, then run the full compatibility/safeguarding/
   retention/backup regression listed in [Storage](architecture/storage.md#owner-decision-required--object-store)
 - [ ] **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require

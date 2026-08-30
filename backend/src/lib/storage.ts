@@ -2,6 +2,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -87,6 +88,25 @@ export function createStorageClients(config: AppConfig): StorageClients {
     publicOrigin: new S3Client({ ...common, endpoint: origin }),
     storagePrefix: prefix,
   };
+}
+
+/**
+ * Authenticated S3 readiness for one required bucket.
+ *
+ * Application health must exercise the same API and credentials as real
+ * storage work. A vendor-specific process-liveness URL can stay green while a
+ * bucket is absent or the application's authority is invalid, and prevents a
+ * supported S3-compatible replacement from satisfying the runtime contract.
+ */
+export async function headBucket(
+  clients: Pick<StorageClients, 'internal'>,
+  bucket: string,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  await clients.internal.send(
+    new HeadBucketCommand({ Bucket: bucket }),
+    abortSignal === undefined ? undefined : { abortSignal },
+  );
 }
 
 /** Inserts the proxy prefix that Nginx will strip back off (see above). */

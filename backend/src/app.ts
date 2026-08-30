@@ -221,8 +221,12 @@ export function createApp(
   );
   app.use(express.json({ limit: '2mb' }));
 
+  const storage = createStorageClients(config);
+
   // TD-14: public and unauthenticated, served at the origin root (§19.1 step 8).
-  app.get('/healthz', healthController(prisma, config, jobReadiness));
+  // The probe uses this same authenticated S3 client rather than a vendor-only
+  // liveness path, so it verifies all three required buckets and real authority.
+  app.get('/healthz', healthController(prisma, config, storage, jobReadiness));
 
   // R98 — `null` when the association runs no online classes, which is a
   // complete configuration; the join route then answers `503` naming the
@@ -307,8 +311,6 @@ export function createApp(
   // Created before the Trash routes because a permanent delete of content must
   // reap its object as well as its row (R59.1) — the upload routes below use the
   // same clients.
-  const storage = createStorageClients(config);
-
   // §7/TD-5/BR-15 (R52, R59) — soft-deleted records. Super Admin only, asserted
   // in the SERVICE against live role rows: the `/admin/` prefix is a URL, not a
   // boundary, and both write verbs here are irreversible or nearly so.
