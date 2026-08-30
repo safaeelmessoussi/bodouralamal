@@ -1553,6 +1553,14 @@ describe('B-01 consent safeguarding', () => {
         });
         return row.visibility === 'private';
       }, 'TD-7 storage retry to complete');
+      await waitUntil(async () => {
+        const [job] = await prisma.$queryRaw<{ state: string; retry_count: number }[]>`
+          SELECT state::text, retry_count
+          FROM pgboss.job
+          WHERE name = ${queue} AND id = ${id}::uuid
+        `;
+        return job?.state === 'completed' && job.retry_count === 1;
+      }, 'TD-7 storage retry job to reach its terminal state');
       const jobs = await prisma.$queryRaw<{ state: string; retry_count: number }[]>`
         SELECT state::text, retry_count
         FROM pgboss.job
