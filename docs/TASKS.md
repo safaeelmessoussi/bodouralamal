@@ -1,15 +1,27 @@
 # Tasks — بذور الأمل Platform
 
-## Staging accepted — 2026-08-25
+## Staging promoted — 2026-08-30
 
-`https://staging.bodouralamal.com` is deployed, healthy and accepted at
-`9d6dff139acaadbe8ae788b1df7a99984c5fea7f`, the exact commit that passed CI 4/4.
+`https://staging.bodouralamal.com` is deployed and healthy at
+`4fd620de2cf182aa8a8342d48641c054ea76002e`. Hosted run `33262358687`, attempt 2,
+passed all six verification jobs and published both exact-commit images before promotion.
+The real edge then passed the complete 15/15 anonymous browser smoke and a stateless-service
+restart. Strict synthetic-only acceptance remains subject to the count-only classification
+finding below.
 
-That acceptance belongs to that commit. Later `develop` commits are not thereby accepted on
+That deployment evidence belongs to that commit. Later `develop` commits are not thereby accepted on
 Staging; current promotion state and blockers live in the
 [deployment-readiness ledger](operations/deployment-readiness.md).
 
-**Open items carried forward, none blocking:**
+**Open items carried forward:**
+
+- **🔴 before Staging — classify four pre-existing untagged rows without exposing or deleting
+  them.** The post-promotion count-only inventory proved zero non-fixture beneficiaries and zero
+  fixture-email violations, but also found two active non-`[تجريبي]` users with non-`example.com`
+  OAuth identities and two non-`[تجريبي]` branches. They predate this promotion and may be
+  synthetic operator records, but row shape cannot prove that. The Owner must classify them;
+  any confirmed real personal data must be removed through an authorised domain path before
+  Staging is called strictly synthetic-only. No value was printed and no row was changed.
 
 - **Rule AX, remaining instance:** the Content **Recorder** dialog still takes its scope from
   the page filters. Its own slice — R75's recorder has a separate submit path.

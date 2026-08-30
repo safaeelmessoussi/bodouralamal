@@ -14,15 +14,25 @@ base, Production profile, Staging overlay, and Local Development overlay.
 
 Staging and current `develop` are different facts:
 
-- `https://staging.bodouralamal.com` was accepted at `9d6dff139acaadbe8ae788b1df7a99984c5fea7f`.
-- Changes after that commit, including the current Production-seed corrections, have **not**
-  been accepted on Staging merely because they are on `develop`.
+- `https://staging.bodouralamal.com` is deployed at
+  `4fd620de2cf182aa8a8342d48641c054ea76002e`. Hosted run `33262358687`, attempt 2,
+  passed all six verification jobs and exact-image publication before promotion; the real edge
+  then passed 15/15 anonymous browser assertions and a stateless-service restart.
+- Acceptance belongs to that deployed commit. Later `develop` documentation or application
+  commits do **not** inherit it.
 - The Owner approved **20 GiB free as the Staging-only preflight floor** on 2026-08-29. This
   does not answer Production capacity; the Production threshold remains a separate input after
   the Moroccan VPS and storage topology are selected.
 - The authorized Staging reboot now has `ssh` and Docker enabled and active at boot. The first
   executable preflight found and closed an effective `PermitRootLogin prohibit-password` drift;
   root login is now disabled, key-only non-root access and `/healthz` remain green.
+- The post-promotion inventory is privacy-safe and count-only: eight tagged fixture users, zero
+  non-fixture beneficiaries, zero fixture-email violations, 61 applied migrations and zero
+  terminal failed/cancelled pg-boss jobs. It also found **two pre-existing untagged OAuth-bound
+  operator rows and two pre-existing untagged Branch rows**. They may be synthetic operator
+  records, but shape cannot establish purpose. This is **🔴 before strict Staging acceptance**:
+  the Owner must classify them, and any confirmed real personal data must be removed through an
+  authorised domain path. No value was displayed and no row was changed.
 - No evidence in this workspace establishes a Production deployment, Production host access,
   Production DNS control, or Production credentials. Production is treated as undeployed.
 
@@ -47,11 +57,11 @@ Staging and current `develop` are different facts:
 | **OWNER/SPEC DECISION REQUIRED** | `backup.replicate` is a TD-7 pg-boss job, while a coherent recovery point must stop Compose services and read Docker volumes; giving the API the Docker socket is explicitly rejected | Reconcile who schedules/executes the host-scoped operation without granting the API root-equivalent host control; then implement the nightly trigger and failure/staleness signal |
 | **OWNER INPUT REQUIRED** | The second Moroccan backup target and destructive retention horizon do not exist in repository configuration | Provision the target, pin its host key, escrow the restic and SSH credentials, and select retention as described in the [recovery runbook](runbooks.md#owner-decision-required--backup-target-and-retention) |
 | **OWNER INPUT REQUIRED — PRIMARY DISK CAPACITY** | The SRS gives audit growth and file caps but intentionally requires the Owner's recording/week and average-size estimate before sizing the VPS disk | Approve the minimum free GiB required at deployment and its growth alarm; host preflight requires that explicit value and refuses to invent a default |
-| **IN PROGRESS — STAGING PROMOTION** | The current `develop` commit is not the accepted Staging commit | Host access and reboot recovery are proven; complete the fail-closed host preflight, promote the exact green commit, and run same-origin acceptance |
+| **🔴 OWNER CLASSIFICATION REQUIRED — STAGING DATA BOUNDARY** | Count-only evidence cannot classify two pre-existing untagged OAuth-bound operator rows and two untagged Branch rows as synthetic | Classify those exact records without exporting their values; if any are real personal data, remove them through an authorised domain path before strict Staging acceptance. The promoted release itself is healthy and introduced no non-fixture beneficiary data |
 | **EXTERNAL ACCESS REQUIRED** | Production VPS, DNS, TLS issuance access, Google OAuth Production credentials, and GHCR read authority are not available in this workspace | Supply only those external inputs; never commit them |
 | **DOCUMENT OWNER APPROVAL REQUIRED** | GitHub now warns that `actions/checkout@v4` and `actions/setup-node@v4` target deprecated Node 20 and force-runs them on Node 24 | Approve the dedicated major tooling upgrade to the current v7 lines; their official action metadata uses `node24`, but SRS §3.1a prohibits an unapproved major upgrade |
 | **PARTIAL — DISPOSABLE PRODUCTION BOOTSTRAP GREEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | The isolated Production-mode drill now proves migrations, byte-stable repeat seed, clean inventory, internal MinIO policies, TLS/Nginx, an anonymous real-browser smoke, worker readiness, storage-degraded `503` + Docker `unhealthy`, and restart/recreation recovery. The browser loads the built same-origin login/public routes, validates security/runtime signals and reaches the real Production auth limiter without a fixture identity. Still execute [the deployment pipeline](deployment.md#the-pipeline) on a clean VPS, including GHCR pull, public certificate, authenticated smoke, backup, restore and rollback |
-| **IMPLEMENTED — HOSTED PUBLICATION PROVED** | Deployable images previously did not exist | Hosted run `33246930840` passed all five verification jobs and published both API and web images for exact commit `9e0b303c27e77ec731e3afee936dcb31cd165504`; the release overlay refuses an absent tag and deployment uses `--no-build` |
+| **IMPLEMENTED — HOSTED PUBLICATION PROVED** | Deployable images previously did not exist | Hosted run `33262358687`, attempt 2, passed all six verification jobs and published both API and web images for exact commit `4fd620de2cf182aa8a8342d48641c054ea76002e`; the release overlay refuses an absent tag and deployment uses `--no-build` |
 | **IMPLEMENTED** | The checked-in environment template defaults to Development | Explicit Production/Staging overlays force the intended runtime tier; boot refuses non-HTTPS external and non-canonical/cross-origin storage URLs |
 | **IMPLEMENTED** | Docker's default container log driver is unbounded | Every base service resolves to one bounded local-log policy (10 MB × 5); a coverage guard fails when a service omits it |
 | **IMPLEMENTED** | Process liveness and a plain `curl` could look green while the platform was degraded | The API container healthcheck uses whole-application `/healthz`; deployment fails on non-200 responses and bounds the probe to 15 seconds |
@@ -73,10 +83,10 @@ Staging and current `develop` are different facts:
 | Status | Item | Evidence needed |
 |---|---|---|
 | **OPEN** | Ceiling-scale query/N+1 and latency audit | Measured fixtures at the documented ceiling, not development-row inference |
-| **PARTIAL — ANONYMOUS PRODUCTION BROWSER GATED** | Full automated J1–J8 and authenticated Staging E2E | The clean hosted Production drill now gates anonymous same-origin login/public-route/security behavior without a development-session backdoor. Complete the authenticated journeys against Staging with real OAuth authority |
+| **PARTIAL — REAL STAGING EDGE GREEN** | Full automated J1–J8 and authenticated Staging E2E | The clean hosted Production drill and the real Staging HTTPS edge both pass the 15/15 anonymous same-origin login/public-route/security smoke without a development-session backdoor. Complete authenticated journeys only with real OAuth authority |
 | **PARTIAL — INTEGRATION COMPLETE** | Permission/E2E/coverage gates in hosted CI | Full real-stack integration and all-table isolation now gate release; add the remaining gates only when each has isolated disposable infrastructure |
 | **OPEN** | Live edge-rate-limit, TLS-expiry, queue-lag, and backup-failure alert verification | Wire-observed signals on the target environment |
-| **PARTIAL — REPOSITORY RESTART/SHUTDOWN GREEN** | Production-host resource, disk-exhaustion, reboot, graceful-shutdown, and realistic-RTO drills | The Production-mode drill proves worker-down backlog drain, a real active handler completing across SIGTERM, independent PostgreSQL/Nginx restart, full-stack stop/start, and force-recreation over unchanged database/object volumes and state. Still observe host reboot, resource/disk pressure and realistic-volume RTO on the selected host with the supported replacement object store |
+| **PARTIAL — STAGING REBOOT/RESTART GREEN** | Production-host resource, disk-exhaustion, reboot and realistic-RTO drills | The Production-mode drill proves worker-down backlog drain, active-handler SIGTERM, independent restarts and persistent recreation. The Staging host additionally recovered from its authorised reboot with SSH/Docker enabled and healthy, and its exact-image API/Nginx restart returned to 9/9 worker readiness. Still observe pressure and realistic-volume RTO on the selected Production host with the supported replacement object store |
 
 ## Promotion rule
 
