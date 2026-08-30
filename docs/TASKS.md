@@ -6,8 +6,8 @@
 `4fd620de2cf182aa8a8342d48641c054ea76002e`. Hosted run `33262358687`, attempt 2,
 passed all six verification jobs and published both exact-commit images before promotion.
 The real edge then passed the complete 15/15 anonymous browser smoke and a stateless-service
-restart. Strict synthetic-only acceptance remains subject to the count-only classification
-finding below.
+restart. The remaining count-only provenance finding is now closed: Staging passes strict
+synthetic-only acceptance without changing the deployed release.
 
 That deployment evidence belongs to that commit. Later `develop` commits are not thereby accepted on
 Staging; current promotion state and blockers live in the
@@ -15,13 +15,20 @@ Staging; current promotion state and blockers live in the
 
 **Open items carried forward:**
 
-- **🔴 before Staging — classify four pre-existing untagged rows without exposing or deleting
-  them.** The post-promotion count-only inventory proved zero non-fixture beneficiaries and zero
-  fixture-email violations, but also found two active non-`[تجريبي]` users with non-`example.com`
-  OAuth identities and two non-`[تجريبي]` branches. They predate this promotion and may be
-  synthetic operator records, but row shape cannot prove that. The Owner must classify them;
-  any confirmed real personal data must be removed through an authorised domain path before
-  Staging is called strictly synthetic-only. No value was printed and no row was changed.
+- [x] **Strict Staging synthetic-only boundary — CLOSED 2026-08-30.** PII-redacted provenance
+  evidence classified both untagged OAuth-bound accounts as **B (manually created/personal)**:
+  one was the original bootstrap administrator later bound and manually expanded, and the other
+  was a self-registered/approved account. Both were permanently de-identified through the exact
+  deployed domain service after an owner-only, catalog-validated PostgreSQL backup; dependent
+  identity/session credentials and the two unclaimed email synchronization coordinates were
+  removed. The two untagged Branch rows are **A (authoritative reference/fixture data)**: every
+  committed reference field matches and each has an exact tagged counterpart, so both were
+  retained with their fixture relationships. Final count-only acceptance proves 8/8 active
+  users match committed fixtures, zero OAuth identities/personal coordinates, 0 non-fixture
+  beneficiaries, 0 fixture-email violations, and 4/4 live Branch rows match authoritative
+  definitions. Release `4fd620de2cf182aa8a8342d48641c054ea76002e`, 61/61 migrations,
+  `/healthz` 9/9 worker readiness, HTTPS, and the 15/15 browser smoke remain green. Production
+  was not accessed or changed.
 
 - **Rule AX, remaining instance:** the Content **Recorder** dialog still takes its scope from
   the page filters. Its own slice — R75's recorder has a separate submit path.

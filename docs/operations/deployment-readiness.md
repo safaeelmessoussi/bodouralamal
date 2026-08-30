@@ -26,13 +26,18 @@ Staging and current `develop` are different facts:
 - The authorized Staging reboot now has `ssh` and Docker enabled and active at boot. The first
   executable preflight found and closed an effective `PermitRootLogin prohibit-password` drift;
   root login is now disabled, key-only non-root access and `/healthz` remain green.
-- The post-promotion inventory is privacy-safe and count-only: eight tagged fixture users, zero
-  non-fixture beneficiaries, zero fixture-email violations, 61 applied migrations and zero
-  terminal failed/cancelled pg-boss jobs. It also found **two pre-existing untagged OAuth-bound
-  operator rows and two pre-existing untagged Branch rows**. They may be synthetic operator
-  records, but shape cannot establish purpose. This is **🔴 before strict Staging acceptance**:
-  the Owner must classify them, and any confirmed real personal data must be removed through an
-  authorised domain path. No value was displayed and no row was changed.
+- The privacy-safe provenance review classified the two pre-existing untagged OAuth accounts as
+  **B (manually created/personal)** and both untagged Branch rows as **A (exact authoritative
+  reference/fixture matches)** without displaying an identity value. After a mode-0600,
+  catalog-validated PostgreSQL backup, the exact deployed domain service permanently
+  de-identified both B accounts and removed their identities, roles and session credentials. A
+  brief API stop made removal of their two unclaimed email synchronization coordinates free of a
+  registration race; the same exact container returned healthy. The branches and all dependent
+  fixture relationships were retained. Final count-only acceptance is 8/8 committed fixture
+  users, zero OAuth identities or personal coordinates, zero non-fixture beneficiaries, zero
+  fixture-email violations, and 4/4 authoritative Branch rows; 61/61 migrations, all health
+  dependencies, 9/9 workers, HTTPS/security headers and the 15/15 anonymous browser smoke remain
+  green on the unchanged deployed release.
 - No evidence in this workspace establishes a Production deployment, Production host access,
   Production DNS control, or Production credentials. Production is treated as undeployed.
 
@@ -57,7 +62,7 @@ Staging and current `develop` are different facts:
 | **OWNER/SPEC DECISION REQUIRED** | `backup.replicate` is a TD-7 pg-boss job, while a coherent recovery point must stop Compose services and read Docker volumes; giving the API the Docker socket is explicitly rejected | Reconcile who schedules/executes the host-scoped operation without granting the API root-equivalent host control; then implement the nightly trigger and failure/staleness signal |
 | **OWNER INPUT REQUIRED** | The second Moroccan backup target and destructive retention horizon do not exist in repository configuration | Provision the target, pin its host key, escrow the restic and SSH credentials, and select retention as described in the [recovery runbook](runbooks.md#owner-decision-required--backup-target-and-retention) |
 | **OWNER INPUT REQUIRED — PRIMARY DISK CAPACITY** | The SRS gives audit growth and file caps but intentionally requires the Owner's recording/week and average-size estimate before sizing the VPS disk | Approve the minimum free GiB required at deployment and its growth alarm; host preflight requires that explicit value and refuses to invent a default |
-| **🔴 OWNER CLASSIFICATION REQUIRED — STAGING DATA BOUNDARY** | Count-only evidence cannot classify two pre-existing untagged OAuth-bound operator rows and two untagged Branch rows as synthetic | Classify those exact records without exporting their values; if any are real personal data, remove them through an authorised domain path before strict Staging acceptance. The promoted release itself is healthy and introduced no non-fixture beneficiary data |
+| **CLOSED — STAGING SYNTHETIC DATA BOUNDARY** | The two untagged OAuth accounts were category B; the two untagged Branch rows were category A exact reference matches | Both B accounts were de-identified through the deployed domain service after a validated owner-only backup, the A branches were retained, and the final PII-safe inventory proves only committed fixture users and authoritative reference Branch rows remain active. Production was untouched |
 | **EXTERNAL ACCESS REQUIRED** | Production VPS, DNS, TLS issuance access, Google OAuth Production credentials, and GHCR read authority are not available in this workspace | Supply only those external inputs; never commit them |
 | **DOCUMENT OWNER APPROVAL REQUIRED** | GitHub now warns that `actions/checkout@v4` and `actions/setup-node@v4` target deprecated Node 20 and force-runs them on Node 24 | Approve the dedicated major tooling upgrade to the current v7 lines; their official action metadata uses `node24`, but SRS §3.1a prohibits an unapproved major upgrade |
 | **PARTIAL — DISPOSABLE PRODUCTION BOOTSTRAP GREEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | The isolated Production-mode drill now proves migrations, byte-stable repeat seed, clean inventory, internal MinIO policies, TLS/Nginx, an anonymous real-browser smoke, worker readiness, storage-degraded `503` + Docker `unhealthy`, and restart/recreation recovery. The browser loads the built same-origin login/public routes, validates security/runtime signals and reaches the real Production auth limiter without a fixture identity. Still execute [the deployment pipeline](deployment.md#the-pipeline) on a clean VPS, including GHCR pull, public certificate, authenticated smoke, backup, restore and rollback |
