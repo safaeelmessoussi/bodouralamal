@@ -25,11 +25,12 @@ that placement so a warm Local `node_modules` cannot hide clean-checkout failure
 
 Hosted run `33246930840` is the first complete proof of the preceding five-verification-job
 topology: all five jobs passed from a clean checkout and the release job published both exact-commit images for
-`9e0b303c27e77ec731e3afee936dcb31cd165504`. GitHub also reported that the v4 checkout and
-setup-node actions target deprecated Node 20 and were being force-run on Node 24. The
-maintained v7 action metadata uses `node24`, but adopting those major versions awaits the
-Document Owner approval required by SRS §3.1a; the warning is not treated as resolved merely
-because GitHub currently applies a compatibility override.
+`9e0b303c27e77ec731e3afee936dcb31cd165504`. After GitHub reported that the v4 checkout and
+setup-node actions targeted deprecated Node 20, the Document Owner approved the dedicated
+major upgrade on 2026-08-30. Every invocation now pins the maintained v7 line, whose official
+metadata declares `node24`. The existing node-version and explicit npm-cache inputs are
+unchanged, and the portability guard rejects any checkout/setup-node invocation outside the
+approved v7 lines rather than relying on GitHub's temporary compatibility override.
 
 ## The guards
 

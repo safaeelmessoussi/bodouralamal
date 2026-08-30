@@ -1329,11 +1329,14 @@ was hiding behind it: the run went green on the first attempt.
   The corrected hosted run `33246930840` then passed guards, contract, backend, frontend and
   the full disposable integration job, and published both exact-commit images for
   `9e0b303c27e77ec731e3afee936dcb31cd165504`.
-- [ ] **DOCUMENT OWNER APPROVAL REQUIRED — GitHub Actions runtime majors.** Hosted CI warns
-  that `actions/checkout@v4` and `actions/setup-node@v4` target deprecated Node 20 and are
-  currently force-run on Node 24. Official v7 action metadata uses `node24`, but moving v4 →
-  v7 is a major tooling upgrade prohibited without approval by SRS §3.1a. Keep this as a
-  dedicated upgrade task; do not mistake GitHub's temporary compatibility override for a fix.
+- [ ] **IMPLEMENTED — HOSTED VERIFICATION REQUIRED: GitHub Actions Node 24 runtime majors.**
+  The Document Owner approved the bounded
+  tooling upgrade on 2026-08-30. Every checkout and setup-node invocation now uses the
+  maintained v7 line, whose official metadata declares `node24`; the workflow retains its
+  explicit Node-version file and npm-cache inputs. The portability guard rejects a regression
+  to an unapproved runtime major, so GitHub's compatibility override is no longer relied on.
+  Close this checkbox only after the complete clean hosted workflow and exact-image publication
+  are terminal and green.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
   command failure with a bounded timeout; a running Node process is not called ready. A separate

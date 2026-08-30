@@ -48,6 +48,25 @@ if [[ -n "$offenders" ]]; then
   exit 1
 fi
 
+# GitHub's temporary compatibility override can make an obsolete JavaScript
+# action look healthy while its declared runtime is already unsupported. The
+# Document Owner approved the current Node 24 action lines on 2026-08-30. Keep
+# every official checkout/setup invocation on those maintained majors; inputs
+# and cache semantics remain explicit in the workflow itself.
+if ! grep -qE 'uses: actions/checkout@v7$' "$workflow" ||
+  ! grep -qE 'uses: actions/setup-node@v7$' "$workflow"; then
+  echo 'ci-portability guard: checkout and setup-node must use the approved v7 Node 24 lines.' >&2
+  exit 1
+fi
+unsupported_actions="$({
+  grep -nE 'uses: actions/(checkout|setup-node)@' "$workflow" || true
+} | grep -vE 'uses: actions/(checkout|setup-node)@v7$' || true)"
+if [[ -n "$unsupported_actions" ]]; then
+  echo 'ci-portability guard: an official JavaScript action uses an unapproved runtime major.' >&2
+  echo "$unsupported_actions" >&2
+  exit 1
+fi
+
 # `check-no-pii-logs.sh` deliberately uses the TypeScript compiler API to
 # distinguish executable property access from comments and generated examples.
 # That is stronger than grep, but it also means the guard is NOT dependency
@@ -73,4 +92,4 @@ if ! awk '
   exit 1
 fi
 
-printf 'ci-portability guard: dependency-free searches are portable and the TypeScript guard follows npm ci\n'
+printf 'ci-portability guard: searches are portable, official actions use Node 24 lines, and the TypeScript guard follows npm ci\n'
