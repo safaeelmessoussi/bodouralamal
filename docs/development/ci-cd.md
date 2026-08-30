@@ -31,6 +31,8 @@ major upgrade on 2026-08-30. Every invocation now pins the maintained v7 line, w
 metadata declares `node24`. The existing node-version and explicit npm-cache inputs are
 unchanged, and the portability guard rejects any checkout/setup-node invocation outside the
 approved v7 lines rather than relying on GitHub's temporary compatibility override.
+Hosted run `33287083470` then passed all six verification jobs with the v7 actions and
+published both exact-commit images for `09ecd09b83d52b2159ab21c3b022d22577167b22`.
 
 ## The guards
 

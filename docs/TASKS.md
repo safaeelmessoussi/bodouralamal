@@ -1329,14 +1329,14 @@ was hiding behind it: the run went green on the first attempt.
   The corrected hosted run `33246930840` then passed guards, contract, backend, frontend and
   the full disposable integration job, and published both exact-commit images for
   `9e0b303c27e77ec731e3afee936dcb31cd165504`.
-- [ ] **IMPLEMENTED — HOSTED VERIFICATION REQUIRED: GitHub Actions Node 24 runtime majors.**
+- [x] **GitHub Actions Node 24 runtime majors.**
   The Document Owner approved the bounded
   tooling upgrade on 2026-08-30. Every checkout and setup-node invocation now uses the
   maintained v7 line, whose official metadata declares `node24`; the workflow retains its
   explicit Node-version file and npm-cache inputs. The portability guard rejects a regression
   to an unapproved runtime major, so GitHub's compatibility override is no longer relied on.
-  Close this checkbox only after the complete clean hosted workflow and exact-image publication
-  are terminal and green.
+  Hosted run `33287083470` passed all six verification jobs under v7 and published both
+  exact-commit images for `09ecd09b83d52b2159ab21c3b022d22577167b22`.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
   command failure with a bounded timeout; a running Node process is not called ready. A separate
