@@ -75,6 +75,14 @@ async function clear(): Promise<void> {
   await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
   await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
   await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
+  // The physical-preference completeness trigger is deferred specifically so
+  // the branch rows and their parent can be retired as one meaning. Separate
+  // auto-committed deletes would expose an invalid half-state at the first
+  // commit and are therefore correctly refused.
+  await prisma.$transaction(async (tx) => {
+    await tx.framingPreferenceBranch.deleteMany({ where: { userId: { in: ids } } });
+    await tx.framingPreference.deleteMany({ where: { userId: { in: ids } } });
+  });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
@@ -146,6 +154,14 @@ beforeAll(async () => {
   });
   teacherId = teacher.id;
   teacherToken = bearer(teacher.id, [{ role: "teacher", branches: null }]);
+  await prisma.framingPreference.create({
+    data: {
+      userId: teacherId,
+      mode: "both",
+      allBranches: false,
+      branches: { create: [{ branchId }] },
+    },
+  });
 });
 
 afterAll(async () => {
@@ -172,10 +188,19 @@ const profile = (over: Record<string, unknown> = {}) => ({
 /* ── the contract ───────────────────────────────────────────────────────── */
 
 describe("an administrator records what a مؤطِّرة can teach, and when", () => {
-  it("starts empty — nothing is inferred from her history (R88.16)", async () => {
+  it("shows the approved general framing preference without inferring a weekly range", async () => {
     const res = await call("GET", `/admin/users/${teacherId}/teaching-profile`, adminToken);
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ subjects: [], categories: [], availability: [] });
+    expect(res.body.data).toMatchObject({
+      framing: {
+        mode: "both",
+        all_branches: false,
+        branches: [{ id: branchId, name: `${TAG} الفرع` }],
+      },
+      subjects: [],
+      categories: [],
+      availability: [],
+    });
   });
 
   it("records several Subjects, several Categories and several ranges", async () => {
@@ -406,13 +431,28 @@ describe("R106 — a مؤطِّرة states her own availability", () => {
     expect(data["subjects"]).toBeDefined();
     expect(data["categories"]).toBeDefined();
     expect(data["availability"]).toBeDefined();
+    expect(data["framing"]).toEqual({
+      mode: "both",
+      all_branches: false,
+      branches: [{ id: branchId, name: `${TAG} الفرع` }],
+    });
   });
 
   it("replaces her ranges, and the administration sees exactly what she wrote", async () => {
     const written = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
       availability: [
-        { weekday: "tuesday", start_time: "14:00", end_time: "17:00" },
-        { weekday: "wednesday", start_time: "09:00", end_time: "11:00" },
+        {
+          weekday: "tuesday",
+          start_time: "14:00",
+          end_time: "17:00",
+          mode: "online",
+        },
+        {
+          weekday: "wednesday",
+          start_time: "09:00",
+          end_time: "11:00",
+          mode: "both",
+        },
       ],
     });
     expect(written.status).toBe(200);
@@ -425,8 +465,35 @@ describe("R106 — a مؤطِّرة states her own availability", () => {
       `/admin/users/${teacherId}/teaching-profile`,
       adminToken,
     );
-    const ranges = (asAdmin.body.data as { availability: { weekday: string }[] }).availability;
+    const ranges = (
+      asAdmin.body.data as {
+        availability: { weekday: string; mode: string | null }[];
+      }
+    ).availability;
     expect(ranges.map((r) => r.weekday).sort()).toEqual(["tuesday", "wednesday"]);
+    expect(ranges.map((r) => r.mode).sort()).toEqual(["both", "online"]);
+  });
+
+  it("preserves a legacy/not-stated window as null and refuses an invalid modality", async () => {
+    const legacy = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "friday", start_time: "10:00", end_time: "12:00" }],
+    });
+    expect(legacy.status).toBe(200);
+    expect(
+      (
+        legacy.body.data as {
+          availability: { mode: string | null }[];
+        }
+      ).availability[0]?.mode,
+    ).toBeNull();
+
+    const invalid = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [
+        { weekday: "friday", start_time: "10:00", end_time: "12:00", mode: "hybrid" },
+      ],
+    });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("REFUSES a body naming subject_ids rather than ignoring it (R106.5)", async () => {

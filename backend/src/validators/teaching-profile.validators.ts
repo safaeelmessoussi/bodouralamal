@@ -34,6 +34,9 @@ const availabilityRange = z
     weekday: z.enum(WEEKDAYS),
     start_time: clock,
     end_time: clock,
+    // Nullable preserves pre-revision ranges honestly: absence means the
+    // person did not state a modality, never an inferred in-person default.
+    mode: z.enum(['in_person', 'online', 'both']).nullable().optional(),
   })
   .strict()
   // A range that ends before it starts is not a range — refused here as
@@ -119,6 +122,7 @@ export const teachingCandidatesQuerySchema = z
       .pipe(z.array(z.enum(WEEKDAYS)).max(7)),
     start_time: clock,
     end_time: clock,
+    delivery_mode: z.enum(['in_person', 'online']).optional(),
   })
   .strict()
   .refine((v) => v.start_time < v.end_time, {

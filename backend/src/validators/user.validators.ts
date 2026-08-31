@@ -89,3 +89,11 @@ export const setUserRolesSchema = z.object({
     )
     .max(20),
 });
+
+/** A high-impact workflow requires an explicit, non-localised confirmation. */
+export const transferPlatformOwnerSchema = z
+  .object({
+    target_user_id: uuid,
+    confirmation: z.literal('TRANSFER_PLATFORM_OWNERSHIP'),
+  })
+  .strict();

@@ -1289,6 +1289,11 @@ export interface ApprovalDto {
    * assignment the approver states.
    */
   requested_role: string | null;
+  framing: {
+    mode: 'in_person' | 'online' | 'both';
+    all_branches: boolean;
+    branches: { id: string; name: string }[];
+  } | null;
   /**
    * The educational stage the applicant asked for (Revision 49) — what §4.1
    * step 1 preselects the first Level from. A request, never a placement.
@@ -1357,6 +1362,11 @@ export function approvalDto(row: {
   }[];
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
+  framing: {
+    mode: 'in_person' | 'online' | 'both';
+    allBranches: boolean;
+    branches: { id: string; name: string }[];
+  } | null;
   category: { id: string; name: string } | null;
 }): ApprovalDto {
   return {
@@ -1382,6 +1392,16 @@ export function approvalDto(row: {
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
     requested_role: row.requestedRole,
+    framing: row.framing
+      ? {
+          mode: row.framing.mode,
+          all_branches: row.framing.allBranches,
+          branches: row.framing.branches.map((branch) => ({
+            id: branch.id,
+            name: branch.name,
+          })),
+        }
+      : null,
     // Field by field, never a spread — two fields, the same as the branch.
     category: row.category
       ? { id: row.category.id, name: row.category.name }
@@ -1452,6 +1472,7 @@ export function settingDto(row: {
  */
 export interface UserDto {
   id: string;
+  is_platform_owner: boolean;
   name_arabic: string;
   /**
    * The stored name parts, sex and notes — what the §5.6 edit form hydrates
@@ -1506,6 +1527,7 @@ export interface UserDto {
 
 export function userDto(row: {
   id: string;
+  isPlatformOwner: boolean;
   nameArabic: string;
   firstNameArabic: string | null;
   lastNameArabic: string | null;
@@ -1523,6 +1545,7 @@ export function userDto(row: {
 }): UserDto {
   return {
     id: row.id,
+    is_platform_owner: row.isPlatformOwner,
     name_arabic: row.nameArabic,
     /**
      * **Derived when they were never recorded** (2026-08-28). Rows predating

@@ -5,7 +5,7 @@
 A REST API under `/api/v1`, **on the same origin as the client**. JSON in, JSON out, bearer
 authentication unless a route is explicitly public. Plural nouns, kebab-case paths.
 
-Current surface: **156 operations across 120 paths**. Full inventory:
+Current surface: **175 operations across 133 paths**. Full inventory:
 [API endpoints](../reference/api-endpoints.md).
 
 ## The contract is generated, and it is governed

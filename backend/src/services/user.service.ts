@@ -10,6 +10,7 @@ import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { revokeAllSessions } from './refresh-token.service.js';
+import { lockAndAssertNotPlatformOwner } from './platform-owner.service.js';
 
 /**
  * Staff pre-provisioning (SRS §3.1, §4.1b step 4b, §5.6 `/admin/users`, §7 R15).
@@ -252,6 +253,7 @@ export interface UserListFilters {
 
 export interface UserListItem {
   id: string;
+  isPlatformOwner: boolean;
   nameArabic: string;
   /**
    * **The stored parts, so the edit form hydrates from what was collected.**
@@ -432,6 +434,7 @@ async function listUsersUnchecked(
         phone: true,
         accountStatus: true,
         version: true,
+        platformOwnership: { select: { singletonKey: true } },
         // **The two places an address can live, and both are needed** (R15,
         // TD-10). A pre-provisioned account has no `UserIdentity` row until its
         // first Google sign-in, so reading only the identity would leave exactly
@@ -461,6 +464,7 @@ async function listUsersUnchecked(
   return {
     data: users.map((u) => ({
       id: u.id,
+      isPlatformOwner: u.platformOwnership !== null,
       nameArabic: u.nameArabic,
       firstNameArabic: u.firstNameArabic,
       lastNameArabic: u.lastNameArabic,
@@ -786,6 +790,7 @@ export async function suspendUser(
   }
 
   await prisma.$transaction(async (tx) => {
+    await lockAndAssertNotPlatformOwner(tx, id);
     // The User row is the stable serialization anchor shared by successful
     // login/session creation and user-wide revocation. It must precede every
     // RefreshSession lock acquired by revokeAllSessions below.
@@ -1137,6 +1142,7 @@ export async function setUserRoles(
   const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
+    await lockAndAssertNotPlatformOwner(tx, id);
     // Role-switch and login issuance derive credentials from these assignments.
     // Share their User governing row so a credential is wholly before or wholly
     // after this replacement, never signed from a half-stale assignment set.
@@ -1190,6 +1196,7 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
       phone: true,
       accountStatus: true,
       version: true,
+      platformOwnership: { select: { singletonKey: true } },
       branchRoles: {
         where: { deletedAt: null },
         select: { branchId: true, role: { select: { name: true } }, branch: { select: { name: true } } },
@@ -1198,6 +1205,7 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
   });
   return {
     id: u.id,
+    isPlatformOwner: u.platformOwnership !== null,
     nameArabic: u.nameArabic,
     firstNameArabic: u.firstNameArabic,
     lastNameArabic: u.lastNameArabic,

@@ -21,11 +21,11 @@ export const REQUIRED_ENV_VARS = [
   'MINIO_SECRET_KEY',
   'PUBLIC_BASE_URL',
   'STORAGE_BASE_URL',
-  // SUPER_ADMIN_EMAIL is deliberately NOT here (TD-13, Revision 23): it is a
+  // SUPER_ADMIN_EMAIL is deliberately NOT here (TD-13, Revision 115): it is a
   // bootstrap value consumed by the seed, never by the running API, so demanding
   // it at boot would force operators to keep a line that no longer does anything.
-  // The seed requires it only while no active Super Administrator exists, and
-  // fails loudly naming it in that case.
+  // The seed requires the exact approved value only while the Platform Owner
+  // singleton is absent, and fails loudly naming it in that case.
   'NODE_ENV',
 ] as const;
 

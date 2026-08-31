@@ -528,6 +528,20 @@ const document = {
     '/admin/users/{id}/roles': {
       put: op('Replace a user\'s role and branch-scope assignments', '§5.6 *"role/branch-scope assignment"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *"who was an administrator at this branch in March"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and the enumerated RefreshRevokedReason values in §7 cover logout, safeguarding actions, replay and the R101 one-time rollout; none honestly describes a demotion.', { '200': 'The user with their new assignments.', '400': `${ENVELOPE} VALIDATION_FAILED — an unknown role, or a missing branch_id key.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN — an Admin attempting to grant or revoke an administrator role.`, '404': `${ENVELOPE} NOT_FOUND for an unknown user, one outside the caller's visibility, or an unknown branch.`, '409': `${ENVELOPE} STATE_CONFLICT with reason LAST_SUPER_ADMIN.` }),
     },
+    '/admin/platform-owner/transfer': {
+      post: op(
+        'Transfer the Platform Owner singleton',
+        'Current Platform Owner only. Body: `{ target_user_id, confirmation: "TRANSFER_PLATFORM_OWNERSHIP" }`. Platform ownership is a singleton lifecycle relationship, not an RBAC role. The target must already be an active, undeleted Global Super Admin. The transaction locks the singleton first and both User rows in deterministic id order, updates the one relationship atomically, increments its version and audits UUID coordinates. It does not remove the former owner\'s Super Admin assignment or grant one to the target. Suspension, deletion, de-identification and demotion of the current owner are refused until a successful transfer.',
+        {
+          '200': 'Ownership transferred; returns previous/new owner ids and the singleton version.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — missing exact confirmation or malformed target id.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN — caller is not the current Platform Owner.`,
+          '404': `${ENVELOPE} NOT_FOUND for an unknown target account.`,
+          '409': `${ENVELOPE} STATE_CONFLICT — ownership is uninitialized, target is ineligible, or target is the current owner.`,
+        },
+      ),
+    },
     '/family-links': {
       post: op('Link an existing child to a parent (staff-mediated)', '§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.', { '201': 'Pending link created; awaits an approval decision.', '400': `${ENVELOPE} VALIDATION_FAILED for a bad id pair, or a user named as their own parent.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN (TD-12 freshness or TD-2 role).`, '404': `${ENVELOPE} NOT_FOUND when either party does not exist or is soft-deleted.`, '409': `${ENVELOPE} DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts.` }),
     },
@@ -899,6 +913,28 @@ const document = {
 
 // ── Reconcile against the routes the application ACTUALLY serves ────────────
 //
+// R115 narrows existing operations as well as adding a path. Keep these
+// corrections executable so the committed OpenAPI cannot retain a pre-R115
+// contract while the older revision history remains in the long-form operation
+// narratives above.
+document.paths['/me'].get.description +=
+  ' `is_platform_owner` reports the current singleton lifecycle relationship and is distinct from roles.';
+document.paths['/registrations'].post.description =
+  '**R115 framing correction (supersedes the older single-branch staff wording later in this historical narrative):** an ordinary adult still sends `branch_id` and `category_id`. A هيئة التأطير request sends `requested_role: "teacher"` plus strict `framing`. `mode: "online"` carries no branch data. `in_person` or `both` carries either `{ all_branches: true }` (all current and future branches) or `{ all_branches: false, branch_ids: [...] }` with one or more live branch ids. Framing is planning preference only and grants no role or scope. ' +
+  document.paths['/registrations'].post.description;
+document.paths['/admin/approvals'].get.description +=
+  ' Staff rows include the framing preference and branch willingness for review; it remains distinct from the role/scope the approver grants.';
+document.paths['/admin/users/{id}/teaching-profile'].get.description +=
+  ' The read also returns the approval-time general `framing` preference (or null for a legacy account), including the future-inclusive `all_branches` meaning and selected branch names. It is read-only on this route, distinct from weekly availability and never authority. Each availability interval carries nullable `mode` (`in_person`, `online`, `both`); null is legacy/not stated.';
+document.paths['/admin/users/{id}/teaching-profile'].put.description +=
+  ' Each availability interval may carry nullable `mode`; omission/null is preserved as unknown rather than inferred.';
+document.paths['/me/teaching-profile/availability'].put.description +=
+  ' Each interval may state `mode: in_person | online | both`; omission/null remains honest legacy unknown.';
+document.paths['/me/teaching-profile'].get.description +=
+  ' The read also returns the approval-time general `framing` preference (or null for a legacy account). It is read-only here, distinct from the per-window availability the teacher may state, and never grants authority.';
+document.paths['/admin/teaching-candidates'].get.description +=
+  ' Optional `delivery_mode=in_person|online` makes the appraisal modality-aware. An explicitly incompatible interval warns `unavailable`; a covering legacy/null interval warns `availability_mode_not_declared`. Both remain advisory and never authorize.';
+
 // The path map above is hand-written, so on its own it proves nothing: a route
 // documented here and in the TD-3 registry, but never mounted on the router,
 // passed every gate while returning 404 to real callers. That happened, and only

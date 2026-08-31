@@ -158,7 +158,7 @@ test -f infra.env || install -m 600 infra.env.example infra.env
 chmod 600 .env infra.env
 #    On first deploy, fill every Required value. Never overwrite existing secrets
 #    from a template during an upgrade. The Postgres password must match DATABASE_URL.
-#    SUPER_ADMIN_EMAIL is needed for the FIRST deployment only
+#    Exact R115 Platform Owner email/sex are needed only before the singleton exists
 
 # 3  Prove the host/config/release boundary without changing runtime state.
 export DEPLOYMENT_TIER=production                 # or staging
@@ -377,8 +377,8 @@ happened to sort first. Production still gets no seeded branches or rooms.
 
 | | First | Subsequent |
 |---|---|---|
-| `SUPER_ADMIN_EMAIL` | **Required** — the seed fails loudly by name without it | Ignored permanently; may be removed from `.env` |
-| `SUPER_ADMIN_SEX` | **Required** — `female` or `male`; the seed refuses without it (R80) | Ignored once the account exists |
+| `SUPER_ADMIN_EMAIL` | **Required as exactly `safae.elmessoussi@gmail.com`** — the seed refuses any other initial owner (R115) | Ignored permanently once the Platform Owner singleton exists; cannot reclaim a transfer |
+| `SUPER_ADMIN_SEX` | **Required as exactly `female`** for the approved initial Owner (R115) | Ignored once ownership exists |
 | `pg_dump` before migrating | Not applicable | **Mandatory** |
 | Restore drill | **Before go-live** | Periodically |
 
@@ -396,7 +396,7 @@ no others:
 
 | | Staging | Production |
 |---|---|---|
-| Data | §15.2 fixtures and synthetic records **only** | Real data |
+| Data | Synthetic fixtures plus exactly the R115-authorised Platform Owner identity for controlled OAuth UAT | Real data |
 | `NODE_ENV` | `development` — the value that *permits* the fixture seed | `production` |
 | Everything else | identical | identical |
 
@@ -406,8 +406,9 @@ For every Compose command in the pipeline, replace `-f docker-compose.production
 `-f docker-compose.staging.yml`; never combine the two tier overlays. Step 6 is then followed
 by `npm run seed:fixtures`, which is the only added operation.
 
-**Never copy a development database or its MinIO objects into Staging.** A developer's
-database is not fixture data.
+**Never copy a development database or its storage objects into Staging.** A developer's
+database is not fixture data. The exact Owner staff identity is pre-provisioned by the
+production seed; it does not authorise any other real person or record on Staging.
 
 Four committed pieces make release hosts reproducible from Git, and none holds a secret:
 

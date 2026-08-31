@@ -19,8 +19,9 @@ threats that actually matter here are:
 | **A stolen session cookie** | 30-day credential | Rotation with reuse detection that kills the whole session |
 | **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
 | **Registration races staff pre-provisioning** | One verified email could become attached to two different accounts through separate tables | Shared normalized-email row lock; cross-channel re-read inside each ownership transaction |
+| **The last accountable platform owner is disabled or two transfers race** | Administrative continuity and accountability could disappear or fork | Protected singleton; owner-first/deterministic locks; DB eligibility/lifecycle triggers; explicit atomic transfer |
 | **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated monotonic consent gate; exact-row authorization on the only public object origin; forced bucket migration |
-| **Data leaves Moroccan infrastructure** | Law 09-08 violation | Fixture-only rule outside Morocco; Moroccan backup target |
+| **Production/beneficiary data leaves Moroccan infrastructure** | Law 09-08 violation | No Production copies outside Morocco; controlled-UAT Staging permits only the exact R115 Owner staff identity |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |
 
 That last row is not a joke. Most of the guards described here exist because something
@@ -31,9 +32,9 @@ plausible-looking was nearly shipped.
 Everything is one origin behind Nginx, under one Let's Encrypt certificate.
 
 **No CORS headers are emitted. Anywhere. In any environment.** Because client, API, and
-storage share an origin, cross-origin requests are not part of normal operation. The staging
-frontend runs against mocks and calls no real backend, which is what deletes the last
-exception that would otherwise have existed.
+storage share an origin, cross-origin requests are not part of normal operation. The
+**Preview** frontend runs against mocks and calls no real backend; Staging is same-origin
+controlled UAT with the full security boundary enabled.
 
 The MinIO public bucket's anonymous policy is likewise not a second external origin:
 production publishes Nginx only. Canonical public GET/HEAD requests pass an internal API
@@ -66,11 +67,10 @@ alike. The Path admits exactly the two refresh-cookie consumers, `/auth/refresh`
 Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS with
 credentials — are **prohibited**.
 
-The specification names the failure mode directly: *an agent "fixing" staging cookies by
-weakening them is introducing a CSRF vulnerability, not fixing a bug.* The staging frontend
-is cross-origin with the local backend, so the refresh cookie will not flow between them —
-**by design, and not a bug to fix.** Authenticated flows are tested against the local
-same-origin stack and the production rehearsal, never through the staging origin.
+The specification names the failure mode directly: *an agent "fixing" cookies by weakening
+them is introducing a CSRF vulnerability, not fixing a bug.* The **Preview** frontend is
+cross-origin and calls no backend. Authenticated flows run through Local same-origin,
+controlled-UAT Staging or the Production rehearsal; Staging receives no cookie exception.
 
 Local development terminates at HTTP on `localhost`, which browsers treat as a secure
 context — so the `Secure` cookie is delivered normally without weakening a single attribute.
@@ -168,8 +168,9 @@ constrains the topology rather than just the policy:
 
 - Production is a **Moroccan VPS**; backups replicate to a **second Moroccan location**.
 - **Production dumps are never copied to development or staging.**
-- The staging frontend is hosted outside Morocco and therefore runs against **fixture mocks
-  only**, calling no real backend.
+- Preview is hosted outside Morocco and runs against fixture mocks only. Full-stack Staging
+  is also outside Morocco but admits only synthetic fixtures plus the one exact R115 Owner
+  staff identity for controlled OAuth UAT; no real beneficiary/educational/content data.
 - Development fixtures are guarded by an environment check and **refuse to run in
   production** — the same guard is the residency firewall.
 

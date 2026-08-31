@@ -44,6 +44,7 @@ export function replace(prisma: PrismaClient) {
         weekday: a.weekday,
         startTime: a.start_time,
         endTime: a.end_time,
+        mode: a.mode ?? null,
       })),
     });
     res.json({ data: profile });
@@ -69,6 +70,7 @@ export function candidates(prisma: PrismaClient) {
         weekdays: q.weekdays,
         startTime: q.start_time,
         endTime: q.end_time,
+        deliveryMode: q.delivery_mode,
       }),
     });
   };
@@ -132,6 +134,7 @@ export function replaceMyAvailability(prisma: PrismaClient) {
           weekday: a.weekday,
           startTime: a.start_time,
           endTime: a.end_time,
+          mode: a.mode ?? null,
         })),
       ),
     });

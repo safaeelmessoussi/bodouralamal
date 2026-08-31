@@ -104,6 +104,7 @@ export const WARNING_KEY: Record<string, string> = {
   category_not_declared: 'admin.schedules.warnCategory',
   availability_not_declared: 'admin.schedules.warnNoAvailability',
   unavailable: 'admin.schedules.warnUnavailable',
+  availability_mode_not_declared: 'admin.schedules.warnAvailabilityModeUnknown',
   conflict: 'admin.schedules.warnConflict',
   availability_indeterminate: 'admin.schedules.warnIndeterminate',
 };

@@ -9,6 +9,7 @@ import {
 } from '../../adapters/teaching-profile.js';
 import { t } from '../../i18n/index.js';
 import { AvailabilityEditor } from '../teaching/availability-editor.js';
+import { FramingPreferenceSummary } from '../teaching/framing-preference-summary.js';
 import { FormDialog } from '../ui/form-dialog.js';
 import { CapabilitiesEditor } from '../teaching/capabilities-editor.js';
 import { isDirty } from '../../lib/form-dirty.js';
@@ -82,6 +83,9 @@ export function TeachingProfileDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [framing, setFraming] = useState<Awaited<ReturnType<typeof fetchTeachingProfile>>['framing']>(
+    null,
+  );
   /**
    * **What the server had when this dialog opened** — the pristine side of the
    * comparison. Held in state rather than recomputed, because the values arrive
@@ -98,10 +102,12 @@ export function TeachingProfileDialog({
         weekday: a.weekday,
         start_time: a.start_time,
         end_time: a.end_time,
+        mode: a.mode,
       }));
       setSubjectIds(loadedSubjects);
       setCategoryIds(loadedCategories);
       setRanges(loadedRanges);
+      setFraming(profile.framing);
       // The same values the fields were just reset to. Captured here rather
       // than in a render, which is the timing trap `isDirty` documents.
       setPristine(snapshot(loadedSubjects, loadedCategories, loadedRanges));
@@ -157,6 +163,8 @@ export function TeachingProfileDialog({
         })();
       }}
     >
+      <FramingPreferenceSummary framing={framing} />
+
       {/* **The shared editor**, for the same reason `AvailabilityEditor` is
           shared: a مؤطِّرة now has these two controls on her own page, and a
           second hand-written copy is how the pair drift (rule C). The

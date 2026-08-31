@@ -1,5 +1,26 @@
 # Tasks — بذور الأمل Platform
 
+## Platform Owner and هيئة التأطير framing — R115, 2026-08-31
+
+- [x] Platform ownership is a protected singleton lifecycle relationship, not a new Role.
+  Transfer is current-owner-only to another active Global Super Admin; the singleton is locked
+  before both Users in deterministic order, and suspension, deletion, permanent
+  de-identification and demotion are refused until transfer.
+- [x] The fresh bootstrap identity is exactly `safae.elmessoussi@gmail.com`, صفاء المسوسي,
+  female, active Global Super Admin, with `both`/all-current-and-future-branches general
+  framing and no invented weekly hours or Google provider subject. Once ownership exists,
+  seed reruns are ownership no-ops and never reclaim a transfer.
+- [x] A هيئة التأطير request records strict planning willingness: online, physical or both;
+  physical modes support one, several, or durable future-inclusive all branches. Approval
+  displays it, and approved teaching profiles retain the same value read-only. It never
+  supplies authority or weekly availability.
+- [x] Every weekly availability interval may state its own mode; legacy null remains honestly
+  unknown. Candidate appraisal reports incompatibility/unknown as an advisory warning only.
+- [ ] **Controlled-UAT Staging promotion:** only after this exact implementation commit passes
+  complete hosted CI, take and validate the Staging backup, promote exact images, apply the
+  migration/seed, prove exactly one unbound Owner and healthy synthetic-only educational data,
+  then stop for the Owner's manual Google login. Production and DNS remain out of scope.
+
 ## Local authenticated navigation restored — 2026-08-31
 
 - [x] The development Compose overlay now replaces the release Nginx port list with exactly
@@ -14,14 +35,16 @@
   consumed-callback screen remains the intentional standalone auth status layout; it was not
   the transport failure.
 
-## Staging promoted — 2026-08-30
+## Staging promoted — 2026-08-30 (previous strict-synthetic release)
 
 `https://staging.bodouralamal.com` is deployed and healthy at
 `4fd620de2cf182aa8a8342d48641c054ea76002e`. Hosted run `33262358687`, attempt 2,
 passed all six verification jobs and published both exact-commit images before promotion.
 The real edge then passed the complete 15/15 anonymous browser smoke and a stateless-service
-restart. The remaining count-only provenance finding is now closed: Staging passes strict
-synthetic-only acceptance without changing the deployed release.
+restart. The remaining count-only provenance finding was closed for that release: Staging
+passed strict synthetic-only acceptance without changing the deployed release. Revision 115
+now authorises one exact Owner identity for controlled UAT, but that later transition does not
+retroactively change this evidence and is tracked above.
 
 That deployment evidence belongs to that commit. Later `develop` commits are not thereby accepted on
 Staging; current promotion state and blockers live in the

@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { FramingPreferenceView } from '../types/framing.js';
 
 /**
  * The teaching profile (R88) — **planning data, not permissions**.
@@ -18,10 +19,14 @@ export interface AvailabilityRange {
   weekday: string;
   start_time: string;
   end_time: string;
+  /** Null is a preserved legacy/unknown statement, not an in-person default. */
+  mode: 'in_person' | 'online' | 'both' | null;
 }
 
 export interface TeachingProfile {
   userId: string;
+  /** Approval-time general willingness; read-only planning data, never authority. */
+  framing: FramingPreferenceView | null;
   subjects: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   availability: (AvailabilityRange & { id: string })[];

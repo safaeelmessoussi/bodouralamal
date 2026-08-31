@@ -25,12 +25,13 @@ import { homeForRole, roleHomePath } from '../lib/role-home.js';
  */
 const person = (roles: string[]): Me => ({
   id: 'u1',
+  is_platform_owner: false,
   account_status: 'active',
   roles,
   role_scopes: roles.map((role) => ({ role, branches: null })),
   active_role: null,
   approved_child_links: [],
-    teaches_quran: false,
+  teaches_quran: false,
 });
 
 /** Renders a probe inside the provider and returns what it observed. */

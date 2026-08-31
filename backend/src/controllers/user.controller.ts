@@ -26,7 +26,9 @@ import {
   setUserRolesSchema,
   suspendUserSchema,
   updateUserSchema,
+  transferPlatformOwnerSchema,
 } from '../validators/user.validators.js';
+import { transferPlatformOwnership } from '../services/platform-owner.service.js';
 
 /**
  * `POST /admin/users` — staff pre-provisioning (§5.6 `/admin/users` "create
@@ -259,6 +261,25 @@ export function setRoles(prisma: PrismaClient) {
       body.assignments.map((a) => ({ role: a.role, branchId: a.branch_id })),
     );
     res.json({ data: userDto(user) });
+  };
+}
+
+/** `POST /admin/platform-owner/transfer` — explicit singleton transfer only. */
+export function transferOwner(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(transferPlatformOwnerSchema, req.body ?? {});
+    const result = await transferPlatformOwnership(
+      prisma,
+      requireActor(req),
+      body.target_user_id,
+    );
+    res.json({
+      data: {
+        owner_user_id: result.ownerUserId,
+        previous_owner_user_id: result.previousOwnerUserId,
+        version: result.version,
+      },
+    });
   };
 }
 

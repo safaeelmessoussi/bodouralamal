@@ -38,11 +38,30 @@ export interface PersonInput {
   sex: 'female' | 'male';
 }
 
-export interface AdultRegistration {
+interface AdultRegistrationBase {
   kind: 'adult';
   applicant: PersonInput;
+  consents: { data_processing: boolean };
+}
+
+export type FramingPreferenceInput =
+  | { mode: 'online' }
+  | {
+      mode: 'in_person' | 'both';
+      willingness:
+        | { all_branches: true }
+        | { all_branches: false; branch_ids: string[] };
+    };
+
+export interface AdultStudentRegistration extends AdultRegistrationBase {
   /** The branch the applicant asked for — a request, not a placement (R39). */
   branch_id: string;
+  category_id: string;
+  requested_role?: never;
+  framing?: never;
+}
+
+export interface TeacherRegistration extends AdultRegistrationBase {
   /**
    * What the applicant is asking to *become* (Revision 49) — `'teacher'`, or
    * absent for the ordinary path.
@@ -56,7 +75,9 @@ export interface AdultRegistration {
    * where the applicant wants to study or teach, while a role's scope is an
    * authorization boundary the approver decides.
    */
-  requested_role?: 'teacher';
+  requested_role: 'teacher';
+  framing: FramingPreferenceInput;
+  branch_id?: never;
   /**
    * The educational stage the applicant is asking for (Revision 49).
    *
@@ -65,9 +86,10 @@ export interface AdultRegistration {
    * `branch_id` it is a **request**: it narrows and preselects the Levels the
    * approver is offered, and the enrolment is what actually admits the person.
    */
-  category_id?: string;
-  consents: { data_processing: boolean };
+  category_id?: never;
 }
+
+export type AdultRegistration = AdultStudentRegistration | TeacherRegistration;
 
 /**
  * A child on a registration (R62.1) — **deliberately not `PersonInput`.**

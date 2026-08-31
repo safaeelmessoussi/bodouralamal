@@ -17,6 +17,7 @@ export type CandidateWarning =
   | 'category_not_declared'
   | 'availability_not_declared'
   | 'unavailable'
+  | 'availability_mode_not_declared'
   | 'conflict'
   | 'availability_indeterminate';
 
@@ -46,6 +47,7 @@ export interface ProposedClassQuery {
   subjectId?: string | undefined;
   levelId?: string | undefined;
   excludeScheduleId?: string | undefined;
+  deliveryMode?: 'in_person' | 'online' | undefined;
 }
 
 export async function appraiseCandidates(
@@ -61,6 +63,7 @@ export async function appraiseCandidates(
   if (proposed.subjectId) params.set('subject_id', proposed.subjectId);
   if (proposed.levelId) params.set('level_id', proposed.levelId);
   if (proposed.excludeScheduleId) params.set('exclude_schedule_id', proposed.excludeScheduleId);
+  if (proposed.deliveryMode) params.set('delivery_mode', proposed.deliveryMode);
 
   const res = await api<{ data: TeachingCandidate[] }>(
     `/admin/teaching-candidates?${params.toString()}`,

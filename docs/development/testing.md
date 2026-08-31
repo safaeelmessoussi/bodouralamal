@@ -14,8 +14,8 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **315 backend tests · 891 frontend tests**. The repository also
-contains **91 backend integration files**; the dedicated workflow job now provisions their
+Current default CI totals: **320 backend tests · 913 frontend tests**. The repository also
+contains **92 backend integration files**; the dedicated workflow job now provisions their
 isolated real stack and database lifecycle rather than pointing them at Local Development.
 
 The backend total includes deterministic worker-readiness regression tests. They inject the
@@ -23,6 +23,15 @@ clock and pg-boss live-worker view, so startup failure, incomplete registration,
 workers, and the long-running-handler exception are covered without sleeps. Controller tests
 separately prove that a healthy database plus a present `pgboss` schema cannot make
 `/healthz` green when the runner never started.
+
+The R115 identity/framing matrix runs on the same disposable real stack. It exercises the
+Platform Owner singleton and database lifecycle triggers, current-owner-only transfer and two
+concurrent targets, first verified Google binding with no fabricated subject, exact bootstrap
+and rerun behavior, strict هيئة التأطير one/multiple/all/online framing persistence, deferred
+cross-table constraint failures, read-only post-approval profile projection, per-window mode,
+legacy null and modality-aware advisory warnings. Its fixtures restore the singleton and User
+version counters as well as the owner id, so a passing assertion cannot still mutate the seeded
+owner behind the all-table isolation guard.
 
 The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
 anonymous and Nginx-gated read before withdrawal; the committed application/public-origin
@@ -59,6 +68,9 @@ bash scripts/dev/test-integration.sh
 
 # CI-equivalent integration — owns and destroys a uniquely named disposable stack
 bash scripts/ci/test-integration.sh
+
+# R115 authenticated browser acceptance — also owns and destroys its whole stack
+bash scripts/dev/browser/verify-platform-owner-framing.sh
 
 # Production-mode bootstrap/readiness — synthetic TLS, no fixtures, isolated volumes
 bash scripts/deploy/verify-production-bootstrap.sh
@@ -265,6 +277,7 @@ result is reported in the slice that ran them.
 
 | Script | Answers |
 |---|---|
+| `scripts/dev/browser/verify-platform-owner-framing.sh` | **R115 end to end on its own disposable real stack.** Operates one/multiple/all/online/both هيئة التأطير registration choices and stale-choice clearing; proves approval and read-only teaching-profile rendering; round-trips stated and legacy-null per-window modes; hides and server-refuses lifecycle actions against a synthetic Platform Owner; transfers between two synthetic Global Super Admins while the current owner is filtered off-page; rejects the former owner's still-live bearer; then checks the exact PostgreSQL singleton, role, framing and availability rows. Every ordinary phase is bounded and the project, volumes, images, Chrome profile and tagged identities are destroyed afterwards. **Last run: 21/21 plus 7/7 exact database assertions.** |
 | `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
 | `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
 | `backend/src/controllers/visibility-matrix.http.integration.test.ts` | **NEW B §E — the visibility authorization matrix over real HTTP.** Three tiers × نشاط/حصة/امتحان × a thirteen-caller cast; `hidden` asserted as a set over the whole cast; direct-by-id gated separately from the list and answering **404, never 403**; the management list asserted **un-gated**; the full 3×3 content independence including `consent_forced_private`; and R91's dated ownership — two occurrences, two main teachers, each reading only her own date. **The suite owns every row it touches under one tag and its before/after snapshot of shared state is identical.** **35/35.** |
@@ -620,11 +633,11 @@ shared `deleted_at` timestamp and a null `deleted_by` — the fingerprint of a
 - **A fixture may create and destroy rows it owns; it may only ever *borrow*
   rows it does not.** The `TAG` prefix convention marks ownership, and a
   `where` clause without it is the smell.
-- **Borrow the least dangerous column.** The rewritten test suspends the other
-  administrators (`account_status`) instead of revoking their grants: a status
-  is trivially restored and means nothing on its own, whereas a **revoked role
-  assignment is indistinguishable from a deliberate administrative act** — which
-  is exactly why the damage was hard to recognise as damage.
+- **Prefer no ambient mutation.** The original rewrite borrowed
+  `account_status` rather than revoking grants, but R115 makes even that obsolete:
+  the Platform Owner cannot be suspended. The current singleton/bootstrap suite
+  observes the seeded Owner and creates its own synthetic eligible successors;
+  it never parks or rewrites any ambient administrator.
 - **Restore in `finally`, not at the end of the happy path.** The original
   restore was the last statement of the test, so any earlier assertion failure
   skipped it. A guard this consequential must survive its own test failing.

@@ -40,6 +40,7 @@ export function useTeachingCandidates(
         proposed.subjectId ?? '',
         proposed.levelId ?? '',
         proposed.excludeScheduleId ?? '',
+        proposed.deliveryMode ?? '',
       ].join('|')
     : '';
 

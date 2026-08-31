@@ -9,6 +9,7 @@ import {
   searchUsers,
   setUserRoles,
   suspendUser,
+  transferPlatformOwnership,
   updateUser,
   deleteUserAccount,
   type RoleAssignment,
@@ -88,6 +89,11 @@ export function UsersPage(): ReactNode {
   const [permanent, setPermanent] = useState(false);
   const [blocked, setBlocked] = useState<unknown>(null);
   const [reactivating, setReactivating] = useState<UserSummary | null>(null);
+  const [transferring, setTransferring] = useState<UserSummary | null>(null);
+  // `/me` is a session snapshot. Once this page successfully transfers the
+  // singleton, do not keep offering a second transfer until a fresh session
+  // read confirms ownership again.
+  const [ownershipTransferred, setOwnershipTransferred] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -140,7 +146,12 @@ export function UsersPage(): ReactNode {
       key: 'first_name',
       header: t('admin.users.colFirstName'),
       sortKey: 'first_name',
-      cell: (r) => r.first_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
+      cell: (r) => (
+        <>
+          {r.first_name_arabic ?? <span className="muted">{t('common.notSet')}</span>}
+          {r.is_platform_owner ? ` — ${t('admin.users.platformOwner')}` : null}
+        </>
+      ),
     },
     {
       key: 'last_name',
@@ -209,13 +220,25 @@ export function UsersPage(): ReactNode {
 
   const actions: RowAction<UserSummary>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    {
+      label: t('admin.users.transferOwnership'),
+      onSelect: (r) => setTransferring(r),
+      available: (r) =>
+        canOfferOwnershipTransfer(
+          me?.id ?? null,
+          me?.is_platform_owner === true,
+          ownershipTransferred,
+          r,
+        ),
+    },
     // Offered only where TD-1 allows the transition, rather than shown and
     // refused: a control that exists only to fail teaches nothing (§14.2).
     {
       label: t('admin.users.suspend'),
       danger: true,
       onSelect: (r) => setSuspending(r),
-      available: (r) => r.account_status === 'active' && r.id !== me?.id,
+      available: (r) =>
+        r.account_status === 'active' && r.id !== me?.id && !r.is_platform_owner,
     },
     {
       label: t('admin.users.reactivate'),
@@ -237,7 +260,7 @@ export function UsersPage(): ReactNode {
         setPermanent(false);
         setDeleting(r);
       },
-      available: (r) => r.id !== me?.id,
+      available: (r) => r.id !== me?.id && !r.is_platform_owner,
     },
     {
       // The de-identification R111 would reach after three days, performed now.
@@ -249,7 +272,7 @@ export function UsersPage(): ReactNode {
         setPermanent(true);
         setDeleting(r);
       },
-      available: (r) => r.id !== me?.id,
+      available: (r) => r.id !== me?.id && !r.is_platform_owner,
     },
   ];
 
@@ -263,6 +286,7 @@ export function UsersPage(): ReactNode {
       setEditing(null);
       setSuspending(null);
       setReactivating(null);
+      setTransferring(null);
       await load();
       setNotice(t(okKey));
     } catch (error) {
@@ -375,6 +399,7 @@ export function UsersPage(): ReactNode {
           user={editing}
           branches={branches}
           canGrantAdmin={isSuperAdmin}
+          rolesProtected={editing.is_platform_owner}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(input, assignments) =>
@@ -383,7 +408,9 @@ export function UsersPage(): ReactNode {
               // TD-15 version, so they go first; the role set is a separate
               // endpoint by design (§5.6) and one audit row per decision.
               await updateUser(editing.id, editing.version, input, accessToken);
-              await setUserRoles(editing.id, assignments, accessToken);
+              if (!editing.is_platform_owner) {
+                await setUserRoles(editing.id, assignments, accessToken);
+              }
             }, 'common.saved')
           }
         />
@@ -417,6 +444,28 @@ export function UsersPage(): ReactNode {
           )
         }
         onCancel={() => setReactivating(null)}
+      />
+
+      <ConfirmDialog
+        open={transferring !== null}
+        title={t('admin.users.transferOwnershipTitle')}
+        body={t('admin.users.transferOwnershipBody').replace(
+          '{name}',
+          transferring?.name_arabic ?? '',
+        )}
+        confirmLabel={t('admin.users.transferOwnership')}
+        danger
+        busy={busy}
+        onConfirm={() =>
+          void run(
+            async () => {
+              await transferPlatformOwnership(transferring!.id, accessToken);
+              setOwnershipTransferred(true);
+            },
+            'admin.users.ownershipTransferred',
+          )
+        }
+        onCancel={() => setTransferring(null)}
       />
 
       {/* R111 — two ACTIONS rather than one action with a switch.
@@ -458,6 +507,28 @@ export function UsersPage(): ReactNode {
   );
 }
 
+/**
+ * Presentation rule only; the server remains authoritative. Keeping it pure
+ * makes the filtered/paginated-owner and stale-former-owner regressions
+ * directly testable without making the table page its own authority source.
+ */
+export function canOfferOwnershipTransfer(
+  currentUserId: string | null,
+  currentUserIsOwner: boolean,
+  ownershipTransferred: boolean,
+  target: UserSummary,
+): boolean {
+  return (
+    currentUserIsOwner &&
+    !ownershipTransferred &&
+    target.id !== currentUserId &&
+    target.account_status === 'active' &&
+    target.roles.some(
+      (assignment) => assignment.role === 'super_admin' && assignment.branch_id === null,
+    )
+  );
+}
+
 /** `null` scope reads as *all branches* (§7 R24), never as *no branch*. */
 function roleLabel(a: RoleAssignment): string {
   const role = t(`admin.users.role.${a.role}`);
@@ -477,6 +548,9 @@ function messageFor(error: unknown): string {
   if (reason === 'LAST_SUPER_ADMIN') return 'admin.users.lastSuperAdmin';
   if (reason === 'SELF_SUSPENSION') return 'admin.users.selfSuspension';
   if (reason === 'INVALID_TRANSITION') return 'admin.users.invalidTransition';
+  if (reason === 'PLATFORM_OWNER_PROTECTED') return 'admin.users.platformOwnerProtected';
+  if (reason === 'PLATFORM_OWNER_TARGET_INELIGIBLE') return 'admin.users.ownerTargetIneligible';
+  if (reason === 'PLATFORM_OWNER_TRANSFER_TO_SELF') return 'admin.users.ownerTransferSelf';
   if (error.status === 409) return 'common.conflict';
   if (error.status === 403) return 'admin.users.forbidden';
   if (error.status === 404) return 'admin.users.notFound';
@@ -519,6 +593,7 @@ function ProfileDialog({
   user,
   branches,
   canGrantAdmin,
+  rolesProtected,
   busy,
   onSave,
   onCancel,
@@ -526,6 +601,7 @@ function ProfileDialog({
   user: UserSummary;
   branches: Branch[];
   canGrantAdmin: boolean;
+  rolesProtected: boolean;
   busy: boolean;
   onSave: (
     input: UserProfileInput,
@@ -568,11 +644,13 @@ function ProfileDialog({
    * scope, so a second row of the same role is not a wider grant — it is the
    * duplicate the database now refuses.
    */
-  const offered = ROLES.filter(
-    (r) =>
-      (canGrantAdmin || (r !== 'admin' && r !== 'super_admin')) &&
-      !rows.some((x) => x.role === r),
-  );
+  const offered = rolesProtected
+    ? []
+    : ROLES.filter(
+        (r) =>
+          (canGrantAdmin || (r !== 'admin' && r !== 'super_admin')) &&
+          !rows.some((x) => x.role === r),
+      );
 
   const guard = useUnsavedGuard({
     open: true,
@@ -597,6 +675,11 @@ function ProfileDialog({
         <PersonFields value={person} onChange={setPerson} errors={touched ? errors : {}} prefix="user" />
 
         <h3>{t('admin.users.rolesHeading')}</h3>
+        {rolesProtected ? (
+          <p className="state" role="status">
+            {t('admin.users.platformOwnerRolesProtected')}
+          </p>
+        ) : null}
         {rows.length === 0 ? (
           // Not an empty box: an account with no assignment can sign in and
           // reach nothing, which is a state worth naming before it is saved.
@@ -608,6 +691,8 @@ function ProfileDialog({
             {rows.map((r) => (
               <li key={r.role}>
                 <span className="admin-list__label">{t(`admin.users.role.${r.role}`)}</span>
+                {rolesProtected ? null : (
+                  <>
                 {/**
                   * **Every assigned role's scope is editable** (Owner,
                   * 2026-08-28). It rendered as text with only a Delete beside
@@ -641,6 +726,8 @@ function ProfileDialog({
                 >
                   {t('common.delete')}
                 </Button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

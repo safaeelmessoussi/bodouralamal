@@ -60,6 +60,12 @@ export interface ApprovalItem {
    * family-link item, which requests no role at all.
    */
   requestedRole: string | null;
+  /** General planning preference captured from هيئة التأطير registration. */
+  framing: {
+    mode: 'in_person' | 'online' | 'both';
+    allBranches: boolean;
+    branches: { id: string; name: string }[];
+  } | null;
   /**
    * The educational stage the applicant asked for (Revision 49) — what §4.1
    * step 1 needs to preselect *"the first Level of the applicant's Category"*.
@@ -203,7 +209,23 @@ export async function listApprovals(
       // Applied to the COUNT as well as the page, so `meta.total` describes the
       // filtered set. A total that ignored the filter would tell the client to
       // render pages that are empty.
-      ...(branchId ? { intendedBranchId: branchId } : {}),
+      ...(branchId
+        ? {
+            OR: [
+              { intendedBranchId: branchId },
+              {
+                framingPreference: {
+                  is: {
+                    OR: [
+                      { allBranches: true },
+                      { branches: { some: { branchId } } },
+                    ],
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
     };
     total += await prisma.user.count({ where });
     const applicants = await prisma.user.findMany({
@@ -223,6 +245,14 @@ export async function listApprovals(
         intendedBranch: { select: { id: true, name: true } },
         // Only what the DTO publishes (§16.2), never the whole row.
         intendedCategory: { select: { id: true, name: true } },
+        framingPreference: {
+          include: {
+            branches: {
+              include: { branch: { select: { id: true, name: true } } },
+              orderBy: { branch: { name: 'asc' } },
+            },
+          },
+        },
       },
       orderBy: approvalOrder(options.sortBy, options.sortDir, (dir) => ({ nameArabic: dir })),
       skip,
@@ -253,6 +283,16 @@ export async function listApprovals(
           ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
+        framing: applicant.framingPreference
+          ? {
+              mode: applicant.framingPreference.mode,
+              allBranches: applicant.framingPreference.allBranches,
+              branches: applicant.framingPreference.branches.map((entry) => ({
+                id: entry.branch.id,
+                name: entry.branch.name,
+              })),
+            }
+          : null,
         // R62 — the children applied for with this registration. Empty on a
         // pre-R62 request, which bundled them as pending LINKS instead; those
         // rows remain and are still counted by `bundle` above.
@@ -305,6 +345,7 @@ export async function listApprovals(
         // A link request concerns an existing child and asks for no role,
         // and no stage: the child's placement already exists.
         requestedRole: null,
+        framing: null,
         children: [],
         category: null,
       });
@@ -383,6 +424,7 @@ export async function listApprovals(
           ? { id: first.requestedBranch.id, name: first.requestedBranch.name }
           : null,
         requestedRole: null,
+        framing: null,
         category: first.requestedCategory
           ? { id: first.requestedCategory.id, name: first.requestedCategory.name }
           : null,
@@ -456,6 +498,7 @@ export async function listApprovals(
         bundle: { childCount: 0, linkCount: group.length },
         branch: null,
         requestedRole: null,
+        framing: null,
         category: null,
         children: [],
       });

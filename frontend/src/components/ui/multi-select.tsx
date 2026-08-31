@@ -46,6 +46,8 @@ export function MultiSelectField({
   searchPlaceholder,
   emptyLabel,
   disabled = false,
+  required = false,
+  error = null,
   /** Below this many options the search box is noise rather than help. */
   searchThreshold = 8,
 }: {
@@ -57,6 +59,8 @@ export function MultiSelectField({
   searchPlaceholder?: string;
   emptyLabel?: string;
   disabled?: boolean;
+  required?: boolean;
+  error?: string | null;
   searchThreshold?: number;
 }): ReactNode {
   const id = useId();
@@ -77,8 +81,23 @@ export function MultiSelectField({
   const searchable = options.length >= searchThreshold;
 
   return (
-    <fieldset className="field multi-select">
-      <legend className="field__label">{label}</legend>
+    <fieldset
+      className={error ? 'field field--invalid multi-select' : 'field multi-select'}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={
+        [hint ? `${id}-hint` : null, error ? `${id}-error` : null]
+          .filter(Boolean)
+          .join(' ') || undefined
+      }
+    >
+      <legend className="field__label">
+        {label}
+        {required ? (
+          <span className="field__required" aria-hidden="true">
+            *
+          </span>
+        ) : null}
+      </legend>
 
       {chosen.length > 0 ? (
         <ul className="multi-select__chosen">
@@ -132,7 +151,16 @@ export function MultiSelectField({
         )}
       </ul>
 
-      {hint ? <p className="field__hint">{hint}</p> : null}
+      {hint ? (
+        <p className="field__hint" id={`${id}-hint`}>
+          {hint}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="field__error" id={`${id}-error`} role="alert">
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

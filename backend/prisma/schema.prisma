@@ -321,6 +321,18 @@ enum DeliveryMode {
   @@map("delivery_mode")
 }
 
+/// A person's general framing capability/preferences, and optionally the mode
+/// of one weekly availability window. This is deliberately distinct from
+/// `DeliveryMode`: a person may support `both`, while one scheduled occurrence
+/// is always either in-person or online.
+enum FramingMode {
+  in_person
+  online
+  both
+
+  @@map("framing_mode")
+}
+
 /// **R97 — what an online occurrence carries.** Meaningful only when
 /// `delivery_mode = 'online'`, and refused otherwise by CHECK: an in-person
 /// class has no media mode, and a nullable column that is sometimes set for one
@@ -413,6 +425,8 @@ model User {
   subjectCapabilities  TeacherSubjectCapability[]
   categoryCapabilities TeacherCategoryCapability[]
   availability         TeacherAvailability[]
+  framingPreference    FramingPreference?
+  platformOwnership    PlatformOwner?
   notifications        Notification[]              @relation("NotificationRecipient")
   examStaff            ExamStaff[]
   eventStaff           EventStaff[]                @relation("EventStaffUser")
@@ -844,6 +858,7 @@ model Branch {
   /// Revision 39 — applicants who REQUESTED this branch at registration. Not
   /// the people placed here; that is `groups → StudentGroup`.
   intendedBy           User[]                    @relation("UserIntendedBranch")
+  framingWillingness   FramingPreferenceBranch[]
   /// Revision 64 — the branch a child-registration request asked for.
   childApplications    ChildApplication[]
   /// Revision 66 — where each enrolled student actually is.
@@ -2700,6 +2715,60 @@ model SystemSetting {
   @@map("system_setting")
 }
 
+/// The platform-wide ownership anchor.
+///
+/// This is a singleton lifecycle relationship, not a role. The database fixes
+/// `singleton_key` to `platform`, permits at most one row, refuses deletion,
+/// and verifies that `ownerUser` is an Active, undeleted, globally scoped Super
+/// Admin. The table is empty only before the first production bootstrap.
+model PlatformOwner {
+  singletonKey String @id @default("platform") @map("singleton_key") @db.VarChar(20)
+  ownerUserId  String @unique @map("owner_user_id") @db.Uuid
+  ownerUser    User   @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("platform_owner")
+}
+
+/// General framing capability recorded before approval. It is planning data,
+/// never RBAC authority and never a weekly schedule.
+///
+/// `allBranches` is the durable, future-inclusive meaning of «كل المقرات»; it
+/// is not expanded into today's Branch ids. Physical/both preferences require
+/// either that flag or at least one `branches` row. Online-only preferences
+/// require neither. Deferred SQL constraint triggers enforce the cross-table
+/// rule without forcing clients to write rows in an unsafe order.
+model FramingPreference {
+  userId      String                    @id @map("user_id") @db.Uuid
+  user        User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  mode        FramingMode
+  allBranches Boolean                   @default(false) @map("all_branches")
+  branches    FramingPreferenceBranch[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("framing_preference")
+}
+
+/// Explicit current-branch willingness for a general framing preference.
+/// Empty beside `allBranches = true` means every current and future branch.
+model FramingPreferenceBranch {
+  userId     String            @map("user_id") @db.Uuid
+  preference FramingPreference @relation(fields: [userId], references: [userId], onDelete: Restrict)
+  branchId   String            @map("branch_id") @db.Uuid
+  branch     Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, branchId])
+  @@index([branchId])
+  @@map("framing_preference_branch")
+}
+
 /// **The one MVP notification event** (§4.8 as narrowed by Revision 77).
 ///
 /// R6 removed in-app notifications from the MVP entirely, and R77 narrows that
@@ -2846,6 +2915,11 @@ model TeacherAvailability {
   weekday   DayOfWeek
   startTime DateTime  @map("start_time") @db.Time(0)
   endTime   DateTime  @map("end_time") @db.Time(0)
+
+  /// Optional for honest compatibility with pre-revision windows. New clients
+  /// may state how this particular window can be used; null means legacy/not
+  /// stated and is never silently backfilled.
+  mode FramingMode?
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 

@@ -41,7 +41,7 @@ export PUBLIC_BASE_URL="http://127.0.0.1:${api_port}"
 # Browser-facing capability URLs must retain the same-origin /storage shape the
 # real Nginx deployment owns; a direct MinIO origin is invalid in every tier.
 export STORAGE_BASE_URL="${PUBLIC_BASE_URL}/storage"
-export SUPER_ADMIN_EMAIL='production-seed-super-admin@example.com'
+export SUPER_ADMIN_EMAIL='safae.elmessoussi@gmail.com'
 export SUPER_ADMIN_SEX='female'
 export NODE_ENV='test'
 export TZ='Africa/Casablanca'
@@ -94,6 +94,36 @@ if [[ "$kinds" != "4" ]]; then
   exit 1
 fi
 echo "OK: scheduling-type catalogue complete — six canonical rows, four structural kinds."
+
+owner_profile="$(psql_seed "
+  SELECT count(*)
+    FROM platform_owner po
+    JOIN \"user\" u ON u.id = po.owner_user_id
+    JOIN user_branch_role ubr ON ubr.user_id = u.id
+    JOIN role r ON r.id = ubr.role_id
+    JOIN framing_preference fp ON fp.user_id = u.id
+   WHERE po.singleton_key = 'platform'
+     AND u.pre_provisioned_email = 'safae.elmessoussi@gmail.com'
+     AND u.first_name_arabic = 'صفاء'
+     AND u.last_name_arabic = 'المسوسي'
+     AND u.name_arabic = 'صفاء المسوسي'
+     AND u.sex = 'female'
+     AND u.account_status = 'active'
+     AND u.deleted_at IS NULL
+     AND r.name = 'super_admin'
+     AND ubr.branch_id IS NULL
+     AND ubr.user_status = 'active'
+     AND ubr.deleted_at IS NULL
+     AND fp.mode = 'both'
+     AND fp.all_branches
+     AND NOT EXISTS (SELECT 1 FROM framing_preference_branch fpb WHERE fpb.user_id = u.id)
+     AND NOT EXISTS (SELECT 1 FROM teacher_availability ta WHERE ta.user_id = u.id)
+     AND NOT EXISTS (SELECT 1 FROM user_identity ui WHERE ui.user_id = u.id);" | tr -d '[:space:]')"
+if [[ "$owner_profile" != "1" ]]; then
+  echo "FAIL: approved Platform Owner identity/authority/framing bootstrap is incomplete." >&2
+  exit 1
+fi
+echo "OK: one unbound approved Platform Owner with global authority and both/all-branch framing."
 
 (
   cd "$repo_root/backend"

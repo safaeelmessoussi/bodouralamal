@@ -87,7 +87,7 @@ function meController(prisma: PrismaClient, config: AppConfig) {
     // `/me` answers *what may this person become*; authorization answers *what
     // is this person now*. One indexed query, on a request that already makes
     // two.
-    const [links, assignments] = await Promise.all([
+    const [links, assignments, platformOwner] = await Promise.all([
       prisma.familyLink.findMany({
         where: {
           parentId: user.id,
@@ -107,6 +107,10 @@ function meController(prisma: PrismaClient, config: AppConfig) {
         where: { userId: user.id, deletedAt: null },
         include: { role: true },
       }),
+      prisma.platformOwner.findUnique({
+        where: { singletonKey: 'platform' },
+        select: { ownerUserId: true },
+      }),
     ]);
     const liveScopes = toRoleScopes(assignments);
 
@@ -120,6 +124,7 @@ function meController(prisma: PrismaClient, config: AppConfig) {
        * un-narrowed session, which is a real answer rather than a missing one.
        */
       active_role: verified.claims.active_role ?? null,
+      is_platform_owner: platformOwner?.ownerUserId === user.id,
       /**
        * **R87 §M — does this person actually teach Quran?**
        *
@@ -440,6 +445,7 @@ export function createApp(
   guarded.post('/admin/users/:id/suspend', users.suspend(prisma));
   guarded.post('/admin/users/:id/reactivate', users.reactivate(prisma));
   guarded.put('/admin/users/:id/roles', users.setRoles(prisma));
+  guarded.post('/admin/platform-owner/transfer', users.transferOwner(prisma));
   // R111 — Super Admin only, on the same 3-day window as a self-deletion.
   // `?permanent=true` performs the de-identification now instead.
   guarded.delete('/admin/users/:id', users.remove(prisma));

@@ -158,6 +158,44 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
     ).toBe(0);
   });
 
+  it('bootstraps the one approved Platform Owner without fabricating identity or weekly hours', async () => {
+    const owner = await prisma.platformOwner.findUniqueOrThrow({
+      where: { singletonKey: 'platform' },
+      include: {
+        ownerUser: {
+          include: {
+            identities: true,
+            availability: true,
+            framingPreference: { include: { branches: true } },
+            branchRoles: { where: { deletedAt: null }, include: { role: true } },
+          },
+        },
+      },
+    });
+    expect(await prisma.platformOwner.count()).toBe(1);
+    expect(owner.ownerUser).toMatchObject({
+      preProvisionedEmail: 'safae.elmessoussi@gmail.com',
+      firstNameArabic: 'صفاء',
+      lastNameArabic: 'المسوسي',
+      nameArabic: 'صفاء المسوسي',
+      sex: 'female',
+      accountStatus: 'active',
+      deletedAt: null,
+    });
+    expect(owner.ownerUser.identities).toEqual([]);
+    expect(owner.ownerUser.availability).toEqual([]);
+    expect(owner.ownerUser.framingPreference).toMatchObject({ mode: 'both', allBranches: true });
+    expect(owner.ownerUser.framingPreference?.branches).toEqual([]);
+    expect(
+      owner.ownerUser.branchRoles.filter(
+        (assignment) =>
+          assignment.role.name === 'super_admin' &&
+          assignment.branchId === null &&
+          assignment.userStatus === 'active',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('is a true no-op for Subjects when the Production seed is run again', async () => {
     await runProductionSeed();
     expect(await subjectSnapshot()).toEqual(firstRun);

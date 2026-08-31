@@ -10,6 +10,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
  */
 export interface Me {
   id: string;
+  /** Protected singleton lifecycle status; it is not an RBAC role. */
+  is_platform_owner: boolean;
   account_status: 'pending' | 'active' | 'rejected' | 'suspended';
   roles: string[];
   /** One entry per role; `branches: null` = all branches (§4.2 Revision 24). */

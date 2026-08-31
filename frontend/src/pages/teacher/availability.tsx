@@ -8,6 +8,10 @@ import {
 } from '../../adapters/teaching-profile.js';
 import { AvailabilityEditor } from '../../components/teaching/availability-editor.js';
 import {
+  FramingPreferenceSummary,
+  type FramingPreferenceView,
+} from '../../components/teaching/framing-preference-summary.js';
+import {
   CapabilitiesEditor,
   type CapabilityOption,
 } from '../../components/teaching/capabilities-editor.js';
@@ -70,6 +74,7 @@ import { isDirty } from '../../lib/form-dirty.js';
 export function TeacherAvailabilityPage(): ReactNode {
   const { accessToken } = useSession();
   const [ranges, setRanges] = useState<AvailabilityRange[]>([]);
+  const [framing, setFraming] = useState<FramingPreferenceView | null>(null);
   /** What the server last confirmed — the comparison `dirty` is made against. */
   const [pristine, setPristine] = useState<AvailabilityRange[]>([]);
   /** The catalogue she chooses from, carried on her own profile read — she
@@ -103,9 +108,11 @@ export function TeacherAvailabilityPage(): ReactNode {
         weekday: a.weekday,
         start_time: a.start_time,
         end_time: a.end_time,
+        mode: a.mode,
       }));
       setRanges(stored);
       setPristine(stored);
+      setFraming(profile.framing);
       setAllSubjects(profile.selectable_subjects);
       setAllCategories(profile.selectable_categories);
       const subs = profile.subjects.map((x) => x.id);
@@ -159,6 +166,7 @@ export function TeacherAvailabilityPage(): ReactNode {
         weekday: a.weekday,
         start_time: a.start_time,
         end_time: a.end_time,
+        mode: a.mode,
       }));
       setRanges(stored);
       setPristine(stored);
@@ -185,6 +193,8 @@ export function TeacherAvailabilityPage(): ReactNode {
       ) : (
         <>
           <p className="field__hint">{t('teacher.availability.planningOnly')}</p>
+
+          <FramingPreferenceSummary framing={framing} />
 
           {/* Hers to state since 2026-08-30, through the SHARED editor — the
               administrator's dialog renders the identical controls. */}

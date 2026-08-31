@@ -33,6 +33,8 @@ export interface RoleAssignment {
 
 export interface UserSummary {
   id: string;
+  /** Singleton lifecycle status, distinct from RBAC roles. */
+  is_platform_owner: boolean;
   name_arabic: string;
   /**
    * The stored parts, sex and notes — what the edit form hydrates from.
@@ -236,6 +238,24 @@ export async function setUserRoles(
     method: 'PUT',
     token,
     body: { assignments },
+  });
+  return body.data;
+}
+
+/** Explicit high-impact transfer; the server still authorises the current owner. */
+export async function transferPlatformOwnership(
+  targetUserId: string,
+  token: string | null,
+): Promise<{ owner_user_id: string; previous_owner_user_id: string; version: number }> {
+  const body = await api<{
+    data: { owner_user_id: string; previous_owner_user_id: string; version: number };
+  }>('/admin/platform-owner/transfer', {
+    method: 'POST',
+    token,
+    body: {
+      target_user_id: targetUserId,
+      confirmation: 'TRANSFER_PLATFORM_OWNERSHIP',
+    },
   });
   return body.data;
 }

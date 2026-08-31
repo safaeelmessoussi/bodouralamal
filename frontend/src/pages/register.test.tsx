@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import type { PublicBranch } from '../adapters/branches.js';
-import { explainFailure, validate } from './register.js';
+import { buildPayload, explainFailure, validate } from './register.js';
 import { ApiError } from '../lib/api.js';
 import { ar } from '../i18n/ar.js';
 
@@ -48,6 +48,9 @@ const base = {
   children: [child],
   branchId: 'b1',
   categoryId: 'c1',
+  framingMode: '' as const,
+  allFramingBranches: false,
+  framingBranchIds: [] as string[],
   dataProcessing: true,
 };
 
@@ -74,7 +77,98 @@ describe('§4.1 step 1 / Revision 49 — the educational stage', () => {
   it('does NOT require one from a staff request', () => {
     // A teacher is admitted to no Level, so the question has no answer — and
     // the server refuses a staff request that states one.
-    expect(validate({ ...base, intent: 'teacher', categoryId: null })).toEqual({});
+    expect(
+      validate({
+        ...base,
+        intent: 'teacher',
+        categoryId: null,
+        framingMode: 'online',
+      }),
+    ).toEqual({});
+  });
+});
+
+describe('هيئة التأطير framing preference', () => {
+  const teacher = {
+    ...base,
+    intent: 'teacher' as const,
+    branchId: null,
+    categoryId: null,
+  };
+
+  it('requires a general mode for a staff request', () => {
+    expect(validate(teacher)).toHaveProperty('framingMode');
+  });
+
+  it.each(['in_person', 'both'] as const)(
+    'requires physical branch willingness for %s',
+    (framingMode) => {
+      expect(validate({ ...teacher, framingMode })).toHaveProperty('framingBranches');
+      expect(
+        validate({ ...teacher, framingMode, framingBranchIds: ['b1', 'b2'] }),
+      ).toEqual({});
+      expect(validate({ ...teacher, framingMode, allFramingBranches: true })).toEqual({});
+    },
+  );
+
+  it('requires no physical branch for online framing', () => {
+    expect(validate({ ...teacher, framingMode: 'online' })).toEqual({});
+  });
+
+  it('omits hidden branch data from an online payload', () => {
+    expect(
+      buildPayload({
+        ...teacher,
+        framingMode: 'online',
+        allFramingBranches: true,
+        framingBranchIds: ['b1'],
+      }),
+    ).toEqual({
+      kind: 'adult',
+      applicant: {
+        first_name_arabic: 'خديجة',
+        last_name_arabic: 'بنعلي',
+        sex: 'female',
+      },
+      requested_role: 'teacher',
+      framing: { mode: 'online' },
+      consents: { data_processing: true },
+    });
+  });
+
+  it('represents one, multiple, and future-inclusive all branches without a fake id', () => {
+    expect(
+      buildPayload({ ...teacher, framingMode: 'in_person', framingBranchIds: ['b1'] }),
+    ).toMatchObject({
+      framing: {
+        mode: 'in_person',
+        willingness: { all_branches: false, branch_ids: ['b1'] },
+      },
+    });
+    expect(
+      buildPayload({ ...teacher, framingMode: 'both', framingBranchIds: ['b1', 'b2'] }),
+    ).toMatchObject({
+      framing: {
+        mode: 'both',
+        willingness: { all_branches: false, branch_ids: ['b1', 'b2'] },
+      },
+    });
+    expect(
+      buildPayload({ ...teacher, framingMode: 'both', allFramingBranches: true }),
+    ).toMatchObject({
+      framing: { mode: 'both', willingness: { all_branches: true } },
+    });
+  });
+
+  it('keeps framing fields irrelevant to ordinary registrations', () => {
+    expect(
+      buildPayload({
+        ...base,
+        framingMode: 'both',
+        allFramingBranches: true,
+        framingBranchIds: ['b1'],
+      }),
+    ).not.toHaveProperty('framing');
   });
 });
 

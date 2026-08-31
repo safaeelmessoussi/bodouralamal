@@ -153,6 +153,51 @@ const categoryId = z.uuid();
 const requestedRole = z.literal('teacher');
 
 /**
+ * General framing capability for a هيئة التأطير request.
+ *
+ * `all_branches: true` is a future-inclusive semantic flag, never a synthetic
+ * branch id and never expanded into today's catalogue. Online-only carries no
+ * physical branch data at all. The strict nested union makes stale hidden
+ * values a refusal rather than something silently persisted.
+ */
+const explicitBranchWillingness = z
+  .object({
+    all_branches: z.literal(false),
+    branch_ids: z.array(z.uuid()).min(1).max(100),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (new Set(value.branch_ids).size !== value.branch_ids.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['branch_ids'],
+        message: 'branch_ids must not contain duplicates',
+      });
+    }
+  });
+
+const allBranchWillingness = z
+  .object({ all_branches: z.literal(true) })
+  .strict();
+
+const physicalFraming = (mode: 'in_person' | 'both') =>
+  z
+    .object({
+      mode: z.literal(mode),
+      willingness: z.discriminatedUnion('all_branches', [
+        allBranchWillingness,
+        explicitBranchWillingness,
+      ]),
+    })
+    .strict();
+
+const framingPreference = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('online') }).strict(),
+  physicalFraming('in_person'),
+  physicalFraming('both'),
+]);
+
+/**
  * Adult self-registration (§4.1). No child, no media release.
  *
  * **The staff request rides on this path rather than on a third `kind`.** A
@@ -166,7 +211,7 @@ export const adultRegistrationSchema = z
   .object({
     kind: z.literal('adult'),
     applicant: personCore,
-    branch_id: branchId,
+    branch_id: branchId.optional(),
     /**
      * **Required for a student, absent for a staff request.** A teacher is not
      * admitted to a Level (§4.1), so asking them for an educational stage would
@@ -175,19 +220,54 @@ export const adultRegistrationSchema = z
      */
     category_id: categoryId.optional(),
     requested_role: requestedRole.optional(),
+    framing: framingPreference.optional(),
     consents,
   })
   .strict()
-  .refine((v) => v.requested_role !== undefined || v.category_id !== undefined, {
-    path: ['category_id'],
-    message: 'category_id is required unless this is a staff request (§4.1, R49)',
-  })
-  .refine((v) => v.requested_role === undefined || v.category_id === undefined, {
-    path: ['category_id'],
-    // Refused rather than ignored: a staff applicant who picked a stage has
-    // misunderstood the form, and silently dropping it would leave them
-    // believing they had asked to study.
-    message: 'a staff request is not admitted to a Level, so it takes no category_id',
+  .superRefine((value, ctx) => {
+    const staff = value.requested_role === 'teacher';
+    if (staff) {
+      if (value.category_id !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['category_id'],
+          message: 'a staff request is not admitted to a Level, so it takes no category_id',
+        });
+      }
+      if (value.branch_id !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['branch_id'],
+          message: 'a staff request records framing willingness, not one requested branch',
+        });
+      }
+      if (value.framing === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['framing'],
+          message: 'framing is required for a staff request',
+        });
+      }
+      return;
+    }
+
+    if (value.branch_id === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['branch_id'], message: 'branch_id is required' });
+    }
+    if (value.category_id === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['category_id'],
+        message: 'category_id is required unless this is a staff request (§4.1, R49)',
+      });
+    }
+    if (value.framing !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['framing'],
+        message: 'framing is only accepted for a staff request',
+      });
+    }
   });
 
 /**

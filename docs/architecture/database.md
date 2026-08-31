@@ -12,6 +12,11 @@ expressed in Prisma's schema language at all**.
 erDiagram
     User ||--o{ UserIdentity : "binds"
     User ||--o{ UserBranchRole : "holds"
+    User ||--o| PlatformOwner : "owns platform"
+    User ||--o| FramingPreference : "states willingness"
+    User ||--o{ TeacherAvailability : "states windows"
+    FramingPreference ||--o{ FramingPreferenceBranch : "physical branches"
+    Branch ||--o{ FramingPreferenceBranch : "willingness"
     User ||--o{ FamilyLink : "parent of"
     User ||--o{ RefreshSession : "sessions"
     RefreshSession ||--o{ RefreshToken : "generations"
@@ -49,7 +54,7 @@ erDiagram
     User ||--o| StudentSurahProgress : "coverage cache"
 ```
 
-Plus the platform-level tables: `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
+Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
 `EducationalContent`, `ConsumedToken`, `RateLimitCounter`, and `HijriMonthStart`.
 
 > The authoritative field-by-field definition is SRS §7. This page explains the parts that
@@ -97,6 +102,26 @@ ownership channels.
 Unique on `(user_id, role_id, branch_id)`, so one person may hold the same role once per
 branch. **`branch_id IS NULL` means all branches for that assignment** — not "Super Admin".
 Super Admin's bypass follows from its role.
+
+### `PlatformOwner` — singleton lifecycle, not RBAC
+
+The one row has fixed key `platform` and a unique restricted FK to its owner User. PostgreSQL
+triggers require that User to remain active, undeleted and assigned a live global Super Admin
+role; deleting the singleton is refused. Transfer locks the singleton first, then the current
+and target Users in id order, so two concurrent attempts cannot create two successors or a
+zero-owner interval. The relationship is what the Users screen labels; it is not represented
+by another Role row.
+
+### Framing preference and availability mode — planning only
+
+`FramingPreference` records `in_person | online | both`. Physical modes require either
+explicit `FramingPreferenceBranch` rows or future-inclusive `all_branches = true`; online
+requires neither. Deferred constraint triggers validate the final transaction state so nested
+creation is legal while incomplete committed preferences are not.
+
+`TeacherAvailability.mode` reuses the vocabulary per weekly interval and is nullable. Null is
+legacy/not stated; no migration guesses a value. These records affect advisory scheduling
+warnings only. Authority still comes from `CourseScheduleStaff` / `SessionStaff`.
 
 ### `RefreshSession` and `RefreshToken` — one stable chain, rotating generations
 

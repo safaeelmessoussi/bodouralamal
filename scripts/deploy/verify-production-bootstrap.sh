@@ -182,7 +182,10 @@ assert_sql 'SELECT count(*) FROM academic_year WHERE is_current;' '1' 'current a
 assert_sql "SELECT count(*) FROM subject WHERE deleted_at IS NULL AND tracks_quran_progress AND name = 'حفظ القرآن';" '1' 'memorisation marker'
 assert_sql "SELECT count(*) FROM subject WHERE deleted_at IS NULL AND name IN ('القرآن الكريم', 'محو الأمية');" '0' 'superseded Subject names'
 assert_sql 'SELECT count(*) FROM "user";' '1' 'bootstrap account count'
-assert_sql "SELECT count(*) FROM \"user\" WHERE pre_provisioned_email = 'production-bootstrap@example.invalid';" '1' 'bootstrap Super Admin'
+assert_sql "SELECT count(*) FROM \"user\" WHERE pre_provisioned_email = 'safae.elmessoussi@gmail.com' AND first_name_arabic = 'صفاء' AND last_name_arabic = 'المسوسي' AND name_arabic = 'صفاء المسوسي' AND sex = 'female' AND account_status = 'active' AND deleted_at IS NULL;" '1' 'approved bootstrap identity'
+assert_sql "SELECT count(*) FROM platform_owner WHERE singleton_key = 'platform';" '1' 'Platform Owner singleton'
+assert_sql "SELECT count(*) FROM platform_owner po JOIN user_branch_role ubr ON ubr.user_id = po.owner_user_id JOIN role r ON r.id = ubr.role_id WHERE po.singleton_key = 'platform' AND r.name = 'super_admin' AND ubr.branch_id IS NULL AND ubr.user_status = 'active' AND ubr.deleted_at IS NULL;" '1' 'Platform Owner global Super Admin authority'
+assert_sql "SELECT count(*) FROM platform_owner po JOIN framing_preference fp ON fp.user_id = po.owner_user_id WHERE fp.mode = 'both' AND fp.all_branches AND NOT EXISTS (SELECT 1 FROM framing_preference_branch fpb WHERE fpb.user_id = fp.user_id) AND NOT EXISTS (SELECT 1 FROM teacher_availability ta WHERE ta.user_id = fp.user_id);" '1' 'Platform Owner framing without fabricated schedule'
 assert_sql 'SELECT count(*) FROM user_identity;' '0' 'bound identities on a fresh install'
 assert_sql 'SELECT count(*) FROM user_branch_role;' '1' 'bootstrap role assignment'
 assert_sql 'SELECT count(*) FROM partner;' '0' 'Owner-managed partners'
@@ -210,7 +213,11 @@ seed_snapshot() {
       'quran_surah', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.surah_id) FROM quran_surah t),
       'system_setting', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.key) FROM system_setting t),
       'user', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM \"user\" t),
-      'user_branch_role', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM user_branch_role t)
+      'user_branch_role', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM user_branch_role t),
+      'platform_owner', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.singleton_key) FROM platform_owner t),
+      'framing_preference', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.user_id) FROM framing_preference t),
+      'framing_preference_branch', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.user_id, t.branch_id) FROM framing_preference_branch t),
+      'teacher_availability', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM teacher_availability t)
     );"
 }
 

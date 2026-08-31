@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { SelectField } from '../components/ui/field.js';
+import { CheckboxField, SelectField } from '../components/ui/field.js';
+import { MultiSelectField } from '../components/ui/multi-select.js';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
@@ -87,6 +88,9 @@ export function Register(): ReactNode {
    */
   const [children, setChildren] = useState<ChildForm[]>([EMPTY_CHILD]);
   const [branchId, setBranchId] = useState<string | null>(null);
+  const [framingMode, setFramingMode] = useState<'' | 'in_person' | 'online' | 'both'>('');
+  const [allFramingBranches, setAllFramingBranches] = useState(false);
+  const [framingBranchIds, setFramingBranchIds] = useState<string[]>([]);
   const [dataProcessing, setDataProcessing] = useState(false);
 
   const [touched, setTouched] = useState(false);
@@ -136,6 +140,9 @@ export function Register(): ReactNode {
     children,
     branchId,
     categoryId,
+    framingMode,
+    allFramingBranches,
+    framingBranchIds,
     dataProcessing,
   });
   const valid = Object.keys(localErrors).length === 0;
@@ -157,8 +164,11 @@ export function Register(): ReactNode {
           intent,
           applicant,
           children,
-          branchId: branchId!,
-          categoryId: categoryId!,
+          branchId,
+          categoryId,
+          framingMode,
+          allFramingBranches,
+          framingBranchIds,
         }),
         token,
       );
@@ -249,7 +259,21 @@ export function Register(): ReactNode {
             <SelectField
               label={t('register.kindLabel')}
               value={intent}
-              onChange={(next) => setIntent(next as typeof intent)}
+              onChange={(next) => {
+                const chosen = next as typeof intent;
+                setIntent(chosen);
+                if (chosen === 'teacher') {
+                  // The teacher path has no single requested branch or stage.
+                  setBranchId(null);
+                  setCategoryId(null);
+                } else {
+                  // Hidden framing values are erased immediately, not trusted
+                  // to a later payload builder to remember to omit them.
+                  setFramingMode('');
+                  setAllFramingBranches(false);
+                  setFramingBranchIds([]);
+                }
+              }}
               options={[
                 { value: 'adult', label: t('register.kindAdult') },
                 { value: 'parent_child', label: t('register.kindParentChild') },
@@ -299,28 +323,75 @@ export function Register(): ReactNode {
                 derived from the first child's server-side: a parent enrols in
                 nothing, and asking twice would produce two answers that must
                 agree. */}
-            {kind === 'parent_child' ? null : (
-            <fieldset className="register-form__group">
-              <legend>{t('register.branchLegend')}</legend>
-              <BranchSelector
-                branches={branches}
-                value={branchId}
-                onChange={setBranchId}
-                label={t('register.branchLabel')}
-                allowAll={false}
-                emptyLabel={t('register.branchEmpty')}
-                required
-                hint={t('register.branchHint')}
-                error={touched ? (errors['branch'] ?? null) : null}
-              />
+            {intent === 'teacher' ? (
+              <fieldset className="register-form__group">
+                <legend>{t('register.framingLegend')}</legend>
+                <SelectField
+                  label={t('register.framingModeLabel')}
+                  value={framingMode}
+                  onChange={(next) => {
+                    const mode = next as typeof framingMode;
+                    setFramingMode(mode);
+                    if (mode === 'online' || mode === '') {
+                      setAllFramingBranches(false);
+                      setFramingBranchIds([]);
+                    }
+                  }}
+                  required
+                  options={[
+                    { value: '', label: t('register.framingModeEmpty') },
+                    { value: 'in_person', label: t('register.framingMode_in_person') },
+                    { value: 'online', label: t('register.framingMode_online') },
+                    { value: 'both', label: t('register.framingMode_both') },
+                  ]}
+                  hint={t('register.framingModeHint')}
+                  error={touched ? (errors['framingMode'] ?? null) : null}
+                />
 
-              {/* R49 — the educational stage. Offered only where it means
-                  something: a teacher is admitted to no Level (§4.1), and the
-                  server refuses a staff request that states one. Populated from
-                  the live Categories in `display_order`, never hardcoded, so a
-                  stage the association adds appears here without a code change
-                  (Revision 27 makes these editable generic stages). */}
-              {intent === 'teacher' ? null : (
+                {framingMode === 'in_person' || framingMode === 'both' ? (
+                  <>
+                    <CheckboxField
+                      label={t('register.framingAllBranches')}
+                      checked={allFramingBranches}
+                      onChange={(checked) => {
+                        setAllFramingBranches(checked);
+                        if (checked) setFramingBranchIds([]);
+                      }}
+                      hint={t('register.framingAllBranchesHint')}
+                    />
+                    {allFramingBranches ? null : (
+                      <MultiSelectField
+                        label={t('register.framingBranchesLabel')}
+                        options={branches.map((branch) => ({
+                          value: branch.id,
+                          label: branch.name,
+                        }))}
+                        selected={framingBranchIds}
+                        onChange={setFramingBranchIds}
+                        required
+                        hint={t('register.framingBranchesHint')}
+                        emptyLabel={t('register.framingBranchesEmpty')}
+                        error={touched ? (errors['framingBranches'] ?? null) : null}
+                      />
+                    )}
+                  </>
+                ) : null}
+              </fieldset>
+            ) : kind === 'parent_child' ? null : (
+              <fieldset className="register-form__group">
+                <legend>{t('register.branchLegend')}</legend>
+                <BranchSelector
+                  branches={branches}
+                  value={branchId}
+                  onChange={setBranchId}
+                  label={t('register.branchLabel')}
+                  allowAll={false}
+                  emptyLabel={t('register.branchEmpty')}
+                  required
+                  hint={t('register.branchHint')}
+                  error={touched ? (errors['branch'] ?? null) : null}
+                />
+
                 <SelectField
                   label={t('register.categoryLabel')}
                   value={categoryId ?? ''}
@@ -333,8 +404,7 @@ export function Register(): ReactNode {
                   hint={t('register.categoryHint')}
                   error={touched ? (errors['category'] ?? null) : null}
                 />
-              )}
-            </fieldset>
+              </fieldset>
             )}
 
             <fieldset className="register-form__group">
@@ -503,6 +573,14 @@ export function mapServerIssues(error: unknown): ServerErrors {
       fields['branch'] = t('register.errBranch');
       continue;
     }
+    if (path === 'framing' || path === 'framing.mode') {
+      fields['framingMode'] = t('register.errFramingMode');
+      continue;
+    }
+    if (path.startsWith('framing.willingness')) {
+      fields['framingBranches'] = t('register.errFramingBranches');
+      continue;
+    }
     if (path.startsWith('consents')) {
       fields['dataProcessing'] = t('register.errConsent');
       continue;
@@ -592,6 +670,9 @@ interface FormState {
   children: ChildForm[];
   branchId: string | null;
   categoryId: string | null;
+  framingMode: '' | 'in_person' | 'online' | 'both';
+  allFramingBranches: boolean;
+  framingBranchIds: string[];
   dataProcessing: boolean;
 }
 
@@ -634,12 +715,23 @@ export function validate(state: FormState): Record<string, string> {
   // R67 — the applicant's own branch, on the adult path only. The parent+child
   // path asks it per child, and the server derives the applicant's from the
   // first.
-  if (state.intent !== 'parent_child' && !state.branchId) errors['branch'] = t('register.errBranch');
+  if (state.intent === 'adult' && !state.branchId) errors['branch'] = t('register.errBranch');
 
   // R49 — required for a student, and meaningless for a staff request: a
   // teacher is admitted to no Level, and the server refuses the pair together.
   if (state.intent === 'adult' && !state.categoryId)
     errors['category'] = t('register.errCategory');
+
+  if (state.intent === 'teacher') {
+    if (state.framingMode === '') errors['framingMode'] = t('register.errFramingMode');
+    if (
+      (state.framingMode === 'in_person' || state.framingMode === 'both') &&
+      !state.allFramingBranches &&
+      state.framingBranchIds.length === 0
+    ) {
+      errors['framingBranches'] = t('register.errFramingBranches');
+    }
+  }
 
   // §4.1: there is no lawful basis to create the record without this, so it is
   // refused rather than warned about.
@@ -648,12 +740,15 @@ export function validate(state: FormState): Record<string, string> {
   return errors;
 }
 
-function buildPayload(state: {
+export function buildPayload(state: {
   intent: 'adult' | 'parent_child' | 'teacher';
   applicant: PersonForm;
   children: ChildForm[];
-  branchId: string;
-  categoryId: string;
+  branchId: string | null;
+  categoryId: string | null;
+  framingMode: '' | 'in_person' | 'online' | 'both';
+  allFramingBranches: boolean;
+  framingBranchIds: string[];
 }): RegistrationInput {
   const person = (p: PersonForm): PersonInput => ({
     // The parts only — the server composes `name_arabic` (§1.1, R40), and
@@ -674,21 +769,31 @@ function buildPayload(state: {
     ...(p.notes.trim() ? { notes: p.notes.trim() } : {}),
   });
 
-  if (state.intent !== 'parent_child') {
+  if (state.intent === 'teacher') {
+    const mode = state.framingMode as 'in_person' | 'online' | 'both';
     return {
       kind: 'adult',
       applicant: person(state.applicant),
-      branch_id: state.branchId,
-      // The ONLY difference between an adult registering and a teacher
-      // applying. It grants nothing — a Super Admin assigns the role at
-      // approval — and its branch SCOPE is not collected here at all:
-      // `branch_id` says where they want to teach, while a role's scope is an
-      // authorization boundary the approver decides.
-      // A staff request states no stage and a student must — a teacher is
-      // admitted to no Level, and the server refuses the pair together.
-      ...(state.intent === 'teacher'
-        ? { requested_role: 'teacher' as const }
-        : { category_id: state.categoryId }),
+      requested_role: 'teacher',
+      framing:
+        mode === 'online'
+          ? { mode }
+          : {
+              mode,
+              willingness: state.allFramingBranches
+                ? { all_branches: true }
+                : { all_branches: false, branch_ids: state.framingBranchIds },
+            },
+      consents: { data_processing: true },
+    };
+  }
+
+  if (state.intent === 'adult') {
+    return {
+      kind: 'adult',
+      applicant: person(state.applicant),
+      branch_id: state.branchId!,
+      category_id: state.categoryId!,
       consents: { data_processing: true },
     };
   }

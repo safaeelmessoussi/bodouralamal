@@ -9,7 +9,7 @@ one.
 |---|---|---|---|---|
 | **Local Development** | Local Vite dev server | Developer's machine, inside the same containerized architecture with locally built app images | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
 | **Preview** | **Vercel**, auto-deployed from `develop` | — **calls no real backend** | **Fixture mocks only**; stores nothing | Vercel is outside Morocco — acceptable *only* because it holds no data at all |
-| **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | **Fixtures and synthetic records only** | Currently OVH France. Outside Morocco — acceptable *only* because the tier is fixture-only |
+| **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | Synthetic fixtures plus exactly the R115-authorised Owner staff identity for controlled OAuth UAT | Currently OVH France. No real beneficiary/educational/content or other staff data is permitted |
 | **Production** | Served by Nginx from the **Moroccan VPS**, same origin as the API | Same VPS: the full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
 
 ## Why "Preview" and "Staging" are two different words
@@ -22,7 +22,9 @@ Since [SRS Revision 104](../SRS.md) the Vercel tier is **Preview** — frontend 
 validation, nothing more — and **Staging** is a real, full-stack, production-shaped
 deployment with its own database and object storage.
 
-> **Staging is not a relaxed environment. It is Production with synthetic data.**
+> **Staging is not a relaxed environment. It is Production-shaped controlled UAT:**
+> synthetic data plus exactly `safae.elmessoussi@gmail.com` as the authorised Platform
+> Owner/Global Super Admin identity.
 
 The tier is structural in Compose. `docker-compose.production.yml` forces
 `NODE_ENV=production`; `docker-compose.staging.yml` forces `development`, the value that
@@ -43,20 +45,25 @@ pipeline.
 
 The hard rule, enforced as [`BR-18`](../reference/business-rules.md#br-18):
 
-> **No real beneficiary data ever enters Local Development, Preview or Staging. Fixture
-> data only.**
+> **No real beneficiary, educational or content data ever enters Local Development,
+> Preview or Staging.** Staging's only real-person exception is the exact Owner staff
+> identity authorised by R115 for OAuth UAT.
 
 Four mechanisms hold it, not one:
 
 1. **The fixtures seed refuses to run when `NODE_ENV=production`.** The same guard that
    stops fixtures polluting production is the residency firewall in the other direction.
    It is also why Staging runs `NODE_ENV=development`: that value is what *permits* the
-   fixtures, and it changes no security behaviour — see below.
+   fixtures, and it changes no security behaviour — see below. The Owner account comes from
+   the production seed's bounded pre-provisioning contract, not from a copied database.
 2. **Production dumps are never copied to any other tier.** Not "discouraged" — never.
 3. **The development database and its MinIO objects are never copied into Staging.** A
    developer's database is not fixture data: it accumulates real addresses and real
    experiments, and it is exactly the thing that looks harmless to copy.
 4. **The Preview frontend build must not embed production URLs.**
+
+The controlled-UAT exception grants no latitude to add another real identity. Any expansion
+requires a new explicit Owner decision and a residency/compliance review.
 
 ### `NODE_ENV` does not change security behaviour
 

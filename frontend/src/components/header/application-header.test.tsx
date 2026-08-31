@@ -34,12 +34,13 @@ function render(state: 'anonymous' | 'authenticated', me: Me | null): string {
 
 const person = (over: Partial<Me> = {}): Me => ({
   id: 'u1',
+  is_platform_owner: false,
   account_status: 'active',
   roles: ['student'],
   role_scopes: [{ role: 'student', branches: null }],
   active_role: null,
   approved_child_links: [],
-    teaches_quran: false,
+  teaches_quran: false,
   ...over,
 });
 

@@ -26,12 +26,13 @@ Visitor → "Continue with Google" → Google verifies email
    └─ Nobody we know          → registration form → Pending
 ```
 
-### Three ways a person enters the system
+### Four ways a person enters the system
 
 | Path | Who initiates | Result |
 |---|---|---|
 | **Adult self-registration** | An adult learner | One `Pending` account |
 | **Unified parent + child** | A parent with no account | Parent account **and** child record **and** the link between them — created in **one transaction**, never one without the other |
+| **هيئة التأطير request** | A prospective مؤطّرة | One `Pending` account plus general framing willingness (physical/online/both and one/multiple/all physical branches); **no authority** |
 | **Staff pre-provisioning** | Staff, in person | An account carrying the beneficiary's Google address, which binds when that person first logs in |
 
 The unified registration is atomic by rule, not by luck: parent, child, family link,
@@ -39,16 +40,19 @@ consent records, the parent's identity, and the single-use token record all comm
 together or none of them do. A test **kills the process mid-transaction** and asserts that
 nothing partial persists.
 
-### Registration never places anyone
+### Registration records requests and willingness; it never places or authorizes
 
-An applicant does **not** choose a branch, room, level, or group. Registration creates a
-*pending applicant*; placement is an administrative action taken after approval
-(Revision 29).
+An ordinary learner requests one branch and stage. A هيئة التأطير applicant states
+whether she can frame in person, online or both; physical willingness may name one, several,
+or every current and future branch. Neither answer is placement or RBAC scope. No applicant
+chooses a Room, Level, Group or role authority; approval records the administrative decision.
+After approval the same general preference remains visible read-only on the teaching profile,
+beside—but never inferred into—the independently stated weekly availability ranges.
 
-This has a consequence the specification records rather than hides: because an applicant
-carries no branch, a branch-scoped Admin does not see them in the user list. The
-**approval queue is deliberately unscoped**, and is the permanent path by which a branch
-Admin meets new applicants — by design, not a gap.
+The approval queue is deliberately reachable to approvers and shows the request/willingness.
+For a staff applicant, a single willing branch may be preselected as a convenience; multiple
+or all branches require an explicit scope decision so willingness is never silently promoted
+to authority.
 
 ### Approval
 
@@ -61,6 +65,15 @@ cannot renew, and a later authorized account recovery would require a fresh auth
 rather than reviving the old sessions.
 
 > SRS §4.1, §4.1b · TD-4.1, TD-4.2 · [Identity and access](../architecture/identity-and-access.md)
+
+### Platform Owner continuity
+
+The initial Owner is pre-provisioned and binds her real Google subject on first verified
+login; she does not register and no placeholder identity exists. Ownership is then independent
+of seed configuration. To change it, the current Owner selects another already-active Global
+Super Admin and confirms the dedicated transfer. The former Owner remains a Global Super Admin.
+Until that succeeds, every suspend/delete/de-identify/demote path is refused. This is one
+atomic lifecycle handoff, not a role rename.
 
 ---
 

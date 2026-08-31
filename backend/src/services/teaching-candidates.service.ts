@@ -43,6 +43,7 @@ export type CandidateWarning =
   | "category_not_declared"
   | "availability_not_declared"
   | "unavailable"
+  | "availability_mode_not_declared"
   | "conflict"
   | "availability_indeterminate";
 
@@ -72,6 +73,10 @@ export interface ProposedClass {
   weekdays: string[];
   startTime: string;
   endTime: string;
+  /** Optional for compatibility with older callers. When present, a range
+   * must explicitly support this delivery mode; legacy null is reported as
+   * unknown rather than silently treated as either mode. */
+  deliveryMode?: "in_person" | "online" | undefined;
   /** The schedule being EDITED. Its own staffing must not be reported as a
    *  clash with itself — the commonest false warning there is. */
   excludeScheduleId?: string | undefined;
@@ -128,7 +133,7 @@ export async function listTeachingCandidates(
       subjectCapabilities: { select: { subjectId: true } },
       categoryCapabilities: { select: { categoryId: true } },
       availability: {
-        select: { weekday: true, startTime: true, endTime: true },
+        select: { weekday: true, startTime: true, endTime: true, mode: true },
       },
     },
     orderBy: { nameArabic: "asc" },
@@ -230,6 +235,7 @@ export async function listTeachingCandidates(
       weekday: String(a.weekday),
       start: hhmm(a.startTime),
       end: hhmm(a.endTime),
+      mode: a.mode,
     }));
 
     const noProfile =
@@ -260,14 +266,28 @@ export async function listTeachingCandidates(
       // class. `isWithinAvailability` carries the Owner's containment rule —
       // ONE range covers it completely, and two adjacent ranges are never
       // merged to manufacture availability.
-      const uncovered = days.filter(
-        (weekday) =>
-          !isWithinAvailability(
-            { weekday, start: proposed.startTime, end: proposed.endTime },
-            declared,
-          ),
-      );
-      if (uncovered.length > 0) warnings.push("unavailable");
+      const proposedRange = (weekday: string) => ({
+        weekday,
+        start: proposed.startTime,
+        end: proposed.endTime,
+      });
+      const timeCovered = (weekday: string, ranges = declared) =>
+        isWithinAvailability(proposedRange(weekday), ranges);
+      const uncovered = days.filter((weekday) => !timeCovered(weekday));
+      if (uncovered.length > 0) {
+        warnings.push("unavailable");
+      } else if (proposed.deliveryMode) {
+        const compatible = declared.filter(
+          (range) => range.mode === proposed.deliveryMode || range.mode === "both",
+        );
+        const unknown = declared.filter((range) => range.mode === null);
+        const incompatibleDays = days.filter((weekday) => !timeCovered(weekday, compatible));
+        if (incompatibleDays.length > 0) {
+          const unknownDays = incompatibleDays.filter((weekday) => timeCovered(weekday, unknown));
+          if (unknownDays.length > 0) warnings.push("availability_mode_not_declared");
+          if (unknownDays.length < incompatibleDays.length) warnings.push("unavailable");
+        }
+      }
     }
 
     // **D · Conflict — a TIME overlap, never "she already has work"** (R88.7).

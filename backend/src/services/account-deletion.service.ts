@@ -8,6 +8,7 @@ import * as users from '../repositories/user.repository.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 import { ACCOUNT_PURGE_WINDOW_DAYS, snapshot } from '../repositories/trash.repository.js';
+import { lockAndAssertNotPlatformOwner } from './platform-owner.service.js';
 
 /**
  * **Deleting an account (R111, and the Owner's clarification of 2026-08-28).**
@@ -246,6 +247,7 @@ async function softDelete(
   selfService: boolean,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    await lockAndAssertNotPlatformOwner(tx, targetId);
     // Shared with every staffing writer and with new-session issuance. If a
     // concurrent assignment wins, the responsibility query below sees it and
     // refuses deletion; if deletion wins, the assignment re-reads this User as
@@ -426,6 +428,11 @@ export async function deIdentifyAccount(
       await users.lockNormalizedEmail(tx, address);
     }
 
+    // Global lock order for lifecycle mutations is PlatformOwner -> User. This
+    // follows the email locks here because transfer never takes an email lock,
+    // while identity binding does not take the ownership lock.
+    await lockAndAssertNotPlatformOwner(tx, targetId);
+
     // Authentication binds in Email -> User order, so permanent
     // de-identification does the same. The account is already soft-deleted,
     // which prevents any staffing writer from naming it while this waits.
@@ -533,6 +540,8 @@ export async function deIdentifyAccount(
     // identity could never be registered again (OD-07).
     const removed = [
       await tx.userIdentity.deleteMany({ where: { userId: targetId } }),
+      await tx.framingPreferenceBranch.deleteMany({ where: { userId: targetId } }),
+      await tx.framingPreference.deleteMany({ where: { userId: targetId } }),
       await tx.userBranchRole.deleteMany({ where: { userId: targetId } }),
       await tx.refreshToken.deleteMany({ where: { userId: targetId } }),
       await tx.refreshSession.deleteMany({ where: { userId: targetId } }),
@@ -598,6 +607,7 @@ export async function purgeUserAccount(
   );
 
   await prisma.$transaction(async (tx) => {
+    await lockAndAssertNotPlatformOwner(tx, targetId);
     if (!(await users.lockUser(tx, targetId))) {
       throw new AppError('NOT_FOUND', 'no such account');
     }

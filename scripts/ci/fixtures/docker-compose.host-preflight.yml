@@ -15,7 +15,7 @@ services:
       MINIO_SECRET_KEY: preflight-secret-password
       PUBLIC_BASE_URL: https://preflight.invalid
       STORAGE_BASE_URL: https://preflight.invalid/storage
-      SUPER_ADMIN_EMAIL: preflight@example.invalid
+      SUPER_ADMIN_EMAIL: safae.elmessoussi@gmail.com
       SUPER_ADMIN_SEX: female
       BACKUP_TARGET_SSH: restic@backup.invalid:/srv/bodour-preflight
 

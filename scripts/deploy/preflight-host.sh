@@ -80,10 +80,10 @@ if any(not api_env.get(name) for name in required):
 if tier == "production" and not api_env.get("BACKUP_TARGET_SSH"):
     raise SystemExit("Production backup target is empty")
 if deployment_state == "fresh":
-    if not api_env.get("SUPER_ADMIN_EMAIL"):
-        raise SystemExit("fresh deployment requires SUPER_ADMIN_EMAIL")
-    if api_env.get("SUPER_ADMIN_SEX") not in {"female", "male"}:
-        raise SystemExit("fresh deployment requires valid SUPER_ADMIN_SEX")
+    if api_env.get("SUPER_ADMIN_EMAIL", "").strip().lower() != "safae.elmessoussi@gmail.com":
+        raise SystemExit("fresh deployment requires the approved Platform Owner SUPER_ADMIN_EMAIL")
+    if api_env.get("SUPER_ADMIN_SEX") != "female":
+        raise SystemExit("fresh deployment requires the approved Platform Owner SUPER_ADMIN_SEX")
 if api_env.get("NODE_ENV") != expected_node_env:
     raise SystemExit("resolved runtime tier is wrong")
 if api_env["PUBLIC_BASE_URL"] != f"https://{domain}":

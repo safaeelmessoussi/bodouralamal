@@ -794,6 +794,9 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
           // identity (§20 rule 21), which governs the PUBLIC name only.
           "email",
           "id",
+          // R115 — lifecycle status needed by the Super-Admin management UI;
+          // it discloses no profile or StudentSocialProfile field.
+          "isPlatformOwner",
           "nameArabic",
           "nickname",
           "phone",

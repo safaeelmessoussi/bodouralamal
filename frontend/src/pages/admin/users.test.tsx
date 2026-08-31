@@ -6,6 +6,7 @@ import { ACCOUNT_STATUSES, ROLES } from '../../adapters/users.js';
 import { ar } from '../../i18n/ar.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
+import { canOfferOwnershipTransfer } from './users.js';
 
 /**
  * `/admin/users` — the client half of the contract guard.
@@ -23,6 +24,7 @@ const ASSIGNMENT: RoleAssignment = {
 
 const WIRE: UserSummary = {
   id: '00000000-0000-4000-8000-000000000001',
+  is_platform_owner: false,
   name_arabic: 'فاطمة الزهراء',
   first_name_arabic: 'سعاد',
   last_name_arabic: 'العلوي',
@@ -59,6 +61,7 @@ const QUEUE_ITEM: Approval = {
   children: [],
   branch: { id: ASSIGNMENT.branch_id!, name: ASSIGNMENT.branch_name! },
   requested_role: null,
+  framing: null,
   category: { id: '00000000-0000-4000-8000-00000000000a', name: 'طفل' },
 };
 
@@ -77,6 +80,7 @@ describe('the adapter type matches the wire contract', () => {
       'first_name_arabic',
       'first_name_french',
       'id',
+      'is_platform_owner',
       'last_name_arabic',
       'last_name_french',
       'name_arabic',
@@ -127,6 +131,43 @@ describe('the vocabularies the screen renders', () => {
     for (const key of ['lastSuperAdmin', 'selfSuspension', 'invalidTransition'] as const) {
       expect(ar.admin.users[key]).toBeTruthy();
     }
+  });
+});
+
+describe('Platform Owner controls', () => {
+  const globalSuperAdmin: UserSummary = {
+    ...WIRE,
+    id: '00000000-0000-4000-8000-000000000099',
+    roles: [{ role: 'super_admin', branch_id: null, branch_name: null }],
+  };
+
+  it('uses the authenticated ownership fact even when the current owner is absent from the page', () => {
+    expect(
+      canOfferOwnershipTransfer(WIRE.id, true, false, globalSuperAdmin),
+    ).toBe(true);
+  });
+
+  it('removes transfer authority locally after success and refuses ineligible targets', () => {
+    expect(canOfferOwnershipTransfer(WIRE.id, true, true, globalSuperAdmin)).toBe(false);
+    expect(canOfferOwnershipTransfer(WIRE.id, false, false, globalSuperAdmin)).toBe(false);
+    expect(
+      canOfferOwnershipTransfer(WIRE.id, true, false, {
+        ...globalSuperAdmin,
+        account_status: 'suspended',
+      }),
+    ).toBe(false);
+    expect(
+      canOfferOwnershipTransfer(WIRE.id, true, false, {
+        ...globalSuperAdmin,
+        roles: [{ role: 'super_admin', branch_id: ASSIGNMENT.branch_id!, branch_name: 'فرع' }],
+      }),
+    ).toBe(false);
+  });
+
+  it('publishes distinct owner-protection and transfer labels', () => {
+    expect(ar.admin.users.platformOwner).toBeTruthy();
+    expect(ar.admin.users.platformOwnerProtected).toBeTruthy();
+    expect(ar.admin.users.transferOwnership).toBeTruthy();
   });
 });
 

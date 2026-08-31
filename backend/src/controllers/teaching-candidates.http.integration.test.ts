@@ -146,7 +146,12 @@ async function teacher(
   profile: {
     subjects?: string[];
     categories?: string[];
-    availability?: { weekday: string; start: string; end: string }[];
+    availability?: {
+      weekday: string;
+      start: string;
+      end: string;
+      mode?: "in_person" | "online" | "both" | null;
+    }[];
   },
 ): Promise<string> {
   const user = await prisma.user.create({
@@ -179,6 +184,7 @@ async function teacher(
         weekday: r.weekday as never,
         startTime: new Date(`1970-01-01T${r.start}:00.000Z`),
         endTime: new Date(`1970-01-01T${r.end}:00.000Z`),
+        mode: r.mode ?? null,
       },
     });
   }
@@ -401,6 +407,37 @@ describe("the appraisal is accurate", () => {
         startTime: new Date("1970-01-01T12:00:00.000Z"),
       },
     });
+  });
+
+  it("B · per-window mode appraises online/in-person honestly and keeps legacy null unknown", async () => {
+    const range = await prisma.teacherAvailability.findFirstOrThrow({
+      where: { userId: teacherA },
+    });
+    const query = `${PROPOSED}&subject_id=${subjectId}&level_id=${levelId}&exclude_schedule_id=${plannedSchedule}`;
+
+    await prisma.teacherAvailability.update({
+      where: { id: range.id },
+      data: { mode: "online" },
+    });
+    expect(named(await appraise(`${query}&delivery_mode=online`), teacherA).warnings).toEqual([]);
+    expect(named(await appraise(`${query}&delivery_mode=in_person`), teacherA).warnings).toEqual([
+      "unavailable",
+    ]);
+
+    await prisma.teacherAvailability.update({
+      where: { id: range.id },
+      data: { mode: "both" },
+    });
+    expect(named(await appraise(`${query}&delivery_mode=online`), teacherA).warnings).toEqual([]);
+    expect(named(await appraise(`${query}&delivery_mode=in_person`), teacherA).warnings).toEqual([]);
+
+    await prisma.teacherAvailability.update({
+      where: { id: range.id },
+      data: { mode: null },
+    });
+    expect(named(await appraise(`${query}&delivery_mode=online`), teacherA).warnings).toEqual([
+      "availability_mode_not_declared",
+    ]);
   });
 
   it("C · a Subject she has not declared warns, and her availability does not", async () => {

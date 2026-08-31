@@ -197,8 +197,8 @@ columns no screen is entitled to.
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload.** `category_id` (the stage asked for) and optional `requested_role: 'teacher'` — **a hint that grants nothing** (R49) |
-| `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants |
+| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; identity comes solely from it. Ordinary adult/family registration carries the requested branch/stage. A `requested_role: 'teacher'` request instead requires R115 `framing`: online with no physical branch, or in-person/both with explicit branch ids or future-inclusive `all_branches`. **It grants nothing.** |
+| `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants. Staff rows expose framing willingness for review, separate from granted scope |
 | `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation, **plus the §4.1 placement**: `enrollments: [{ user_id, administrative_group_id }]`, and optional `assignments: [{ role, branch_id }]`, all in **one transaction** |
 | `POST` | `/admin/approvals/{id}/reject` | 🔒 | Body carries a reason |
 | `POST` | `/family-links` | 🔒 | **Staff-mediated** link of an existing child. Parents have no search over children |
@@ -214,6 +214,7 @@ columns no screen is entitled to.
 | `POST` | `/admin/users/{id}/suspend` | 🔒 | TD-1 `Active → Suspended`; **revokes every live session in the same transaction** (TD-4.15). Reason mandatory |
 | `POST` | `/admin/users/{id}/reactivate` | 🔒 | TD-1 `Suspended → Active`. Sessions stay revoked; `Rejected` is terminal and unreachable |
 | `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke |
+| `POST` | `/admin/platform-owner/transfer` | 🔒 | Current Platform Owner only; exact confirmation; target must already be an active Global Super Admin. Atomically moves the protected singleton and leaves both roles unchanged |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
 | `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
 
@@ -265,10 +266,13 @@ path.
 by pre-provisioning, an authenticated path with a named actor, and a database `CHECK` makes
 widening the set an SRS revision rather than a code change.
 
-**A role's branch scope is never collected at registration.** `branch_id` is the branch the
-applicant *asked for* (R39 — a request, not a placement); a role's scope is an authorization
-boundary (TD-2), and collecting it from the applicant would let a person propose the extent of
-their own permissions.
+**A role's branch scope is never collected at registration.** An ordinary learner's
+`branch_id` is the branch requested (R39). A هيئة التأطير applicant instead states
+physical/online **willingness**, potentially across several or all current/future branches.
+Neither is authority: the approver independently chooses the role assignment's scope (TD-2).
+The general preference remains visible read-only on both the administrative and own teaching-
+profile reads after approval. It is not part of either profile write: changing weekly ranges or
+declared Subjects cannot silently rewrite what the staff request recorded.
 
 **The grant runs through the same function `PUT /admin/users/{id}/roles` uses**, so approval
 cannot become a weaker path to authority: administrator roles stay Super-Admin-only, and a

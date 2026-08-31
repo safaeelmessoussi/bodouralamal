@@ -17,7 +17,7 @@ services:
       MINIO_SECRET_KEY: integration-secret-password
       PUBLIC_BASE_URL: http://127.0.0.1:${BODOUR_INTEGRATION_HTTP_PORT:-58083}
       STORAGE_BASE_URL: http://127.0.0.1:${BODOUR_INTEGRATION_HTTP_PORT:-58083}/storage
-      SUPER_ADMIN_EMAIL: integration-super-admin@example.com
+      SUPER_ADMIN_EMAIL: safae.elmessoussi@gmail.com
       SUPER_ADMIN_SEX: female
       NODE_ENV: test
       BACKUP_TARGET_SSH: ""

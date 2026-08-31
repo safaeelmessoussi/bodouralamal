@@ -188,6 +188,17 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     expect(dialog).not.toContain('scheduling.weekday');
   });
 
+  it('shows the same read-only general framing preference on both profile views', () => {
+    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
+    const own = code('/src/pages/teacher/availability.tsx');
+    expect(dialog).toContain('FramingPreferenceSummary');
+    expect(own).toContain('FramingPreferenceSummary');
+    // One formatter owns the future-inclusive all-branches meaning; neither
+    // profile view hand-builds or edits the registration preference.
+    expect(dialog).not.toContain('framing.allBranches');
+    expect(own).not.toContain('framing.allBranches');
+  });
+
   it('reports dirty against the PROFILE it loaded, not against emptiness (NEW E)', () => {
     // **The defect this exists for.** The dialog computed
     // `dirty = loaded && (subjectIds.length > 0 || categoryIds.length > 0 || ranges.length > 0)`

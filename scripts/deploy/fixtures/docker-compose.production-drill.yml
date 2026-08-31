@@ -17,7 +17,7 @@ services:
       MINIO_SECRET_KEY: production-drill-secret-password
       PUBLIC_BASE_URL: https://production-drill.invalid:${BODOUR_PRODUCTION_DRILL_HTTPS_PORT:-58443}
       STORAGE_BASE_URL: https://production-drill.invalid:${BODOUR_PRODUCTION_DRILL_HTTPS_PORT:-58443}/storage
-      SUPER_ADMIN_EMAIL: production-bootstrap@example.invalid
+      SUPER_ADMIN_EMAIL: safae.elmessoussi@gmail.com
       SUPER_ADMIN_SEX: female
       NODE_ENV: production
       BACKUP_TARGET_SSH: restic@backup.invalid:/srv/bodour-production-drill

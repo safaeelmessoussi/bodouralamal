@@ -7,6 +7,13 @@
  * exist now even though there is one language.
  */
 export const ar = {
+  framing: {
+    generalTitle: 'تفضيل التأطير العام',
+    generalHint:
+      'سُجّل هذا التفضيل مع طلب الانضمام. هو بيان تخطيط للقدرة العامة، وليس جدولاً أسبوعياً ولا يمنح صلاحية.',
+    notStated: 'غير مذكور (طلب قديم)',
+    allBranches: 'كل المقرات الحالية والمستقبلية',
+  },
   app: {
     name: 'بذور الأمل',
     tagline: 'جمعية بذور الأمل — مراكش',
@@ -591,6 +598,20 @@ export const ar = {
     // يُقال صراحةً: الطلب لا يمنح شيئًا، والصفة تُسنَد بعد الموافقة.
     teacherNotice:
       'سيصل طلبك إلى الإدارة لمراجعته. لا يمنحك إرسال الطلب أي صلاحية؛ تُسنَد صفة المؤطِّرة عند الموافقة.',
+    framingLegend: 'تفضيلات التأطير',
+    framingModeLabel: 'طريقة التأطير المتاحة',
+    framingModeEmpty: 'اختاري طريقة التأطير…',
+    framingMode_in_person: 'حضوري',
+    framingMode_online: 'عن بُعد',
+    framingMode_both: 'حضوري وعن بُعد',
+    framingModeHint: 'هذه قدرة عامة قبل الموافقة، وليست جدولاً أسبوعياً ولا تمنح صلاحية.',
+    framingAllBranches: 'يمكنني التأطير في كل المقرات',
+    framingAllBranchesHint: 'تشمل المقرات الحالية وأي مقر يُضاف لاحقاً.',
+    framingBranchesLabel: 'المقرات التي يمكنني التأطير بها',
+    framingBranchesHint: 'يمكن اختيار مقر واحد أو عدة مقرات.',
+    framingBranchesEmpty: 'لم يُختر أي مقر بعد.',
+    errFramingMode: 'اختاري طريقة التأطير المتاحة.',
+    errFramingBranches: 'اختاري مقراً واحداً على الأقل، أو اختاري كل المقرات.',
     kindHint: 'هذا السؤال عن **مَن** يُسجَّل، لا عن المرحلة التعليمية؛ تُحدَّد الفئة في الأسفل.',
     you: 'بياناتك',
     parent: 'بيانات ولي الأمر',
@@ -1480,6 +1501,9 @@ export const ar = {
       weekday: 'اليوم',
       from: 'من',
       to: 'إلى',
+      mode: 'طريقة التأطير في هذه الفترة',
+      modeUnknown: 'غير محددة (بيانات سابقة)',
+      modeHint: 'اختاري حضوريًا أو عن بُعد أو كليهما لهذه الفترة. عدم التحديد يبقى قيمة قديمة غير معروفة.',
       saved: 'حُفظ الملف التدريسي.',
       saveFailed: 'تعذّر حفظ الملف التدريسي. تحقّقي من الفترات: لا يجوز تداخلها.',
       loadFailed: 'تعذّر تحميل الملف التدريسي.',
@@ -1530,6 +1554,19 @@ export const ar = {
       allBranches: 'كل الفروع',
       // حساب بلا دور يستطيع الدخول ولا يصل إلى شيء — تُذكر الحالة لا تُخفى.
       noRoles: 'بلا دور',
+      platformOwner: 'مالكة المنصة',
+      platformOwnerRolesProtected:
+        'دور المشرفة العامة ونطاق كل الفروع محميان ما دامت هذه المستخدمة مالكة المنصة. انقلي الملكية أولًا لتغييرهما.',
+      platformOwnerProtected:
+        'هذا حساب مالكة المنصة. انقلي ملكية المنصة إلى مشرفة عامة عالمية نشطة قبل إيقافه أو حذفِه أو تغيير دوره.',
+      transferOwnership: 'نقل ملكية المنصة',
+      transferOwnershipTitle: 'تأكيد نقل ملكية المنصة',
+      transferOwnershipBody:
+        'ستصبح «{name}» مالكة المنصة الوحيدة. ستبقين مشرفة عامة، ولن يُحذف أو يُوقف أي حساب تلقائيًا.',
+      ownershipTransferred: 'تم نقل ملكية المنصة. بقيت المالكة السابقة مشرفة عامة.',
+      ownerTargetIneligible:
+        'يجب أن تكون المالكة الجديدة حسابًا نشطًا قائمًا يحمل دور المشرفة العامة بنطاق كل الفروع.',
+      ownerTransferSelf: 'هذا الحساب يملك المنصة بالفعل.',
       noRolesWarning: 'هذا الحساب بلا أي دور. سيتمكن صاحبه من الدخول دون الوصول إلى أي شيء.',
       // R71 audit — this dictionary had drifted from `role.*` above: «أستاذة»
       // for a مؤطرة and a second spelling of every other label. One concept,
@@ -1972,6 +2009,7 @@ export const ar = {
       warnSubject: 'المادة غير مذكورة في ملفها',
       warnCategory: 'الفئة غير مذكورة في ملفها',
       warnUnavailable: 'غير متاحة في هذا الوقت',
+      warnAvailabilityModeUnknown: 'طريقة التأطير غير محددة لهذه الفترة',
       warnNoAvailability: 'لم تُسجَّل أوقاتها بعد',
       warnConflict: 'لديها حصة متعارضة',
       warnIndeterminate: 'تعذّر تقدير التفرغ لهذا التكرار',
@@ -2101,7 +2139,8 @@ export const ar = {
       // R49 — the stage the applicant asked for. The key was used by the table
       // and the filter and was never in the catalog, so `t()` fell back to
       // returning the PATH and both rendered `admin.approvals.colRequested`.
-      colRequested: 'المرحلة المطلوبة',
+      colRequested: 'الصفة المطلوبة',
+      colFraming: 'تفضيل التأطير',
       branchNone: 'غير مذكور',
       filterBranch: 'المقر',
       filterAllBranches: 'كل المقرات',
@@ -2156,6 +2195,7 @@ export const ar = {
       grantRole: 'الدور الممنوح',
       grantRoleHint: 'مقترح من الطلب، وقابل للتعديل — القرار قرارك.',
       grantScopeHint: 'نطاق الصلاحية، وهو غير الفرع الذي طلبه صاحب الحساب.',
+      chooseGrantScope: 'اختاري نطاق الصلاحية…',
       approveWithRole: 'الموافقة مع إسناد الدور',
       approveWithoutRole: 'الموافقة دون دور',
       // §4.1 (المراجعة 43): الموافقة هي الإسناد نفسه، لا خطوة تالية له.

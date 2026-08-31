@@ -98,7 +98,7 @@ for invariant in \
   "Docker data root must be on persistent host storage" \
   "approved floor is" \
   "partial persistent-volume set requires recovery review before deployment" \
-  "fresh deployment requires SUPER_ADMIN_EMAIL" \
+  "fresh deployment requires the approved Platform Owner SUPER_ADMIN_EMAIL" \
   "DNS A record does not resolve exclusively to the approved public IPv4" \
   "must not publish an unverified AAAA record" \
   'if [[ -e "$HOME/.docker/config.json" ]]' \

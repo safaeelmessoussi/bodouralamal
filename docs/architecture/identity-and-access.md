@@ -665,36 +665,34 @@ decides.
 
 ---
 
-## Bootstrapping the first administrator
+## Platform Owner and initial bootstrap
 
-A chicken-and-egg problem with a carefully specified answer.
+Platform ownership is a protected singleton lifecycle relationship, not a special RBAC
+role. The owner must be active, undeleted and hold a live global Super Admin assignment.
+The database and application refuse suspension, deletion, permanent de-identification or
+demotion until ownership is transferred.
 
-`SUPER_ADMIN_EMAIL` is a **bootstrap configuration value, not an operational one.** The
-seed consults it **only when no active Super Administrator exists**. Once one does, the
-value is **ignored permanently** and may be removed from the environment entirely;
-administrators are managed through the application, with the database as the single source
-of truth.
+The initial Owner is fixed by SRS Revision 115: `safae.elmessoussi@gmail.com`, صفاء
+المسوسي, female. The seed creates or claims that one account, makes it an active
+Global Super Admin, stores general `both`/all-current-and-future-branches framing
+willingness, and creates no weekly hours. It stores `pre_provisioned_email`; it **does not
+fabricate a `UserIdentity` or Google subject**. The first verified Google login binds the
+real provider subject through the normal transaction.
 
-The gate moved from "a row matching this email" to "an active Super Administrator exists"
-because the original was idempotent only while the variable never changed: editing it and
-re-running the seed matched nothing, created a **second** Super Admin, and left the previous
-one active, privileged, and unclaimed — a silent privilege-retention bug, and the opposite
-of what an operator editing that line intends.
+The singleton is the bootstrap gate:
 
-Resolution when the gate is open:
+1. Before it exists, the seed requires the exact approved email and `female`, takes a
+   database advisory transaction lock, and fails atomically on an address conflict.
+2. Once it exists, every seed rerun is an ownership no-op — even after a legitimate
+   transfer, with absent/wrong environment values, or after other administrators change.
+3. The seed never reclaims the original Owner, creates a successor or reopens because no
+   other active Super Admin remains.
 
-1. The address already belongs to a non-deleted account (matched on **either** channel a
-   verified address can occupy) → that account is **granted** the role, and set active if it
-   is not, because bootstrap must yield a usable administrator.
-2. Otherwise create the account with the address in `pre_provisioned_email`; its identity
-   binds on first Google login. **No placeholder identity row is seeded.**
-3. The address belongs to a **soft-deleted** account → **fail loudly, create nothing.**
-   Guessing between resurrecting a deleted person and hijacking their address is not a
-   decision a seed script may make.
-
-**Lockout recovery is intended:** if every Super Administrator is suspended or deleted, the
-gate reopens. This grants no new authority — running the seed already requires database
-credentials and shell access to the VPS.
+Ownership transfer is current-owner-only and accepts another already-active Global Super
+Admin. One transaction locks the singleton first and both Users in deterministic id order,
+updates the single relationship, increments its version and audits previous/new UUIDs. It
+does not alter either person's role. Concurrent transfer attempts therefore produce one
+winner and one stale former-owner refusal, never two owners.
 
 ---
 

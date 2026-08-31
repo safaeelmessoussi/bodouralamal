@@ -1,5 +1,6 @@
 import { applySort } from './reorder.js';
 import type { SortState } from '../components/ui/data-table.js';
+import type { FramingPreferenceView } from '../types/framing.js';
 import { api } from '../lib/api.js';
 
 /**
@@ -67,6 +68,7 @@ export interface Approval {
    * assignment the approver states below.
    */
   requested_role: string | null;
+  framing: FramingPreferenceView | null;
   /**
    * The educational stage the applicant asked for (Revision 49) — what §4.1
    * step 1 preselects the first Level from.

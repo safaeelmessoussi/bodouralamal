@@ -1176,6 +1176,7 @@ export function SchedulingDialog({
           weekdays: weekdaysForClass(recurrence.type, recurrence.weekdays, recurrence.startDate),
           startTime,
           endTime,
+          deliveryMode: delivery,
           ...(scope.value.subjectId ? { subjectId: scope.value.subjectId } : {}),
           ...(scope.value.levelId ? { levelId: scope.value.levelId } : {}),
           ...(item?.id ? { excludeScheduleId: item.id } : {}),

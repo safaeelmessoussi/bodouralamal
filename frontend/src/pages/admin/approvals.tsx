@@ -46,6 +46,7 @@ import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { FramingPreferenceValue } from '../../components/teaching/framing-preference-summary.js';
 
 /**
  * `/admin/approvals` — طلبات الانضمام, the approval queue (§5.6, §14.2).
@@ -194,6 +195,12 @@ export function ApprovalsPage(): ReactNode {
         ) : (
           <span className="muted">—</span>
         ),
+    },
+    {
+      key: 'framing',
+      header: t('admin.approvals.colFraming'),
+      secondary: true,
+      cell: (r) => <FramingPreferenceValue framing={r.framing} />,
     },
     {
       key: 'submitted',
@@ -484,14 +491,19 @@ function StaffApprovalDialog({
   onCancel: () => void;
 }): ReactNode {
   const [role, setRole] = useState(row.requested_role ?? 'teacher');
-  const [branchId, setBranchId] = useState<string>(row.branch?.id ?? '');
+  const onlyWillingBranch =
+    row.framing && !row.framing.all_branches && row.framing.branches.length === 1
+      ? row.framing.branches[0]!.id
+      : null;
+  const initialScope = row.branch?.id ?? onlyWillingBranch ?? '__choose__';
+  const [branchId, setBranchId] = useState<string>(initialScope);
   /** The requested role and branch are prefilled FROM THE REQUEST — that is
    *  hydration, not a change, so it is the baseline. */
   const staffGuard = useUnsavedGuard({
     open: true,
     dirty: isDirty(
       { role, branchId },
-      { role: row.requested_role ?? 'teacher', branchId: row.branch?.id ?? '' },
+      { role: row.requested_role ?? 'teacher', branchId: initialScope },
     ),
     onCancel,
   });
@@ -516,6 +528,10 @@ function StaffApprovalDialog({
             t(`admin.users.role.${row.requested_role ?? 'teacher'}`),
           )}
         </p>
+        <div className="state" role="status">
+          <strong>{t('admin.approvals.colFraming')}:</strong>{' '}
+          <FramingPreferenceValue framing={row.framing} />
+        </div>
         <SelectField
           label={t('admin.approvals.grantRole')}
           value={role}
@@ -528,6 +544,7 @@ function StaffApprovalDialog({
           value={branchId}
           onChange={setBranchId}
           options={[
+            { value: '__choose__', label: t('admin.approvals.chooseGrantScope') },
             { value: '', label: t('admin.users.allBranches') },
             ...branches.map((b) => ({ value: b.id, label: b.name })),
           ]}
@@ -545,7 +562,7 @@ function StaffApprovalDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={busy}
+            disabled={busy || branchId === '__choose__'}
             onClick={() => onConfirm([{ role, branch_id: branchId || null }])}
           >
             {t('admin.approvals.approveWithRole')}

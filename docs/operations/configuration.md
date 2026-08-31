@@ -46,7 +46,7 @@ two separately scoped credential boundaries.
 
 | Variable | When |
 |---|---|
-| `SUPER_ADMIN_EMAIL` | **Bootstrap only.** See below |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only.** See below |
 | `BACKUP_TARGET_SSH` | Production only — the offsite Moroccan backup target |
 
 ### Optional, with defaults
@@ -79,27 +79,24 @@ MinIO's init container passes credentials through `MC_HOST_local` — the docume
 credential channel — rather than on the command line, so the secret never surfaces in
 `docker compose config`, `docker inspect`, or a process list.
 
-## `SUPER_ADMIN_EMAIL` is a bootstrap value
+## Platform Owner bootstrap values
 
 The variable with the most subtle lifecycle in the system.
 
-- **The running API never reads it.** Boot validation therefore does not demand it.
-- **The seed reads it only while no active Super Administrator exists.** If the gate is open
-  and the value is absent, the seed **fails loudly, naming the variable** — rather than
-  completing without an administrator.
-- **Once one exists, the value is ignored permanently** and may be **removed from `.env`
-  entirely.**
+- **The running API never reads them.**
+- Before `PlatformOwner('platform')` exists, the seed requires exactly
+  `SUPER_ADMIN_EMAIL=safae.elmessoussi@gmail.com` and `SUPER_ADMIN_SEX=female`, failing
+  loudly and atomically on any other value or identity conflict.
+- Once the singleton exists, both values are ignored permanently and may be removed from
+  `.env`. A rerun cannot reclaim a valid transfer, create an automatic successor, or reopen
+  because the active-Super-Admin population changed.
 
-**Editing this line later does not move the Super Admin role.** Administrators are managed
-exclusively through the application, with the database as the single source of truth.
-
-That gate — *"an active Super Administrator exists"* rather than *"a row matching this
-email"* — exists because the original was idempotent only while the variable never changed.
-Editing it and re-running the seed matched nothing, created a **second** Super Admin, and
-left the previous one active, privileged, and unclaimed.
+**Editing these lines later does not move ownership or a role.** Ownership transfers through
+the application to another eligible Global Super Admin; ordinary administrator changes use
+the ordinary role-management workflow. The database remains the source of truth.
 
 > Full resolution order:
-> [Identity and access](../architecture/identity-and-access.md#bootstrapping-the-first-administrator)
+> [Identity and access](../architecture/identity-and-access.md#platform-owner-and-initial-bootstrap)
 
 ## Runtime settings
 

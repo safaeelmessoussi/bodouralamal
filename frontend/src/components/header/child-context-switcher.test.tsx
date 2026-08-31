@@ -15,11 +15,13 @@ import { ChildContextSwitcher } from './child-context-switcher.js';
  */
 const me = (links: { id: string; display_name: string }[]): Me => ({
   id: 'p1',
+  is_platform_owner: false,
   account_status: 'active',
   roles: ['parent'],
   role_scopes: [{ role: 'parent', branches: null }],
   active_role: 'parent',
-  approved_child_links: links, teaches_quran: false,
+  approved_child_links: links,
+  teaches_quran: false,
 });
 
 function render(links: { id: string; display_name: string }[]): string {

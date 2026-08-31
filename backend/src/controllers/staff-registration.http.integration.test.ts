@@ -108,7 +108,22 @@ let counter = 0;
 
 /** Submits the adult self-registration form over real HTTP, exactly as the
  *  public form does — with the onboarding token as the only identity. */
-async function apply(requestedRole?: "teacher"): Promise<string> {
+type Framing =
+  | { mode: "online" }
+  | {
+      mode: "in_person" | "both";
+      willingness:
+        | { all_branches: true }
+        | { all_branches: false; branch_ids: string[] };
+    };
+
+async function apply(
+  requestedRole?: "teacher",
+  framing: Framing = {
+    mode: "both",
+    willingness: { all_branches: false, branch_ids: [branchId] },
+  },
+): Promise<string> {
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
   const { token } = issueOnboardingToken(
@@ -130,12 +145,11 @@ async function apply(requestedRole?: "teacher"): Promise<string> {
         last_name_arabic: `أستاذة${counter}`,
         sex: "female",
       },
-      branch_id: branchId,
       // R49: a student states a stage; a staff request must NOT — a teacher
       // is admitted to no Level, and the schema refuses the pair together.
       ...(requestedRole
-        ? { requested_role: requestedRole }
-        : { category_id: placement.categoryId }),
+        ? { requested_role: requestedRole, framing }
+        : { branch_id: branchId, category_id: placement.categoryId }),
       consents: { data_processing: true },
     },
   });
@@ -161,6 +175,10 @@ async function clear(): Promise<void> {
     await prisma.consentRecord.deleteMany({
       where: { studentId: { in: ids } },
     });
+    await prisma.$transaction([
+      prisma.framingPreferenceBranch.deleteMany({ where: { userId: { in: ids } } }),
+      prisma.framingPreference.deleteMany({ where: { userId: { in: ids } } }),
+    ]);
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
     // is ON DELETE RESTRICT — so they go before the people they belong to. This
@@ -207,6 +225,17 @@ describe("a teacher asks for a teacher account", () => {
     const row = await prisma.user.findUniqueOrThrow({ where: { id } });
 
     expect(row.requestedRole).toBe("teacher");
+    expect(row.intendedBranchId).toBeNull();
+    expect(
+      await prisma.framingPreference.findUnique({
+        where: { userId: id },
+        include: { branches: true },
+      }),
+    ).toMatchObject({
+      mode: "both",
+      allBranches: false,
+      branches: [{ branchId }],
+    });
     // The whole point: a self-declared role is a HINT. Authority lives in
     // `user_branch_role`, and a value that granted access by form submission
     // would be privilege escalation.
@@ -234,6 +263,11 @@ describe("a teacher asks for a teacher account", () => {
     expect(rows.find((r) => r["id"] === teacher)?.["requested_role"]).toBe(
       "teacher",
     );
+    expect(rows.find((r) => r["id"] === teacher)?.["framing"]).toMatchObject({
+      mode: "both",
+      all_branches: false,
+      branches: [{ id: branchId }],
+    });
     expect(
       rows.find((r) => r["id"] === ordinary)?.["requested_role"],
     ).toBeNull();
@@ -277,11 +311,10 @@ describe("a teacher asks for a teacher account", () => {
     }
   });
 
-  it("does not collect a branch SCOPE — only the branch the applicant asked for", async () => {
-    // R39's `branch_id` is a request, not a placement. A role's branch scope is
-    // an authorization boundary (TD-2), and collecting it here would let an
-    // applicant propose the extent of their own permissions. `.strict()` turns
-    // that into a refusal rather than a silently dropped field.
+  it("refuses authority scope fields and a legacy single branch beside framing willingness", async () => {
+    // Willingness is planning data; `role_branch_id` would be proposed
+    // authority, while `branch_id` is the obsolete one-branch teacher shape.
+    // Both are refused rather than silently interpreted.
     counter += 1;
     const stamp = `${Date.now()}-${counter}`;
     const { token } = issueOnboardingToken(
@@ -307,11 +340,128 @@ describe("a teacher asks for a teacher account", () => {
           branch_id: branchId,
           requested_role: "teacher",
           role_branch_id: branchId,
+          framing: {
+            mode: "in_person",
+            willingness: { all_branches: false, branch_ids: [branchId] },
+          },
           consents: { data_processing: true },
         },
       },
     );
     expect(res.status).toBe(400);
+  });
+
+  it("persists online, one, multiple, and future-inclusive all-branch willingness", async () => {
+    const secondBranch = await prisma.branch.create({ data: { name: `${TAG} فرع ثانٍ` } });
+    const online = await apply("teacher", { mode: "online" });
+    const one = await apply("teacher", {
+      mode: "in_person",
+      willingness: { all_branches: false, branch_ids: [branchId] },
+    });
+    const multiple = await apply("teacher", {
+      mode: "both",
+      willingness: { all_branches: false, branch_ids: [branchId, secondBranch.id] },
+    });
+    const all = await apply("teacher", {
+      mode: "both",
+      willingness: { all_branches: true },
+    });
+
+    const rows = await prisma.framingPreference.findMany({
+      where: { userId: { in: [online, one, multiple, all] } },
+      include: { branches: true },
+    });
+    const byUser = new Map(rows.map((row) => [row.userId, row]));
+    expect(byUser.get(online)).toMatchObject({ mode: "online", allBranches: false, branches: [] });
+    expect(byUser.get(one)?.branches.map((entry) => entry.branchId)).toEqual([branchId]);
+    expect(byUser.get(multiple)?.branches.map((entry) => entry.branchId).sort()).toEqual(
+      [branchId, secondBranch.id].sort(),
+    );
+    expect(byUser.get(all)).toMatchObject({ mode: "both", allBranches: true, branches: [] });
+  });
+
+  it("database constraint triggers reject incomplete or contradictory committed preferences", async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: { nameArabic: `${TAG} direct missing branch`, sex: "female" },
+        });
+        await tx.framingPreference.create({
+          data: { userId: user.id, mode: "in_person", allBranches: false },
+        });
+      }),
+    ).rejects.toThrow(/physical framing preference requires/);
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: { nameArabic: `${TAG} direct contradictory`, sex: "female" },
+        });
+        await tx.framingPreference.create({
+          data: {
+            userId: user.id,
+            mode: "both",
+            allBranches: true,
+            branches: { create: { branchId } },
+          },
+        });
+      }),
+    ).rejects.toThrow(/physical framing preference requires/);
+  });
+
+  it("refuses missing/invalid modes, stale online branches, duplicates, fake all tokens, and unknown branches", async () => {
+    const invalidFramings: unknown[] = [
+      undefined,
+      { mode: "hybrid" },
+      { mode: "in_person" },
+      { mode: "both", willingness: { all_branches: false, branch_ids: [] } },
+      { mode: "online", willingness: { all_branches: true } },
+      {
+        mode: "in_person",
+        willingness: { all_branches: false, branch_ids: [branchId, branchId] },
+      },
+      { mode: "in_person", willingness: { all_branches: "all" } },
+      {
+        mode: "in_person",
+        willingness: {
+          all_branches: false,
+          branch_ids: ["00000000-0000-4000-8000-000000000000"],
+        },
+      },
+    ];
+
+    for (const framing of invalidFramings) {
+      counter += 1;
+      const stamp = `${Date.now()}-${counter}`;
+      const issued = issueOnboardingToken(
+        {
+          email: `staffreg-invalid-${stamp}@example.com`,
+          providerSubjectId: `staffreg-invalid-sub-${stamp}`,
+        },
+        config.ONBOARDING_TOKEN_KEY,
+      );
+      const response = await httpCall<{ error?: { code?: string } }>(
+        BASE,
+        "POST",
+        "/registrations",
+        {
+          headers: { "X-Onboarding-Token": issued.token },
+          body: {
+            kind: "adult",
+            applicant: {
+              first_name_arabic: `${TAG}`,
+              last_name_arabic: `رفض${counter}`,
+              sex: "female",
+            },
+            requested_role: "teacher",
+            ...(framing === undefined ? {} : { framing }),
+            consents: { data_processing: true },
+          },
+        },
+      );
+      expect(response.status, JSON.stringify(framing)).toBe(400);
+      expect(response.body.error?.code).toBe("VALIDATION_FAILED");
+    }
   });
 });
 

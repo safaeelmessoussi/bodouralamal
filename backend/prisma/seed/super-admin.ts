@@ -1,89 +1,76 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
+import * as audit from '../../src/repositories/audit.repository.js';
+import * as owners from '../../src/repositories/platform-owner.repository.js';
 import * as users from '../../src/repositories/user.repository.js';
 
-/**
- * The bootstrap account's sex, from the environment, or a loud refusal naming it.
- *
- * It fails rather than defaulting because a default here would be exactly the
- * inference R80 forbids — and because the person this account belongs to is
- * standing next to whoever runs the seed.
- */
-function requireSuperAdminSex(): 'female' | 'male' {
-  const raw = (process.env['SUPER_ADMIN_SEX'] ?? '').trim().toLowerCase();
-  if (raw === 'female' || raw === 'male') return raw;
-  throw new Error(
-    'SUPER_ADMIN_SEX must be set to `female` or `male` before this seed can create the ' +
-      'Super Administrator account (SRS Revision 80). It is seed-only, like SUPER_ADMIN_EMAIL: ' +
-      'the running API never reads it. Nothing is defaulted, because a default would be the ' +
-      'inference R80 exists to forbid.',
-  );
+/** The Owner-ratified bootstrap identity for every deployment tier. */
+export const INITIAL_PLATFORM_OWNER = {
+  email: 'safae.elmessoussi@gmail.com',
+  firstNameArabic: 'صفاء',
+  lastNameArabic: 'المسوسي',
+  nameArabic: 'صفاء المسوسي',
+  sex: 'female' as const,
+  framingMode: 'both' as const,
+};
+
+export function requireInitialOwnerConfiguration(email: string | undefined): string {
+  if (!email?.trim()) {
+    throw new Error(
+      'Platform Owner has not been bootstrapped and SUPER_ADMIN_EMAIL is not set. ' +
+        `Set it to ${INITIAL_PLATFORM_OWNER.email}; it is ignored after ownership exists.`,
+    );
+  }
+  const normalized = email.trim().toLowerCase();
+  if (normalized !== INITIAL_PLATFORM_OWNER.email) {
+    throw new Error(
+      `Initial Platform Owner must be ${INITIAL_PLATFORM_OWNER.email}; ` +
+        `SUPER_ADMIN_EMAIL was ${normalized}. Refusing to bootstrap a different owner.`,
+    );
+  }
+  const sex = (process.env['SUPER_ADMIN_SEX'] ?? '').trim().toLowerCase();
+  if (sex !== INITIAL_PLATFORM_OWNER.sex) {
+    throw new Error(
+      'Initial Platform Owner SUPER_ADMIN_SEX must be `female` (Owner decision, 2026-08-31).',
+    );
+  }
+  return normalized;
 }
 
 /**
- * §15.1 Super Admin — BOOTSTRAP ONLY (Revision 22).
+ * Establishes the one Platform Owner and her Global Super Admin authority.
  *
- * `SUPER_ADMIN_EMAIL` is a bootstrap configuration value, not an operational
- * one. It is consulted **only when no active Super Administrator exists**; once
- * one does, the value is ignored permanently and every later change of
- * administrators happens through the application, with the database as the
- * single source of truth.
+ * The singleton relationship is the gate. Once it exists, every later seed is
+ * a no-op regardless of configuration or how many other Super Admins exist; a
+ * legitimate transfer therefore cannot be stolen back by deployment. Before
+ * it exists, an advisory transaction lock makes concurrent seed processes
+ * converge on one transaction even though there is not yet a row to lock.
  *
- * The gate used to be "a row matching this email", which is idempotent only
- * while the env var never changes: editing it and re-running created a SECOND
- * Super Admin and left the previous one active, privileged and unclaimed.
- *
- * Because the gate is "no active Super Administrator", the value becomes live
- * again if every administrator is suspended or deleted. That is the intended
- * lockout-recovery path and grants no new authority — reaching it requires
- * running this seed on the host, which already requires DATABASE_URL.
- *
- * No placeholder identity row is written — §7 prohibits stub identities, and no
- * password exists anywhere in this system (§20 rule 10).
+ * No placeholder UserIdentity is written. The existing verified-email binding
+ * flow creates the real Google subject on first login.
  */
-export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string | undefined): Promise<void> {
-  const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
-  if (!role) throw new Error('super_admin role missing — seedRoles must run first');
-
-  // ── The gate: does an ACTIVE Super Administrator already exist?
-  const activeSuperAdmin = await prisma.userBranchRole.findFirst({
-    where: {
-      roleId: role.id,
-      deletedAt: null,
-      user: { accountStatus: 'active', deletedAt: null },
-    },
-    include: { user: { select: { id: true } } },
-  });
-
-  if (activeSuperAdmin) {
-    // Revision 22: ignored permanently from here on. Re-running is a no-op for
-    // administrators no matter what SUPER_ADMIN_EMAIL currently says.
-    console.log('  super admin: active administrator exists — SUPER_ADMIN_EMAIL ignored (§15.1 R22)');
+export async function bootstrapSuperAdmin(
+  prisma: PrismaClient,
+  email: string | undefined,
+): Promise<void> {
+  const existingOwner = await owners.findPlatformOwner(prisma);
+  if (existingOwner) {
+    console.log('  platform owner: ownership exists — bootstrap configuration ignored');
     return;
   }
 
-  // Revision 23: the value is required only HERE, and only now that the gate is
-  // open. Failing loudly is the point — completing the seed without an
-  // administrator would leave a platform nobody can approve anyone into.
-  if (!email?.trim()) {
-    throw new Error(
-      'No active Super Administrator exists and SUPER_ADMIN_EMAIL is not set. ' +
-        'Set it for this first deployment (§15.1, TD-13 Revision 23); it may be removed afterwards.',
-    );
-  }
-
-  // TD-12: lowercase before every lookup and every write, so a capitalised
-  // value in .env can never create an account that its owner cannot claim.
-  const normalized = email.trim().toLowerCase();
-
+  const normalized = requireInitialOwnerConfiguration(email);
   const result = await prisma.$transaction(async (tx) => {
-    // Bootstrap is a production ownership writer too. It shares the same
-    // normalized-email boundary as registration, staff pre-provisioning and
-    // first binding before re-reading either ownership channel.
+    // Stable, database-local serialization for the absent-row bootstrap case.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('bodour-platform-owner-bootstrap', 0))`;
+
+    const racedOwner = await owners.findPlatformOwner(tx);
+    if (racedOwner) return { action: 'already bootstrapped concurrently', identityCount: null };
+
+    const role = await tx.role.findUnique({ where: { name: 'super_admin' } });
+    if (!role) throw new Error('super_admin role missing — seedRoles must run first');
+
     await users.lockNormalizedEmail(tx, normalized);
 
-    // A soft-deleted holder of this address is a hard stop: §4.1 forbids silent
-    // reactivation. Choosing between resurrecting a deleted person and
-    // hijacking their address is not a decision a seed script may make.
     const deletedHolder = await tx.user.findFirst({
       where: {
         deletedAt: { not: null },
@@ -96,77 +83,115 @@ export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string | 
     });
     if (deletedHolder) {
       throw new Error(
-        `SUPER_ADMIN_EMAIL (${normalized}) belongs to a soft-deleted account (${deletedHolder.id}). ` +
-          'Refusing to resurrect it or to create a parallel account (§15.1 Revision 22). ' +
-          'Either restore that account deliberately, or set SUPER_ADMIN_EMAIL to a different address.',
+        `Initial Platform Owner address belongs to a soft-deleted account (${deletedHolder.id}). ` +
+          'Refusing to resurrect it or create a parallel identity.',
       );
     }
 
-    // Either channel a verified address can legitimately occupy (§15.1 R22 step 1):
-    // a completed binding, or an account still awaiting one. This read is
-    // authoritative because the shared email lock is held.
-    const existing = await tx.user.findFirst({
-      where: {
-        deletedAt: null,
-        OR: [
-          { preProvisionedEmail: normalized },
-          { identities: { some: { email: normalized } } },
-        ],
-      },
-      select: { id: true, accountStatus: true },
-    });
+    const claimants = await users.emailClaimingUserIds(tx, normalized);
+    if (claimants.length > 1) {
+      throw new Error(
+        `Initial Platform Owner address is claimed by ${claimants.length} accounts; ` +
+          'resolve the identity conflict before bootstrap.',
+      );
+    }
 
     let user: { id: string };
     let action: string;
-
-    if (existing) {
-      // Granted, not duplicated. Set active if it is not: bootstrap must yield a
-      // USABLE administrator, and TD-12's freshness check refuses a non-active
-      // caller, so a suspended Super Admin would be no Super Admin at all.
-      if (existing.accountStatus === 'active') {
-        user = { id: existing.id };
-        action = 'granted to the existing account for that address';
-      } else {
-        user = await tx.user.update({
-          where: { id: existing.id },
-          data: { accountStatus: 'active' },
-          select: { id: true },
-        });
-        action = `granted to the existing account for that address (activated from ${existing.accountStatus})`;
-      }
-    } else {
-      user = await tx.user.create({
+    if (claimants.length === 1) {
+      user = await tx.user.update({
+        where: { id: claimants[0]! },
         data: {
-          nameArabic: 'المشرف العام',
-          preProvisionedEmail: normalized,
-          // Pre-approved by definition: the Super Admin must not land in the
-          // approval queue that only a Super Admin could clear.
+          nameArabic: INITIAL_PLATFORM_OWNER.nameArabic,
+          firstNameArabic: INITIAL_PLATFORM_OWNER.firstNameArabic,
+          lastNameArabic: INITIAL_PLATFORM_OWNER.lastNameArabic,
+          sex: INITIAL_PLATFORM_OWNER.sex,
           accountStatus: 'active',
-          /** R79: bootstrap administration is not beneficiary status. */
-          isBeneficiary: false,
-          /** R80.2: supplied from the seed-only setting, never defaulted. */
-          sex: requireSuperAdminSex(),
+          deletedAt: null,
+          deletedById: null,
         },
         select: { id: true },
       });
-      action = 'created';
+      action = 'granted to the existing verified account';
+    } else {
+      user = await tx.user.create({
+        data: {
+          nameArabic: INITIAL_PLATFORM_OWNER.nameArabic,
+          firstNameArabic: INITIAL_PLATFORM_OWNER.firstNameArabic,
+          lastNameArabic: INITIAL_PLATFORM_OWNER.lastNameArabic,
+          preProvisionedEmail: normalized,
+          accountStatus: 'active',
+          isBeneficiary: false,
+          sex: INITIAL_PLATFORM_OWNER.sex,
+        },
+        select: { id: true },
+      });
+      action = 'created and pre-provisioned';
     }
 
-    // Unscoped role assignment: Super Admin is not branch-scoped (§2.1).
-    const assignment = await tx.userBranchRole.findFirst({
-      where: { userId: user.id, roleId: role.id, branchId: null, deletedAt: null },
+    // One live role per account. Preserve old rows as tombstones, then revive
+    // the exact global assignment when one exists or create it otherwise.
+    const assignments = await tx.userBranchRole.findMany({
+      where: { userId: user.id },
+      select: { id: true, roleId: true, branchId: true, deletedAt: true },
     });
-    if (!assignment) {
+    const globalSuperAdmin = assignments.find(
+      (row) => row.roleId === role.id && row.branchId === null,
+    );
+    await tx.userBranchRole.updateMany({
+      where: { userId: user.id, deletedAt: null },
+      data: { deletedAt: new Date(), deletedById: null },
+    });
+    if (globalSuperAdmin) {
+      await tx.userBranchRole.update({
+        where: { id: globalSuperAdmin.id },
+        data: { deletedAt: null, deletedById: null, userStatus: 'active' },
+      });
+    } else {
       await tx.userBranchRole.create({
-        data: { userId: user.id, roleId: role.id, branchId: null },
+        data: { userId: user.id, roleId: role.id, branchId: null, userStatus: 'active' },
       });
     }
+
+    // General capability, not a teacher role and not a fabricated weekly
+    // schedule. «both + all branches» is future-inclusive willingness.
+    await tx.framingPreferenceBranch.deleteMany({ where: { userId: user.id } });
+    await tx.framingPreference.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        mode: INITIAL_PLATFORM_OWNER.framingMode,
+        allBranches: true,
+      },
+      update: { mode: INITIAL_PLATFORM_OWNER.framingMode, allBranches: true },
+    });
+
+    await tx.platformOwner.create({
+      data: { singletonKey: owners.PLATFORM_OWNER_KEY, ownerUserId: user.id },
+    });
+
+    await audit.write(tx, {
+      actorUserId: null,
+      actionType: 'platform_owner.bootstrap',
+      targetEntity: 'PlatformOwner',
+      // Audit target ids are UUID coordinates. The singleton key is implicit in
+      // the entity type; the governed owner User is the attributable target.
+      targetId: user.id,
+      detail: { owner_user_id: user.id },
+    });
 
     const identityCount = await tx.userIdentity.count({ where: { userId: user.id } });
     return { action, identityCount };
   });
+
   console.log(
-    `  super admin: ${result.action} ` +
-      `(identity ${result.identityCount === 0 ? 'not yet bound — binds on first Google login' : 'bound'})`,
+    `  platform owner: ${result.action}` +
+      (result.identityCount === null
+        ? ''
+        : ` (identity ${
+            result.identityCount === 0
+              ? 'not yet bound — binds on first Google login'
+              : 'already bound'
+          })`),
   );
 }

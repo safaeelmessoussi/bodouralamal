@@ -52,6 +52,7 @@ export const DEFAULT_RANGE: AvailabilityRange = {
   weekday: 'monday',
   start_time: '09:00',
   end_time: '12:00',
+  mode: null,
 };
 
 export function AvailabilityEditor({
@@ -103,6 +104,23 @@ export function AvailabilityEditor({
             onChange={(v) => update(index, { start_time: v })}
             hint={t('scheduling.timeHint')}
             disabled={disabled}
+          />
+          <SelectField
+            label={t('admin.teachingProfile.mode')}
+            value={range.mode ?? ''}
+            onChange={(v) =>
+              update(index, {
+                mode: v === '' ? null : (v as AvailabilityRange['mode']),
+              })
+            }
+            disabled={disabled}
+            options={[
+              { value: '', label: t('admin.teachingProfile.modeUnknown') },
+              { value: 'in_person', label: t('register.framingMode_in_person') },
+              { value: 'online', label: t('register.framingMode_online') },
+              { value: 'both', label: t('register.framingMode_both') },
+            ]}
+            hint={t('admin.teachingProfile.modeHint')}
           />
           <TextField
             label={t('admin.teachingProfile.to')}

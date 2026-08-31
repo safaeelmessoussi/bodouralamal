@@ -149,6 +149,7 @@ export async function register(
       }
 
       const applicantData = input.kind === 'adult' ? input.applicant : input.parent;
+      const staffRequest = input.kind === 'adult' && input.requested_role === 'teacher';
 
       // §4.1 / Revision 39: the chosen branch must be REAL and not closed.
       //
@@ -187,12 +188,35 @@ export async function register(
       const applicantCategoryId =
         input.kind === 'adult' ? input.category_id : input.children[0]!.requested_category_id;
 
-      const branch = await tx.branch.findFirst({
-        where: { id: applicantBranchId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!branch) {
-        throw new AppError('VALIDATION_FAILED', 'branch_id does not name a live branch (§4.1)');
+      if (applicantBranchId !== undefined) {
+        const branch = await tx.branch.findFirst({
+          where: { id: applicantBranchId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!branch) {
+          throw new AppError('VALIDATION_FAILED', 'branch_id does not name a live branch (§4.1)');
+        }
+      }
+
+      // A physical/both staff preference may name several live branches. The
+      // future-inclusive all-branches case deliberately names none, and online
+      // is rejected by the schema if it carries any hidden branch data.
+      const framingBranchIds =
+        staffRequest && input.framing && input.framing.mode !== 'online'
+          ? input.framing.willingness.all_branches
+            ? []
+            : input.framing.willingness.branch_ids
+          : [];
+      if (framingBranchIds.length > 0) {
+        const liveBranches = await tx.branch.count({
+          where: { id: { in: framingBranchIds }, deletedAt: null },
+        });
+        if (liveBranches !== framingBranchIds.length) {
+          throw new AppError(
+            'VALIDATION_FAILED',
+            'framing branch_ids must each name a live branch',
+          );
+        }
       }
 
       // Revision 49 — the same liveness rule the branch gets, for the same
@@ -240,7 +264,7 @@ export async function register(
           // On the applicant only: the parent chose one branch for the family,
           // and copying it onto the child would be a second value to keep in
           // step. The child's branch, once they have one, is their Group's.
-          intendedBranchId: applicantBranchId,
+          intendedBranchId: applicantBranchId ?? null,
           // Revision 49 — on the APPLICANT row, exactly like the branch. On the
           // parent+child path the parent chose one stage for the application,
           // and the approval screen reads it from the bundle's applicant; a
@@ -262,6 +286,24 @@ export async function register(
       await tx.userIdentity.create({
         data: { userId: applicant.id, provider: 'google', providerSubjectId, email },
       });
+
+      if (staffRequest && input.framing) {
+        const physical = input.framing.mode !== 'online' ? input.framing.willingness : null;
+        await tx.framingPreference.create({
+          data: {
+            userId: applicant.id,
+            mode: input.framing.mode,
+            allBranches: physical?.all_branches ?? false,
+            ...(framingBranchIds.length > 0
+              ? {
+                  branches: {
+                    create: framingBranchIds.map((branchId) => ({ branchId })),
+                  },
+                }
+              : {}),
+          },
+        });
+      }
 
       // Data-processing consent: recorded for the applicant themselves.
       await tx.consentRecord.create({

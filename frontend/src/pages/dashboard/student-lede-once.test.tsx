@@ -48,6 +48,7 @@ if (!('window' in globalThis)) {
 
 const me: Me = {
   id: 's1',
+  is_platform_owner: false,
   account_status: 'active',
   roles: ['student'],
   role_scopes: [{ role: 'student', branches: null }],

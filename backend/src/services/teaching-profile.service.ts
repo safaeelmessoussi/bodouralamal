@@ -31,6 +31,7 @@ export interface AvailabilityInput {
   weekday: string;
   startTime: string;
   endTime: string;
+  mode?: 'in_person' | 'online' | 'both' | null;
 }
 
 export interface TeachingProfileInput {
@@ -41,9 +42,25 @@ export interface TeachingProfileInput {
 
 export interface TeachingProfile {
   userId: string;
+  /**
+   * General willingness captured with the staff request (R115). It remains
+   * read-only here: a weekly range and an approval-time preference answer
+   * different planning questions, and neither is authority.
+   */
+  framing: {
+    mode: 'in_person' | 'online' | 'both';
+    all_branches: boolean;
+    branches: { id: string; name: string }[];
+  } | null;
   subjects: { id: string; name: string }[];
   categories: { id: string; name: string }[];
-  availability: { id: string; weekday: string; start_time: string; end_time: string }[];
+  availability: {
+    id: string;
+    weekday: string;
+    start_time: string;
+    end_time: string;
+    mode: 'in_person' | 'online' | 'both' | null;
+  }[];
 }
 
 /**
@@ -163,7 +180,18 @@ function assertNoOverlap(availability: readonly AvailabilityInput[]): void {
  *  has already decided whose profile it may read, and doing it once is what
  *  keeps the two readers returning the same shape. */
 async function loadProfile(prisma: PrismaClient, userId: string): Promise<TeachingProfile> {
-  const [subjects, categories, availability] = await Promise.all([
+  const [framing, subjects, categories, availability] = await Promise.all([
+    prisma.framingPreference.findUnique({
+      where: { userId },
+      select: {
+        mode: true,
+        allBranches: true,
+        branches: {
+          select: { branch: { select: { id: true, name: true } } },
+          orderBy: { branch: { name: 'asc' } },
+        },
+      },
+    }),
     prisma.teacherSubjectCapability.findMany({
       where: { userId },
       select: { subject: { select: { id: true, name: true } } },
@@ -182,6 +210,13 @@ async function loadProfile(prisma: PrismaClient, userId: string): Promise<Teachi
 
   return {
     userId,
+    framing: framing
+      ? {
+          mode: framing.mode,
+          all_branches: framing.allBranches,
+          branches: framing.branches.map((entry) => entry.branch),
+        }
+      : null,
     subjects: subjects.map((r) => r.subject),
     categories: categories.map((r) => r.category),
     availability: availability.map((r) => ({
@@ -189,6 +224,7 @@ async function loadProfile(prisma: PrismaClient, userId: string): Promise<Teachi
       weekday: String(r.weekday),
       start_time: time(r.startTime),
       end_time: time(r.endTime),
+      mode: r.mode,
     })),
   };
 }
@@ -301,6 +337,7 @@ export async function replaceTeachingProfile(
           weekday: a.weekday as never,
           startTime: asTime(a.startTime),
           endTime: asTime(a.endTime),
+          mode: a.mode ?? null,
         })),
       });
     }
@@ -481,6 +518,7 @@ export async function replaceOwnAvailability(
           weekday: a.weekday as never,
           startTime: asTime(a.startTime),
           endTime: asTime(a.endTime),
+          mode: a.mode ?? null,
         })),
       });
     }

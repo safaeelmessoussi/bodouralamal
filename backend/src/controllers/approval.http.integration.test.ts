@@ -294,6 +294,9 @@ describe("GET /api/v1/admin/approvals", () => {
       // request but give the approver nothing to act on, since R62.2 decides
       // a child alone and the ids live in these blocks.
       "children",
+      // General framing preference is visible before approval; null on this
+      // ordinary family registration and on honest legacy rows.
+      "framing",
       "id",
       "requested_role",
       "submitted_at",
@@ -305,6 +308,7 @@ describe("GET /api/v1/admin/approvals", () => {
     // reason the staff workflow needed anything at all. **A hint, never an
     // authority** — it is `null` here because this bundle asked for no role.
     expect(item["requested_role"]).toBeNull();
+    expect(item["framing"]).toBeNull();
     // `category` joined in Revision 49, and it is what made §4.1 step 1's
     // preselection implementable at all: nothing had recorded the applicant's
     // stage, so the clause could not be honoured. Two fields, like the branch.
