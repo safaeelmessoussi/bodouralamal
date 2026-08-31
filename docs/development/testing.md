@@ -334,10 +334,13 @@ bash scripts/dev/issue-dev-session.sh <user-uuid>  # an existing user, as they a
 The admin-navigation browser guard sets that token with the real cookie attributes, including
 `Secure`, even though the Local origin is `http://localhost`. Localhost is the deliberate
 secure-context exception; tests must never make the result green by weakening cookie
-attributes. The Local Compose edge is correspondingly HTTP-only and loopback-only. A harness
-that inherits or publishes a dead port 443 can turn a full-page Dashboard navigation into a
-TLS reset before Nginx sees any request, so the Compose operations guard pins the resolved
-port boundary as well as the browser result.
+attributes. The Local Compose edge is correspondingly HTTP-only and loopback-only on both
+`127.0.0.1` and `[::1]`. The browser harness probes both families before opening Chrome:
+`localhost` resolution may change between connections, so an IPv4-only edge can serve the
+landing page and still refuse a later full-page Dashboard navigation before Nginx sees it.
+A harness that inherits or publishes a dead port 443 can instead turn that navigation into a
+TLS reset, so the Compose operations guard pins the complete port boundary as well as the
+browser result.
 
 The authentication integration coverage drives both cookie consumers over HTTP. It proves a
 refresh rotates first, logout receives that successor, the persisted chain is revoked, a

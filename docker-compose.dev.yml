@@ -32,9 +32,12 @@ services:
     # that list rather than appending to it: its Nginx config intentionally
     # listens only on HTTP, and publishing an unserved host port 443 makes
     # Docker accept a browser's TLS connection only to reset it before any
-    # request can reach Nginx. Keep the one Local edge loopback-only.
+    # request can reach Nginx. Publish the one Local HTTP edge on both
+    # loopback families: browsers may resolve localhost to ::1 first, and an
+    # IPv4-only bind then fails before Nginx can receive the navigation.
     ports: !override
       - "127.0.0.1:80:80"
+      - "[::1]:80:80"
     volumes:
       # TD-13's rate limits key on the client IP, and the whole integration
       # suite arrives from one host — so the production ceiling that models a

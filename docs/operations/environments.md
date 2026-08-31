@@ -104,11 +104,13 @@ context** — so the `Secure` cookie is delivered normally without weakening a s
 attribute. The problem simply does not arise there.
 
 The development overlay therefore **replaces** the release edge's published-port list with
-exactly `127.0.0.1:80 → nginx:80`. It does not publish 443: the Local Nginx configuration has
-no TLS listener. Publishing an unserved container port would make Docker accept an HTTPS
-connection and then reset it before Nginx could receive an HTTP request, stranding a browser
-on `ERR_CONNECTION_CLOSED`. Staging and Production do not select this overlay and retain the
-release edge's 80/443 topology.
+exactly `127.0.0.1:80 → nginx:80` and `[::1]:80 → nginx:80`. Both are host loopback;
+publishing only the first is insufficient because a browser may resolve `localhost` to `::1`
+on a later navigation and receive `ERR_CONNECTION_REFUSED` before Nginx sees a request. The
+overlay does not publish 443: the Local Nginx configuration has no TLS listener. Publishing
+an unserved container port would instead make Docker accept an HTTPS connection and reset it
+before Nginx could receive an HTTP request (`ERR_CONNECTION_CLOSED`). Staging and Production
+do not select this overlay and retain the release edge's 80/443 topology.
 
 ## What development actually runs
 
@@ -145,8 +147,9 @@ Two deliberate choices in that file:
 automatically**. Deployment explicitly selects `docker-compose.release.yml` and must never
 pick the development overlay up by accident.
 
-**Ports are bound to `127.0.0.1`, never `0.0.0.0`**, and use non-default numbers (5433 for
-PostgreSQL, 9001 for MinIO) because a host PostgreSQL commonly occupies 5432 — and **a
+**Ports are bound to loopback (`127.0.0.1`, plus `[::1]` for the browser-facing HTTP edge),
+never wildcard addresses**, and use non-default numbers (5433 for PostgreSQL, 9001 for
+MinIO) because a host PostgreSQL commonly occupies 5432 — and **a
 silent connection to the wrong database is far worse than a port clash.** That clash was
 real on the development machine.
 

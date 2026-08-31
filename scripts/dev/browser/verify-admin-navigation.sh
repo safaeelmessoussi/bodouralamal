@@ -7,6 +7,13 @@ cd "$(git rev-parse --show-toplevel)"
 CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
 [[ -n "$CHROME" ]] || { echo "SKIP: no Chrome on this machine"; exit 0; }
 
+# A browser may choose either address for localhost on a later full-page
+# navigation. Prove both reach the same Local HTTP edge before exercising the
+# authenticated journey; otherwise an IPv4-only bind can make the landing page
+# work and the Dashboard click fail before Nginx receives it.
+curl --noproxy '*' -4 --fail --silent --show-error --max-time 5 http://127.0.0.1/ >/dev/null
+curl --noproxy '*' -g -6 --fail --silent --show-error --max-time 5 'http://[::1]/' >/dev/null
+
 [[ -f .env ]] || { echo "FAIL: .env missing (TD-13)." >&2; exit 1; }
 set -a; . ./.env; set +a
 export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"

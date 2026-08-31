@@ -45,8 +45,9 @@ logging_count="$(grep -Ec '^    logging: \*bounded-local-logging$' "$compose")"
 # runs the HTTP-only Nginx server, so inheriting 443 creates a TCP listener whose
 # upstream container port has no listener: browsers see ERR_CONNECTION_CLOSED
 # before an HTTP request exists. The development overlay must replace the release
-# list with exactly one loopback-bound HTTP mapping; Staging/Production continue
-# to resolve exclusively from their release overlays.
+# list with exactly the IPv4 and IPv6 loopback HTTP mappings; localhost may
+# resolve to either family. Staging/Production continue to resolve exclusively
+# from their release overlays.
 mapfile -t development_edge_ports < <(
   awk '
     /^  nginx:$/ { in_nginx = 1; next }
@@ -56,9 +57,10 @@ mapfile -t development_edge_ports < <(
     in_ports && /^    [[:alnum:]_-]+:/ { exit }
   ' "$development_overlay"
 )
-[[ "${#development_edge_ports[@]}" -eq 1 &&
-   "${development_edge_ports[0]}" == '      - "127.0.0.1:80:80"' ]] ||
-  fail 'the Local Nginx edge must publish exactly 127.0.0.1:80:80 and no TLS port'
+[[ "${#development_edge_ports[@]}" -eq 2 &&
+   "${development_edge_ports[0]}" == '      - "127.0.0.1:80:80"' &&
+   "${development_edge_ports[1]}" == '      - "[::1]:80:80"' ]] ||
+  fail 'the Local Nginx edge must publish HTTP on both loopback families and no TLS port'
 
 grep -Fq 'test: ["CMD", "curl", "-fsS", "--max-time", "12", "http://127.0.0.1:3000/healthz"]' "$compose" ||
   fail 'the API container must report whole-application readiness to Docker'
