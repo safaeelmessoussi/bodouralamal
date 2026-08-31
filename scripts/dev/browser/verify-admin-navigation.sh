@@ -24,6 +24,10 @@ export ADMIN_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$ADMIN_ID"
 # so the browser spends the two above on its first page load.
 export SUPER_API_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$SUPER_ADMIN_ID")"
 export ADMIN_API_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$ADMIN_ID")"
+# The browser lifecycle proof logs out and then signs in again. Rotation makes
+# the original browser cookie single-use, so this is a separate real session,
+# not a replay of an already-spent credential.
+export ADMIN_RELOGIN_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$ADMIN_ID")"
 
 WORK="$(mktemp -d)"
 cleanup() {

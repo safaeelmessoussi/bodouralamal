@@ -1,5 +1,18 @@
 # Tasks — بذور الأمل Platform
 
+## Local authenticated navigation restored — 2026-08-31
+
+- [x] The development Compose overlay now replaces the release Nginx port list with exactly
+  `127.0.0.1:80:80`. Local Nginx serves HTTP only, so it no longer inherits a published but
+  unserved port 443 that accepted browser TLS and reset it before any HTTP request reached
+  Nginx. Staging/Production retain the release 80/443 topology and all cookie attributes stay
+  unchanged.
+- [x] The real Chrome regression now uses the production-shape Secure refresh cookie, clicks
+  the rendered لوحة التحكم control, and covers HTTP arrival, Back/Forward, reload, logout,
+  re-login, a consumed OAuth callback, a fresh tab and Admin/Super Admin authorization
+  (**42/42**). The consumed-callback screen remains the intentional standalone auth status
+  layout; it was not the transport failure.
+
 ## Staging promoted — 2026-08-30
 
 `https://staging.bodouralamal.com` is deployed and healthy at

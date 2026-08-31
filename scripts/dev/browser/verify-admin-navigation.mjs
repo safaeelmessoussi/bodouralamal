@@ -23,7 +23,7 @@
  *
  * NEVER put a backtick in page code — see cdp.mjs.
  */
-import { connect, results } from './cdp.mjs';
+import { connect, newPage, results } from './cdp.mjs';
 
 const BASE = 'http://localhost';
 const S = JSON.parse(process.env.R82_SCENARIO ?? '{}');
@@ -39,8 +39,12 @@ const ADMIN_COOKIE = process.env.ADMIN_REFRESH_COOKIE;
  */
 const SUPER_API_COOKIE = process.env.SUPER_API_COOKIE;
 const ADMIN_API_COOKIE = process.env.ADMIN_API_COOKIE;
-if (!SUPER_COOKIE || !ADMIN_COOKIE || !SUPER_API_COOKIE || !ADMIN_API_COOKIE) {
-  throw new Error('SUPER_REFRESH_COOKIE, ADMIN_REFRESH_COOKIE, SUPER_API_COOKIE and ADMIN_API_COOKIE are required');
+const ADMIN_RELOGIN_COOKIE = process.env.ADMIN_RELOGIN_COOKIE;
+if (!SUPER_COOKIE || !ADMIN_COOKIE || !SUPER_API_COOKIE || !ADMIN_API_COOKIE || !ADMIN_RELOGIN_COOKIE) {
+  throw new Error(
+    'SUPER_REFRESH_COOKIE, ADMIN_REFRESH_COOKIE, SUPER_API_COOKIE, ADMIN_API_COOKIE and ' +
+      'ADMIN_RELOGIN_COOKIE are required',
+  );
 }
 
 /** The Owner's order, §4. Duplicated from no file on purpose: this harness is
@@ -98,22 +102,28 @@ const setSession = async (value) => {
   await send('Network.setCookie', {
     name: 'bodour_refresh',
     value,
-    domain: 'localhost',
+    url: BASE,
     path: '/api/v1/auth',
     httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
   });
 };
 
-const goto = async (path) => {
+const goto = async (
+  path,
+  readiness = `!!document.querySelector('.admin-nav a, .state, .admin-empty')`,
+) => {
   await send('Page.navigate', { url: `${BASE}${path}` });
+  const expectedPath = new URL(path, BASE).pathname;
   // Wait for the shell to have rendered rather than for a fixed delay: a sleep
   // that reads before React commits is a harness fault that has cost this
   // project several confident wrong answers.
   for (let i = 0; i < 80; i += 1) {
     const ready = await evaluate(
-      `document.location.pathname === ${JSON.stringify(path)} &&
+      `document.location.pathname === ${JSON.stringify(expectedPath)} &&
        !document.querySelector('.skeleton') &&
-       !!document.querySelector('.admin-nav a, .state, .admin-empty')`,
+       (${readiness})`,
     );
     if (ready) return;
     await new Promise((r) => setTimeout(r, 100));
@@ -152,7 +162,94 @@ const labelled = (pairs) => pairs.map(([text, href]) => ({ text, href }));
 /* ── Super Admin sees the complete structure, in the Owner's order ───────── */
 
 await setSession(SUPER_COOKIE);
-await goto('/admin');
+await send('Page.navigate', { url: BASE });
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `document.location.pathname === '/' && !!document.querySelector('a[href="/admin"]')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+const dashboardLink = await evaluate(`(() => {
+  const link = document.querySelector('a[href="/admin"]');
+  return link ? { href: link.getAttribute('href'), text: link.textContent.trim() } : null;
+})()`);
+check(
+  'Local authenticated root renders the real Dashboard link',
+  dashboardLink?.href === '/admin' && dashboardLink.text === 'لوحة التحكم',
+  JSON.stringify(dashboardLink),
+);
+await evaluate(`document.querySelector('a[href="/admin"]')?.click()`);
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `document.location.pathname === '/admin' && !!document.querySelector('.admin-nav')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+const dashboardArrival = await evaluate(`({
+  protocol: document.location.protocol,
+  path: document.location.pathname,
+  shell: !!document.querySelector('.admin-nav'),
+  chromeError: document.body?.textContent?.includes('ERR_CONNECTION_CLOSED') ?? false,
+})`);
+check(
+  'clicking Dashboard stays on the live Local HTTP edge (no dead TLS connection)',
+  dashboardArrival.protocol === 'http:' &&
+    dashboardArrival.path === '/admin' &&
+    dashboardArrival.shell &&
+    !dashboardArrival.chromeError,
+  JSON.stringify(dashboardArrival),
+);
+
+await evaluate(`history.back()`);
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `document.location.pathname === '/' && !!document.querySelector('a[href="/admin"]')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+const backArrival = await evaluate(
+  `({ protocol: location.protocol, path: location.pathname, dashboard: !!document.querySelector('a[href="/admin"]') })`,
+);
+check(
+  'Back returns to the authenticated Local HTTP page rather than a dead callback/TLS entry',
+  backArrival.protocol === 'http:' && backArrival.path === '/' && backArrival.dashboard,
+  JSON.stringify(backArrival),
+);
+
+await evaluate(`history.forward()`);
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `document.location.pathname === '/admin' && !!document.querySelector('.admin-nav')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+const forwardArrival = await evaluate(
+  `({ protocol: location.protocol, path: location.pathname, shell: !!document.querySelector('.admin-nav') })`,
+);
+check(
+  'Forward returns to the authenticated dashboard on Local HTTP',
+  forwardArrival.protocol === 'http:' && forwardArrival.path === '/admin' && forwardArrival.shell,
+  JSON.stringify(forwardArrival),
+);
+
+await send('Page.reload', { ignoreCache: true });
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `document.location.pathname === '/admin' && !!document.querySelector('.admin-nav')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+check(
+  'a dashboard reload refreshes the session and remains reachable',
+  await evaluate(
+    `location.protocol === 'http:' && location.pathname === '/admin' && !!document.querySelector('.admin-nav')`,
+  ),
+);
 
 const superNav = await readSidebar();
 check(
@@ -331,5 +428,91 @@ if (levelId) {
 const superTrash = await api('GET', '/admin/trash', superToken);
 check('…while a Super Admin still reaches سلة المحذوفات (the probes discriminate)', superTrash === 200, `got ${superTrash}`);
 
+/* ── Session lifecycle at the same Local edge ───────────────────────────── */
+
+await goto(
+  '/',
+  `[...document.querySelectorAll('button.menu__trigger')]
+    .some((button) => button.textContent.includes('الحساب'))`,
+);
+await evaluate(`(() => {
+  const account = [...document.querySelectorAll('button.menu__trigger')]
+    .find((button) => button.textContent.includes('الحساب'));
+  account?.click();
+})()`);
+for (let i = 0; i < 40; i += 1) {
+  if (await evaluate(`!!document.querySelector('.menu__panel')`)) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+await evaluate(`(() => {
+  const logout = [...document.querySelectorAll('.menu__panel button')]
+    .find((button) => button.textContent.includes('تسجيل الخروج'));
+  logout?.click();
+})()`);
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(
+    `location.pathname === '/' && ` +
+      `!!document.querySelector('a[href="/api/v1/auth/google"]') && ` +
+      `!document.querySelector('a[href="/admin"]')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+const logoutState = await evaluate(`({
+  protocol: location.protocol,
+  path: location.pathname,
+  login: !!document.querySelector('a[href="/api/v1/auth/google"]'),
+  dashboard: !!document.querySelector('a[href="/admin"]'),
+})`);
+check(
+  'logout revokes the browser session and returns to the reachable anonymous Local page',
+  logoutState.protocol === 'http:' &&
+    logoutState.path === '/' &&
+    logoutState.login &&
+    !logoutState.dashboard,
+  JSON.stringify(logoutState),
+);
+
+await goto('/login?error=state_mismatch', `!!document.querySelector('main.auth-page')`);
+const expiredState = await evaluate(`(() => ({
+  protocol: location.protocol,
+  alert: document.querySelector('[role="alert"]')?.textContent.trim() ?? '',
+  retry: document.querySelector('a[href="/api/v1/auth/google"]')?.getAttribute('href') ?? null,
+  standalone: !!document.querySelector('main.auth-page') && !document.querySelector('.app-header'),
+}))()`);
+check(
+  'a consumed/expired OAuth callback renders the intentional reachable standalone retry screen',
+  expiredState.protocol === 'http:' &&
+    expiredState.alert.includes('انتهت صلاحية الجلسة') &&
+    expiredState.retry === '/api/v1/auth/google' &&
+    expiredState.standalone,
+  JSON.stringify(expiredState),
+);
+
+await setSession(ADMIN_RELOGIN_COOKIE);
+await goto('/', `!!document.querySelector('a[href="/admin"]')`);
+check(
+  'a newly issued supported Local session can sign in again after logout',
+  await evaluate(`location.protocol === 'http:' && !!document.querySelector('a[href="/admin"]')`),
+);
+
+const freshTab = await newPage(process.env.PORT ?? '9247');
+await freshTab.send('Page.navigate', { url: BASE });
+for (let i = 0; i < 80; i += 1) {
+  const ready = await freshTab.evaluate(
+    `location.pathname === '/' && !!document.querySelector('a[href="/admin"]')`,
+  );
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 100));
+}
+check(
+  'a fresh tab refreshes the shared Secure session and remains on reachable Local HTTP',
+  await freshTab.evaluate(
+    `location.protocol === 'http:' && location.pathname === '/' && ` +
+      `!!document.querySelector('a[href="/admin"]')`,
+  ),
+);
+freshTab.close();
+
 close();
-process.exit(finish());
+process.exitCode = finish();

@@ -103,13 +103,20 @@ Local development terminates at HTTP on `localhost`, which browsers treat as a *
 context** — so the `Secure` cookie is delivered normally without weakening a single
 attribute. The problem simply does not arise there.
 
+The development overlay therefore **replaces** the release edge's published-port list with
+exactly `127.0.0.1:80 → nginx:80`. It does not publish 443: the Local Nginx configuration has
+no TLS listener. Publishing an unserved container port would make Docker accept an HTTPS
+connection and then reset it before Nginx could receive an HTTP request, stranding a browser
+on `ERR_CONNECTION_CLOSED`. Staging and Production do not select this overlay and retain the
+release edge's 80/443 topology.
+
 ## What development actually runs
 
 The same service topology as Production, through `docker-compose`; API and web images are
 built from the working source rather than pulled from GHCR:
 
 ```
-nginx   ← the only container publishing host ports (80, 443)
+nginx   ← the only public edge (release tiers: 80/443; Local: loopback HTTP 80 only)
 api     ← Node + Express, pg-boss workers in-process
 db      ← PostgreSQL 18.4, with the production memory and pool pins
 minio   ← dual buckets, created idempotently by a one-shot init container
@@ -127,9 +134,10 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 The overlay also replaces the release HTTP server, which is permanently ACME-only plus an
-HTTPS redirect, with `nginx/dev/default.conf`. This is the only tier that serves the
-application directly over HTTP, and only on localhost; no runtime environment flag can
-weaken a release host into that mode.
+HTTPS redirect, with `nginx/dev/default.conf`, and replaces the inherited Nginx port list
+with loopback port 80 only. This is the only tier that serves the application directly over
+HTTP, and only on localhost; no runtime environment flag can weaken a release host into that
+mode.
 
 Two deliberate choices in that file:
 

@@ -203,6 +203,12 @@ they redirect to `/login?error=<key>` and render as a friendly message with a re
 
 No partial state is ever persisted on any failure path.
 
+The flow-state cookie is single-use. Pressing Back onto a callback URL after a successful
+callback therefore replays an already-consumed coordinate and correctly renders the compact,
+standalone `state_mismatch` login/retry screen. That screen is an authentication status
+surface, not the ordinary public-page shell; its missing application header does not mean the
+refresh session was lost. A fresh page still attempts the ordinary refresh-cookie flow.
+
 ### Email normalization
 
 Every Google email is **lowercased before every lookup and every write** — identity

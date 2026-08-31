@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 compose="$repo_root/docker-compose.yml"
+development_overlay="$repo_root/docker-compose.dev.yml"
 deployment="$repo_root/docs/operations/deployment.md"
 workflow="$repo_root/.github/workflows/ci.yml"
 integration_runner="$repo_root/scripts/ci/test-integration.sh"
@@ -39,6 +40,25 @@ logging_count="$(grep -Ec '^    logging: \*bounded-local-logging$' "$compose")"
 [[ "$service_count" -gt 0 ]] || fail 'no base Compose services were found'
 [[ "$logging_count" -eq "$service_count" ]] ||
   fail "every base service must use bounded logging ($logging_count/$service_count do)"
+
+# The base edge exposes 80/443 for release tiers. Local Development deliberately
+# runs the HTTP-only Nginx server, so inheriting 443 creates a TCP listener whose
+# upstream container port has no listener: browsers see ERR_CONNECTION_CLOSED
+# before an HTTP request exists. The development overlay must replace the release
+# list with exactly one loopback-bound HTTP mapping; Staging/Production continue
+# to resolve exclusively from their release overlays.
+mapfile -t development_edge_ports < <(
+  awk '
+    /^  nginx:$/ { in_nginx = 1; next }
+    in_nginx && /^  [[:alnum:]_-]+:$/ { exit }
+    in_nginx && /^    ports: !override$/ { in_ports = 1; next }
+    in_ports && /^      - / { print; next }
+    in_ports && /^    [[:alnum:]_-]+:/ { exit }
+  ' "$development_overlay"
+)
+[[ "${#development_edge_ports[@]}" -eq 1 &&
+   "${development_edge_ports[0]}" == '      - "127.0.0.1:80:80"' ]] ||
+  fail 'the Local Nginx edge must publish exactly 127.0.0.1:80:80 and no TLS port'
 
 grep -Fq 'test: ["CMD", "curl", "-fsS", "--max-time", "12", "http://127.0.0.1:3000/healthz"]' "$compose" ||
   fail 'the API container must report whole-application readiness to Docker'
