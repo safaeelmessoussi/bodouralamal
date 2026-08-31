@@ -1373,6 +1373,15 @@ was hiding behind it: the run went green on the first attempt.
   instead of weakening SSH file permissions. The same run proved both exact GHCR packages are
   publicly readable and found no Docker credential file; the gate now accepts that legitimate
   state while still protecting any installed credential and requiring both exact manifests.
+- [~] **Production provider/capacity decision packet** — one authoritative
+  [quotation evidence matrix](operations/provider-acceptance.md) now covers Morocco-only primary
+  and secondary residency, compute/memory growth, ~200-GB NVMe, access/network/recovery, offsite
+  backup failure domain, maintained S3 compatibility and administration, platform restrictions,
+  costs and exit terms. Engineering recommends a **50 GiB deployment floor**, **60 GiB warning**
+  and **50 GiB critical state** for the planned disk; this reserves rollback/restore and runtime
+  headroom but does not prove the disk is large enough. **OWNER INPUT REQUIRED:** supply the SRS
+  recording/week and average-size budget, approve or replace the thresholds, and select a provider
+  only from actual written quotation/residency evidence.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts
@@ -1446,6 +1455,15 @@ was hiding behind it: the run went green on the first attempt.
   payload, trigger and singleton rule; until then manual `?permanent=true` is complete, while an
   untouched soft-deleted account remains identifiable past `purge_after`. Do not invent the
   missing TD-7 row in implementation.
+- [ ] **OWNER / LEGAL DECISION REQUIRED — R111 normalized-email coordinate retention.**
+  Classified **C (unresolved retention/specification boundary)** after the synthetic Staging
+  finding. Permanent de-identification clears both ownership channels and a real regression proves
+  the address can be reclaimed, but the stable `NormalizedEmailLock` retains the exact lowercased
+  former address without an owner so future absent-row claims serialize. R111 requires the lock to
+  be released and identifying fields cleared, but does not say whether this raw ownerless
+  coordinate may remain. Decide between an explicit purpose/access/retention basis and an
+  erasable/non-reversible serialization design; do not delete it ad hoc and reintroduce the race.
+  This is **BEFORE REAL USERS**, not a blocker to an empty deployment.
 - [x] **P1.2 TEST ISOLATION — the integration sweep now leaves shared Local Development state
   unchanged.** The staffing loss reproduced in `branch.integration.test.ts` alone: its first
   `beforeEach` cleared with `userId: actorUserId ?? undefined` before the id existed, and Prisma

@@ -10,6 +10,7 @@ do when something breaks.
 | | |
 |---|---|
 | [Deployment readiness](deployment-readiness.md) | Live ledger: deployment blockers, real-user blockers, and hardening |
+| [Moroccan provider acceptance](provider-acceptance.md) | One evidence checklist for hosting, residency, storage, backup and commercial quotations |
 | [Environments](environments.md) | The three tiers, and the data-residency firewall between them |
 | [Configuration](configuration.md) | Every environment variable and runtime setting |
 | [Deployment](deployment.md) | The deterministic pipeline to the production VPS |

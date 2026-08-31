@@ -38,9 +38,11 @@ account's SSH key as a host-root credential. Do not expose the Docker API over T
 
 Production additionally requires a second Moroccan location for offsite backups, domain/DNS
 control for Let's Encrypt, Google OAuth credentials, and read access to the repository's GHCR
-packages. The primary disk has no honest fixed number yet: the SRS gives audit projections but
-requires the Owner's recording/week and average-size estimate. Select and pass that approved
-floor to preflight; never substitute a convenient default.
+packages. Use the single [Moroccan-provider evidence matrix](provider-acceptance.md) for the host,
+storage and backup quotation. Engineering recommends a 50-GiB deployment floor for the planned
+~200-GB disk, with a warning at 60 GiB, but that is not approved and does not replace the SRS's
+recording/week and average-size estimate. Select and pass the Owner-approved whole-GiB floor to
+preflight; never turn the recommendation into a convenient code default.
 
 ## One-time host provisioning
 

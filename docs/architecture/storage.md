@@ -22,6 +22,11 @@ release line. Production **must not launch on the current pin**: an edge filter 
 known request shape but cannot turn an unsupported, affected object-store release into a
 maintained production dependency.
 
+Collect each vendor's residency, support, administration, backup and commercial evidence through
+the single [Moroccan-provider acceptance matrix](../operations/provider-acceptance.md). This page
+owns the technical object-store contract and regression suite; the procurement matrix does not
+replace either.
+
 Safe replacement categories are:
 
 1. a currently patched, supported MinIO AIStor release;

@@ -133,9 +133,15 @@ their split parts, contact/public identity, registration-request fields, notes, 
 identifiers, Google binding, roles, live credentials, quota rows, notifications, safeguarding
 case-file detail and teaching-planning rows are cleared. The recoverable snapshot is deleted
 in the same transaction: leaving the original name, phone and email in Trash would make the
-erasure cosmetic. Stable normalized-email lock rows remain because they carry no owner;
-removing the two ownership facts releases the address, while retaining the row keeps the next
-claim serialized.
+erasure cosmetic. Removing the two ownership facts releases the address and re-registration is
+tested. The current concurrency design retains the stable normalized-email lock row so the next
+claim remains serialized, but the row still contains the exact lowercased former address even
+though it carries no owner. R111 says the lock is released and identifying fields are cleared;
+it does not explicitly authorize retaining that ownerless raw coordinate. This is therefore an
+**Owner/legal retention decision before real users**, not an engineering inference: either give
+the coordinate an explicit purpose/access/retention basis, or require an erasable or
+non-reversible serialization design. Until decided, do not describe the tombstone as containing
+no surviving personal coordinate.
 
 Live responsibilities and the last active Super Admin still block the first step. The check is
 time-aware: ended schedule/assignment periods and past occurrences are history, while live or
@@ -231,6 +237,13 @@ fields already name. A transaction advisory lock was rejected because it would h
 unbounded email into PostgreSQL's finite advisory-key space and depart from the repository
 row-lock convention. The dedicated row is collision-free, inspectable, and released by
 ordinary transaction rollback.
+
+That concurrency rationale does not itself settle privacy retention. The ownerless row is not an
+email **claim** and does not block OD-07 re-registration, but its primary key is still the raw
+normalized email. The exact Owner/legal choice is recorded in the
+[readiness ledger](../operations/deployment-readiness.md#blocks-real-users); deleting rows ad hoc
+would reintroduce an absent-row race, while retaining them indefinitely needs authority R111 does
+not currently state.
 
 ---
 
