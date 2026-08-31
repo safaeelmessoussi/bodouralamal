@@ -92,13 +92,19 @@ it drains on return; holds a real handler active across API SIGTERM and proves t
 then restarts PostgreSQL, Nginx, and the full stack. Finally it force-recreates every long-running
 container over the same stateful volumes and rechecks the exact seed rows, migration history,
 private object bytes, job terminal states, and non-migrating/non-seeding API command. The same
+drill labels both candidate images with the exact repository HEAD and pins the running API/Nginx
+containers to those image IDs. Its final phase creates an encrypted recovery point from this
+Production-mode graph, writes newer PostgreSQL and object state, destroys both data volumes,
+restores into empty replacements, and requires the exact images and whole-platform `/healthz` to
+return with the pre-change values, unchanged migrations and unchanged Production seed. The same
 drill is a dedicated hosted verification job, and exact-image publication waits for it. Cleanup
-destroys the unique containers, volumes, network, images, generated key, and Chrome profile.
+destroys the unique containers, volumes, encrypted repository, network, images, generated key,
+and Chrome profile.
 
 This is repository-side deployment evidence, not Staging or Production acceptance. It does not
 pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget or reboot,
-exercise resource/disk pressure, or rehearse rollback/restoration there; those remain separate
-host/external checks.
+exercise resource/disk pressure, use the selected Moroccan backup target/object store, or prove
+realistic-volume RTO; those remain separate host/external checks.
 
 The host preflight is the target-side complement. It is deliberately read-only and prints no
 configuration values. Its source guard directly tests the Compose-version, domain and public-IP

@@ -5,6 +5,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/backup/common.sh
+source "$repo_root/scripts/backup/common.sh"
 overlay="$repo_root/scripts/deploy/fixtures/docker-compose.production-drill.yml"
 project="bodour-production-drill-$$"
 domain="production-drill.invalid"
@@ -19,6 +21,11 @@ api_image="bodour-production-drill-api:$project"
 web_image="bodour-production-drill-web:$project"
 chrome_pid=''
 browser_log="$drill_root/browser-smoke.log"
+release_commit="$(git -C "$repo_root" rev-parse HEAD)"
+backup_repository="$drill_root/repository"
+backup_password_file="$drill_root/restic-password"
+recovery_config="$drill_root/recovery.env"
+recovered_config="$drill_root/recovered-config"
 
 export BODOUR_PRODUCTION_DRILL_HTTP_PORT="$http_port"
 export BODOUR_PRODUCTION_DRILL_HTTPS_PORT="$https_port"
@@ -47,6 +54,8 @@ fail() {
   exit 1
 }
 
+[[ "$release_commit" =~ ^[0-9a-f]{40}$ ]] || fail 'repository HEAD is not an exact commit'
+
 cleanup() {
   local rc=$?
   trap - EXIT INT TERM
@@ -65,6 +74,13 @@ cleanup() {
   fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1
   docker image rm "$api_image" "$web_image" >/dev/null 2>&1
+  if [[ -d "$backup_repository" ]]; then
+    # The pinned restic container writes its repository as root. Empty only the
+    # validated drill-owned directory through that image before removing the
+    # enclosing user-owned temporary tree.
+    docker run --rm --entrypoint /bin/sh --volume "$backup_repository:/repository" \
+      "$RESTIC_IMAGE" -c 'find /repository -mindepth 1 -delete' >/dev/null 2>&1 || true
+  fi
   case "$drill_root" in
     /tmp/bodour-production-bootstrap.*) rm -rf -- "$drill_root" ;;
     *) printf 'Refusing to remove unexpected drill path: %s\n' "$drill_root" >&2 ;;
@@ -94,7 +110,13 @@ stop_grace="$("${compose[@]}" config --format json | node -e '
 ')"
 [[ "$stop_grace" == '2m0s' ]] ||
   fail "the API stop grace period is not 2 minutes (found ${stop_grace:-<empty>})"
-"${compose[@]}" build api nginx
+docker build --label "org.opencontainers.image.revision=$release_commit" \
+  --tag "$api_image" "$repo_root/backend"
+docker build --label "org.opencontainers.image.revision=$release_commit" \
+  --tag "$web_image" "$repo_root/frontend"
+api_image_id="$(docker image inspect --format '{{.Id}}' "$api_image")"
+web_image_id="$(docker image inspect --format '{{.Id}}' "$web_image")"
+[[ -n "$api_image_id" && -n "$web_image_id" ]] || fail 'built image identity is missing'
 "${compose[@]}" up --no-build -d --wait db minio
 "${compose[@]}" run --rm --no-deps minio-init
 "${compose[@]}" run --rm api npx prisma migrate deploy
@@ -272,8 +294,20 @@ container_id() {
   printf '%s' "$id"
 }
 
+assert_release_identity() {
+  [[ "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$api_image")" == "$release_commit" ]] ||
+    fail 'API image revision label does not match repository HEAD'
+  [[ "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$web_image")" == "$release_commit" ]] ||
+    fail 'web image revision label does not match repository HEAD'
+  [[ "$(docker inspect --format '{{.Image}}' "$(container_id api)")" == "$api_image_id" ]] ||
+    fail 'running API container does not use the proved image identity'
+  [[ "$(docker inspect --format '{{.Image}}' "$(container_id nginx)")" == "$web_image_id" ]] ||
+    fail 'running Nginx container does not use the proved image identity'
+}
+
 status="$("${curl_https[@]}" --output "$response_body" --write-out '%{http_code}' "$https_url/healthz")"
 [[ "$status" == '200' ]] || fail "whole-application HTTPS health returned $status"
+assert_release_identity
 node --input-type=module -e '
   import fs from "node:fs";
   const body = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -477,7 +511,91 @@ done)"
   fail 'API container startup command may run migration/seed work'
 wait_for_https_status 200 90 'force-recreate recovery'
 assert_persistent_state
+assert_release_identity
 [[ "$(job_state "$queued_job_id")" == 'completed' && "$(job_state "$active_job_id")" == 'completed' ]] ||
   fail 'durable job terminal state changed during recreation'
 
-printf 'Production bootstrap drill: bootstrap, dependency failure, graceful job drain, restart and persistent recreation passed\n'
+# Recovery/rollback integration: the focused backup drill already proves the
+# portable pg_dump in a second clean database and wrong-password fail-before-
+# outage behavior. This phase proves the other boundary: a recovery point from
+# the actual Production-mode graph restores into empty volumes, boots the exact
+# same release images, becomes healthy, and rolls back later DB/object writes.
+mkdir -p "$backup_repository"
+umask 077
+printf 'production-drill-restic-password-with-sufficient-entropy\n' > "$backup_password_file"
+printf 'NODE_ENV=production\nrelease_commit=%s\n' "$release_commit" > "$recovery_config"
+
+sql "
+  CREATE TABLE production_recovery_drill (
+    id integer PRIMARY KEY,
+    value text NOT NULL
+  );
+  INSERT INTO production_recovery_drill (id, value)
+  VALUES (1, 'state-at-recovery-point');"
+
+running_container_ids() {
+  for service in api db minio nginx; do
+    printf '%s=%s\n' "$service" "$(container_id "$service")"
+  done
+}
+
+before_recovery_ids="$(running_container_ids)"
+"$repo_root/scripts/backup/create-recovery-point.sh" \
+  --allow-fixtures \
+  --project "$project" \
+  --compose-file "$repo_root/docker-compose.yml" \
+  --compose-file "$overlay" \
+  --compose-file "$repo_root/docker-compose.production.yml" \
+  --repository "$backup_repository" \
+  --password-file "$backup_password_file" \
+  --database-user app \
+  --database-name bodour \
+  --stop-timeout 120 \
+  --volume db-data \
+  --volume minio-data \
+  --config-file "$recovery_config"
+
+[[ "$(running_container_ids)" == "$before_recovery_ids" ]] ||
+  fail 'recovery-point creation replaced a Production-mode container'
+wait_for_https_status 200 90 'recovery-point restart readiness'
+assert_release_identity
+
+# Make both durable stores newer than the recovery point. Restoring the snapshot
+# must remove these later values rather than merely proving that old data exists.
+sql "UPDATE production_recovery_drill SET value = 'state-after-recovery-point' WHERE id = 1;"
+printf 'object-after-recovery-point' |
+  "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
+    -c "mc pipe local/private/$canary_key >/dev/null"
+assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
+  'state-after-recovery-point' 'post-recovery-point database mutation'
+
+"${compose[@]}" down --volumes --remove-orphans
+"$repo_root/scripts/backup/restore-recovery-point.sh" \
+  --allow-fixtures \
+  --project "$project" \
+  --compose-file "$repo_root/docker-compose.yml" \
+  --compose-file "$overlay" \
+  --compose-file "$repo_root/docker-compose.production.yml" \
+  --repository "$backup_repository" \
+  --password-file "$backup_password_file" \
+  --recovered-config-dir "$recovered_config" \
+  --volume db-data \
+  --volume minio-data
+
+grep -Fxq 'format=bodour-recovery-point-v1' "$recovered_config/manifest.env" ||
+  fail 'restored recovery-point format is wrong'
+grep -Fxq "git_commit=$release_commit" "$recovered_config/manifest.env" ||
+  fail 'restored recovery point does not name the exact source commit'
+cmp -s "$recovery_config" "$recovered_config/$(basename "$recovery_config")" ||
+  fail 'restored recovery configuration differs from the encrypted snapshot'
+
+"${compose[@]}" up --no-build -d --wait --wait-timeout 150 db minio api nginx
+wait_for_https_status 200 90 'post-restore application readiness'
+assert_release_identity
+assert_persistent_state
+assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
+  'state-at-recovery-point' 'database rollback state'
+[[ "$(migration_digest)" == "$migration_snapshot" ]] ||
+  fail 'ordinary post-restore startup changed migration history'
+
+printf 'Production bootstrap drill: bootstrap, failure recovery, exact-release restart/recreation and healthy recovery-point rollback passed\n'

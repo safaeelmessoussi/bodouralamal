@@ -1356,7 +1356,12 @@ was hiding behind it: the run went green on the first attempt.
   across SIGTERM, PostgreSQL and Nginx recover independently, a full stack stop/start retains state,
   and all long-running containers can be force-recreated over the exact database/object volumes.
   Seed rows, migration history, private object bytes, durable job states and the non-seeding API
-  startup command are rechecked. Real-host reboot, pressure and realistic-volume RTO remain open.
+  startup command are rechecked. Both candidate images now carry repository HEAD and every running
+  API/Nginx container is pinned to its exact image ID. The same drill creates an encrypted recovery
+  point from the Production-mode graph, writes later database/object state, destroys both volumes,
+  restores the earlier point into empty replacements and requires exact-release health plus the
+  pre-change values without implicit migration/seeding. Real-host pressure, selected Moroccan
+  storage/backup targets and realistic-volume RTO remain open.
 - [x] **Executable clean-VPS preflight** — the deployment now stops before runtime mutation unless
   the target is a supported Ubuntu LTS/AMD64 host with local boot-enabled Docker, Compose ≥2.24.4,
   NTP, persistent/adequately sized Docker storage, an exact detached clean checkout, private
@@ -1415,7 +1420,9 @@ was hiding behind it: the run went green on the first attempt.
   portable `pg_dump`, raw data/TLS/config volumes, fail-safe exact-container restart and destructive
   disposable drill are complete (under one minute, raw DB + actual clean-database `pg_restore` +
   object + config recovered). Repository authority is checked before writers stop, and a wrong
-  credential is proven visible without stopping/recreating the running services. **OWNER DECISION
+  credential is proven visible without stopping/recreating the running services. The complete
+  Production-mode graph additionally becomes healthy after an empty-volume recovery and proves
+  that later DB/object state is rolled back under the exact source-labelled image IDs. **OWNER DECISION
   REQUIRED — BACKUP TARGET AND RETENTION:** provision the second Moroccan SFTP location,
   escrow keys/password, and set retention. Still release-blocking: `backup.replicate` nightly
   pg-boss automation (an unmonitored cron substitute is explicitly not implemented), critical

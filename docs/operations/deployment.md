@@ -283,6 +283,11 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 Migrations are forward-only. There is no down-migration path, by policy.
 The [recovery-point runbook](runbooks.md#creating-and-restoring-a-full-recovery-point) restores
 only into empty volumes and leaves services stopped for configuration verification.
+The repository dress rehearsal below executes this rollback boundary against the complete
+Production-mode graph: it writes state after a recovery point, destroys both disposable data
+volumes, restores the earlier point, and starts the exact proved image IDs without invoking a
+migration or seed. The target VPS must repeat it against its supported object store and remote
+Moroccan repository; fixture-scale local timing is not Production RTO evidence.
 
 ## TLS
 
@@ -445,9 +450,14 @@ Production seed commands twice, asserts the clean initial inventory, loads the a
 configuration, drives the built public/login routes in a real anonymous browser, and proves that
 storage loss makes both `/healthz` and Docker health fail before recovering. The browser verifies
 the Google-only boundary, public reads, CSP/runtime cleanliness and real Production auth throttling;
-it does not fake an authenticated identity. It deliberately builds local images so it can test an
-uncommitted candidate; the same drill gates hosted CI before exact-commit GHCR publication. Passing
-it is not a deployment claim and does not replace the authenticated and host checks below.
+it does not fake an authenticated identity. Both local candidate images carry the exact repository
+HEAD label, and every restart/recreation is checked against their image IDs. The final phase creates
+an encrypted recovery point from that running graph, mutates PostgreSQL and object state, destroys
+both volumes, restores into empty replacements, and requires the exact release, pre-change state,
+migration history and whole-application health to return. It deliberately builds local images so
+it can test an uncommitted candidate; the same drill gates hosted CI before exact-commit GHCR
+publication. Passing it is not a deployment claim and does not replace the authenticated,
+Moroccan-target, realistic-volume or host checks below.
 
 Before launch, the full pipeline runs **on the production VPS itself**, because the staging
 topology exercises none of the VPS realities — memory ceilings, TLS automation, the backup

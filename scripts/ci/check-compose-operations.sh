@@ -121,6 +121,20 @@ grep -Fq 'API container startup command may run migration/seed work' "$productio
   fail 'the Production drill must prove normal API startup does not migrate or seed'
 grep -Fq 'assert_persistent_state' "$production_drill" ||
   fail 'restart/recreate phases must verify database, migration and object persistence'
+[[ "$(grep -Fc 'org.opencontainers.image.revision=$release_commit' "$production_drill")" -eq 2 ]] ||
+  fail 'the Production drill must label both local candidate images with exact repository HEAD'
+grep -Fq 'assert_release_identity' "$production_drill" ||
+  fail 'the Production drill must pin running containers to the proved image identities'
+grep -Fq 'scripts/backup/create-recovery-point.sh' "$production_drill" ||
+  fail 'the Production-mode graph must create a real encrypted recovery point'
+grep -Fq 'scripts/backup/restore-recovery-point.sh' "$production_drill" ||
+  fail 'the Production-mode graph must restore that recovery point into empty volumes'
+grep -Fq "wait_for_https_status 200 90 'post-restore application readiness'" "$production_drill" ||
+  fail 'the restored Production-mode application must pass whole-platform readiness'
+grep -Fq "'state-at-recovery-point' 'database rollback state'" "$production_drill" ||
+  fail 'the recovery drill must prove later database state is rolled back'
+grep -Fq 'restored recovery point does not name the exact source commit' "$production_drill" ||
+  fail 'the recovery manifest must preserve exact release provenance'
 grep -Fq 'verify-production-browser.mjs' "$production_drill" ||
   fail 'the Production drill must execute the real built application in a browser'
 grep -Fq -- '--host-resolver-rules="MAP $domain 127.0.0.1"' "$production_drill" ||

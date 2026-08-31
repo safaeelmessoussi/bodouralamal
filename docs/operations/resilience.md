@@ -95,10 +95,14 @@ the restart. It also restarts PostgreSQL and Nginx independently, performs a ful
 and force-recreates every long-running container over unchanged PostgreSQL/MinIO volumes. After
 each data-boundary phase it rechecks the exact Production seed, migration history, a private object,
 and durable job terminal states; ordinary API startup is also asserted not to migrate or seed.
+It then takes a real encrypted recovery point from that Production-mode graph, writes later
+database/object values, destroys both disposable volumes, restores into empty replacements and
+requires the exact image IDs plus whole-platform health to return on the earlier values. The
+recovery manifest must name repository HEAD, so a green restore cannot be detached from its code.
 
 The remaining host row in the readiness ledger is intentionally narrower: a real host reboot,
-resource and disk pressure, supported replacement object store, and realistic-volume RTO still
-need to be observed on the selected VPS.
+resource and disk pressure, GHCR pull/public TLS, the supported replacement object store and remote
+Moroccan backup target, and realistic-volume RTO still need to be observed on the selected VPS.
 
 ## Concurrency failures are expected, not exceptional
 
