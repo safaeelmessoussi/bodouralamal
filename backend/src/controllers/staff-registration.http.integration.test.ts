@@ -143,6 +143,7 @@ async function apply(
       applicant: {
         first_name_arabic: `${TAG}`,
         last_name_arabic: `أستاذة${counter}`,
+        phone: '+212600000040',
         sex: "female",
       },
       // R49: a student states a stage; a staff request must NOT — a teacher
@@ -169,6 +170,9 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   if (ids.length > 0) {
+    await prisma.notification.deleteMany({
+      where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+    });
     await prisma.auditLog.deleteMany({
       where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
     });
@@ -508,10 +512,9 @@ describe("approval grants the role and its scope in one transaction", () => {
     ]);
   });
 
-  it("approves an ordinary applicant with a placement and no role", async () => {
-    // A student receives access through ENROLMENT, not through a role
-    // assignment — so an empty assignment set is a normal outcome, while an
-    // empty placement is not (§4.1, R43).
+  it("approves an ordinary applicant with a placement and the structural Student role", async () => {
+    // R79: a beneficiary admitted through placement is structurally a Student;
+    // the role is derived inside the transaction, never chosen by the client.
     const id = await apply();
     const res = await call(
       "POST",
@@ -527,11 +530,11 @@ describe("approval grants the role and its scope in one transaction", () => {
     expect(
       (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
     ).toBe("active");
-    expect(
-      await prisma.userBranchRole.count({
-        where: { userId: id, deletedAt: null },
-      }),
-    ).toBe(0);
+    const assignments = await prisma.userBranchRole.findMany({
+      where: { userId: id, deletedAt: null },
+      include: { role: { select: { name: true } } },
+    });
+    expect(assignments.map((assignment) => assignment.role.name)).toEqual(['student']);
     expect(
       await prisma.enrollment.count({
         where: { studentId: id, deletedAt: null },

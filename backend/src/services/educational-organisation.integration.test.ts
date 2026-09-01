@@ -161,6 +161,14 @@ async function cleanup(): Promise<void> {
   await prisma.trash.deleteMany({
     where: { deletedBy: { nameArabic: { startsWith: TAG } } },
   });
+  await prisma.notification.deleteMany({
+    where: {
+      OR: [
+        { user: taggedPerson },
+        { subjectUser: taggedPerson },
+      ],
+    },
+  });
   await prisma.auditLog.deleteMany({ where: { actor: taggedPerson } });
 
   await prisma.user.deleteMany({ where: taggedPerson });

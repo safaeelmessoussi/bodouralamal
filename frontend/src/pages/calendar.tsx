@@ -20,6 +20,7 @@ import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { t } from '../i18n/index.js';
 import { addMonths, endOfMonth, startOfMonth, toIsoDate } from '../lib/dates.js';
+import { useSession } from '../contexts/session.js';
 
 /**
  * `/calendar` — the public monthly calendar (§5.1, §4.4, TD-3.4, TD-3.10).
@@ -34,8 +35,8 @@ import { addMonths, endOfMonth, startOfMonth, toIsoDate } from '../lib/dates.js'
  * costs nothing further, because each occurrence is self-sufficient.
  *
  * Anonymous visitors get the public tier and the tier widens automatically once
- * signed in — that decision is the server's (§4.4), so this page does not branch
- * on the session at all.
+ * signed in. The page sends the current credential but makes no visibility
+ * decision of its own; the server remains the sole tier authority (§4.4).
  *
  * **The grid is the page.** It runs nearly the full viewport width and there is
  * no panel beneath it: a day opens in a dialog, which is what lets the cells be
@@ -63,6 +64,7 @@ type Load =
 const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'type'] as const;
 
 export function CalendarPage(): ReactNode {
+  const { accessToken } = useSession();
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
   /**
@@ -148,6 +150,7 @@ export function CalendarPage(): ReactNode {
         const result = await fetchOccurrences({
           from,
           to,
+          token: accessToken,
           branchId,
           categoryId,
           levelId,
@@ -180,7 +183,7 @@ export function CalendarPage(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [from, to, branchId, categoryId, levelId, filters.value.type]);
+  }, [from, to, branchId, categoryId, levelId, filters.value.type, accessToken]);
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 

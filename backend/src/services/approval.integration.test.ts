@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { actorFor } from "../test-support/actor.js";
 
@@ -97,12 +99,19 @@ async function submitBundle(
       parent: {
         first_name_arabic: `${TAG}`,
         last_name_arabic: `والدة`,
+        phone: '+212600000002',
+        first_name_french: 'Amina',
+        last_name_french: 'Bennani',
+        nickname: 'أم مريم',
         sex: "female" as const,
       },
       children: [
         {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `طفلة`,
+          first_name_french: 'Maryam',
+          last_name_french: 'Bennani',
+          nickname: 'مريم',
           sex: "female" as const,
           consent_media_release: true,
           // R67 — the branch and stage are the CHILD's now. `intoBranchId` is
@@ -114,7 +123,7 @@ async function submitBundle(
           requested_category_id: placement.categoryId,
         },
       ],
-      consents: { data_processing: true, media_release: true },
+      consents: { data_processing: true },
     },
     KEY,
   );
@@ -130,6 +139,11 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: {
+      OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }],
+    },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
@@ -163,6 +177,7 @@ async function clear(): Promise<void> {
   // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
   // still referenced refuses to go.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   // **Last, not first.** `intended_branch_id` and `intended_category_id` are
   // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by
   // a user refuses to go — which is the constraint doing its job, and the
@@ -259,6 +274,78 @@ describe("R66.5 — an approver places into a Level with no group", () => {
 });
 
 describe("§5.6 / TD-4.2 approval queue", () => {
+  it("adult student approval atomically activates, enrolls, marks beneficiary, and grants the scoped Student role", async () => {
+    const admin = await makeAdmin("super_admin");
+    const applicant = await prisma.user.create({
+      data: {
+        nameArabic: `${TAG} مستفيدة راشدة`,
+        sex: "female",
+        accountStatus: "pending",
+        intendedBranchId: placement.branchId,
+        intendedCategoryId: placement.categoryId,
+      },
+    });
+
+    await decide(prisma, await actorFor(prisma, admin), applicant.id, {
+      approve: true,
+      enrollments: [
+        {
+          userId: applicant.id,
+          placement: { administrativeGroupId: placement.groupId },
+        },
+      ],
+    });
+
+    const approved = await prisma.user.findUniqueOrThrow({
+      where: { id: applicant.id },
+      include: {
+        branchRoles: {
+          where: { deletedAt: null },
+          include: { role: true },
+        },
+        levelEnrollments: { where: { deletedAt: null } },
+      },
+    });
+    expect(approved.accountStatus).toBe("active");
+    expect(approved.isBeneficiary).toBe(true);
+    expect(approved.levelEnrollments).toHaveLength(1);
+    expect(
+      approved.branchRoles.map((entry) => ({
+        role: entry.role.name,
+        branchId: entry.branchId,
+      })),
+    ).toContainEqual({ role: "student", branchId: placement.branchId });
+  });
+
+  it("rolls back activation and the Student grant when placement fails", async () => {
+    const admin = await makeAdmin("super_admin");
+    const applicant = await prisma.user.create({
+      data: {
+        nameArabic: `${TAG} تراجع ذري`,
+        sex: "female",
+        accountStatus: "pending",
+      },
+    });
+
+    await expect(
+      decide(prisma, await actorFor(prisma, admin), applicant.id, {
+        approve: true,
+        enrollments: [
+          {
+            userId: applicant.id,
+            placement: { levelId: placement.levelId, branchId: randomUUID() },
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: applicant.id } });
+    expect(unchanged.accountStatus).toBe("pending");
+    expect(unchanged.isBeneficiary).toBe(false);
+    expect(await prisma.enrollment.count({ where: { studentId: applicant.id } })).toBe(0);
+    expect(await prisma.userBranchRole.count({ where: { userId: applicant.id } })).toBe(0);
+  });
+
   it("lists a parent+child registration as ONE item, with the child as a decidable block", async () => {
     const admin = await makeAdmin();
     const { parentId, applicationId } = await submitBundle();
@@ -277,6 +364,31 @@ describe("§5.6 / TD-4.2 approval queue", () => {
     // because R62.2 decides a child alone.
     expect(item!.children.map((c) => c.applicationId)).toEqual([applicationId]);
     expect(item!.bundle).toEqual({ childCount: 1, linkCount: 1 });
+    expect(item!.registrationDetails?.applicant).toMatchObject({
+      firstNameFrench: 'Amina',
+      lastNameFrench: 'Bennani',
+      nickname: 'أم مريم',
+      phone: '+212600000002',
+      dataProcessingConsent: { granted: true, textVersion: 'appr-test-v1' },
+    });
+    expect(item!.children[0]).toMatchObject({
+      firstNameFrench: 'Maryam',
+      lastNameFrench: 'Bennani',
+      nickname: 'مريم',
+      requestedCategory: { id: placement.categoryId },
+      requestedBranch: { id: branchId },
+      dataProcessingConsent: true,
+      mediaReleaseConsent: true,
+    });
+
+    const exact = await listApprovals(prisma, await actorFor(prisma, admin), {
+      reviewUserId: parentId,
+    });
+    expect(exact.data.map((row) => row.id)).toEqual([parentId]);
+    const absent = await listApprovals(prisma, await actorFor(prisma, admin), {
+      reviewUserId: randomUUID(),
+    });
+    expect(absent.data).toEqual([]);
 
     // And it is not ALSO listed as a standalone child-application item, which
     // would invite an approver to decide the same family from two places.
@@ -320,6 +432,9 @@ describe("§5.6 / TD-4.2 approval queue", () => {
     });
     expect(application?.status).toBe("pending");
     expect(await prisma.familyLink.count({ where: { parentId } })).toBe(0);
+    expect(await prisma.enrollment.count({ where: { studentId: parentId } })).toBe(0);
+    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.isBeneficiary).toBe(false);
+    expect(await prisma.userBranchRole.count({ where: { userId: parentId } })).toBe(0);
 
     // …and deciding the child then creates both, without touching the parent.
     const { decideChildApplication } =
@@ -341,6 +456,13 @@ describe("§5.6 / TD-4.2 approval queue", () => {
     expect(link?.status).toBe("approved");
     expect(link?.decidedById).toBe(admin);
 
+    // Once the exact parent registration and every child application are
+    // terminal, an old notification coordinate fails closed to no review row.
+    const stale = await listApprovals(prisma, await actorFor(prisma, admin), {
+      reviewUserId: parentId,
+    });
+    expect(stale.data).toEqual([]);
+
     const row = await prisma.auditLog.findFirst({
       where: { targetId: parentId, actionType: "user.approve" },
     });
@@ -349,6 +471,63 @@ describe("§5.6 / TD-4.2 approval queue", () => {
     expect((row!.detail as Record<string, unknown>)["children_activated"]).toBe(
       0,
     );
+  });
+
+  it("R117 keeps requested Category and Branch exact for each sibling", async () => {
+    const admin = await makeAdmin();
+    const otherCategory = await prisma.category.create({
+      data: { name: `${TAG} فئة أخرى` },
+    });
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'parent_child',
+        parent: {
+          first_name_arabic: TAG,
+          last_name_arabic: 'والدة طفلين',
+          phone: '+212600000030',
+          sex: 'female',
+        },
+        children: [
+          {
+            first_name_arabic: TAG,
+            last_name_arabic: 'الأولى',
+            sex: 'female',
+            requested_branch_id: branchId,
+            requested_category_id: placement.categoryId,
+            consent_media_release: true,
+          },
+          {
+            first_name_arabic: TAG,
+            last_name_arabic: 'الثانية',
+            sex: 'female',
+            requested_branch_id: otherBranchId,
+            requested_category_id: otherCategory.id,
+            consent_media_release: false,
+          },
+        ],
+        consents: { data_processing: true },
+      },
+      KEY,
+    );
+
+    const exact = await listApprovals(prisma, await actorFor(prisma, admin), {
+      reviewUserId: result.applicantId,
+    });
+    expect(exact.data).toHaveLength(1);
+    expect(exact.data[0]!.branch).toBeNull();
+    expect(exact.data[0]!.category).toBeNull();
+    expect(
+      exact.data[0]!.children.map((child) => [
+        child.requestedBranch?.id,
+        child.requestedCategory?.id,
+      ]),
+    ).toEqual([
+      [branchId, placement.categoryId],
+      [otherBranchId, otherCategory.id],
+    ]);
   });
 
   it("rejecting the parent leaves each child its OWN decision (R62)", async () => {
@@ -379,6 +558,14 @@ describe("§5.6 / TD-4.2 approval queue", () => {
     // And no link exists to be half-decided, because none is created until a
     // child is approved.
     expect(await prisma.familyLink.count({ where: { parentId } })).toBe(0);
+    // A Rejected account has no authenticated inbox by TD-1. Its status screen
+    // communicates this decision; persisting an unreadable row would falsely
+    // claim delivery and could surface stale data after later staff recovery.
+    expect(
+      await prisma.notification.count({
+        where: { userId: parentId, subjectUserId: parentId },
+      }),
+    ).toBe(0);
   });
 
   it("rejection without a reason is refused (§5.6, §14.2)", async () => {

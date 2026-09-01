@@ -101,6 +101,12 @@ fails a build where a controller hands a service result straight to `res.json`, 
 suites assert the **exact key set** of each response, so a field arriving that nobody chose is a
 test failure rather than a surprise.
 
+R117 applies that rule to registration review. `GET /admin/approvals` exposes complete
+submitted applicant/contact/consent data only inside its Admin/Super-Admin DTO, with one exact
+block per child. `review_user_id` is a lookup coordinate, not authorization: live-role freshness
+still gates the route, and a stale coordinate returns an empty page rather than confirming a
+historical row or falling back to the full queue.
+
 ## The error envelope
 
 Every non-2xx response, without exception:

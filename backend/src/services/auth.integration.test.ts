@@ -105,6 +105,9 @@ describe("§4.1b login resolution and routing", () => {
     // §7: pre_provisioned_email is RETAINED, not cleared — provenance survives.
     const user = await prisma.user.findUnique({ where: { id: userId } });
     expect(user?.preProvisionedEmail).toBe(email);
+    // R117 is prospective at POST /registrations. Historical/pre-provisioned
+    // accounts retain nullable phone and must still bind and authenticate.
+    expect(user?.phone).toBeNull();
   });
 
   it("4a — the second login resolves by identity and does NOT re-bind", async () => {

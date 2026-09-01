@@ -5,6 +5,7 @@ import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as owners from '../repositories/platform-owner.repository.js';
 import * as users from '../repositories/user.repository.js';
+import { notifySubjectUserChange } from './notification.service.js';
 
 const OWNER_ADMIN_ROLES = ['super_admin'] as const;
 
@@ -22,6 +23,32 @@ export async function lockAndAssertNotPlatformOwner(
       'STATE_CONFLICT',
       'Platform Owner status must be transferred before this account can change lifecycle',
       { reason: 'PLATFORM_OWNER_PROTECTED' },
+    );
+  }
+  return owner;
+}
+
+/**
+ * Locks the singleton before a role-set replacement and preserves the one role
+ * the current Owner must always hold. Ownership protects the global Super Admin
+ * assignment, not every unrelated operational role on the account.
+ */
+export async function lockAndAssertOwnerRoleInvariant(
+  tx: Prisma.TransactionClient,
+  targetUserId: string,
+  assignments: readonly { role: string; branchId: string | null }[],
+): Promise<owners.PlatformOwnerRow | null> {
+  const owner = await owners.lockPlatformOwner(tx);
+  if (
+    owner?.ownerUserId === targetUserId &&
+    !assignments.some(
+      (assignment) => assignment.role === 'super_admin' && assignment.branchId === null,
+    )
+  ) {
+    throw new AppError(
+      'STATE_CONFLICT',
+      'Platform Owner must retain the globally scoped Super Admin role',
+      { reason: 'PLATFORM_OWNER_GLOBAL_SUPER_ADMIN_REQUIRED' },
     );
   }
   return owner;
@@ -115,6 +142,12 @@ export async function transferPlatformOwnership(
         previous_owner_user_id: current.ownerUserId,
         new_owner_user_id: updated.ownerUserId,
       },
+    });
+    await notifySubjectUserChange(tx, {
+      type: 'platform_ownership_received',
+      subjectUserId: updated.ownerUserId,
+      recipientUserIds: [updated.ownerUserId],
+      actorUserId: actor.userId,
     });
 
     return {

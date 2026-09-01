@@ -21,7 +21,7 @@ const person = {
   firstNameFrench: '',
   lastNameFrench: '',
   nickname: '',
-  phone: '',
+  phone: '+212 600000000',
   notes: '',
   sex: 'female' as const,
 };
@@ -128,6 +128,7 @@ describe('هيئة التأطير framing preference', () => {
       applicant: {
         first_name_arabic: 'خديجة',
         last_name_arabic: 'بنعلي',
+        phone: '+212 600000000',
         sex: 'female',
       },
       requested_role: 'teacher',
@@ -205,6 +206,27 @@ describe('consent rules (§4.1, BR-1)', () => {
   it('asks nothing about media release on the adult path', () => {
     expect(Object.keys(validate(base))).toEqual([]);
   });
+
+  it.each([1, 2, 3])(
+    'sends one request consent and a media decision for each of %i children',
+    (childCount) => {
+      const children = Array.from({ length: childCount }, (_, index) => ({
+        ...child,
+        firstNameArabic: `طفلة ${index + 1}`,
+        mediaRelease: index % 2 === 0 ? ('yes' as const) : ('no' as const),
+      }));
+      const payload = buildPayload({ ...base, intent: 'parent_child', children });
+
+      expect(payload.consents).toEqual({ data_processing: true });
+      expect(payload).not.toHaveProperty('consents.media_release');
+      expect(payload.kind).toBe('parent_child');
+      if (payload.kind === 'parent_child') {
+        expect(payload.children.map((entry) => entry.consent_media_release)).toEqual(
+          children.map((entry) => entry.mediaRelease === 'yes'),
+        );
+      }
+    },
+  );
 });
 
 describe('person rules mirror TD-9', () => {
@@ -255,8 +277,10 @@ describe('person rules mirror TD-9', () => {
     ).toEqual({});
   });
 
-  it('accepts an empty optional phone but refuses a malformed one', () => {
-    expect(validate({ ...base, applicant: { ...person, phone: '' } })).toEqual({});
+  it('requires a phone prospectively and refuses a malformed one', () => {
+    expect(validate({ ...base, applicant: { ...person, phone: '' } })).toHaveProperty(
+      'applicant.phone',
+    );
     expect(validate({ ...base, applicant: { ...person, phone: 'abc' } })).toHaveProperty(
       'applicant.phone',
     );

@@ -33,7 +33,7 @@ describe("postLoginDestination", () => {
 
   it("sends every other role to its §14.1 home", () => {
     expect(postLoginDestination(["teacher"])).toBe("/teacher");
-    expect(postLoginDestination(["parent"])).toBe("/dashboard/parent");
+    expect(postLoginDestination(["parent"])).toBe("/dashboard/student");
     expect(postLoginDestination(["student"])).toBe("/dashboard/student");
   });
 
@@ -63,7 +63,7 @@ describe("postLoginDestination", () => {
       super_admin: "/admin",
       admin: "/admin",
       teacher: "/teacher",
-      parent: "/dashboard/parent",
+      parent: "/dashboard/student",
       student: "/dashboard/student",
     });
   });

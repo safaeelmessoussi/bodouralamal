@@ -44,10 +44,8 @@ describe('the domain permits many assistants, and the interface does not cap it'
     expect(code(PERIODS)).toContain("value: 'assistant'");
   });
 
-  it('defaults a new row to ASSISTANT, the position that is not capped', () => {
-    // At most one main مؤطِّرة may be active on a date (R91 §6). Defaulting to
-    // the capped position would make the commonest next action a refusal.
-    expect(code(PERIODS)).toContain("position: 'assistant', effective_from: ''");
+  it('defaults a new row to the responsible teacher position', () => {
+    expect(code(PERIODS)).toContain("position: 'teacher', effective_from: ''");
   });
 
   it('lets one person appear on more than one row', () => {

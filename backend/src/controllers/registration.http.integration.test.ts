@@ -86,10 +86,14 @@ const person = (first: string, last: string) => ({
   last_name_arabic: last,
   sex: "female" as const,
 });
+const adultPerson = (first: string, last: string) => ({
+  ...person(first, last),
+  phone: '+212600000020',
+});
 
 const adult = () => ({
   kind: "adult" as const,
-  applicant: person("خديجة", "بنعلي"),
+  applicant: adultPerson("خديجة", "بنعلي"),
   branch_id: branchId,
   category_id: categoryId,
   consents: { data_processing: true },
@@ -101,6 +105,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
@@ -217,7 +224,7 @@ describe("a well-formed submission succeeds end to end", () => {
       submit(
         {
           kind: "parent_child",
-          parent: person("أمينة", "بنعلي"),
+          parent: adultPerson("أمينة", "بنعلي"),
           children: [
             {
               ...person("سارة", "بنعلي"),
@@ -226,7 +233,7 @@ describe("a well-formed submission succeeds end to end", () => {
               requested_category_id: categoryId,
             },
           ],
-          consents: { data_processing: true, media_release: false },
+          consents: { data_processing: true },
         },
         freshToken(),
       ),
@@ -254,9 +261,58 @@ describe("a well-formed submission succeeds end to end", () => {
     };
     expect(child?.nameArabic).toBe(`${TAG} سارة بنعلي`);
   });
+
+  it.each([1, 2, 3])(
+    "accepts the browser consent shape for %i child(ren) and stores one applicant consent",
+    async (childCount) => {
+      const children = Array.from({ length: childCount }, (_, index) => ({
+        ...person(`طفلة ${index + 1}`, "بنعلي"),
+        consent_media_release: index % 2 === 0,
+        requested_branch_id: branchId,
+        requested_category_id: categoryId,
+      }));
+
+      const res = await withConsentVersion("http-reg-v1", () =>
+        submit(
+          {
+            kind: "parent_child",
+            parent: adultPerson("أمينة", "بنعلي"),
+            children,
+            // This is exactly the frontend payload: data processing belongs to
+            // the request; media release belongs to every child.
+            consents: { data_processing: true },
+          },
+          freshToken(),
+        ),
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.child_application_ids).toHaveLength(childCount);
+      expect(
+        await prisma.childApplication.count({
+          where: { id: { in: res.body.child_application_ids ?? [] } },
+        }),
+      ).toBe(childCount);
+      expect(
+        await prisma.consentRecord.count({
+          where: { studentId: res.body.applicant_id!, consentType: "data_processing" },
+        }),
+      ).toBe(1);
+    },
+  );
 });
 
 describe("the boundary refuses what it should, over HTTP", () => {
+  it("R117 refuses a new registration without a contact phone", async () => {
+    const body = adult();
+    const { phone: _phone, ...withoutPhone } = body.applicant;
+    const res = await withConsentVersion("http-reg-v1", () =>
+      submit({ ...body, applicant: withoutPhone }, freshToken()),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+  });
+
   it("refuses a client-supplied name_arabic rather than ignoring it", async () => {
     // §1.1 / R40: the server composes the name. Accepting one from the client
     // would make the client the authority on how a person's name reads.
@@ -264,7 +320,7 @@ describe("the boundary refuses what it should, over HTTP", () => {
       submit(
         {
           kind: "adult",
-          applicant: { ...person("خديجة", "بنعلي"), name_arabic: "شيء آخر" },
+          applicant: { ...adultPerson("خديجة", "بنعلي"), name_arabic: "شيء آخر" },
           branch_id: branchId,
           category_id: categoryId,
           consents: { data_processing: true },

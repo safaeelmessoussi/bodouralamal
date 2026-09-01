@@ -16,6 +16,8 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[cal-http-test]";
+/** Reserved fixture coordinate: deliberately outside the Production seed. */
+const TEST_HIJRI_YEAR = 1547;
 
 interface Row {
   kind: string;
@@ -91,7 +93,7 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
-  await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: 1447 } });
+  await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: TEST_HIJRI_YEAR } });
 }
 
 /** Events created directly: this suite tests the READ path, not creation. */
@@ -102,7 +104,9 @@ async function seedEvent(
     data: {
       title: `${TAG} ${visibility}`,
       visibility: visibility as never,
-      startDate: new Date("2026-06-15T00:00:00.000Z"),
+      // Both coordinates are fixture-owned: a reserved Hijri year and a remote
+      // Gregorian date outside the local official catalogue's timeline.
+      startDate: new Date("2036-06-15T00:00:00.000Z"),
       startTime: new Date(Date.UTC(1970, 0, 1, 14, 0)),
       recurrenceType: "none" as never,
     },
@@ -128,7 +132,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const RANGE = "from=2026-06-01&to=2026-06-30";
+const RANGE = "from=2036-06-01&to=2036-06-30";
 
 describe("GET /calendar — public access", () => {
   it("is reachable with NO token and returns the public tier only", async () => {
@@ -141,25 +145,26 @@ describe("GET /calendar — public access", () => {
     expect(rows[0]!.start_time).toBe("14:00");
     // Revision 31: with no official month recorded, the overlay is absent
     // rather than computed. The Gregorian date still renders.
-    expect(rows[0]!.date).toBe("2026-06-15");
+    expect(rows[0]!.date).toBe("2036-06-15");
     expect(rows[0]!.hijri_date).toBeNull();
     expect(rows[0]!.hijri_month_ar).toBeNull();
   });
 
   it("carries the official Hijri overlay once the month is published", async () => {
-    // The officially announced Moroccan date: 1 Dhu al-Hijja 1447 = 18 May 2026.
+    // A published database coordinate is the authority. The deliberately
+    // non-seeded year also proves the test owns the row it later removes.
     await prisma.hijriMonthStart.create({
       data: {
-        hijriYear: 1447,
+        hijriYear: TEST_HIJRI_YEAR,
         hijriMonth: 12,
-        gregorianStartDate: new Date("2026-05-18T00:00:00.000Z"),
+        gregorianStartDate: new Date("2036-05-18T00:00:00.000Z"),
         status: "published",
       },
     });
 
     const rows = mine((await call(`/calendar?${RANGE}`)).body);
 
-    expect(rows[0]!.hijri_date).toBe("1447-12-29");
+    expect(rows[0]!.hijri_date).toBe(`${TEST_HIJRI_YEAR}-12-29`);
     expect(rows[0]!.hijri_month_ar).toBe("ذو الحجة");
   });
 
@@ -182,6 +187,13 @@ describe("GET /calendar — public access", () => {
     const rows = mine((await call(`/calendar?${RANGE}`, student)).body);
 
     expect(rows.map((r) => r.visibility).sort()).toEqual(["private", "public"]);
+  });
+
+  it("an active account with no authorised calendar role remains public-only", async () => {
+    const roleless = bearer(await person("حساب بلا دور"), []);
+    const rows = mine((await call(`/calendar?${RANGE}`, roleless)).body);
+
+    expect(rows.map((r) => r.visibility)).toEqual(["public"]);
   });
 
   /**

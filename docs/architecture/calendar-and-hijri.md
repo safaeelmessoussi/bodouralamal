@@ -272,6 +272,12 @@ Two accepted trade-offs are recorded rather than hidden:
 `Pending` users see the public tier only, which is effectively nothing beyond the public
 calendar.
 
+The public calendar route is optionally authenticated. Its frontend therefore sends the
+current access token when one exists and sends none for an anonymous tab; it never chooses a
+tier itself. The server classifies the live actor. An Active account with no Student, Parent
+or staff role receives the public tier only — lifecycle state alone is not private-calendar
+authority.
+
 ### The tier travels schedule → occurrence
 
 Exactly as `room_id` (R43.4) and `delivery_mode` (R97) do, through the mechanism that already
@@ -587,6 +593,11 @@ share it and twice when they do not.
 in the day cell, and the title's Hijri side and its divider are both omitted rather than left
 blank. That is the same "silence over guessing" rule the backend follows, carried through to
 the pixel.
+
+Inside each day cell the coordinate row has one fixed physical contract in the Arabic RTL
+interface: **Hijri is left, Gregorian is right**, matching the dual title. The row alone is
+explicitly LTR so DOM order equals visual order; the page and its Arabic content remain RTL,
+and neither date identity, stored mapping nor event coordinate is swapped to obtain layout.
 
 > Design rationale in full: [API](api.md#designing-an-endpoint-the-bootstrap-as-a-worked-example)
 

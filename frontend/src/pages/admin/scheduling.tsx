@@ -858,7 +858,7 @@ export function SchedulingDialog({
    * * `teachingMode: mode` is **sent on save**, so saving an unrelated edit —
    *   a new end date, say — would have rewritten that class's audience.
    */
-  const [mode, setMode] = useState<string>(item?.ids.teachingMode ?? 'administrative_group');
+  const [mode, setMode] = useState<string>(item?.ids.teachingMode ?? 'entire_level');
   const [roomId, setRoomId] = useState(item?.ids.roomId ?? '');
   /**
    * **R97 — طريقة الحضور**, defaulting to حضوري: that is the column's default,
@@ -1000,7 +1000,7 @@ export function SchedulingDialog({
     },
     // Pristine mirrors the state above expression for expression, or `dirty`
     // would report every edited class as changed before it was touched.
-    mode: item?.ids.teachingMode ?? 'administrative_group',
+    mode: item?.ids.teachingMode ?? 'entire_level',
     roomId: item?.ids.roomId ?? '',
     // R97 — delivery joins the dirty check (rule U): a form holding an unsaved
     // switch to عن بُعد must not close on a stray backdrop click.

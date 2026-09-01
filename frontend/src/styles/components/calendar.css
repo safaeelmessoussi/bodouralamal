@@ -340,6 +340,11 @@ tr:last-child .cal-cell {
    block. */
 .cal-day__select {
   display: flex;
+  /* The application is RTL, while this two-coordinate row has a fixed spatial
+     contract: Hijri on the physical left, Gregorian on the physical right.
+     Pinning this small row to LTR makes source order equal visual order without
+     changing the calendar's Arabic reading direction anywhere else. */
+  direction: ltr;
   align-items: center;
   justify-content: space-between;
   /* A real gap, not just `space-between`: on the narrowest cell two two-digit

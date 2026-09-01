@@ -79,6 +79,11 @@ async function setup(): Promise<void> {
 }
 
 async function verify(): Promise<void> {
+  const firstBranch = await prisma.branch.findFirstOrThrow({
+    where: { deletedAt: null },
+    orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+    select: { id: true },
+  });
   const identity = await prisma.userIdentity.findFirstOrThrow({ where: { email: applicantEmail } });
   const applicant = await prisma.user.findUniqueOrThrow({
     where: { id: identity.userId },
@@ -92,6 +97,12 @@ async function verify(): Promise<void> {
   const target = await prisma.user.findFirstOrThrow({
     where: { nameArabic: `${TAG} المالكة التالية` },
     select: { id: true },
+  });
+  const formerOwner = await prisma.user.findFirstOrThrow({
+    where: { nameArabic: `${TAG} المالكة المؤقتة` },
+    include: {
+      branchRoles: { where: { deletedAt: null }, include: { role: true } },
+    },
   });
 
   const checks: Record<string, boolean> = {
@@ -109,6 +120,14 @@ async function verify(): Promise<void> {
       applicant.availability.length === 2 &&
       applicant.availability[0]?.mode === 'online' &&
       applicant.availability[1]?.mode === null,
+    owner_additional_role:
+      formerOwner.branchRoles.some(
+        (assignment) => assignment.role.name === 'super_admin' && assignment.branchId === null,
+      ) &&
+      formerOwner.branchRoles.some(
+        (assignment) =>
+          assignment.role.name === 'teacher' && assignment.branchId === firstBranch.id,
+      ),
   };
   const failed = Object.entries(checks)
     .filter(([, passed]) => !passed)

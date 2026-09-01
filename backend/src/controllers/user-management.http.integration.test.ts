@@ -210,7 +210,9 @@ async function clear(): Promise<void> {
       where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
     });
     await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.notification.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.notification.deleteMany({
+      where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+    });
     await prisma.studentSocialProfile.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
     await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
@@ -1184,6 +1186,32 @@ describe("R88 — who إدارة المؤطِّرات lists", () => {
  * show that a forged request is refused — only a forged request can.
  */
 describe("account administration is Super Admin's, the directory is not", () => {
+  it("keeps pending/rejected requests out of both operational populations", async () => {
+    const pending = await makeUser("طلب قيد المراجعة", "pending");
+    const rejected = await makeUser("طلب مرفوض", "rejected");
+    const active = await makeUser("حساب مقبول", "active");
+
+    const accounts = await call("GET", "/admin/users?page_size=100", superAdmin);
+    expect(accounts.status).toBe(200);
+    const accountIds = (accounts.body.data as unknown as { id: string }[]).map((row) => row.id);
+    expect(accountIds).toContain(active);
+    expect(accountIds).not.toContain(pending);
+    expect(accountIds).not.toContain(rejected);
+
+    const directory = await call("GET", "/admin/directory?page_size=100", superAdmin);
+    expect(directory.status).toBe(200);
+    const directoryIds = (directory.body.data as unknown as { id: string }[]).map(
+      (row) => row.id,
+    );
+    expect(directoryIds).toContain(active);
+    expect(directoryIds).not.toContain(pending);
+    expect(directoryIds).not.toContain(rejected);
+
+    const forgedPendingFilter = await call("GET", "/admin/users?status=pending", superAdmin);
+    expect(forgedPendingFilter.status).toBe(400);
+    expect(forgedPendingFilter.body.error?.code).toBe("VALIDATION_FAILED");
+  });
+
   it("refuses a branch Admin the global account list", async () => {
     const res = await call("GET", "/admin/users", branchAdmin);
     expect(res.status).toBe(403);
@@ -1542,7 +1570,6 @@ describe("R111 — deleting an account keeps the record", () => {
         recurrenceType: "none",
       },
     });
-
     const bothAtBoundary = deferred();
     let arrivals = 0;
     const realLock = userRepository.lockUser;
@@ -1905,6 +1932,12 @@ describe("R111 — deleting an account keeps the record", () => {
         startDate: new Date("2025-01-01T00:00:00.000Z"),
         recurrenceType: "none",
       },
+    });
+    // The production writer intentionally refuses to announce an assignment
+    // that is not present on the Event. Materialize that governing row before
+    // racing notification delivery against de-identification.
+    await prisma.eventStaff.create({
+      data: { eventId: event.id, userId: victim, position: "responsible" },
     });
     const boundary = deferred();
     let arrivals = 0;

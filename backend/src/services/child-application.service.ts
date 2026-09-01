@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
-import { composeArabicName } from '../lib/person-name.js';
+import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import { allocateReferenceCode } from '../lib/reference-code.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
-import { applyRoleAssignments } from './user.service.js';
+import { ensureRoleAssignment } from './user.service.js';
+import {
+  approvalReviewRecipients,
+  notifySubjectUserChange,
+} from './notification.service.js';
 
 /**
  * Child applications (SRS Revision 62).
@@ -41,6 +45,9 @@ const APPROVER_ROLES = ['admin', 'super_admin'] as const;
 export interface ChildApplicationInput {
   firstNameArabic: string;
   lastNameArabic: string;
+  firstNameFrench?: string;
+  lastNameFrench?: string;
+  nickname?: string;
   /** R80.1 — required at creation, like every other path into the system. */
   sex: 'female' | 'male';
   schoolingStage?:
@@ -108,6 +115,9 @@ export async function submitChildApplications(
         parentId,
         firstNameArabic: firstName,
         lastNameArabic: lastName,
+        ...(child.firstNameFrench ? { firstNameFrench: child.firstNameFrench.trim() } : {}),
+        ...(child.lastNameFrench ? { lastNameFrench: child.lastNameFrench.trim() } : {}),
+        ...(child.nickname ? { nickname: child.nickname.trim() } : {}),
         sex: child.sex,
         ...(child.schoolingStage ? { schoolingStage: child.schoolingStage } : {}),
         ...(child.requestedBranchId ? { requestedBranchId: child.requestedBranchId } : {}),
@@ -124,6 +134,13 @@ export async function submitChildApplications(
     });
     applicationIds.push(row.id);
   }
+
+  await notifySubjectUserChange(tx, {
+    type: 'registration_review_required',
+    subjectUserId: parentId,
+    recipientUserIds: await approvalReviewRecipients(tx),
+    actorUserId: parentId,
+  });
 
   return { requestId, applicationIds };
 }
@@ -209,6 +226,12 @@ export async function decideChildApplication(
         // audit log is read by more people than the queue is.
         detail: { parent_id: application.parentId, reason: decision.rejectionReason },
       });
+      await notifySubjectUserChange(tx, {
+        type: 'registration_rejected',
+        subjectUserId: application.parentId,
+        recipientUserIds: [application.parentId],
+        actorUserId: actor.userId,
+      });
       return { childUserId: null, parentRoleGranted: false };
     }
 
@@ -280,6 +303,13 @@ export async function decideChildApplication(
           nameArabic: composeArabicName(application.firstNameArabic, application.lastNameArabic),
           firstNameArabic: application.firstNameArabic,
           lastNameArabic: application.lastNameArabic,
+          firstNameFrench: application.firstNameFrench,
+          lastNameFrench: application.lastNameFrench,
+          nameFrench: composeFrenchName(
+            application.firstNameFrench ?? undefined,
+            application.lastNameFrench ?? undefined,
+          ),
+          nickname: application.nickname,
           // R80.1 — the application carried one, so the child it creates does.
           sex: application.sex,
           ...(application.schoolingStage ? { schoolingStage: application.schoolingStage } : {}),
@@ -339,58 +369,45 @@ export async function decideChildApplication(
       },
     });
 
-    // ── The role, on the FIRST approval only. ───────────────────────────────
-    const holdsParent = await tx.userBranchRole.count({
-      where: { userId: application.parentId, deletedAt: null, role: { name: 'parent' } },
-    });
-    const parentRoleGranted = holdsParent === 0;
-    if (parentRoleGranted) {
-      /**
-       * **The grant is ADDITIVE, and it has to be spelled out that way.**
-       *
-       * `applyRoleAssignments` is the one implementation carrying the privilege
-       * guard, the branch-liveness check and the last-administrator rule, which
-       * is why approval routes through it rather than inserting a row — but its
-       * contract is *"these are now the account's assignments"*, **not** *"add
-       * this one"*. Passing `[{ parent }]` alone therefore **revoked every other
-       * role the parent held**: a مؤطِّرة who registered her own daughter stopped
-       * being a teacher the moment an administrator approved the child, and for
-       * the last Super Admin `assertNotLastSuperAdmin` refused the approval
-       * outright — so the child could not be admitted at all.
-       *
-       * Found by walking the flow end to end as a Super Admin, not by any test:
-       * every suite granted `parent` to an account that held nothing else, where
-       * a replace and an append are indistinguishable.
-       *
-       * Passing the UNION keeps the guard honest as well as the roles: nothing
-       * privileged appears in `changing`, so an Admin approver is not refused
-       * for a privilege they are not altering.
-       *
-       * `branchId: null` is *all branches for this assignment* (R24) — a
-       * parent's reach is their children, not a branch, so scoping it would be
-       * meaningless.
-       */
-      const live = await tx.userBranchRole.findMany({
-        where: { userId: application.parentId, deletedAt: null },
-        select: { branchId: true, role: { select: { name: true } } },
-      });
-      await applyRoleAssignments(tx, actor, application.parentId, [
-        ...live.map((assignment) => ({
-          role: assignment.role.name,
-          branchId: assignment.branchId,
-        })),
-        { role: 'parent', branchId: null },
-      ]);
-    }
+    /**
+     * The grant is additive. The shared helper preserves every existing
+     * functional role and routes the change through the complete-set
+     * implementation; passing only `{ parent }` would revoke a teacher or
+     * administrator role the parent already held. `null` is correct here
+     * because a parent's reach is her approved children, not a branch.
+     */
+    const parentRoleGranted = await ensureRoleAssignment(
+      tx,
+      actor,
+      application.parentId,
+      { role: 'parent', branchId: null },
+    );
 
     // ── Placement, if the administrator chose one. ──────────────────────────
     //
     // R62.7: schooling stage INFORMS this decision and never makes it. Nothing
     // here reads `schoolingStage` to choose, validate or refuse a group.
+    let studentRoleGranted = false;
     if (decision.placement) {
       // The same resolver `decide()` uses, so the two approval paths cannot
       // place students by different rules (R66.5).
-      await enrolAtPlacement(tx, actor, decision.placement, childUserId, 'approval');
+      const enrollment = await enrolAtPlacement(
+        tx,
+        actor,
+        decision.placement,
+        childUserId,
+        'approval',
+      );
+      if (created) {
+        studentRoleGranted = await ensureRoleAssignment(tx, actor, childUserId, {
+          role: 'student',
+          branchId: enrollment.branchId,
+        });
+        await tx.user.update({
+          where: { id: childUserId },
+          data: { isBeneficiary: true },
+        });
+      }
     }
 
     await tx.childApplication.update({
@@ -419,7 +436,20 @@ export async function decideChildApplication(
         created,
         linked_existing: Boolean(decision.matchExistingUserId),
         parent_role_granted: parentRoleGranted,
+        student_role_granted: studentRoleGranted,
+        admitted_as_beneficiary: created,
       },
+    });
+
+    await notifySubjectUserChange(tx, {
+      type: 'registration_approved',
+      // The approved child now has a real User coordinate. Targeting the
+      // parent would collapse approvals for several children into one
+      // `(recipient, subject, type)` row and make the notice unable to identify
+      // which application changed.
+      subjectUserId: childUserId,
+      recipientUserIds: [application.parentId],
+      actorUserId: actor.userId,
     });
 
     return { childUserId, parentRoleGranted };

@@ -41,8 +41,8 @@ service, not by the URL prefix).
 
 ## Notifications
 
-The MVP carries the bounded notification types admitted by R77, R78, R82, R83
-and R93. The postponed framework remains postponed: there is no tier,
+The MVP carries the bounded notification types admitted by R77, R78, R82, R83,
+R93 and R116. The postponed framework remains postponed: there is no tier,
 `NotificationPreference`, delivery channel, or per-child preference.
 
 | | Path | Notes |
@@ -51,6 +51,36 @@ and R93. The postponed framework remains postponed: there is no tier,
 | `POST` | `/notifications/{id}/read` | 🔒 Idempotent, and it does **not** move the timestamp on a retry. Another user's row answers **`404`, never `403`** (§20 rule 17) |
 | `POST` | `/events/{id}/notify` | 🔒 Optional Event announcement after the saved create, reschedule, or cancellation. Body `{ change }`; recipient ids are refused |
 | `POST` | `/sessions/{id}/notify` | 🔒 R83's independent occurrence decision after a cancellation or reschedule. Body `{ change }` |
+
+R116 adds no route. Automatic notices join the existing domain writes:
+
+| Type(s) | Trigger → recipient | Privacy and retry rule |
+|---|---|---|
+| `registration_review_required` | Complete submission → live Admin/Super-Admin approval population | Targets the applicant; submitter/actor excluded; one row per approver/applicant/type |
+| `registration_approved`, `registration_rejected` | Adult activation → applicant; child approval → active parent with the child as exact target; child rejection → active parent | An adult rejection uses the deactivated-status screen because TD-1 gives it no inbox; distinct approved children remain distinct coordinates; decision and useful notice commit together |
+| `family_link_requested`, `family_link_approved`, `family_link_rejected`, `family_link_revoked` | Link lifecycle → parent, targeting the child | No child search/list is exposed; actor excluded; stale opposite state is not duplicated |
+| `role_assignments_changed` | Real role/scope set change → affected User | Same-set saves are silent; no role or scope is inferred from the notice |
+| `platform_ownership_received` | Atomic transfer → new Platform Owner | Written only after eligibility/locking succeeds; former Owner receives no self-report |
+| `enrollment_changed` | Placement create/move/material edit/removal → affected student | Uses the committed placement fact; unchanged writes are silent |
+| `session_assigned`, `session_unassigned` | Exact occurrence restaffing → added/removed person | On hidden Sessions only `teacher` remains eligible; stale target rows are withdrawn from students/assistants |
+| `event_staff_assigned`, `event_staff_unassigned` | Event staffing change → added/removed person | On hidden Events only `responsible` remains eligible; assignment is automatic and distinct from optional audience announcement |
+| `exam_teacher_assigned`, `exam_teacher_unassigned` | Exam staffing change → added/removed eligible staff | Hidden Exam exposes no target to an assistant; supervisor-only. Remove/re-add withdraws the opposite fact |
+| `exam_scheduled` | Physical Exam creation or audience entry → grade-sheet student audience | Hidden produces no student row; exact Group or Level+Branch scope only |
+| `exam_rescheduled` | Date/start/end change → retained authorized students and staff | Time changes only; repeated no-op save is silent |
+| `exam_changed` | Material non-time sitting detail change → retained authorized students and staff | Prevents a title/room edit being mislabeled as a reschedule; hidden is supervisor-only |
+| `exam_cancelled` | Exam deletion or audience departure → current/removed authorized recipient as applicable | Deletion leaves current recipients with only cancellation; hidden remains supervisor-only |
+
+The pre-R116 types remain exact: `session_cancelled`, `session_restored`,
+`session_rescheduled`; `event_created`, `event_rescheduled`, `event_cancelled`;
+and `grade_published`. A dual-role Exam recipient keeps both assignment and scheduling rows
+because their types carry different meanings. The common idempotency coordinate is
+`(recipient, exact target, type)`: a retry/no-op creates nothing and does not resurface a read
+row; a proved new transition reuses the semantic row as unread and withdraws stale opposite
+facts. Exactly one of `session_id`, `event_id`, `exam_id`, `subject_user_id` is populated.
+
+Upload completion deliberately emits no content notice: it finalizes storage and is not a
+publication decision. This prevents a stale, replaced or consent-restricted storage coordinate
+from entering an inbox merely because bytes completed.
 
 **An optional send is a separate request after the change commits** (R82.5,
 R83.3). Declining is the absence of that request; a notification failure never
@@ -78,7 +108,7 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 
 | | Path | Returns |
 |---|---|---|
-| `GET` | `/calendar` | Occurrences at the caller's visibility tier. **Self-sufficient** — opening an event costs no further request. **Uncached** |
+| `GET` | `/calendar` | Occurrences at the caller's visibility tier. Public and optionally authenticated: the calendar client sends its access token when present; invalid/Pending/role-less callers receive public only. **Self-sufficient** — opening an event costs no further request. **Uncached** |
 | `GET` | `/calendar/sessions/{id}` | The §5.2 **Session page**: `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`. Public at the caller's tier — a public session's details, never its private recordings |
 | `GET` | `/calendar/bootstrap` | The calendar screen's reference data in one read. **Cached 5 min + strong ETag.** Reference data only — never operational data. `?category_id=` narrows **only** the Level list, server-side (§4.4); an unknown id yields an empty list rather than falling back to all |
 | `GET` | `/branches` | The landing-page branch directory: id, name, address, phone, email, opening hours, map link, display order. **Never** version, operational start date, or timestamps |
@@ -197,9 +227,9 @@ columns no screen is entitled to.
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; identity comes solely from it. Ordinary adult/family registration carries the requested branch/stage. A `requested_role: 'teacher'` request instead requires R115 `framing`: online with no physical branch, or in-person/both with explicit branch ids or future-inclusive `all_branches`. **It grants nothing.** |
-| `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants. Staff rows expose framing willingness for review, separate from granted scope |
-| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation, **plus the §4.1 placement**: `enrollments: [{ user_id, administrative_group_id }]`, and optional `assignments: [{ role, branch_id }]`, all in **one transaction** |
+| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; identity comes solely from it. New applicants require phone. Adult requests carry their Branch/Category; every child carries her own Branch/Category and submitted details. A `requested_role: 'teacher'` request instead requires R115 framing. Requests grant nothing. |
+| `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped**. Registration rows provide an authorized complete-details projection. `review_user_id` returns at most that applicant's still-pending review; stale coordinates return an empty page. Compact Branch/Category is shown only when unambiguous; exact values remain per child. |
+| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Adult-beneficiary approval atomically activates and places. A guardian registration activates only the parent—no beneficiary/Student/Enrollment—and each child is decided through the child endpoint. `assignments` carries explicitly approved staff roles. |
 | `POST` | `/admin/approvals/{id}/reject` | 🔒 | Body carries a reason |
 | `POST` | `/family-links` | 🔒 | **Staff-mediated** link of an existing child. Parents have no search over children |
 | `DELETE` | `/admin/family-links/{id}` | 🔒 | Soft delete **is** the revocation — effective on the next request |
@@ -209,11 +239,12 @@ columns no screen is entitled to.
 | | Path | Audience | Notes |
 |---|---|---|---|
 | `GET` `POST` | `/admin/users` | `?beneficiaries_only=true` returns the institute's مستفيدات (R79) — the durable fact, **independent of role and of enrolment**. The flag is never published |
-| `GET` `POST` | `/admin/users` | 🔒 | List with search (carries `version`, so the edit form needs no second read); create pre-provisions against a Google address |
+| `GET` `POST` | `/admin/users` | 🔒 | Approved account-management population only: live Active/Suspended rows, excluding Pending/Rejected. List carries `version`; create pre-provisions an Active account against a Google address |
+| `GET` | `/admin/directory` | 🔒 | Operational people-picker: live Active rows only, so Pending/Rejected/Suspended accounts cannot be staffed or rostered through an ordinary selector |
 | `PATCH` | `/admin/users/{id}` | 🔒 | The person's own fields. **`account_status`, `pre_provisioned_email` and `public_display_name` are refused, not dropped** |
 | `POST` | `/admin/users/{id}/suspend` | 🔒 | TD-1 `Active → Suspended`; **revokes every live session in the same transaction** (TD-4.15). Reason mandatory |
 | `POST` | `/admin/users/{id}/reactivate` | 🔒 | TD-1 `Suspended → Active`. Sessions stay revoked; `Rejected` is terminal and unreachable |
-| `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke |
+| `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke. For the Platform Owner the required global Super Admin assignment must remain, while additional roles are ordinary editable assignments |
 | `POST` | `/admin/platform-owner/transfer` | 🔒 | Current Platform Owner only; exact confirmation; target must already be an active Global Super Admin. Atomically moves the protected singleton and leaves both roles unchanged |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
 | `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
@@ -226,10 +257,10 @@ enrollment is a person the platform admitted and then lost."* An approval that w
 admitted student unplaced is **refused** (`400`, `reason: ENROLLMENT_REQUIRED`), naming who is
 missing.
 
-**Who must be placed is derived, never asked for**: the children of a family registration (the
-parent's access comes through the family link), or a lone applicant, and **nobody for a staff
-request** — a teacher is not admitted to a Level. Only people in the bundle may be named
-(`NOT_IN_BUNDLE`), or approval would be an unscoped enrolment endpoint.
+**Who must be placed is derived, never asked for**: a lone adult-beneficiary applicant on the
+registration approval path, or the one child on a child-application decision. A guardian is
+activated without placement, and **nobody is placed for a staff request**. Only the exact
+decision subject may be named, or approval would be an unscoped enrolment endpoint.
 
 **`level_id` is not accepted** — the group already names its Level, and `Enrollment.level_id` is
 read from the group so a composite FK keeps them agreeing rather than a caller. **Exactly one
@@ -240,11 +271,11 @@ Placement runs through the **same function the roster screen uses**, so it carri
 branch-scope check, §4.4b's `gender_restriction` vs `User.sex` rule, BR-21 and the consent
 re-evaluation enqueue.
 
-**§4.1 step 1's preselection works** because registration records the stage the applicant asked
-for (`User.intended_category_id`, R49). The approval screen filters the Level list to that
-Category and preselects its first Level — **a default, not a decision**, so *"any Category"*
-stays one click away for an applicant who chose the wrong stage. An applicant registered before
-R49 has no Category, rendered as *not stated* rather than guessed.
+**§4.1 step 1's preselection works** because an adult request records
+`User.intended_category_id` and each child records `ChildApplication.requested_category_id`.
+The picker reads the exact decision subject, filters to that Category and preselects its first
+Level—a default, not a decision. A legacy null renders *not stated* and offers all Categories;
+one sibling's request is never reused for another.
 
 **`category_id` is required for a student and refused for a staff request** — a teacher is
 admitted to no Level. The form populates it from the **live Categories ordered by
@@ -650,6 +681,9 @@ ticket and an access token can never be exchanged for one another — the separa
 requires between token classes, without a configuration variable TD-13 does not list.
 
 ### Replacement extends the upload flow (R53)
+
+This remains an internal/API compatibility capability; the current content page deliberately
+offers upload/create and delete, not a user-facing replacement action.
 
 `content_meta.replaces_content_id` targets an existing record. The same two phases run, and
 completion updates that row: **a new key with a new hash segment, the previous object

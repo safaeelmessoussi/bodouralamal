@@ -197,7 +197,7 @@ function ProfileDetails({
       <p className="muted">{t('qr.lede')}</p>
       <UserQr qr={profile.qr} caption={profile.name_arabic} />
 
-      <TextField label={t('register.phone')} type="tel" value={phone} onChange={setPhone} hint={t('register.phoneHint')} />
+      <TextField label={t('register.phoneOptional')} type="tel" value={phone} onChange={setPhone} hint={t('register.phoneHint')} />
       <TextField label={t('register.nickname')} value={nickname} onChange={setNickname} hint={t('register.nicknameHint')} />
 
       {notice ? (

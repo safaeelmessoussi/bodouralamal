@@ -229,7 +229,47 @@ const ownerSearch = await evaluate(`(async () => {
   );
   return { text: row?.textContent ?? '', actions: [...(row?.querySelectorAll('button') ?? [])].map((b) => b.textContent.trim()) };
 })()`);
-check('16 · owner-destructive and owner-role actions are not offered in the UI', ownerSearch.text.includes('مالكة المنصة') && !ownerSearch.actions.some((label) => label.includes('إيقاف') || label.includes('حذف') || label.includes('نقل ملكية')));
+check('16 · owner lifecycle/transfer actions are withheld on her own row', ownerSearch.text.includes('مالكة المنصة') && !ownerSearch.actions.some((label) => label.includes('إيقاف') || label.includes('حذف') || label.includes('نقل ملكية')));
+
+const ownerRoleSave = await evaluate(`(async () => {
+  const row = [...document.querySelectorAll('.admin-table tbody tr')].find((node) =>
+    node.textContent.includes('المالكة المؤقتة')
+  );
+  const edit = [...(row?.querySelectorAll('button') ?? [])].find((button) =>
+    button.textContent.trim() === 'تعديل'
+  );
+  edit?.click();
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  const dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { offered: Boolean(edit), noDialog: true };
+  const fields = [...dialog.querySelectorAll('.field')];
+  const role = fields.find((field) =>
+    (field.querySelector('.field__label')?.textContent ?? '').trim().startsWith('إضافة دور'))
+    ?.querySelector('select');
+  const scope = fields.filter((field) =>
+    (field.querySelector('.field__label')?.textContent ?? '').trim().startsWith('نطاق الفرع'))
+    .at(-1)?.querySelector('select');
+  const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+  if (!role || !scope) return { offered: Boolean(edit), noDraft: true };
+  set.call(role, 'teacher');
+  role.dispatchEvent(new Event('change', { bubbles: true }));
+  set.call(scope, ${JSON.stringify(FIXTURE.branchIds[0])});
+  scope.dispatchEvent(new Event('change', { bubbles: true }));
+  // Deliberately do NOT press «إضافة دور»: this proves the primary Save owns
+  // the visible draft rather than silently discarding it.
+  const save = [...dialog.querySelectorAll('button')].find((button) =>
+    button.textContent.trim() === 'حفظ'
+  );
+  save?.click();
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  return { offered: Boolean(edit), draft: role.value, scope: scope.value,
+           saved: Boolean(save), dialogOpen: Boolean(document.querySelector('dialog[open]')) };
+})()`);
+check('17 · the Owner edit form offers an ordinary role and primary Save commits its visible draft', ownerRoleSave.offered && ownerRoleSave.draft === 'teacher' && ownerRoleSave.scope === FIXTURE.branchIds[0] && ownerRoleSave.saved && ownerRoleSave.dialogOpen === false, JSON.stringify(ownerRoleSave));
+
+const ownerAfterRoleSave = await api('GET', `/admin/users?q=${encodeURIComponent('[r115-browser] المالكة المؤقتة')}&page=1&page_size=25`);
+const savedOwner = ownerAfterRoleSave.body?.data?.find((row) => row.id === FIXTURE.ownerId);
+check('18 · global Super Admin stays protected while the branch-scoped Teacher role persists', savedOwner?.roles?.some((entry) => entry.role === 'super_admin' && entry.branch_id === null) && savedOwner?.roles?.some((entry) => entry.role === 'teacher' && entry.branch_id === FIXTURE.branchIds[0]), JSON.stringify(savedOwner?.roles));
 
 const suspendOwner = await api('POST', `/admin/users/${FIXTURE.ownerId}/suspend`, {
   version: ownerRow.version,
@@ -239,7 +279,7 @@ const stripOwnerRole = await api('PUT', `/admin/users/${FIXTURE.ownerId}/roles`,
   assignments: [],
 });
 const deleteOwner = await api('DELETE', `/admin/users/${FIXTURE.ownerId}`);
-check('17 · direct forged owner lifecycle writes fail closed server-side', suspendOwner.status === 409 && stripOwnerRole.status === 409 && deleteOwner.status === 409, JSON.stringify({ suspend: suspendOwner.status, roles: stripOwnerRole.status, delete: deleteOwner.status }));
+check('19 · direct forged owner lifecycle/global-role writes fail closed server-side', suspendOwner.status === 409 && stripOwnerRole.status === 409 && deleteOwner.status === 409, JSON.stringify({ suspend: suspendOwner.status, roles: stripOwnerRole.status, delete: deleteOwner.status }));
 
 await open('/admin/users', '.admin-table');
 const targetState = await evaluate(`(async () => {
@@ -269,15 +309,15 @@ const targetState = await evaluate(`(async () => {
     ).length,
   };
 })()`);
-check('18 · the real confirmation transfers ownership between synthetic Global Super Admins', targetState.offered && targetState.notice, JSON.stringify(targetState));
-check('19 · transfer works while the current owner row is absent from the filtered page', targetState.ownerVisible === false, JSON.stringify(targetState));
-check('20 · the stale former-owner page cannot offer a second transfer', targetState.remainingTransferActions === 0, JSON.stringify(targetState));
+check('20 · the real confirmation transfers ownership between synthetic Global Super Admins', targetState.offered && targetState.notice, JSON.stringify(targetState));
+check('21 · transfer works while the current owner row is absent from the filtered page', targetState.ownerVisible === false, JSON.stringify(targetState));
+check('22 · the stale former-owner page cannot offer a second transfer', targetState.remainingTransferActions === 0, JSON.stringify(targetState));
 
 const afterTransfer = await api('POST', '/admin/platform-owner/transfer', {
   target_user_id: FIXTURE.ownerId,
   confirmation: 'TRANSFER_PLATFORM_OWNERSHIP',
 });
-check('21 · the former owner’s still-live bearer is rejected after the singleton transfer', afterTransfer.status === 403, JSON.stringify(afterTransfer.body));
+check('23 · the former owner’s still-live bearer is rejected after the singleton transfer', afterTransfer.status === 403, JSON.stringify(afterTransfer.body));
 
 close();
 process.exit(finish());

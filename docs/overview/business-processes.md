@@ -31,14 +31,17 @@ Visitor → "Continue with Google" → Google verifies email
 | Path | Who initiates | Result |
 |---|---|---|
 | **Adult self-registration** | An adult learner | One `Pending` account |
-| **Unified parent + child** | A parent with no account | Parent account **and** child record **and** the link between them — created in **one transaction**, never one without the other |
+| **Unified parent + child** | A parent with no account | One Pending parent request plus one or more child applications. Each accepted child account, link, consent history, placement and authorization are created atomically at approval |
 | **هيئة التأطير request** | A prospective مؤطّرة | One `Pending` account plus general framing willingness (physical/online/both and one/multiple/all physical branches); **no authority** |
 | **Staff pre-provisioning** | Staff, in person | An account carrying the beneficiary's Google address, which binds when that person first logs in |
 
-The unified registration is atomic by rule, not by luck: parent, child, family link,
-consent records, the parent's identity, and the single-use token record all commit
-together or none of them do. A test **kills the process mid-transaction** and asserts that
-nothing partial persists.
+The unified registration is atomic by rule, not by luck: the Pending parent, identity,
+one-or-more child applications, request-level data-processing decision and single-use token
+record all commit together or none do. Media release is a separate explicit decision on each
+child application, so siblings may differ without one request-level value overriding them.
+Each child likewise retains her own requested Category and Branch. Every French name is
+optional as a pair: both personal and family parts, or neither. A phone is mandatory on every
+new public registration; nullable legacy accounts are neither backfilled nor refused on login.
 
 ### Registration records requests and willingness; it never places or authorizes
 
@@ -50,15 +53,27 @@ After approval the same general preference remains visible read-only on the teac
 beside—but never inferred into—the independently stated weekly availability ranges.
 
 The approval queue is deliberately reachable to approvers and shows the request/willingness.
+Its table stays compact; `عرض التفاصيل` exposes the submitted guardian contact/consent data
+and one complete block per child. A registration notification links to that applicant's exact
+still-pending review. A stale or already-decided coordinate says it is unavailable rather than
+opening a blank screen or falling back to the whole queue.
+Pending and Rejected applicants do not also appear in ordinary user administration or
+operational people-pickers: account management contains approved Active/Suspended accounts,
+while operational selectors contain Active accounts only.
 For a staff applicant, a single willing branch may be preselected as a convenience; multiple
 or all branches require an explicit scope decision so willingness is never silently promoted
 to authority.
 
 ### Approval
 
-An Admin reviews the queue and approves or rejects with a reason. Approving a parent+child
-bundle activates the parent, the child, and the link **atomically**, and writes an audit
-row. Rejection is **terminal** — a rejected applicant cannot re-register themselves; that
+An Admin reviews the queue and approves or rejects with a reason. For every admitted
+beneficiary, approval atomically creates the placement, sets the durable beneficiary fact and
+ensures one explicit Student role at that placement's branch; an approval spanning ambiguous
+Student branches is refused rather than guessed. Activating a children-only guardian creates
+no beneficiary fact, Student role or Enrollment for the parent. Each child application creates
+its child account, consent history, approved family link, placement and Student role in that
+child's own decision, using that child's requested Category/Branch only. Rejection
+is **terminal** — a rejected applicant cannot re-register themselves; that
 requires staff action. Rejecting also revokes every live refresh session for that account in
 the same transaction as the state change and mandatory audit records. A retained credential
 cannot renew, and a later authorized account recovery would require a fresh authentication
@@ -74,6 +89,33 @@ of seed configuration. To change it, the current Owner selects another already-a
 Super Admin and confirms the dedicated transfer. The former Owner remains a Global Super Admin.
 Until that succeeds, every suspend/delete/de-identify/demote path is refused. This is one
 atomic lifecycle handoff, not a role rename.
+
+Only the required live global Super Admin assignment is protected. The Owner may hold Teacher,
+Student or any other ordinary functional role concurrently, and those additional roles keep
+their normal scopes and edit lifecycle. The user form's main Save includes the currently
+configured role; «إضافة دور» begins another row rather than secretly committing the first.
+
+### Actionable changes reach the existing in-app inbox
+
+Registration submission/decision, family-link lifecycle, role/scope changes, ownership
+receipt, placement changes, explicit Session/Event restaffing and physical Exam lifecycle
+changes now create delivered facts in the affected person's own inbox. Automatic notices
+commit with the change they announce; the existing optional Session/Event audience prompt
+still happens only after the saved change and can be declined.
+
+Recipients come from the authoritative domain rows, never a list supplied by the browser.
+The actor is excluded, unrelated people receive nothing, and a dual-role Exam participant
+receives separate assignment and attendance notices because those require different action.
+Retries and unchanged saves do not duplicate or resurface anything; a genuine later transition
+withdraws the stale opposite fact and makes the one current semantic row unread again.
+
+Hidden scheduling items are also hidden in the inbox: only the responsible teacher for a
+Session, responsible Event staff member, or Exam supervisor retains a target-bearing notice.
+Changing an item to hidden withdraws already-delivered coordinates from students and
+assistants. Upload completion remains silent because it is storage finalization, not a
+deliberate content-publication event.
+
+> SRS §4.8, Revision 116 · [API notifications](../reference/api-endpoints.md#notifications)
 
 ---
 

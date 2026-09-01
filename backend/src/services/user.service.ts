@@ -10,7 +10,11 @@ import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { revokeAllSessions } from './refresh-token.service.js';
-import { lockAndAssertNotPlatformOwner } from './platform-owner.service.js';
+import { notifySubjectUserChange } from './notification.service.js';
+import {
+  lockAndAssertNotPlatformOwner,
+  lockAndAssertOwnerRoleInvariant,
+} from './platform-owner.service.js';
 
 /**
  * Staff pre-provisioning (SRS §3.1, §4.1b step 4b, §5.6 `/admin/users`, §7 R15).
@@ -238,7 +242,7 @@ export interface UserListFilters {
   q?: string;
   role?: string;
   branchId?: string;
-  status?: string;
+  status?: 'active' | 'suspended';
   /**
    * R79.7 — **only the institute's مستفيدات**, whatever their roles.
    *
@@ -330,7 +334,7 @@ export async function listUsers(
   // caller's status and role are re-read from live rows on every request — and
   // since 2026-08-28 that role is Super Admin alone.
   await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
-  return listUsersUnchecked(prisma, caller, filters);
+  return listUsersUnchecked(prisma, caller, 'account_management', filters);
 }
 
 /**
@@ -347,13 +351,23 @@ export async function listUsers(
 async function listUsersUnchecked(
   prisma: PrismaClient,
   caller: Actor,
+  population: 'account_management' | 'operational',
   filters: UserListFilters & SortParams = {},
 ): Promise<Page<UserListItem>> {
   const actor = await assertFreshActive(prisma, caller.userId, DIRECTORY_ROLES, caller.activeRole);
 
   const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const where: Record<string, unknown> = {
+    deletedAt: null,
+    // Pending and Rejected belong exclusively to the approval workflow. The
+    // account-management page may also recover a Suspended approved account;
+    // an operational picker must offer only people who can actually act now.
+    accountStatus:
+      population === 'operational'
+        ? 'active'
+        : { in: ['active', 'suspended'] },
+  };
 
   // R79.7 — the durable fact, never a role or an enrolment lookup.
   if (filters.beneficiariesOnly === true) where['isBeneficiary'] = true;
@@ -553,7 +567,7 @@ export async function listDirectory(
   // Delegated on purpose. `listUsers` re-asserts `ACCOUNT_ADMIN_ROLES`, which an
   // Admin does not hold, so this calls the shared query with the caller's own
   // identity and narrows afterwards — see `listUsersUnchecked`.
-  const page = await listUsersUnchecked(prisma, caller, filters);
+  const page = await listUsersUnchecked(prisma, caller, 'operational', filters);
 
   return {
     data: page.data.map((u) => ({
@@ -1121,7 +1135,54 @@ export async function applyRoleAssignments(
         moved,
       },
     });
+    if (changing.length > 0) {
+      await notifySubjectUserChange(tx, {
+        type: 'role_assignments_changed',
+        subjectUserId: id,
+        recipientUserIds: [id],
+        actorUserId: actor.userId,
+      });
+    }
   }
+}
+
+/**
+ * Adds or corrects one role assignment while preserving every other live role.
+ *
+ * Approval needs this additive operation for structural roles (`student` for
+ * an admitted beneficiary, `parent` for an approved family link), while the
+ * user-management endpoint deliberately replaces the complete set. Routing
+ * both through `applyRoleAssignments` keeps privilege, scope-liveness,
+ * tombstone/revival and audit behaviour in one implementation.
+ */
+export async function ensureRoleAssignment(
+  tx: Prisma.TransactionClient,
+  actor: { userId: string; roles: string[]; activeRole?: string | undefined },
+  id: string,
+  assignment: RoleAssignmentInput,
+): Promise<boolean> {
+  // The following read-and-replace must share the same User serialization
+  // anchor as the ordinary role-management endpoint. Without this lock, a
+  // concurrent complete-set edit could read the pre-approval roles and commit
+  // after this helper, silently discarding the structural Student/Parent grant
+  // (or this helper could discard the concurrent edit).
+  if (!(await users.lockUser(tx, id))) {
+    throw new AppError('NOT_FOUND', 'no such user');
+  }
+  const live = await tx.userBranchRole.findMany({
+    where: { userId: id, deletedAt: null },
+    select: { branchId: true, role: { select: { name: true } } },
+  });
+  const current = live.find((entry) => entry.role.name === assignment.role);
+  if (current?.branchId === assignment.branchId) return false;
+
+  await applyRoleAssignments(tx, actor, id, [
+    ...live
+      .filter((entry) => entry.role.name !== assignment.role)
+      .map((entry) => ({ role: entry.role.name, branchId: entry.branchId })),
+    assignment,
+  ]);
+  return true;
 }
 
 /**
@@ -1142,7 +1203,7 @@ export async function setUserRoles(
   const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
-    await lockAndAssertNotPlatformOwner(tx, id);
+    await lockAndAssertOwnerRoleInvariant(tx, id, assignments);
     // Role-switch and login issuance derive credentials from these assignments.
     // Share their User governing row so a credential is wholly before or wholly
     // after this replacement, never signed from a half-stale assignment set.

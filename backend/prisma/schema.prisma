@@ -428,6 +428,7 @@ model User {
   framingPreference    FramingPreference?
   platformOwnership    PlatformOwner?
   notifications        Notification[]              @relation("NotificationRecipient")
+  notificationSubjects Notification[]              @relation("NotificationSubjectUser")
   examStaff            ExamStaff[]
   eventStaff           EventStaff[]                @relation("EventStaffUser")
   id                   String                      @id @default(uuid()) @db.Uuid
@@ -1826,6 +1827,11 @@ model ChildApplication {
 
   firstNameArabic String          @map("first_name_arabic") @db.VarChar(60)
   lastNameArabic  String          @map("last_name_arabic") @db.VarChar(60)
+  /// Optional submitted identity details. Nullable so pre-R117 applications
+  /// remain reviewable without fabricating data that was never persisted.
+  firstNameFrench String?         @map("first_name_french") @db.VarChar(60)
+  lastNameFrench  String?         @map("last_name_french") @db.VarChar(60)
+  nickname        String?         @db.VarChar(60)
   sex             Sex?
   schoolingStage  SchoolingStage? @map("schooling_stage")
 
@@ -2799,16 +2805,40 @@ enum NotificationType {
   /// R82 — a grade became visible to the student it is about (BR-8). Written at
   /// publication only, and idempotent across re-publication.
   grade_published
+  /// R116 — actionable account and relationship changes. These target the
+  /// affected User through `subject_user_id`; the recipient may be that person
+  /// or an administrator who owns the pending decision.
+  registration_review_required
+  registration_approved
+  registration_rejected
+  family_link_requested
+  family_link_approved
+  family_link_rejected
+  family_link_revoked
+  role_assignments_changed
+  platform_ownership_received
+  enrollment_changed
   session_cancelled
   session_restored
   /// R78.2 — a person was ADDED to a Session's staffing. Never written for a
   /// re-save that changes nothing: the `(user, session, type)` unique index
   /// makes that structural rather than a check.
   session_assigned
+  session_unassigned
   /// R78.4 — an occurrence's date or time changed. The row points at the
   /// Session, so the notice always renders the CURRENT date and time; a second
   /// reschedule needs no second row, and the unique index gives that for free.
   session_rescheduled
+  /// R116 — a physical sitting is scheduled when it is created. Assignment and
+  /// student scheduling remain distinct facts, so a dual-role recipient keeps
+  /// both rows rather than being deduplicated by user id.
+  exam_teacher_assigned
+  exam_teacher_unassigned
+  exam_scheduled
+  exam_rescheduled
+  exam_changed
+  exam_cancelled
+  event_staff_unassigned
 
   @@map("notification_type")
 }
@@ -2820,12 +2850,12 @@ model Notification {
 
   type NotificationType
 
-  /// **Exactly one of the three is set** (R82) — a SQL CHECK enforces it, since
+  /// **Exactly one of the four is set** (R82/R116) — a SQL CHECK enforces it, since
   /// a nullable column cannot say *and not the others*. Real foreign keys rather
   /// than a `target_type`/`target_id` pair: a polymorphic pair cannot be
-  /// constrained by the database, and the three render from different includes.
+  /// constrained by the database, and the four render from different includes.
   ///
-  /// `Restrict` on all three, like every other reference to these rows: a notice
+  /// `Restrict` on all four, like every other reference to these rows: a notice
   /// whose subject vanished would be unreadable.
   sessionId String?  @map("session_id") @db.Uuid
   session   Session? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
@@ -2839,6 +2869,13 @@ model Notification {
   /// grade has been published, and her screen shows the current score.
   examId String? @map("exam_id") @db.Uuid
   exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Restrict)
+
+  /// R116 — account, approval, family-link, role, ownership and enrolment
+  /// notices point at the affected person. This is a real FK rather than a
+  /// payload id, and exactly-one-target is extended by the accompanying SQL
+  /// migration. It is distinct from `user_id`, which is always the recipient.
+  subjectUserId String? @map("subject_user_id") @db.Uuid
+  subjectUser   User?   @relation("NotificationSubjectUser", fields: [subjectUserId], references: [id], onDelete: Restrict)
 
   /// Null until the recipient reads it. R77.5 turns on this column: an UNREAD
   /// notice of something no longer true is deleted on restore, while a READ one

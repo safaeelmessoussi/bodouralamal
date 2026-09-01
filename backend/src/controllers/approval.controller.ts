@@ -78,6 +78,8 @@ const listSchema = z.object({
   type: z.enum(['registration', 'family-link', 'child-application', 'identity-review']).optional(),
   /** §14.2 / Revision 39 — a filter, never a scope (see the service). */
   branch_id: z.uuid().optional(),
+  /** R117 — exact notification coordinate for one applicant/parent review. */
+  review_user_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).optional(),
   page_size: z.coerce.number().int().min(1).max(100).optional(),
   // R76 — refused against the service's own allow-list, not here.
@@ -93,6 +95,7 @@ export function list(prisma: PrismaClient) {
     const result = await listApprovals(prisma, requireActor(req), {
       ...(parsed.data.type ? { type: parsed.data.type as ApprovalType } : {}),
       ...(parsed.data.branch_id ? { branchId: parsed.data.branch_id } : {}),
+      ...(parsed.data.review_user_id ? { reviewUserId: parsed.data.review_user_id } : {}),
       ...(parsed.data.page ? { page: parsed.data.page } : {}),
       ...(parsed.data.page_size ? { pageSize: parsed.data.page_size } : {}),
       ...sortParamsFrom(req.query),

@@ -12,6 +12,7 @@ import {
   enqueueConsentReevaluationForSessions,
   enqueueConsentReevaluationForStudent,
 } from './consent-reevaluation.service.js';
+import { notifySubjectUserChange } from './notification.service.js';
 
 // Kept as a public re-export for existing callers; the safeguarding engine now
 // owns the inverse-audience lookup and its Session lock discipline.
@@ -264,6 +265,12 @@ export async function enrolInGroup(
         source,
       },
     });
+    await notifySubjectUserChange(tx, {
+      type: 'enrollment_changed',
+      subjectUserId: studentId,
+      recipientUserIds: [studentId],
+      actorUserId: actor.userId,
+    });
     return row;
   }
 }
@@ -400,6 +407,12 @@ export async function enrolInLevel(
       branch_id: branchId,
       source,
     },
+  });
+  await notifySubjectUserChange(tx, {
+    type: 'enrollment_changed',
+    subjectUserId: studentId,
+    recipientUserIds: [studentId],
+    actorUserId: actor.userId,
   });
   return row;
 }
@@ -569,6 +582,12 @@ async function releaseEnrollment(
       sessions_requeued: sessions.length,
     },
   });
+  await notifySubjectUserChange(tx, {
+    type: 'enrollment_changed',
+    subjectUserId: row.studentId,
+    recipientUserIds: [row.studentId],
+    actorUserId: actor.userId,
+  });
 }
 
 /**
@@ -674,6 +693,12 @@ export async function moveStudent(
         from_branch_id: from.branchId,
         to_branch_id: to.branchId,
       },
+    });
+    await notifySubjectUserChange(tx, {
+      type: 'enrollment_changed',
+      subjectUserId: studentId,
+      recipientUserIds: [studentId],
+      actorUserId: actor.userId,
     });
     return moved;
   });
@@ -934,6 +959,15 @@ export async function updateEnrollmentPlacement(
         teaching_group_seats_released: groupChanged,
       },
     });
+
+    if (groupChanged) {
+      await notifySubjectUserChange(tx, {
+        type: 'enrollment_changed',
+        subjectUserId: row.studentId,
+        recipientUserIds: [row.studentId],
+        actorUserId: actor.userId,
+      });
+    }
 
     return updated;
   });

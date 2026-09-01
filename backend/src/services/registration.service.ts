@@ -7,6 +7,10 @@ import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { submitChildApplications } from './child-application.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
+import {
+  approvalReviewRecipients,
+  notifySubjectUserChange,
+} from './notification.service.js';
 
 /**
  * Unified registration (SRS §4.1, §4.1b step 5, TD-4.1).
@@ -113,11 +117,9 @@ export async function register(
   if (!input.consents.data_processing) {
     throw new AppError('CONSENT_REQUIRED', 'data_processing consent is mandatory (§4.1)');
   }
-  // The parent+child form carries the explicit, separate media-release
-  // checkbox, so a *decision* must be present. `false` is a valid decision.
-  if (input.kind === 'parent_child' && input.consents.media_release === undefined) {
-    throw new AppError('CONSENT_REQUIRED', 'media_release decision is required for a minor (§4.1)');
-  }
+  // R62.3b: each child carries her own required media-release decision. The
+  // boundary schema enforces presence for every array element; there is no
+  // request-level media decision to inspect here.
 
   const textVersion = await activeConsentTextVersion(prisma);
 
@@ -340,6 +342,9 @@ export async function register(
           children: input.children.map((c) => ({
             firstNameArabic: c.first_name_arabic,
             lastNameArabic: c.last_name_arabic,
+            ...(c.first_name_french ? { firstNameFrench: c.first_name_french } : {}),
+            ...(c.last_name_french ? { lastNameFrench: c.last_name_french } : {}),
+            ...(c.nickname ? { nickname: c.nickname } : {}),
             sex: c.sex,
             ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
             // R67 — **this child's own**, not the family's. They used to be one
@@ -350,6 +355,13 @@ export async function register(
             requestedBranchId: c.requested_branch_id,
             consentMediaRelease: c.consent_media_release,
           })),
+        });
+      } else {
+        await notifySubjectUserChange(tx, {
+          type: 'registration_review_required',
+          subjectUserId: applicant.id,
+          recipientUserIds: await approvalReviewRecipients(tx),
+          actorUserId: applicant.id,
         });
       }
 

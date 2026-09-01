@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
-import { EMPTY_CHILD, toChildInput, validateChildren, type ChildForm } from './children.js';
+import {
+  EMPTY_CHILD,
+  NameFields,
+  toChildInput,
+  validateChildren,
+  type ChildForm,
+} from './children.js';
 import { validate as validateProfileForm } from '../../pages/profile/register-child.js';
 
 /**
@@ -44,6 +52,20 @@ describe('validateChildren — one rule set, keyed per sibling', () => {
     expect(validateChildren([child({ firstNameFrench: 'Meriem' })])).toHaveProperty(
       'children.0.lastNameFrench',
     );
+  });
+
+  it('states the optional-pair rule beside both French fields', () => {
+    const markup = renderToStaticMarkup(
+      createElement(NameFields, {
+        value: child(),
+        onChange: () => undefined,
+        errors: {},
+        prefix: 'children.0',
+      }),
+    );
+    expect(
+      markup.match(/اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين\./g),
+    ).toHaveLength(2);
   });
 });
 

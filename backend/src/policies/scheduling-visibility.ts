@@ -113,6 +113,8 @@ const isSuperAdmin = (a: TierActor) => scope.isSuperAdmin(a.roleScopes);
 const isAdmin = (a: TierActor) =>
   scope.hasRole(a.roleScopes, "admin") || isSuperAdmin(a);
 const isTeacher = (a: TierActor) => scope.hasRole(a.roleScopes, "teacher");
+const isStudentOrParent = (a: TierActor) =>
+  scope.hasRole(a.roleScopes, "student") || scope.hasRole(a.roleScopes, "parent");
 
 /**
  * **Nothing but the public tier**, for an anonymous visitor or an account that
@@ -181,10 +183,13 @@ export function sessionTierWhere(
     };
   }
 
-  // Approved Student or Parent: public and private, never hidden. Private is
-  // deliberately unfiltered by branch or group (§4.4, Risk R-6) — the same
-  // accepted trade-off an Event's private tier already makes.
-  return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  if (isStudentOrParent(a)) {
+    // Approved Student or Parent: public and private, never hidden. Private is
+    // deliberately unfiltered by branch or group (§4.4, Risk R-6) — the same
+    // accepted trade-off an Event's private tier already makes.
+    return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  }
+  return publicOnly<Prisma.SessionWhereInput>();
 }
 
 /* ── امتحان — one dated sitting ─────────────────────────────────────────── */
@@ -219,7 +224,10 @@ export function examTierWhere(actor: TierActor | null): Prisma.ExamWhereInput {
     };
   }
 
-  return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  if (isStudentOrParent(a)) {
+    return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  }
+  return publicOnly<Prisma.ExamWhereInput>();
 }
 
 /* ── نشاط — the Event layer ─────────────────────────────────────────────── */

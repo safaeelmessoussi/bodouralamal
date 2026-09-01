@@ -73,6 +73,27 @@ const header = () =>
     };
   })()`);
 
+/** Physical coordinates for the dual title and one published dual-date cell.
+ * The application is RTL, so source order alone cannot prove what a reader
+ * sees on the left and right. */
+const dualDateCoordinates = () =>
+  evaluate(`(() => {
+    const box = (element) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { left: Math.round(rect.left), right: Math.round(rect.right), text: element.textContent.trim() };
+    };
+    const cell = [...document.querySelectorAll('.cal-day__select')]
+      .find((entry) => (entry.querySelector('.cal-day__hijri')?.textContent ?? '').trim() !== '');
+    return {
+      titleHijri: box(document.querySelector('.cal-title__hijri')),
+      titleGregorian: box(document.querySelector('.cal-title__gregorian')),
+      cellHijri: box(cell?.querySelector('.cal-day__hijri')),
+      cellGregorian: box(cell?.querySelector('.cal-day__gregorian')),
+      cellDirection: cell ? getComputedStyle(cell).direction : null,
+    };
+  })()`);
+
 /* ── the public calendar, desktop ───────────────────────────────────────── */
 
 await width(1440);
@@ -114,6 +135,19 @@ check(
   '6 · public — the calendar content is below the filters',
   pub.contentTop !== null && pub.filters !== null && pub.contentTop > pub.filters.top,
   JSON.stringify({ filtersTop: pub.filters?.top, contentTop: pub.contentTop }),
+);
+const dual = await dualDateCoordinates();
+check(
+  '6b · public — the dual title is physically Hijri LEFT / Gregorian RIGHT',
+  dual.titleHijri !== null && dual.titleGregorian !== null &&
+    dual.titleHijri.right < dual.titleGregorian.left,
+  JSON.stringify({ hijri: dual.titleHijri, gregorian: dual.titleGregorian }),
+);
+check(
+  '6c · public — a day cell matches: Hijri LEFT / Gregorian RIGHT without swapping values',
+  dual.cellDirection === 'ltr' && dual.cellHijri !== null && dual.cellGregorian !== null &&
+    dual.cellHijri.right < dual.cellGregorian.left,
+  JSON.stringify({ direction: dual.cellDirection, hijri: dual.cellHijri, gregorian: dual.cellGregorian }),
 );
 
 /* ── narrow ────────────────────────────────────────────────────────────── */

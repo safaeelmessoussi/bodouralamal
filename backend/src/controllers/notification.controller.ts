@@ -66,12 +66,22 @@ function notificationDto(row: NotificationRow): Record<string, unknown> {
           ? {
               title: row.exam.title,
               date: date(row.exam.date),
-              start_time: null,
+              start_time: row.exam.startTime === null ? null : time(row.exam.startTime),
               // A grade notice carries no reason and, deliberately, no score:
               // it says a grade is available and her own screen shows it.
               reason: null,
               scope_name: row.exam.subject?.name ?? null,
             }
+          : row.subjectUser !== null
+            ? {
+                // Affected-person notices remain readable for administrators
+                // without copying a mutable display label into the row.
+                title: row.subjectUser.nameArabic,
+                date: null,
+                start_time: null,
+                reason: null,
+                scope_name: null,
+              }
           : { title: null, date: null, start_time: null, reason: null, scope_name: null };
 
   return {
@@ -80,6 +90,7 @@ function notificationDto(row: NotificationRow): Record<string, unknown> {
     session_id: row.sessionId,
     event_id: row.eventId,
     exam_id: row.examId,
+    subject_user_id: row.subjectUserId,
     ...target,
     // R77's original keys, unchanged for the client that already reads them.
     session_date: row.session === null ? null : date(row.session.date),

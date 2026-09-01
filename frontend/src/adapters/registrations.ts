@@ -31,7 +31,8 @@ export interface PersonInput {
   first_name_french?: string;
   last_name_french?: string;
   nickname?: string;
-  phone?: string;
+  /** R117 — required prospectively; persisted User rows remain nullable. */
+  phone: string;
   notes?: string;
   /** Required for every person created (§4.1b step 5, Revision 27) — the
    *  person-side half of `Level.gender_restriction`. */

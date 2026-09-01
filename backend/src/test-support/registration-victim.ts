@@ -74,7 +74,7 @@ const input: RegistrationInput = {
       requested_category_id: categoryId,
     },
   ],
-  consents: { data_processing: true, media_release: true },
+  consents: { data_processing: true },
 };
 
 const { token } = issueOnboardingToken({ email, providerSubjectId: subject }, config.ONBOARDING_TOKEN_KEY);

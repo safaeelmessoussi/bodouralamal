@@ -68,6 +68,7 @@ function adultInput(): RegistrationInput {
     applicant: {
       first_name_arabic: TAG,
       last_name_arabic: 'مستفيدة',
+      phone: '+212600000003',
       sex: 'female',
     },
     branch_id: branchId,
@@ -99,6 +100,9 @@ async function clearOwnedRows(): Promise<void> {
     select: { id: true },
   });
   const ids = owned.map((row) => row.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });

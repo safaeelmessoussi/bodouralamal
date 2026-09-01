@@ -148,12 +148,13 @@ describe('the chosen tier is the tier that is sent', () => {
   });
 });
 
-/* ── Replacement must not become a visibility or scope change ────────────── */
+/* ── Replacement stays an internal upload capability, not a page action ──── */
 
 describe('replacement changes the object, never the tier or the scope', () => {
-  it('the replace dialog passes `replacing`, which locks every determining field', () => {
-    const replace = readSource().slice(readSource().indexOf('open={replacing !== null}'));
-    expect(replace).toContain('replacing={{');
+  it('offers no user-facing replacement action or dialog', () => {
+    expect(readSource()).not.toContain('setReplacing');
+    expect(readSource()).not.toContain("t('content.replace')");
+    expect(readSource()).not.toContain('replaceTitle');
   });
 
   it('a locked form omits visibility from the payload entirely', () => {
@@ -162,8 +163,8 @@ describe('replacement changes the object, never the tier or the scope', () => {
     const shared = scopeBlock();
     const meta = shared.slice(shared.indexOf('const meta = useMemo'), shared.indexOf('const problem'));
     expect(meta).toContain('visibility === null || locked');
-    // The replacement id is the upload form's own — it is what distinguishes a
-    // replacement from a create, and the recorder has no such notion.
+    // The backend-compatible upload primitive remains safe for any existing
+    // internal caller even though the content page no longer exposes it.
     expect(form()).toContain('replaces_content_id');
   });
 

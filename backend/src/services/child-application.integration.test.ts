@@ -84,6 +84,12 @@ async function clear(): Promise<void> {
   const ids = users.map((u) => u.id);
   if (ids.length === 0) return;
 
+  await prisma.notification.deleteMany({
+    where: {
+      OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }],
+    },
+  });
+
   // `decided_by` is RESTRICT too — an application decided by the admin blocks
   // deleting the admin, which is how this teardown first failed.
   await prisma.childApplication.deleteMany({
@@ -215,6 +221,40 @@ describe("each child is decided alone (R62.2)", () => {
     );
 
     expect(result.childUserId).not.toBeNull();
+    const admitted = await prisma.user.findUniqueOrThrow({
+      where: { id: result.childUserId! },
+      include: {
+        branchRoles: {
+          where: { deletedAt: null },
+          include: { role: true },
+        },
+      },
+    });
+    expect(admitted.isBeneficiary).toBe(true);
+    expect(
+      admitted.branchRoles.map((entry) => ({
+        role: entry.role.name,
+        branchId: entry.branchId,
+      })),
+    ).toContainEqual({ role: "student", branchId: placement.branchId });
+    expect(
+      await prisma.notification.count({
+        where: {
+          userId: parentId,
+          subjectUserId: admitted.id,
+          type: "registration_approved",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.notification.count({
+        where: {
+          userId: parentId,
+          subjectUserId: parentId,
+          type: "registration_approved",
+        },
+      }),
+    ).toBe(0);
     const sibling = await prisma.childApplication.findUnique({
       where: { id: applicationIds[1]! },
     });
@@ -242,6 +282,17 @@ describe("each child is decided alone (R62.2)", () => {
     expect(
       await prisma.user.count({ where: { firstNameArabic: `${TAG} محمد` } }),
     ).toBe(0);
+    // The parent remains Active, so this is the useful `registration_rejected`
+    // case: her child's application changed and her own inbox is reachable.
+    expect(
+      await prisma.notification.count({
+        where: {
+          userId: parentId,
+          subjectUserId: parentId,
+          type: "registration_rejected",
+        },
+      }),
+    ).toBe(1);
   });
 
   it("refuses a rejection with no bounded reason (R62.8)", async () => {

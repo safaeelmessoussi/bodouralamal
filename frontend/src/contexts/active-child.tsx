@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 import { linkedChildren, type LinkedChild } from '../adapters/children.js';
 import { useSession } from './session.js';
+import { useActiveRole } from './active-role.js';
 
 /**
  * Active child context (§4.3).
@@ -39,6 +40,16 @@ import { useSession } from './session.js';
  */
 const ACTIVE_CHILD_KEY = 'bodour.activeChild';
 
+/** Pure form of the fail-closed child-coordinate reconciliation. */
+export function resolveActiveChild(
+  activeRole: string | null,
+  activeChildId: string | null,
+  available: readonly LinkedChild[],
+): LinkedChild | null {
+  if (activeRole !== 'parent') return null;
+  return available.find((child) => child.id === activeChildId) ?? null;
+}
+
 export function storedActiveChildId(): string | null {
   try {
     return window.sessionStorage.getItem(ACTIVE_CHILD_KEY);
@@ -69,6 +80,7 @@ const ActiveChildContext = createContext<ActiveChildState | null>(null);
 
 export function ActiveChildProvider({ children }: { children: ReactNode }): ReactNode {
   const { me } = useSession();
+  const { activeRole } = useActiveRole();
   const [activeChildId, setActiveChildIdState] = useState<string | null>(() =>
     storedActiveChildId(),
   );
@@ -80,7 +92,10 @@ export function ActiveChildProvider({ children }: { children: ReactNode }): Reac
     // it was the active one, fall back to none rather than keep pointing at it.
     // This is the reconciliation the doc comment above leans on — without it,
     // a stored id would be a claim rather than a preference.
-    const active = available.find((child) => child.id === activeChildId) ?? null;
+    // A child coordinate is meaningful only while acting as Parent. In a
+    // genuine Parent+Student account, switching to Student must resolve self;
+    // a child left in sessionStorage must never leak into that request.
+    const active = resolveActiveChild(activeRole, activeChildId, available);
     return {
       children: available,
       activeChildId: active?.id ?? null,
@@ -90,7 +105,7 @@ export function ActiveChildProvider({ children }: { children: ReactNode }): Reac
         setActiveChildIdState(id);
       },
     };
-  }, [available, activeChildId]);
+  }, [available, activeChildId, activeRole]);
 
   return <ActiveChildContext.Provider value={value}>{children}</ActiveChildContext.Provider>;
 }

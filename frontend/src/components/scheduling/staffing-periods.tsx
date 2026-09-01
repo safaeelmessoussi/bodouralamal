@@ -193,11 +193,10 @@ export function StaffingPeriods({
         onClick={() =>
           onChange([
             ...value,
-            // A new row defaults to **assistant**, not to main teacher: at most
-            // one main may be active on a date (R91 §6), and defaulting to the
-            // position that is capped would make the commonest next action a
-            // refusal.
-            { user_id: '', position: 'assistant', effective_from: '', effective_until: '' },
+            // Owner UAT default: a new staffing decision normally names the
+            // responsible مؤطّرة. Existing rows keep their recorded position,
+            // and this remains editable before submission.
+            { user_id: '', position: 'teacher', effective_from: '', effective_until: '' },
           ])
         }
       >

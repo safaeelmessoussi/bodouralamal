@@ -1299,6 +1299,24 @@ export interface ApprovalDto {
    * step 1 preselects the first Level from. A request, never a placement.
    */
   category: { id: string; name: string } | null;
+  registration_details: {
+    applicant: {
+      first_name_arabic: string | null;
+      last_name_arabic: string | null;
+      first_name_french: string | null;
+      last_name_french: string | null;
+      nickname: string | null;
+      sex: string | null;
+      phone: string | null;
+      email: string | null;
+      notes: string | null;
+      data_processing_consent: {
+        granted: boolean;
+        text_version: string;
+        given_at: string;
+      } | null;
+    };
+  } | null;
   /** §14.2 column: Applicant(s). */
   applicants: {
     id: string;
@@ -1322,6 +1340,18 @@ export interface ApprovalDto {
     name: string;
     status: string;
     schooling_stage: string | null;
+    first_name_arabic: string;
+    last_name_arabic: string;
+    first_name_french: string | null;
+    last_name_french: string | null;
+    nickname: string | null;
+    sex: string | null;
+    requested_category: { id: string; name: string } | null;
+    requested_branch: { id: string; name: string } | null;
+    data_processing_consent: boolean;
+    media_release_consent: boolean;
+    consent_text_version: string;
+    consent_given_at: string;
   }[];
   /**
    * §14.2 column: Branch requested (Revision 39) — **what the applicant asked
@@ -1359,6 +1389,18 @@ export function approvalDto(row: {
     nameArabic: string;
     status: string;
     schoolingStage: string | null;
+    firstNameArabic: string;
+    lastNameArabic: string;
+    firstNameFrench: string | null;
+    lastNameFrench: string | null;
+    nickname: string | null;
+    sex: string | null;
+    requestedCategory: { id: string; name: string } | null;
+    requestedBranch: { id: string; name: string } | null;
+    dataProcessingConsent: boolean;
+    mediaReleaseConsent: boolean;
+    consentTextVersion: string;
+    consentGivenAt: Date;
   }[];
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
@@ -1368,6 +1410,24 @@ export function approvalDto(row: {
     branches: { id: string; name: string }[];
   } | null;
   category: { id: string; name: string } | null;
+  registrationDetails: {
+    applicant: {
+      firstNameArabic: string | null;
+      lastNameArabic: string | null;
+      firstNameFrench: string | null;
+      lastNameFrench: string | null;
+      nickname: string | null;
+      sex: string | null;
+      phone: string | null;
+      email: string | null;
+      notes: string | null;
+      dataProcessingConsent: {
+        granted: boolean;
+        textVersion: string;
+        givenAt: Date;
+      } | null;
+    };
+  } | null;
 }): ApprovalDto {
   return {
     id: row.id,
@@ -1387,6 +1447,18 @@ export function approvalDto(row: {
       name: c.nameArabic,
       status: c.status,
       schooling_stage: c.schoolingStage,
+      first_name_arabic: c.firstNameArabic,
+      last_name_arabic: c.lastNameArabic,
+      first_name_french: c.firstNameFrench,
+      last_name_french: c.lastNameFrench,
+      nickname: c.nickname,
+      sex: c.sex,
+      requested_category: c.requestedCategory,
+      requested_branch: c.requestedBranch,
+      data_processing_consent: c.dataProcessingConsent,
+      media_release_consent: c.mediaReleaseConsent,
+      consent_text_version: c.consentTextVersion,
+      consent_given_at: c.consentGivenAt.toISOString(),
     })),
     // Field by field, never a spread — the branch is projected to exactly the
     // two fields the screen renders (§16.2).
@@ -1405,6 +1477,28 @@ export function approvalDto(row: {
     // Field by field, never a spread — two fields, the same as the branch.
     category: row.category
       ? { id: row.category.id, name: row.category.name }
+      : null,
+    registration_details: row.registrationDetails
+      ? {
+          applicant: {
+            first_name_arabic: row.registrationDetails.applicant.firstNameArabic,
+            last_name_arabic: row.registrationDetails.applicant.lastNameArabic,
+            first_name_french: row.registrationDetails.applicant.firstNameFrench,
+            last_name_french: row.registrationDetails.applicant.lastNameFrench,
+            nickname: row.registrationDetails.applicant.nickname,
+            sex: row.registrationDetails.applicant.sex,
+            phone: row.registrationDetails.applicant.phone,
+            email: row.registrationDetails.applicant.email,
+            notes: row.registrationDetails.applicant.notes,
+            data_processing_consent: row.registrationDetails.applicant.dataProcessingConsent
+              ? {
+                  granted: row.registrationDetails.applicant.dataProcessingConsent.granted,
+                  text_version: row.registrationDetails.applicant.dataProcessingConsent.textVersion,
+                  given_at: row.registrationDetails.applicant.dataProcessingConsent.givenAt.toISOString(),
+                }
+              : null,
+          },
+        }
       : null,
   };
 }

@@ -83,7 +83,10 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
       setActiveRole(granted);
       // Stored BEFORE navigating: the switch is a full page load, and an
       // in-memory child would be destroyed by the navigation that carries it.
-      if (childId !== undefined) setActiveChildId(childId);
+      // Every non-Parent selection clears the stale child coordinate. A person
+      // who genuinely also holds Student must then act as self, not as the last
+      // child they viewed while in the Parent context.
+      setActiveChildId(granted === 'parent' ? (childId ?? null) : null);
       const home = homeForRole(granted);
       // A role §14.1 gives no home stays put; the context has still changed.
       window.location.assign(home ?? window.location.pathname);

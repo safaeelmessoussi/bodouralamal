@@ -4,6 +4,7 @@ import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
+import { notifySubjectUserChange } from './notification.service.js';
 
 /**
  * FamilyLink lifecycle beyond approval (SRS §4.3, Revision 16).
@@ -102,6 +103,12 @@ export async function createLink(
       targetId: link.id,
       detail: { parent_id: parentId, student_id: studentId, created_by: 'staff' },
     });
+    await notifySubjectUserChange(tx, {
+      type: 'family_link_requested',
+      subjectUserId: studentId,
+      recipientUserIds: [parentId],
+      actorUserId: actor.userId,
+    });
 
     return link;
   });
@@ -177,6 +184,12 @@ export async function revokeLink(
       // attribution invariant requires who/when/why to be reconstructable from
       // the audit row alone, without reading the (now soft-deleted) link.
       detail: { parent_id: link.parentId, student_id: link.studentId, reason },
+    });
+    await notifySubjectUserChange(tx, {
+      type: 'family_link_revoked',
+      subjectUserId: link.studentId,
+      recipientUserIds: [link.parentId],
+      actorUserId: actor.userId,
     });
 
     return { parentId: link.parentId, studentId: link.studentId };

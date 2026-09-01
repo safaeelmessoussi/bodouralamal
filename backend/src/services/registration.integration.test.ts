@@ -79,7 +79,7 @@ const parentChild = (): Extract<
       requested_category_id: categoryId,
     },
   ],
-  consents: { data_processing: true, media_release: true },
+  consents: { data_processing: true },
 });
 
 /**
@@ -126,6 +126,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+  });
   // R62 — the approval helper creates an admin (with a role row) and a child,
   // and applications reference all three under RESTRICT. Sweeping only what the
   // registration itself wrote leaves the teardown blocked.
@@ -221,6 +224,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         applicant: {
           first_name_arabic: `${TAG} خديجة`,
           last_name_arabic: "بنعلي",
+          phone: '+212600000004',
           sex: "female",
         },
         branch_id: branchId,
@@ -251,6 +255,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         parent: {
           first_name_arabic: `${TAG} أمينة`,
           last_name_arabic: "بنعلي",
+          phone: '+212600000005',
           sex: "female",
         },
         children: [
@@ -263,7 +268,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
             requested_category_id: categoryId,
           },
         ],
-        consents: { data_processing: true, media_release: false },
+        consents: { data_processing: true },
       },
       KEY,
     );
@@ -329,6 +334,48 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         },
       }).success,
     ).toBe(false);
+  });
+
+  it("R41 identifies the missing French counterpart for adults and children", () => {
+    const adult = {
+      kind: "adult" as const,
+      applicant: {
+        first_name_arabic: "خديجة",
+        last_name_arabic: "بنعلي",
+        phone: '+212600000050',
+        sex: "female" as const,
+      },
+      branch_id: branchId,
+      category_id: categoryId,
+      consents: { data_processing: true },
+    };
+    const missingAdultFirst = registrationSchema.safeParse({
+      ...adult,
+      applicant: { ...adult.applicant, last_name_french: "Benali" },
+    });
+    expect(missingAdultFirst.success).toBe(false);
+    if (!missingAdultFirst.success) {
+      expect(missingAdultFirst.error.issues[0]?.path).toEqual([
+        "applicant",
+        "first_name_french",
+      ]);
+    }
+
+    const family = parentChild();
+    const missingChildLast = registrationSchema.safeParse({
+      ...family,
+      children: [
+        { ...family.children[0]!, first_name_french: "Meriem" },
+      ],
+    });
+    expect(missingChildLast.success).toBe(false);
+    if (!missingChildLast.success) {
+      expect(missingChildLast.error.issues[0]?.path).toEqual([
+        "children",
+        0,
+        "last_name_french",
+      ]);
+    }
   });
 });
 
@@ -458,6 +505,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         applicant: {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `مختارة`,
+          phone: '+212600000006',
           sex: "female",
         },
         branch_id: branchId,
@@ -516,6 +564,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           applicant: {
             first_name_arabic: `${TAG}`,
             last_name_arabic: `وهمية`,
+            phone: '+212600000007',
             sex: "female",
           },
           branch_id: "00000000-0000-4000-8000-000000000000",
@@ -544,6 +593,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           applicant: {
             first_name_arabic: `${TAG}`,
             last_name_arabic: `مرفوضة`,
+            phone: '+212600000008',
             sex: "female",
           },
           branch_id: closed.id,
@@ -574,6 +624,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         applicant: {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `مبكرة`,
+          phone: '+212600000009',
           sex: "female",
         },
         branch_id: future.id,
@@ -600,6 +651,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
         parent: {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `والدة`,
+          phone: '+212600000010',
           sex: "female",
         },
         children: [
@@ -612,7 +664,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
             requested_category_id: categoryId,
           },
         ],
-        consents: { data_processing: true, media_release: true },
+        consents: { data_processing: true },
       },
       KEY,
     );
@@ -640,6 +692,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
         applicant: {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `راشدة`,
+          phone: '+212600000011',
           sex: "female",
         },
         branch_id: branchId,
@@ -689,6 +742,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
         applicant: {
           first_name_arabic: "خديجة",
           last_name_arabic: "الاختبارية",
+          phone: '+212600000051',
           sex,
         },
         branch_id: "00000000-0000-4000-8000-000000000000",
@@ -1042,13 +1096,11 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
     ).toBe(0);
   });
 
-  it("refuses a minor registration with no media-release DECISION at all", async () => {
-    const { token } = issueOnboardingToken(identity(), KEY);
+  it("refuses a minor registration with no per-child media-release decision", () => {
     const input = parentChild();
-    delete (input.consents as { media_release?: boolean }).media_release;
-    await expect(register(prisma, token, input, KEY)).rejects.toMatchObject({
-      code: "CONSENT_REQUIRED",
-    });
+    const child = { ...input.children[0] } as Record<string, unknown>;
+    delete child["consent_media_release"];
+    expect(registrationSchema.safeParse({ ...input, children: [child] }).success).toBe(false);
   });
 
   it("adult self-registration creates one user, one consent, no link", async () => {
@@ -1061,6 +1113,7 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
         applicant: {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `خديجة`,
+          phone: '+212600000012',
           sex: "female" as const,
         },
         branch_id: branchId,

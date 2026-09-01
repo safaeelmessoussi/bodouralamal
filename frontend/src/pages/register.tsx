@@ -299,6 +299,7 @@ export function Register(): ReactNode {
                 onChange={setApplicant}
                 errors={touched ? errors : {}}
                 prefix="applicant"
+                phoneRequired
               />
             </fieldset>
 
@@ -701,7 +702,8 @@ export function validate(state: FormState): Record<string, string> {
 
     // Only an adult gives one — a child has no `phone` field to validate.
     const phone = 'phone' in p ? p.phone.trim() : '';
-    if (phone !== '' && (!PHONE_PATTERN.test(phone) || phone.length < LIMITS.phoneMin || phone.length > LIMITS.phoneMax))
+    if ('phone' in p && phone === '') errors[`${prefix}.phone`] = t('register.errRequired');
+    else if (phone !== '' && (!PHONE_PATTERN.test(phone) || phone.length < LIMITS.phoneMin || phone.length > LIMITS.phoneMax))
       errors[`${prefix}.phone`] = t('register.errPhone');
   };
 
@@ -765,7 +767,7 @@ export function buildPayload(state: {
         }
       : {}),
     ...(p.nickname.trim() ? { nickname: p.nickname.trim() } : {}),
-    ...(p.phone.trim() ? { phone: p.phone.trim() } : {}),
+    phone: p.phone.trim(),
     ...(p.notes.trim() ? { notes: p.notes.trim() } : {}),
   });
 

@@ -12,6 +12,7 @@ import {
 import {
   eventAudienceWhere,
   resolveAudience,
+  audienceWhere,
   type AudienceSpec,
   type EventScopeRows,
   audienceForSession,
@@ -74,15 +75,26 @@ async function recipientsFor(
   spec: AudienceSpec,
   actorUserId: string,
 ): Promise<string[]> {
-  const [students, staff] = await Promise.all([
+  const [students, session] = await Promise.all([
     resolveAudience(tx as unknown as PrismaClient, spec),
-    tx.sessionStaff.findMany({
-      where: { sessionId, deletedAt: null },
-      select: { userId: true },
+    tx.session.findUnique({
+      where: { id: sessionId },
+      select: {
+        visibility: true,
+        staff: {
+          where: { deletedAt: null },
+          select: { userId: true, position: true },
+        },
+      },
     }),
   ]);
+  if (!session) return [];
+  const hidden = session.visibility === 'hidden';
+  const staff = session.staff.filter(
+    (person) => !hidden || person.position === 'teacher',
+  );
   const everyone = new Set([
-    ...students.map((s) => s.id),
+    ...(hidden ? [] : students.map((s) => s.id)),
     ...staff.map((s) => s.userId),
   ]);
   // **Never notified of your own act** — the whole of R78.3's narrowing.
@@ -91,14 +103,32 @@ async function recipientsFor(
 }
 
 export type NotificationKind =
+  | "registration_review_required"
+  | "registration_approved"
+  | "registration_rejected"
+  | "family_link_requested"
+  | "family_link_approved"
+  | "family_link_rejected"
+  | "family_link_revoked"
+  | "role_assignments_changed"
+  | "platform_ownership_received"
+  | "enrollment_changed"
   | "session_cancelled"
   | "session_restored"
   | "session_assigned"
+  | "session_unassigned"
   | "session_rescheduled"
   | "event_created"
   | "event_rescheduled"
   | "event_cancelled"
   | "event_staff_assigned"
+  | "event_staff_unassigned"
+  | "exam_teacher_assigned"
+  | "exam_teacher_unassigned"
+  | "exam_scheduled"
+  | "exam_rescheduled"
+  | "exam_changed"
+  | "exam_cancelled"
   | "grade_published";
 
 /**
@@ -112,6 +142,7 @@ export interface NotificationRow {
   sessionId: string | null;
   eventId: string | null;
   examId: string | null;
+  subjectUserId: string | null;
   readAt: Date | null;
   createdAt: Date;
   session: {
@@ -131,8 +162,10 @@ export interface NotificationRow {
   exam: {
     title: string;
     date: Date;
+    startTime: Date | null;
     subject: { name: string } | null;
   } | null;
+  subjectUser: { nameArabic: string } | null;
 }
 
 /**
@@ -156,7 +189,11 @@ async function liveNotificationRecipients(
   if (ids.length === 0) return [];
 
   const live = await tx.user.findMany({
-    where: { id: { in: ids }, deletedAt: null },
+    // Only an Active account has an inbox. Pending reaches only `/me` and
+    // logout; Rejected/Suspended receives no authenticated session at all.
+    // Persisting a row for any of them would record a delivery that cannot be
+    // read and could later surface stale coordinates after reactivation.
+    where: { id: { in: ids }, accountStatus: 'active', deletedAt: null },
     select: { id: true },
   });
   const liveIds = new Set(live.map((row) => row.id));
@@ -166,7 +203,7 @@ async function liveNotificationRecipients(
 /**
  * **What a notice needs to be readable, per target** (R82.1).
  *
- * Three different shapes, which is the concrete reason R82 chose three foreign
+ * Four different shapes, which is the concrete reason R82/R116 chose foreign
  * keys over a `target_type`/`target_id` pair: a polymorphic id could not be
  * joined at all, and the screen would need a second round trip per row to say
  * anything more than *something happened*.
@@ -200,8 +237,14 @@ const LIST_INCLUDE = {
   // score is deliberately absent: the notice says it is available, and her own
   // screen shows the current number (R82.4).
   exam: {
-    select: { title: true, date: true, subject: { select: { name: true } } },
+    select: {
+      title: true,
+      date: true,
+      startTime: true,
+      subject: { select: { name: true } },
+    },
   },
+  subjectUser: { select: { nameArabic: true } },
 } satisfies Prisma.NotificationInclude;
 
 /**
@@ -285,7 +328,11 @@ export async function notifyAssigned(
 async function writeFor(
   tx: Prisma.TransactionClient,
   sessionId: string,
-  type: "session_cancelled" | "session_rescheduled" | "session_assigned",
+  type:
+    | "session_cancelled"
+    | "session_rescheduled"
+    | "session_assigned"
+    | "session_unassigned",
   userIds: readonly string[],
 ): Promise<number> {
   const recipients = await liveNotificationRecipients(tx, userIds);
@@ -319,11 +366,12 @@ export async function eventRecipients(
   const event = await prisma.event.findFirst({
     where: { id: eventId, deletedAt: null },
     select: {
+      visibility: true,
       branchScopes: { select: { branchId: true } },
       categoryScopes: { select: { categoryId: true } },
       levelScopes: { select: { levelId: true } },
       administrativeGroupScopes: { select: { administrativeGroupId: true } },
-      staff: { where: { deletedAt: null }, select: { userId: true } },
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
     },
   });
   if (!event) throw new AppError("NOT_FOUND", "no such event");
@@ -338,7 +386,8 @@ export async function eventRecipients(
         (r) => r.administrativeGroupId,
       ),
     },
-    event.staff.map((s) => s.userId),
+    event.visibility,
+    event.staff,
     actorUserId,
   );
 }
@@ -351,7 +400,8 @@ export async function eventRecipients(
 async function recipientsFromEventScope(
   prisma: PrismaClient,
   scopes: EventScopeRows,
-  staffUserIds: readonly string[],
+  visibility: 'public' | 'private' | 'hidden',
+  staff: readonly { userId: string; position: 'responsible' | 'assistant' }[],
   actorUserId: string,
 ): Promise<string[]> {
   const where = eventAudienceWhere(scopes);
@@ -359,9 +409,19 @@ async function recipientsFromEventScope(
   // A GLOBAL event resolves to no audience at all (R82.7) — but its own staff
   // are still concerned by it, which is a different question from its scope.
   const audience =
-    where === null
+    visibility === 'hidden' || where === null
       ? []
-      : await prisma.user.findMany({ where, select: { id: true } });
+      : await prisma.user.findMany({
+          // `eventAudienceWhere` already carries this boundary. Repeat it at
+          // the read site as an auditable invariant: a future alternate scope
+          // predicate must not silently make a deleted account a recipient.
+          where: { ...where, deletedAt: null },
+          select: { id: true },
+        });
+
+  const staffUserIds = staff
+    .filter((person) => visibility !== 'hidden' || person.position === 'responsible')
+    .map((person) => person.userId);
 
   const everyone = new Set([
     ...audience.map((u) => u.id),
@@ -430,7 +490,8 @@ async function deletedEventRecipients(
         deletedById: actorUserId,
       },
       select: {
-        staff: { where: { deletedAt: null }, select: { userId: true } },
+        visibility: true,
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
       },
     }),
     prisma.trash.findFirst({
@@ -448,7 +509,8 @@ async function deletedEventRecipients(
   return recipientsFromEventScope(
     prisma,
     eventScopeFromTrash(entry.snapshot),
-    event.staff.map((s) => s.userId),
+    event.visibility,
+    event.staff,
     actorUserId,
   );
 }
@@ -830,9 +892,31 @@ export async function notifyEventStaffAssigned(
   newlyAssigned: readonly string[],
   actorUserId: string,
 ): Promise<number> {
+  const added = [...new Set(newlyAssigned)];
+  if (added.length > 0) {
+    await tx.notification.deleteMany({
+      where: { eventId, type: 'event_staff_unassigned', userId: { in: added } },
+    });
+  }
+  const event = await tx.event.findUnique({
+    where: { id: eventId },
+    select: {
+      visibility: true,
+      staff: {
+        where: { userId: { in: added }, deletedAt: null },
+        select: { userId: true, position: true },
+      },
+    },
+  });
+  if (!event) return 0;
+  const eligible = new Set(
+    event.staff
+      .filter((person) => event.visibility !== 'hidden' || person.position === 'responsible')
+      .map((person) => person.userId),
+  );
   const recipients = await liveNotificationRecipients(
     tx,
-    [...new Set(newlyAssigned)].filter((id) => id !== actorUserId),
+    added.filter((id) => id !== actorUserId && eligible.has(id)),
   );
   if (recipients.length === 0) return 0;
 
@@ -873,4 +957,685 @@ export async function notifyEventStaffAssigned(
   }
 
   return created.count + existing.length;
+}
+
+/** The counterpart of R93: a person removed from live event staffing is told. */
+export async function notifyEventStaffUnassigned(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  removedUserIds: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  const removed = [...new Set(removedUserIds)];
+  if (removed.length > 0) {
+    await tx.notification.deleteMany({
+      where: { eventId, type: 'event_staff_assigned', userId: { in: removed } },
+    });
+  }
+  const event = await tx.event.findUnique({
+    where: { id: eventId },
+    select: { visibility: true },
+  });
+  // Once hidden, the target is readable only by its current responsible
+  // person. A former staff member cannot receive a target-bearing removal row
+  // without that row itself bypassing R109.
+  if (!event || event.visibility === 'hidden') return 0;
+  const recipients = await liveNotificationRecipients(
+    tx,
+    removed.filter((id) => id !== actorUserId),
+  );
+  if (recipients.length === 0) return 0;
+  const created = await tx.notification.createMany({
+    data: recipients.map((userId) => ({
+      userId,
+      eventId,
+      type: 'event_staff_unassigned' as const,
+    })),
+    skipDuplicates: true,
+  });
+  const spent = await tx.notification.findMany({
+    where: {
+      eventId,
+      type: 'event_staff_unassigned',
+      userId: { in: recipients },
+      readAt: { not: null },
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  const now = new Date();
+  for (const row of spent) {
+    await tx.notification.update({
+      where: { id: row.id },
+      data: { readAt: null, createdAt: now },
+    });
+  }
+  return created.count + spent.length;
+}
+
+/** Withdraws target-bearing rows when a staff member loses hidden-read status. */
+export async function withdrawEventStaffNotificationAccess(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  userIds: readonly string[],
+): Promise<void> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) return;
+  await tx.notification.deleteMany({ where: { eventId, userId: { in: ids } } });
+}
+
+/**
+ * Reconciles an Event visibility transition without turning publication into a
+ * staffing mutation. Hidden retains rows only for the live responsible person;
+ * widening from hidden tells assistants whose existing responsibility has just
+ * become readable, while audience announcements remain explicitly optional.
+ */
+export async function reconcileEventNotificationVisibility(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  previous: 'public' | 'private' | 'hidden',
+  current: 'public' | 'private' | 'hidden',
+  actorUserId: string,
+): Promise<void> {
+  if (previous === current) return;
+  const staff = await tx.eventStaff.findMany({
+    where: { eventId, deletedAt: null },
+    select: { userId: true, position: true },
+  });
+  if (current === 'hidden') {
+    const allowed = staff
+      .filter((person) => person.position === 'responsible')
+      .map((person) => person.userId);
+    await tx.notification.deleteMany({
+      where: {
+        eventId,
+        ...(allowed.length === 0 ? {} : { userId: { notIn: allowed } }),
+      },
+    });
+    return;
+  }
+  if (previous === 'hidden') {
+    await notifyEventStaffAssigned(
+      tx,
+      eventId,
+      staff.filter((person) => person.position === 'assistant').map((person) => person.userId),
+      actorUserId,
+    );
+  }
+}
+
+/** One deterministic lock boundary for an Event's added and removed people. */
+export async function notifyEventStaffChanged(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  addedUserIds: readonly string[],
+  removedUserIds: readonly string[],
+  actorUserId: string,
+): Promise<{ assigned: number; unassigned: number }> {
+  await liveNotificationRecipients(
+    tx,
+    [...addedUserIds, ...removedUserIds].filter((id) => id !== actorUserId),
+  );
+  return {
+    assigned: await notifyEventStaffAssigned(
+      tx,
+      eventId,
+      addedUserIds,
+      actorUserId,
+    ),
+    unassigned: await notifyEventStaffUnassigned(
+      tx,
+      eventId,
+      removedUserIds,
+      actorUserId,
+    ),
+  };
+}
+
+/** Explicit occurrence restaffing, with stale opposite notices withdrawn. */
+export async function notifySessionStaffChanged(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  input: {
+    previousVisibility: 'public' | 'private' | 'hidden';
+    currentVisibility: 'public' | 'private' | 'hidden';
+    previousStaff: readonly { userId: string; position: 'teacher' | 'assistant' }[];
+    currentStaff: readonly { userId: string; position: 'teacher' | 'assistant' }[];
+  },
+  actorUserId: string,
+): Promise<{ assigned: number; unassigned: number }> {
+  const previousRaw = new Set(input.previousStaff.map((person) => person.userId));
+  const currentRaw = new Set(input.currentStaff.map((person) => person.userId));
+  const visible = (
+    visibility: 'public' | 'private' | 'hidden',
+    staff: readonly { userId: string; position: 'teacher' | 'assistant' }[],
+  ) =>
+    new Set(
+      staff
+        .filter((person) => visibility !== 'hidden' || person.position === 'teacher')
+        .map((person) => person.userId),
+    );
+  const previousVisible = visible(input.previousVisibility, input.previousStaff);
+  const currentVisible = visible(input.currentVisibility, input.currentStaff);
+  const rawAdded = [...currentRaw].filter((id) => !previousRaw.has(id));
+  const rawRemoved = [...previousRaw].filter((id) => !currentRaw.has(id));
+  const accessGained = [...currentRaw].filter(
+    (id) => previousRaw.has(id) && !previousVisible.has(id) && currentVisible.has(id),
+  );
+  const accessLost = [...previousRaw].filter(
+    (id) => currentRaw.has(id) && previousVisible.has(id) && !currentVisible.has(id),
+  );
+  const added = [
+    ...rawAdded.filter((id) => currentVisible.has(id)),
+    ...accessGained,
+  ];
+  const removed =
+    input.currentVisibility === 'hidden'
+      ? []
+      : rawRemoved.filter((id) => previousVisible.has(id));
+  await liveNotificationRecipients(
+    tx,
+    [...previousRaw, ...currentRaw].filter((id) => id !== actorUserId),
+  );
+  if (input.currentVisibility === 'hidden') {
+    const allowed = [...currentVisible];
+    await tx.notification.deleteMany({
+      where: {
+        sessionId,
+        ...(allowed.length === 0 ? {} : { userId: { notIn: allowed } }),
+      },
+    });
+  } else if (accessLost.length > 0) {
+    await tx.notification.deleteMany({
+      where: { sessionId, userId: { in: accessLost } },
+    });
+  }
+  if (rawAdded.length > 0) {
+    await tx.notification.deleteMany({
+      where: { sessionId, type: 'session_unassigned', userId: { in: rawAdded } },
+    });
+  }
+  if (rawRemoved.length > 0) {
+    await tx.notification.deleteMany({
+      where: { sessionId, type: 'session_assigned', userId: { in: rawRemoved } },
+    });
+  }
+  const assigned = await writeFor(
+    tx,
+    sessionId,
+    'session_assigned',
+    added.filter((id) => id !== actorUserId),
+  );
+  const unassigned = await writeFor(
+    tx,
+    sessionId,
+    'session_unassigned',
+    removed.filter((id) => id !== actorUserId),
+  );
+  return { assigned, unassigned };
+}
+
+/* ── Revision 116 — actionable account and exam changes ─────────────────── */
+
+export type SubjectUserNotificationKind =
+  | 'registration_review_required'
+  | 'registration_approved'
+  | 'registration_rejected'
+  | 'family_link_requested'
+  | 'family_link_approved'
+  | 'family_link_rejected'
+  | 'family_link_revoked'
+  | 'role_assignments_changed'
+  | 'platform_ownership_received'
+  | 'enrollment_changed';
+
+/**
+ * Writes one semantic account/relationship notice and resurfaces it only when
+ * the caller has proved a new domain transition occurred.
+ *
+ * The unique coordinate is `(recipient, affected person, type)`. That is
+ * deliberate for recurring facts such as placement or role changes: the bell
+ * carries the current actionable state, while AuditLog remains the history.
+ * Callers MUST NOT invoke this helper for an unchanged save.
+ */
+export async function notifySubjectUserChange(
+  tx: Prisma.TransactionClient,
+  input: {
+    type: SubjectUserNotificationKind;
+    subjectUserId: string;
+    recipientUserIds: readonly string[];
+    actorUserId: string;
+  },
+): Promise<number> {
+  const recipients = await liveNotificationRecipients(
+    tx,
+    [...new Set(input.recipientUserIds)].filter((id) => id !== input.actorUserId),
+  );
+  if (recipients.length === 0) return 0;
+
+  const created = await tx.notification.createMany({
+    data: recipients.map((userId) => ({
+      userId,
+      subjectUserId: input.subjectUserId,
+      type: input.type,
+    })),
+    skipDuplicates: true,
+  });
+  const spent = await tx.notification.findMany({
+    where: {
+      userId: { in: recipients },
+      subjectUserId: input.subjectUserId,
+      type: input.type,
+      deletedAt: null,
+      readAt: { not: null },
+    },
+    select: { id: true },
+  });
+  const now = new Date();
+  for (const row of spent) {
+    await tx.notification.update({
+      where: { id: row.id },
+      data: { readAt: null, createdAt: now },
+    });
+  }
+  return created.count + spent.length;
+}
+
+/** Everyone whose live Admin/Super-Admin assignment gives them the approvals queue. */
+export async function approvalReviewRecipients(
+  tx: Prisma.TransactionClient,
+): Promise<string[]> {
+  const rows = await tx.user.findMany({
+    where: {
+      deletedAt: null,
+      accountStatus: 'active',
+      branchRoles: {
+        some: {
+          deletedAt: null,
+          userStatus: 'active',
+          role: { name: { in: ['admin', 'super_admin'] } },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
+}
+
+interface ExamNoticeSpec {
+  levelId: string;
+  administrativeGroupId: string | null;
+  branchId: string;
+  visibility: 'public' | 'private' | 'hidden';
+}
+
+interface ExamNoticeStaff {
+  userId: string;
+  position: 'supervisor' | 'assistant';
+}
+
+/** R109 permits only the responsible supervisor to read a hidden sitting. */
+function examStaffRecipients(
+  spec: ExamNoticeSpec,
+  staff: readonly ExamNoticeStaff[],
+): string[] {
+  return staff
+    .filter((person) => spec.visibility !== 'hidden' || person.position === 'supervisor')
+    .map((person) => person.userId);
+}
+
+/**
+ * The exam roster is the grade-sheet roster, not a new interpretation: a named
+ * Administrative Group or the whole Level at the sitting's branch. Hidden is
+ * a publication rule and therefore yields no student scheduling notice.
+ */
+async function examStudentRecipients(
+  tx: Prisma.TransactionClient,
+  spec: ExamNoticeSpec,
+): Promise<string[]> {
+  if (spec.visibility === 'hidden') return [];
+  const where =
+    spec.administrativeGroupId === null
+      ? audienceWhere({
+          teachingMode: 'entire_level',
+          levelId: spec.levelId,
+          administrativeGroupId: null,
+          teachingGroupId: null,
+          branchId: spec.branchId,
+        })
+      : audienceWhere({
+          teachingMode: 'administrative_group',
+          levelId: null,
+          administrativeGroupId: spec.administrativeGroupId,
+          teachingGroupId: null,
+          branchId: spec.branchId,
+        });
+  const rows = await tx.user.findMany({
+    // `audienceWhere` is also live-only; keep the recipient read itself
+    // explicit so every soft-deletable read fails closed under source audit.
+    where: { ...where, deletedAt: null },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
+}
+
+type ExamNotificationKind =
+  | 'exam_teacher_assigned'
+  | 'exam_teacher_unassigned'
+  | 'exam_scheduled'
+  | 'exam_rescheduled'
+  | 'exam_changed'
+  | 'exam_cancelled';
+
+async function writeExamNotice(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  type: ExamNotificationKind,
+  userIds: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  const recipients = await liveNotificationRecipients(
+    tx,
+    [...new Set(userIds)].filter((id) => id !== actorUserId),
+  );
+  if (recipients.length === 0) return 0;
+  const created = await tx.notification.createMany({
+    data: recipients.map((userId) => ({ userId, examId, type })),
+    skipDuplicates: true,
+  });
+  const spent = await tx.notification.findMany({
+    where: {
+      examId,
+      type,
+      userId: { in: recipients },
+      deletedAt: null,
+      readAt: { not: null },
+    },
+    select: { id: true },
+  });
+  const now = new Date();
+  for (const row of spent) {
+    await tx.notification.update({
+      where: { id: row.id },
+      data: { readAt: null, createdAt: now },
+    });
+  }
+  return created.count + spent.length;
+}
+
+async function reconcileExamStaffNotices(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  addedUserIds: readonly string[],
+  removedUserIds: readonly string[],
+  actorUserId: string,
+): Promise<{ assigned: number; unassigned: number }> {
+  const added = [...new Set(addedUserIds)];
+  const removed = [...new Set(removedUserIds)];
+
+  // A stale opposite statement must not survive a real state transition.
+  if (added.length > 0) {
+    await tx.notification.deleteMany({
+      where: { examId, type: 'exam_teacher_unassigned', userId: { in: added } },
+    });
+  }
+  if (removed.length > 0) {
+    await tx.notification.deleteMany({
+      where: { examId, type: 'exam_teacher_assigned', userId: { in: removed } },
+    });
+  }
+
+  const assigned = await writeExamNotice(
+    tx,
+    examId,
+    'exam_teacher_assigned',
+    added,
+    actorUserId,
+  );
+  const unassigned = await writeExamNotice(
+    tx,
+    examId,
+    'exam_teacher_unassigned',
+    removed,
+    actorUserId,
+  );
+  return { assigned, unassigned };
+}
+
+const EXAM_STUDENT_NOTICE_TYPES = [
+  'exam_scheduled',
+  'exam_rescheduled',
+  'exam_changed',
+  'exam_cancelled',
+] as const;
+
+/**
+ * Withdraws student-facing statements that a real scope/publication transition
+ * made stale. In particular, changing a sitting to `hidden` must remove the
+ * previously delivered title/date rather than replacing it with a cancellation
+ * that still discloses the hidden sitting. Assigned supervisors remain a
+ * separate responsibility audience and are reconciled independently.
+ */
+async function withdrawExamStudentNotices(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  userIds: readonly string[],
+  types: readonly (typeof EXAM_STUDENT_NOTICE_TYPES)[number][] = EXAM_STUDENT_NOTICE_TYPES,
+): Promise<void> {
+  const recipients = [...new Set(userIds)];
+  if (recipients.length === 0) return;
+  await tx.notification.deleteMany({
+    where: {
+      examId,
+      userId: { in: recipients },
+      type: { in: [...types] },
+    },
+  });
+}
+
+/** Scheduling and assignment facts join creation's transaction. */
+export async function notifyExamCreated(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  spec: ExamNoticeSpec,
+  staff: readonly ExamNoticeStaff[],
+  actorUserId: string,
+): Promise<{ assigned: number; scheduled: number }> {
+  const students = await examStudentRecipients(tx, spec);
+  const staffUserIds = examStaffRecipients(spec, staff);
+  // One deterministic User-lock acquisition for the whole obligation. Staffing
+  // and student delivery are distinct notices, but they must not acquire two
+  // overlapping recipient sets in different orders.
+  await liveNotificationRecipients(
+    tx,
+    [...staffUserIds, ...students].filter((id) => id !== actorUserId),
+  );
+  const staffNotices = await reconcileExamStaffNotices(
+    tx,
+    examId,
+    staffUserIds,
+    [],
+    actorUserId,
+  );
+  const scheduled = await writeExamNotice(
+    tx,
+    examId,
+    'exam_scheduled',
+    students,
+    actorUserId,
+  );
+  return { assigned: staffNotices.assigned, scheduled };
+}
+
+/**
+ * Reconciles one actual exam edit. Newly scoped students are scheduled,
+ * removed students are cancelled, retained students and retained staff are
+ * rescheduled. Staff assignment/removal remains semantically distinct.
+ */
+export async function notifyExamUpdated(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  input: {
+    previous: ExamNoticeSpec;
+    current: ExamNoticeSpec;
+    previousStaff: readonly ExamNoticeStaff[];
+    currentStaff: readonly ExamNoticeStaff[];
+    rescheduled: boolean;
+    detailsChanged: boolean;
+    audienceChanged: boolean;
+  },
+  actorUserId: string,
+): Promise<void> {
+  const previousRawStaff = new Set(input.previousStaff.map((person) => person.userId));
+  const currentRawStaff = new Set(input.currentStaff.map((person) => person.userId));
+  const previousVisibleStaff = new Set(examStaffRecipients(input.previous, input.previousStaff));
+  const currentVisibleStaff = new Set(examStaffRecipients(input.current, input.currentStaff));
+  const addedRawStaff = [...currentRawStaff].filter((id) => !previousRawStaff.has(id));
+  const removedRawStaff = [...previousRawStaff].filter((id) => !currentRawStaff.has(id));
+  const accessGained = [...currentRawStaff].filter(
+    (id) => previousRawStaff.has(id) && !previousVisibleStaff.has(id) && currentVisibleStaff.has(id),
+  );
+  const accessLost = [...previousRawStaff].filter(
+    (id) => currentRawStaff.has(id) && previousVisibleStaff.has(id) && !currentVisibleStaff.has(id),
+  );
+  const assignedNotices = [
+    ...addedRawStaff.filter((id) => currentVisibleStaff.has(id)),
+    ...accessGained,
+  ];
+  const unassignedNotices =
+    input.current.visibility === 'hidden'
+      ? []
+      : removedRawStaff.filter((id) => previousVisibleStaff.has(id));
+  const previousStudents = new Set(await examStudentRecipients(tx, input.previous));
+  const currentStudents = new Set(await examStudentRecipients(tx, input.current));
+  await liveNotificationRecipients(
+    tx,
+    [
+      ...previousRawStaff,
+      ...currentRawStaff,
+      ...previousStudents,
+      ...currentStudents,
+    ].filter((id) => id !== actorUserId),
+  );
+
+  // Opposite facts become stale on a real staff transition even when the
+  // person's new position is not eligible to read a hidden sitting.
+  if (addedRawStaff.length > 0) {
+    await tx.notification.deleteMany({
+      where: { examId, type: 'exam_teacher_unassigned', userId: { in: addedRawStaff } },
+    });
+  }
+  if (removedRawStaff.length > 0) {
+    await tx.notification.deleteMany({
+      where: { examId, type: 'exam_teacher_assigned', userId: { in: removedRawStaff } },
+    });
+  }
+  // Visibility/position eligibility changed, not staffing. Withdraw coordinates
+  // that are no longer readable without falsely telling an unchanged assistant
+  // that she was removed from the exam.
+  if (accessLost.length > 0) {
+    await tx.notification.deleteMany({
+      where: {
+        examId,
+        userId: { in: accessLost },
+        type: { in: ['exam_teacher_assigned', 'exam_rescheduled', 'exam_changed'] },
+      },
+    });
+  }
+  await reconcileExamStaffNotices(
+    tx,
+    examId,
+    assignedNotices,
+    unassignedNotices,
+    actorUserId,
+  );
+  if (!input.rescheduled && !input.detailsChanged && !input.audienceChanged) return;
+
+  const retainedStaff = [...currentVisibleStaff].filter((id) => previousVisibleStaff.has(id));
+  if (input.current.visibility === 'hidden') {
+    // R109: students cannot read a hidden sitting. A cancellation notification
+    // would still reveal its current title/date through the inbox projection,
+    // so the only fail-closed transition is withdrawal of every student-facing
+    // statement previously delivered for it. Staff responsibility remains
+    // visible only to the retained/added staffing paths.
+    await withdrawExamStudentNotices(tx, examId, [...previousStudents]);
+    if (input.rescheduled || input.detailsChanged) {
+      await writeExamNotice(
+        tx,
+        examId,
+        input.rescheduled ? 'exam_rescheduled' : 'exam_changed',
+        retainedStaff,
+        actorUserId,
+      );
+    }
+    return;
+  }
+
+  const newlyScoped = [...currentStudents].filter((id) => !previousStudents.has(id));
+  const removed = [...previousStudents].filter((id) => !currentStudents.has(id));
+  const retained = [...currentStudents].filter((id) => previousStudents.has(id));
+
+  // A person re-entering the audience must not retain an old cancellation;
+  // somebody leaving it must not retain a schedule/reschedule that now points
+  // at an exam outside her scope.
+  await withdrawExamStudentNotices(tx, examId, newlyScoped, ['exam_cancelled']);
+  await withdrawExamStudentNotices(
+    tx,
+    examId,
+    removed,
+    ['exam_scheduled', 'exam_rescheduled'],
+  );
+
+  if (input.audienceChanged) {
+    await writeExamNotice(tx, examId, 'exam_scheduled', newlyScoped, actorUserId);
+    await writeExamNotice(tx, examId, 'exam_cancelled', removed, actorUserId);
+  }
+  if (input.rescheduled || input.detailsChanged) {
+    await writeExamNotice(
+      tx,
+      examId,
+      input.rescheduled ? 'exam_rescheduled' : 'exam_changed',
+      [...retained, ...retainedStaff],
+      actorUserId,
+    );
+  }
+}
+
+/** A deleted sitting tells its current roster and current staff atomically. */
+export async function notifyExamCancelled(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  spec: ExamNoticeSpec,
+  staff: readonly ExamNoticeStaff[],
+  actorUserId: string,
+): Promise<number> {
+  const students = await examStudentRecipients(tx, spec);
+  const staffUserIds = examStaffRecipients(spec, staff);
+  const recipients = [...new Set([...students, ...staffUserIds])];
+  // A cancellation is the current actionable state. Withdraw live scheduling
+  // and assignment statements for the people who are still concerned, while
+  // leaving former-staff unassignment history untouched.
+  if (recipients.length > 0) {
+    await tx.notification.deleteMany({
+      where: {
+        examId,
+        userId: { in: recipients },
+        type: {
+          in: [
+            'exam_scheduled',
+            'exam_rescheduled',
+            'exam_changed',
+            'exam_teacher_assigned',
+          ],
+        },
+      },
+    });
+  }
+  return writeExamNotice(
+    tx,
+    examId,
+    'exam_cancelled',
+    recipients,
+    actorUserId,
+  );
 }

@@ -6,7 +6,7 @@ import {
   type NotificationItem,
 } from '../../adapters/notifications.js';
 import { t } from '../../i18n/index.js';
-import { Button } from '../ui/button.js';
+import { Button, ButtonLink } from '../ui/button.js';
 import { ErrorState } from '../states.js';
 
 /**
@@ -49,16 +49,42 @@ import { ErrorState } from '../states.js';
  * a cancellation.
  */
 const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
+  registration_review_required: 'notifications.registrationReviewRequired',
+  registration_approved: 'notifications.registrationApproved',
+  registration_rejected: 'notifications.registrationRejected',
+  family_link_requested: 'notifications.familyLinkRequested',
+  family_link_approved: 'notifications.familyLinkApproved',
+  family_link_rejected: 'notifications.familyLinkRejected',
+  family_link_revoked: 'notifications.familyLinkRevoked',
+  role_assignments_changed: 'notifications.roleAssignmentsChanged',
+  platform_ownership_received: 'notifications.platformOwnershipReceived',
+  enrollment_changed: 'notifications.enrollmentChanged',
   session_cancelled: 'notifications.sessionCancelled',
   session_restored: 'notifications.sessionRestored',
   session_rescheduled: 'notifications.sessionRescheduled',
   session_assigned: 'notifications.sessionAssigned',
+  session_unassigned: 'notifications.sessionUnassigned',
   event_created: 'notifications.eventCreated',
   event_staff_assigned: 'notifications.eventStaffAssigned',
+  event_staff_unassigned: 'notifications.eventStaffUnassigned',
   event_rescheduled: 'notifications.eventRescheduled',
   event_cancelled: 'notifications.eventCancelled',
+  exam_teacher_assigned: 'notifications.examTeacherAssigned',
+  exam_teacher_unassigned: 'notifications.examTeacherUnassigned',
+  exam_scheduled: 'notifications.examScheduled',
+  exam_rescheduled: 'notifications.examRescheduled',
+  exam_changed: 'notifications.examChanged',
+  exam_cancelled: 'notifications.examCancelled',
   grade_published: 'notifications.gradePublished',
 };
+
+/** Only notifications with an implemented, valid exact destination are links. */
+export function notificationHref(item: NotificationItem): string | null {
+  if (item.type === 'registration_review_required' && item.subject_user_id) {
+    return `/admin/approvals?review_user_id=${encodeURIComponent(item.subject_user_id)}`;
+  }
+  return null;
+}
 
 export function NotificationList({
   token,
@@ -164,6 +190,15 @@ export function NotificationList({
               <p className="notifications__reason">
                 {t('notifications.reason').replace('{reason}', item.reason)}
               </p>
+            ) : null}
+            {notificationHref(item) ? (
+              <ButtonLink
+                variant="secondary"
+                className="row-action"
+                href={notificationHref(item)!}
+              >
+                {t('notifications.review')}
+              </ButtonLink>
             ) : null}
             {item.read_at === null ? (
               <Button

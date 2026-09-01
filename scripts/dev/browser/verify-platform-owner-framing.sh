@@ -103,4 +103,4 @@ done
 
 PORT="$debug_port" timeout 180s node scripts/dev/browser/verify-platform-owner-framing.mjs
 timeout 30s bash -c 'cd backend && npx tsx ../scripts/dev/browser/platform-owner-framing-fixture.ts --verify'
-printf 'R115 browser gate: 21/21 real-browser assertions and exact disposable database state passed\n'
+printf 'R115/UAT browser gate: 23/23 real-browser assertions and 8/8 exact disposable database assertions passed\n'

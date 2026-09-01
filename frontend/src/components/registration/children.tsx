@@ -129,12 +129,14 @@ export function NameFields({
         label={t('register.firstNameFrench')}
         value={value.firstNameFrench}
         onChange={(next) => set({ firstNameFrench: next })}
+        hint={t('register.frenchPairHint')}
         error={errors[`${prefix}.firstNameFrench`] ?? null}
       />
       <TextField
         label={t('register.lastNameFrench')}
         value={value.lastNameFrench}
         onChange={(next) => set({ lastNameFrench: next })}
+        hint={t('register.frenchPairHint')}
         error={errors[`${prefix}.lastNameFrench`] ?? null}
       />
       <TextField

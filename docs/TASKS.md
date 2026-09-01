@@ -1,5 +1,47 @@
 # Tasks — بذور الأمل Platform
 
+## Controlled-UAT corrections — 2026-09-01
+
+- [x] Registration now accepts the real multi-child consent shape: one required
+  request-level data-processing decision and one explicit media-release decision per child.
+  French names remain optional as a pair for every adult and child; both controls explain
+  that rule and server validation identifies the missing counterpart.
+- [x] Pending and Rejected registration accounts remain in طلبات الانضمام and are absent
+  from ordinary account-management and operational-directory populations. Approval places
+  every admitted beneficiary, sets the durable beneficiary fact and grants the structural
+  branch-scoped Student role in the same transaction.
+- [x] Platform ownership protects only the live global Super Admin assignment. The Owner may
+  add, change and remove ordinary functional roles; the main user-form Save includes its
+  visible role draft. The existing current-owner-only transfer action remains discoverable
+  on eligible active Global Super Admin rows.
+- [x] The public calendar sends the current access token when one exists, leaving visibility
+  resolution to the server. Students/Parents receive the ratified private tier, staff remain
+  scoped, role-less Active accounts fail closed to public, and hidden remains responsible-
+  person/Super-Admin only. Day cells pin Hijri to the physical left and Gregorian to the
+  physical right without changing either date.
+- [x] Removed the user-facing file-replacement action while retaining the internal R53 upload
+  primitive. New scheduling items default to المستوى كامل and new staffing rows to مؤطّرة
+  مسؤولة; edits preserve stored values. The existing shared dirty-form guard already closes
+  pristine forms immediately and confirms only genuine unsaved changes.
+- [x] Calendar integration fixtures now own reserved Hijri years and remote Gregorian dates;
+  teardown can no longer delete an operator-recorded 1447/1448 catalogue. The all-table
+  isolation runner proves the restored local catalogue remains byte-stable.
+- [x] **R116 — comprehensive actionable notifications.** The ratified catalogue extends the
+  existing caller-owned inbox for registration/approval, family links, roles, ownership,
+  enrolment, Session/Event restaffing and physical Exam lifecycle. Exact target FKs,
+  transaction-local delivery, actor exclusion, dual-role semantic coexistence, real-transition
+  resurfacing and hidden responsible-only withdrawal are enforced. Upload completion stays
+  silent because it is storage finalization rather than a publication decision. The postponed
+  tier/preference/channel framework and TD-7 job catalogue remain unchanged.
+- [x] **R117 — registration/guardian controlled-UAT closure.** Registration-review notices
+  open one exact authorized pending request and stale coordinates render safely. Reviewers see
+  complete guardian contact/consent data and separate submitted details for every child.
+  Sibling Category/Branch requests remain exact into their own placement decisions; a
+  children-only guardian is activated without beneficiary/Student/Enrollment state. New
+  registration requires phone while legacy null remains valid, Parent lands on the supported
+  Student Dashboard, and non-Parent context clears any stored child coordinate. Focused local
+  evidence is 41/41 real-browser plus 12/12 exact database assertions.
+
 ## Platform Owner and هيئة التأطير framing — R115, 2026-08-31
 
 - [x] Platform ownership is a protected singleton lifecycle relationship, not a new Role.

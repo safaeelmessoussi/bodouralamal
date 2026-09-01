@@ -4,7 +4,11 @@ import * as scope from '../policies/branch-scope.js';
 import { isResponsibleForEvent, teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
-import { notifyEventStaffAssigned } from './notification.service.js';
+import {
+  notifyEventStaffChanged,
+  reconcileEventNotificationVisibility,
+  withdrawEventStaffNotificationAccess,
+} from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
@@ -455,6 +459,14 @@ export async function updateEvent(
       },
     });
 
+    await reconcileEventNotificationVisibility(
+      tx,
+      id,
+      existing.visibility,
+      merged.visibility,
+      actor.userId,
+    );
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -601,11 +613,6 @@ export async function setEventStaff(
       }
     }
 
-    await assertStaffAccountsAvailable(
-      tx,
-      staff.map((person) => person.userId),
-    );
-
     const existing = await tx.eventStaff.findMany({ where: { eventId } });
     const wanted = new Map(staff.map((p) => [p.userId, p.position]));
 
@@ -655,7 +662,50 @@ export async function setEventStaff(
         return before === undefined || before.deletedAt !== null;
       })
       .map((person) => person.userId);
-    const notified = await notifyEventStaffAssigned(tx, eventId, newlyAssigned, actor.userId);
+    const removed = existing
+      .filter(
+        (row) =>
+          row.deletedAt === null && !staff.some((person) => person.userId === row.userId),
+      )
+      .map((row) => row.userId);
+    const accessGained =
+      event.visibility === 'hidden'
+        ? staff
+            .filter((person) => {
+              const before = existing.find((row) => row.userId === person.userId);
+              return (
+                before?.deletedAt === null &&
+                before.position === 'assistant' &&
+                person.position === 'responsible'
+              );
+            })
+            .map((person) => person.userId)
+        : [];
+    const accessLost =
+      event.visibility === 'hidden'
+        ? existing
+            .filter((row) => {
+              const after = staff.find((person) => person.userId === row.userId);
+              return (
+                row.deletedAt === null &&
+                row.position === 'responsible' &&
+                after?.position === 'assistant'
+              );
+            })
+            .map((row) => row.userId)
+        : [];
+    await withdrawEventStaffNotificationAccess(tx, eventId, accessLost);
+    const staffNotices = await notifyEventStaffChanged(
+      tx,
+      eventId,
+      [...newlyAssigned, ...accessGained],
+      removed,
+      actor.userId,
+    );
+    await assertStaffAccountsAvailable(
+      tx,
+      staff.map((person) => person.userId),
+    );
 
     // R71.4 — its own action type: *who answers for this celebration* is not an
     // attribute edit, and `event.update` would bury the decision.
@@ -670,7 +720,9 @@ export async function setEventStaff(
         // *Who was told, and how many* — the question somebody asks when an
         // assistant says she never heard.
         newly_assigned: newlyAssigned,
-        notified,
+        notified: staffNotices.assigned,
+        removed,
+        unassigned_notified: staffNotices.unassigned,
       },
     });
   });

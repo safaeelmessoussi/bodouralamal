@@ -220,6 +220,9 @@ const isAdmin = (a: CalendarActor | null) =>
   a !== null && (scope.hasRole(a.roleScopes, "admin") || isSuperAdmin(a));
 const isTeacher = (a: CalendarActor | null) =>
   a !== null && scope.hasRole(a.roleScopes, "teacher");
+const isStudentOrParent = (a: CalendarActor | null) =>
+  a !== null &&
+  (scope.hasRole(a.roleScopes, "student") || scope.hasRole(a.roleScopes, "parent"));
 
 /**
  * Builds the visibility filter for Events.
@@ -338,9 +341,16 @@ async function visibilityFilter(
     };
   }
 
-  // Approved Student or Parent: public and private, never hidden. Private is
-  // deliberately unfiltered by branch or group (§4.4, Risk R-6).
-  return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  if (isStudentOrParent(actor)) {
+    // Approved Student or Parent: public and private, never hidden. Private is
+    // deliberately unfiltered by branch or group (§4.4, Risk R-6).
+    return { OR: [{ visibility: "public" }, { visibility: "private" }] };
+  }
+
+  // Active is a lifecycle fact, not calendar authority. A pre-provisioned or
+  // otherwise role-less account receives no private tier merely because it can
+  // authenticate.
+  return { visibility: "public" };
 }
 
 /**

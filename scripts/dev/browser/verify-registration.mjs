@@ -25,7 +25,10 @@ import { connect, results } from './cdp.mjs';
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const TOKEN = process.env.ONBOARDING_TOKEN;
 const EMAIL = process.env.ONBOARDING_EMAIL;
-if (!TOKEN || !EMAIL) throw new Error('ONBOARDING_TOKEN and ONBOARDING_EMAIL are required');
+const ADMIN_COOKIE = process.env.ADMIN_REFRESH_COOKIE;
+if (!TOKEN || !EMAIL || !ADMIN_COOKIE) {
+  throw new Error('ONBOARDING_TOKEN, ONBOARDING_EMAIL and ADMIN_REFRESH_COOKIE are required');
+}
 
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9241');
 const { check, finish } = results();
@@ -49,8 +52,8 @@ const installProbe = () => evaluate(`(() => {
 })()`);
 const calls = () => evaluate('JSON.stringify(window.__calls || [])').then((r) => JSON.parse(r));
 
-const setInput = (label, value) => evaluate(`(() => {
-  const f = [...document.querySelectorAll('.field')].find((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}));
+const setInput = (label, value, occurrence = 0) => evaluate(`(() => {
+  const f = [...document.querySelectorAll('.field')].filter((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}))[${occurrence}];
   const el = f?.querySelector('input, textarea');
   if (!el) return 'missing';
   const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement : window.HTMLInputElement;
@@ -59,8 +62,8 @@ const setInput = (label, value) => evaluate(`(() => {
   return 'ok';
 })()`);
 
-const setSelect = (label, index) => evaluate(`(() => {
-  const f = [...document.querySelectorAll('.field')].find((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}));
+const setSelect = (label, index, occurrence = 0) => evaluate(`(() => {
+  const f = [...document.querySelectorAll('.field')].filter((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}))[${occurrence}];
   const el = f?.querySelector('select');
   if (!el) return 'missing';
   const opt = [...el.options].filter((o) => o.value !== '')[${index}];
@@ -68,6 +71,28 @@ const setSelect = (label, index) => evaluate(`(() => {
   Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set.call(el, opt.value);
   el.dispatchEvent(new Event('change', { bubbles: true }));
   return opt.value;
+})()`);
+
+const setSelectValue = (label, value, occurrence = 0) => evaluate(`(() => {
+  const f = [...document.querySelectorAll('.field')].filter((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}))[${occurrence}];
+  const el = f?.querySelector('select');
+  if (!el || ![...el.options].some((option) => option.value === ${JSON.stringify(value)})) return 'missing';
+  Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return el.value;
+})()`);
+
+const selectedText = (label, occurrence = 0) => evaluate(`(() => {
+  const f = [...document.querySelectorAll('.field')].filter((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith(${JSON.stringify(label)}))[${occurrence}];
+  const el = f?.querySelector('select');
+  return el?.selectedOptions[0]?.textContent?.trim() ?? null;
+})()`);
+
+const clickButton = (text) => evaluate(`(() => {
+  const button = [...document.querySelectorAll('button')].find((entry) => (entry.textContent ?? '').includes(${JSON.stringify(text)}));
+  if (!button) return 'missing';
+  button.click();
+  return 'clicked';
 })()`);
 
 const bodyText = () => evaluate('document.body.innerText');
@@ -94,12 +119,107 @@ check(
   text.slice(0, 160),
 );
 
-/* ── 3. Fill and submit the real form ───────────────────────────────────── */
-check('الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'مستفيدة')) === 'ok');
-check('الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق')) === 'ok');
-check('الجنس accepted', (await setSelect('الجنس*', 0)) !== 'missing');
-check('المقر accepted', (await setSelect('المقر', 0)) !== 'missing');
-check('الفئة accepted', (await setSelect('الفئة*', 0)) !== 'missing');
+/* ── 3. Fill the exact multi-child shape that failed in controlled UAT ──── */
+check(
+  'the parent + children registration path is selectable',
+  (await setSelectValue('نوع التسجيل', 'parent_child')) === 'parent_child',
+);
+await new Promise((r) => setTimeout(r, 200));
+check(
+  'the guardian option explains that the applicant is registering children as وليّة أمر',
+  (await bodyText()).includes('أُسجّل أبناءً أو بنات بصفتي وليّة أمر'),
+);
+
+check('ولي الأمر: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'ولية', 0)) === 'ok');
+check('ولي الأمر: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 0)) === 'ok');
+check('ولي الأمر: الجنس accepted', (await setSelect('الجنس*', 0, 0)) !== 'missing');
+check(
+  'the new-registration phone control is visibly required',
+  (await bodyText()).includes('رقم الهاتف*'),
+);
+
+check('الطفلة 1: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'مريم', 1)) === 'ok');
+check('الطفلة 1: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 1)) === 'ok');
+check('الطفلة 1: الجنس accepted', (await setSelect('الجنس*', 0, 1)) !== 'missing');
+check('الطفلة 1: المقر accepted', (await setSelect('المقر المطلوب', 0, 0)) !== 'missing');
+check('الطفلة 1: الفئة accepted', (await setSelect('الفئة*', 0, 0)) !== 'missing');
+const child1Branch = await selectedText('المقر المطلوب', 0);
+const child1Category = await selectedText('الفئة*', 0);
+check(
+  'الطفلة 1: media release YES accepted',
+  (await setSelectValue('الموافقة على نشر الصوت/التسجيلات', 'yes', 0)) === 'yes',
+);
+
+check('a second child can be added', (await clickButton('إضافة ابن/ابنة')) === 'clicked');
+await new Promise((r) => setTimeout(r, 200));
+check(
+  'the repeated child fieldset renders twice',
+  (await evaluate(`document.querySelectorAll('fieldset legend').length`)) >= 4,
+);
+
+check('الطفلة 2: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'سلمى', 2)) === 'ok');
+check('الطفلة 2: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 2)) === 'ok');
+check('الطفلة 2: الجنس accepted', (await setSelect('الجنس*', 0, 2)) !== 'missing');
+const child2BranchValue = await setSelect('المقر المطلوب', 1, 1);
+const child2CategoryValue = await setSelect('الفئة*', 1, 1);
+check('الطفلة 2: المقر accepted', !['missing', 'no-option'].includes(child2BranchValue));
+check('الطفلة 2: الفئة accepted', !['missing', 'no-option'].includes(child2CategoryValue));
+const child2Branch = await selectedText('المقر المطلوب', 1);
+const child2Category = await selectedText('الفئة*', 1);
+check(
+  'the two children can carry different requested branches and categories',
+  child1Branch !== null && child2Branch !== null && child1Branch !== child2Branch &&
+    child1Category !== null && child2Category !== null && child1Category !== child2Category,
+  JSON.stringify({ child1Branch, child2Branch, child1Category, child2Category }),
+);
+check(
+  'الطفلة 2: media release NO accepted',
+  (await setSelectValue('الموافقة على نشر الصوت/التسجيلات', 'no', 1)) === 'no',
+);
+check(
+  'all six optional French-name controls explain the pair rule',
+  (await bodyText()).split('اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين.').length - 1 === 6,
+);
+
+/* Prove the prospective phone rule independently of the consent rule below. */
+await evaluate(`(() => {
+  const c = document.querySelector('input[type="checkbox"]');
+  if (c && !c.checked) c.click();
+  return c ? c.checked : 'none';
+})()`);
+await new Promise((r) => setTimeout(r, 200));
+await clickButton('إرسال الطلب');
+await new Promise((r) => setTimeout(r, 250));
+check(
+  'missing required phone sends no registration request',
+  (await calls()).filter((c) => c.url.includes('/registrations')).length === 0,
+);
+check(
+  'missing required phone is explained in Arabic',
+  (await bodyText()).includes('هذا الحقل مطلوب.'),
+);
+check('ولي الأمر: رقم الهاتف accepted', (await setInput('رقم الهاتف*', '+212600000099')) === 'ok');
+
+await evaluate(`(() => {
+  const c = document.querySelector('input[type="checkbox"]');
+  if (c?.checked) c.click();
+  return c ? c.checked : 'none';
+})()`);
+await new Promise((r) => setTimeout(r, 200));
+
+/* The required request-level processing consent must fail before the wire. */
+await clickButton('إرسال الطلب');
+await new Promise((r) => setTimeout(r, 250));
+check(
+  'unchecked data-processing consent sends no registration request',
+  (await calls()).filter((c) => c.url.includes('/registrations')).length === 0,
+);
+check(
+  'unchecked data-processing consent is explained in Arabic',
+  (await bodyText()).includes('لا يمكن إنشاء الحساب دون الموافقة على معالجة البيانات.'),
+);
+
+/* ── 4. Consent and submit the real form ────────────────────────────────── */
 await evaluate(`(() => {
   const c = document.querySelector('input[type="checkbox"]');
   if (c && !c.checked) c.click();
@@ -114,7 +234,7 @@ await evaluate(`(() => {
 })()`);
 await new Promise((r) => setTimeout(r, 3000));
 
-/* ── 4. What actually happened on the wire ──────────────────────────────── */
+/* ── 5. What actually happened on the wire ──────────────────────────────── */
 const seen = await calls();
 const reg = seen.filter((c) => c.url.includes('/registrations'));
 const refresh = seen.filter((c) => c.url.includes('/auth/refresh'));
@@ -139,7 +259,7 @@ check(
   after.slice(0, 200),
 );
 
-/* ── 5. A retry of the single-use token creates nothing more ────────────── */
+/* ── 6. A retry of the single-use token creates nothing more ────────────── */
 await open(TOKEN);
 await installProbe();
 await new Promise((r) => setTimeout(r, 800));
@@ -148,6 +268,93 @@ check(
   'replaying the consumed onboarding token does not present an envelope',
   !replayText.includes('"error"') && !replayText.includes('request_id'),
   replayText.slice(0, 160),
+);
+
+/* ── 7. The administrator follows the real notice to this exact request ─── */
+await send('Network.clearBrowserCookies');
+await send('Network.setCookie', {
+  name: 'bodour_refresh', value: ADMIN_COOKIE,
+  domain: new URL(BASE).hostname, path: '/api/v1/auth', httpOnly: true,
+});
+await send('Page.navigate', { url: `${BASE}/admin` });
+for (let i = 0; i < 100; i += 1) {
+  const ready = await evaluate(`(() => !!document.querySelector('.bell__trigger'))()`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const bell = await evaluate(`(() => {
+  const button = document.querySelector('.bell__trigger');
+  if (!button) return false;
+  button.click();
+  return true;
+})()`);
+check('the authenticated administrator notification bell opens', bell === true);
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(`(() => !!document.querySelector('.bell__panel .notifications__item'))()`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const noticeClick = await evaluate(`(() => {
+  const item = [...document.querySelectorAll('.bell__panel .notifications__item')]
+    .find((entry) => (entry.textContent ?? '').includes('ولية تحقق'));
+  const link = item?.querySelector('a');
+  if (!link) return { clicked: false, panel: document.querySelector('.bell__panel')?.textContent?.slice(0, 300) ?? '' };
+  link.click();
+  return { clicked: true };
+})()`);
+check(
+  'the new-registration notification exposes a review action for this applicant',
+  noticeClick.clicked === true,
+  JSON.stringify(noticeClick),
+);
+for (let i = 0; i < 100; i += 1) {
+  const ready = await evaluate(`(() => document.body.innerText.includes('تفاصيل طلب التسجيل'))()`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const review = await evaluate(`(() => ({
+  path: window.location.pathname,
+  query: window.location.search,
+  text: document.body.innerText,
+  hasMain: document.querySelector('main') !== null,
+}))()`);
+check(
+  'notification navigation reaches the valid exact registration-review route',
+  review.path === '/admin/approvals' && /^\?review_user_id=[0-9a-f-]{36}$/.test(review.query),
+  `${review.path}${review.query}`,
+);
+check(
+  'the exact review opens complete parent contact and both child blocks',
+  review.text.includes('ولية') && review.text.includes('تحقق') &&
+    review.text.includes('+212600000099') && review.text.includes(EMAIL) &&
+    review.text.includes('مريم') && review.text.includes('سلمى'),
+  review.text.slice(0, 600),
+);
+check(
+  'the review preserves each child’s distinct requested branch and category',
+  [child1Branch, child2Branch, child1Category, child2Category]
+    .every((label) => label !== null && review.text.includes(label)),
+  JSON.stringify({ child1Branch, child2Branch, child1Category, child2Category }),
+);
+
+/* An obsolete/already-decided coordinate must render an answer, never a blank
+ * page. The HTTP integration owns decision races; this pins the browser state. */
+await send('Page.navigate', {
+  url: `${BASE}/admin/approvals?review_user_id=00000000-0000-4000-8000-000000000117`,
+});
+for (let i = 0; i < 80; i += 1) {
+  const ready = await evaluate(`(() => document.body.innerText.includes('تم البتّ في هذا الطلب أو لم يعد متاحاً للمراجعة.'))()`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const stale = await evaluate(`(() => ({
+  hasMain: document.querySelector('main') !== null,
+  text: document.body.innerText,
+}))()`);
+check(
+  'a stale registration-review coordinate fails gracefully rather than blanking',
+  stale.hasMain === true && stale.text.includes('تم البتّ في هذا الطلب أو لم يعد متاحاً للمراجعة.'),
+  stale.text.slice(0, 300),
 );
 
 close();

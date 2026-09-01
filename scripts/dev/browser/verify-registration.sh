@@ -17,6 +17,7 @@ export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 STAMP="$(date +%s)"
 export ONBOARDING_EMAIL="reg-verify-${STAMP}@example.com"
 export ONBOARDING_TOKEN="$(bash scripts/dev/issue-dev-onboarding.sh "$ONBOARDING_EMAIL" "dev-subject-${STAMP}")"
+export ADMIN_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
 
 WORK="$(mktemp -d)"
 cleanup() {
@@ -45,9 +46,11 @@ cleanup() {
 
   if [[ -n "${OWNER_ID:-}" ]]; then
     for stmt in \
+      "DELETE FROM notification WHERE subject_user_id = '${OWNER_ID}' OR user_id = '${OWNER_ID}';" \
       "DELETE FROM audit_log WHERE target_id = '${OWNER_ID}' OR actor_user_id = '${OWNER_ID}';" \
       "DELETE FROM user_branch_role WHERE user_id = '${OWNER_ID}';" \
       "DELETE FROM consent_record WHERE student_id = '${OWNER_ID}';" \
+      "DELETE FROM child_application WHERE parent_id = '${OWNER_ID}';" \
       "DELETE FROM enrollment WHERE student_id = '${OWNER_ID}';" \
       "DELETE FROM ${USER_TBL} WHERE id = '${OWNER_ID}';"
     do
@@ -75,12 +78,27 @@ STATUS=$?
 
 # ── The records the journey created, asserted from the database ───────────
 echo
-echo "-- exactly the intended records, and no duplicates --"
-docker compose exec -T db psql -U app -d bodour -c "
+echo "-- exactly the intended multi-child records, and no duplicates --"
+STATE="$(docker compose exec -T db psql -U app -d bodour -At -F '|' -c "
 WITH owner AS (SELECT user_id FROM user_identity WHERE email = '${ONBOARDING_EMAIL}')
 SELECT (SELECT count(*) FROM \"user\" u JOIN owner o ON o.user_id = u.id)          AS users,
        (SELECT count(*) FROM user_identity WHERE email = '${ONBOARDING_EMAIL}')     AS identities,
        (SELECT count(*) FROM normalized_email_lock WHERE email = '${ONBOARDING_EMAIL}') AS email_locks,
-       (SELECT u.account_status::text FROM \"user\" u JOIN owner o ON o.user_id = u.id LIMIT 1) AS state;"
+       (SELECT u.account_status::text FROM \"user\" u JOIN owner o ON o.user_id = u.id LIMIT 1) AS state,
+       (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id) AS children,
+       (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id WHERE c.status = 'pending') AS pending_children,
+       (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id WHERE c.consent_media_release) AS media_yes,
+       (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id WHERE NOT c.consent_media_release) AS media_no,
+       (SELECT count(*) FROM consent_record c JOIN owner o ON o.user_id = c.student_id WHERE c.consent_type = 'data_processing' AND c.granted) AS processing_consents,
+       (SELECT count(DISTINCT c.requested_category_id) FROM child_application c JOIN owner o ON o.user_id = c.parent_id) AS categories,
+       (SELECT count(DISTINCT c.requested_branch_id) FROM child_application c JOIN owner o ON o.user_id = c.parent_id) AS branches,
+       (SELECT u.phone FROM \"user\" u JOIN owner o ON o.user_id = u.id LIMIT 1) AS phone;")"
+echo "$STATE"
+if [[ "$STATE" != "1|1|1|pending|2|2|1|1|1|2|2|+212600000099" ]]; then
+  echo "FAIL: unexpected multi-child registration state" >&2
+  STATUS=1
+else
+  echo "Registration database gate: 12/12 exact state assertions passed"
+fi
 
 exit "$STATUS"

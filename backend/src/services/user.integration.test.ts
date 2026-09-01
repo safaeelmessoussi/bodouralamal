@@ -6,7 +6,12 @@ import { actorFor } from "../test-support/actor.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import * as userRepo from "../repositories/user.repository.js";
-import { listDirectory, listUsers, preProvision } from "./user.service.js";
+import {
+  ensureRoleAssignment,
+  listDirectory,
+  listUsers,
+  preProvision,
+} from "./user.service.js";
 
 /**
  * Staff pre-provisioning (§3.1, §4.1b step 4b, §5.6, §7 Revision 15).
@@ -64,6 +69,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
@@ -87,6 +95,65 @@ beforeEach(clear);
 afterAll(async () => {
   await clear();
   await prisma.$disconnect();
+});
+
+describe("structural role grants share the User serialization anchor", () => {
+  it("waits behind an in-flight account edit before reading the complete role set", async () => {
+    const adminId = await makeStaff("super_admin");
+    const target = await prisma.user.create({
+      data: {
+        nameArabic: `${TAG} منح متزامن`,
+        sex: "female",
+        accountStatus: "active",
+      },
+    });
+    const actor = await actorFor(prisma, adminId);
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let announceLock!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      announceLock = resolve;
+    });
+
+    const blocker = prisma.$transaction(async (tx) => {
+      expect(await userRepo.lockUser(tx, target.id)).toBe(true);
+      announceLock();
+      await held;
+    });
+    await locked;
+
+    let settled = false;
+    const grant = prisma
+      .$transaction((tx) =>
+        ensureRoleAssignment(tx, actor, target.id, {
+          role: "student",
+          branchId: null,
+        }),
+      )
+      .finally(() => {
+        settled = true;
+      });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      // Without the shared User lock the helper finishes while the account edit
+      // is still in flight, which re-opens the read/replace lost-update race.
+      expect(settled).toBe(false);
+    } finally {
+      release();
+    }
+
+    await blocker;
+    expect(await grant).toBe(true);
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: target.id, deletedAt: null, role: { name: "student" } },
+      }),
+    ).toBe(1);
+  });
 });
 
 describe("§4.1b step 4b — staff pre-provisioning", () => {
@@ -625,6 +692,9 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
         // R80.1 — every creation path records a sex.
         sex: "female",
         email: unclaimedEmail,
+        // Unbound does not mean unapproved: this account is operational and
+        // therefore belongs in the account directory before first Google use.
+        preApproved: true,
       },
     );
     // A bound account: the address lives on UserIdentity.
@@ -679,7 +749,7 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
     });
   });
 
-  it("§14.2 filters: role, branch and status", async () => {
+  it("operational account management excludes pending/rejected and filters approved statuses", async () => {
     const admin = await makeStaff("super_admin");
     const branch = await prisma.branch.create({
       data: {
@@ -696,13 +766,21 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
       branchId: branch.id,
       preApproved: true,
     });
-    const plain = await person({ nameArabic: "بدون دور", status: "pending" });
+    const pending = await person({ nameArabic: "طلب قيد المراجعة", status: "pending" });
+    const rejected = await person({ nameArabic: "طلب مرفوض", status: "rejected" });
+    const suspended = await person({ nameArabic: "حساب موقوف", status: "suspended" });
+
+    const ordinary = await listUsers(prisma, await actorFor(prisma, admin), {});
+    expect(idsOf(ordinary)).not.toContain(pending);
+    expect(idsOf(ordinary)).not.toContain(rejected);
+    expect(idsOf(ordinary)).toContain(teacher.id);
+    expect(idsOf(ordinary)).toContain(suspended);
 
     const byRole = await listUsers(prisma, await actorFor(prisma, admin), {
       role: "teacher",
     });
     expect(idsOf(byRole)).toContain(teacher.id);
-    expect(idsOf(byRole)).not.toContain(plain);
+    expect(idsOf(byRole)).not.toContain(pending);
 
     const byBranch = await listUsers(prisma, await actorFor(prisma, admin), {
       branchId: branch.id,
@@ -710,9 +788,9 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
     expect(idsOf(byBranch)).toEqual([teacher.id]);
 
     const byStatus = await listUsers(prisma, await actorFor(prisma, admin), {
-      status: "pending",
+      status: "suspended",
     });
-    expect(idsOf(byStatus)).toContain(plain);
+    expect(idsOf(byStatus)).toContain(suspended);
     expect(idsOf(byStatus)).not.toContain(teacher.id);
 
     await prisma.userBranchRole.deleteMany({ where: { userId: teacher.id } });
@@ -728,6 +806,7 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
       sex: "female",
       email: addr(),
       role: "teacher",
+      preApproved: true,
     });
     expect(
       idsOf(
@@ -942,6 +1021,26 @@ describe("§4.2 Revision 25 — directory visibility is branch-scoped", () => {
 
   const idsOf = (page: { data: { id: string }[] }) =>
     page.data.map((u) => u.id);
+
+  it("an operational directory offers active people only", async () => {
+    const admin = await scopedAdmin([]);
+    const active = await memberOf(await branch("النشيط"));
+    const pending = await prisma.user.create({
+      data: { nameArabic: `${TAG} قيد المراجعة`, sex: "female", accountStatus: "pending" },
+    });
+    const rejected = await prisma.user.create({
+      data: { nameArabic: `${TAG} مرفوضة`, sex: "female", accountStatus: "rejected" },
+    });
+    const suspended = await prisma.user.create({
+      data: { nameArabic: `${TAG} موقوفة`, sex: "female", accountStatus: "suspended" },
+    });
+
+    const ids = idsOf(await listDirectory(prisma, await actorFor(prisma, admin), {}));
+    expect(ids).toContain(active);
+    expect(ids).not.toContain(pending.id);
+    expect(ids).not.toContain(rejected.id);
+    expect(ids).not.toContain(suspended.id);
+  });
 
   it("a branch-scoped Admin sees their own branch and NOT another", async () => {
     const marrakesh = await branch("مراكش");

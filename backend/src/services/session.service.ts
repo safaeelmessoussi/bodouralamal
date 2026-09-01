@@ -4,7 +4,10 @@ import type {
   Session,
   SessionStatus,
 } from "../generated/prisma/client.js";
-import { notifyRestored } from "./notification.service.js";
+import {
+  notifyRestored,
+  notifySessionStaffChanged,
+} from "./notification.service.js";
 import { AppError } from "../lib/errors.js";
 import { atMidnightUtc } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
@@ -305,28 +308,47 @@ export async function overrideSession(
       },
     });
 
-    if (data.staff !== undefined) {
-      await assertStaffAccountsAvailable(
-        tx,
-        data.staff.map((person) => person.userId),
-      );
+    if (
+      data.staff !== undefined ||
+      (data.visibility !== undefined && data.visibility !== session.visibility)
+    ) {
       const before = await tx.sessionStaff.findMany({
         where: { sessionId, deletedAt: null },
         select: { userId: true, position: true },
       });
-      await replaceSessionStaff(tx, sessionId, data.staff);
-      changed["staff"] = {
-        from:
-          before
-            .map((b) => `${b.position}:${b.userId}`)
-            .sort()
-            .join(",") || null,
-        to:
-          data.staff
-            .map((b) => `${b.position}:${b.userId}`)
-            .sort()
-            .join(",") || null,
-      };
+      const after = data.staff ?? before;
+      if (data.staff !== undefined) {
+        await replaceSessionStaff(tx, sessionId, data.staff);
+      }
+      await notifySessionStaffChanged(
+        tx,
+        sessionId,
+        {
+          previousVisibility: session.visibility,
+          currentVisibility: data.visibility ?? session.visibility,
+          previousStaff: before,
+          currentStaff: after,
+        },
+        actor.userId,
+      );
+      if (data.staff !== undefined) {
+        await assertStaffAccountsAvailable(
+          tx,
+          data.staff.map((person) => person.userId),
+        );
+        changed["staff"] = {
+          from:
+            before
+              .map((b) => `${b.position}:${b.userId}`)
+              .sort()
+              .join(",") || null,
+          to:
+            data.staff
+              .map((b) => `${b.position}:${b.userId}`)
+              .sort()
+              .join(",") || null,
+        };
+      }
     }
 
     /**

@@ -1878,7 +1878,7 @@ before passing**:
   rendered is *worse* than the original defect, because the dialog becomes impossible to
   leave while dirty. One of the six did precisely that while this section was being written.
 
-Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**23/23**), which drives
+Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**24/24**), which drives
 the reported scenario in a real browser and keeps `＋تسجيل مستفيدة` green as the reference.
 
 ### AY.1 · «Dirty» means *changed*, never *has content* (NEW E)
@@ -2227,7 +2227,7 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/dev/browser/verify-ux-slice.mjs`](../../scripts/dev/browser/verify-ux-slice.mjs) | **AG/AI/W** as **rendered boxes** — scroll ownership at two viewports, control geometry on two calendars, sidebar `scrollTop` across a real navigation |
 | [`scripts/ci/check-dialog-hidden-when-closed.sh`](../../scripts/ci/check-dialog-hidden-when-closed.sh) | **AG** — no unconditional `display` on `.dialog`, and the explicit closed rule survives |
 | [`scripts/dev/browser/verify-dialog-states.mjs`](../../scripts/dev/browser/verify-dialog-states.mjs) | **AG** — closed/open/close/reopen on 15 pages from BOTH the affected and unaffected sets, plus page-flow impact and scroll ownership |
-| [`scripts/dev/browser/verify-calendar-header.mjs`](../../scripts/dev/browser/verify-calendar-header.mjs) | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift from the header centre, and the table note against its table's width |
+| [`scripts/dev/browser/verify-calendar-header.mjs`](../../scripts/dev/browser/verify-calendar-header.mjs) | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift from the header centre, physical Hijri-left/Gregorian-right coordinates in both title and day cell, and the table note against its table's width |
 | [`components/calendar/calendar-header.test.tsx`](../../frontend/src/components/calendar/calendar-header.test.tsx) | **AJ** — the three regions, and the shape following the data rather than a flag |
 | [`scripts/dev/browser/verify-notifications.mjs`](../../scripts/dev/browser/verify-notifications.mjs) | **AM/AN** — asked as three different people: who sees what, who is told, and that declining tells nobody |
 | [`scripts/dev/browser/verify-calendar-filters.mjs`](../../scripts/dev/browser/verify-calendar-filters.mjs) | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** |

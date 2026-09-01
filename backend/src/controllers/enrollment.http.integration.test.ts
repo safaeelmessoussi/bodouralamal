@@ -73,6 +73,9 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   if (ids.length > 0) {
+    await prisma.notification.deleteMany({
+      where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+    });
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });

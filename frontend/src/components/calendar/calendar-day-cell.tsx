@@ -68,12 +68,14 @@ export function CalendarDayCell({
         <button
           type="button"
           className="cal-day__select"
+          dir="ltr"
           onClick={() => onSelect(date)}
           aria-label={`${iso}${count ? ` — ${t('calendar.eventCount')}: ${count}` : ''}`}
         >
-          {/* RTL: the Hijri number is written first so it lands on the LEFT,
-              and the Gregorian on the right. Both are aria-hidden — the button
-              label above already states the date properly. */}
+          {/* This coordinate row is explicitly LTR in CSS: the Hijri number is
+              first/left and Gregorian second/right inside the otherwise RTL
+              calendar. Both are aria-hidden — the button label above already
+              states the date properly. */}
           {hijri?.hijri_day != null ? (
             <span className="cal-day__hijri" aria-hidden="true">
               {hijri.hijri_day}

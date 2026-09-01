@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { NotificationItem } from '../../adapters/notifications.js';
 import { t } from '../../i18n/index.js';
+import { notificationHref } from './notification-list.js';
+import { resolveRoute } from '../../lib/route.js';
 
 /**
  * The R77 surface's copy and its wire type.
@@ -17,6 +19,7 @@ const CANCELLED: NotificationItem = {
   session_id: 's1',
   event_id: null,
   exam_id: null,
+  subject_user_id: null,
   // R82.1 — the target-neutral fields the renderer reads, so one list can carry
   // a class, an activity and an exam without a switch in every consumer.
   title: 'تفسير',
@@ -39,6 +42,7 @@ const GRADE: NotificationItem = {
   session_id: null,
   event_id: null,
   exam_id: 'e1',
+  subject_user_id: null,
   title: 'اختبار التفسير الأول',
   date: '2026-08-20',
   start_time: null,
@@ -69,6 +73,7 @@ describe('R77 — the wire shape a client is coded against', () => {
       'session_start_time',
       'start_time',
       'subject_name',
+      'subject_user_id',
       'title',
       'type',
     ]);
@@ -76,6 +81,26 @@ describe('R77 — the wire shape a client is coded against', () => {
 
   it('carries the reason, because «ألغيت» without «لماذا» is what the manual channels already did badly', () => {
     expect(CANCELLED.reason).not.toBeNull();
+  });
+});
+
+describe('R117 — actionable registration review', () => {
+  it('names the exact applicant on a real admin route and leaves stale coordinates server-checkable', () => {
+    const href = notificationHref({
+      ...CANCELLED,
+      type: 'registration_review_required',
+      session_id: null,
+      subject_user_id: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(href).toBe(
+      '/admin/approvals?review_user_id=11111111-1111-4111-8111-111111111111',
+    );
+    expect(resolveRoute(new URL(href!, 'https://example.test').pathname)).toBe('admin');
+  });
+
+  it('does not invent a destination when the exact target is absent', () => {
+    expect(notificationHref({ ...CANCELLED, type: 'registration_review_required' })).toBeNull();
+    expect(notificationHref(GRADE)).toBeNull();
   });
 });
 
@@ -155,14 +180,32 @@ describe('R77 — the unread marker is a shape, not only a colour', () => {
  */
 describe('R82/R83 — a notice of any kind reads as itself', () => {
   const KEYS: Record<NotificationItem['type'], string> = {
+    registration_review_required: 'notifications.registrationReviewRequired',
+    registration_approved: 'notifications.registrationApproved',
+    registration_rejected: 'notifications.registrationRejected',
+    family_link_requested: 'notifications.familyLinkRequested',
+    family_link_approved: 'notifications.familyLinkApproved',
+    family_link_rejected: 'notifications.familyLinkRejected',
+    family_link_revoked: 'notifications.familyLinkRevoked',
+    role_assignments_changed: 'notifications.roleAssignmentsChanged',
+    platform_ownership_received: 'notifications.platformOwnershipReceived',
+    enrollment_changed: 'notifications.enrollmentChanged',
     session_cancelled: 'notifications.sessionCancelled',
     session_restored: 'notifications.sessionRestored',
     session_rescheduled: 'notifications.sessionRescheduled',
     session_assigned: 'notifications.sessionAssigned',
+    session_unassigned: 'notifications.sessionUnassigned',
     event_created: 'notifications.eventCreated',
     event_staff_assigned: 'notifications.eventStaffAssigned',
+    event_staff_unassigned: 'notifications.eventStaffUnassigned',
     event_rescheduled: 'notifications.eventRescheduled',
     event_cancelled: 'notifications.eventCancelled',
+    exam_teacher_assigned: 'notifications.examTeacherAssigned',
+    exam_teacher_unassigned: 'notifications.examTeacherUnassigned',
+    exam_scheduled: 'notifications.examScheduled',
+    exam_rescheduled: 'notifications.examRescheduled',
+    exam_changed: 'notifications.examChanged',
+    exam_cancelled: 'notifications.examCancelled',
     grade_published: 'notifications.gradePublished',
   };
 

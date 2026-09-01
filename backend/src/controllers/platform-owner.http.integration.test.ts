@@ -39,6 +39,12 @@ const token = (userId: string, role: string, branches: string[] | null = null) =
 let originalOwnerId: string;
 let originalOwnerVersion: number;
 let originalOwnerUserVersion: number;
+let originalOwnerNotification: {
+  id: string;
+  readAt: Date | null;
+  createdAt: Date;
+  deletedAt: Date | null;
+} | null;
 let ownerToken: string;
 let branchId: string;
 let eligibleA: string;
@@ -112,6 +118,33 @@ async function restoreOriginalState(): Promise<void> {
   });
 }
 
+/**
+ * Several proofs transfer ownership back through the real endpoint, which
+ * correctly notifies the pre-existing Owner. That row belongs to this test
+ * only when the exact semantic coordinate did not exist before the suite; on a
+ * populated developer database an existing read/deleted state must instead be
+ * restored byte-for-byte where it is logically significant.
+ */
+async function restoreOriginalOwnerNotification(): Promise<void> {
+  const exact = {
+    userId: originalOwnerId,
+    subjectUserId: originalOwnerId,
+    type: 'platform_ownership_received' as const,
+  };
+  if (originalOwnerNotification === null) {
+    await prisma.notification.deleteMany({ where: exact });
+    return;
+  }
+  await prisma.notification.update({
+    where: { id: originalOwnerNotification.id },
+    data: {
+      readAt: originalOwnerNotification.readAt,
+      createdAt: originalOwnerNotification.createdAt,
+      deletedAt: originalOwnerNotification.deletedAt,
+    },
+  });
+}
+
 async function clear(): Promise<void> {
   await restoreOriginalOwner();
   const users = await prisma.user.findMany({
@@ -120,6 +153,9 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((user) => user.id);
   if (ids.length > 0) {
+    await prisma.notification.deleteMany({
+      where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+    });
     await prisma.auditLog.deleteMany({
       where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
     });
@@ -128,6 +164,7 @@ async function clear(): Promise<void> {
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  await restoreOriginalOwnerNotification();
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
@@ -142,6 +179,14 @@ beforeAll(async () => {
   originalOwnerUserVersion = (
     await prisma.user.findUniqueOrThrow({ where: { id: originalOwnerId }, select: { version: true } })
   ).version;
+  originalOwnerNotification = await prisma.notification.findFirst({
+    where: {
+      userId: originalOwnerId,
+      subjectUserId: originalOwnerId,
+      type: 'platform_ownership_received',
+    },
+    select: { id: true, readAt: true, createdAt: true, deletedAt: true },
+  });
   ownerToken = token(originalOwnerId, 'super_admin');
   await clear();
 
@@ -156,7 +201,10 @@ beforeAll(async () => {
   deletedSuperAdmin = await createUser('محذوفة', 'super_admin', { deleted: true });
 });
 
-afterEach(restoreOriginalState);
+afterEach(async () => {
+  await restoreOriginalState();
+  await restoreOriginalOwnerNotification();
+});
 
 afterAll(async () => {
   await clear();
@@ -278,6 +326,16 @@ describe('Platform Owner transfer and lifecycle invariants', () => {
         )
       ).status,
     ).toBe(409);
+    const wrongScope = await call(
+      'PUT',
+      `/admin/users/${originalOwnerId}/roles`,
+      token(nonOwnerSuperAdmin, 'super_admin'),
+      { assignments: [{ role: 'super_admin', branch_id: branchId }] },
+    );
+    expect(wrongScope.status).toBe(409);
+    expect(wrongScope.body.error?.details?.['reason']).toBe(
+      'PLATFORM_OWNER_GLOBAL_SUPER_ADMIN_REQUIRED',
+    );
     expect((await call('DELETE', '/profile', ownerToken)).status).toBe(409);
     expect(
       (
@@ -323,6 +381,39 @@ describe('Platform Owner transfer and lifecycle invariants', () => {
     ).rejects.toThrow(/Platform Owner/);
   });
 
+  it('lets the current Owner add and remove ordinary roles while retaining global Super Admin', async () => {
+    expect((await transfer(eligibleA, ownerToken)).status).toBe(200);
+    const successorToken = token(eligibleA, 'super_admin');
+
+    const added = await call('PUT', `/admin/users/${eligibleA}/roles`, successorToken, {
+      assignments: [
+        { role: 'super_admin', branch_id: null },
+        { role: 'student', branch_id: branchId },
+      ],
+    });
+    expect(added.status).toBe(200);
+    expect(
+      await prisma.userBranchRole.count({
+        where: {
+          userId: eligibleA,
+          deletedAt: null,
+          branchId,
+          role: { name: 'student' },
+        },
+      }),
+    ).toBe(1);
+
+    const removed = await call('PUT', `/admin/users/${eligibleA}/roles`, successorToken, {
+      assignments: [{ role: 'super_admin', branch_id: null }],
+    });
+    expect(removed.status).toBe(200);
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: eligibleA, deletedAt: null, role: { name: 'student' } },
+      }),
+    ).toBe(0);
+  });
+
   it('applies normal lifecycle rules to the former owner after transfer', async () => {
     expect((await transfer(eligibleA, ownerToken)).status).toBe(200);
     const former = await prisma.user.findUniqueOrThrow({ where: { id: originalOwnerId } });
@@ -349,27 +440,42 @@ describe('Platform Owner transfer and lifecycle invariants', () => {
   });
 
   it('binds the pre-provisioned owner on first verified Google identity without registration', async () => {
+    const existingIdentity = await prisma.userIdentity.findFirst({
+      where: {
+        userId: originalOwnerId,
+        provider: 'google',
+        email: 'safae.elmessoussi@gmail.com',
+      },
+      select: { providerSubjectId: true },
+    });
     const providerSubjectId = `${TAG}:google-subject`;
     try {
       const route = await resolveLogin(prisma, {
         email: 'safae.elmessoussi@gmail.com',
-        providerSubjectId,
+        providerSubjectId: existingIdentity?.providerSubjectId ?? providerSubjectId,
       });
       expect(route.kind).toBe('active');
       if (route.kind === 'active') {
-        expect(route.boundNow).toBe(true);
+        expect(route.boundNow).toBe(existingIdentity === null);
         expect(route.account.user.id).toBe(originalOwnerId);
       }
       expect(
-        await prisma.userIdentity.count({ where: { userId: originalOwnerId, providerSubjectId } }),
+        await prisma.userIdentity.count({
+          where: {
+            userId: originalOwnerId,
+            providerSubjectId: existingIdentity?.providerSubjectId ?? providerSubjectId,
+          },
+        }),
       ).toBe(1);
     } finally {
-      await prisma.auditLog.deleteMany({
-        where: { targetId: originalOwnerId, actionType: 'auth.identity_bound' },
-      });
-      await prisma.userIdentity.deleteMany({
-        where: { userId: originalOwnerId, providerSubjectId },
-      });
+      if (existingIdentity === null) {
+        await prisma.auditLog.deleteMany({
+          where: { targetId: originalOwnerId, actionType: 'auth.identity_bound' },
+        });
+        await prisma.userIdentity.deleteMany({
+          where: { userId: originalOwnerId, providerSubjectId },
+        });
+      }
     }
   });
 });

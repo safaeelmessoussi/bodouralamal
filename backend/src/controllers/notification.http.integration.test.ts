@@ -53,6 +53,7 @@ const KEYS = [
   "session_start_time",
   "start_time",
   "subject_name",
+  "subject_user_id",
   "title",
   "type",
 ];
@@ -119,7 +120,9 @@ async function clear(): Promise<void> {
     where: { sessionId: { in: sessions.map((s) => s.id) } },
   });
   await prisma.sessionStaff.deleteMany({
-    where: { session: { scheduleId: { in: ids } } },
+    // Exact ids avoid a relation-filter race with the live materialiser while
+    // this disposable schedule is being torn down.
+    where: { sessionId: { in: sessions.map((session) => session.id) } },
   });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({
@@ -670,5 +673,56 @@ describe("R78.4 — rescheduling tells the audience where the class now is", () 
         (n) => n["session_id"] === sessionId,
       ),
     ).toHaveLength(0);
+  });
+});
+
+describe("R109/R116 — hidden Sessions never expose notification coordinates to students or assistants", () => {
+  const sessionTypesFor = async (userId: string): Promise<string[]> =>
+    (
+      await prisma.notification.findMany({
+        where: { userId, sessionId, deletedAt: null },
+        select: { type: true },
+      })
+    )
+      .map((row) => row.type)
+      .sort();
+
+  it("withdraws prior rows and resolves a later send only to the responsible teacher", async () => {
+    await prisma.notification.deleteMany({ where: { sessionId } });
+    const current = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { status: true, version: true },
+    });
+    if (current.status === "cancelled") {
+      expect(
+        (
+          await call("POST", `/sessions/${sessionId}/restore`, superAdmin, {
+            version: current.version,
+          })
+        ).status,
+      ).toBe(200);
+    }
+
+    const staffed = await call("PATCH", `/sessions/${sessionId}`, superAdmin, {
+      version: await versionOf(),
+      visibility: "private",
+    });
+    expect(staffed.status, JSON.stringify(staffed.body)).toBe(200);
+    expect((await announce("rescheduled")).status).toBe(200);
+    expect(await sessionTypesFor(enrolledId)).toContain("session_rescheduled");
+
+    const hidden = await call("PATCH", `/sessions/${sessionId}`, superAdmin, {
+      version: await versionOf(),
+      visibility: "hidden",
+    });
+    expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
+    expect(await sessionTypesFor(enrolledId)).toEqual([]);
+
+    await prisma.notification.deleteMany({ where: { sessionId } });
+    const sendWhileHidden = await announce("rescheduled");
+    expect(sendWhileHidden.status, JSON.stringify(sendWhileHidden.body)).toBe(200);
+    expect((sendWhileHidden.body.data as unknown as { notified: number }).notified).toBe(1);
+    expect(await sessionTypesFor(teacherId)).toEqual(["session_rescheduled"]);
+    expect(await sessionTypesFor(enrolledId)).toEqual([]);
   });
 });

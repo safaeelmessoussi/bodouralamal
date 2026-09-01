@@ -6,7 +6,7 @@ import { ACCOUNT_STATUSES, ROLES } from '../../adapters/users.js';
 import { ar } from '../../i18n/ar.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
-import { canOfferOwnershipTransfer } from './users.js';
+import { assignmentsForSave, canOfferOwnershipTransfer } from './users.js';
 
 /**
  * `/admin/users` — the client half of the contract guard.
@@ -63,6 +63,7 @@ const QUEUE_ITEM: Approval = {
   requested_role: null,
   framing: null,
   category: { id: '00000000-0000-4000-8000-00000000000a', name: 'طفل' },
+  registration_details: null,
 };
 
 describe('the adapter type matches the wire contract', () => {
@@ -168,6 +169,14 @@ describe('Platform Owner controls', () => {
     expect(ar.admin.users.platformOwner).toBeTruthy();
     expect(ar.admin.users.platformOwnerProtected).toBeTruthy();
     expect(ar.admin.users.transferOwnership).toBeTruthy();
+  });
+
+  it('includes the visible role draft when the primary Save is used', () => {
+    expect(assignmentsForSave([ASSIGNMENT], 'student', '')).toEqual([
+      ASSIGNMENT,
+      { role: 'student', branch_id: null },
+    ]);
+    expect(assignmentsForSave([ASSIGNMENT], '', ASSIGNMENT.branch_id!)).toEqual([ASSIGNMENT]);
   });
 });
 

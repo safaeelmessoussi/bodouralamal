@@ -422,6 +422,8 @@ straddling two Hijri months therefore needs no special case in the client — wh
 whole point, because computing a Hijri date in a client is prohibited outright (§20 rule 14).
 
 Per-cell Hijri numbers come from `hijri.days`, keyed once into a map for O(1) lookup.
+The cell's small coordinate row is explicitly LTR within the RTL page: Hijri first/physical
+left, Gregorian second/physical right, matching the title without exchanging date values.
 
 ### Absence is rendered as absence
 
@@ -685,7 +687,8 @@ notification confirmation used by create and reschedule appear. Choosing
 `بدون إشعار` sends no second request; choosing `إرسال الإشعار` calls the existing
 Event notify adapter with `cancelled`. Classes and exams do not enter this arm:
 Session occurrence changes keep their separate R83 flow, and an exam announces
-grade publication.
+its R116 scheduling/staffing lifecycle automatically in the domain transaction;
+grade publication remains its separate BR-8 event.
 
 The ordering is deliberate. Asking before deletion would either announce a
 change that could still fail or require coupling delivery back into the delete
@@ -702,6 +705,17 @@ target, room, teacher, assistants), `ActivitySection` (§4.4 — visibility and
 scope) or `ExamSection` (§4.6 — see below). A `type === 'class'` ladder inside it
 would be how a "generic" form quietly becomes three forms sharing a wrapper, and
 the parity guard asserts there is none.
+
+For a **new** class, the teaching-mode draft begins at `entire_level`
+(`المستوى كامل`); editing seeds the stored mode instead. A new staffing-period row begins
+at the responsible `teacher` position (`مؤطّرة مسؤولة`), while existing rows keep their
+recorded positions and both defaults remain editable before Save.
+
+The scheduling dialog compares an exhaustive normalized snapshot with its pristine opening
+state and passes that one result to `FormDialog`. Closing an unchanged form is immediate;
+Cancel/Escape/X on a dirty form use the shared discard confirmation; backdrop is ignored while
+dirty; and restoring every value makes it clean again. Successful Save unmounts the form and
+never raises a discard prompt.
 
 **The claim was tested by cashing it.** R58 added Exams, and the shell, the
 recurrence editor, the list and the calendar grid were unchanged: what moved was
@@ -916,11 +930,16 @@ rather than teaching a shared component why a branch selector sometimes offers a
 ## Content upload, and why one screen serves two portals
 
 `/admin/content` (§5.6) and `/teacher/content` (§5.5) render **the same component**. The
-capability is identical — attach a file to a Subject within a Level, replace it, delete it —
+user-facing capability is identical — attach a new file to a Subject within a Level and
+delete it —
 and what differs between the audiences is **what the server will accept**, not what the client
 offers: a Teacher cannot choose the Global scope and is confined to the branches of the
 schedules they staff (§4.9). Building two screens would put that difference in the client,
 which is exactly where it must not live.
+
+The R53 replacement primitive remains in the upload contract for compatibility and internal
+recovery, but the page offers no «استبدال الملف» action. A reader creates/uploads a new item
+instead; upload, download, linkage and deletion keep their existing flows.
 
 So the page **renders refusals rather than pre-empting them**, with one deliberate exception:
 the Global option is not offered to a Teacher at all, because an option that always fails is
@@ -999,6 +1018,13 @@ component *almost* fits:
   been carrying. Extracted on the second use, not the third (§2.7).
 
 Neither was a `RejectDialog` or an `ApprovalBadge`. That distinction is the whole framework.
+
+R117 keeps the queue row readable by making submitted registration data a row action, not more
+columns. `عرض التفاصيل` opens the explicit staff-only projection: guardian contact/consent data
+and one fieldset per child, including that child's requested Category and Branch. An exact
+`review_user_id` from the notification opens this dialog automatically; no row produces the
+ordinary unavailable state. Parent/child approval deliberately opens a plain guardian
+confirmation, while each child owns the shared placement picker and its own Category default.
 
 ### The registration form found three selectors that were one
 
@@ -1325,18 +1351,17 @@ to find them.
 
 ## The family surface: one switcher, one dashboard (R62)
 
-**`ولي الأمر` is not a destination — it is a group.** A parent's home is a *child's*
-dashboard, so selecting the bare role would arrive somewhere with nobody selected. The
-account switcher's `parent` entry therefore expands into the approved children plus a
-persistent **«＋ تسجيل طفل»** action, and picking a child sets the active role and the
-active child **in one action**.
+**`ولي الأمر` is not a separate destination — it is a group on the supported Student
+Dashboard route.** The account switcher's `parent` entry expands into approved children, and
+picking one sets the active role and active child **in one action**. Registering another child
+is a task under `/profile/register-child`, not a context inside this menu.
 
 That is why there is no longer a second child dropdown beside the role switcher. Two menus
 made one decision into two, and left two places to be wrong about who is currently active.
 
 **A parent-only account still gets the switcher.** The old rule hid it below two roles,
-which for a parent holding exactly one role hid the entire family surface — the children
-and the registration action are inside that menu.
+which for a parent holding exactly one role hid the entire family surface — the children are
+inside that menu.
 
 **R64 moved «＋ تسجيل طفل» out of the switcher onto its own page, and R65 moved
 that page out of the student dashboard** to `/profile/register-child`. A switcher lists the *contexts* a person may
@@ -1359,6 +1384,11 @@ child's when they act as a parent, because `GET /students/me` resolves the **act
 student server-side (§4.3, R63). The client sends the child header and renders whatever
 comes back; it never decides whose data this is.
 
+The stored child coordinate is reconciled to `null` outside Parent context. Switching to
+Student clears it before navigation, so a genuine Parent+Student acts as herself and never as
+the child selected in the previous context. A Parent-only account has no standalone
+`مستفيدة` option because role choices come from live roles, not from the presence of children.
+
 **A persistent banner names the child** (R62.10) — not a toast and not a subtitle. A parent
 looking at the wrong child's schedule must find that out by reading the screen, not by
 noticing something is off.
@@ -1367,10 +1397,11 @@ Its scope is R62.10's and stops there: the identity block, today's and upcoming 
 Quran progress, grades and exams are later milestones and are **not** stubbed — an empty
 section promising a feature is a §14.4 problem, not a placeholder.
 
-**The sessions list passes the access token to `GET /calendar`.** That endpoint is public
-and optionally authenticated, so it returns the *caller's* visibility tier; the public
-calendar page passes nothing and gets the public tier, which is right for it. On this
-screen a session restricted to the student's own Level is exactly what is wanted.
+**Every authenticated calendar consumer passes the access token to `GET /calendar`.** The
+endpoint is public and optionally authenticated, so the same `/calendar` page is anonymous
+without a session and receives the caller's live tier after login. Neither this page nor the
+student session list decides visibility locally; the backend does. On the student screen a
+session restricted to the student's own Level is exactly what is wanted.
 
 ## Toasts
 

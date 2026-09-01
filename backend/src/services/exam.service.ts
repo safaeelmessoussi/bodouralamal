@@ -12,6 +12,11 @@ import { resolveSort, type SortableFields, type SortParams } from '../lib/sortin
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
+import {
+  notifyExamCancelled,
+  notifyExamCreated,
+  notifyExamUpdated,
+} from './notification.service.js';
 
 /**
  * Exams as **scheduled sittings** (§4.6 as amended by SRS Revision 58).
@@ -214,11 +219,6 @@ export async function createPhysicalExam(
       administrativeGroupId: input.administrativeGroupId ?? null,
     });
     await assertCoherent(tx, input);
-    await assertStaffAccountsAvailable(
-      tx,
-      (input.staff ?? []).map((person) => person.userId),
-    );
-
     const exam = await tx.exam.create({
       data: {
         mode: 'physical',
@@ -251,6 +251,23 @@ export async function createPhysicalExam(
       });
     }
 
+    await notifyExamCreated(
+      tx,
+      exam.id,
+      {
+        levelId: input.levelId,
+        administrativeGroupId: input.administrativeGroupId ?? null,
+        branchId: input.branchId,
+        visibility: input.visibility ?? 'public',
+      },
+      input.staff ?? [],
+      actor.userId,
+    );
+    await assertStaffAccountsAvailable(
+      tx,
+      (input.staff ?? []).map((person) => person.userId),
+    );
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -282,12 +299,22 @@ export async function updatePhysicalExam(
   const existing = await prisma.exam.findFirst({
     where: { id, deletedAt: null },
     select: {
+      title: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      roomId: true,
+      visibility: true,
       branchId: true,
       levelId: true,
       subjectId: true,
       administrativeGroupId: true,
       mode: true,
       version: true,
+      staff: {
+        where: { deletedAt: null },
+        select: { userId: true, position: true },
+      },
     },
   });
   if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
@@ -382,10 +409,6 @@ export async function updatePhysicalExam(
     });
 
     if (input.staff !== undefined) {
-      await assertStaffAccountsAvailable(
-        tx,
-        input.staff.map((person) => person.userId),
-      );
       // Replaced, not merged: one call is one decision, and there is no window
       // in which the exam holds half of an intended change.
       //
@@ -427,6 +450,51 @@ export async function updatePhysicalExam(
       }
     }
 
+    const currentStaff = input.staff ?? existing.staff;
+    const changedDate = (next: Date | undefined, current: Date | null): boolean =>
+      next !== undefined && current !== null && next.getTime() !== current.getTime();
+    await notifyExamUpdated(
+      tx,
+      id,
+      {
+        previous: {
+          levelId: existing.levelId,
+          administrativeGroupId: existing.administrativeGroupId,
+          branchId: existing.branchId ?? '',
+          visibility: existing.visibility,
+        },
+        current: {
+          levelId: existing.levelId,
+          administrativeGroupId:
+            input.administrativeGroupId === undefined
+              ? existing.administrativeGroupId
+              : input.administrativeGroupId,
+          branchId: existing.branchId ?? '',
+          visibility: input.visibility ?? existing.visibility,
+        },
+        previousStaff: existing.staff,
+        currentStaff,
+        rescheduled:
+          changedDate(input.date, existing.date) ||
+          changedDate(input.startTime, existing.startTime) ||
+          changedDate(input.endTime, existing.endTime),
+        detailsChanged:
+          (input.title !== undefined && input.title !== existing.title) ||
+          (input.roomId !== undefined && input.roomId !== existing.roomId),
+        audienceChanged:
+          (input.administrativeGroupId !== undefined &&
+            input.administrativeGroupId !== existing.administrativeGroupId) ||
+          (input.visibility !== undefined && input.visibility !== existing.visibility),
+      },
+      actor.userId,
+    );
+    if (input.staff !== undefined) {
+      await assertStaffAccountsAvailable(
+        tx,
+        input.staff.map((person) => person.userId),
+      );
+    }
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -449,7 +517,13 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
   }
   const existing = await prisma.exam.findFirst({
     where: { id, deletedAt: null },
-    select: { branchId: true },
+    select: {
+      branchId: true,
+      levelId: true,
+      administrativeGroupId: true,
+      visibility: true,
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+    },
   });
   if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
   scope.assertCanActOnBranch(
@@ -469,6 +543,18 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
     // fell outside the window, and a restored exam came back with nobody
     // supervising it — silently, which is the failure §7 describes.
     const now = new Date();
+    await notifyExamCancelled(
+      tx,
+      id,
+      {
+        levelId: existing.levelId,
+        administrativeGroupId: existing.administrativeGroupId,
+        branchId: existing.branchId ?? '',
+        visibility: existing.visibility,
+      },
+      existing.staff,
+      actor.userId,
+    );
     await tx.examStaff.updateMany({
       where: { examId: id, deletedAt: null },
       data: { deletedAt: now, deletedById: actor.userId },

@@ -57,6 +57,7 @@ let studentB: string;
 /** Assigned to an Event directly — the staff half of R82.7's union. */
 let eventStaffRecipient: string;
 let eventStaffToken: string;
+let examTeacherOnly: string;
 let levelA: string;
 let levelB: string;
 let branchA: string;
@@ -105,6 +106,7 @@ async function clear(): Promise<void> {
   const examIds = exams.map((e) => e.id);
   await prisma.notification.deleteMany({ where: { examId: { in: examIds } } });
   await prisma.grade.deleteMany({ where: { examId: { in: examIds } } });
+  await prisma.examStaff.deleteMany({ where: { examId: { in: examIds } } });
   await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
   await prisma.levelSubject.deleteMany({
     where: { level: { name: { startsWith: TAG } } },
@@ -186,10 +188,29 @@ beforeAll(async () => {
   await prisma.enrollment.create({ data: { studentId: b.id, levelId: levelB, branchId: branchB } });
 
   const staff = await prisma.user.create({
-    data: { nameArabic: `${TAG} مؤطرة النشاط`, sex: "female", accountStatus: "active" },
+    data: {
+      nameArabic: `${TAG} مؤطرة النشاط`,
+      sex: "female",
+      accountStatus: "active",
+      isBeneficiary: true,
+    },
   });
   eventStaffRecipient = staff.id;
   eventStaffToken = bearer(staff.id, [{ role: "teacher", branches: null }]);
+  const teacherRole = await prisma.role.findFirstOrThrow({ where: { name: "teacher" } });
+  await prisma.userBranchRole.create({
+    data: { userId: staff.id, roleId: teacherRole.id, branchId: branchA },
+  });
+  await prisma.enrollment.create({
+    data: { studentId: staff.id, levelId: levelA, branchId: branchA },
+  });
+  const teacher = await prisma.user.create({
+    data: { nameArabic: `${TAG} مؤطرة الامتحان`, sex: "female", accountStatus: "active" },
+  });
+  examTeacherOnly = teacher.id;
+  await prisma.userBranchRole.create({
+    data: { userId: teacher.id, roleId: teacherRole.id, branchId: branchA },
+  });
 });
 
 afterAll(async () => {
@@ -201,12 +222,15 @@ afterAll(async () => {
 async function makeEvent(
   title: string,
   scopes: { branchIds?: string[]; categoryIds?: string[]; levelIds?: string[] },
-  details: { startTime?: Date } = {},
+  details: {
+    startTime?: Date;
+    visibility?: "public" | "private" | "hidden";
+  } = {},
 ): Promise<string> {
   const event = await prisma.event.create({
     data: {
       title: `${TAG} ${title}`,
-      visibility: "public",
+      visibility: details.visibility ?? "public",
       startDate: new Date("2099-05-05T00:00:00Z"),
       startTime: details.startTime ?? null,
       recurrenceType: "none",
@@ -453,6 +477,274 @@ describe("sending is a decision, and repeating it is harmless (R82.5)", () => {
       change: "created",
     });
     expect([403, 404]).toContain(res.status);
+  });
+});
+
+/* ── R116 exam assignment and scheduling ───────────────────────────────── */
+
+describe("hidden Events expose notification coordinates only to the responsible person (R109/R116)", () => {
+  it("withdraws audience/assistant notices and resolves later sends from the hidden tier", async () => {
+    const eventId = await makeEvent(
+      "نشاط يتحول إلى مخفي",
+      { levelIds: [levelA] },
+      { visibility: "private" },
+    );
+    const staffed = await call("PUT", `/events/${eventId}/staff`, adminToken, {
+      staff: [
+        { user_id: examTeacherOnly, position: "responsible" },
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(staffed.status, JSON.stringify(staffed.body)).toBe(204);
+    expect(
+      (await notificationsOf(eventStaffRecipient)).filter((row) => row.eventId === eventId),
+    ).toHaveLength(1);
+
+    expect(
+      (await call("POST", `/events/${eventId}/notify`, adminToken, { change: "created" })).status,
+    ).toBe(200);
+    expect(
+      (await notificationsOf(studentA)).filter((row) => row.eventId === eventId),
+    ).toHaveLength(1);
+
+    const hidden = await call("PATCH", `/events/${eventId}`, adminToken, {
+      version: 0,
+      visibility: "hidden",
+    });
+    expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
+    for (const userId of [studentA, eventStaffRecipient]) {
+      expect(
+        (await notificationsOf(userId)).filter((row) => row.eventId === eventId),
+      ).toHaveLength(0);
+    }
+    expect(
+      (await notificationsOf(examTeacherOnly))
+        .filter((row) => row.eventId === eventId)
+        .map((row) => row.type)
+        .sort(),
+    ).toEqual(["event_created", "event_staff_assigned"]);
+
+    // Prove a fresh send resolves the CURRENT hidden audience rather than
+    // succeeding only because the pre-transition row already exists.
+    await prisma.notification.deleteMany({
+      where: { userId: examTeacherOnly, eventId, type: "event_created" },
+    });
+
+    const sendWhileHidden = await call("POST", `/events/${eventId}/notify`, adminToken, {
+      change: "created",
+    });
+    expect(sendWhileHidden.status, JSON.stringify(sendWhileHidden.body)).toBe(200);
+    expect((sendWhileHidden.body.data as { notified: number }).notified).toBe(1);
+    expect(
+      (await notificationsOf(examTeacherOnly))
+        .filter((row) => row.eventId === eventId)
+        .map((row) => row.type)
+        .sort(),
+    ).toEqual(["event_created", "event_staff_assigned"]);
+    for (const userId of [studentA, eventStaffRecipient]) {
+      expect(
+        (await notificationsOf(userId)).filter((row) => row.eventId === eventId),
+      ).toHaveLength(0);
+    }
+  });
+});
+
+describe("exam notifications preserve assignment, audience, and dual-role meaning (R116)", () => {
+  let subjectId: string;
+  let academicYearId: string;
+  let roomId: string;
+
+  beforeAll(async () => {
+    const subject = await prisma.subject.findFirstOrThrow({ where: { deletedAt: null } });
+    subjectId = subject.id;
+    await prisma.levelSubject.upsert({
+      where: { levelId_subjectId: { levelId: levelA, subjectId } },
+      create: { levelId: levelA, subjectId },
+      update: {},
+    });
+    academicYearId = (await prisma.academicYear.findFirstOrThrow()).id;
+    roomId = (
+      await prisma.room.create({
+        data: { name: `${TAG} قاعة إشعارات الامتحان`, branchId: branchA, capacity: 20 },
+      })
+    ).id;
+  });
+
+  const createExam = async (visibility: "public" | "private" | "hidden" = "private") => {
+    const res = await call("POST", "/exams", adminToken, {
+      mode: "physical",
+      title: `${TAG} امتحان الإشعارات ${visibility}`,
+      max_grade: 20,
+      date: visibility === "hidden" ? "2099-06-08" : "2099-06-07",
+      start_time: "09:00",
+      end_time: "11:00",
+      level_id: levelA,
+      subject_id: subjectId,
+      academic_year_id: academicYearId,
+      branch_id: branchA,
+      room_id: roomId,
+      visibility,
+      staff: [
+        { user_id: examTeacherOnly, position: "supervisor" },
+        // This same person is enrolled in the sitting's Level and is assigned
+        // to it. Two meanings must survive the unique index as two types.
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    return res.body["id"] as string;
+  };
+
+  const examTypesFor = async (examId: string, userId: string) =>
+    (await notificationsOf(userId))
+      .filter((row) => row.examId === examId)
+      .map((row) => row.type)
+      .sort();
+
+  it("teacher-only gets assignment, student-only gets scheduling, dual-role gets both, unrelated gets none", async () => {
+    const examId = await createExam();
+
+    expect(await examTypesFor(examId, examTeacherOnly)).toEqual(["exam_teacher_assigned"]);
+    expect(await examTypesFor(examId, studentA)).toEqual(["exam_scheduled"]);
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([
+      "exam_scheduled",
+      "exam_teacher_assigned",
+    ]);
+    expect(await examTypesFor(examId, studentB)).toEqual([]);
+
+    const list = await call("GET", "/notifications", eventStaffToken);
+    const rows = (list.body.data as unknown as Record<string, unknown>[]).filter(
+      (row) => row["exam_id"] === examId,
+    );
+    expect(rows.map((row) => row["type"]).sort()).toEqual([
+      "exam_scheduled",
+      "exam_teacher_assigned",
+    ]);
+    expect(rows.every((row) => row["start_time"] === "09:00")).toBe(true);
+
+    // An unchanged retry-shaped save increments the entity version but emits
+    // no new semantic notification and does not resurface the existing rows.
+    const unchanged = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 0,
+      staff: [
+        { user_id: examTeacherOnly, position: "supervisor" },
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(unchanged.status).toBe(204);
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([
+      "exam_scheduled",
+      "exam_teacher_assigned",
+    ]);
+  });
+
+  it("reconciles reschedule, removal, re-grant and cancellation without stale or duplicate facts", async () => {
+    const examId = await createExam();
+    const moved = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 0,
+      date: "2099-06-09",
+      staff: [{ user_id: eventStaffRecipient, position: "assistant" }],
+    });
+    expect(moved.status, JSON.stringify(moved.body)).toBe(204);
+
+    expect(await examTypesFor(examId, examTeacherOnly)).toEqual([
+      "exam_teacher_unassigned",
+    ]);
+    expect(await examTypesFor(examId, studentA)).toEqual([
+      "exam_rescheduled",
+      "exam_scheduled",
+    ]);
+    // One reschedule row even though this recipient is both retained staff and
+    // a retained student.
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([
+      "exam_rescheduled",
+      "exam_scheduled",
+      "exam_teacher_assigned",
+    ]);
+
+    const unchanged = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 1,
+      date: "2099-06-09",
+      staff: [{ user_id: eventStaffRecipient, position: "assistant" }],
+    });
+    expect(unchanged.status, JSON.stringify(unchanged.body)).toBe(204);
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([
+      "exam_rescheduled",
+      "exam_scheduled",
+      "exam_teacher_assigned",
+    ]);
+
+    const reassigned = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 2,
+      staff: [
+        { user_id: examTeacherOnly, position: "supervisor" },
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(reassigned.status, JSON.stringify(reassigned.body)).toBe(204);
+    expect(await examTypesFor(examId, examTeacherOnly)).toEqual([
+      "exam_teacher_assigned",
+    ]);
+
+    const detailsChanged = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 3,
+      title: `${TAG} امتحان الإشعارات بتفاصيل محدثة`,
+      staff: [
+        { user_id: examTeacherOnly, position: "supervisor" },
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(detailsChanged.status, JSON.stringify(detailsChanged.body)).toBe(204);
+    expect(await examTypesFor(examId, studentA)).toContain("exam_changed");
+    expect(await examTypesFor(examId, examTeacherOnly)).toEqual([
+      "exam_changed",
+      "exam_teacher_assigned",
+    ]);
+
+    const cancelled = await call("DELETE", `/exams/${examId}`, adminToken);
+    expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(204);
+    for (const userId of [examTeacherOnly, studentA, eventStaffRecipient]) {
+      expect(await examTypesFor(examId, userId)).toEqual(["exam_cancelled"]);
+    }
+    expect((await call("DELETE", `/exams/${examId}`, adminToken)).status).toBe(404);
+  });
+
+  it("hidden sittings notify assigned staff but leak no scheduling notice to students", async () => {
+    const examId = await createExam("hidden");
+    expect(
+      (await notificationsOf(examTeacherOnly)).filter(
+        (row) => row.examId === examId && row.type === "exam_teacher_assigned",
+      ),
+    ).toHaveLength(1);
+    for (const userId of [studentA, eventStaffRecipient, studentB]) {
+      expect(
+        (await notificationsOf(userId)).filter(
+          (row) => row.examId === examId && row.type === "exam_scheduled",
+        ),
+      ).toHaveLength(0);
+    }
+    // R109: an assistant is not the responsible reader of a hidden sitting.
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([]);
+  });
+
+  it("withdrawing a published sitting to hidden removes student-facing coordinates", async () => {
+    const examId = await createExam("private");
+    expect(await examTypesFor(examId, studentA)).toEqual(["exam_scheduled"]);
+
+    const hidden = await call("PATCH", `/exams/${examId}`, adminToken, {
+      version: 0,
+      visibility: "hidden",
+      staff: [
+        { user_id: examTeacherOnly, position: "supervisor" },
+        { user_id: eventStaffRecipient, position: "assistant" },
+      ],
+    });
+    expect(hidden.status, JSON.stringify(hidden.body)).toBe(204);
+    expect(await examTypesFor(examId, studentA)).toEqual([]);
+    expect(await examTypesFor(examId, eventStaffRecipient)).toEqual([]);
+    expect(await examTypesFor(examId, examTeacherOnly)).toEqual([
+      "exam_teacher_assigned",
+    ]);
   });
 });
 

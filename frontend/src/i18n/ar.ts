@@ -334,6 +334,17 @@ export const ar = {
     sessionRescheduled: 'تغيّر موعد حصة {subject}. الموعد الجديد: {date} على الساعة {time}.',
     // R78.2 — تُرسَل لمن أُسنِدت إليه الحصة، ولا تُرسَل لمن قام بالإسناد بنفسه.
     sessionAssigned: 'أُسنِدت إليك حصة {subject} ليوم {date} على الساعة {time}.',
+    sessionUnassigned: 'أُلغي إسنادك من حصة {subject} ليوم {date} على الساعة {time}.',
+    registrationReviewRequired: 'طلب تسجيل «{subject}» ينتظر المراجعة.',
+    registrationApproved: 'تم قبول طلب تسجيل «{subject}».',
+    registrationRejected: 'تم رفض طلب التسجيل.',
+    familyLinkRequested: 'طُلب ربط حسابك بالمستفيدة «{subject}».',
+    familyLinkApproved: 'تم قبول ربطك بالمستفيدة «{subject}».',
+    familyLinkRejected: 'تم رفض ربطك بالمستفيدة «{subject}».',
+    familyLinkRevoked: 'أُلغي ربطك بالمستفيدة «{subject}».',
+    roleAssignmentsChanged: 'تغيّرت أدوارك أو نطاقات صلاحياتك في المنصة.',
+    platformOwnershipReceived: 'أصبحتِ مالكة المنصة. احتفظي بدور الإدارة العليا العام.',
+    enrollmentChanged: 'تغيّر تسجيلك الدراسي أو موضعك داخل المستوى.',
     // جرس الإشعارات في الشريط العلوي — متاح من كل شاشة، لا من لوحة واحدة.
     bell: 'الإشعارات',
     bellWithCount: 'الإشعارات — {n} غير مقروء',
@@ -345,12 +356,20 @@ export const ar = {
     // **R93 — إسناد، لا إعلان.** «أُضيف نشاط» تخبرها أن الجمعية تقيم نشاطاً؛
     // وهذه تخبرها أنها هي المعنيّة بالعمل فيه، وهو ما تتصرّف بناءً عليه.
     eventStaffAssigned: 'أُسندت إليكِ المشاركة في نشاط «{subject}» يوم {date} على الساعة {time}.',
+    eventStaffUnassigned: 'أُلغي إسنادك من نشاط «{subject}» يوم {date}.',
     eventRescheduled: 'غُيّر موعد نشاط «{subject}» إلى {date} على الساعة {time}.',
     eventCancelled: 'أُلغي نشاط «{subject}» الذي كان يوم {date}.',
+    examTeacherAssigned: 'أُسندت إليكِ مسؤولية امتحان «{subject}» يوم {date} على الساعة {time}.',
+    examTeacherUnassigned: 'أُلغي إسنادك من امتحان «{subject}» يوم {date}.',
+    examScheduled: 'بُرمج لكِ امتحان «{subject}» يوم {date} على الساعة {time}.',
+    examRescheduled: 'تغيّر موعد امتحان «{subject}» إلى {date} على الساعة {time}.',
+    examChanged: 'تغيّرت تفاصيل امتحان «{subject}» المبرمج يوم {date}.',
+    examCancelled: 'أُلغي امتحان «{subject}» الذي كان يوم {date}.',
     gradePublished: 'نُشرت نقطتك في «{subject}» ({date}).',
     theClass: 'الحصة',
     reason: 'السبب: {reason}',
     markRead: 'تم الاطّلاع',
+    review: 'مراجعة الطلب',
   },
   // §4.9 as amended by R75 — the in-app recorder. The wording keeps the
   // phone-upload path visible everywhere the recorder is not available: it is
@@ -589,7 +608,7 @@ export const ar = {
     lede: 'املأ البيانات التالية. سيراجع مشرف الجمعية طلبك قبل تفعيل الحساب.',
     kindLabel: 'نوع التسجيل',
     kindAdult: 'أُسجّل نفسي',
-    kindParentChild: 'أُسجّل ابناً/ابنة إلى جانب حسابي',
+    kindParentChild: 'أُسجّل أبناءً أو بنات بصفتي وليّة أمر',
     kindTeacher: 'أرغب في الالتحاق بهيئة التأطير',
     categoryLabel: 'الفئة',
     categoryEmpty: 'اختاري الفئة…',
@@ -637,10 +656,12 @@ export const ar = {
     // Revision 41 — split like the Arabic pair. Optional, but as a pair.
     firstNameFrench: 'الاسم الشخصي بالفرنسية (اختياري)',
     lastNameFrench: 'الاسم العائلي بالفرنسية (اختياري)',
+    frenchPairHint: 'اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين.',
     errFrenchPair: 'يرجى إدخال الاسمين معاً بالفرنسية، أو تركهما فارغين.',
     nickname: 'الكنية (اختياري)',
     nicknameHint: 'تُستعمل داخلياً للبحث فقط.',
-    phone: 'رقم الهاتف (اختياري)',
+    phone: 'رقم الهاتف',
+    phoneOptional: 'رقم الهاتف (اختياري للحسابات الحالية)',
     phoneHint: 'أرقام وعلامة + والمسافات فقط.',
     notes: 'ملاحظات (اختياري)',
     sex: 'الجنس',
@@ -1556,9 +1577,9 @@ export const ar = {
       noRoles: 'بلا دور',
       platformOwner: 'مالكة المنصة',
       platformOwnerRolesProtected:
-        'دور المشرفة العامة ونطاق كل الفروع محميان ما دامت هذه المستخدمة مالكة المنصة. انقلي الملكية أولًا لتغييرهما.',
+        'يبقى دور المشرفة العامة بنطاق كل الفروع محميًا ما دامت هذه المستخدمة مالكة المنصة. يمكن إضافة أدوار أخرى أو تعديلها وحذفها كالمعتاد.',
       platformOwnerProtected:
-        'هذا حساب مالكة المنصة. انقلي ملكية المنصة إلى مشرفة عامة عالمية نشطة قبل إيقافه أو حذفِه أو تغيير دوره.',
+        'هذا حساب مالكة المنصة. انقلي ملكية المنصة إلى مشرفة عامة عالمية نشطة قبل إيقافه أو حذفه أو إزالة دور المشرفة العامة العالمي.',
       transferOwnership: 'نقل ملكية المنصة',
       transferOwnershipTitle: 'تأكيد نقل ملكية المنصة',
       transferOwnershipBody:
@@ -2211,6 +2232,18 @@ export const ar = {
       categoryRequested: 'الفئة المطلوبة: {category}. المستوى الأول منها مقترح، ويمكنك تغييره.',
       categoryNotStated: 'لم تُسجَّل فئة في هذا الطلب، فلا يوجد اقتراح.',
       decisionFailed: 'تعذّر تنفيذ القرار. يرجى المحاولة من جديد.',
+      viewDetails: 'عرض التفاصيل',
+      detailsTitle: 'تفاصيل طلب التسجيل',
+      parentDetails: 'بيانات صاحبة الحساب / وليّة الأمر',
+      email: 'البريد الإلكتروني',
+      dataConsent: 'الموافقة على معالجة البيانات',
+      mediaConsent: 'الموافقة على نشر الصوت أو الصورة',
+      consentVersion: 'نسخة نص الموافقة',
+      consentAt: 'وقت تسجيل الموافقة',
+      consentGranted: 'موافقة',
+      consentRefused: 'غير موافقة',
+      notProvided: 'غير مذكور',
+      reviewUnavailable: 'تم البتّ في هذا الطلب أو لم يعد متاحاً للمراجعة.',
     },
     // §5.6 / Revision 42 — Platform Settings, first iteration.
     settings: {
@@ -2417,18 +2450,12 @@ export const ar = {
     sizeUnits: ['بايت', 'كيلوبايت', 'ميغابايت', 'غيغابايت'],
     countItems: { one: 'مادة', two: 'مادتان', many: 'مواد' },
     countYears: { one: 'سنة دراسية', two: 'سنتان دراسيتان', many: 'سنوات دراسية' },
-    // شاشة إدارة المحتوى (§5.5, §5.6) — المرفوع، والاستبدال، والحذف.
+    // شاشة إدارة المحتوى (§5.5, §5.6) — الرفع والحذف.
     caption: 'المحتوى التعليمي المرفوع',
     allLevels: 'كل المستويات',
     allSubjects: 'كل المواد',
     chooseLevelFirst: 'اختاري المستوى أولًا',
     levelTeachesNothing: 'لا مواد مسندة إلى هذا المستوى',
-    replace: 'استبدال الملف',
-    replaceTitle: 'استبدال الملف',
-    // TD-9: مفتاح تخزين جديد، والملف السابق إلى الحجر — لا استبدال في مكانه.
-    replaceExplainer:
-      'يُرفع الملف الجديد بمفتاح تخزين جديد، ويُنقل الملف السابق إلى الحجر مدة تسعين يومًا. تبقى المادة نفسها بكل ارتباطاتها.',
-    replaced: 'تم استبدال الملف.',
     uploaded: 'تم رفع الملف.',
     deleted: 'تم حذف المادة. يمكن استرجاعها من سلة المحذوفات خلال تسعين يومًا.',
     deleteFailed: 'تعذّر الحذف. يرجى إعادة المحاولة.',

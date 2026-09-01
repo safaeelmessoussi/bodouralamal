@@ -157,6 +157,11 @@ async function clear(): Promise<void> {
   // neither its old name nor the TAG.
   const userIds = [...new Set([...users.map((u) => u.id), ...createdUserIds])];
   if (userIds.length > 0) {
+    await prisma.notification.deleteMany({
+      where: {
+        OR: [{ userId: { in: userIds } }, { subjectUserId: { in: userIds } }],
+      },
+    });
     await prisma.auditLog.deleteMany({
       where: { actorUserId: { in: userIds } },
     });

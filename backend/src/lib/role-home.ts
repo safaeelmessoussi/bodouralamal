@@ -2,8 +2,8 @@
  * Where a signed-in person lands after authenticating (§4.1b step 4a, §14.1).
  *
  * §4.1b calls the post-login landing a **"role-based dashboard redirect"**, and
- * §14.1's sitemap names the destinations: `/dashboard/student`,
- * `/dashboard/parent`, `/teacher`, `/admin`. **There is no bare `/dashboard`
+ * §14.1's sitemap names the destinations: `/dashboard/student`, `/teacher`,
+ * `/admin`. **There is no Parent Dashboard and no bare `/dashboard`
  * node** — and the callback nevertheless redirected every active account there,
  * so a Super Admin signing in landed on a page that does not exist.
  *
@@ -22,7 +22,7 @@ const ROLE_HOMES: { role: string; path: string }[] = [
   { role: 'super_admin', path: '/admin' },
   { role: 'admin', path: '/admin' },
   { role: 'teacher', path: '/teacher' },
-  { role: 'parent', path: '/dashboard/parent' },
+  { role: 'parent', path: '/dashboard/student' },
   { role: 'student', path: '/dashboard/student' },
 ];
 

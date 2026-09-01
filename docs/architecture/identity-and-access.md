@@ -609,6 +609,12 @@ live authorization on every load, never a claim. Neither value is ever a token
 claim — §4.3 is explicit that the active child must not be, so that revocation
 takes effect on the very next request.
 
+R117 adds the other axis of the same fail-closed rule: a child coordinate is valid only while
+the active role is Parent. Any switch to a non-Parent role clears it before navigation. Thus a
+person who genuinely holds Parent and Student acts as herself in Student context, while a
+Parent-only account exposes only Parent/linked-child contexts and cannot acquire a synthetic
+self-beneficiary context from the children it manages.
+
 > **The defect this replaced.** `RoleSwitcher` held its selection in local
 > component state and did nothing with it: picking a role re-labelled the trigger
 > and changed nothing else. The control was documented as *"presentation only"*,
@@ -693,6 +699,18 @@ Admin. One transaction locks the singleton first and both Users in deterministic
 updates the single relationship, increments its version and audits previous/new UUIDs. It
 does not alter either person's role. Concurrent transfer attempts therefore produce one
 winner and one stale former-owner refusal, never two owners.
+
+Ownership freezes **that required global Super Admin assignment, not the whole role set**.
+`PUT /admin/users/{id}/roles` may add, move or remove the Owner's ordinary roles while the
+global assignment remains present; omitting it or changing its scope fails inside the same
+singleton-locked transaction. This preserves the platform invariant without preventing the
+Owner from also teaching or studying.
+
+The two people-list populations are intentionally narrower than the authentication table.
+`/admin/users` is approved account management: live Active and Suspended accounts, including
+valid pre-provisioned Active accounts. `/admin/directory` is an operational picker and returns
+only live Active people. Pending and Rejected rows belong to the approval lifecycle and are
+never offered as ordinary users, staffing candidates or roster choices.
 
 ---
 

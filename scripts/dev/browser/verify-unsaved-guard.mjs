@@ -288,16 +288,24 @@ if (sched === 'ready') {
     await new Promise((r) => setTimeout(r, 1500));
     const dlg = document.querySelector('dialog[open]');
     if (!dlg) return { noDialog: true };
+    const modeField = [...dlg.querySelectorAll('.field')].find((field) =>
+      (field.querySelector('.field__label')?.textContent ?? '').trim().startsWith('نمط التدريس'));
+    const defaultMode = modeField?.querySelector('select')?.value ?? null;
     const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
     if (!close) return { noCloseButton: true };
     close.click();
     await new Promise((r) => setTimeout(r, 800));
-    return { closed: true };
+    return { closed: true, defaultMode };
   })()`);
 
   if (opened.closed !== true) {
     check('PRISTINE الجدولة: the add form could be opened', false, JSON.stringify(opened));
   } else {
+    check(
+      'NEW الجدولة: نمط التدريس defaults to المستوى كامل in the rendered form',
+      opened.defaultMode === 'entire_level',
+      JSON.stringify(opened),
+    );
     const after = await state();
     check(
       'PRISTINE: an untouched إضافة عنصر closes with no discard question',

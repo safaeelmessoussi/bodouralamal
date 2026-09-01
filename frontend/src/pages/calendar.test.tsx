@@ -13,6 +13,7 @@ import { LevelSelector } from '../components/calendar/level-selector.js';
 import type { HijriDay, Occurrence, PrefilledFilters } from '../adapters/calendar.js';
 import { tList } from '../i18n/index.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
+import CALENDAR_PAGE_SOURCE from './calendar.tsx?raw';
 
 /**
  * The calendar's structure, its date arithmetic, and the rules that would fail
@@ -161,10 +162,11 @@ describe('a day cell carries both calendars', () => {
     expect(withBoth).toContain('>29<');
   });
 
-  it('puts the Hijri number FIRST in source order, so RTL lands it on the left', () => {
+  it('pins Hijri first/left and Gregorian second/right inside the RTL calendar', () => {
     expect(withBoth.indexOf('cal-day__hijri')).toBeLessThan(
       withBoth.indexOf('cal-day__gregorian'),
     );
+    expect(withBoth).toContain('class="cal-day__select" dir="ltr"');
   });
 
   it('renders NO Hijri number when the month is not recorded (Revision 31)', () => {
@@ -218,6 +220,14 @@ describe('a day cell carries both calendars', () => {
     );
     expect(html.split('event-chip__title').length - 1).toBe(7);
     expect(html).not.toContain('cal-day__more');
+  });
+});
+
+describe('the public calendar preserves the authenticated visibility tier', () => {
+  it('passes the current access token to the optional-auth calendar read', () => {
+    expect(CALENDAR_PAGE_SOURCE).toContain('const { accessToken } = useSession()');
+    expect(CALENDAR_PAGE_SOURCE).toMatch(/fetchOccurrences\(\{[\s\S]*?token: accessToken,/);
+    expect(CALENDAR_PAGE_SOURCE).toContain('filters.value.type, accessToken]');
   });
 });
 

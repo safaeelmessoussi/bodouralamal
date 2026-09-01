@@ -99,3 +99,17 @@ describe('the form shell stays generic', () => {
     expect(FORM.includes('SchedulingTimes')).toBe(true);
   });
 });
+
+describe('new scheduling-item defaults', () => {
+  it('starts a new class at the whole-Level teaching mode while preserving edits', () => {
+    const source = code(SCHEDULING);
+    expect(source).toContain("item?.ids.teachingMode ?? 'entire_level'");
+    expect(source.match(/item\?\.ids\.teachingMode \?\? 'entire_level'/g) ?? []).toHaveLength(2);
+  });
+
+  it('uses the shared dirty comparison and passes its result to FormDialog', () => {
+    const source = code(SCHEDULING);
+    expect(source).toContain('const dirty = isDirty(');
+    expect(source).toContain('dirty={dirty}');
+  });
+});

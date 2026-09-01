@@ -31,7 +31,7 @@ import { Feedback } from '../components/ui/feedback.js';
  * `/teacher/content` (§5.5).
  *
  * **One screen, two portals.** The capability is identical: attach a file to a
- * Subject within a Level, replace it, delete it. What differs is the chrome and
+ * Subject within a Level, upload it, delete it. What differs is the chrome and
  * what the server will accept from the caller — a Teacher cannot choose the
  * Global scope and is confined to the branches of the schedules they staff
  * (§4.9). Building two screens would mean maintaining that difference in the
@@ -115,7 +115,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [total, setTotal] = useState(0);
 
   const [uploading, setUploading] = useState(false);
-  const [replacing, setReplacing] = useState<LibraryRow | null>(null);
   const [deleting, setDeleting] = useState<LibraryRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -255,7 +254,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   ];
 
   const actions: RowAction<LibraryRow>[] = [
-    { label: t('content.replace'), onSelect: (r) => setReplacing(r) },
     { label: t('common.delete'), onSelect: (r) => setDeleting(r), danger: true },
   ];
 
@@ -403,47 +401,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
               void load();
             }}
           />
-        ) : null}
-      </Dialog>
-
-      <Dialog
-        open={replacing !== null}
-        onClose={() => setReplacing(null)}
-        title={t('content.replaceTitle')}
-      >
-        {replacing ? (
-          <>
-            {/* TD-9: the record and every link to it survive; only the object
-                changes, under a new key, with the old one quarantined. */}
-            <p className="muted">{t('content.replaceExplainer')}</p>
-            {/* The same form, with every determining field DISABLED rather than
-                hidden: R53 swaps the object and keeps the record, so the scope
-                and tier are the row's — and a person replacing a file should be
-                able to see which row they are replacing into. */}
-            <ContentUploadForm
-              token={accessToken}
-              mayAssignGlobal={isAdmin}
-              initial={{
-                levelId: replacing.level_id,
-                subjectId: replacing.subject_id,
-                academicYearId: replacing.academic_year_id,
-                branchId: replacing.branch_id ?? '',
-              }}
-              replacing={{
-                id: replacing.id,
-                title: replacing.title,
-                description: replacing.description ?? '',
-                visibility: replacing.visibility,
-              }}
-              submitLabel={t('content.replace')}
-              onCancel={() => setReplacing(null)}
-              onUploaded={() => {
-                setReplacing(null);
-                setNotice(t('content.replaced'));
-                void load();
-              }}
-            />
-          </>
         ) : null}
       </Dialog>
 

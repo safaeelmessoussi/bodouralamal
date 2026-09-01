@@ -306,6 +306,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const userIds = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: userIds } }, { subjectUserId: { in: userIds } }] },
+  });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
   await prisma.userBranchRole.deleteMany({
     where: { userId: { in: userIds } },
@@ -334,7 +337,11 @@ describe("a class occurrence is read at the caller's tier (R109)", () => {
   });
 
   it("shows an approved beneficiary public and private, never hidden", async () => {
-    expect(await tiersSeen(actor(studentId, []), "session")).toEqual([
+    // Active is only lifecycle state; the structural Student role is what
+    // distinguishes a beneficiary from an active role-less account.
+    expect(
+      await tiersSeen(actor(studentId, [{ role: "student", branches: null }]), "session"),
+    ).toEqual([
       "private",
       "public",
     ]);

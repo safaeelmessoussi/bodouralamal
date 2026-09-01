@@ -133,6 +133,7 @@ async function submitBundle(
       parent: {
         first_name_arabic: `${TAG}`,
         last_name_arabic: `والدة`,
+        phone: '+212600000001',
         sex: "female" as const,
       },
       children: [
@@ -150,7 +151,7 @@ async function submitBundle(
       // R49 — the stage the parent chose for the child, which §4.1 step 1
       // preselects the first Level from. The fixture's placement Category, so
       // the preselection and the group the approval uses agree.
-      consents: { data_processing: true, media_release: true },
+      consents: { data_processing: true },
     },
     config.ONBOARDING_TOKEN_KEY,
   );
@@ -166,6 +167,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.notification.deleteMany({
+    where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
@@ -298,6 +302,7 @@ describe("GET /api/v1/admin/approvals", () => {
       // ordinary family registration and on honest legacy rows.
       "framing",
       "id",
+      "registration_details",
       "requested_role",
       "submitted_at",
       "type",
@@ -309,6 +314,7 @@ describe("GET /api/v1/admin/approvals", () => {
     // authority** — it is `null` here because this bundle asked for no role.
     expect(item["requested_role"]).toBeNull();
     expect(item["framing"]).toBeNull();
+    expect(item["registration_details"]).not.toBeNull();
     // `category` joined in Revision 49, and it is what made §4.1 step 1's
     // preselection implementable at all: nothing had recorded the applicant's
     // stage, so the clause could not be honoured. Two fields, like the branch.
@@ -326,6 +332,25 @@ describe("GET /api/v1/admin/approvals", () => {
     expect(Object.keys(applicant).sort()).toEqual(["id", "name", "role"]);
     // `submitted_at` is an instant, correctly — a submission is a moment.
     expect(item.submitted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("R117 review_user_id returns only the exact live review and stale coordinates fail closed", async () => {
+    const { parentId } = await submitBundle();
+    const exact = await call(
+      "GET",
+      `/admin/approvals?review_user_id=${parentId}`,
+      admin,
+    );
+    expect(exact.status).toBe(200);
+    expect((exact.body.data as { id: string }[]).map((item) => item.id)).toEqual([parentId]);
+
+    const absent = await call(
+      "GET",
+      "/admin/approvals?review_user_id=00000000-0000-4000-8000-000000000099",
+      admin,
+    );
+    expect(absent.status).toBe(200);
+    expect(absent.body.data).toEqual([]);
   });
 
   it("§14.2 R39: branch_id NARROWS the queue rather than returning everything", async () => {

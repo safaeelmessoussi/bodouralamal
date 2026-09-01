@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import {
   approveApproval,
@@ -49,6 +49,17 @@ import { Feedback } from '../../components/ui/feedback.js';
 import { FramingPreferenceValue } from '../../components/teaching/framing-preference-summary.js';
 
 /**
+ * A registration places its applicant only when that applicant asked to join
+ * as a beneficiary. A parent registration carries children, but the parent is
+ * activated as a guardian and every child is placed through her own decision.
+ */
+export function registrationNeedsApplicantPlacement(
+  row: Pick<Approval, 'type' | 'children'>,
+): boolean {
+  return row.type === 'registration' && row.children.length === 0;
+}
+
+/**
  * `/admin/approvals` — طلبات الانضمام, the approval queue (§5.6, §14.2).
  *
  * **Configuration of the CRUD framework, not a new one.** `DataTable`, the
@@ -96,6 +107,10 @@ export function ApprovalsPage(): ReactNode {
   const [total, setTotal] = useState(0);
   const [typeFilter, setTypeFilter] = useState<'' | ApprovalType>('');
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
+  const [reviewUserId] = useState(() =>
+    new URLSearchParams(window.location.search).get('review_user_id'),
+  );
+  const reviewHandled = useRef(false);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [deciding, setDeciding] = useState<{ row: Approval; approve: boolean } | null>(null);
   /** Approving a staff request is a different act from approving a family, so
@@ -110,6 +125,7 @@ export function ApprovalsPage(): ReactNode {
    * generic approve/reject path is never offered for it.
    */
   const [childDeciding, setChildDeciding] = useState<Approval | null>(null);
+  const [details, setDetails] = useState<Approval | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -122,11 +138,21 @@ export function ApprovalsPage(): ReactNode {
       const result = await listApprovals(accessToken, {
         ...(sort ? { sort } : {}),
         page,
-        ...(typeFilter ? { type: typeFilter } : {}),
-        ...(branchFilter ? { branchId: branchFilter } : {}),
+        ...(reviewUserId
+          ? { reviewUserId }
+          : {
+              ...(typeFilter ? { type: typeFilter } : {}),
+              ...(branchFilter ? { branchId: branchFilter } : {}),
+            }),
       });
       setRows(result.data);
       setTotal(result.meta.total);
+      if (reviewUserId && !reviewHandled.current) {
+        reviewHandled.current = true;
+        const exact = result.data[0] ?? null;
+        setDetails(exact);
+        if (!exact) setNotice(t('admin.approvals.reviewUnavailable'));
+      }
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -136,7 +162,7 @@ export function ApprovalsPage(): ReactNode {
   // was never re-sent and the rows never moved. Server-side sorting fails
   // SILENTLY this way: the control looks alive and the table simply does not
   // change, which is exactly how the Owner reported it.
-  }, [accessToken, page, typeFilter, branchFilter, sort]);
+  }, [accessToken, page, typeFilter, branchFilter, sort, reviewUserId]);
 
   useEffect(() => {
     void load();
@@ -217,6 +243,11 @@ export function ApprovalsPage(): ReactNode {
 
   const actions: RowAction<Approval>[] = [
     {
+      label: t('admin.approvals.viewDetails'),
+      onSelect: setDetails,
+      available: (row) => row.registration_details !== null || row.children.length > 0,
+    },
+    {
       label: t('admin.approvals.approve'),
       onSelect: (row) =>
         // A request for a role needs a decision about that role; a family
@@ -238,8 +269,10 @@ export function ApprovalsPage(): ReactNode {
             ? setDeciding({ row, approve: true })
             : row.requested_role
             ? setStaffApproval(row)
-            : row.type === 'registration'
+            : registrationNeedsApplicantPlacement(row)
               ? setPlacing(row)
+              : row.type === 'registration'
+                ? setDeciding({ row, approve: true })
               : setDeciding({ row, approve: true }),
     },
     {
@@ -372,13 +405,17 @@ export function ApprovalsPage(): ReactNode {
 
       {placing ? (
         <PlacementDialog
-          row={placing}
           // The applicant enrols only when there is no child: a bundle with
           // children is a parent registering a family.
           students={
-            placing.applicants.filter((a) => a.role === 'child').length > 0
-              ? placing.applicants.filter((a) => a.role === 'child')
-              : placing.applicants.filter((a) => a.role === 'applicant')
+            placing.applicants
+              .filter((a) => a.role === 'applicant')
+              .map((applicant) => ({
+                id: applicant.id,
+                name: applicant.name,
+                requestedCategory: placing.category,
+                requestedBranch: placing.branch,
+              }))
           }
           title={t('admin.approvals.placeTitle')}
           branches={branches}
@@ -397,6 +434,8 @@ export function ApprovalsPage(): ReactNode {
           }
         />
       ) : null}
+
+      {details ? <ApprovalDetailsDialog row={details} onClose={() => setDetails(null)} /> : null}
 
       {childDeciding ? (
         <ChildDecisionDialog
@@ -451,6 +490,72 @@ export function ApprovalsPage(): ReactNode {
         onCancel={() => setDeciding(null)}
       />
     </AdminLayout>
+  );
+}
+
+function ApprovalDetailsDialog({ row, onClose }: { row: Approval; onClose: () => void }): ReactNode {
+  const applicant = row.registration_details?.applicant ?? null;
+  const shown = (value: string | null | undefined) =>
+    value && value.trim() !== '' ? value : t('admin.approvals.notProvided');
+  const consent = (value: boolean) =>
+    t(value ? 'admin.approvals.consentGranted' : 'admin.approvals.consentRefused');
+
+  return (
+    <Dialog open onClose={onClose} title={t('admin.approvals.detailsTitle')}>
+      <div className="form">
+        {applicant ? (
+          <section aria-labelledby="approval-applicant-details">
+            <h3 id="approval-applicant-details">{t('admin.approvals.parentDetails')}</h3>
+            <dl>
+              <dt>{t('register.firstNameArabic')}</dt><dd>{shown(applicant.first_name_arabic)}</dd>
+              <dt>{t('register.lastNameArabic')}</dt><dd>{shown(applicant.last_name_arabic)}</dd>
+              <dt>{t('register.firstNameFrench')}</dt><dd>{shown(applicant.first_name_french)}</dd>
+              <dt>{t('register.lastNameFrench')}</dt><dd>{shown(applicant.last_name_french)}</dd>
+              <dt>{t('register.nickname')}</dt><dd>{shown(applicant.nickname)}</dd>
+              <dt>{t('register.sex')}</dt>
+              <dd>{applicant.sex ? t(`register.sex${applicant.sex === 'female' ? 'Female' : 'Male'}`) : shown(null)}</dd>
+              <dt>{t('register.phone')}</dt><dd>{shown(applicant.phone)}</dd>
+              <dt>{t('admin.approvals.email')}</dt><dd>{shown(applicant.email)}</dd>
+              <dt>{t('register.notes')}</dt><dd>{shown(applicant.notes)}</dd>
+              <dt>{t('admin.approvals.dataConsent')}</dt>
+              <dd>
+                {applicant.data_processing_consent
+                  ? `${consent(applicant.data_processing_consent.granted)} — ${applicant.data_processing_consent.text_version} — ${new Date(applicant.data_processing_consent.given_at).toLocaleString('ar-MA')}`
+                  : shown(null)}
+              </dd>
+            </dl>
+          </section>
+        ) : null}
+
+        {row.children.map((child) => (
+          <fieldset key={child.application_id}>
+            <legend>{child.name}</legend>
+            <dl>
+              <dt>{t('register.firstNameArabic')}</dt><dd>{child.first_name_arabic}</dd>
+              <dt>{t('register.lastNameArabic')}</dt><dd>{child.last_name_arabic}</dd>
+              <dt>{t('register.firstNameFrench')}</dt><dd>{shown(child.first_name_french)}</dd>
+              <dt>{t('register.lastNameFrench')}</dt><dd>{shown(child.last_name_french)}</dd>
+              <dt>{t('register.nickname')}</dt><dd>{shown(child.nickname)}</dd>
+              <dt>{t('register.sex')}</dt>
+              <dd>{child.sex ? t(`register.sex${child.sex === 'female' ? 'Female' : 'Male'}`) : shown(null)}</dd>
+              <dt>{t('register.schoolingStage')}</dt>
+              <dd>{child.schooling_stage ? t(`register.schoolingStage_${child.schooling_stage}`) : shown(null)}</dd>
+              <dt>{t('admin.approvals.colRequested')}</dt><dd>{shown(child.requested_category?.name)}</dd>
+              <dt>{t('admin.approvals.colBranch')}</dt><dd>{shown(child.requested_branch?.name)}</dd>
+              <dt>{t('admin.approvals.dataConsent')}</dt><dd>{consent(child.data_processing_consent)}</dd>
+              <dt>{t('admin.approvals.mediaConsent')}</dt><dd>{consent(child.media_release_consent)}</dd>
+              <dt>{t('admin.approvals.consentVersion')}</dt><dd>{child.consent_text_version}</dd>
+              <dt>{t('admin.approvals.consentAt')}</dt>
+              <dd>{new Date(child.consent_given_at).toLocaleString('ar-MA')}</dd>
+            </dl>
+          </fieldset>
+        ))}
+
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -584,10 +689,11 @@ function StaffApprovalDialog({
  * the approval. The screen cannot offer a plain "approve" for a registration,
  * because the server would refuse it.
  *
- * **One row per person the bundle admits as a student** — on a parent+child
- * registration that is the child, and the parent is deliberately absent: their
- * access comes through the family link, and offering to enrol them would invite
- * placing a parent in a Level.
+ * **One row per person this decision admits as a student.** A children-only
+ * registration never reaches this dialog: its parent is activated separately
+ * as a guardian, while each child reaches the same picker through
+ * `ChildDecisionDialog`. Offering the parent here would invite placing a
+ * guardian in a Level.
  *
  * **Exactly one group per Level** (§4.1 step 2), and where a Level has a single
  * group it is chosen automatically — §4.1 asks for that explicitly, and a
@@ -607,8 +713,49 @@ function StaffApprovalDialog({
  * rendered as what it is — *not stated* — with no filter and nothing
  * preselected, rather than as a guess.
  */
+type PlacementStudent = {
+  id: string;
+  name: string;
+  requestedCategory: { id: string; name: string } | null;
+  requestedBranch: { id: string; name: string } | null;
+};
+
+type PlacementChoice = {
+  levelId: string;
+  groupId: string;
+  branchId: string;
+};
+
+/**
+ * Derive each student's own request-backed default independently. Keeping this
+ * pure makes the sibling boundary executable: one child's Category or Branch
+ * can never leak into another child's initial placement merely because they
+ * share a registration review.
+ */
+export function initialPlacementChoices(
+  students: readonly PlacementStudent[],
+  levels: readonly Pick<Level, 'id' | 'category_id'>[],
+  groups: readonly Pick<AdministrativeGroup, 'id' | 'level_id'>[],
+): Record<string, PlacementChoice> {
+  return Object.fromEntries(
+    students.flatMap((student) => {
+      const wanted = student.requestedCategory?.id;
+      const first = wanted ? levels.find((level) => level.category_id === wanted) : null;
+      if (!first) return [];
+      const inLevel = groups.filter((group) => group.level_id === first.id);
+      return [[
+        student.id,
+        {
+          levelId: first.id,
+          groupId: inLevel.length === 1 ? inLevel[0]!.id : '',
+          branchId: inLevel.length === 0 ? (student.requestedBranch?.id ?? '') : '',
+        },
+      ]];
+    }),
+  );
+}
+
 function PlacementDialog({
-  row,
   students,
   title,
   branches,
@@ -616,18 +763,17 @@ function PlacementDialog({
   onConfirm,
   onCancel,
 }: {
-  row: Approval;
   /**
    * Who is being placed, as `{ id, name }`.
    *
-   * **Passed in rather than derived from `row`, because the id means different
+   * **Passed in rather than derived from an approval row, because the id means different
    * things on the two paths that need this picker** — a `User` id on a
    * registration bundle, a `ChildApplication` id on a child-registration
    * request, where no `User` exists yet. The Level/group logic is identical and
    * §4.1 step 1's preselection is identical, so the picker is shared and the
    * caller owns the meaning of the id.
    */
-  students: { id: string; name: string }[];
+  students: PlacementStudent[];
   title: string;
   /** R66.5 — offered when the chosen Level has no group to inherit one from. */
   branches: PublicBranch[];
@@ -636,25 +782,26 @@ function PlacementDialog({
   onCancel: () => void;
 }): ReactNode {
   const { accessToken } = useSession();
-  const studentIds = students.map((s) => s.id);
-
   const [levels, setLevels] = useState<Level[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   /** R66.5 — a group, OR a branch when the Level has none. Never both. */
-  const [choice, setChoice] = useState<
-    Record<string, { levelId: string; groupId: string; branchId: string }>
-  >({});
+  const [choice, setChoice] = useState<Record<string, PlacementChoice>>({});
   const [loadFailed, setLoadFailed] = useState(false);
   /** §4.1 step 1 filters to the applicant's Category — and lets the approver
    *  leave it, because the applicant may have chosen the wrong stage. */
-  const [categoryFilter, setCategoryFilter] = useState<string>(row.category?.id ?? '');
+  const initialCategoryFilter = Object.fromEntries(
+    students.map((student) => [student.id, student.requestedCategory?.id ?? '']),
+  );
+  const [categoryFilter, setCategoryFilter] = useState<Record<string, string>>(
+    initialCategoryFilter,
+  );
   /** A placement chosen but not yet decided is unsaved work; the Category
    *  prefilled from the request is not. */
   const placementGuard = useUnsavedGuard({
     open: true,
     dirty:
       isDirty(choice, null) ||
-      isDirty(categoryFilter, row.category?.id ?? ''),
+      isDirty(categoryFilter, initialCategoryFilter),
     onCancel,
   });
 
@@ -672,28 +819,7 @@ function PlacementDialog({
         // preselected** — a DEFAULT, not a decision. Applied once, when the
         // lists arrive, so a later edit is never overwritten. The group follows
         // step 2: a Level with one group needs no interaction.
-        const wanted = row.category?.id;
-        if (wanted) {
-          const first = lvls.find((l) => l.category_id === wanted);
-          if (first) {
-            const inLevel = grps.data.filter((g) => g.level_id === first.id);
-            setChoice(
-              Object.fromEntries(
-                studentIds.map((id) => [
-                  id,
-                  {
-                    levelId: first.id,
-                    groupId: inLevel.length === 1 ? inLevel[0]!.id : '',
-                    // R66.5 — with no group to inherit a branch from, the
-                    // approver states it. Preselected from the request where
-                    // one was made, exactly as the Level is.
-                    branchId: inLevel.length === 0 ? (row.branch?.id ?? '') : '',
-                  },
-                ]),
-              ),
-            );
-          }
-        }
+        setChoice(initialPlacementChoices(students, lvls, grps.data));
       } catch {
         // Without these the approval cannot be completed at all, so this is a
         // blocking failure rather than a degraded one.
@@ -704,6 +830,7 @@ function PlacementDialog({
 
   function pickLevel(studentId: string, levelId: string): void {
     const inLevel = groups.filter((g) => g.level_id === levelId);
+    const student = students.find((candidate) => candidate.id === studentId)!;
     setChoice((c) => ({
       ...c,
       // §4.1 step 2: a Level with one group needs no interaction. R66.5: a
@@ -712,7 +839,7 @@ function PlacementDialog({
       [studentId]: {
         levelId,
         groupId: inLevel.length === 1 ? inLevel[0]!.id : '',
-        branchId: inLevel.length === 0 ? (row.branch?.id ?? '') : '',
+        branchId: inLevel.length === 0 ? (student.requestedBranch?.id ?? '') : '',
       },
     }));
   }
@@ -748,26 +875,6 @@ function PlacementDialog({
           </p>
         ) : null}
 
-        {/* The stage the applicant asked for, and an escape from it. §4.1 makes
-            the preselection a default; an applicant who picked the wrong stage
-            is exactly why the approver can widen this. */}
-        <SelectField
-          label={t('admin.approvals.colRequested')}
-          value={categoryFilter}
-          onChange={setCategoryFilter}
-          options={[
-            { value: '', label: t('admin.approvals.anyCategory') },
-            ...[...new Map(levels.map((l) => [l.category_id, l.category_name])).entries()].map(
-              ([id, name]) => ({ value: id, label: name }),
-            ),
-          ]}
-          hint={
-            row.category
-              ? t('admin.approvals.categoryRequested').replace('{category}', row.category.name)
-              : t('admin.approvals.categoryNotStated')
-          }
-        />
-
         {/* R66.5 — the "no assignable Level" notice is gone with the filter
             that made it necessary. Every Level can now be placed into: a group
             where the Level is subdivided, a branch where it is not. */}
@@ -778,6 +885,41 @@ function PlacementDialog({
           return (
             <fieldset key={s.id}>
               <legend>{s.name}</legend>
+              <SelectField
+                label={t('admin.approvals.colRequested')}
+                value={categoryFilter[s.id] ?? ''}
+                onChange={(value) => {
+                  setCategoryFilter((current) => ({ ...current, [s.id]: value }));
+                  const currentLevel = choice[s.id]?.levelId;
+                  if (
+                    currentLevel &&
+                    value !== '' &&
+                    !levels.some(
+                      (level) => level.id === currentLevel && level.category_id === value,
+                    )
+                  ) {
+                    setChoice((current) => {
+                      const next = { ...current };
+                      delete next[s.id];
+                      return next;
+                    });
+                  }
+                }}
+                options={[
+                  { value: '', label: t('admin.approvals.anyCategory') },
+                  ...[...new Map(levels.map((l) => [l.category_id, l.category_name])).entries()].map(
+                    ([id, name]) => ({ value: id, label: name }),
+                  ),
+                ]}
+                hint={
+                  s.requestedCategory
+                    ? t('admin.approvals.categoryRequested').replace(
+                        '{category}',
+                        s.requestedCategory.name,
+                      )
+                    : t('admin.approvals.categoryNotStated')
+                }
+              />
               <SelectField
                 label={t('admin.levels.colName')}
                 value={picked?.levelId ?? ''}
@@ -803,7 +945,11 @@ function PlacementDialog({
                    * below appears exactly when there is no group to choose.
                    */
                   ...levels
-                    .filter((l) => categoryFilter === '' || l.category_id === categoryFilter)
+                    .filter(
+                      (l) =>
+                        (categoryFilter[s.id] ?? '') === '' ||
+                        l.category_id === categoryFilter[s.id],
+                    )
                     // The shared label rather than a third copy of its format —
                     // this was one of them, and the day the format changes it
                     // would have been the one that did not (2026-08-17).
@@ -927,7 +1073,7 @@ function ChildDecisionDialog({
     dirty: Object.values(reason).some((v) => v !== ''),
     onCancel,
   });
-  const [placeFor, setPlaceFor] = useState<{ application_id: string; name: string }[] | null>(null);
+  const [placeFor, setPlaceFor] = useState<Approval['children'] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   const chosen = (id: string): 'approve' | 'reject' | undefined => outcome[id];
@@ -981,8 +1127,12 @@ function ChildDecisionDialog({
   if (placeFor) {
     return (
       <PlacementDialog
-        row={row}
-        students={placeFor.map((c) => ({ id: c.application_id, name: c.name }))}
+        students={placeFor.map((c) => ({
+          id: c.application_id,
+          name: c.name,
+          requestedCategory: c.requested_category,
+          requestedBranch: c.requested_branch,
+        }))}
         title={t('admin.approvals.placeTitle')}
         branches={branches}
         busy={busy}
@@ -1061,9 +1211,7 @@ function ChildDecisionDialog({
             disabled={busy || !complete}
             onClick={() =>
               approving.length > 0
-                ? setPlaceFor(
-                    approving.map((c) => ({ application_id: c.application_id, name: c.name })),
-                  )
+                ? setPlaceFor(approving)
                 : void apply({})
             }
           >

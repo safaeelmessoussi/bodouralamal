@@ -153,9 +153,9 @@ export async function searchUsers(
 export const ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
 export type Role = (typeof ROLES)[number];
 
-/** TD-1's account lifecycle. `rejected` is terminal — reachable as a filter,
- *  never as a destination. */
-export const ACCOUNT_STATUSES = ['pending', 'active', 'suspended', 'rejected'] as const;
+/** Approved accounts visible in operational account management. Pending and
+ * rejected requests belong to طلبات الانضمام, not this directory. */
+export const ACCOUNT_STATUSES = ['active', 'suspended'] as const;
 
 export interface UserProfileInput {
   /** The parts. The server composes `name_arabic`/`name_french` (§1.1, R40). */

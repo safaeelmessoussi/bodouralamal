@@ -10,7 +10,8 @@ import * as trash from '../repositories/trash.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { revokeAllSessions } from './refresh-token.service.js';
-import { applyRoleAssignments } from './user.service.js';
+import { applyRoleAssignments, ensureRoleAssignment } from './user.service.js';
+import { notifySubjectUserChange } from './notification.service.js';
 
 /**
  * Approval queue (SRS §5.6, §14.2, TD-3.2, TD-4.2, TD-12).
@@ -33,6 +34,23 @@ export type ApprovalType =
   | 'family-link'
   | 'child-application'
   | 'identity-review';
+
+export interface ApprovalRegistrationPerson {
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
+  firstNameFrench: string | null;
+  lastNameFrench: string | null;
+  nickname: string | null;
+  sex: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  dataProcessingConsent: {
+    granted: boolean;
+    textVersion: string;
+    givenAt: Date;
+  } | null;
+}
 
 export interface ApprovalItem {
   id: string;
@@ -77,6 +95,8 @@ export interface ApprovalItem {
    * stated*, exactly as a null branch does.
    */
   category: { id: string; name: string } | null;
+  /** Complete submitted adult/guardian facts for the authorised review dialog. */
+  registrationDetails: { applicant: ApprovalRegistrationPerson } | null;
   /**
    * R62 — the children in this request, **one decidable block each**.
    *
@@ -95,7 +115,56 @@ export interface ApprovalItem {
     nameArabic: string;
     status: 'pending' | 'approved' | 'rejected';
     schoolingStage: string | null;
+    firstNameArabic: string;
+    lastNameArabic: string;
+    firstNameFrench: string | null;
+    lastNameFrench: string | null;
+    nickname: string | null;
+    sex: string | null;
+    requestedCategory: { id: string; name: string } | null;
+    requestedBranch: { id: string; name: string } | null;
+    dataProcessingConsent: boolean;
+    mediaReleaseConsent: boolean;
+    consentTextVersion: string;
+    consentGivenAt: Date;
   }[];
+}
+
+function registrationPerson(row: {
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
+  firstNameFrench: string | null;
+  lastNameFrench: string | null;
+  nickname: string | null;
+  sex: string | null;
+  phone: string | null;
+  notes: string | null;
+  identities: { email: string }[];
+  consentsAsSubject: {
+    granted: boolean;
+    consentTextVersion: string;
+    grantedAt: Date;
+  }[];
+}): ApprovalRegistrationPerson {
+  const consent = row.consentsAsSubject[0];
+  return {
+    firstNameArabic: row.firstNameArabic,
+    lastNameArabic: row.lastNameArabic,
+    firstNameFrench: row.firstNameFrench,
+    lastNameFrench: row.lastNameFrench,
+    nickname: row.nickname,
+    sex: row.sex,
+    phone: row.phone,
+    email: row.identities[0]?.email ?? null,
+    notes: row.notes,
+    dataProcessingConsent: consent
+      ? {
+          granted: consent.granted,
+          textVersion: consent.consentTextVersion,
+          givenAt: consent.grantedAt,
+        }
+      : null,
+  };
 }
 
 /**
@@ -179,6 +248,8 @@ export async function listApprovals(
     pageSize?: number;
     sortBy?: string | undefined;
     sortDir?: string | undefined;
+    /** Exact notification target: only this applicant/parent's review work. */
+    reviewUserId?: string;
   } = {},
 ): Promise<Page<ApprovalItem>> {
   // TD-12: approvals are a high-risk surface, so even listing re-asserts the
@@ -194,6 +265,7 @@ export async function listApprovals(
   // A family-link item has no branch, so any branch filter excludes the whole
   // type rather than matching some of it.
   const branchId = options.branchId;
+  const reviewUserId = options.reviewUserId;
 
   const items: ApprovalItem[] = [];
   let total = 0;
@@ -206,6 +278,7 @@ export async function listApprovals(
       accountStatus: 'pending' as const,
       deletedAt: null,
       childLinks: { none: {} },
+      ...(reviewUserId ? { id: reviewUserId } : {}),
       // Applied to the COUNT as well as the page, so `meta.total` describes the
       // filtered set. A total that ignored the filter would tell the client to
       // render pages that are empty.
@@ -239,6 +312,17 @@ export async function listApprovals(
         childApplicationsAsParent: {
           where: { status: 'pending', deletedAt: null },
           orderBy: [{ createdAt: 'asc' }],
+          include: {
+            requestedCategory: { select: { id: true, name: true } },
+            requestedBranch: { select: { id: true, name: true } },
+          },
+        },
+        identities: { where: { isActive: true }, select: { email: true }, take: 1 },
+        consentsAsSubject: {
+          where: { consentType: 'data_processing' },
+          orderBy: { grantedAt: 'desc' },
+          take: 1,
+          select: { granted: true, consentTextVersion: true, grantedAt: true },
         },
         // Only what the DTO publishes (§16.2): the branch's id and name, never
         // the whole row.
@@ -260,6 +344,21 @@ export async function listApprovals(
     });
     for (const applicant of applicants) {
       const pendingLinks = applicant.parentLinks.filter((l) => l.status === 'pending');
+      const firstApplication = applicant.childApplicationsAsParent[0];
+      const requestedBranch = firstApplication
+        ? applicant.childApplicationsAsParent.every(
+            (child) => child.requestedBranchId === firstApplication.requestedBranchId,
+          )
+          ? firstApplication.requestedBranch
+          : null
+        : applicant.intendedBranch;
+      const requestedCategory = firstApplication
+        ? applicant.childApplicationsAsParent.every(
+            (child) => child.requestedCategoryId === firstApplication.requestedCategoryId,
+          )
+          ? firstApplication.requestedCategory
+          : null
+        : applicant.intendedCategory;
       items.push({
         id: applicant.id,
         type: 'registration',
@@ -279,10 +378,11 @@ export async function listApprovals(
           childCount: pendingLinks.length + applicant.childApplicationsAsParent.length,
           linkCount: pendingLinks.length + applicant.childApplicationsAsParent.length,
         },
-        branch: applicant.intendedBranch
-          ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
+        branch: requestedBranch
+          ? { id: requestedBranch.id, name: requestedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
+        registrationDetails: { applicant: registrationPerson(applicant) },
         framing: applicant.framingPreference
           ? {
               mode: applicant.framingPreference.mode,
@@ -301,9 +401,21 @@ export async function listApprovals(
           nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
+          firstNameArabic: c.firstNameArabic,
+          lastNameArabic: c.lastNameArabic,
+          firstNameFrench: c.firstNameFrench,
+          lastNameFrench: c.lastNameFrench,
+          nickname: c.nickname,
+          sex: c.sex,
+          requestedCategory: c.requestedCategory,
+          requestedBranch: c.requestedBranch,
+          dataProcessingConsent: c.consentDataProcessing,
+          mediaReleaseConsent: c.consentMediaRelease,
+          consentTextVersion: c.consentTextVersion,
+          consentGivenAt: c.consentGivenAt,
         })),
-        category: applicant.intendedCategory
-          ? { id: applicant.intendedCategory.id, name: applicant.intendedCategory.name }
+        category: requestedCategory
+          ? { id: requestedCategory.id, name: requestedCategory.name }
           : null,
       });
     }
@@ -314,7 +426,7 @@ export async function listApprovals(
   // is asking for something a family-link item can never be. Skipping the query
   // keeps `meta.total` honest — counting rows that can never match would report
   // results the caller cannot see.
-  if ((!type || type === 'family-link') && !branchId) {
+  if ((!type || type === 'family-link') && !branchId && !reviewUserId) {
     // Standalone link requests: the parent already has an account (§4.3), so
     // only the link itself is pending.
     const where = { status: 'pending' as const, deletedAt: null, parent: { accountStatus: 'active' as const } };
@@ -345,6 +457,7 @@ export async function listApprovals(
         // A link request concerns an existing child and asks for no role,
         // and no stage: the child's placement already exists.
         requestedRole: null,
+        registrationDetails: null,
         framing: null,
         children: [],
         category: null,
@@ -380,9 +493,30 @@ export async function listApprovals(
         // exactly the requests from adults who are ALREADY approved — an adult
         // student registering their children, or a parent adding another.
         parent: { accountStatus: { not: 'pending' } },
+        ...(reviewUserId ? { parentId: reviewUserId } : {}),
       },
       include: {
-        parent: { select: { id: true, nameArabic: true } },
+        parent: {
+          select: {
+            id: true,
+            nameArabic: true,
+            firstNameArabic: true,
+            lastNameArabic: true,
+            firstNameFrench: true,
+            lastNameFrench: true,
+            nickname: true,
+            sex: true,
+            phone: true,
+            notes: true,
+            identities: { where: { isActive: true }, select: { email: true }, take: 1 },
+            consentsAsSubject: {
+              where: { consentType: 'data_processing' },
+              orderBy: { grantedAt: 'desc' },
+              take: 1,
+              select: { granted: true, consentTextVersion: true, grantedAt: true },
+            },
+          },
+        },
         requestedCategory: { select: { id: true, name: true } },
         // R64 — the branch this child was asked to attend. Until it existed the
         // item reported `branch: null` and the §14.2 branch filter could not
@@ -408,6 +542,19 @@ export async function listApprovals(
     // across two pages — half a family is not a thing an approver can act on.
     for (const group of [...byRequest.values()].slice(skip, skip + take)) {
       const first = group[0]!;
+      // A parent may request a different branch/category per child. The compact
+      // table summary is populated only when the whole sibling group agrees;
+      // otherwise the exact values remain on each child in the detail view.
+      const commonBranch = group.every(
+        (child) => child.requestedBranchId === first.requestedBranchId,
+      )
+        ? first.requestedBranch
+        : null;
+      const commonCategory = group.every(
+        (child) => child.requestedCategoryId === first.requestedCategoryId,
+      )
+        ? first.requestedCategory
+        : null;
       items.push({
         id: first.requestId,
         type: 'child-application',
@@ -418,21 +565,32 @@ export async function listApprovals(
         // Approving the whole request would create this many children and this
         // many links — though R62.2 lets an approver take them one at a time.
         bundle: { childCount: group.length, linkCount: group.length },
-        // The request's branch, which every child in it shares — one form, one
-        // choice. Still `null` for a request submitted before R64.
-        branch: first.requestedBranch
-          ? { id: first.requestedBranch.id, name: first.requestedBranch.name }
+        branch: commonBranch
+          ? { id: commonBranch.id, name: commonBranch.name }
           : null,
         requestedRole: null,
+        registrationDetails: { applicant: registrationPerson(first.parent) },
         framing: null,
-        category: first.requestedCategory
-          ? { id: first.requestedCategory.id, name: first.requestedCategory.name }
+        category: commonCategory
+          ? { id: commonCategory.id, name: commonCategory.name }
           : null,
         children: group.map((c) => ({
           applicationId: c.id,
           nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
+          firstNameArabic: c.firstNameArabic,
+          lastNameArabic: c.lastNameArabic,
+          firstNameFrench: c.firstNameFrench,
+          lastNameFrench: c.lastNameFrench,
+          nickname: c.nickname,
+          sex: c.sex,
+          requestedCategory: c.requestedCategory,
+          requestedBranch: c.requestedBranch,
+          dataProcessingConsent: c.consentDataProcessing,
+          mediaReleaseConsent: c.consentMediaRelease,
+          consentTextVersion: c.consentTextVersion,
+          consentGivenAt: c.consentGivenAt,
         })),
       });
     }
@@ -454,7 +612,7 @@ export async function listApprovals(
    * Teaching Groups: the entity has no branch of its own, and resolving one
    * through the student's enrolment would make one filter mean two things.
    */
-  if ((!type || type === 'identity-review') && !branchId) {
+  if ((!type || type === 'identity-review') && !branchId && !reviewUserId) {
     const flagged = await prisma.familyLink.findMany({
       where: {
         identityReviewRaisedAt: { not: null },
@@ -498,6 +656,7 @@ export async function listApprovals(
         bundle: { childCount: 0, linkCount: group.length },
         branch: null,
         requestedRole: null,
+        registrationDetails: null,
         framing: null,
         category: null,
         children: [],
@@ -755,17 +914,53 @@ export async function decide(
        * registered children is not made a beneficiary by their admission.
        */
       const admitted = [...new Set(enrollments.map((e) => e.userId))];
+      const placedEnrollments: Awaited<ReturnType<typeof enrolAtPlacement>>[] = [];
+      for (const e of enrollments) {
+        // One resolver for both shapes and both approval paths — the branching
+        // lives in `enrolAtPlacement`, not in each caller (R66.5).
+        placedEnrollments.push(
+          await enrolAtPlacement(tx, actor, e.placement, e.userId, 'approval'),
+        );
+      }
+
+      /**
+       * A beneficiary admitted by this decision is structurally a Student.
+       * Placement supplies the role's branch scope; the client neither chooses
+       * nor may omit it. This closes the reachable Active + beneficiary +
+       * Enrollment + no-role state that rendered «بلا دور» after approval.
+       */
+      const studentRoleScopes: { userId: string; branchId: string; changed: boolean }[] = [];
+      for (const userId of admitted) {
+        const branches = [
+          ...new Set(
+            placedEnrollments
+              .filter((entry) => entry.studentId === userId)
+              .map((entry) => entry.branchId),
+          ),
+        ];
+        if (branches.length !== 1) {
+          throw new AppError(
+            'VALIDATION_FAILED',
+            'one approval must place a student within one role scope',
+            { reason: 'STUDENT_ROLE_SCOPE_AMBIGUOUS', user_id: userId },
+          );
+        }
+        const branchId = branches[0]!;
+        studentRoleScopes.push({
+          userId,
+          branchId,
+          changed: await ensureRoleAssignment(tx, actor, userId, {
+            role: 'student',
+            branchId,
+          }),
+        });
+      }
+
       if (decision.approve && admitted.length > 0) {
         await tx.user.updateMany({
           where: { id: { in: admitted } },
           data: { isBeneficiary: true },
         });
-      }
-
-      for (const e of enrollments) {
-        // One resolver for both shapes and both approval paths — the branching
-        // lives in `enrolAtPlacement`, not in each caller (R66.5).
-        await enrolAtPlacement(tx, actor, e.placement, e.userId, 'approval');
       }
 
       await audit.write(tx, {
@@ -785,6 +980,11 @@ export async function decide(
           // was requested and what was granted.
           admitted_as_beneficiary: admitted.length,
           granted: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
+          student_role_scopes: studentRoleScopes.map((entry) => ({
+            user_id: entry.userId,
+            branch_id: entry.branchId,
+            changed: entry.changed,
+          })),
           // §4.1's placement, recorded on the approval itself as well as on each
           // `enrollment.create` row: this is the act that admitted them, and it
           // must be answerable from the approval alone.
@@ -817,6 +1017,15 @@ export async function decide(
             parent_applicant_id: applicant.id,
             ...(decision.reason ? { reason: decision.reason } : {}),
           },
+        });
+      }
+
+      if (decision.approve) {
+        await notifySubjectUserChange(tx, {
+          type: 'registration_approved',
+          subjectUserId: applicant.id,
+          recipientUserIds: [applicant.id],
+          actorUserId: actor.userId,
         });
       }
 
@@ -909,6 +1118,12 @@ export async function decide(
               reason: decision.reason ?? 'identity_review',
             },
           });
+          await notifySubjectUserChange(tx, {
+            type: 'family_link_revoked',
+            subjectUserId: link.studentId,
+            recipientUserIds: [link.parentId],
+            actorUserId: actor.userId,
+          });
         }
       }
 
@@ -977,6 +1192,13 @@ export async function decide(
         student_id: link.studentId,
         ...(decision.reason ? { reason: decision.reason } : {}),
       },
+    });
+
+    await notifySubjectUserChange(tx, {
+      type: decision.approve ? 'family_link_approved' : 'family_link_rejected',
+      subjectUserId: link.studentId,
+      recipientUserIds: [link.parentId],
+      actorUserId: actor.userId,
     });
 
     return { type: 'family-link' as const, activated: 1 };

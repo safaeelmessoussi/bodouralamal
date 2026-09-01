@@ -16,14 +16,32 @@ import { api } from '../lib/api.js';
  * class that MOVED once risked being announced as one called off.
  */
 export type NotificationType =
+  | 'registration_review_required'
+  | 'registration_approved'
+  | 'registration_rejected'
+  | 'family_link_requested'
+  | 'family_link_approved'
+  | 'family_link_rejected'
+  | 'family_link_revoked'
+  | 'role_assignments_changed'
+  | 'platform_ownership_received'
+  | 'enrollment_changed'
   | 'session_cancelled'
   | 'session_restored'
   | 'session_assigned'
+  | 'session_unassigned'
   | 'session_rescheduled'
   | 'event_created'
   | 'event_staff_assigned'
+  | 'event_staff_unassigned'
   | 'event_rescheduled'
   | 'event_cancelled'
+  | 'exam_teacher_assigned'
+  | 'exam_teacher_unassigned'
+  | 'exam_scheduled'
+  | 'exam_rescheduled'
+  | 'exam_changed'
+  | 'exam_cancelled'
   | 'grade_published';
 
 export interface NotificationItem {
@@ -33,6 +51,7 @@ export interface NotificationItem {
   session_id: string | null;
   event_id: string | null;
   exam_id: string | null;
+  subject_user_id: string | null;
   /** What it is about — a subject, an event's name, an exam's title. */
   title: string | null;
   date: string | null;

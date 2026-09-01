@@ -399,7 +399,7 @@ export function UsersPage(): ReactNode {
           user={editing}
           branches={branches}
           canGrantAdmin={isSuperAdmin}
-          rolesProtected={editing.is_platform_owner}
+          platformOwner={editing.is_platform_owner}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(input, assignments) =>
@@ -408,9 +408,7 @@ export function UsersPage(): ReactNode {
               // TD-15 version, so they go first; the role set is a separate
               // endpoint by design (§5.6) and one audit row per decision.
               await updateUser(editing.id, editing.version, input, accessToken);
-              if (!editing.is_platform_owner) {
-                await setUserRoles(editing.id, assignments, accessToken);
-              }
+              await setUserRoles(editing.id, assignments, accessToken);
             }, 'common.saved')
           }
         />
@@ -593,7 +591,7 @@ function ProfileDialog({
   user,
   branches,
   canGrantAdmin,
-  rolesProtected,
+  platformOwner,
   busy,
   onSave,
   onCancel,
@@ -601,7 +599,7 @@ function ProfileDialog({
   user: UserSummary;
   branches: Branch[];
   canGrantAdmin: boolean;
-  rolesProtected: boolean;
+  platformOwner: boolean;
   busy: boolean;
   onSave: (
     input: UserProfileInput,
@@ -644,13 +642,11 @@ function ProfileDialog({
    * scope, so a second row of the same role is not a wider grant — it is the
    * duplicate the database now refuses.
    */
-  const offered = rolesProtected
-    ? []
-    : ROLES.filter(
-        (r) =>
-          (canGrantAdmin || (r !== 'admin' && r !== 'super_admin')) &&
-          !rows.some((x) => x.role === r),
-      );
+  const offered = ROLES.filter(
+    (r) =>
+      (canGrantAdmin || (r !== 'admin' && r !== 'super_admin')) &&
+      !rows.some((x) => x.role === r),
+  );
 
   const guard = useUnsavedGuard({
     open: true,
@@ -675,7 +671,7 @@ function ProfileDialog({
         <PersonFields value={person} onChange={setPerson} errors={touched ? errors : {}} prefix="user" />
 
         <h3>{t('admin.users.rolesHeading')}</h3>
-        {rolesProtected ? (
+        {platformOwner ? (
           <p className="state" role="status">
             {t('admin.users.platformOwnerRolesProtected')}
           </p>
@@ -691,7 +687,7 @@ function ProfileDialog({
             {rows.map((r) => (
               <li key={r.role}>
                 <span className="admin-list__label">{t(`admin.users.role.${r.role}`)}</span>
-                {rolesProtected ? null : (
+                {platformOwner && r.role === 'super_admin' ? null : (
                   <>
                 {/**
                   * **Every assigned role's scope is editable** (Owner,
@@ -808,7 +804,7 @@ function ProfileDialog({
                   // R80.3 completes a missing sex; the server refuses a change.
                   ...(person.sex === '' ? {} : { sex: person.sex }),
                 },
-                rows,
+                assignmentsForSave(rows, role, branchId),
               );
             }}
           >
@@ -818,6 +814,19 @@ function ProfileDialog({
       </div>
     </Dialog>
   );
+}
+
+/**
+ * The primary Save commits the visible role draft too. The secondary Add
+ * button is only needed when the operator wants to start another role row.
+ */
+export function assignmentsForSave(
+  rows: { role: string; branch_id: string | null }[],
+  draftRole: string,
+  draftBranchId: string,
+): { role: string; branch_id: string | null }[] {
+  if (draftRole === '') return rows;
+  return [...rows, { role: draftRole, branch_id: draftBranchId || null }];
 }
 
 /**

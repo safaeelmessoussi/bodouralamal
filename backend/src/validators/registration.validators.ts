@@ -42,6 +42,28 @@ const notes = person.notes;
  * can compare a person against a `girls_only` Level, and enrolment enforcement
  * treats a missing sex as *not eligible* rather than as a wildcard.
  */
+function requireFrenchNamePair(
+  person: {
+    first_name_french?: string | undefined;
+    last_name_french?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const missing =
+    person.first_name_french === undefined && person.last_name_french !== undefined
+      ? 'first_name_french'
+      : person.first_name_french !== undefined && person.last_name_french === undefined
+        ? 'last_name_french'
+        : null;
+  if (missing !== null) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [missing],
+      message: 'both French name parts are required together, or neither (Revision 41)',
+    });
+  }
+}
+
 const personCore = z.object({
   first_name_arabic: namePart,
   last_name_arabic: namePart,
@@ -50,7 +72,10 @@ const personCore = z.object({
   first_name_french: namePart.optional(),
   last_name_french: namePart.optional(),
   nickname: nickname.optional(),
-  phone: phone.optional(),
+  // R117 — prospective registrations require a reachable contact number.
+  // `User.phone` remains nullable for historical accounts; this is a write-
+  // boundary rule, not a destructive schema backfill.
+  phone,
   notes: notes.optional(),
   sex: z.enum(['female', 'male']),
 })
@@ -61,29 +86,19 @@ const personCore = z.object({
   // quietly dropped, because silently ignoring it would let a client believe a
   // placement was recorded when placement happens after approval (§4.1).
   .strict()
-  .refine(
-    (p) => (p.first_name_french === undefined) === (p.last_name_french === undefined),
-    {
-      // Named on the field rather than the object, so the form can mark the
-      // control the applicant needs to fix (§14.4).
-      path: ['last_name_french'],
-      message: 'both French name parts are required together, or neither (Revision 41)',
-    },
-  );
+  // Name the missing counterpart, not a fixed field: when the family name is
+  // the supplied half, marking it invalid would tell the applicant to fix the
+  // field that is already complete.
+  .superRefine(requireFrenchNamePair);
 
 /**
- * Consent decisions (§4.1, §4.1a). Every form carries the generic
- * data-processing checkbox; the parent+child form additionally carries the
- * explicit, separate Parental Media Release checkbox.
+ * The request-level consent decision (§4.1, §4.1a).
  *
- * `media_release` is **required to be present but may be `false`** — a parent
- * declining is a recorded decision, not a missing one (BR-1 treats absence of a
- * record as no consent, so the decision is stored either way).
+ * Media release is deliberately absent: R62.3b moved that decision onto each
+ * child because siblings may have different answers. Accepting a second,
+ * request-level copy would give one consent two sources of truth.
  */
-const consents = z.object({
-  data_processing: z.boolean(),
-  media_release: z.boolean().optional(),
-});
+const consents = z.object({ data_processing: z.boolean() }).strict();
 
 /**
  * The branch the applicant chooses (§4.1, Revision 39).
@@ -328,7 +343,11 @@ const childCore = z
     requested_branch_id: branchId,
     requested_category_id: categoryId,
   })
-  .strict();
+  .strict()
+  // The child and adult shapes share the same R41 rule. The browser already
+  // enforces it per sibling; repeating it at the wire boundary keeps a forged
+  // child payload from storing half a French name.
+  .superRefine(requireFrenchNamePair);
 
 /**
  * Unified Parent + Child registration (§4.1, as amended by Revision 62).

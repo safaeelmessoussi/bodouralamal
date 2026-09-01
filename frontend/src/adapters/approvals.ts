@@ -35,6 +35,37 @@ export interface ApprovalChild {
   name: string;
   status: 'pending' | 'approved' | 'rejected';
   schooling_stage: string | null;
+  first_name_arabic: string;
+  last_name_arabic: string;
+  first_name_french: string | null;
+  last_name_french: string | null;
+  nickname: string | null;
+  sex: string | null;
+  requested_category: { id: string; name: string } | null;
+  requested_branch: { id: string; name: string } | null;
+  data_processing_consent: boolean;
+  media_release_consent: boolean;
+  consent_text_version: string;
+  consent_given_at: string;
+}
+
+export interface ApprovalRegistrationDetails {
+  applicant: {
+    first_name_arabic: string | null;
+    last_name_arabic: string | null;
+    first_name_french: string | null;
+    last_name_french: string | null;
+    nickname: string | null;
+    sex: string | null;
+    phone: string | null;
+    email: string | null;
+    notes: string | null;
+    data_processing_consent: {
+      granted: boolean;
+      text_version: string;
+      given_at: string;
+    } | null;
+  };
 }
 
 export interface ApprovalApplicant {
@@ -82,6 +113,7 @@ export interface Approval {
   /** R62 — present on a `child-application` item; `[]` elsewhere. Each entry is
    *  decided on its own (R62.2). */
   children: ApprovalChild[];
+  registration_details: ApprovalRegistrationDetails | null;
 }
 
 export interface Page<T> {
@@ -102,12 +134,15 @@ export async function listApprovals(
     branchId?: string;
     /** R76 — server-side, per source; see `approvalOrder` in the service. */
     sort?: SortState | null;
+    /** Exact notification target; stale/decided work returns an empty page. */
+    reviewUserId?: string;
   } = {},
 ): Promise<Page<Approval>> {
   const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: '25' });
   applySort(params, options.sort ?? null);
   if (options.type) params.set('type', options.type);
   if (options.branchId) params.set('branch_id', options.branchId);
+  if (options.reviewUserId) params.set('review_user_id', options.reviewUserId);
   return api<Page<Approval>>(`/admin/approvals?${params.toString()}`, { token });
 }
 

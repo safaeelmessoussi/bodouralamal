@@ -43,6 +43,7 @@ export function PersonFields({
   onChange,
   errors,
   prefix,
+  phoneRequired = false,
 }: {
   value: PersonForm;
   onChange: (next: PersonForm) => void;
@@ -50,6 +51,8 @@ export function PersonFields({
   /** Namespaces the error keys. Registration uses `applicant`; the back-office
    *  edit uses `user`, and neither needs to know about the other. */
   prefix: string;
+  /** Prospective public registrations require contact; legacy profile edits do not. */
+  phoneRequired?: boolean;
 }): ReactNode {
   const set = (patch: Partial<PersonForm>) => onChange({ ...value, ...patch });
 
@@ -57,12 +60,13 @@ export function PersonFields({
     <>
       <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
       <TextField
-        label={t('register.phone')}
+        label={t(phoneRequired ? 'register.phone' : 'register.phoneOptional')}
         type="tel"
         value={value.phone}
         onChange={(next) => set({ phone: next })}
         hint={t('register.phoneHint')}
         error={errors[`${prefix}.phone`] ?? null}
+        required={phoneRequired}
       />
       <TextArea
         label={t('register.notes')}

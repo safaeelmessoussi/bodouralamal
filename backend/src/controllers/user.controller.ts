@@ -95,7 +95,7 @@ const listSchema = z.object({
   q: z.string().trim().max(120).optional(),
   role: z.enum(['super_admin', 'admin', 'teacher', 'student', 'parent']).optional(),
   branch_id: z.uuid().optional(),
-  status: z.enum(['pending', 'active', 'rejected', 'suspended']).optional(),
+  status: z.enum(['active', 'suspended']).optional(),
   // R79.7 — the enrolment selector's population. `true` is the only meaningful
   // value: `false` would ask for non-beneficiaries, which no screen wants.
   beneficiaries_only: z.enum(['true']).optional(),

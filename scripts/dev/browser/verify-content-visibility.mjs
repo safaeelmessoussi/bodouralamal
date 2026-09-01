@@ -27,6 +27,9 @@
  *
  * It asserts the two halves that must agree, because the defect was precisely
  * that they did not: what the person SEES selected, and what the upload SENDS.
+ * It also pins the controlled-UAT removal of the user-facing replacement
+ * action: creating a new item remains available, while no table row can open a
+ * replacement dialog.
  */
 import { connect, results } from './cdp.mjs';
 
@@ -147,8 +150,9 @@ const readVis = () => evaluate(`(() => {
   };
 })()`);
 
-/** Reads every labelled control inside the OPEN dialog — the form's own view of
- *  what will be saved, which is the whole point of the self-containment rule. */
+/** Reads every labelled control inside the OPEN upload dialog — the form's own
+ *  view of what will be saved, which is the whole point of the self-containment
+ *  rule. */
 const readDialogFields = () => evaluate(`(() => {
   const d = document.querySelector('dialog[open]');
   if (!d) return { open: false };
@@ -212,41 +216,28 @@ check(
 check('all three tiers are offered', ['public', 'private', 'hidden'].every((v) => vis.options.includes(v)),
   JSON.stringify(vis.options));
 
-/* ── 1b. Replacement offers no visibility control (checked while unfiltered,
-       because a Level filter can legitimately leave the table empty) ─────── */
+/* ── 1b. Controlled UAT: replacement is not a user-facing action ─────────── */
 await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
 await new Promise((r) => setTimeout(r, 300));
-const replaced = await evaluate(`(async () => {
-  const row = document.querySelector('.admin-table tbody tr');
-  if (!row) return 'no-rows';
-  const item = [...row.querySelectorAll('button')].find((b) => b.textContent.includes('استبدال'));
-  if (!item) return 'no-replace';
-  item.click();
-  await new Promise((r) => setTimeout(r, 600));
-  return 'opened';
+const replacementSurface = await evaluate(`(() => {
+  const rows = [...document.querySelectorAll('.admin-table tbody tr')];
+  const replacementButtons = rows.flatMap((row) => [...row.querySelectorAll('button')])
+    .filter((button) => (button.textContent ?? '').includes('استبدال'));
+  return {
+    rows: rows.length,
+    replacementButtons: replacementButtons.length,
+    replacementDialog: [...document.querySelectorAll('dialog')]
+      .some((dialog) => (dialog.textContent ?? '').includes('استبدال الملف')),
+  };
 })()`);
-if (replaced === 'opened') {
-  const rf = await readDialogFields();
-  check(
-    'the REPLACE dialog SHOWS the scope and tier rather than hiding them',
-    rf.selects.length >= 5,
-    `${rf.selects.length} selects: ${rf.selects.map((s) => s.label).join(' | ')}`,
-  );
-  check(
-    'every one of them is DISABLED — replacement swaps the object, not the scope',
-    rf.selects.length > 0 && rf.selects.every((s) => s.disabled === true),
-    JSON.stringify(rf.selects.map((s) => [s.label, s.disabled])),
-  );
-} else {
-  check('the replace dialog could be opened', false, `state=${replaced}`);
-}
-await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
-await new Promise((r) => setTimeout(r, 300));
+check('the unfiltered library has a real row to inspect', replacementSurface.rows > 0);
+check(
+  'no row exposes استبدال الملف and no replacement dialog is mounted',
+  replacementSurface.replacementButtons === 0 && replacementSurface.replacementDialog === false,
+  JSON.stringify(replacementSurface),
+);
 
 /* ── 2. Choosing a Level initialises from ITS Category default ──────────── */
-await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
-await new Promise((r) => setTimeout(r, 200));
-
 /**
  * Fills Level, then Subject and Academic Year.
  *

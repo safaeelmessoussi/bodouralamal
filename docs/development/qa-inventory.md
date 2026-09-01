@@ -102,10 +102,10 @@ under the table.
 | `verify-notifications.sh` | 12, 13, 14a–14c | **AM/AN — AUDIENCE only.** Drives `/notify` through the API, so it proves who the server resolves and **nothing** about whether the dialog reaches that endpoint. `verify-notify-ui` is the proof of the feature | 22/22 |
 | `verify-public-calendar.sh` | 20 | قائمة / تقويم driven anonymously; **R83** — a cancelled occurrence leaves the ordinary projection and `include_cancelled=true` still carries it; the reason never leaks | 18/18 |
 | `verify-enrolment-gender.sh` | 3 | R79 beneficiary identity across six person-shapes + R27/BR-21 Level narrowing | 17/17 |
-| `verify-calendar-header.sh` | 20 | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift, the table note against its table | 17/17 |
+| `verify-calendar-header.sh` | 20 | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift, physical dual-date order, the table note against its table | 19/19 |
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-error-experience.sh` | 5 | The error experience's live half: expected-401 silence, real offline, real 429, branded 404 | 7/7 |
-| `verify-unsaved-guard.sh` | 21 | Unsaved-changes protection on every dismissal path, plus the pristine half | 21/21 |
+| `verify-unsaved-guard.sh` | 21 | Unsaved-changes protection on every dismissal path, the pristine half, and the rendered new-schedule default | 24/24 |
 | `verify-registration.sh` | 13 | The beneficiary registration journey end to end, plus the records it must and must not create | 13/13 |
 | `verify-content-visibility.sh` | 24 | §14.1's visibility selector, operated in a real browser: state, selection, the request body, and the replace dialog's absence of one. **Three of its checks had been failing as assumed fixture noise and were one real defect** — the upload dialog cleared the Subject its page filter had seeded (see §10 in `CHANGES.log`) | 24/24 |
 | `verify-admin-navigation.sh` | 4 | **R105's two menu orders as they RENDER**, both roles, plus the dashboard cards · an Admin typing each الإدارة URL · and the boundary a menu check cannot see: the same nine asked of the **server** with a real Admin bearer token | 31/31 |

@@ -55,6 +55,9 @@ const out = await evaluate(`(async () => {
   await new Promise((r) => setTimeout(r, 800));
 
   const d2 = document.querySelector('dialog[open]');
+  const positionFields = [...d2.querySelectorAll('.field')].filter((f) =>
+    (f.querySelector('.field__label')?.textContent ?? '').trim().startsWith('الصفة'));
+  const defaultPosition = positionFields.at(-1)?.querySelector('select')?.value ?? null;
   const froms = [...d2.querySelectorAll('.field')].filter((f) => (f.querySelector('.field__label')?.textContent ?? '').includes('من تاريخ'));
   const untils = [...d2.querySelectorAll('.field')].filter((f) => (f.querySelector('.field__label')?.textContent ?? '').includes('إلى تاريخ'));
   if (froms.length === 0) return { noPeriodFields: true, labels: [...d2.querySelectorAll('.field__label')].map((l) => l.textContent.trim()) };
@@ -76,10 +79,11 @@ const out = await evaluate(`(async () => {
   const d4 = document.querySelector('dialog[open]');
   const afterScheduleMoved = [...d4.querySelectorAll('.field__error')].map((e) => e.textContent.trim());
 
-  return { bounds, errors, invalidMarked, afterScheduleMoved };
+  return { defaultPosition, bounds, errors, invalidMarked, afterScheduleMoved };
 })()`);
 
 console.log(JSON.stringify(out, null, 1));
+check('a NEW staffing row defaults to مؤطّرة مسؤولة', out.defaultPosition === 'teacher', String(out.defaultPosition));
 check('the period pickers are bounded by the schedule', out.bounds?.min === '2026-08-30', JSON.stringify(out.bounds));
 check('29 غشت against a class starting 30 غشت is marked immediately',
   Array.isArray(out.errors) && out.errors.some((e) => e.includes('خارج فترة الحصة')), JSON.stringify(out.errors));

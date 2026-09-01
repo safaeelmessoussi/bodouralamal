@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ActiveChildProvider } from '../../contexts/active-child.js';
+import { ActiveRoleProvider } from '../../contexts/active-role.js';
 import { SessionContext, type Me } from '../../contexts/session.js';
 import { ChildContextSwitcher } from './child-context-switcher.js';
 
@@ -34,9 +35,11 @@ function render(links: { id: string; display_name: string }[]): string {
         setAccessToken: () => undefined,
       }}
     >
-      <ActiveChildProvider>
-        <ChildContextSwitcher onSelectChild={() => undefined} />
-      </ActiveChildProvider>
+      <ActiveRoleProvider>
+        <ActiveChildProvider>
+          <ChildContextSwitcher onSelectChild={() => undefined} />
+        </ActiveChildProvider>
+      </ActiveRoleProvider>
     </SessionContext.Provider>,
   );
 }
