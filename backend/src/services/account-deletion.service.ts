@@ -549,7 +549,6 @@ export async function deIdentifyAccount(
       await tx.teacherAvailability.deleteMany({ where: { userId: targetId } }),
       await tx.teacherSubjectCapability.deleteMany({ where: { userId: targetId } }),
       await tx.teacherCategoryCapability.deleteMany({ where: { userId: targetId } }),
-      await tx.studentSocialProfile.deleteMany({ where: { studentId: targetId } }),
       await tx.notification.deleteMany({ where: { userId: targetId } }),
     ];
 

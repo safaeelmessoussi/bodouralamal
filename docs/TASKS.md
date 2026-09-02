@@ -434,11 +434,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ Security — out-of-scope is 404 not 403 (no existence leak for a minor's record); revoking an assignment, un-enrolling, or deleting the group each end reach on the next call
   - ✓ Abstraction — `taughtByTeacher()` composable predicate is the primary form; `teachesStudent`/`teacherStudentIds` are built on it (one query each). Adopted while zero production call sites existed
   - △ Later milestone (M3) — the admin UI that creates groups and assigns teachers arrives with Group CRUD
-- [~] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2, SRS Revision 28)
-  - ✓ Backend — `GET`/`PUT /students/{id}/social-profile`; authorization server-side via the §4.2 predicate + TD-12 freshness
-  - ✓ Tests — 19 integration tests asserting the matrix in both directions, the audit trail for reads and writes, and 404-not-403
-  - ✓ Security — seven mutations caught; audit records field names never values; `socialprofile.*` excluded from the R19 purge allowlist (verified with a 2099 horizon)
-  - △ Frontend integration — the §14 case-file screen
+- [x] ~~StudentSocialProfile field-level restriction~~ — **FEATURE WITHDRAWN (SRS Revision 120, Owner 2026-09-02).** The entity, its table, its two endpoints, its permissions and its audit actions are removed: no product surface ever collected the data, and the Owner does not collect personal-data categories the association does not operationally need.
 - [~] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
   - ✓ Backend — `GET /admin/users`; §14.2 columns exactly; filters read live assignments; TD-10 envelope and ar-x-icu ordering
   - ✓ Tests — 14 list/search tests + a 38-entry parity corpus proving the TS normalizer matches the SQL function byte for byte; eight mutations caught
@@ -603,7 +599,7 @@ was hiding behind it: the run went green on the first attempt.
 - [~] Teacher scope from `CourseScheduleStaff` (§4.4c, TD-2) — **replaces `teacher-scope.ts`'s `GroupTeacher` resolution**
   - ✓ Backend — `studentsTaughtBy`, `teacherBranchIds`, `staffsSession` in `roster-resolution.ts`; branch scope now **stated** by the schedule instead of inferred through two hops
   - ✓ Tests — assistants have identical reach; a teacher with no schedules reaches nobody; revoking a staffing ends reach on the next call
-  - ✓ **Consumers migrated** — `calendar`, `event`, `consent` and `social-profile` services all resolve through `roster-resolution.ts`; **no production code reads `GroupTeacher`**
+  - ✓ **Consumers migrated** — `calendar`, `event` and `consent` services all resolve through `roster-resolution.ts`; **no production code reads `GroupTeacher`**
   - ✓ Event scoping moved with it (`EventAdministrativeGroup`), because the two id spaces could never have intersected
   - ✓ `consent.service` now emits `{ session_id }`, so both producers agree before M6 writes the handler
   - ✓ `test-support/educational-fixture.ts` — one fixture for the four suites that each need "a group, a student in it, and a teacher who reaches them"
@@ -1807,7 +1803,7 @@ Owner-created rows.
 consent_record (×3), course_schedule_staff, enrollment, event_staff, exam_staff, family_link
 (×2), grade, notification, quran_progress_log (×2), rate_limit_counter, refresh_session,
 refresh_token, session_recording (×2), session_staff, student_exam_submission,
-student_social_profile, student_surah_progress, student_teaching_group, teacher_availability,
+student_surah_progress, student_teaching_group, teacher_availability,
 teacher_category_capability, teacher_subject_capability, trash.deleted_by, user.deleted_by,
 user_branch_role, user_identity.
 

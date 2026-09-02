@@ -16,7 +16,7 @@ import { narrowToRole, rolesOf, toRoleScopes, type RoleScope } from './branch-sc
  * window is acceptable for reading one's own schedule; it is not acceptable here.
  *
  * TD-12's list, and where each lands:
- *   presigned GET minting (M6) · `StudentSocialProfile` reads (M2) ·
+ *   presigned GET minting (M6) ·
  *   **approval actions (`/admin/approvals/*`) — this milestone** ·
  *   consent-gate overrides (M6) · staff-assisted consent recording (M2) ·
  *   pass/fail overrides (M5) · user-management mutations (M2)

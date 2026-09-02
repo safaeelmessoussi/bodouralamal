@@ -632,7 +632,6 @@ model User {
 
   identities    UserIdentity[]
   branchRoles   UserBranchRole[]
-  socialProfile StudentSocialProfile?
 
   // Revision 43 (expand phase) — see the educational-model block below.
   levelEnrollments   Enrollment[]
@@ -2168,31 +2167,6 @@ model RateLimitCounter {
   @@unique([userId, bucket, windowStart])
   @@index([windowStart])
   @@map("rate_limit_counter")
-}
-
-/// Restricted case-file data (BR-16, §4.10). Field-level access: Admins and
-/// the student's specifically-assigned teachers only — never other students,
-/// unrelated guardians, or teachers at large.
-model StudentSocialProfile {
-  id        String @id @default(uuid()) @db.Uuid
-  studentId String @unique @map("student_id") @db.Uuid
-  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
-
-  healthCondition  String? @map("health_condition") @db.VarChar(2000)
-  familySituation  String? @map("family_situation") @db.VarChar(2000)
-  homeAddress      String? @map("home_address") @db.VarChar(2000)
-  siblingsCount    Int?    @map("siblings_count")
-  fatherName       String? @map("father_name") @db.VarChar(120)
-  fatherProfession String? @map("father_profession") @db.VarChar(120)
-  motherName       String? @map("mother_name") @db.VarChar(120)
-  motherProfession String? @map("mother_profession") @db.VarChar(120)
-
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedById String?   @map("deleted_by") @db.Uuid
-
-  @@map("student_social_profile")
 }
 
 // ---------------------------------------------------------------------------

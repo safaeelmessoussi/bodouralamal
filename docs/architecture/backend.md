@@ -52,7 +52,7 @@ Each boundary prevents a specific failure that has a history in this kind of cod
 
 | Directory | Holds | Notable contents |
 |---|---|---|
-| `controllers/` | One module per resource | `calendar`, `calendar-bootstrap`, `event`, `group`, `branch`, `public-branch`, `hijri-calendar`, `user`, `approval`, `family-link`, `consent`, `social-profile`, `registration`, `auth`, `health` |
+| `controllers/` | One module per resource | `calendar`, `calendar-bootstrap`, `event`, `group`, `branch`, `public-branch`, `hijri-calendar`, `user`, `approval`, `family-link`, `consent`, `registration`, `auth`, `health` |
 | `services/` | Business logic per resource | Plus `refresh-token`, `roster`, `public-branch`, `calendar-bootstrap` |
 | `repositories/` | Data access | `user`, `audit`, `refresh-token`, `trash`, `jobs`, and `optimistic-lock` |
 | `policies/` | Permission predicates | `branch-scope`, `teacher-scope`, `freshness.policy` |

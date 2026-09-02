@@ -62,8 +62,13 @@ POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff
 GET /students/me                              # TD-3.3, §5.3 (R62.10, Revision 63) — the ACTING student's identity block
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"
 POST /students/{id}/consents                  # §4.1a staff_recorded; TD-2, TD-8 consent.grant/revoke, TD-7 consent.reevaluate
-GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28; §19.2 "assigned-teacher-only, API test"
-PUT /students/{id}/social-profile              # §4.10, TD-2 Revision 28 (SA / Admin in branch / Teacher own students)
+# GET/PUT /students/{id}/social-profile  — WITHDRAWN by SRS Revision 120
+# (Owner, 2026-09-02). The StudentSocialProfile capability held minors' health
+# and family data, no product surface ever collected it, and the Owner's
+# data-minimisation decision removed the feature rather than leaving an unused
+# ability to collect it. The entries are struck here rather than deleted
+# silently, so a reader of this registry sees that the endpoints were withdrawn
+# and not merely forgotten.
 GET /admin/directory                          # R112; Admin-safe people surface — scoped rows, minimal projection, NO account management
 GET /admin/users                              # R112: SUPER ADMIN ONLY (§5.7); search (fields: TD-10), filter, list; §14.2 Users screen
 POST /admin/users                             # §5.6 /admin/users "create (staff pre-provisioning against a Google email)"; §4.1b step 4b; TD-2

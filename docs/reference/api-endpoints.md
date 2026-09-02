@@ -247,7 +247,6 @@ columns no screen is entitled to.
 | `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke. For the Platform Owner the required global Super Admin assignment must remain, while additional roles are ordinary editable assignments |
 | `POST` | `/admin/platform-owner/transfer` | 🔒 | Current Platform Owner only; exact confirmation; target must already be an active Global Super Admin. Atomically moves the protected singleton and leaves both roles unchanged |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
-| `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
 
 ### Approval is the act that admits somebody (§4.1, Revision 43)
 

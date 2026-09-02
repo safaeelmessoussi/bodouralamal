@@ -331,6 +331,35 @@ change the canonical coordinate or bytes.
 | Video | — | **Not accepted at `/uploads/*`.** §4.9's *"Video remains excluded entirely"* remains in force for the route it was written about, and R99.12's `origin` marker does not widen it: the whitelist check does not consult that field |
 | Video, **ingested class recording** | **500 MB** | `video/mp4`, reachable **only** by `session-recording-ingest` (R99.8). What R99 admits is a **provenance** — an object the platform produced by recording a class it authorised — not a file type. The cap is larger because a three-hour صوت وصورة lesson is legitimately bigger than a voice memo, and bounded for the same disk-budget reason Revision 18 gave |
 
+## What a recording IS — the product meaning (Owner, 2026-09-02; SRS R120)
+
+A recording on this platform is **a مؤطِّرة recording herself giving or
+explaining a lesson**, voluntarily and on purpose:
+
+* **MVP** — her own **voice**, made with her phone's native voice recorder and
+  uploaded, or produced by the online-class egress path.
+* **Post-MVP** — her own **video**, doing the same.
+
+**The platform does not record a classroom and does not record beneficiaries.**
+Teacher-authored lesson material must not be described as classroom capture, as
+surveillance, or as inherently containing a student's voice or image.
+
+**No technical safeguard prevents a microphone or camera from capturing somebody
+else, and none is claimed here.** BR-2's consent gate is the answer to that
+possibility: it governs **publication and access**, forcing any recording
+attached to a Session private while any student in that Session's audience lacks
+`media_release` consent. That mechanism is unchanged by this clarification.
+
+**Photographs and video from association events and parties are a separate
+scenario** and are not this pipeline. Such media is intended for publication only
+where the required consent has been obtained from identifiable people in it, or
+from a parent or legal representative where applicable. No surface implements
+that today.
+
+The internal names — `SessionRecording`, the `session-recording` queue, the
+`recordings-staging` bucket — are **kept deliberately**. Renaming them would be
+churn; what needed correcting is the product meaning, which is stated here.
+
 **Video's absence is a rule, not an omission.** The library client maps `video/*` for
 *presentation*, because that list answers a different question — how a stored thing is shown,
 rather than what may be stored. Accepting video is a Document Owner decision and an SRS

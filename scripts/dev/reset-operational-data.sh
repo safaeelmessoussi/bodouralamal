@@ -108,7 +108,6 @@ DELETE FROM educational_content;
 DELETE FROM consent_record;
 DELETE FROM child_application;
 DELETE FROM family_link;
-DELETE FROM student_social_profile;
 DELETE FROM teacher_availability;
 DELETE FROM teacher_category_capability;
 DELETE FROM teacher_subject_capability;

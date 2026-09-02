@@ -3,6 +3,24 @@
 # Personal Data & CNDP Readiness Audit
 
 **Date:** 2026-08-11 · **Scope:** the live `develop` architecture, before R62
+
+> ## ⚠️ THIS IS A DATED AUDIT, NOT THE CURRENT INVENTORY
+>
+> **`StudentSocialProfile` no longer exists.** Its removal is the decision this
+> audit argued for: on **2026-09-02** the Document Owner withdrew the capability
+> entirely (**SRS Revision 120**), and migration
+> `20260902200000_drop_student_social_profile` dropped the table behind a guard
+> that refuses a non-empty one. **Localhost and Staging both held 0 rows;
+> Production is not deployed.**
+>
+> **The platform collects no health, medical or social-case-file data.** Section
+> A.2 below, and every *LEGAL REVIEW* item derived from it, is **RESOLVED BY
+> REMOVAL** and is retained only as the reasoning that led there. Read it as
+> history; do not read it as an inventory of what is processed today.
+>
+> The policy the Owner recorded with the decision: *the platform does not
+> collect categories of personal data that are not necessary for the
+> association's current operational purposes.*
 **Status:** audit for the Document Owner. No code, schema, or SRS was changed.
 **Followed by:** [the data-collection decision document](data-collection-decision.md),
 which turns these findings into a recommended profile per person type.
@@ -69,7 +87,13 @@ notes, spoken/QR identifiers and every credential/planning satellite. Its recove
 snapshot is deleted in that same transaction; otherwise the original PII would survive the
 operation in JSONB.
 
-## A.2 `StudentSocialProfile` — the highest-risk table
+## A.2 `StudentSocialProfile` — ~~the highest-risk table~~ **REMOVED**
+
+> **RESOLVED BY REMOVAL (SRS R120, 2026-09-02).** Every field below is gone from
+> the platform — table, model, routes, permissions and audit actions. The
+> question this section called *"the single most important legal question in
+> this audit"* was answered by not collecting the data at all. The analysis is
+> kept because it is the argument that produced the decision.
 
 | Field | Purpose | Necessary? | Sensitive? | Action |
 |---|---|---|---|---|

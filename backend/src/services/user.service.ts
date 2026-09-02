@@ -220,9 +220,9 @@ export async function preProvision(
  * §14.2 Users screen: paginated, filtered, searchable list (TD-10).
  *
  * Columns are exactly what §14.2 specifies — Arabic name, Nickname, Role(s),
- * Branch scope, Status, Phone — and nothing more. Notably absent is anything
- * from `StudentSocialProfile`: §4.10 restricts those fields to assigned
- * teachers, so a list screen is the last place they belong.
+ * Branch scope, Status, Phone — and nothing more. The list has never carried a
+ * case file, and there is no longer one to carry: R120 withdrew
+ * `StudentSocialProfile` entirely.
  *
  * **Visibility is branch-scoped (§4.2, Revision 25).** A branch-scoped Admin
  * sees only users holding a live role assignment to one of that Admin's managed

@@ -16,7 +16,6 @@ import {
 import { setEventStaff } from "../services/event.service.js";
 import { initiateUpload } from "../services/content.service.js";
 import { notifyEventStaffAssigned } from "../services/notification.service.js";
-import { writeProfile } from "../services/social-profile.service.js";
 import { replaceTeachingProfile } from "../services/teaching-profile.service.js";
 import { restoreEntry } from "../services/trash.service.js";
 import * as userRepository from "../repositories/user.repository.js";
@@ -213,7 +212,6 @@ async function clear(): Promise<void> {
     await prisma.notification.deleteMany({
       where: { OR: [{ userId: { in: ids } }, { subjectUserId: { in: ids } }] },
     });
-    await prisma.studentSocialProfile.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
     await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
     await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
@@ -1020,13 +1018,11 @@ describe("R79 — who the enrolment selector offers", () => {
     expect(await offered()).toContain(beneficiaryNoRole);
   });
 
-  it("L · a StudentSocialProfile is NOT required for beneficiary identity", async () => {
-    // §4.10's case file is created by staff later, and most beneficiaries never
-    // have one. Requiring it would have hidden nearly everybody.
-    const withProfile = await prisma.studentSocialProfile.count({
-      where: { studentId: { in: [beneficiaryNoRole, unplacedBeneficiary] } },
-    });
-    expect(withProfile).toBe(0);
+  it("L · no case file is required for beneficiary identity", async () => {
+    // R79.4 — beneficiary identity rests on `is_beneficiary` and nothing else.
+    // This pinned the same property against `StudentSocialProfile`, which the
+    // Owner withdrew on 2026-09-02 (R120): the platform collects no case-file
+    // data at all now, so the property is stated against what remains.
     const list = await offered();
     expect(list).toContain(beneficiaryNoRole);
     expect(list).toContain(unplacedBeneficiary);
@@ -1888,40 +1884,15 @@ describe("R111 — deleting an account keeps the record", () => {
     }
   });
 
-  it("serializes safeguarding-profile writes against final de-identification", async () => {
-    const victim = await makeUser("سباق ملف اجتماعي", "active", "female", true);
-    const boundary = deferred();
-    let arrivals = 0;
-    const realLock = userRepository.lockUser;
-    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
-      if (id === victim && arrivals < 2) {
-        arrivals += 1;
-        if (arrivals === 2) boundary.resolve();
-        await boundary.promise;
-      }
-      return realLock(tx, id);
-    });
-
-    try {
-      const [purge] = await Promise.allSettled([
-        purgeUserAccount(
-          prisma,
-          { userId: superAdminId, activeRole: "super_admin" },
-          victim,
-        ),
-        writeProfile(prisma, await actorFor(prisma, superAdminId), victim, {
-          healthCondition: "بيانات يجب ألا تعود",
-        }),
-      ]);
-      expect(purge.status).toBe("fulfilled");
-      expect(
-        await prisma.studentSocialProfile.count({ where: { studentId: victim } }),
-      ).toBe(0);
-    } finally {
-      boundary.resolve();
-      lock.mockRestore();
-    }
-  });
+  /**
+   * **A `StudentSocialProfile` serialization test stood here** and went with the
+   * feature (R120, Owner 2026-09-02).
+   *
+   * The property it asserted — a satellite write cannot slip past final
+   * de-identification — is **not lost**: the `teacherAvailability` test directly
+   * above exercises the same `lockUser` boundary against the same purge. What
+   * disappeared is the second subject, not the guarantee.
+   */
 
   it("serializes notification delivery against final de-identification", async () => {
     const victim = await makeUser("سباق صندوق الإشعار", "active", "female", false);

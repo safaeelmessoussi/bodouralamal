@@ -21,7 +21,6 @@ erDiagram
     User ||--o{ RefreshSession : "sessions"
     RefreshSession ||--o{ RefreshToken : "generations"
     User ||--o{ ConsentRecord : "subject of"
-    User ||--o| StudentSocialProfile : "case file"
     Role ||--o{ UserBranchRole : ""
     Branch ||--o{ UserBranchRole : "scopes"
     Branch ||--o{ Room : ""
@@ -243,6 +242,34 @@ state from the row that proves it.**
 `ingestion_failure_reason` sits beside it and is deliberately **not** the same column as
 `failure_reason`: the provider failing to record and the platform failing to accept what it
 recorded are different events with different remedies, and only the second is fixed by retrying.
+
+### No health, medical or social-case-file data
+
+**The platform collects none of it** (Owner decision, 2026-09-02; SRS R120).
+
+A `StudentSocialProfile` entity used to hold a child's health condition, family
+situation, home address, siblings count and both parents' names and professions,
+behind the strictest authorization in the system. **No product surface ever
+collected any of it** — not registration, not «تسجيل طفل», not the beneficiary
+profile, and no parent, مؤطِّرة or administrative screen; the frontend contained
+no reference to it at all.
+
+The Owner withdrew the capability rather than leave it unused, because **an
+unused capability is still a capability**: an endpoint nobody calls is a live
+ability to collect health data about a minor, and an empty column is a declared
+purpose. Migration `20260902200000_drop_student_social_profile` drops the table
+behind a guard that **refuses a non-empty one** and reports the row count, since
+the drop is irreversible and the table was the only place that data ever lived.
+Localhost and Staging both held **0 rows** when it was written; Production is
+not deployed.
+
+> **Data-minimisation policy:** the platform does not collect categories of
+> personal data that are not necessary for the association's current operational
+> purposes.
+
+This states a technical fact about what the software does. It is **not** a legal
+conclusion about which CNDP regime applies — that assessment is the Owner's and
+their counsel's, and nothing here should be read as making it.
 
 ### `ConsentRecord` and `AuditLog` — append-only by design
 
@@ -505,6 +532,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260901220000_partner_deletion_provenance
 20260902160000_scheduling_type_on_schedule_and_exam
 20260902180000_versioned_legal_consent_text
+20260902200000_drop_student_social_profile
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

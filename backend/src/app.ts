@@ -14,7 +14,6 @@ import * as hijri from './controllers/hijri-calendar.controller.js';
 import * as calendarBootstrap from './controllers/calendar-bootstrap.controller.js';
 import * as partners from './controllers/partner.controller.js';
 import * as publicBranches from './controllers/public-branch.controller.js';
-import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import * as administrativeGroups from './controllers/administrative-group.controller.js';
@@ -443,8 +442,6 @@ export function createApp(
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));
   guarded.get('/students/:id/consents', consents.read(prisma));
   guarded.post('/students/:id/consents', consents.record(prisma));
-  guarded.get('/students/:id/social-profile', socialProfile.read(prisma));
-  guarded.put('/students/:id/social-profile', socialProfile.write(prisma));
   // **Two surfaces, two authorizations** (Owner clarification, 2026-08-28).
   //
   // `/admin/users` is global ACCOUNT administration — Super Admin only, asserted

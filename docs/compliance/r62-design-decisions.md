@@ -2,6 +2,20 @@
 
 # R62 — Architectural Decisions Before Drafting
 
+
+> ## ⚠️ SUPERSEDED IN PART — `StudentSocialProfile` WAS REMOVED, NOT NARROWED
+>
+> This document proposed **narrowing** the case file (a renamed `StudentSupport`
+> / `MinorSafeguarding` table with fewer fields). The Document Owner took the
+> stronger decision on **2026-09-02**: the capability is **withdrawn entirely**
+> (**SRS Revision 120**), because no product surface ever collected the data and
+> the association does not collect categories it does not operationally need.
+>
+> **The platform collects no health, medical or social-case-file data.** Every
+> proposal below concerning `healthCondition`, `familySituation`, `homeAddress`,
+> `siblingsCount` or the parents' names and professions is **moot**. Retained as
+> the reasoning trail, not as a plan.
+
 **Date:** 2026-08-11 · **Follows:** [audit](personal-data-audit.md) → [data-collection decision](data-collection-decision.md)
 **Status:** for approval. Nothing implemented, no schema, no migration, no SRS change.
 

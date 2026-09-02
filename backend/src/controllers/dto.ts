@@ -1575,9 +1575,10 @@ export function settingDto(row: {
  * and never re-fetches a page to see one row change.
  *
  * Deliberately **absent**: `pre_provisioned_email` (an authorisation to claim an
- * account, not a contact detail), `notes`, `sex`, `intended_branch_id`, and
- * anything from `StudentSocialProfile` — §4.10 restricts those to assigned
- * teachers, so a back-office list is the last place they belong.
+ * account, not a contact detail), `notes`, `sex` and `intended_branch_id` — a
+ * back-office list is the last place any of them belongs. *(A clause naming
+ * `StudentSocialProfile` stood here until R120 withdrew that feature; the
+ * projection is unchanged, since it never carried those fields.)*
  */
 export interface UserDto {
   id: string;

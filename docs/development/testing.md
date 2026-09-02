@@ -1252,8 +1252,12 @@ only deterministic 64-hex coordinate ids in audit while their exact-key storage
 transitions still converge. The Trash integration proves an irreversible audit
 row outlives its entity without copying the entity label.
 
-The complete-sweep isolation guard caught a separate falsely-green proof:
-`social-profile.integration.test.ts` called the platform-wide `audit.purge`
+The complete-sweep isolation guard caught a separate falsely-green proof.
+*(The suite named below went with the `StudentSocialProfile` feature in R120;
+the lesson is kept because the mechanism it established — a destructive
+platform-wide proof runs inside an always-rolled-back transaction — is in force
+across the suites that remain.)* `social-profile.integration.test.ts` called the
+platform-wide `audit.purge`
 with a 2099 horizon and asserted only that its retained safeguarding row
 survived. It passed while deleting ambient eligible authentication history. The
 purge and survival assertion now run inside an always-rolled-back transaction;
@@ -1350,8 +1354,9 @@ Those focused suites also exposed a second ownership trap: a fixed tag such as
 `[content-test]` is not proof that the current process owns a row. A process
 restarted after interruption can find the earlier process's tagged Users and
 delete their domain/audit rows during its opening cleanup. The affected R111,
-content, teaching-profile, social-profile and notification suites now include a
-random run id in their ownership prefix. Their cleanup can match only ids born
+content, teaching-profile and notification suites now include a random run id in
+their ownership prefix (the social-profile suite did too, until R120 withdrew
+that feature). Their cleanup can match only ids born
 in that process, while the all-table wrapper remains the backstop that detects
 any residue left by an interrupted run.
 

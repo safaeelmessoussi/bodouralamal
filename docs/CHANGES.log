@@ -2406,3 +2406,59 @@ New browser harness `scripts/dev/browser/verify-consent-disclosure.sh` — 19/19
 character-for-character comparison of the revealed wording against what
 `GET /registration/consent-text` serves, and a 360px check. `verify-registration.sh` still
 passes 41/41 plus 12/12 database assertions, so the submission path is unchanged.
+
+## StudentSocialProfile removed; what a lesson recording IS — SRS R120, 2026-09-02
+
+**The association does not collect this data, and the platform must not be able to.**
+`StudentSocialProfile` held a child's **health condition**, family situation, home address,
+siblings count and both parents' names and professions, behind the strictest authorization in
+the system. **No product surface ever collected any of it** — not registration, not «تسجيل
+طفل», not the beneficiary profile, and no parent, مؤطِّرة or administrative screen. The
+frontend contained no reference to it at all.
+
+**An unused capability is still a capability**, and that is the whole reasoning: an endpoint
+nobody calls is a live ability to collect health data about a minor, and an empty column is a
+declared purpose. Neither is withdrawn by not being used, so the Owner removed the feature
+rather than disabling it — model, table, both routes, service, controller, authorization path,
+the `socialprofile.view`/`socialprofile.update` audit actions, and the tests.
+
+**The drop is guarded rather than trusted.** `20260902200000_drop_student_social_profile`
+refuses to run against a non-empty table and reports the row count, because the DROP is
+irreversible and the table was the only place that data ever lived — a human must decide the
+fate of any row before the capability goes. Proven against the case it exists for on a
+disposable database: **refuses with 1 synthetic row, drops when empty, idempotent on re-run.**
+Verified read-only first: **Localhost 0 rows, Staging 0 rows**; Production is not deployed.
+
+Tagged `contract-phase` (TD-6b) with the reason there is no expand or migrate step: there is
+nothing to migrate, and a transitional column or renamed successor would preserve exactly the
+capability being withdrawn.
+
+**Policy recorded with the decision:** the platform does not collect categories of personal
+data that are not necessary for the association's current operational purposes. This is a
+technical fact about the software; **no legal conclusion about which CNDP regime applies is
+stated or implied** — that assessment is the Owner's and their counsel's.
+
+The dated compliance documents that argued for this now carry a resolution banner: the
+2026-08-11 personal-data audit's §A.2 is **resolved by removal**, and the two companion
+documents' proposals to *narrow* the case file are moot, since the Owner took the stronger
+decision. They are retained as the reasoning trail, not as an inventory.
+
+TD-2's two rows, TD-8's two action types and TD-3's two endpoints are **struck rather than
+deleted**, so each registry records that a capability was withdrawn and not silently dropped.
+Revision 28 is marked superseded in its entirety rather than rewritten.
+
+## What a recording IS — a factual correction, same revision
+
+A recording is **a مؤطِّرة recording herself giving or explaining a lesson**: her own voice in
+the MVP, her own video post-MVP. **The platform does not record a classroom and does not
+record beneficiaries**, and teacher-authored lesson material must not be described as
+classroom capture or as inherently containing a student's voice or image.
+
+**No technical safeguard prevents a microphone from capturing somebody else, and none is
+claimed.** BR-2's consent gate is the answer to that possibility — it governs publication and
+access, not capture — and is **unchanged by this correction**. Event and party media is a
+separate scenario, intended for publication only where consent exists from identifiable people
+or their parent/legal representative; **no implementation is created here.**
+
+Internal names (`SessionRecording`, the `session-recording` queue, `recordings-staging`) are
+kept deliberately: what needed correcting was the product meaning, not identifiers.

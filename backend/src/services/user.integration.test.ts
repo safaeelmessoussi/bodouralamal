@@ -844,13 +844,19 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
     ).not.toContain(gone);
   });
 
-  it("§4.10: the list never carries StudentSocialProfile fields", async () => {
+  it("the list carries exactly its §14.2 columns and nothing else", async () => {
     const admin = await makeStaff("super_admin");
     await person({ nameArabic: "طالبة" });
     const page = await listUsers(prisma, await actorFor(prisma, admin), {});
 
-    // §14.2 fixes the columns; anything §4.10 restricts to assigned teachers
-    // must not ride along on a list every Admin can call.
+    // §14.2 fixes the columns, and the guard is that a field must be **argued
+    // onto** this list rather than arrive on it by accident.
+    //
+    // It was written as *«never carries StudentSocialProfile fields»*. R120
+    // withdrew that feature entirely (Owner, 2026-09-02), so the case file is
+    // no longer the thing being kept off the list — but the exact-key-set
+    // assertion is the same assertion, and it is the one that catches the next
+    // field somebody adds to the projection without deciding to.
     //
     // `publicDisplayName` joined deliberately in Revision 36.1: it is a name
     // the person chose to PUBLISH, so it is less sensitive than the legal name
@@ -874,7 +880,7 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
           "email",
           "id",
           // R115 — lifecycle status needed by the Super-Admin management UI;
-          // it discloses no profile or StudentSocialProfile field.
+          // it discloses no profile field.
           "isPlatformOwner",
           "nameArabic",
           "nickname",
@@ -901,10 +907,10 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
            * else** — `/admin/directory`, the Admin-reachable surface, still does
            * not carry it, which the directory's own key assertion pins.
            *
-           * `notes` is the registration free text — **not** a
-           * `StudentSocialProfile` field, which is what §4.10 restricts to
-           * assigned teachers and which still appears nowhere here. The premise
-           * this assertion was written under has also changed: **R112 made
+           * `notes` is the registration free text. It was distinguished here
+           * from a `StudentSocialProfile` field; R120 withdrew that feature, so
+           * `notes` is now simply the only free text on a `User` at all. The
+           * premise this assertion was written under has also changed: **R112 made
            * `listUsers` Super-Admin-only**, so this is no longer "a list every
            * Admin can call". An Admin doing operational work reads
            * `/admin/directory`, which carries id, name, nickname and roles —
