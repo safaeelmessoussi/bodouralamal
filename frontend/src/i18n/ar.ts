@@ -1457,6 +1457,21 @@ export const ar = {
       purged: 'تم الحذف النهائي.',
       purgeFailed: 'تعذّر الحذف النهائي.',
       dependentsExist: 'لا يمكن الحذف النهائي: ما يزال هناك سجل مرتبط بهذا العنصر.',
+      // تُسمّى الجهة الحاجزة بلغة المجال لا باسم قيد قاعدة البيانات (القاعدة M).
+      dependentsExistNamed:
+        'لا يمكن الحذف النهائي: ما يزال {what} مرتبطاً بهذا العنصر. احذفيه نهائياً أولاً ثم أعيدي المحاولة.',
+      blocker: {
+        LevelSubject: 'إسناد مادة إلى مستوى',
+        Level: 'مستوى',
+        RecurringCourseSchedule: 'عنصر في الجدولة',
+        Enrollment: 'تسجيل مستفيدة',
+        AdministrativeGroup: 'مجموعة مستوى',
+        TeachingGroup: 'حلقة',
+        Exam: 'امتحان',
+        LevelSurah: 'سورة في مقرر الحفظ',
+        Room: 'قاعة',
+        Event: 'نشاط',
+      },
       purgeBlocked: {
         ACCOUNTABILITY_RECORD: 'غير متاح — يحفظ سجل المسؤولية',
         CASCADE_CHILDREN: 'غير متاح — يتبعه سجلات أخرى',

@@ -204,9 +204,27 @@ export function TrashPage(): ReactNode {
     } catch (error) {
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+      /**
+       * **The refusal names what holds the record** (UAT, 2026-09-02).
+       *
+       * *«ما يزال هناك سجل مرتبط»* is true and unactionable: an administrator
+       * reading it tries the same purge again. The server now reports which
+       * kind of record still depends on it, so the sentence can say what to
+       * remove first. An unrecognised blocker keeps the previous wording —
+       * less helpful, never wrong.
+       */
+      const blocking =
+        error instanceof ApiError
+          ? (error.details?.['blocking_entity'] as string | undefined)
+          : undefined;
       setNotice(
         reason === 'DEPENDENTS_EXIST'
-          ? t('admin.trash.dependentsExist')
+          ? blocking
+            ? t('admin.trash.dependentsExistNamed').replace(
+                '{what}',
+                t(`admin.trash.blocker.${blocking}`),
+              )
+            : t('admin.trash.dependentsExist')
           : reason === 'NOT_DELETED'
             ? t('admin.trash.notDeleted')
             : t('admin.trash.purgeFailed'),

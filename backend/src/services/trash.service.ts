@@ -338,6 +338,36 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   FamilyLink: { model: 'familyLink' },
 };
 
+/**
+ * Constraint → the domain thing that holds the record, for the refusal message.
+ *
+ * Keys are PostgreSQL's own constraint names, so an entry can only ever be
+ * reached by an actual violation of that constraint. Anything absent falls back
+ * to the generic sentence, which is why this table cannot drift into being
+ * *wrong* — only into being less helpful, which the next UAT would surface.
+ */
+const BLOCKING_ENTITY: Record<string, string> = {
+  level_subject_level_id_fkey: 'LevelSubject',
+  level_category_id_fkey: 'Level',
+  recurring_course_schedule_administrative_group_id_fkey: 'RecurringCourseSchedule',
+  recurring_course_schedule_level_id_fkey: 'RecurringCourseSchedule',
+  recurring_course_schedule_branch_id_fkey: 'RecurringCourseSchedule',
+  recurring_course_schedule_room_id_fkey: 'RecurringCourseSchedule',
+  enrollment_level_id_fkey: 'Enrollment',
+  enrollment_administrative_group_id_fkey: 'Enrollment',
+  enrollment_branch_id_fkey: 'Enrollment',
+  administrative_group_level_id_fkey: 'AdministrativeGroup',
+  administrative_group_branch_id_fkey: 'AdministrativeGroup',
+  teaching_group_level_id_fkey: 'TeachingGroup',
+  teaching_group_subject_id_fkey: 'TeachingGroup',
+  exam_level_id_fkey: 'Exam',
+  exam_branch_id_fkey: 'Exam',
+  exam_room_id_fkey: 'Exam',
+  level_surah_level_id_fkey: 'LevelSurah',
+  room_branch_id_fkey: 'Room',
+  event_scheduling_type_id_fkey: 'Event',
+};
+
 /** Why a type cannot be purged. Stable codes: a screen renders them. */
 const PURGE_BLOCKED_REASON: Record<string, string> = {
   // Destroying a person takes the audit trail that says what they did — the one
@@ -801,10 +831,27 @@ export async function purgeEntry(
     // failure — a record in use is not destroyed, and the caller is told which
     // constraint held it.
     if (isForeignKeyViolation(error)) {
+      const constraint = constraintOf(error);
       throw new AppError('STATE_CONFLICT', 'something still references this record', {
         reason: 'DEPENDENTS_EXIST',
         target_entity: entry.targetEntity,
-        constraint: constraintOf(error),
+        constraint,
+        /**
+         * **What still depends on it, in domain terms** (UAT, 2026-09-02).
+         *
+         * The refusal is correct — a record in use is not destroyed — but the
+         * administrator was told only *«something still references this»*, with
+         * no way to learn what or what to do next. She would then try the same
+         * purge again.
+         *
+         * This is a TRANSLATION of the answer PostgreSQL just gave, not the
+         * hand-maintained blocker list this module's docstring rules out: it
+         * predicts nothing, it is consulted only after a real refusal, and an
+         * unrecognised constraint degrades to the previous generic sentence
+         * rather than to a wrong one. The raw `constraint` stays for engineers;
+         * the interface renders this.
+         */
+        blocking_entity: constraint === null ? null : (BLOCKING_ENTITY[constraint] ?? null),
       });
     }
     throw error;

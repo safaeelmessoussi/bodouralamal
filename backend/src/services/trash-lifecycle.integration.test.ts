@@ -240,6 +240,74 @@ describe('exact owned-child lifecycle plans', () => {
   });
 });
 
+describe('a blocked purge names what still depends on the record', () => {
+  /**
+   * **The refusal was true and unactionable** (UAT, 2026-09-02).
+   *
+   * Permanent deletion answered *«something still references this record»* and
+   * nothing else, so an administrator's only move was to try the same purge
+   * again. The record is correctly protected — nothing here bypasses a foreign
+   * key — but she now learns WHICH kind of record holds it, and therefore what
+   * to remove first.
+   *
+   * The translation is consulted only after PostgreSQL has actually refused, so
+   * it predicts nothing and cannot disagree with the schema.
+   */
+  it('reports the blocking entity for a Level held by a Subject assignment', async () => {
+    const { levelId, subjectId } = await curriculum();
+    await assignSubjectToLevel(prisma, superAdmin(), levelId, subjectId);
+    // Delete the Level while its assignment row is still live: the assignment
+    // is a record in its own right and the FK is RESTRICT.
+    await prisma.level.update({ where: { id: levelId }, data: { deletedAt: new Date() } });
+    await prisma.trash.create({
+      data: {
+        targetEntity: 'Level',
+        targetId: levelId,
+        snapshot: { name: `${TAG} مستوى` },
+        deletedById: actorUserId,
+        purgeAfter: new Date(Date.now() + 86_400_000),
+      },
+    });
+
+    const entry = (await listTrash(prisma, superAdmin(), { entity: 'Level' })).data.find(
+      (row) => row.targetId === levelId,
+    )!;
+    await expect(purgeEntry(prisma, superAdmin(), entry.id)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: expect.objectContaining({
+        reason: 'DEPENDENTS_EXIST',
+        blocking_entity: 'LevelSubject',
+      }),
+    });
+
+    // And the record is still there — a named refusal is still a refusal.
+    expect(await prisma.level.count({ where: { id: levelId } })).toBe(1);
+  });
+
+  it('degrades to no blocker rather than a wrong one for an unmapped constraint', async () => {
+    // The property that makes the table safe: it is a translation of an answer
+    // already given, so an entry it lacks costs helpfulness, never correctness.
+    const { categoryId } = await curriculum();
+    await prisma.category.update({ where: { id: categoryId }, data: { deletedAt: new Date() } });
+    await prisma.trash.create({
+      data: {
+        targetEntity: 'Category',
+        targetId: categoryId,
+        snapshot: { name: `${TAG} فئة` },
+        deletedById: actorUserId,
+        purgeAfter: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const entry = (await listTrash(prisma, superAdmin(), { entity: 'Category' })).data.find(
+      (row) => row.targetId === categoryId,
+    )!;
+    // Its Level still references it, so this refuses with a MAPPED blocker.
+    await expect(purgeEntry(prisma, superAdmin(), entry.id)).rejects.toMatchObject({
+      details: expect.objectContaining({ blocking_entity: 'Level' }),
+    });
+  });
+});
+
 describe('leaf lifecycle coverage', () => {
   it('removes stale Trash when a unique curriculum pair is assigned again', async () => {
     const { levelId, subjectId } = await curriculum();
