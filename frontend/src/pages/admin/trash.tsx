@@ -13,7 +13,7 @@ import { Feedback } from '../../components/ui/feedback.js';
 
 /** The entity types that reach the Trash. A closed list, so the filter offers
  *  real choices rather than whatever happens to be on the current page. */
-const ENTITIES = [
+export const TRASH_ENTITY_TYPES = [
   'Branch',
   'Room',
   'Category',
@@ -24,7 +24,18 @@ const ENTITIES = [
   'RecurringCourseSchedule',
   'Session',
   'Event',
+  'Exam',
   'EducationalContent',
+  'Enrollment',
+  'StudentTeachingGroup',
+  'LevelSubject',
+  'LevelSurah',
+  'SessionContent',
+  'FamilyLink',
+  'QuranProgressLog',
+  'HijriMonthStart',
+  'SchedulingType',
+  'Partner',
   'User',
 ] as const;
 
@@ -46,10 +57,8 @@ const ENTITIES = [
  * surprising part, and an administrator who cannot restore their own data
  * deserves to know it is a known limitation rather than a bug.
  *
- * **There is no permanent-delete control.** BR-15's 90-day window is enforced by
- * the purge job, and a manual *delete now* would bypass a retention rule that
- * exists for legal and safeguarding reasons — a data-retention decision, not a
- * convenience.
+ * **Permanent delete is server-declared per entity type.** The client renders
+ * the capability and reason it receives; it never infers destruction safety.
  *
  * **The snapshot is never shown.** It is the whole row as it was, including
  * columns no screen is entitled to. This page answers *what was deleted, by
@@ -275,7 +284,7 @@ export function TrashPage(): ReactNode {
               onChange={(v) => refilter(() => setEntity(v))}
               options={[
                 { value: '', label: t('admin.trash.allEntities') },
-                ...ENTITIES.map((e) => ({ value: e, label: t(`admin.trash.entity.${e}`) })),
+                ...TRASH_ENTITY_TYPES.map((e) => ({ value: e, label: t(`admin.trash.entity.${e}`) })),
               ]}
             />
             <DateField

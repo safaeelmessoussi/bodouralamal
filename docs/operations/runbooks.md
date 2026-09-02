@@ -132,10 +132,12 @@ CLI; do not use a command or direct SQL that the repository does not provide.
 ### What the screen can restore
 
 The screen handles the types whose reinstatement is **written and tested** — today
-`User` (R111), `Branch`, `Category`, `Subject`, `Room`, `Exam` (R59.3) and
-`HijriMonthStart` (R59.5). It refuses everything else loudly, with the reason on the row,
-because clearing `deleted_at` is
-the easy tenth of the problem and every failure of the other nine is silent.
+`User` (R111), `Branch`, `Category`, `Subject`, `Room`, `Partner`, `Exam` (R59.3) and
+`HijriMonthStart` (R59.5). A current Subject snapshot names the exact `LevelSubject` rows
+that followed its deletion and restores only those; a legacy snapshot without those ids is
+labelled `INCOMPLETE_SNAPSHOT` and is not offered for restore. Everything else is refused
+loudly, because clearing `deleted_at` is the easy tenth of the problem and every failure of
+the other nine is silent.
 
 ### Permanent deletion, and what it will not do
 
@@ -153,7 +155,14 @@ Two types have no destruction plan at all:
 | Type | Reason | What to do instead |
 |---|---|---|
 | `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and institutional records, so destroying it takes their meaning and the record of who acted | Use R111 permanent de-identification. The non-identifying tombstone remains; its personal fields, credentials, planning data and recoverable snapshot do not |
-| `RecurringCourseSchedule` | `CASCADE_CHILDREN` — its Sessions are materialized rows other records reference, so destroying it destroys a timetable's history | Purge the Sessions that block it first, or leave it to BR-15 |
+| `RecurringCourseSchedule` | `CASCADE_CHILDREN` — retained Sessions are the dated historical truth, including their venue snapshot; consequence Sessions have no independent Trash transition and must not be deleted by SQL | Keep it. Whether a schedule that never materialized a Session may be purged is an explicit Owner decision recorded in `TASKS.md` |
+
+`QuranProgressLog` is different from account deletion: deleting an account retains every
+institutional progress row, but a teacher's deliberate correction already tombstones one exact
+log. That deleted correction may now be permanently purged; its `quranlog.delete` and
+`trash.permanent_delete` audits remain. `LevelSurah`, `Partner`, and an unused `SchedulingType` are likewise
+explicit leaf plans. Parent Level/Subject purges use only child ids captured in the parent's
+snapshot; they never issue a broad delete by foreign key.
 
 The deliberate action is storage-durable for `EducationalContent`: its transaction inserts an
 exact `content.quarantine-purge` obligation before deleting the content row and Trash locator.

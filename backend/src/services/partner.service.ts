@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
@@ -177,7 +178,21 @@ export async function deletePartner(
     const existing = await tx.partner.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError('NOT_FOUND', 'no such partner');
 
-    await tx.partner.update({ where: { id }, data: { deletedAt: new Date() } });
+    const now = new Date();
+    await tx.partner.update({
+      where: { id },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await trash.snapshot(
+      tx,
+      {
+        targetEntity: 'Partner',
+        targetId: id,
+        snapshot: JSON.parse(JSON.stringify(existing)) as object,
+        deletedById: actor.userId,
+      },
+      now,
+    );
     await audit.write(tx, {
       actorUserId: actor.userId,
       ...(actor.activeRole ? { activeRole: actor.activeRole } : {}),

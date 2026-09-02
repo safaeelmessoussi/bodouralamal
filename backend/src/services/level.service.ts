@@ -388,10 +388,22 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     ]);
 
     const now = new Date();
+    const levelSubjects = await tx.levelSubject.findMany({
+      where: { levelId: id, deletedAt: null },
+      select: { id: true },
+    });
+    const levelSurahs = await tx.levelSurah.findMany({
+      where: { levelId: id, deletedAt: null },
+      select: { id: true },
+    });
     // The owned links follow the Level. `LevelSubject` carries a soft-delete
     // column; `EventLevel` is a bare join row and is removed outright, which
     // destroys no history — the Event itself and its other scopes are untouched.
     await tx.levelSubject.updateMany({
+      where: { levelId: id, deletedAt: null },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await tx.levelSurah.updateMany({
       where: { levelId: id, deletedAt: null },
       data: { deletedAt: now, deletedById: actor.userId },
     });
@@ -400,6 +412,11 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     const groups = await tx.administrativeGroup.findMany({
       where: { levelId: id, deletedAt: null },
       select: { id: true },
+    });
+    // The same owned audience joins removed by deleting one Administrative
+    // Group must also follow when the Level removes those groups as a cascade.
+    await tx.eventAdministrativeGroup.deleteMany({
+      where: { administrativeGroupId: { in: groups.map((group) => group.id) } },
     });
     await tx.administrativeGroup.updateMany({
       where: { levelId: id, deletedAt: null },
@@ -410,9 +427,16 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     await trash.snapshot(tx, {
       targetEntity: 'Level',
       targetId: id,
-      snapshot: JSON.parse(JSON.stringify(level)) as object,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...level,
+          cascaded_level_subject_ids: levelSubjects.map((link) => link.id),
+          cascaded_level_surah_ids: levelSurahs.map((link) => link.id),
+          cascaded_administrative_group_ids: groups.map((group) => group.id),
+        }),
+      ) as object,
       deletedById: actor.userId,
-    });
+    }, now);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

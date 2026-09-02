@@ -27,6 +27,7 @@ Contributing to the platform.
 | [SRS proposal — Revision 76](../SRS-PROPOSAL-R76.md) | List sorting (`sort_by`/`sort_dir`, allow-listed per endpoint) and manual reordering (`PATCH /admin/{resource}/order`, taking the **sequence**). **Applied 2026-08-18** — both contracts are in force |
 | [SRS proposal — Revision 75](../SRS-PROPOSAL-R75.md) | The in-app audio recorder, brought forward for **class sessions only**. **Drafted, NOT applied** — it reinstates risk R-4, which is the Owner's to accept |
 | [Platform-wide UX & IA correction — audit](audit-2026-08-17-ux-architecture.md) | The atomic foundation already existed; the defects were **drift at the edges**. Five dropdown-gated pages, a second button system, three copies of the Level label. **Applied** — two unlisted TD-3 reads reported in §Z |
+| [Trash lifecycle audit — 2026-09-01](audit-2026-09-01-trash-lifecycle.md) | Remaining schedule/history/reference/link cases classified against the FK graph; implemented exact-child and leaf closures separated from Owner decisions |
 | [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
 **Constitution, conventions, or UX architecture?** [The constitution](engineering-constitution.md)

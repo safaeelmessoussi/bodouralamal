@@ -4,6 +4,7 @@ import type { TrashEntry } from '../../adapters/trash.js';
 import { ar } from '../../i18n/ar.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
+import { TRASH_ENTITY_TYPES } from './trash.js';
 
 /**
  * `/admin/trash` — the client half of the contract, and the one property this
@@ -70,7 +71,12 @@ describe('the screen explains itself', () => {
   it('has a sentence for every blocked reason the server can send', () => {
     // A missing one would render as a raw enum in the column an administrator
     // reads to find out why their own data cannot be restored.
-    for (const reason of ['CASCADE_RELATIONSHIPS', 'CASCADE_CHILDREN', 'NOT_YET_SUPPORTED'] as const) {
+    for (const reason of [
+      'CASCADE_RELATIONSHIPS',
+      'CASCADE_CHILDREN',
+      'INCOMPLETE_SNAPSHOT',
+      'NOT_YET_SUPPORTED',
+    ] as const) {
       expect(ar.admin.trash.blocked[reason]).toBeTruthy();
     }
   });
@@ -88,7 +94,7 @@ describe('the screen explains itself', () => {
   });
 
   it('labels every entity type the filter offers', () => {
-    for (const entity of ['Branch', 'Room', 'Subject', 'User', 'Level'] as const) {
+    for (const entity of TRASH_ENTITY_TYPES) {
       expect(ar.admin.trash.entity[entity]).toBeTruthy();
     }
   });

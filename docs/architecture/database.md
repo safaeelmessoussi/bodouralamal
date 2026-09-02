@@ -468,6 +468,18 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260826120000_r109_scheduling_visibility
 20260826140000_r110_scheduling_type_catalogue
 20260827120000_new_i_branch_phone_secondary
+20260827160000_new_kl_category_level_description
+20260828140000_new_n_partner
+20260828170000_one_role_per_account
+20260828190000_holiday_structural_kind
+20260828190100_holiday_catalogue
+20260828200000_partner_description
+20260830100000_name_part_sort_columns
+20260831100000_platform_owner_and_framing_preferences
+20260901100000_r116_actionable_notifications
+20260901103000_r116_exam_changed_notification
+20260901110000_r117_registration_review_details
+20260901220000_partner_deletion_provenance
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -565,10 +577,17 @@ edit and `UserBranchRole` revocation during a role change get none: each is one 
 *update* wearing a tombstone, and an entry apiece would fill the screen with rows nobody
 deleted.
 
-`services/trash-coverage.test.ts` enforces this by **scanning the source**, not the
-behaviour. None of the four gaps would have been caught by a functional test, because the
-behaviour under test was the un-enrolment and it worked — what was missing was a second
-write nobody was looking for.
+The same rule applies to the Quran curriculum join: deliberately unassigning a Surah writes
+a `LevelSurah` Trash entry. When either unique curriculum pair is assigned again, the service
+revives the existing row and removes that exact stale Trash entry in the same transaction;
+the unique key makes inserting a replacement row impossible.
+
+`services/trash-coverage.integration.test.ts` enforces this by parsing each exported
+delete/remove/unassign operation and checking its own body — not merely asking whether some
+other function in the same file writes a snapshot. That old file-wide test missed both
+`unassignSurahFromLevel` and `deletePartner` because their files happened to contain an
+unrelated compliant deletion. The guard remains structural because a functional test of the
+domain removal can pass while the second Trash write is absent.
 
 ### Restoring children: one timestamp per deletion
 
@@ -587,6 +606,10 @@ Two rules follow, and both are cheap:
 * **One `now` per deletion**, passed to every statement in it including the snapshot.
 * **The restore keys on the record's tombstone, never the Trash entry's** — the entry is
   written after the rows it describes, so it is always the later reading.
+* **A parent snapshot names exact consequence ids.** Subject and Level deletion record the
+  `LevelSubject`, `LevelSurah`, and empty `AdministrativeGroup` ids they tombstoned. Restore
+  and purge use only those ids. A legacy snapshot without them fails closed on restore and
+  deletes no guessed child during purge; PostgreSQL then refuses the parent if a child remains.
 
 ### Hard deletion
 

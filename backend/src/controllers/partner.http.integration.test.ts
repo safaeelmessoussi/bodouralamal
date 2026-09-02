@@ -67,6 +67,20 @@ let superAdmin: string;
 let admin: string;
 
 async function clear(): Promise<void> {
+  const partnerIds = (
+    await prisma.partner.findMany({
+      where: { name: { startsWith: TAG } },
+      select: { id: true },
+    })
+  ).map((row) => row.id);
+  await prisma.trash.deleteMany({
+    where: {
+      OR: [
+        { targetEntity: 'Partner', targetId: { in: partnerIds } },
+        { deletedById: { in: createdUserIds } },
+      ],
+    },
+  });
   await prisma.partner.deleteMany({ where: { name: { startsWith: TAG } } });
   if (createdUserIds.length > 0) {
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: createdUserIds } } });
@@ -206,5 +220,11 @@ describe('the partners catalogue', () => {
     // TD-5: the row survives for the runbook, it is merely not live.
     const row = await prisma.partner.findUnique({ where: { id } });
     expect(row?.deletedAt).not.toBeNull();
+    expect(row?.deletedById).toBe(createdUserIds[0]!);
+    expect(
+      await prisma.trash.count({
+        where: { targetEntity: 'Partner', targetId: id, deletedById: createdUserIds[0]! },
+      }),
+    ).toBe(1);
   });
 });

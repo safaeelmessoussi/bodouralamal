@@ -71,3 +71,20 @@ export async function snapshot(
     },
   });
 }
+
+/**
+ * Removes every tombstone for a row that a domain service has deliberately
+ * revived through its canonical idempotent write path.
+ *
+ * Some unique relationship rows (currently LevelSubject and LevelSurah) cannot
+ * be re-inserted after soft deletion: assigning the same pair restores the
+ * existing row. The revival and removal of its old Trash entry must be one
+ * transaction, or the Trash would advertise a live row as deleted forever.
+ */
+export async function removeForRevivedTarget(
+  db: Db,
+  targetEntity: string,
+  targetId: string,
+): Promise<void> {
+  await db.trash.deleteMany({ where: { targetEntity, targetId } });
+}

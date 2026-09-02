@@ -122,6 +122,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [**Online classroom**](development/online-classroom.md) | **بذور الأمل authorizes; the provider executes** — who may enter a class عن بُعد, the derived room, the join window, the credential, and the one classroom every portal shares |
 | [**Person identity**](development/person-identity.md) | **The QR and the two identifiers beside it — one per person, role-independent, and why it identifies but never authenticates** |
 | [**Quran progress**](development/quran-progress.md) | **One engine behind إدخال الحفظ and حفظي — what authorises an entry, why مراجعة never raises the percentage, why the log stores no Level** |
+| [Trash lifecycle audit](development/audit-2026-09-01-trash-lifecycle.md) | Remaining Trash/FK cases: implemented exact-child coverage, retained history, and the Owner decisions that still prevent broader cleanup |
 | [Testing](development/testing.md) | The four layers, what each is for, and how to run them |
 | [CI/CD](development/ci-cd.md) | Every gate, what it catches, and why it was added |
 | [**Engineering constitution**](development/engineering-constitution.md) | **The laws every implementation must satisfy — required reading** |

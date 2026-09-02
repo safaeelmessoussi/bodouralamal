@@ -161,6 +161,10 @@ export async function assignSubjectToLevel(
         ).id
       : (await tx.levelSubject.create({ data: { levelId, subjectId }, select: { id: true } })).id;
 
+    if (existing?.deletedAt) {
+      await trash.removeForRevivedTarget(tx, 'LevelSubject', id);
+    }
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -202,9 +206,10 @@ export async function unassignSubjectFromLevel(
       });
     }
 
+    const now = new Date();
     await tx.levelSubject.update({
       where: { id: row.id },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      data: { deletedAt: now, deletedById: actor.userId },
     });
     // R59.2 — a deliberate Super Admin act with real curriculum consequences:
     // the pairing gates every Teaching Group and every schedule at that Level,
@@ -219,7 +224,7 @@ export async function unassignSubjectFromLevel(
         }),
       ) as object,
       deletedById: actor.userId,
-    });
+    }, now);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -334,6 +339,7 @@ export async function assignSurahToLevel(
         where: { id: existing.id },
         data: { deletedAt: null, deletedById: null },
       });
+      await trash.removeForRevivedTarget(tx, 'LevelSurah', existing.id);
     } else {
       await tx.levelSurah.create({ data: { levelId, surahId } });
     }
@@ -370,10 +376,30 @@ export async function unassignSurahFromLevel(
     const row = await tx.levelSurah.findFirst({ where: { levelId, surahId, deletedAt: null } });
     if (!row) throw new AppError('NOT_FOUND', 'that surah is not in this level');
 
+    const [level, surah] = await Promise.all([
+      tx.level.findUnique({ where: { id: levelId }, select: { name: true } }),
+      tx.quranSurah.findUnique({ where: { surahId }, select: { nameArabic: true } }),
+    ]);
+
+    const now = new Date();
     await tx.levelSurah.update({
       where: { id: row.id },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      data: { deletedAt: now, deletedById: actor.userId },
     });
+    // R59.2 applies to this curriculum join exactly as it does to
+    // LevelSubject: a deliberate unassignment is a deletion, not a hidden field
+    // reconciliation, and therefore needs its own recoverable tombstone.
+    await trash.snapshot(tx, {
+      targetEntity: 'LevelSurah',
+      targetId: row.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...row,
+          label: `${level?.name ?? '—'} — ${surah?.nameArabic ?? '—'}`,
+        }),
+      ) as object,
+      deletedById: actor.userId,
+    }, now);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

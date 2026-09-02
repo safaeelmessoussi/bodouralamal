@@ -266,19 +266,30 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
       { label: 'content', count: content },
     ]);
 
-    // The owned link follows the Subject.
+    const ownedLevelSubjects = await tx.levelSubject.findMany({
+      where: { subjectId: id, deletedAt: null },
+      select: { id: true },
+    });
+    const now = new Date();
+    // The owned link follows the Subject. One timestamp is shared with the
+    // parent so the deletion remains one identifiable lifecycle act.
     await tx.levelSubject.updateMany({
       where: { subjectId: id, deletedAt: null },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      data: { deletedAt: now, deletedById: actor.userId },
     });
 
-    await tx.subject.update({ where: { id }, data: { deletedAt: new Date(), deletedById: actor.userId } });
+    await tx.subject.update({ where: { id }, data: { deletedAt: now, deletedById: actor.userId } });
     await trash.snapshot(tx, {
       targetEntity: 'Subject',
       targetId: id,
-      snapshot: JSON.parse(JSON.stringify(subject)) as object,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...subject,
+          cascaded_level_subject_ids: ownedLevelSubjects.map((link) => link.id),
+        }),
+      ) as object,
       deletedById: actor.userId,
-    });
+    }, now);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

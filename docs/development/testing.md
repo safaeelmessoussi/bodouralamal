@@ -582,6 +582,12 @@ neither — or, worse, rewrites only the database, which is the confusing case:
 the initiated key`, which reads as a broken presigned-upload implementation and
 is a hostname that does not resolve.
 
+Lifecycle purge coverage belongs in a real database suite. In particular,
+`trash-lifecycle.integration.test.ts` asserts the actual `RESTRICT` graph and transaction
+rollback: parent deletion snapshots exact owned-child ids, an independently deleted child
+cannot be swept by a later parent purge, and leaf purge/unique-pair revival leave no stale
+Trash. A repository mock cannot prove any of those properties.
+
 **A queue must be registered before anything can be enqueued into it.**
 `pgboss.job` is partitioned by queue name, so adding a job to the TD-7 catalogue
 means the **worker process must restart** before any test can insert one — until

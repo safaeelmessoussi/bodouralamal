@@ -1309,6 +1309,23 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `User` and `RecurringCourseSchedule` are not row-purgeable — `ACCOUNTABILITY_RECORD` and
   `CASCADE_CHILDREN`. R111 now supplies User de-identification without destroying the tombstone;
   the schedule remains blocked on its materialized history
+- [x] **R59 lifecycle closure (2026-09-01):** Subject and Level deletion snapshots now name
+  the exact owned `LevelSubject`, `LevelSurah`, and empty `AdministrativeGroup` rows that followed
+  the parent; restoration/purge never sweep an earlier independent deletion. `LevelSurah`,
+  `QuranProgressLog`, unused `SchedulingType`, and `Partner` have explicit permanent-purge plans, and reviving
+  a unique curriculum pair atomically removes its stale Trash entry. The UI filter now names every
+  entity that can actually reach Trash. Real PostgreSQL FK/rollback regressions own the proof.
+- [ ] **OWNER DECISION REQUIRED — SCHEDULE HISTORY IN TRASH:** keep every deleted
+  `RecurringCourseSchedule` indefinitely as `CASCADE_CHILDREN`, or permit permanent purge only when
+  it has never materialized a Session (and decide separately whether derived future Session
+  tombstones may follow it). Historical/held Sessions and their venue coordinates remain retained.
+- [ ] **OWNER DECISION REQUIRED — TERMINAL REJECTED FAMILY LINKS:** the current terminal live row
+  grants no authority and preserves the decision history, but neither a retention period nor an
+  explicit removal transition is specified. Do not invent one or treat it as disposable Trash.
+- [ ] **OWNER DECISION REQUIRED — HISTORICAL REFERENCE RETENTION/PRESENTATION:** Branch/Room/
+  Level/Subject/Category/AdministrativeGroup rows still referenced by retained schedules or
+  Sessions remain FK-protected. Decide whether those tombstones stay visibly non-purgeable in Trash
+  or move to a separate archive presentation before changing the historical FK/snapshot model.
 
 ### R58 — physical exam scheduling (2026-08-09)
 - [x] `Exam.mode` discriminator; `physical` carries date, wall-clock window, branch, room, optional group and supervising staff. Migration + boot-time CHECK ("all four place columns or none", so one legacy row survives without inventing a room)

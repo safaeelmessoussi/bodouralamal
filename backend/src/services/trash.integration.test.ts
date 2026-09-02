@@ -117,6 +117,11 @@ describe("what the list says about each row", () => {
     expect(row.label).toBe(`${TAG} حفظ القرآن`);
     expect(row.deletedByName).toBe(`${TAG} مديرة`);
     expect(row.purgeAfter).toBeInstanceOf(Date);
+    // Legacy Subject snapshots predate exact consequence coordinates. They may
+    // still be purged if PostgreSQL proves no child remains, but cannot be
+    // restored by guessing which LevelSubject rows followed this deletion.
+    expect(row.restorable).toBe(false);
+    expect(row.restoreBlockedReason).toBe('INCOMPLETE_SNAPSHOT');
   });
 
   it("marks R111 accounts RESTORABLE and a cascading entity not, with a reason", async () => {
@@ -125,7 +130,10 @@ describe("what the list says about each row", () => {
     const subject = await prisma.subject.create({
       data: { name: `${TAG} مادة`, deletedAt: new Date() },
     });
-    await bin("Subject", subject.id, { name: `${TAG} مادة` });
+    await bin("Subject", subject.id, {
+      name: `${TAG} مادة`,
+      cascaded_level_subject_ids: [],
+    });
     await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
 
     const page = await listTrash(prisma, superAdmin(), {});
@@ -160,7 +168,10 @@ describe("restore is offered only where it is COMPLETE (§7)", () => {
         deletedById: actorUserId,
       },
     });
-    const entryId = await bin("Subject", subject.id, { name: `${TAG} مادة` });
+    const entryId = await bin("Subject", subject.id, {
+      name: `${TAG} مادة`,
+      cascaded_level_subject_ids: [],
+    });
 
     await restoreEntry(prisma, superAdmin(), entryId);
 

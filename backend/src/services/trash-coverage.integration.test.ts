@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -31,9 +32,10 @@ import { createTeachingContext } from "../test-support/educational-fixture.js";
  *
  * A per-entity test would have to be remembered for every entity added later,
  * which is exactly the discipline that failed here. So the last test reads the
- * service sources and requires that **any module writing a `deletedAt`
- * tombstone also calls `trash.snapshot`** — the two appear together or the file
- * is named. A new entity cannot quietly opt out.
+ * service sources and requires that **each exported deletion operation writing
+ * a `deletedAt` tombstone also calls `trash.snapshot` in that operation**. The
+ * older file-wide check was insufficient: one compliant function could hide a
+ * second omission in the same module, exactly what happened to LevelSurah.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
@@ -222,7 +224,7 @@ describe("deleting a Course Schedule (الحصص)", () => {
 });
 
 describe("the structural guard", () => {
-  it("names any service that writes a tombstone without a Trash snapshot", () => {
+  it("names any exported deletion operation that writes a tombstone without a Trash snapshot", () => {
     // The discipline that failed here was "remember to snapshot", so this does
     // not enumerate entities — it reads the sources. A new service that
     // soft-deletes and forgets is named by this test on the day it is written,
@@ -234,9 +236,56 @@ describe("the structural guard", () => {
     for (const file of readdirSync(dir)) {
       if (!file.endsWith(".service.ts")) continue;
       const source = readFileSync(join(dir, file), "utf8");
-      const tombstones = /deletedAt:\s*(new Date\(\)|stamp|now)\b/.test(source);
-      const snapshots = /(trash\.)?snapshot\(/.test(source);
-      if (tombstones && !snapshots) offenders.push(file);
+      const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+
+      const visit = (node: ts.Node): void => {
+        if (
+          ts.isFunctionDeclaration(node) &&
+          node.name &&
+          node.body &&
+          node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) &&
+          /^(delete|remove|unassign|revoke|withdraw)/.test(node.name.text)
+        ) {
+          let tombstones = false;
+          let snapshots = false;
+          const inspectOperation = (operation: ts.Node): void => {
+            if (ts.isCallExpression(operation)) {
+              const callee = operation.expression;
+              if (
+                ts.isPropertyAccessExpression(callee) &&
+                (callee.name.text === 'update' || callee.name.text === 'updateMany')
+              ) {
+                const options = operation.arguments[0];
+                if (options && ts.isObjectLiteralExpression(options)) {
+                  const data = options.properties.find(
+                    (property): property is ts.PropertyAssignment =>
+                      ts.isPropertyAssignment(property) && property.name.getText(parsed) === 'data',
+                  );
+                  if (data && ts.isObjectLiteralExpression(data.initializer)) {
+                    tombstones ||= data.initializer.properties.some(
+                      (property) =>
+                        ts.isPropertyAssignment(property) &&
+                        property.name.getText(parsed) === 'deletedAt' &&
+                        property.initializer.kind !== ts.SyntaxKind.NullKeyword,
+                    );
+                  }
+                }
+              }
+              if (
+                (ts.isPropertyAccessExpression(callee) && callee.name.text === 'snapshot') ||
+                (ts.isIdentifier(callee) && callee.text === 'snapshot')
+              ) {
+                snapshots = true;
+              }
+            }
+            ts.forEachChild(operation, inspectOperation);
+          };
+          inspectOperation(node.body);
+          if (tombstones && !snapshots) offenders.push(`${file}:${node.name.text}`);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(parsed);
     }
 
     // **The `enrollment.service.ts` exemption was removed by R59.2**, and the

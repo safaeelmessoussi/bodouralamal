@@ -35,7 +35,8 @@ import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
  * **Its deletion is GUARDED rather than CASCADING.** These four refuse to delete
  * while anything references them — a Branch with rooms, a Subject a Level still
  * teaches — so nothing was removed alongside them and clearing the tombstone
- * genuinely restores the whole record.
+ * genuinely restores the whole record. Partner is the simpler leaf case: no
+ * table references it, so its tombstone is likewise the complete deletion.
  *
  * Everything else cascades and stays read-only until its reinstatement is
  * written and tested: a `Level` takes its Administrative Groups, a
@@ -51,6 +52,7 @@ type ModelName =
   | 'room'
   | 'exam'
   | 'hijriMonthStart'
+  | 'partner'
   | 'user';
 
 /** Delegates a purge plan may destroy. Separate from `ModelName` because the
@@ -61,6 +63,8 @@ type PurgeModel =
   | 'recurringCourseSchedule'
   | 'session'
   | 'educationalContent'
+  | 'quranProgressLog'
+  | 'schedulingType'
   | 'administrativeGroup'
   | 'teachingGroup'
   | 'level'
@@ -87,10 +91,12 @@ type PurgeModel =
  * `educationalContentId` assumption made every content purge fail at runtime.
  */
 interface ChildWhereByModel {
+  administrativeGroup: Prisma.AdministrativeGroupWhereInput;
   eventBranch: Prisma.EventBranchWhereInput;
   eventCategory: Prisma.EventCategoryWhereInput;
   eventLevel: Prisma.EventLevelWhereInput;
   eventAdministrativeGroup: Prisma.EventAdministrativeGroupWhereInput;
+  levelSubject: Prisma.LevelSubjectWhereInput;
   levelSurah: Prisma.LevelSurahWhereInput;
   studentTeachingGroup: Prisma.StudentTeachingGroupWhereInput;
   sessionStaff: Prisma.SessionStaffWhereInput;
@@ -102,6 +108,15 @@ type DeclaredChild = {
   [Model in keyof ChildWhereByModel]: {
     model: Model;
     fk: Extract<keyof ChildWhereByModel[Model], string>;
+    /**
+     * Consequence rows that have their own soft-delete lifecycle are destroyed
+     * only when the parent's snapshot names their exact ids. Without this,
+     * purging a Level could sweep a LevelSubject that an administrator had
+     * independently removed earlier, leaving that row's own Trash entry stale.
+     * Legacy snapshots without the key delete nothing and therefore fail closed
+     * on the FK rather than guessing ownership.
+     */
+    snapshotIdsKey?: string;
   };
 }[keyof ChildWhereByModel];
 
@@ -128,7 +143,17 @@ const RESTORABLE: Record<
   // No parent: nothing above them can be missing.
   Branch: { model: 'branch' },
   Category: { model: 'category' },
-  Subject: { model: 'subject' },
+  Partner: { model: 'partner' },
+  Subject: {
+    model: 'subject',
+    children: [
+      {
+        model: 'levelSubject',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_level_subject_ids',
+      },
+    ],
+  },
   // A Room belongs to a Branch, and restoring one into a deleted Branch would
   // produce a room nobody can reach — see `restoreEntry`.
   Room: { model: 'room', parent: { field: 'branchId', model: 'branch' } },
@@ -209,7 +234,16 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   // their own, so a Branch with any of them left is refused rather than emptied.
   Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
   Category: { model: 'category', children: [{ model: 'eventCategory', fk: 'categoryId' }] },
-  Subject: { model: 'subject' },
+  Subject: {
+    model: 'subject',
+    children: [
+      {
+        model: 'levelSubject',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_level_subject_ids',
+      },
+    ],
+  },
   Room: { model: 'room' },
 
   // The Level's curriculum mapping and calendar scope join go with it; its
@@ -217,8 +251,26 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   Level: {
     model: 'level',
     children: [
-      { model: 'levelSurah', fk: 'levelId' },
-      { model: 'eventLevel', fk: 'levelId' },
+      {
+        model: 'eventAdministrativeGroup',
+        fk: 'administrativeGroupId',
+        snapshotIdsKey: 'cascaded_administrative_group_ids',
+      },
+      {
+        model: 'levelSubject',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_level_subject_ids',
+      },
+      {
+        model: 'levelSurah',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_level_surah_ids',
+      },
+      {
+        model: 'administrativeGroup',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_administrative_group_ids',
+      },
     ],
   },
   AdministrativeGroup: {
@@ -266,11 +318,22 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
     children: [{ model: 'sessionContent', fk: 'contentId' }],
   },
 
+  // A deleted Quran range is a correction, not the student's live source of
+  // coverage. Its create/update/delete audits remain; explicit R59.1 purge may
+  // remove the already-tombstoned row without changing current progress.
+  QuranProgressLog: { model: 'quranProgressLog' },
+
+  // Reference data with no owned children. Historical Events remain
+  // independent referrers and PostgreSQL refuses the purge while any exists.
+  SchedulingType: { model: 'schedulingType' },
+  Partner: { model: 'partner' },
+
   // Join rows with nothing beneath them.
   HijriMonthStart: { model: 'hijriMonthStart' },
   Enrollment: { model: 'enrollment' },
   StudentTeachingGroup: { model: 'studentTeachingGroup' },
   LevelSubject: { model: 'levelSubject' },
+  LevelSurah: { model: 'levelSurah' },
   SessionContent: { model: 'sessionContent' },
   FamilyLink: { model: 'familyLink' },
 };
@@ -408,7 +471,14 @@ export async function listTrash(
   ]);
 
   const mapped = rows.map((row) => {
-    const restorable = RESTORABLE[row.targetEntity] !== undefined;
+    const restorePlan = RESTORABLE[row.targetEntity];
+    const completeRestoreSnapshot =
+      restorePlan?.children?.every(
+        (child) =>
+          child.snapshotIdsKey === undefined ||
+          hasValidSnapshotIds(row.snapshot, child.snapshotIdsKey),
+      ) ?? true;
+    const restorable = restorePlan !== undefined && completeRestoreSnapshot;
     const purgeable = PURGEABLE[row.targetEntity] !== undefined;
     return {
       id: row.id,
@@ -422,7 +492,9 @@ export async function listTrash(
       restorable,
       restoreBlockedReason: restorable
         ? null
-        : (BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
+        : restorePlan !== undefined && !completeRestoreSnapshot
+          ? 'INCOMPLETE_SNAPSHOT'
+          : (BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
       purgeable,
       purgeBlockedReason: purgeable
         ? null
@@ -473,7 +545,6 @@ export async function restoreEntry(
       target_entity: entry.targetEntity,
     });
   }
-
   return prisma.$transaction(async (tx) => {
     const delegate = tx[plan.model] as unknown as {
       findUnique: (a: unknown) => Promise<Record<string, unknown> | null>;
@@ -491,6 +562,18 @@ export async function restoreEntry(
     }
     if (row['deletedAt'] === null) {
       throw new AppError('STATE_CONFLICT', 'that record is not deleted', { reason: 'NOT_DELETED' });
+    }
+    if (
+      plan.children?.some(
+        (child) =>
+          child.snapshotIdsKey !== undefined &&
+          !hasValidSnapshotIds(entry.snapshot, child.snapshotIdsKey),
+      )
+    ) {
+      throw new AppError('STATE_CONFLICT', 'the legacy snapshot does not identify cascade children', {
+        reason: 'INCOMPLETE_SNAPSHOT',
+        target_entity: entry.targetEntity,
+      });
     }
 
     // **A child cannot be restored into a deleted parent.** Restoring a Room
@@ -562,7 +645,14 @@ export async function restoreEntry(
         // Scoped to the rows removed BY this deletion: a supervisor taken off
         // the exam a week earlier stays off it, because that was a different
         // decision by a different person.
-        where: { [child.fk]: entry.targetId, deletedAt: { gte: deletedAt } },
+        where: child.snapshotIdsKey
+          ? {
+              [child.fk]: {
+                in: snapshotIds(entry.snapshot, child.snapshotIdsKey, entry.targetEntity),
+              },
+              deletedAt: { gte: deletedAt },
+            }
+          : { [child.fk]: entry.targetId, deletedAt: { gte: deletedAt } },
         data: { deletedAt: null, deletedById: null },
       });
     }
@@ -675,7 +765,14 @@ export async function purgeEntry(
         const childDelegate = tx[child.model] as unknown as {
           deleteMany: (a: unknown) => Promise<{ count: number }>;
         };
-        await childDelegate.deleteMany({ where: { [child.fk]: entry.targetId } });
+        const where = child.snapshotIdsKey
+          ? {
+              [child.fk]: {
+                in: snapshotIds(entry.snapshot, child.snapshotIdsKey, entry.targetEntity),
+              },
+            }
+          : { [child.fk]: entry.targetId };
+        await childDelegate.deleteMany({ where });
       }
 
       await delegate.delete({ where: { id: entry.targetId } });
@@ -712,6 +809,31 @@ export async function purgeEntry(
     }
     throw error;
   }
+}
+
+/**
+ * Reads an exact consequence set written by the deleting service.
+ *
+ * Absence means a legacy snapshot and deliberately returns an empty set: the
+ * parent's eventual FK delete then refuses, which is the safe answer when the
+ * platform cannot distinguish an owned cascade from an earlier independent
+ * deletion. A present but malformed set is corruption and aborts the whole
+ * transaction rather than silently broadening or narrowing destruction.
+ */
+function snapshotIds(snapshot: unknown, key: string, targetEntity: string): string[] {
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return [];
+  const value = (snapshot as Record<string, unknown>)[key];
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string')) {
+    throw new Error(`${targetEntity} Trash snapshot has malformed ${key}`);
+  }
+  return value as string[];
+}
+
+function hasValidSnapshotIds(snapshot: unknown, key: string): boolean {
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return false;
+  const value = (snapshot as Record<string, unknown>)[key];
+  return Array.isArray(value) && value.every((id) => typeof id === 'string');
 }
 
 /**
