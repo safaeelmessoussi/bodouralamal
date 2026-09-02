@@ -8,7 +8,7 @@ import { ContentUploadForm } from '../components/content/content-upload-form.js'
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { FormDialog } from '../components/ui/form-dialog.js';
-import { SelectField, TextField } from '../components/ui/field.js';
+import { CheckboxField, SelectField, TextField } from '../components/ui/field.js';
 import { VisibilityField } from '../components/scheduling/visibility-field.js';
 import { isDirty } from '../lib/form-dirty.js';
 import {
@@ -85,6 +85,7 @@ function ContentEditDialog({
     levelId: string;
     subjectId: string;
     visibility: string;
+    isRecording: boolean;
   }) => void;
 }): ReactNode {
   const pristine = {
@@ -92,6 +93,7 @@ function ContentEditDialog({
     levelId: row.level_id,
     subjectId: row.subject_id,
     visibility: row.visibility,
+    isRecording: row.origin === 'session_recording',
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -137,6 +139,16 @@ function ContentEditDialog({
 
       {/* The shared control, so the three tiers read identically wherever they
           are chosen — and the server still decides (rule O). */}
+      {/* The same marker the upload form sets, with the same label and hint —
+          one concept, one control vocabulary (rule C). It has no storage
+          meaning, so changing it moves and re-uploads nothing. */}
+      <CheckboxField
+        label={t('content.upload.isRecording')}
+        checked={form.isRecording}
+        onChange={(v) => setForm((f) => ({ ...f, isRecording: v }))}
+        hint={t('content.upload.isRecordingHint')}
+      />
+
       {consentLocked ? (
         /**
          * **Shown as a fact, not as a disabled control** (rule AF). The server
@@ -164,6 +176,8 @@ interface LibraryRow {
   title: string;
   description: string | null;
   visibility: string;
+  /** R99.12's marker — «هذا تسجيل حصة». */
+  origin: string;
   level_id: string;
   subject_id: string;
   academic_year_id: string;
@@ -389,6 +403,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     levelId: string;
     subjectId: string;
     visibility: string;
+    isRecording: boolean;
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -402,6 +417,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           ...(patch.subjectId !== editing.subject_id ? { subject_id: patch.subjectId } : {}),
           ...(patch.visibility !== editing.visibility
             ? { visibility: patch.visibility as 'public' | 'private' | 'hidden' }
+            : {}),
+          // R99.12's marker, sent only when it actually changed — like every
+          // other field here, so an edit never restates what nobody touched.
+          ...(patch.isRecording !== (editing.origin === 'session_recording')
+            ? { origin: (patch.isRecording ? 'session_recording' : 'uploaded') as
+                'session_recording' | 'uploaded' }
             : {}),
         },
         accessToken,

@@ -2236,3 +2236,18 @@ nothing (4 families before, 4 after, zero leftover content rows).
 
 The 12 existing rows are **reported, not deleted**: no authorization to remove them was
 given, and none is required for the fix.
+
+## «هذا تسجيل حصة» became editable — 2026-09-02
+
+`PATCH /content/{id}` gains `origin`, R99.12's existing marker and the same field the upload
+form already sets — no second boolean for a concept that had one. The edit dialog offers it
+through `CheckboxField` with the upload form's own label and hint, so one concept keeps one
+control vocabulary, and it is sent only when it actually changed.
+
+**A plain column with no storage meaning**: correcting the marker moves no object and
+re-uploads nothing, which the regression asserts on bucket, key and size, in both directions.
+Authorization, consent, optimistic locking and the `.strict()` schema are untouched — the
+CONSENT_FORCED_PRIVATE behaviour from 1a56aa9 is deliberately unchanged.
+
+`origin` also joins the library projection, because the dialog has to seed its control from
+the item's current value. It states what the file IS, not consent state.

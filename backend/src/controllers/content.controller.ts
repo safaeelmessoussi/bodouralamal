@@ -89,6 +89,8 @@ const updateContentSchema = z
     level_id: z.uuid().optional(),
     subject_id: z.uuid().optional(),
     visibility: z.enum(['public', 'private', 'hidden']).optional(),
+    // R99.12's marker — «هذا تسجيل حصة». Same enum the upload ticket carries.
+    origin: z.enum(['uploaded', 'session_recording']).optional(),
   })
   .strict();
 
@@ -99,6 +101,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       level_id?: string;
       subject_id?: string;
       visibility?: 'public' | 'private' | 'hidden';
+      origin?: 'uploaded' | 'session_recording';
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.
@@ -117,6 +120,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.level_id !== undefined ? { levelId: body.level_id } : {}),
         ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
         ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+        ...(body.origin !== undefined ? { origin: body.origin } : {}),
       },
     );
     res.status(204).end();

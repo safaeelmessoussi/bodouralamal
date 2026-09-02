@@ -986,6 +986,37 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     expect(row.storageBucket).toBe(BUCKETS.private);
   });
 
+  it("changes the «هذا تسجيل حصة» marker without touching the stored object", async () => {
+    // R99.12's `origin` is the authoritative field and a plain column: it says
+    // what the file IS, so correcting it moves nothing and re-uploads nothing.
+    const { id } = await uploadPdf(admin(), "ملف عادي");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { origin: true, storageBucket: true, storageKey: true, sizeBytes: true },
+    });
+    expect(before.origin).toBe("uploaded");
+
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      origin: "session_recording",
+    });
+
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { origin: true, storageBucket: true, storageKey: true, sizeBytes: true },
+    });
+    expect(after.origin).toBe("session_recording");
+    expect(after.storageBucket).toBe(before.storageBucket);
+    expect(after.storageKey).toBe(before.storageKey);
+    expect(after.sizeBytes).toBe(before.sizeBytes);
+
+    // And back again — the marker is correctable in both directions.
+    await updateContentMetadata(prisma, clients, admin(), id, { origin: "uploaded" });
+    expect(
+      (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { origin: true } }))
+        .origin,
+    ).toBe("uploaded");
+  });
+
   it("refuses an unknown Level rather than storing a dangling reference", async () => {
     const { id } = await uploadPdf(admin(), "مادة");
     await expect(

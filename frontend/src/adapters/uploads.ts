@@ -125,6 +125,8 @@ export interface ContentMetadataPatch {
   level_id?: string;
   subject_id?: string;
   visibility?: 'public' | 'private' | 'hidden';
+  /** R99.12's marker — «هذا تسجيل حصة». No storage meaning. */
+  origin?: 'uploaded' | 'session_recording';
 }
 
 export async function updateContent(

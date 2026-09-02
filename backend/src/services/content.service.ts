@@ -1205,6 +1205,15 @@ export interface ContentMetadataPatch {
   levelId?: string;
   subjectId?: string;
   visibility?: 'public' | 'private' | 'hidden';
+  /**
+   * R99.12's `origin` marker — *«هذا تسجيل حصة»*. The authoritative field
+   * already on the row; no second boolean is introduced for the same concept.
+   *
+   * A plain column with **no storage meaning**: correcting it moves no object
+   * and re-uploads nothing, exactly like `title`. Consent evaluation is
+   * unchanged and is not re-run from here.
+   */
+  origin?: 'uploaded' | 'session_recording';
 }
 
 /**
@@ -1302,6 +1311,7 @@ export async function updateContentMetadata(
         ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
         ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
         ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
+        ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
         version: { increment: 1 },
       },
     });
@@ -1354,6 +1364,7 @@ export async function updateContentMetadata(
       ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
       ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
       visibility: nextVisibility as never,
+      ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
       storageBucket: targetBucket,
       version: { increment: 1 },
     },

@@ -930,6 +930,10 @@ export interface LibraryItemDto {
   /** §4.9 tier. Present so a client can badge a restricted item **before** the
    *  reader asks for it — the download is what requires login, not the listing. */
   visibility: string;
+  /** R99.12 — whether the file IS a class recording («هذا تسجيل حصة»). A
+   *  content-type fact, not consent state, and the value the edit dialog seeds
+   *  its own control from. */
+  origin: string;
   level_id: string;
   subject_id: string;
   academic_year_id: string;
@@ -975,6 +979,7 @@ export function libraryItemDto(row: {
   title: string;
   description: string | null;
   visibility: string;
+  origin: string;
   levelId: string;
   subjectId: string;
   academicYearId: string;
@@ -994,6 +999,9 @@ export function libraryItemDto(row: {
     title: row.title,
     description: row.description,
     visibility: row.visibility,
+    // R99.12's marker, so the edit dialog can show «هذا تسجيل حصة» as it stands.
+    // A content-type fact, not consent state: it says what the file IS.
+    origin: row.origin,
     level_id: row.levelId,
     subject_id: row.subjectId,
     academic_year_id: row.academicYearId,

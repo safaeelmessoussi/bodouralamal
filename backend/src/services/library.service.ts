@@ -137,6 +137,8 @@ export interface LibraryItem {
   title: string;
   description: string | null;
   visibility: string;
+  /** R99.12's marker — whether this file IS a class recording. */
+  origin: string;
   levelId: string;
   subjectId: string;
   academicYearId: string;
@@ -368,6 +370,7 @@ export async function listLibrary(
              c."title",
              c."description",
              c."visibility"::text        AS "visibility",
+             c."origin"::text            AS "origin",
              c."level_id"                AS "levelId",
              c."subject_id"              AS "subjectId",
              c."academic_year_id"        AS "academicYearId",
