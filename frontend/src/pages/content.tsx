@@ -69,6 +69,7 @@ function ContentEditDialog({
   levels,
   subjects,
   busy,
+  consentLocked,
   onCancel,
   onSave,
 }: {
@@ -76,6 +77,8 @@ function ContentEditDialog({
   levels: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
   busy: boolean;
+  /** The server has reported that consent keeps this item private (B-01). */
+  consentLocked: boolean;
   onCancel: () => void;
   onSave: (patch: {
     title: string;
@@ -134,10 +137,24 @@ function ContentEditDialog({
 
       {/* The shared control, so the three tiers read identically wherever they
           are chosen — and the server still decides (rule O). */}
-      <VisibilityField
-        value={form.visibility}
-        onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
-      />
+      {consentLocked ? (
+        /**
+         * **Shown as a fact, not as a disabled control** (rule AF). The server
+         * refuses to publish this item, so offering a select that implies it
+         * might one day be chosen here would be the same invitation again. The
+         * line names the rule and what would have to change.
+         */
+        <p className="field">
+          <span className="field__label">{t('content.col.visibility')}</span>
+          <span>{t(`calendar.visibility${form.visibility === 'hidden' ? 'Hidden' : 'Private'}`)}</span>
+          <span className="hint">{t('content.edit.consentLockedHint')}</span>
+        </p>
+      ) : (
+        <VisibilityField
+          value={form.visibility}
+          onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
+        />
+      )}
     </FormDialog>
   );
 }
@@ -211,6 +228,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRow | null>(null);
   const [editing, setEditing] = useState<LibraryRow | null>(null);
+  /** Set when the server reports consent keeps THIS item private (see the
+   *  catch below). Cleared whenever a different item is opened. */
+  const [consentLocked, setConsentLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const { activeRoles } = useActiveRole();
@@ -350,7 +370,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   const actions: RowAction<LibraryRow>[] = [
     // Rule AC — contextual, then تعديل, then the destructive one.
-    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    { label: t('common.edit'), onSelect: (r) => { setConsentLocked(false); setEditing(r); } },
     { label: t('common.delete'), onSelect: (r) => setDeleting(r), danger: true },
   ];
 
@@ -392,11 +412,34 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     } catch (error) {
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
-      setNotice(
-        reason === 'CONSENT_FORCED_PRIVATE'
-          ? t('content.edit.consentForcedPrivate')
-          : t('common.saveFailed'),
-      );
+      /**
+       * **Every coded refusal gets its own sentence** (UAT, 2026-09-02).
+       *
+       * Only `CONSENT_FORCED_PRIVATE` was named, so the other three arrived as
+       * «تعذّر الحفظ.» — an administrator meeting `OBJECT_MISSING` was told
+       * nothing she could act on, and the platform's own generic
+       * `STATE_CONFLICT` text tells her to refresh, which never helps here.
+       */
+      const named: Record<string, string> = {
+        CONSENT_FORCED_PRIVATE: 'content.edit.consentForcedPrivate',
+        OBJECT_MISSING: 'content.edit.objectMissing',
+        STORAGE_MOVE_FAILED: 'content.edit.storageMoveFailed',
+        CONCURRENT_MODIFICATION: 'content.edit.concurrent',
+        UNKNOWN_LEVEL: 'content.edit.unknownLevel',
+        UNKNOWN_SUBJECT: 'content.edit.unknownSubject',
+      };
+      setNotice(t(named[reason ?? ''] ?? 'common.saveFailed'));
+      /**
+       * **The impossible choice is withdrawn as soon as the platform knows.**
+       *
+       * The dialog cannot tell in advance that consent has locked an item
+       * private — `consent_forced_private` is safeguarding-adjacent and is not
+       * published on the anonymous `/library` read the page uses — so it offers
+       * «عام» like any other item. The moment the server says otherwise, the
+       * control is pinned to the effective value and explains itself, and the
+       * reader's other edits stay in the form to be saved.
+       */
+      if (reason === 'CONSENT_FORCED_PRIVATE') setConsentLocked(true);
     } finally {
       setBusy(false);
     }
@@ -555,6 +598,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           levels={scope.options.levelId}
           subjects={scope.options.subjectId}
           busy={busy}
+          consentLocked={consentLocked}
           onCancel={() => setEditing(null)}
           onSave={(patch) => void confirmEdit(patch)}
         />

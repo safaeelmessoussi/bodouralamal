@@ -2185,3 +2185,54 @@ established here.
 The Level and Category entries still refuse on legacy `LevelSubject` tombstones whose
 ownership no snapshot records — deliberate no-guess behaviour from `d57bedb5`, unchanged. The
 R59.4 quarantine-destruction question remains open.
+
+## Content edit refusal and a Localhost fixture leak — 2026-09-02
+
+### CONSENT_FORCED_PRIVATE was the invariant working, not a metadata bug
+
+Traced end to end against the deployed `PATCH /content/{id}`, measured at every layer.
+**Metadata-only edits on consent-forced-private content already succeed** — title, Level and
+Subject each return 204, proven by API and through the real dialog. The guard fires on one
+condition only: a payload carrying `visibility: "public"` for an item whose consent flag is
+set and whose stored visibility is not public.
+
+The frontend sends `visibility` **only when it differs** from the row's, so the field reaches
+the server only when somebody actually chose a new tier. The refusal was therefore correct:
+the reader selected «عام» on an item consent has locked private.
+
+**The real defect is that the dialog offered that choice at all**, and then reported the
+refusal as a bare «تعذّر الحفظ.». The page reads the **anonymous** `/library` endpoint, which
+does not publish `consent_forced_private` — safeguarding-adjacent metadata that must not
+become public to satisfy a back-office convenience (§16.2). So the client cannot know in
+advance.
+
+Fixed where it can be: the moment the server says consent keeps the item private, the
+visibility control is replaced by the effective value **as a fact with the rule beside it**
+(rule AF, not a disabled select that implies it may one day be chosen), the reader's other
+edits stay in the form, and every coded refusal now has its own Arabic sentence —
+`OBJECT_MISSING`, `STORAGE_MOVE_FAILED`, `CONCURRENT_MODIFICATION`, `UNKNOWN_LEVEL`,
+`UNKNOWN_SUBJECT` all previously collapsed into «تعذّر الحفظ.».
+
+**No privacy policy was invented and no domain rule changed.** Refusing the whole request
+rather than applying the metadata and silently dropping the visibility is the platform's
+established convention — a field the server will not honour is refused, never ignored, so a
+response never appears to confirm what did not happen.
+
+### The `[content-test:*]` selectors — a Localhost-only leak, with its cause
+
+**Staging is clean: zero `content-test` rows.** Localhost holds **12**: four Categories, four
+Levels and four Subjects, one family per crashed suite run, each Level still holding one
+content row.
+
+The mechanism, established rather than assumed: this suite's own edit test renamed a content
+row to a title **without** the TAG, so teardown's `title startsWith TAG` missed it; the
+orphan then blocked the Level delete on `educational_content_level_id_fkey`; `clear()` threw
+at that line, and the Subject and Category deletions after it never ran.
+
+**A tag in a mutable column is not a handle** — the lesson `testing.md` already records, hit
+again in the suite that renames. Teardown now collects content by the **union of the tag and
+the ids it recorded at creation**, so a rename cannot strand a row. Proven: a fresh run adds
+nothing (4 families before, 4 after, zero leftover content rows).
+
+The 12 existing rows are **reported, not deleted**: no authorization to remove them was
+given, and none is required for the fix.

@@ -87,6 +87,9 @@ let sessionId = "";
 const objectsToClean = new Map<string, { bucket: string; key: string }>();
 const settingKeysToClean = new Set<string>();
 
+/** Every content row this suite creates, so teardown never depends on a title. */
+const createdContentIds = new Set<string>();
+
 function trackObject(bucket: string, key: string): void {
   objectsToClean.set(`${bucket}\u0000${key}`, { bucket, key });
 }
@@ -220,8 +223,23 @@ async function clear(): Promise<void> {
     })
   ).map((s) => s.id);
 
+  /**
+   * **Collected by the recorded ids AND the tag** (2026-09-02).
+   *
+   * The tag lives in `title`, which this suite's own edit test rewrites — so a
+   * renamed row escaped `startsWith(TAG)`, survived teardown, and then blocked
+   * the Level delete on `educational_content_level_id_fkey`. `clear()` threw at
+   * that point, so the Category, Level and Subject after it were never removed
+   * either: **four leaked fixture families on Localhost, one per crashed run.**
+   *
+   * A tag in a mutable column is not a handle. The id is, so the two are unioned
+   * — the same correction `administrative-group.http` and `quran-entry` already
+   * carry.
+   */
   const contents = await prisma.educationalContent.findMany({
-    where: { title: { startsWith: TAG } },
+    where: {
+      OR: [{ title: { startsWith: TAG } }, { id: { in: [...createdContentIds] } }],
+    },
     select: { id: true, storageBucket: true, storageKey: true },
   });
   for (const content of contents) {
@@ -250,7 +268,7 @@ async function clear(): Promise<void> {
     where: { contentId: { in: contents.map((c) => c.id) } },
   });
   await prisma.educationalContent.deleteMany({
-    where: { title: { startsWith: TAG } },
+    where: { id: { in: contents.map((c) => c.id) } },
   });
 
   await prisma.sessionStaff.deleteMany({
@@ -406,6 +424,8 @@ async function uploadPdf(
       description: null,
     },
   );
+  // Recorded the moment it exists, so a later rename cannot strand it.
+  createdContentIds.add(created.id);
   const stored = await prisma.educationalContent.findUniqueOrThrow({
     where: { id: created.id },
     select: { storageBucket: true, storageKey: true },
@@ -807,6 +827,138 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     });
     expect(row.visibility).toBe("hidden");
     expect(row.storageBucket).toBe(BUCKETS.private);
+  });
+
+  it("CONSENT-FORCED PRIVATE: a title-only edit still succeeds", async () => {
+    /**
+     * The UAT report. A privacy rule that locks *visibility* must not block an
+     * unrelated metadata correction — the refusal belongs to the transition it
+     * forbids, not to the request that happens to carry other fields.
+     */
+    const { id } = await uploadPdf(admin(), "عنوان قابل للتصحيح", {
+      origin: "session_recording",
+      visibility: "private",
+    });
+    await prisma.educationalContent.update({
+      where: { id },
+      data: { consentForcedPrivate: true },
+    });
+
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      title: `${TAG} عنوان مصحَّح`,
+    });
+
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { title: true, visibility: true, consentForcedPrivate: true },
+    });
+    expect(row.title).toBe(`${TAG} عنوان مصحَّح`);
+    // The privacy state is exactly as it was.
+    expect(row.visibility).toBe("private");
+    expect(row.consentForcedPrivate).toBe(true);
+  });
+
+  it("CONSENT-FORCED PRIVATE: a Level/Subject edit succeeds when otherwise valid", async () => {
+    const { id } = await uploadPdf(admin(), "مادة للنقل", {
+      origin: "session_recording",
+      visibility: "private",
+    });
+    await prisma.educationalContent.update({
+      where: { id },
+      data: { consentForcedPrivate: true },
+    });
+    const otherLevel = await prisma.level.findFirstOrThrow({
+      where: { deletedAt: null, id: { not: (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { levelId: true } })).levelId } },
+      select: { id: true },
+    });
+
+    await updateContentMetadata(prisma, clients, admin(), id, { levelId: otherLevel.id });
+
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { levelId: true, visibility: true, storageBucket: true },
+    });
+    expect(row.levelId).toBe(otherLevel.id);
+    expect(row.visibility).toBe("private");
+    // No move: a Level change has no storage meaning.
+    expect(row.storageBucket).toBe(BUCKETS.private);
+  });
+
+  it("CONSENT-FORCED PRIVATE: an explicit visibility=private is accepted as a no-op", async () => {
+    /**
+     * The form submits only what changed, so this is the case where a reader
+     * re-states the value the item already has. It must not be read as an
+     * attempted transition — the guard is about becoming PUBLIC, not about the
+     * field appearing.
+     */
+    const { id } = await uploadPdf(admin(), "إعادة تأكيد الخصوصية", {
+      origin: "session_recording",
+      visibility: "private",
+    });
+    await prisma.educationalContent.update({
+      where: { id },
+      data: { consentForcedPrivate: true },
+    });
+
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      title: `${TAG} مع خاص`,
+      visibility: "private",
+    });
+
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { title: true, visibility: true },
+    });
+    expect(row.title).toBe(`${TAG} مع خاص`);
+    expect(row.visibility).toBe("private");
+  });
+
+  it("a metadata-only edit does not touch the stored object at all", async () => {
+    const { id } = await uploadPdf(admin(), "بدون رفع");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { storageBucket: true, storageKey: true, sizeBytes: true },
+    });
+    const objectBefore = await statObjectStrict(clients, before.storageBucket, before.storageKey);
+
+    await updateContentMetadata(prisma, clients, admin(), id, { title: `${TAG} غُيّر العنوان` });
+
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { storageBucket: true, storageKey: true, sizeBytes: true },
+    });
+    expect(after).toEqual(before);
+    const objectAfter = await statObjectStrict(clients, after.storageBucket, after.storageKey);
+    // Same bytes, same etag — nothing was re-uploaded or rewritten.
+    expect(objectAfter?.etag).toBe(objectBefore?.etag);
+    expect(objectAfter?.sizeBytes).toBe(objectBefore?.sizeBytes);
+  });
+
+  it("refuses an edit from a NON-STAFF caller, as a 404", async () => {
+    /**
+     * §20 rule 17 — out of reach answers `NOT_FOUND`, never `FORBIDDEN`, so the
+     * refusal does not confirm the item exists.
+     *
+     * The non-staff boundary is asserted rather than a branch one because a
+     * Teacher's branches are resolved from the **database** — the schedules she
+     * staffs (`teacherBranchIds`) — not from her token, so a fabricated branch
+     * list in an actor proves nothing about scope.
+     */
+    const { id } = await uploadPdf(admin(), "خارج النطاق");
+    await expect(
+      updateContentMetadata(
+        prisma,
+        clients,
+        actorOf(teacherId, [{ role: "student", branches: null }]),
+        id,
+        { title: `${TAG} محاولة` },
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { title: true },
+    });
+    expect(row.title).toBe(`${TAG} خارج النطاق`);
   });
 
   it("refuses to publish a recording that consent forced private (B-01)", async () => {
