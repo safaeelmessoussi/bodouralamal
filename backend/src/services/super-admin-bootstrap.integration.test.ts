@@ -61,7 +61,26 @@ describe('Platform Owner production bootstrap', () => {
       deletedAt: null,
       preProvisionedEmail: INITIAL_PLATFORM_OWNER.email,
     });
-    expect(owner.ownerUser.identities).toEqual([]);
+    /**
+     * **Bootstrap fabricates no Google binding** — the property, asserted so it
+     * survives the Owner actually signing in (test isolation, 2026-09-02).
+     *
+     * This read `identities).toEqual([])`, which stops being a statement about
+     * bootstrap the first time somebody logs in: on a development or production
+     * database that has been used, a bound identity is the CORRECT state and the
+     * assertion failed on legitimate data.
+     *
+     * An identity created in the bootstrap transaction would carry the account's
+     * own creation timestamp; one bound by a real sign-in is strictly later. So
+     * the distinction the assertion was reaching for is checked directly, and it
+     * holds however many times the Owner has since signed in.
+     */
+    for (const identity of owner.ownerUser.identities) {
+      expect(
+        identity.createdAt.getTime(),
+        'a bootstrap-fabricated identity would share the account creation instant',
+      ).toBeGreaterThan(owner.ownerUser.createdAt.getTime());
+    }
     expect(owner.ownerUser.availability).toEqual([]);
     expect(owner.ownerUser.framingPreference).toMatchObject({ mode: 'both', allBranches: true });
     expect(owner.ownerUser.framingPreference?.branches).toEqual([]);

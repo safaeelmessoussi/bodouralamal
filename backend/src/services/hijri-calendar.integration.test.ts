@@ -514,15 +514,35 @@ describe("TD-8 — history is the audit trail", () => {
  * silence when the recorded months run out.
  */
 describe("coverage reports how far the official calendar reaches", () => {
-  it("reports nothing published as no coverage at all, never as zero days", () => {
+  it("reports nothing published as no coverage at all, never as zero days", async () => {
     // `null` and `0` are different answers: one is "nobody has recorded
     // anything", the other is "it ran out today". A screen that shows 0 for both
     // tells an administrator the calendar is expiring when it never existed.
-    return coverage(prisma, superAdmin(), day("2026-06-20")).then((c) => {
-      expect(c.publishedThroughStart).toBeNull();
-      expect(c.daysRemaining).toBeNull();
-      expect(c.nextUnrecorded).toBeNull();
-    });
+    //
+    // **`coverage` reads the WHOLE table** — it answers *how far does the
+    // official calendar reach*, which has no per-year form. So this test made
+    // the empty case by requiring the development database to contain no
+    // published month at all, and failed the moment the Owner legitimately
+    // published 1448.
+    //
+    // The suite now owns the visible set for the duration of one transaction it
+    // deliberately rolls back: inside it every published month is a draft, the
+    // empty branch is exercised for real, and nothing is written. Legitimate
+    // data is neither deleted nor special-cased.
+    class Rollback extends Error {}
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.hijriMonthStart.updateMany({
+          where: { deletedAt: null, status: "published" },
+          data: { status: "draft" },
+        });
+        const c = await coverage(tx as unknown as typeof prisma, superAdmin(), day("2026-06-20"));
+        expect(c.publishedThroughStart).toBeNull();
+        expect(c.daysRemaining).toBeNull();
+        expect(c.nextUnrecorded).toBeNull();
+        throw new Rollback();
+      }),
+    ).rejects.toBeInstanceOf(Rollback);
   });
 
   it("counts only PUBLISHED months — a draft is runway the platform will not use", async () => {
@@ -531,11 +551,19 @@ describe("coverage reports how far the official calendar reaches", () => {
       month: 1,
       gregorianStartDate: day("2026-06-17"),
     });
-    // Recorded but not published: §5.7 renders only published months, so this
-    // must not be reported as coverage.
-    expect(
-      (await coverage(prisma, superAdmin(), day("2026-06-20"))).daysRemaining,
-    ).toBeNull();
+    /**
+     * Recorded but not published: §5.7 renders only published months, so this
+     * must not be reported as coverage.
+     *
+     * **Asserted as *not this suite's draft*, rather than as globally null**
+     * (test isolation, 2026-09-02). `coverage` reports the single furthest
+     * published month in the table, so a database with any legitimate published
+     * year answers with that year — which says nothing about whether a draft
+     * counts. `YEAR` is far beyond any real one, so once this row IS published
+     * it becomes that answer; before it is, the answer must be anything else.
+     */
+    const whileDraft = await coverage(prisma, superAdmin(), day("2026-06-20"));
+    expect(whileDraft.publishedThroughStart).not.toEqual(day("2026-06-17"));
 
     await publishYear(prisma, superAdmin(), YEAR);
     const after = await coverage(prisma, superAdmin(), day("2026-06-20"));
