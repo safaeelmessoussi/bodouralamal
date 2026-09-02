@@ -921,7 +921,6 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
           "firstNameFrench",
           "lastNameFrench",
           "sex",
-          "notes",
         ].sort(),
       );
     }

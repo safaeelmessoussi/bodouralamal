@@ -22,7 +22,6 @@ const person = {
   lastNameFrench: '',
   nickname: '',
   phone: '+212 600000000',
-  notes: '',
   sex: 'female' as const,
 };
 /** R62 — a child is no longer a `person`: no phone, no notes, and two

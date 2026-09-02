@@ -539,7 +539,6 @@ model User {
   /// runtime definition (R79.6): enrolment cannot be the precondition for being
   /// enrollable.
   isBeneficiary Boolean @default(false) @map("is_beneficiary")
-  notes         String? @db.VarChar(2000)
 
   /// Revision 39 — THE BRANCH THE APPLICANT ASKED FOR at registration.
   ///

@@ -103,7 +103,20 @@ export function buildAuthorizationUrl(params: {
   url.searchParams.set('client_id', params.clientId);
   url.searchParams.set('redirect_uri', params.redirectUri);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'openid email profile');
+  /**
+   * **The minimum the identity contract needs, and nothing else** (Owner,
+   * 2026-09-02; SRS R121).
+   *
+   * `openid` yields the `sub` this platform binds an account to; `email` yields
+   * the address `UserIdentity` stores and `email_verified`, which §4.1b step 7
+   * hard-stops on. Those two claims are the entire contract.
+   *
+   * **`profile` was requested for a year and never read.** It carries name,
+   * picture and locale; `verifyGoogleIdToken` extracts `sub` and `email` and
+   * discards the rest, so the platform was asking Google for personal data it
+   * then threw away. Asking for less is the change — nothing downstream moves.
+   */
+  url.searchParams.set('scope', 'openid email');
   url.searchParams.set('state', params.state);
   url.searchParams.set('code_challenge', params.codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');

@@ -243,6 +243,25 @@ state from the row that proves it.**
 `failure_reason`: the provider failing to record and the platform failing to accept what it
 recorded are different events with different remedies, and only the second is fixed by retrying.
 
+### No generic free-text collection
+
+**A personal-data field must have a specific, documented purpose** (Owner
+decision, 2026-09-02; SRS R121).
+
+`User.notes` was 2 000 characters of unbounded free text on the **public
+registration form**, so an applicant could volunteer a health condition, a
+custody arrangement or a judicial matter into a platform that collects none of
+them — and no requirement stated what it was for or who had to read it. R62.1
+had already excluded it from the child shape for exactly that reason; R121
+extends the rule to every person. Migration
+`20260902220000_drop_user_notes` drops the column behind a guard that refuses a
+non-blank value.
+
+The bounded free-text fields that **do** have a stated purpose are untouched:
+`ChildApplication.internal_note` (R62.8), `FamilyLink.decision_reason`,
+`Session.cancellation_reason`. The `notes` key on the §5.2 Session page
+projection is a different field on a different entity and is unrelated.
+
 ### No health, medical or social-case-file data
 
 **The platform collects none of it** (Owner decision, 2026-09-02; SRS R120).
@@ -533,6 +552,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260902160000_scheduling_type_on_schedule_and_exam
 20260902180000_versioned_legal_consent_text
 20260902200000_drop_student_social_profile
+20260902220000_drop_user_notes
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

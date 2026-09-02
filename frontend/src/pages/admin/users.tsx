@@ -616,7 +616,6 @@ function ProfileDialog({
     lastNameFrench: user.last_name_french ?? '',
     nickname: user.nickname ?? '',
     phone: user.phone ?? '',
-    notes: user.notes ?? '',
     // R80.6 amended (Owner, 2026-08-28): this Super-Admin-only read publishes
     // `sex`, so the form hydrates it. R80.3/R80.4 still govern the write —
     // completing a missing value is allowed, changing a recorded one is refused.
@@ -800,7 +799,6 @@ function ProfileDialog({
                   last_name_french: orNull(person.lastNameFrench),
                   nickname: orNull(person.nickname),
                   phone: orNull(person.phone),
-                  notes: orNull(person.notes),
                   // R80.3 completes a missing sex; the server refuses a change.
                   ...(person.sex === '' ? {} : { sex: person.sex }),
                 },

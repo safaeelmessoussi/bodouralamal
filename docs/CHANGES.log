@@ -2462,3 +2462,77 @@ or their parent/legal representative; **no implementation is created here.**
 
 Internal names (`SessionRecording`, the `session-recording` queue, `recordings-staging`) are
 kept deliberately: what needed correcting was the product meaning, not identifiers.
+
+## `User.notes` removed; Google scope minimised; Category names reconciled — SRS R121, 2026-09-02
+
+### A · Generic free text is withdrawn
+
+`User.notes` was 2 000 characters of unbounded free text rendered as «ملاحظات (اختياري)» on the
+**public registration form**. An applicant could volunteer a health condition, a custody
+arrangement or a judicial matter into a platform that deliberately collects none of them; it
+was also staff-editable and displayed to approvers. **No requirement anywhere stated what it
+was for or who had to read it.**
+
+R62.1 had already excluded `notes` from the child shape in exactly these words — *"free text
+about a child, with no stated purpose and no reader, is where a diagnosis or a custody
+arrangement gets written in good faith"* — and the Owner now extends that to every person.
+Hiding the control would not have withdrawn the capability: the column would still accept
+2 000 characters through the API, and an empty column is still a declared purpose.
+
+**Migration `20260902220000_drop_user_notes` refuses to run while any row holds a non-blank
+value** and reports how many, because a dropped column cannot be recovered. Blank-but-not-null
+counts as no value, deliberately — refusing on whitespace would block a deployment over an
+artefact rather than over somebody's words. Proven on a disposable database in three states:
+**refuses with a real value; succeeds with only NULL and blanks; a fresh full history ends with
+no column.** Verified read-only first: **Localhost 73 users / 0 values, Staging 14 users / 0
+values.**
+
+**The principle, recorded so this is a rule and not one deletion:** the platform does not
+provide generic free-text collection fields without a defined operational purpose; a
+personal-data field must have a specific, documented purpose.
+
+**Deliberately untouched** — the bounded free-text fields that DO have one:
+`ChildApplication.internal_note` (R62.8), `FamilyLink.decision_reason`,
+`Session.cancellation_reason`, and the `notes` key on the §5.2 Session page projection, which
+is a different field on a different entity.
+
+### B · Google OAuth asks for `openid email`
+
+`profile` was requested and never read: the verifier extracts `sub` and `email` and discards
+the rest, so the platform was asking Google for a name, a picture and a locale in order to
+throw them away. Nothing downstream moved when it went.
+
+PKCE, `state`, the sealed flow cookie, token validation, `email_verified`, the subject binding
+and the account-chooser prompt are unchanged, as is the rule that no Google token is persisted
+and no Google API is called after login. **The public privacy page is corrected in the same
+change** — it told applicants the platform asks for their name and picture. A policy naming a
+scope the application does not request is as wrong as one omitting a scope it does, and
+`legal.test.ts` asserts the page and `oauth.ts` agree.
+
+### C · The Category names are the association's own
+
+**`المرأة`, `اليافعات`, `الطفل` are authoritative** (Owner, 2026-09-02) and are not renamed.
+
+**Revision 27 is not reversed.** Its purpose was to make the sex restriction machine-readable:
+before it, *«teens are girls only»* lived **only in the feminine plural of the category name**,
+where no query could read it. R27 moved that onto `Level.gender_restriction`, paired it with
+`User.sex`, and **that half stands untouched**. The rename that travelled with it was a
+consequence of the normalisation, not a product decision — and this repository then recorded
+the renamed forms as the seeded reality in several places.
+
+**No migration and no data change was created.** Both installations already hold the Owner's
+names with no duplicates, and a fresh install seeds them correctly because the R27 rename is
+guarded by the legacy name and finds nothing on an empty table.
+
+**Two live defects caused by the stale assumption are fixed.** The library's `CATEGORY_ORDER`
+matched the sex-neutral names, so **not one of the three matched a real row**, every category
+ranked equal-last, and the adult→teen→child progression the constant exists to impose was
+silently absent. And the public landing page named two stages the association does not use.
+
+**A known upgrade hazard is recorded rather than fixed**: on an installation carrying the
+legacy rows before 2026-07-28, the R27 migration renames them and the §15.1 seed — which
+matches by name — would create the Owner's names as *new* rows. No such installation is known;
+if one appears it is a data reconciliation and an Owner decision, not a silent seed change.
+
+**No legal conclusion** is drawn here about these names, about `User.sex`, about Quran progress
+or about the Google transfer. Those remain open compliance questions.

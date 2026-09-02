@@ -28,7 +28,7 @@ describe('the legal pages invent nothing', () => {
     expect(ar.legal.privacyRetentionPending).toContain('لم تُحدَّد');
   });
 
-  it('names the three Google scopes the code actually requests, and no others', () => {
+  it('names the two Google scopes the code actually requests, and no others', () => {
     /**
      * Google requires the policy to explain how the app accesses and uses Google
      * user data. The check that matters is that the page and `oauth.ts` agree —
@@ -36,11 +36,14 @@ describe('the legal pages invent nothing', () => {
      * omitting a scope it does.
      */
     const body = ar.legal.privacyGoogleBody;
-    for (const scope of ['openid', 'email', 'profile']) {
+    for (const scope of ['openid', 'email']) {
       expect(body, `the policy must name the ${scope} scope`).toContain(scope);
     }
-    // The ones it must not claim.
-    for (const absent of ['drive', 'calendar', 'contacts', 'gmail']) {
+    // **`profile` joined this list in R121.** The page told applicants the
+    // platform asks Google for their name and picture; it no longer does, and a
+    // policy claiming a scope the app does not request is as wrong as one
+    // omitting a scope it does.
+    for (const absent of ['profile', 'drive', 'calendar', 'contacts', 'gmail']) {
       expect(body.toLowerCase()).not.toContain(absent);
     }
   });

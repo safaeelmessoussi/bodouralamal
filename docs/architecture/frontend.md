@@ -515,8 +515,9 @@ says so. The same question will arise for every drill-down screen still to be bu
 
 ### Category order is editorial, not data
 
-Categories always render **الكبار → اليافعون → الطفل**. That is the association's own
-progression, and it is neither alphabetical nor `display_order` — so it is a constant in the
+Categories always render **المرأة → اليافعات → الطفل** (Revision 121 — the association's own
+names; the constant matched R27's sex-neutral forms until then, so **nothing matched a real
+row** and every category ranked equal-last). That is the association's own progression, and it is neither alphabetical nor `display_order` — so it is a constant in the
 page with unrecognised categories sorted **last rather than dropped**, because a category added
 later must still appear.
 

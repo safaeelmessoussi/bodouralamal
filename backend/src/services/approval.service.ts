@@ -44,7 +44,6 @@ export interface ApprovalRegistrationPerson {
   sex: string | null;
   phone: string | null;
   email: string | null;
-  notes: string | null;
   dataProcessingConsent: {
     granted: boolean;
     textVersion: string;
@@ -138,7 +137,6 @@ function registrationPerson(row: {
   nickname: string | null;
   sex: string | null;
   phone: string | null;
-  notes: string | null;
   identities: { email: string }[];
   consentsAsSubject: {
     granted: boolean;
@@ -156,7 +154,6 @@ function registrationPerson(row: {
     sex: row.sex,
     phone: row.phone,
     email: row.identities[0]?.email ?? null,
-    notes: row.notes,
     dataProcessingConsent: consent
       ? {
           granted: consent.granted,
@@ -507,7 +504,6 @@ export async function listApprovals(
             nickname: true,
             sex: true,
             phone: true,
-            notes: true,
             identities: { where: { isActive: true }, select: { email: true }, take: 1 },
             consentsAsSubject: {
               where: { consentType: 'data_processing' },

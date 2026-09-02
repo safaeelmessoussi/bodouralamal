@@ -59,7 +59,6 @@ export interface ApprovalRegistrationDetails {
     sex: string | null;
     phone: string | null;
     email: string | null;
-    notes: string | null;
     data_processing_consent: {
       granted: boolean;
       text_version: string;

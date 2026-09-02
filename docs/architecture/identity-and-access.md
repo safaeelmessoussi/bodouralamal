@@ -520,6 +520,27 @@ exists to somebody with no business knowing.
 **Writes are unchanged**: every create, edit and delete of a branch or room stays
 Super Admin only (R26), and the screen itself is Super-Admin-only (R61).
 
+## The Google scope is the minimum the identity contract needs
+
+`openid email` — and nothing else (Owner, 2026-09-02; SRS R121).
+
+`openid` yields the `sub` an account is bound to; `email` yields the address
+`UserIdentity` stores and the `email_verified` claim §4.1b step 7 hard-stops on.
+Those two claims are the entire contract.
+
+**`profile` was requested for a year and never read.** It carries name, picture
+and locale; `verifyGoogleIdToken` extracts `sub` and `email` and discards the
+rest, so the platform was asking Google for personal data in order to throw it
+away. Nothing downstream changed when it was removed, which is the point — a
+scope nothing reads is a scope nothing needs.
+
+Unchanged by that reduction: PKCE S256, `state`, the HMAC-sealed flow cookie,
+`prompt=select_account`, the `email_verified` hard stop, the subject binding,
+and the rule that **no Google token is ever persisted and no Google API is ever
+called after login**. The public privacy page names the same two scopes, and
+`legal.test.ts` asserts the page and `oauth.ts` agree — a policy naming a scope
+the application does not request is as wrong as one omitting a scope it does.
+
 ## The legal consent wording — Super Admin only, and freshness-checked
 
 Creating, editing and **activating** a `LegalConsentText` (R119) is Super Admin

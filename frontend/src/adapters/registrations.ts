@@ -33,7 +33,6 @@ export interface PersonInput {
   nickname?: string;
   /** R117 — required prospectively; persisted User rows remain nullable. */
   phone: string;
-  notes?: string;
   /** Required for every person created (§4.1b step 5, Revision 27) — the
    *  person-side half of `Level.gender_restriction`. */
   sex: 'female' | 'male';
@@ -217,7 +216,6 @@ export const LIMITS = {
   nickname: 60,
   phoneMin: 5,
   phoneMax: 20,
-  notes: 2000,
 } as const;
 
 /** TD-9: digits, `+` and spaces only. Non-unique — families share phones. */

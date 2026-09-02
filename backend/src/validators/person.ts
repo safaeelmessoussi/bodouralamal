@@ -32,7 +32,6 @@ export const phone = z
   .regex(/^[0-9+ ]+$/, 'digits, + and spaces only');
 
 /** TD-9: 2000 characters of free text about the person. */
-export const notes = z.string().trim().max(2000);
 
 /** §4.4b/R80 — recorded for everyone; the column is NOT NULL. */
 export const sex = z.enum(['female', 'male']);

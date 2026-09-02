@@ -137,10 +137,16 @@ encode sex. Every seeded level nonetheless carried `gender_restriction = any`, s
 restriction existed only in the Arabic words**. A query asking whether a boy could enrol got
 `any` and said yes.
 
-Revision 27 fixed both halves: categories became **generic educational stages** — الكبار
-(Adult), اليافعون (Teen), الطفل (Child) — which **must never encode sex**, and the actual
-restriction lives on `Level.gender_restriction`, paired with `User.sex`, as data a query can
-read.
+Revision 27 fixed the half that mattered: **the restriction moved onto
+`Level.gender_restriction`**, paired with `User.sex`, as data a query can read. That is the
+rule that stands — **a restriction must never be encoded in a name**, because a name is not
+something logic can consult.
+
+The **rename** that travelled with it did not stand. R27's migration also renamed the
+categories to sex-neutral forms, and this page recorded those as the product's names. The
+Document Owner clarified on 2026-09-02 (**Revision 121**) that the association's own names are
+**المرأة, اليافعات, الطفل**, and they are authoritative. The rename was a consequence of the
+normalisation rather than a product decision; nothing about `gender_restriction` changes.
 
 The property this bought: a (stage, sex) combination is available precisely when a level
 exists for that stage admitting that sex. Opening Teen + Male later is **Super Admin data

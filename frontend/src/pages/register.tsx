@@ -512,7 +512,6 @@ interface PersonForm {
   lastNameFrench: string;
   nickname: string;
   phone: string;
-  notes: string;
   sex: '' | 'female' | 'male';
 }
 
@@ -523,7 +522,6 @@ const emptyPerson: PersonForm = {
   lastNameFrench: '',
   nickname: '',
   phone: '',
-  notes: '',
   sex: '',
 };
 
@@ -566,7 +564,6 @@ const SERVER_FIELD_PATHS: Record<string, string> = {
   last_name_french: 'lastNameFrench',
   nickname: 'nickname',
   phone: 'phone',
-  notes: 'notes',
   sex: 'sex',
   // R62 — the two fields a child has and an adult does not.
   schooling_stage: 'schoolingStage',
@@ -810,7 +807,6 @@ export function buildPayload(state: {
       : {}),
     ...(p.nickname.trim() ? { nickname: p.nickname.trim() } : {}),
     phone: p.phone.trim(),
-    ...(p.notes.trim() ? { notes: p.notes.trim() } : {}),
   });
 
   if (state.intent === 'teacher') {

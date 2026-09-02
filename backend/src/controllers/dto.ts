@@ -1324,7 +1324,6 @@ export interface ApprovalDto {
       sex: string | null;
       phone: string | null;
       email: string | null;
-      notes: string | null;
       data_processing_consent: {
         granted: boolean;
         text_version: string;
@@ -1435,7 +1434,6 @@ export function approvalDto(row: {
       sex: string | null;
       phone: string | null;
       email: string | null;
-      notes: string | null;
       dataProcessingConsent: {
         granted: boolean;
         textVersion: string;
@@ -1504,7 +1502,6 @@ export function approvalDto(row: {
             sex: row.registrationDetails.applicant.sex,
             phone: row.registrationDetails.applicant.phone,
             email: row.registrationDetails.applicant.email,
-            notes: row.registrationDetails.applicant.notes,
             data_processing_consent: row.registrationDetails.applicant.dataProcessingConsent
               ? {
                   granted: row.registrationDetails.applicant.dataProcessingConsent.granted,
@@ -1609,7 +1606,6 @@ export interface UserDto {
    * COMPLETES a missing value and refuses a change.
    */
   sex: string | null;
-  notes: string | null;
   nickname: string | null;
   public_display_name: string | null;
   phone: string | null;
@@ -1644,7 +1640,6 @@ export function userDto(row: {
   firstNameFrench: string | null;
   lastNameFrench: string | null;
   sex: string | null;
-  notes: string | null;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -1669,7 +1664,6 @@ export function userDto(row: {
     first_name_french: row.firstNameFrench,
     last_name_french: row.lastNameFrench,
     sex: row.sex,
-    notes: row.notes,
     nickname: row.nickname,
     public_display_name: row.publicDisplayName,
     phone: row.phone,

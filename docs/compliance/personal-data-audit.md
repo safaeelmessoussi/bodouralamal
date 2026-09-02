@@ -21,6 +21,23 @@
 > The policy the Owner recorded with the decision: *the platform does not
 > collect categories of personal data that are not necessary for the
 > association's current operational purposes.*
+>
+> **A second removal followed on 2026-09-02 (SRS Revision 121).** `User.notes` —
+> the 2 000-character free-text field this audit flagged for **LEGAL REVIEW** at
+> §A.1 and §G.3 — **no longer exists**, dropped by
+> `20260902220000_drop_user_notes` behind a guard that refuses a non-blank
+> value. Localhost held 0 values across 73 users and Staging 0 across 14. The
+> registration form no longer offers it. In the same revision the **Google OAuth
+> scope was reduced to `openid email`**; the `profile` scope this audit recorded
+> at §H.1 as requested-but-unused is no longer requested at all.
+>
+> The principle recorded with it: *the platform does not provide generic
+> free-text collection fields without a defined operational purpose. A
+> personal-data field must have a specific, documented purpose.*
+>
+> **No legal conclusion is stated or implied by either removal** — whether
+> ordinary declaration suffices, how Quran progress is classified, and what the
+> Google transfer requires all remain open compliance questions.
 **Status:** audit for the Document Owner. No code, schema, or SRS was changed.
 **Followed by:** [the data-collection decision document](data-collection-decision.md),
 which turns these findings into a recommended profile per person type.

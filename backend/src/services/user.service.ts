@@ -274,7 +274,6 @@ export interface UserListItem {
   lastNameFrench: string | null;
   /** R80.6 amended 2026-08-28 — see `UserDto.sex`. */
   sex: string | null;
-  notes: string | null;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -442,7 +441,6 @@ async function listUsersUnchecked(
         firstNameFrench: true,
         lastNameFrench: true,
         sex: true,
-        notes: true,
         nickname: true,
         publicDisplayName: true,
         phone: true,
@@ -485,7 +483,6 @@ async function listUsersUnchecked(
       firstNameFrench: u.firstNameFrench,
       lastNameFrench: u.lastNameFrench,
       sex: u.sex,
-      notes: u.notes,
       nickname: u.nickname,
       publicDisplayName: u.publicDisplayName,
       phone: u.phone,
@@ -578,7 +575,6 @@ export async function listDirectory(
       firstNameFrench: u.firstNameFrench,
       lastNameFrench: u.lastNameFrench,
       sex: u.sex,
-      notes: u.notes,
       nickname: u.nickname,
       roles: u.roles,
     })),
@@ -620,7 +616,6 @@ export interface UserProfileInput {
   lastNameFrench?: string | null;
   nickname?: string | null;
   phone?: string | null;
-  notes?: string | null;
   /**
    * **R80.3 — COMPLETION, never correction.**
    *
@@ -746,7 +741,6 @@ export async function updateUser(
           : {}),
         ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.sex !== undefined ? { sex: input.sex } : {}),
         version: { increment: 1 },
       },
@@ -1251,7 +1245,6 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
       firstNameFrench: true,
       lastNameFrench: true,
       sex: true,
-      notes: true,
       nickname: true,
       publicDisplayName: true,
       phone: true,
@@ -1273,7 +1266,6 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
     firstNameFrench: u.firstNameFrench,
     lastNameFrench: u.lastNameFrench,
     sex: u.sex,
-    notes: u.notes,
     nickname: u.nickname,
     publicDisplayName: u.publicDisplayName,
     phone: u.phone,

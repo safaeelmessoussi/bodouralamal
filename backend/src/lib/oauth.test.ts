@@ -233,10 +233,16 @@ describe("the authorization URL", () => {
     expect(u.searchParams.get("code_challenge_method")).toBe("S256");
   });
 
-  it("requests only openid/email/profile and forces the account chooser", () => {
+  it("requests only openid/email and forces the account chooser", () => {
     const u = url();
 
-    expect(u.searchParams.get("scope")).toBe("openid email profile");
+    expect(u.searchParams.get("scope")).toBe("openid email");
+    // **R121 — `profile` is gone and must not come back.** It was requested for
+    // a year and never read: the verifier takes `sub` and `email` and discards
+    // the rest, so the platform was asking Google for name, picture and locale
+    // in order to throw them away. Asserted as an absence as well as an
+    // equality, because a future scope string could append rather than replace.
+    expect(u.searchParams.get("scope")).not.toContain("profile");
     expect(u.searchParams.get("response_type")).toBe("code");
     // §4.1b: a shared family device must not silently reuse whoever is signed in.
     expect(u.searchParams.get("prompt")).toBe("select_account");

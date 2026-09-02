@@ -30,7 +30,6 @@ const namePart = person.namePart;
 const nickname = person.nickname;
 /** TD-9: 5–20 chars, digits/`+`/spaces only; non-unique (families share phones). */
 const phone = person.phone;
-const notes = person.notes;
 
 /**
  * §4.1b step 5, Revision 27: `sex` is **required** on every person the
@@ -76,7 +75,6 @@ const personCore = z.object({
   // `User.phone` remains nullable for historical accounts; this is a write-
   // boundary rule, not a destructive schema backfill.
   phone,
-  notes: notes.optional(),
   sex: z.enum(['female', 'male']),
 })
   // `.strict()` for the same reason §20 rule 9 refuses identity fields: an

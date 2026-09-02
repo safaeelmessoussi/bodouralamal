@@ -18,7 +18,6 @@ import * as person from './person.js';
  */
 const nickname = person.nickname.nullable();
 const phone = person.phone.nullable();
-const notes = person.notes.nullable();
 const optionalNamePart = person.namePart.nullable();
 
 /**
@@ -58,7 +57,6 @@ export const updateUserSchema = z
     last_name_french: optionalNamePart.optional(),
     nickname: nickname.optional(),
     phone: phone.optional(),
-    notes: notes.optional(),
   })
   .strict();
 

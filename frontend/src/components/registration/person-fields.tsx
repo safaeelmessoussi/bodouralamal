@@ -23,7 +23,6 @@ export interface PersonForm {
   lastNameFrench: string;
   nickname: string;
   phone: string;
-  notes: string;
   sex: '' | 'female' | 'male';
 }
 
@@ -34,7 +33,6 @@ export const emptyPerson: PersonForm = {
   lastNameFrench: '',
   nickname: '',
   phone: '',
-  notes: '',
   sex: '',
 };
 
@@ -67,12 +65,6 @@ export function PersonFields({
         hint={t('register.phoneHint')}
         error={errors[`${prefix}.phone`] ?? null}
         required={phoneRequired}
-      />
-      <TextArea
-        label={t('register.notes')}
-        value={value.notes}
-        onChange={(next) => set({ notes: next })}
-        rows={3}
       />
     </>
   );

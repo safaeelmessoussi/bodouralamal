@@ -76,11 +76,18 @@ export function ResourcesPage(): ReactNode {
 /**
  * Categories always appear in this order, and it is **not** alphabetical or
  * `display_order`: it is the association's own progression, adult → teen →
- * child. Matching on the seeded Revision-27 stage names, with anything
- * unrecognised sorted last rather than dropped — a category added later must
- * still appear.
+ * child. Anything unrecognised sorts last rather than being dropped — a
+ * category added later must still appear.
+ *
+ * **The names are the association's own** (Owner clarification, 2026-09-02;
+ * SRS R121). This list read `الكبار / اليافعون / الطفل`, the sex-neutral forms
+ * R27's migration introduced while moving the sex restriction into
+ * `Level.gender_restriction`. Those are not what the association calls its
+ * stages, so **not one of the three matched a real row** and every category
+ * ranked equal-last — the progression this constant exists to impose was
+ * silently absent.
  */
-const CATEGORY_ORDER = ['الكبار', 'اليافعون', 'الطفل'];
+const CATEGORY_ORDER = ['المرأة', 'اليافعات', 'الطفل'];
 
 function categoryRank(name: string): number {
   const index = CATEGORY_ORDER.indexOf(name);

@@ -120,6 +120,9 @@ describe('toChildInput — one translation to the wire', () => {
     expect(input).not.toHaveProperty('first_name_french');
     // R62.1 — never collected about a minor, so never sent.
     expect(input).not.toHaveProperty('phone');
+    // R62.1 excluded `notes` from the child shape; R121 removed the field for
+    // EVERYBODY, so this is now true of every person rather than of children
+    // specifically. Kept because the child payload must still never grow one.
     expect(input).not.toHaveProperty('notes');
   });
 

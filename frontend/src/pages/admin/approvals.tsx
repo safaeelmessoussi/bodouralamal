@@ -516,7 +516,6 @@ function ApprovalDetailsDialog({ row, onClose }: { row: Approval; onClose: () =>
               <dd>{applicant.sex ? t(`register.sex${applicant.sex === 'female' ? 'Female' : 'Male'}`) : shown(null)}</dd>
               <dt>{t('register.phone')}</dt><dd>{shown(applicant.phone)}</dd>
               <dt>{t('admin.approvals.email')}</dt><dd>{shown(applicant.email)}</dd>
-              <dt>{t('register.notes')}</dt><dd>{shown(applicant.notes)}</dd>
               <dt>{t('admin.approvals.dataConsent')}</dt>
               <dd>
                 {applicant.data_processing_consent

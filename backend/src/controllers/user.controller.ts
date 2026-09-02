@@ -204,7 +204,6 @@ export function update(prisma: PrismaClient) {
         ...(body.last_name_french !== undefined
           ? { lastNameFrench: body.last_name_french }
           : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
         ...(body.sex !== undefined ? { sex: body.sex } : {}),

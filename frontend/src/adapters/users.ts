@@ -47,7 +47,6 @@ export interface UserSummary {
   last_name_french: string | null;
   /** R80.6 amended 2026-08-28 — published on this Super-Admin-only read only. */
   sex: string | null;
-  notes: string | null;
   nickname: string | null;
   phone: string | null;
   /**
@@ -165,7 +164,6 @@ export interface UserProfileInput {
   last_name_french?: string | null;
   nickname?: string | null;
   phone?: string | null;
-  notes?: string | null;
   /** R80.3 — completes a missing sex; the server refuses a change. */
   sex?: 'female' | 'male';
 }

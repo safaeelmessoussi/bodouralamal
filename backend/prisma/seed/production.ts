@@ -30,11 +30,24 @@ const ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
 
 /** §15.1 categories, ordered per §2.2 `display_order`. */
 /**
- * §15.1 categories — **generic educational stages (Revision 27)**. Sex is never
- * encoded in a category name: it lives on `Level.gender_restriction`, paired
- * with `User.sex`. The legacy names المرأة / اليافعات are renamed in place by
- * the Revision-27 migration, so an upgraded deployment matches these names here
- * and no duplicate categories are created.
+ * §15.1 categories — **the association's own names** (Document Owner,
+ * 2026-09-02; SRS Revision 121): المرأة, اليافعات, الطفل. These are
+ * authoritative and are not to be renamed.
+ *
+ * **Revision 27's rule is unchanged and is a different thing:** a Level's sex
+ * restriction lives on `Level.gender_restriction`, paired with `User.sex`, and
+ * **never in a category name** — a name is not something a query can read. R27's
+ * migration also renamed these to sex-neutral forms, and this docstring used to
+ * claim that rename as the seeded reality while the constant below seeded the
+ * Owner's names. R121 settles it in favour of the constant.
+ *
+ * **A fresh deployment is correct**: the R27 rename is guarded by the legacy
+ * name, so it finds nothing on an empty table and the seed creates these.
+ * **A pre-2026-07-28 upgraded installation is the open case** — there the
+ * migration renames the legacy rows and this seed, matching by name, would
+ * create the Owner's names as NEW rows. No such installation is known; if one
+ * appears it is a data reconciliation and an Owner decision, not a silent
+ * change here.
  */
 const CATEGORIES = [
   {
