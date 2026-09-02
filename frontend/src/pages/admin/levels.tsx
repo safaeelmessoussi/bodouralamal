@@ -220,6 +220,20 @@ export function LevelsPage(): ReactNode {
           existing.version,
           {
             name: input.name,
+            /**
+             * **الوصف was collected and then dropped here** (UAT, 2026-09-02).
+             *
+             * The form gathers it, the adapter carries it and the API accepts
+             * it — this handler simply did not name it, so every edit sent a
+             * payload without the field, the server changed nothing, and
+             * `common.saved` reported success. Editing a description looked
+             * like it worked and never did.
+             *
+             * `null` is a real value here (NEW L): clearing the description is
+             * a change, not an omission, and the API's `.strict()` schema
+             * distinguishes the two.
+             */
+            description: input.description ?? null,
             gender_restriction: input.gender_restriction,
           },
           accessToken,

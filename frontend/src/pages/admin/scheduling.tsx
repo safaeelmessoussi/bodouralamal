@@ -167,6 +167,27 @@ function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * **`مرة واحدة` is the creation default for every kind** (Owner, 2026-09-02).
+ *
+ * It used to be `weekly` for a class or a sitting, so the commonest single
+ * booking arrived pre-set to repeat and had to be corrected — the wrong default
+ * in the direction that creates data nobody asked for.
+ *
+ * **This is a creation default only.** An existing item answers with its own
+ * stored `recurrence`, and the previous kind-based fallback is retained for the
+ * edit path so a stored item with no recurrence resolves exactly as it did
+ * before. Nothing about editing changes.
+ *
+ * Defined once because the form state and its pristine baseline both need it,
+ * and a default that disagrees with its own baseline reports the form dirty on
+ * open (rule AY.1).
+ */
+function initialRecurrenceType(item: SchedulingItem | null): RecurrenceValue['type'] {
+  if (item === null) return 'none';
+  return item.recurrence ?? (item.type === 'activity' || item.type === 'holiday' ? 'none' : 'weekly');
+}
+
 export function SchedulingPage(): ReactNode {
   const { accessToken } = useSession();
   const [view, setView] = useState<View>(() =>
@@ -838,7 +859,7 @@ export function SchedulingDialog({
   const [endTime, setEndTime] = useState(item?.endTime ?? '10:00');
   const [endDate, setEndDate] = useState(item?.endDate ?? '');
   const [recurrence, setRecurrence] = useState<RecurrenceValue>({
-    type: item?.recurrence ?? (item?.type === 'activity' || item?.type === 'holiday' ? 'none' : 'weekly'),
+    type: initialRecurrenceType(item),
     weekdays: item?.weekdays ?? [],
     startDate: item?.startDate ?? '',
     endDate: item?.repeatUntil ?? '',
@@ -993,7 +1014,7 @@ export function SchedulingDialog({
     endTime: item?.endTime ?? '10:00',
     endDate: item?.endDate ?? '',
     recurrence: {
-      type: item?.recurrence ?? (item?.type === 'activity' || item?.type === 'holiday' ? 'none' : 'weekly'),
+      type: initialRecurrenceType(item),
       weekdays: item?.weekdays ?? [],
       startDate: item?.startDate ?? '',
       endDate: item?.repeatUntil ?? '',
