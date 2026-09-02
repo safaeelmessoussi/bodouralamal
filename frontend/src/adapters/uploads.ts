@@ -109,6 +109,36 @@ export async function abortUpload(uploadId: string, token: string | null): Promi
 }
 
 /** R53 — soft delete; the object waits out BR-15's window in quarantine. */
+/**
+ * **What the item IS — never the file it holds** (UAT, 2026-09-02).
+ *
+ * `PATCH /content/{id}` corrects a title, a Level, a Subject or a visibility
+ * without re-uploading anything. Replacement is a different act with a
+ * different route: this one cannot carry a file and the server refuses a body
+ * that tries.
+ *
+ * Only the changed fields are sent, so an edit never restates values the
+ * administrator did not touch.
+ */
+export interface ContentMetadataPatch {
+  title?: string;
+  level_id?: string;
+  subject_id?: string;
+  visibility?: 'public' | 'private' | 'hidden';
+}
+
+export async function updateContent(
+  contentId: string,
+  patch: ContentMetadataPatch,
+  token: string | null,
+): Promise<void> {
+  await api(`/content/${encodeURIComponent(contentId)}`, {
+    token,
+    method: 'PATCH',
+    body: patch,
+  });
+}
+
 export async function deleteContent(contentId: string, token: string | null): Promise<void> {
   await api(`/content/${encodeURIComponent(contentId)}`, { token, method: 'DELETE' });
 }

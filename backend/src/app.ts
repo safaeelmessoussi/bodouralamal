@@ -661,6 +661,7 @@ export function createApp(
   guarded.post('/uploads/:uploadId/abort', contentCtl.abort(prisma, storage, config));
   // R53: replacement reuses the upload flow (`replaces_content_id`); deletion is
   // its own route because it moves no bytes in.
+  guarded.patch('/content/:id', contentCtl.update(prisma, storage));
   guarded.delete('/content/:id', contentCtl.remove(prisma, storage));
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.

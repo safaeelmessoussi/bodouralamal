@@ -7,6 +7,9 @@ import { ACTIVE_CHILD_HEADER } from '../middleware/child-context.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as content from '../services/content.service.js';
 import { completeUploadSchema, initiateUploadSchema } from '../validators/content.validators.js';
+import { z } from 'zod';
+
+import { AppError } from '../lib/errors.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -69,6 +72,54 @@ export function complete(prisma: PrismaClient, clients: StorageClients, config: 
       { title: body.title, description: body.description ?? null },
     );
     res.status(201).json({ id: result.id });
+  };
+}
+
+/**
+ * `PATCH /content/{id}` — **what the item IS, never the file it holds.**
+ *
+ * `.strict()`, so a client that tried to send a filename, a size or a storage
+ * key here is refused rather than quietly ignored: this route cannot replace an
+ * object, and a request that appears to have done so must not receive a 200.
+ * Replacement remains TD-9's own path.
+ */
+const updateContentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    level_id: z.uuid().optional(),
+    subject_id: z.uuid().optional(),
+    visibility: z.enum(['public', 'private', 'hidden']).optional(),
+  })
+  .strict();
+
+export function update(prisma: PrismaClient, clients: StorageClients) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse<Record<string, unknown>>(updateContentSchema, req.body) as {
+      title?: string;
+      level_id?: string;
+      subject_id?: string;
+      visibility?: 'public' | 'private' | 'hidden';
+    };
+    // An empty patch is a request that asks for nothing; answering 204 would
+    // report a change that did not happen.
+    if (Object.keys(body).length === 0) {
+      throw new AppError('VALIDATION_FAILED', 'at least one field must be given', {
+        reason: 'EMPTY_PATCH',
+      });
+    }
+    await content.updateContentMetadata(
+      prisma,
+      clients,
+      requireActor(req),
+      String(req.params['id'] ?? ''),
+      {
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.level_id !== undefined ? { levelId: body.level_id } : {}),
+        ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
+        ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+      },
+    );
+    res.status(204).end();
   };
 }
 

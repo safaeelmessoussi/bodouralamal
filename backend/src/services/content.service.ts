@@ -25,6 +25,7 @@ import {
   deleteObject,
   presignGetUrl,
   presignPutUrl,
+  statObjectStrict,
   PRESIGN_TTL_SECONDS,
   type BucketName,
   type StorageClients,
@@ -1199,6 +1200,179 @@ async function quarantineObject(
  * a deletion that destroyed the object immediately would make the Trash's
  * restore promise a lie for exactly the entity where the data is largest.
  */
+export interface ContentMetadataPatch {
+  title?: string;
+  levelId?: string;
+  subjectId?: string;
+  visibility?: 'public' | 'private' | 'hidden';
+}
+
+/**
+ * **Editing what a content item IS, without touching the file** (UAT, 2026-09-02).
+ *
+ * مكتبة المحتوى could upload and delete and nothing between: correcting a typed
+ * title, a Level chosen from the wrong filter, or a visibility set too widely
+ * meant re-uploading the same bytes under a new row. TD-9's replacement path
+ * exists for a **new file**; it is the wrong instrument for a wrong word.
+ *
+ * ## The file is not re-uploaded, and usually not touched at all
+ *
+ * `title`, `levelId` and `subjectId` are database columns with no storage
+ * meaning. `visibility` is different, and this is the invariant that shapes the
+ * whole function.
+ *
+ * ## B-02: the bucket follows the database, so some visibility changes MOVE the object
+ *
+ * `bucketFor` puts `public` in the public bucket and both `private` and
+ * `hidden` in the private one. So:
+ *
+ * * **private ↔ hidden** changes a column and nothing else;
+ * * **public → private/hidden** must move the object, or the row would claim to
+ *   be private while the bytes stayed anonymously reachable — a privacy hole,
+ *   not an inconsistency;
+ * * **private/hidden → public** must move it too, or the presigned read would
+ *   point into a bucket the public tier cannot serve.
+ *
+ * The move is copy → verify → commit → delete source, the same order
+ * `quarantineContentObject` already uses: the destination is proved byte-identical
+ * before anything is committed, and the source is removed only afterwards, so a
+ * failure at any point leaves a readable object rather than none.
+ *
+ * ## Consent still wins
+ *
+ * A recording forced private by consent (B-01) cannot be published by editing a
+ * dropdown. The refusal is coded so the screen can say why rather than showing
+ * a control that silently fails.
+ *
+ * ## No notification
+ *
+ * R116(9) decided that content completion emits none, because upload is storage
+ * finalization rather than a deliberate publication transition. A metadata
+ * correction is *less* of a publication event than that, so it inherits the
+ * decision rather than reopening it.
+ */
+export async function updateContentMetadata(
+  prisma: PrismaClient,
+  clients: StorageClients,
+  actor: Actor,
+  contentId: string,
+  patch: ContentMetadataPatch,
+): Promise<void> {
+  const existing = await loadWritableContent(prisma, actor, contentId);
+
+  if (
+    patch.visibility === 'public' &&
+    existing.consentForcedPrivate &&
+    existing.visibility !== 'public'
+  ) {
+    throw new AppError('STATE_CONFLICT', 'consent keeps this recording private', {
+      reason: 'CONSENT_FORCED_PRIVATE',
+    });
+  }
+
+  // §4.9's Global-scope and branch rules are the same ones initiation applies;
+  // a Level change must not become a way to move content into a scope the
+  // caller could not have uploaded to.
+  if (patch.levelId !== undefined) {
+    const level = await prisma.level.findFirst({
+      where: { id: patch.levelId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!level) throw new AppError('VALIDATION_FAILED', 'no such level', { reason: 'UNKNOWN_LEVEL' });
+  }
+  if (patch.subjectId !== undefined) {
+    const subject = await prisma.subject.findFirst({
+      where: { id: patch.subjectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!subject) {
+      throw new AppError('VALIDATION_FAILED', 'no such subject', { reason: 'UNKNOWN_SUBJECT' });
+    }
+  }
+
+  const nextVisibility = patch.visibility ?? existing.visibility;
+  const targetBucket = bucketFor(nextVisibility);
+  const mustMove = targetBucket !== existing.storageBucket;
+
+  if (!mustMove) {
+    const written = await prisma.educationalContent.updateMany({
+      where: { id: contentId, deletedAt: null, version: existing.version },
+      data: {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
+        ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+        ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
+        version: { increment: 1 },
+      },
+    });
+    if (written.count === 0) {
+      throw new AppError('VERSION_CONFLICT', 'content changed during edit', {
+        reason: 'CONCURRENT_MODIFICATION',
+      });
+    }
+    return;
+  }
+
+  // **Copy first, and prove it.** Nothing is committed and nothing is removed
+  // until the destination is confirmed byte-identical to the source.
+  const source = await statObjectStrict(clients, existing.storageBucket, existing.storageKey);
+  if (source === null) {
+    throw new AppError('STATE_CONFLICT', 'the stored object is missing', {
+      reason: 'OBJECT_MISSING',
+    });
+  }
+  await copyObject(
+    clients,
+    { bucket: existing.storageBucket, key: existing.storageKey },
+    { bucket: targetBucket, key: existing.storageKey },
+    undefined,
+    source.etag === null ? {} : { sourceIfMatch: source.etag },
+  );
+  const destination = await statObjectStrict(clients, targetBucket, existing.storageKey);
+  if (
+    destination === null ||
+    destination.sizeBytes !== source.sizeBytes ||
+    (source.sha256 !== null && destination.sha256 !== source.sha256)
+  ) {
+    // The copy is the disposable half: remove it and leave the original alone.
+    await discardObject(clients, targetBucket, existing.storageKey);
+    throw new AppError('STATE_CONFLICT', 'the object could not be moved', {
+      reason: 'STORAGE_MOVE_FAILED',
+    });
+  }
+
+  const written = await prisma.educationalContent.updateMany({
+    where: {
+      id: contentId,
+      deletedAt: null,
+      version: existing.version,
+      storageBucket: existing.storageBucket,
+      storageKey: existing.storageKey,
+    },
+    data: {
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
+      ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+      visibility: nextVisibility as never,
+      storageBucket: targetBucket,
+      version: { increment: 1 },
+    },
+  });
+  if (written.count === 0) {
+    // Somebody else changed the row while the bytes were being copied. The
+    // database is the authority (B-02), so the COPY is what gets discarded.
+    await discardObject(clients, targetBucket, existing.storageKey);
+    throw new AppError('VERSION_CONFLICT', 'content changed during edit', {
+      reason: 'CONCURRENT_MODIFICATION',
+    });
+  }
+
+  // Committed. The old placement now contradicts the authority, so it goes —
+  // last, deliberately: a failure here leaves a duplicate object rather than an
+  // unreadable row, and the duplicate is visible to the storage lifecycle.
+  await discardObject(clients, existing.storageBucket, existing.storageKey);
+}
+
 export async function deleteContent(
   prisma: PrismaClient,
   clients: StorageClients,

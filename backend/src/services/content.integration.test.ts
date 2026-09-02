@@ -24,6 +24,7 @@ import { loadConfig } from "../lib/config.js";
 import { quarantineKeyFor, storageCoordinateId } from "../lib/file-types.js";
 import {
   BUCKETS,
+  statObjectStrict,
   createStorageClients,
   deleteObject,
   presignPutUrl,
@@ -49,6 +50,7 @@ import {
   deleteContent,
   initiateUpload,
   mintDownloadUrl,
+  updateContentMetadata,
   UPLOAD_QUOTA,
 } from "./content.service.js";
 
@@ -720,6 +722,127 @@ describe("completion verification (§4.9 Revision 8)", () => {
     );
     expect(e.code).toBe("NOT_FOUND");
     expect(e.details?.["reason"]).toBe("BAD_SIGNATURE");
+  });
+});
+
+describe("editing an item's metadata (UAT 2026-09-02)", () => {
+  /**
+   * The library could upload and delete and nothing between, so correcting a
+   * typed title or a Level chosen under the wrong filter meant re-uploading the
+   * same bytes. These pin the two halves that matter: the file is untouched,
+   * and a visibility change that crosses the bucket boundary MOVES the object —
+   * because B-02 makes the bucket follow the database, and a row that claimed
+   * to be private while its bytes stayed in the public bucket would be a
+   * privacy hole rather than an inconsistency.
+   */
+  it("changes title, Level and Subject without touching the stored object", async () => {
+    const { id } = await uploadPdf(admin(), "عنوان خاطئ");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { storageBucket: true, storageKey: true, sizeBytes: true, version: true },
+    });
+
+    // **The new title keeps the TAG.** Teardown collects by `title startsWith
+    // TAG`, so renaming past it would strand the row and block the Level delete
+    // for the whole suite — the mutable-handle trap `testing.md` records.
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      title: `${TAG} العنوان الصحيح`,
+    });
+
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: {
+        title: true,
+        storageBucket: true,
+        storageKey: true,
+        sizeBytes: true,
+        version: true,
+      },
+    });
+    expect(after.title).toBe(`${TAG} العنوان الصحيح`);
+    // The bytes and their coordinates are identical — no re-upload, no move.
+    expect(after.storageBucket).toBe(before.storageBucket);
+    expect(after.storageKey).toBe(before.storageKey);
+    expect(after.sizeBytes).toBe(before.sizeBytes);
+    expect(after.version).toBe(before.version + 1);
+  });
+
+  it("moves the object when visibility crosses the bucket boundary", async () => {
+    const { id } = await uploadPdf(admin(), "مادة خاصة", { visibility: "private" });
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { storageBucket: true, storageKey: true },
+    });
+    expect(before.storageBucket).toBe(BUCKETS.private);
+
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      visibility: "public",
+    });
+
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { visibility: true, storageBucket: true, storageKey: true },
+    });
+    expect(after.visibility).toBe("public");
+    // B-02 — the bucket followed the database, and the key is unchanged (TD-9:
+    // the key never carries visibility).
+    expect(after.storageBucket).toBe(BUCKETS.public);
+    expect(after.storageKey).toBe(before.storageKey);
+
+    // The object is readable at its new placement, and gone from the old one.
+    expect(await statObjectStrict(clients, BUCKETS.public, after.storageKey)).not.toBeNull();
+    expect(await statObjectStrict(clients, BUCKETS.private, before.storageKey)).toBeNull();
+  });
+
+  it("private ↔ hidden changes a column and moves nothing", async () => {
+    // The two share the private bucket, so a move here would be work done for
+    // no reason — and a needless copy of a large file inside a request.
+    const { id } = await uploadPdf(admin(), "مادة مخفية", { visibility: "private" });
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      visibility: "hidden",
+    });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { visibility: true, storageBucket: true },
+    });
+    expect(row.visibility).toBe("hidden");
+    expect(row.storageBucket).toBe(BUCKETS.private);
+  });
+
+  it("refuses to publish a recording that consent forced private (B-01)", async () => {
+    const { id } = await uploadPdf(admin(), "تسجيل", {
+      origin: "session_recording",
+      visibility: "private",
+    });
+    await prisma.educationalContent.update({
+      where: { id },
+      data: { consentForcedPrivate: true },
+    });
+
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, { visibility: "public" }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: "CONSENT_FORCED_PRIVATE" }),
+    });
+
+    // And it is still private, in the database and in storage.
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { visibility: true, storageBucket: true },
+    });
+    expect(row.visibility).toBe("private");
+    expect(row.storageBucket).toBe(BUCKETS.private);
+  });
+
+  it("refuses an unknown Level rather than storing a dangling reference", async () => {
+    const { id } = await uploadPdf(admin(), "مادة");
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, {
+        levelId: "00000000-0000-4000-8000-000000000000",
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: "UNKNOWN_LEVEL" }),
+    });
   });
 });
 

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
-import { deleteContent } from '../adapters/uploads.js';
+import { deleteContent, updateContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { ContentRecorderForm } from '../components/content/content-recorder-form.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
+import { FormDialog } from '../components/ui/form-dialog.js';
+import { SelectField, TextField } from '../components/ui/field.js';
+import { VisibilityField } from '../components/scheduling/visibility-field.js';
+import { isDirty } from '../lib/form-dirty.js';
 import {
   DataTable,
   type Column,
@@ -23,7 +27,7 @@ import { useActiveRole } from '../contexts/active-role.js';
 import { t } from '../i18n/index.js';
 import { formatDate } from '../lib/format-date.js';
 import { applySort } from '../adapters/reorder.js';
-import { api } from '../lib/api.js';
+import { api, ApiError } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
 
 /**
@@ -48,6 +52,96 @@ import { Feedback } from '../components/ui/feedback.js';
  * you are adding to. That removes a whole class of mistake where a form's
  * defaults disagree with the list behind it.
  */
+/**
+ * **Editing what a content item IS** (UAT, 2026-09-02).
+ *
+ * A self-contained form (rule AX): every field that decides what will be saved
+ * is inside it, pre-filled from the row. It carries **no file input** — TD-9's
+ * replacement is a different act with a different route, and offering both here
+ * would invite an administrator to re-upload a file to fix a word.
+ *
+ * `dirty` compares against the row as loaded, so opening and closing without a
+ * change asks nothing (rule AY.1), and a value typed and undone is pristine
+ * again.
+ */
+function ContentEditDialog({
+  row,
+  levels,
+  subjects,
+  busy,
+  onCancel,
+  onSave,
+}: {
+  row: LibraryRow;
+  levels: { value: string; label: string }[];
+  subjects: { value: string; label: string }[];
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (patch: {
+    title: string;
+    levelId: string;
+    subjectId: string;
+    visibility: string;
+  }) => void;
+}): ReactNode {
+  const pristine = {
+    title: row.title,
+    levelId: row.level_id,
+    subjectId: row.subject_id,
+    visibility: row.visibility,
+  };
+  const [form, setForm] = useState(pristine);
+  const [touched, setTouched] = useState(false);
+  const error = form.title.trim() === '' ? t('common.required') : null;
+
+  return (
+    <FormDialog
+      open
+      title={t('content.edit.title')}
+      submitLabel={t('common.save')}
+      busy={busy}
+      dirty={isDirty(form, pristine)}
+      onCancel={onCancel}
+      onSubmit={() => {
+        setTouched(true);
+        if (error) return;
+        onSave({ ...form, title: form.title.trim() });
+      }}
+    >
+      <p className="field__hint">{t('content.edit.fileUnchanged')}</p>
+
+      <TextField
+        label={t('content.col.title')}
+        value={form.title}
+        onChange={(v) => setForm((f) => ({ ...f, title: v }))}
+        required
+        error={touched ? error : null}
+      />
+
+      <SelectField
+        label={t('content.col.level')}
+        value={form.levelId}
+        onChange={(v) => setForm((f) => ({ ...f, levelId: v }))}
+        options={levels}
+      />
+
+      <SelectField
+        label={t('content.col.subject')}
+        value={form.subjectId}
+        onChange={(v) => setForm((f) => ({ ...f, subjectId: v }))}
+        options={subjects}
+      />
+
+      {/* The shared control, so the three tiers read identically wherever they
+          are chosen — and the server still decides (rule O). */}
+      <VisibilityField
+        value={form.visibility}
+        onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
+      />
+    </FormDialog>
+  );
+}
+
 interface LibraryRow {
   id: string;
   title: string;
@@ -116,6 +210,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRow | null>(null);
+  const [editing, setEditing] = useState<LibraryRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const { activeRoles } = useActiveRole();
@@ -254,8 +349,58 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   ];
 
   const actions: RowAction<LibraryRow>[] = [
+    // Rule AC — contextual, then تعديل, then the destructive one.
+    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), onSelect: (r) => setDeleting(r), danger: true },
   ];
+
+  /**
+   * **Correcting an item, without touching its bytes** (UAT, 2026-09-02).
+   *
+   * The library could upload and delete and nothing between, so fixing a typed
+   * title or a Level chosen under the wrong filter meant re-uploading the same
+   * file. Only the fields that actually changed are sent, so an edit never
+   * restates a value nobody touched — and the server decides everything: a
+   * visibility the consent rule forbids comes back as a refusal, not as a
+   * control this screen quietly hides.
+   */
+  async function confirmEdit(patch: {
+    title: string;
+    levelId: string;
+    subjectId: string;
+    visibility: string;
+  }): Promise<void> {
+    if (!editing) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await updateContent(
+        editing.id,
+        {
+          ...(patch.title !== editing.title ? { title: patch.title } : {}),
+          ...(patch.levelId !== editing.level_id ? { level_id: patch.levelId } : {}),
+          ...(patch.subjectId !== editing.subject_id ? { subject_id: patch.subjectId } : {}),
+          ...(patch.visibility !== editing.visibility
+            ? { visibility: patch.visibility as 'public' | 'private' | 'hidden' }
+            : {}),
+        },
+        accessToken,
+      );
+      setEditing(null);
+      await load();
+      setNotice(t('common.saved'));
+    } catch (error) {
+      const reason =
+        error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+      setNotice(
+        reason === 'CONSENT_FORCED_PRIVATE'
+          ? t('content.edit.consentForcedPrivate')
+          : t('common.saveFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function confirmDelete(): Promise<void> {
     if (!deleting) return;
@@ -403,6 +548,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           />
         ) : null}
       </Dialog>
+
+      {editing === null ? null : (
+        <ContentEditDialog
+          row={editing}
+          levels={scope.options.levelId}
+          subjects={scope.options.subjectId}
+          busy={busy}
+          onCancel={() => setEditing(null)}
+          onSave={(patch) => void confirmEdit(patch)}
+        />
+      )}
 
       <ConfirmDialog
         open={deleting !== null}

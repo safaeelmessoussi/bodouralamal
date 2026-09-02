@@ -266,6 +266,7 @@ GET /library                                  # TD-3.13, §5.2; PUBLIC — authe
 POST /uploads/initiate                        # TD-3.5, §4.9
 POST /uploads/{upload_id}/complete            # TD-3.5, §4.9
 POST /uploads/{upload_id}/abort               # TD-3.5
+PATCH  /content/{id}                          # UAT 2026-09-02; metadata only — title/level/subject/visibility; never replaces the file
 DELETE /content/{id}                          # TD-3.5 (R53), TD-5, BR-15
 GET /content/{id}/download-url                # TD-3.5, TD-12
 
