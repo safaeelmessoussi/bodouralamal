@@ -75,6 +75,14 @@ export function TrashPage(): ReactNode {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [query, setQuery] = useState('');
+  /**
+   * **Which side of the Trash** (Owner, 2026-09-02). `actionable` is the
+   * default because that is what a Trash is for: rows a restore or a purge can
+   * actually be performed on. History kept because a Session or an audit row
+   * references it is reachable under `retained` — shown rather than hidden, and
+   * never offering two buttons that cannot work.
+   */
+  const [view, setView] = useState<'actionable' | 'retained' | 'all'>('actionable');
   const [restoring, setRestoring] = useState<TrashEntry | null>(null);
   const [purging, setPurging] = useState<TrashEntry | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,6 +98,7 @@ export function TrashPage(): ReactNode {
           ...(from ? { from } : {}),
           ...(to ? { to } : {}),
           ...(query.trim() ? { q: query.trim() } : {}),
+          view,
         },
         page,
       );
@@ -99,7 +108,7 @@ export function TrashPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, entity, from, to, query, page]);
+  }, [accessToken, entity, from, to, query, view, page]);
 
   useEffect(() => {
     void load();
@@ -295,6 +304,17 @@ export function TrashPage(): ReactNode {
               onChange={(v) => refilter(() => setQuery(v))}
               label={t('common.search')}
               placeholder={t('admin.trash.searchPlaceholder')}
+            />
+            <SelectField
+              label={t('admin.trash.viewLabel')}
+              value={view}
+              onChange={(v) => refilter(() => setView(v as 'actionable' | 'retained' | 'all'))}
+              options={[
+                { value: 'actionable', label: t('admin.trash.view.actionable') },
+                { value: 'retained', label: t('admin.trash.view.retained') },
+                { value: 'all', label: t('admin.trash.view.all') },
+              ]}
+              hint={t('admin.trash.viewHint')}
             />
             <SelectField
               label={t('admin.trash.colEntity')}

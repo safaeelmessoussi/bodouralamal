@@ -49,6 +49,13 @@ export interface TrashQuery {
   from?: string;
   to?: string;
   q?: string;
+  /**
+   * Which side of the Trash to read (Owner, 2026-09-02). `actionable` — the
+   * server's default — lists rows a restore or purge can actually be performed
+   * on; `retained` lists history kept because something references it. The
+   * stored rows are the same either way; this is a lens, not a move.
+   */
+  view?: 'actionable' | 'retained' | 'all';
 }
 
 export async function listTrash(

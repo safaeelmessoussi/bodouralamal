@@ -3196,6 +3196,77 @@
         }
       }
     },
+    "/admin/family-links/{id}/rejected": {
+      "delete": {
+        "summary": "Remove a terminal rejected family link",
+        "description": "§4.3, TD-8, **Revision 118 (Owner, 2026-09-02)**. A `rejected` link grants no authority over any child and is not Trash: it records a request that was refused and, until this decision, had no transition to leave by — which is why such rows accumulated. The **operational row is destroyed** and the **audit trail is the evidence**: `familylink.purge_rejected` is written BEFORE the delete and in the same transaction, carrying both parties, who rejected it and when. `AuditLog.target_id` is deliberately not a foreign key, so *who asked, who refused, and who removed the record* survives the row (§7's attribution invariant) — that is what makes removing it acceptable rather than a loss. **A separate route from revoke, deliberately**: they are different acts on different states, and one route deciding by status is how a destructive verb reaches the wrong row. **`pending` and `approved` are refused by name** (`NOT_TERMINAL_REJECTED`) — a pending link still owes somebody an answer, and an approved one is live authority that is revoked (soft, with a Trash snapshot), never removed. Same fresh-role check and same roles as revoke (TD-12). No reason is required: the decision was made and audited when the request was rejected.",
+        "responses": {
+          "200": {
+            "description": "The link was removed; both party ids are returned."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a malformed id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below the revoking roles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a link that does not exist (§20 rule 17).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — NOT_TERMINAL_REJECTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/family-links/{id}": {
       "delete": {
         "summary": "Revoke an approved family link",

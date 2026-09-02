@@ -31,6 +31,8 @@ const listSchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   q: z.string().trim().max(120).optional(),
+  // Which side of the Trash: actionable items, retained history, or both.
+  view: z.enum(['actionable', 'retained', 'all']).optional(),
   page: z.coerce.number().int().min(1).optional(),
   page_size: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -44,6 +46,7 @@ export function list(prisma: PrismaClient) {
       ...(q.from ? { from: q.from } : {}),
       ...(q.to ? { to: q.to } : {}),
       ...(q.q ? { q: q.q } : {}),
+      ...(q.view ? { view: q.view } : {}),
       ...(q.page ? { page: q.page } : {}),
       ...(q.page_size ? { pageSize: q.page_size } : {}),
     });

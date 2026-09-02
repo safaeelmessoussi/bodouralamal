@@ -4,7 +4,7 @@ import { actorFor } from "../test-support/actor.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { resolveActingStudent } from "../middleware/child-context.js";
-import { createLink, revokeLink } from "./family-link.service.js";
+import { createLink, purgeRejectedLink, revokeLink } from "./family-link.service.js";
 
 /**
  * FamilyLink revocation (§4.3 Revision 16) against the real database.
@@ -330,6 +330,98 @@ describe("§4.3 Revision 16 — revoking an approved link", () => {
     await expect(
       resolveActingStudent(prisma, { userId: p2, roles: ["parent"] }, c),
     ).resolves.toMatchObject({ studentId: c });
+  });
+});
+
+describe("removing a TERMINAL REJECTED link (Owner decision, 2026-09-02)", () => {
+  /**
+   * A rejected link grants no authority over any child and is not Trash: it
+   * records a request that was refused and then went nowhere. Until this
+   * decision no transition removed it, so it stayed live forever for want of a
+   * verb rather than for a reason.
+   *
+   * **The operational row goes; the audit proves it happened.** `AuditLog`
+   * carries no foreign key to the link, which is exactly the property that
+   * makes removing the row acceptable — *who asked, who refused, and who
+   * removed it* stays reconstructable from the trail alone (§7).
+   */
+  async function rejectedLink(parentId: string, studentId: string): Promise<string> {
+    const row = await prisma.familyLink.create({
+      data: { parentId, studentId, status: "rejected", decidedAt: new Date() },
+    });
+    return row.id;
+  }
+
+  it("removes the row and leaves durable audit evidence behind", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await rejectedLink(parent, student);
+
+    await purgeRejectedLink(prisma, await actorFor(prisma, admin), linkId);
+
+    expect(await prisma.familyLink.count({ where: { id: linkId } })).toBe(0);
+
+    const trail = await prisma.auditLog.findMany({
+      where: { targetEntity: "FamilyLink", targetId: linkId },
+      select: { actionType: true, actorUserId: true, detail: true },
+    });
+    const removal = trail.find((r) => r.actionType === "familylink.purge_rejected");
+    expect(removal, "the removal must be provable after the row is gone").toBeDefined();
+    expect(removal!.actorUserId).toBe(admin);
+    // Both parties, so the trail answers WHOSE relationship this was without
+    // the row it describes.
+    expect(removal!.detail).toMatchObject({ parent_id: parent, student_id: student });
+  });
+
+  it("REFUSES an approved link — that one is revoked, never removed", async () => {
+    const parent = await makeUser("ولي معتمد");
+    const student = await makeUser("طفل معتمد");
+    const admin = await makeStaff("admin");
+    const linkId = await approvedLink(parent, student);
+
+    await expect(
+      purgeRejectedLink(prisma, await actorFor(prisma, admin), linkId),
+    ).rejects.toMatchObject({ details: expect.objectContaining({ reason: "NOT_TERMINAL_REJECTED" }) });
+    // Live authority is untouched.
+    expect(await prisma.familyLink.count({ where: { id: linkId, deletedAt: null } })).toBe(1);
+  });
+
+  it("REFUSES a pending link — somebody still owes it an answer", async () => {
+    const parent = await makeUser("ولي منتظر");
+    const student = await makeUser("طفل منتظر");
+    const admin = await makeStaff("admin");
+    const row = await prisma.familyLink.create({
+      data: { parentId: parent, studentId: student, status: "pending" },
+    });
+
+    await expect(
+      purgeRejectedLink(prisma, await actorFor(prisma, admin), row.id),
+    ).rejects.toMatchObject({ details: expect.objectContaining({ reason: "NOT_TERMINAL_REJECTED" }) });
+    expect(await prisma.familyLink.count({ where: { id: row.id } })).toBe(1);
+  });
+
+  it("refuses a caller without the revoking role, and destroys nothing", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const teacher = await makeStaff("teacher");
+    const linkId = await rejectedLink(parent, student);
+
+    await expect(
+      purgeRejectedLink(prisma, await actorFor(prisma, teacher), linkId),
+    ).rejects.toBeTruthy();
+    expect(await prisma.familyLink.count({ where: { id: linkId } })).toBe(1);
+  });
+
+  it("answers NOT_FOUND for a link that is already gone (§20 rule 17)", async () => {
+    const admin = await makeStaff("admin");
+    await expect(
+      purgeRejectedLink(
+        prisma,
+        await actorFor(prisma, admin),
+        "00000000-0000-4000-8000-000000000000",
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 

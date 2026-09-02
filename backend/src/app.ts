@@ -456,6 +456,7 @@ export function createApp(
   guarded.delete('/admin/partners/:id', partners.remove(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
+  guarded.delete('/admin/family-links/:id/rejected', familyLinks.purgeRejected(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));
   guarded.post('/admin/branches', branch.createBranch(prisma));
   // R76 — manual ordering as a contract. Declared BEFORE `/:id` so the literal

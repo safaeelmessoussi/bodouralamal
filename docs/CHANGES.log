@@ -2134,3 +2134,54 @@ blindly put the form state out of step with its own control. The default is also
 when the kind changes, since the kind is chosen after the form opens; that also closes a
 latent fault in the other direction, where switching activity → class left a value the server
 would reject.
+
+## Lifecycle closure and test isolation — 2026-09-02
+
+### Three suites stopped requiring a pristine development database
+
+All three asserted global emptiness of a shared table and failed on legitimate data — 12
+published Hijri months for 1448, and a Platform Owner who has signed in. None was testing
+that.
+
+- **Platform Owner** — `identities).toEqual([])` stops being a statement about bootstrap the
+  first time anybody logs in. The property is that bootstrap **fabricates no Google binding**,
+  so an identity created in the bootstrap transaction would carry the account's own creation
+  instant while one bound by a real sign-in is strictly later. That is now asserted.
+- **Hijri empty coverage** — `coverage` answers *how far does the official calendar reach* and
+  has no per-year form, so the suite made the empty case by requiring an empty table. It now
+  owns the visible set for one **deliberately rolled-back transaction**; the empty branch is
+  exercised for real and nothing is written.
+- **Hijri draft coverage** — asserted as *not this suite's draft* rather than globally null.
+
+No legitimate data deleted, no assertion weakened, no production behaviour changed.
+
+### Owner lifecycle decisions (SRS Revision 118)
+
+**A · Schedule purge is a fact about the row.** Never materialized a Session → purgeable; one
+Session, live or tombstoned → permanent, `MATERIALIZED_HISTORY`. Asserted twice: in the list,
+so no interface offers an impossible action, and inside the purge transaction, where it is
+authoritative because a materialization job may have run between the two. Staffing rows are
+owned and go with it; Sessions are never in the plan, since their existence is what forbids it.
+
+**B · Retained history is a lens, not a move.** `view=actionable|retained|all`, defaulting to
+actionable. **No row is moved, hidden, altered or deleted.** Reuses the existing Trash rather
+than adding an archive subsystem.
+
+**C · A terminal rejected FamilyLink may be removed.** The operational row goes; the audit is
+the evidence, written before the delete in the same transaction. `pending` and `approved` are
+refused by name — one still owes an answer, the other is authority and is revoked, not
+removed.
+
+### Localhost Trash after the decisions
+
+**49 rows: 48 actionable, 1 retained.** The retained row is a schedule that materialized
+Sessions. Fourteen schedules became purgeable, which is what releases the
+AdministrativeGroup blocker through ordered purge — proven in the suite, **not performed on
+live records**: no bulk cleanup was authorised and provenance of individual UAT rows is not
+established here.
+
+### Not changed
+
+The Level and Category entries still refuse on legacy `LevelSubject` tombstones whose
+ownership no snapshot records — deliberate no-guess behaviour from `d57bedb5`, unchanged. The
+R59.4 quarantine-destruction question remains open.

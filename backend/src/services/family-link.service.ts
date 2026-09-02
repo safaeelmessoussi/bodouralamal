@@ -122,6 +122,96 @@ export async function createLink(
  * suspended mid-session must not be able to perform it on a still-valid token.
  * One indexed read on a low-frequency endpoint (TD-11a unaffected).
  */
+/**
+ * **A terminal rejection may be removed, and the audit proves it happened**
+ * (Owner decision, 2026-09-02).
+ *
+ * A `rejected` FamilyLink grants no authority over any child and is not a Trash
+ * item: it records a decision that was taken and then went nowhere. Until now
+ * no transition removed it, so it stayed live forever for want of a verb rather
+ * than for a reason — the state the lifecycle audit flagged as class C with no
+ * retention horizon.
+ *
+ * ## What survives, and what does not
+ *
+ * The **operational row** is destroyed: it is not history, it is a request that
+ * was refused, and the platform keeps no queue of refusals. The **audit trail
+ * is untouched and gains one row**, so *who asked, who refused, and who later
+ * removed the record* is reconstructable from `AuditLog` alone — §7's
+ * attribution invariant, which is precisely why the row itself need not be kept.
+ *
+ * ## Only a terminal rejection
+ *
+ * `pending` is a live decision somebody still owes an answer to, and `approved`
+ * is authority — that one is revoked (soft, with a Trash snapshot), never
+ * removed. Both are refused here by name rather than silently ignored.
+ *
+ * ## Authorization
+ *
+ * The same fresh-role check the revoke path takes (TD-12), and the same roles:
+ * removing the evidence-bearing operational row is an administrative act about
+ * a child's relationships, not a tidy-up.
+ */
+export async function purgeRejectedLink(
+  prisma: PrismaClient,
+  caller: Actor,
+  linkId: string,
+): Promise<{ parentId: string; studentId: string }> {
+  const actor = await assertFreshActive(prisma, caller.userId, REVOKER_ROLES, caller.activeRole);
+
+  return prisma.$transaction(async (tx) => {
+    const link = await tx.familyLink.findFirst({
+      // **`deletedAt: null`, like every read of a soft-deletable model.** A
+      // withdrawn link is already absent from every surface; destroying one is
+      // the Trash path's business, not this verb's, and the coverage guard is
+      // right to insist the constraint is written rather than assumed.
+      where: { id: linkId, deletedAt: null },
+      select: {
+        id: true,
+        parentId: true,
+        studentId: true,
+        status: true,
+        decidedAt: true,
+        decidedById: true,
+        createdAt: true,
+      },
+    });
+    // §20 rule 17 — a link the caller may not reach and one that is gone answer
+    // alike.
+    if (!link) throw new AppError('NOT_FOUND', 'no such family link');
+    if (link.status !== 'rejected') {
+      throw new AppError('STATE_CONFLICT', 'only a rejected link may be removed (§4.3)', {
+        reason: 'NOT_TERMINAL_REJECTED',
+      });
+    }
+
+    /**
+     * **The audit row is written BEFORE the delete**, inside the same
+     * transaction, and carries the whole decision. `AuditLog.target_id` is not a
+     * foreign key, so the record survives the row it describes — which is the
+     * property that makes removing the operational row acceptable at all.
+     */
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'familylink.purge_rejected',
+      targetEntity: 'FamilyLink',
+      targetId: link.id,
+      detail: {
+        parent_id: link.parentId,
+        student_id: link.studentId,
+        rejected_at: link.decidedAt,
+        rejected_by: link.decidedById,
+        requested_at: link.createdAt,
+      },
+    });
+
+    await tx.familyLink.delete({ where: { id: link.id } });
+
+    return { parentId: link.parentId, studentId: link.studentId };
+  });
+}
+
 export async function revokeLink(
   prisma: PrismaClient,
   caller: Actor,

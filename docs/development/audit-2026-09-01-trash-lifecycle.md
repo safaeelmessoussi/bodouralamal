@@ -47,7 +47,45 @@ The Trash UI had also treated its filter list as closed while omitting backend-p
 one exported inventory now has Arabic labels for every producer; capability still comes
 from each server row and is never inferred by the browser.
 
-## Owner decisions required
+## Owner decisions taken — 2026-09-02
+
+The three questions below were put to the Document Owner and answered. The
+answers are implemented; the original text is kept beneath for provenance.
+
+**1 · Schedule history — split by whether anything was ever materialized.** A
+deleted `RecurringCourseSchedule` that has **never materialized a Session** may
+be permanently purged: it is a plan nobody taught, and there is no history to
+protect. One Session — live **or** tombstoned, protected or not — makes the
+schedule non-purgeable, because the materialized coordinate is the institutional
+record R59 keeps. This is the first entity whose purgeability is a fact about the
+**row** rather than the type, so `CONDITIONAL_PURGE` asks the question once in
+the list (so the interface never offers an impossible action) and again inside
+the purge transaction (where it is authoritative, since a materialization job may
+have run in between). Refusal code: `MATERIALIZED_HISTORY`. Its `CourseScheduleStaff`
+rows are owned by it and go with it; Sessions are never in the plan, because
+their presence is what forbids the purge.
+
+**2 · Retained tombstones — a lens, not a move.** A row that can be neither
+restored nor purged is not waiting for a decision; it is being kept. `listTrash`
+gains `view`: **`actionable`** (the default) lists rows an action exists for,
+`retained` lists history kept because something references it, `all` lists both.
+**No row is moved, hidden, altered or deleted** — referential and historical
+integrity are untouched, and `retained` keeps the record reachable. Applied after
+the page is read, exactly as the label search is, and for the same reason:
+purgeability is a per-row question no single SQL predicate expresses across every
+entity type.
+
+**3 · Rejected FamilyLink — removable, with the audit as the evidence.** A
+terminal `rejected` link grants no authority and records a request that was
+refused. `DELETE /admin/family-links/{id}/rejected` removes the operational row
+under the same fresh-role check revoke takes, writing `familylink.purge_rejected`
+**before** the delete and in the same transaction. `AuditLog.target_id` is not a
+foreign key, so *who asked, who refused, and who removed it* survives the row —
+which is the property that makes removing it acceptable. `pending` and `approved`
+are refused by name (`NOT_TERMINAL_REJECTED`): one still owes an answer, the
+other is authority and is revoked rather than removed.
+
+## Owner decisions required (answered above; retained for provenance)
 
 1. **Schedule history:** may a deleted schedule be permanently purged only when it has never
    materialized any Session? Separately, may a parent purge consume only derived future Session
@@ -59,7 +97,19 @@ from each server row and is never inferred by the browser.
    retained for a fixed period, or receives an explicit audited removal transition. Until decided,
    it stays live, non-authorizing, and outside Trash.
 
-## What “Trash can reach zero” means
+## What “Trash can reach zero” means (updated 2026-09-02)
+
+Decision 1 moves the never-materialized subset from D to A, so an ordered purge
+now reaches further than it could: the AdministrativeGroup blocker in the
+2026-09-02 UAT was a deleted group named by a deleted schedule with no Sessions,
+and purging the schedule releases the group. Decision 2 means the rows that
+genuinely cannot go stop presenting themselves as ordinary Trash.
+
+Zero is still **not** a goal, and is still not guaranteed: a schedule that taught
+anything, and every reference a retained Session or audit row holds, stay by
+design. The original text below is unchanged.
+
+## What “Trash can reach zero” meant before these decisions
 
 Ordinary disposable UAT data can reach zero after dependants are removed in domain order and each
 parent owns exact consequence coordinates. Zero is **not** currently guaranteed for a database

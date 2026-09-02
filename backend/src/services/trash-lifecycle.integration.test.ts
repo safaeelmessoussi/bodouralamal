@@ -37,6 +37,21 @@ const superAdmin = (): Actor => ({
 });
 
 async function cleanup(): Promise<void> {
+  // The 2026-09-02 lifecycle fixtures build a schedule (and sometimes an
+  // occurrence) of their own. Sessions are RESTRICT against the schedule, so
+  // they go first; every row here is created by this suite and tagged.
+  const mySchedules = await prisma.recurringCourseSchedule.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  if (mySchedules.length > 0) {
+    const ids = mySchedules.map((s) => s.id);
+    await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
+    await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
+    await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
+    await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
+  }
+
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -305,6 +320,196 @@ describe('a blocked purge names what still depends on the record', () => {
     await expect(purgeEntry(prisma, superAdmin(), entry.id)).rejects.toMatchObject({
       details: expect.objectContaining({ blocking_entity: 'Level' }),
     });
+  });
+});
+
+describe('Owner lifecycle decisions of 2026-09-02', () => {
+  /**
+   * **A schedule that never became anything may go; one that did, stays.**
+   *
+   * The contract was type-wide — every deleted schedule refused with
+   * `CASCADE_CHILDREN` — because destroying one *might* be destroying a
+   * timetable's history. The Owner split the two cases, and the split is a fact
+   * about the row: a plan nobody ever taught has no history to protect, while a
+   * single materialized coordinate is the institutional record R59 keeps.
+   */
+  async function deletedSchedule(withSession: boolean): Promise<{ scheduleId: string; entryId: string }> {
+    const { levelId, subjectId } = await curriculum();
+    const branch = await prisma.branch.create({ data: { name: `${TAG} مقر`, updatedAt: new Date() } });
+    /**
+     * **The academic year is REUSED, not created.** `label` carries a
+     * `YYYY-YYYY` format check, and the schedule only needs a valid reference —
+     * so the fixture borrows an existing year read-only rather than inventing a
+     * row it would then have to clean up.
+     */
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const schedule = await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة`,
+        levelId,
+        subjectId,
+        branchId: branch.id,
+        academicYearId: year.id,
+        teachingMode: 'entire_level',
+        recurrence: 'weekly',
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T10:00:00.000Z'),
+        deletedAt: new Date(),
+        deletedById: actorUserId,
+      },
+    });
+    if (withSession) {
+      await prisma.session.create({
+        data: {
+          scheduleId: schedule.id,
+          date: new Date('2026-09-07'),
+          startTime: new Date('1970-01-01T09:00:00.000Z'),
+          endTime: new Date('1970-01-01T10:00:00.000Z'),
+        },
+      });
+    }
+    const entry = await prisma.trash.create({
+      data: {
+        targetEntity: 'RecurringCourseSchedule',
+        targetId: schedule.id,
+        snapshot: { id: schedule.id, title: `${TAG} حصة` },
+        deletedById: actorUserId,
+        purgeAfter: new Date(Date.now() + 86_400_000),
+      },
+    });
+    return { scheduleId: schedule.id, entryId: entry.id };
+  }
+
+  it('purges a deleted schedule that never materialized a Session', async () => {
+    const { scheduleId, entryId } = await deletedSchedule(false);
+
+    const listed = (await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule' })).data
+      .find((r) => r.targetId === scheduleId)!;
+    expect(listed.purgeable, 'a plan nobody taught is disposable').toBe(true);
+
+    await purgeEntry(prisma, superAdmin(), entryId);
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: entryId } })).toBe(0);
+  });
+
+  it('REFUSES a schedule with any materialized Session, and says why', async () => {
+    const { scheduleId, entryId } = await deletedSchedule(true);
+
+    // Asked for explicitly: decision B keeps a history-protected row out of the
+    // default actionable view, which the next test asserts. What matters here
+    // is that when it IS shown, it does not advertise a purge the transaction
+    // would refuse.
+    const listed = (
+      await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
+    ).data.find((r) => r.targetId === scheduleId)!;
+    expect(listed.purgeable).toBe(false);
+    expect(listed.purgeBlockedReason).toBe('MATERIALIZED_HISTORY');
+
+    await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'MATERIALIZED_HISTORY' }),
+    });
+    // The schedule AND its occurrence are untouched — R59.
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(1);
+    expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
+  });
+
+  it('counts a TOMBSTONED Session as history too', async () => {
+    // A soft-deleted occurrence is still a coordinate the institution recorded.
+    const { scheduleId, entryId } = await deletedSchedule(true);
+    await prisma.session.updateMany({
+      where: { scheduleId },
+      data: { deletedAt: new Date(), deletedById: actorUserId },
+    });
+    await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'MATERIALIZED_HISTORY' }),
+    });
+  });
+
+  it('unblocks its AdministrativeGroup once the empty schedule is purged (ordered)', async () => {
+    /**
+     * The UAT blocker, in miniature: a deleted group refused because a deleted
+     * schedule still named it. Neither was destroyable before, so the pair was
+     * stuck. Decision A makes the schedule disposable when it never
+     * materialized, and ordered purge then reaches the group — **child first,
+     * then parent**, with PostgreSQL refusing until the order is right.
+     */
+    const { levelId } = await curriculum();
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} مقر مجموعة`, updatedAt: new Date() },
+    });
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة`, levelId, branchId: branch.id, deletedAt: new Date() },
+    });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const subject = await prisma.subject.findFirstOrThrow({ select: { id: true } });
+    const schedule = await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة مجموعة`,
+        // `course_schedule_mode_target_check`: an administrative-group schedule
+        // names the GROUP, and the Level comes through it. Naming both is the
+        // contradiction the constraint exists to refuse.
+        subjectId: subject.id,
+        administrativeGroupId: group.id,
+        branchId: branch.id,
+        academicYearId: year.id,
+        teachingMode: 'administrative_group',
+        recurrence: 'weekly',
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T10:00:00.000Z'),
+        deletedAt: new Date(),
+        deletedById: actorUserId,
+      },
+    });
+    const mk = async (entity: string, targetId: string): Promise<string> =>
+      (
+        await prisma.trash.create({
+          data: {
+            targetEntity: entity,
+            targetId,
+            snapshot: { id: targetId },
+            deletedById: actorUserId,
+            purgeAfter: new Date(Date.now() + 86_400_000),
+          },
+        })
+      ).id;
+    const groupEntry = await mk('AdministrativeGroup', group.id);
+    const scheduleEntry = await mk('RecurringCourseSchedule', schedule.id);
+
+    // Parent first is refused — by the database, which is the authority on what
+    // still points at the row.
+    await expect(purgeEntry(prisma, superAdmin(), groupEntry)).rejects.toMatchObject({
+      details: expect.objectContaining({
+        reason: 'DEPENDENTS_EXIST',
+        blocking_entity: 'RecurringCourseSchedule',
+      }),
+    });
+
+    await purgeEntry(prisma, superAdmin(), scheduleEntry);
+    await purgeEntry(prisma, superAdmin(), groupEntry);
+
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: schedule.id } })).toBe(0);
+    expect(await prisma.administrativeGroup.count({ where: { id: group.id } })).toBe(0);
+  });
+
+  it('keeps history-protected rows OUT of the actionable Trash view', async () => {
+    /**
+     * Decision B. The row is neither moved nor hidden — it is the same row in
+     * the same table, and `all`/`retained` still reach it. What changes is that
+     * the default view stops offering two buttons that cannot work.
+     */
+    const { scheduleId } = await deletedSchedule(true);
+    const actionable = (await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule' })).data;
+    expect(actionable.some((r) => r.targetId === scheduleId)).toBe(false);
+
+    const retained = (
+      await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'retained' })
+    ).data;
+    expect(retained.some((r) => r.targetId === scheduleId)).toBe(true);
+
+    const all = (
+      await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
+    ).data;
+    expect(all.some((r) => r.targetId === scheduleId)).toBe(true);
   });
 });
 

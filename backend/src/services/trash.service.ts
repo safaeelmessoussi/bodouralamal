@@ -102,6 +102,9 @@ interface ChildWhereByModel {
   sessionStaff: Prisma.SessionStaffWhereInput;
   sessionContent: Prisma.SessionContentWhereInput;
   examStaff: Prisma.ExamStaffWhereInput;
+  // A schedule's staffing has no life of its own: R91 makes an assignment a row
+  // ON the schedule, so it is destroyed with one and never independently.
+  courseScheduleStaff: Prisma.CourseScheduleStaffWhereInput;
 }
 
 type DeclaredChild = {
@@ -246,6 +249,29 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   },
   Room: { model: 'room' },
 
+  /**
+   * **A schedule that never became anything** (Owner decision, 2026-09-02).
+   *
+   * The contract was type-wide: every deleted schedule refused purge with
+   * `CASCADE_CHILDREN`, because destroying one *could* be destroying a
+   * timetable's history. The Owner has now split the two cases, and the split
+   * is a fact about the row rather than about the type:
+   *
+   * * **no `Session` was ever materialized** — the schedule is a plan nobody
+   *   ever taught. There is no history to protect, so it may be purged;
+   * * **any `Session` exists**, live or tombstoned, protected or not — the
+   *   materialized coordinates ARE the institutional record (R59), and the
+   *   schedule stays. `assertNoMaterializedHistory` refuses it by name.
+   *
+   * Its staffing rows are owned by it — `CourseScheduleStaff` has no life of
+   * its own — so they go with it. Sessions are never in this plan: their
+   * presence is what forbids the purge in the first place.
+   */
+  RecurringCourseSchedule: {
+    model: 'recurringCourseSchedule',
+    children: [{ model: 'courseScheduleStaff', fk: 'scheduleId' }],
+  },
+
   // The Level's curriculum mapping and calendar scope join go with it; its
   // groups, schedules and enrolments are records of their own and block.
   Level: {
@@ -368,6 +394,28 @@ const BLOCKING_ENTITY: Record<string, string> = {
   event_scheduling_type_id_fkey: 'Event',
 };
 
+/**
+ * **Which Trash rows are purgeable only under a condition** (Owner, 2026-09-02).
+ *
+ * Everything else is decided by the presence of a plan, which is a fact about
+ * the TYPE. A schedule is the first entity whose answer is a fact about the
+ * ROW — it may be destroyed exactly when it never materialized a Session — so
+ * the condition lives here, is asked once per row by `listTrash`, and is asked
+ * again inside the purge transaction where it is authoritative.
+ */
+const CONDITIONAL_PURGE: Record<
+  string,
+  { reason: string; purgeable: (db: PrismaClient, targetId: string) => Promise<boolean> }
+> = {
+  RecurringCourseSchedule: {
+    reason: 'MATERIALIZED_HISTORY',
+    // `deletedAt` is deliberately NOT filtered: a tombstoned occurrence is still
+    // a coordinate the institution recorded, and R59 keeps it.
+    purgeable: async (db, targetId) =>
+      (await db.session.count({ where: { scheduleId: targetId } })) === 0,
+  },
+};
+
 /** Why a type cannot be purged. Stable codes: a screen renders them. */
 const PURGE_BLOCKED_REASON: Record<string, string> = {
   // Destroying a person takes the audit trail that says what they did — the one
@@ -441,6 +489,15 @@ export interface TrashFilters extends PageParams {
   from?: Date;
   to?: Date;
   q?: string;
+  /**
+   * Which side of the Trash to read (Owner, 2026-09-02).
+   *
+   * `actionable` — the default — is what the Trash is for: rows a restore or a
+   * purge can actually be performed on. `retained` is the history kept because
+   * something references it, shown so it is reachable rather than hidden. `all`
+   * is both. The stored rows are identical in every case.
+   */
+  view?: 'actionable' | 'retained' | 'all';
 }
 
 /**
@@ -500,7 +557,9 @@ export async function listTrash(
     prisma.trash.count({ where }),
   ]);
 
-  const mapped = rows.map((row) => {
+  // `Promise.all` because purgeability is now a per-row question for the types
+  // that have a condition — one bounded count per such row, on a page of 25.
+  const mapped = await Promise.all(rows.map(async (row) => {
     const restorePlan = RESTORABLE[row.targetEntity];
     const completeRestoreSnapshot =
       restorePlan?.children?.every(
@@ -509,7 +568,18 @@ export async function listTrash(
           hasValidSnapshotIds(row.snapshot, child.snapshotIdsKey),
       ) ?? true;
     const restorable = restorePlan !== undefined && completeRestoreSnapshot;
-    const purgeable = PURGEABLE[row.targetEntity] !== undefined;
+    const conditional = CONDITIONAL_PURGE[row.targetEntity];
+    /**
+     * **Purgeability is a fact about the ROW where a condition exists.**
+     *
+     * Offering a purge that can never succeed is what made the Trash
+     * misleading; refusing one that would succeed would be worse. So the
+     * condition is asked here, per row, and the same predicate decides again
+     * inside the purge transaction.
+     */
+    const purgeable =
+      PURGEABLE[row.targetEntity] !== undefined &&
+      (conditional === undefined || (await conditional.purgeable(prisma, row.targetId)));
     return {
       id: row.id,
       targetEntity: row.targetEntity,
@@ -528,9 +598,11 @@ export async function listTrash(
       purgeable,
       purgeBlockedReason: purgeable
         ? null
-        : (PURGE_BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
+        : PURGEABLE[row.targetEntity] !== undefined && conditional !== undefined
+          ? conditional.reason
+          : (PURGE_BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
     };
-  });
+  }));
 
   // **Search is applied to the LABEL, after the page is read.** The label lives
   // inside a JSONB snapshot under a key that differs per entity, so a SQL
@@ -539,13 +611,37 @@ export async function listTrash(
   // honest — and the entity and date filters above, which do run in SQL, are the
   // ones that make the page small enough for that to be true.
   const needle = filters.q?.trim().toLowerCase();
-  const data = needle
+  const searched = needle
     ? mapped.filter(
         (r) =>
           r.label?.toLowerCase().includes(needle) ||
           r.targetEntity.toLowerCase().includes(needle),
       )
     : mapped;
+
+  /**
+   * **Retained history is not an actionable Trash item** (Owner, 2026-09-02).
+   *
+   * A row that can be neither restored nor purged is not waiting for a decision
+   * — it is being kept, because a Session, an audit row or consent evidence
+   * references it and R59 says those stay. Listing it beside genuinely
+   * disposable records offered an administrator two buttons that could never
+   * work, which is what made the Trash misleading.
+   *
+   * **The row is not moved, hidden or altered.** Referential and historical
+   * integrity are untouched; this is a lens over the same table, defaulting to
+   * the items an action actually exists for. `retained` shows the other side
+   * and `all` shows both, so nothing becomes unreachable.
+   *
+   * Applied after the page is read, exactly as the label search above is and
+   * for the same reason: purgeability is a per-row question that no single SQL
+   * predicate expresses across every entity type.
+   */
+  const view = filters.view ?? 'actionable';
+  const data =
+    view === 'all'
+      ? searched
+      : searched.filter((r) => (view === 'retained' ? !r.restorable && !r.purgeable : r.restorable || r.purgeable));
 
   return page(data, window, total);
 }
@@ -751,6 +847,20 @@ export async function purgeEntry(
   if (!plan) {
     throw new AppError('STATE_CONFLICT', 'destroying this entity type is not supported', {
       reason: PURGE_BLOCKED_REASON[entry.targetEntity] ?? 'NOT_YET_SUPPORTED',
+      target_entity: entry.targetEntity,
+    });
+  }
+
+  /**
+   * **Re-asserted here, where it is authoritative.** The list's answer is a
+   * read taken earlier; between the two, a materialization job may have given
+   * this schedule its first occurrence. R59 keeps that coordinate, so the purge
+   * must see it.
+   */
+  const conditional = CONDITIONAL_PURGE[entry.targetEntity];
+  if (conditional !== undefined && !(await conditional.purgeable(prisma, entry.targetId))) {
+    throw new AppError('STATE_CONFLICT', 'this record carries history that must be kept', {
+      reason: conditional.reason,
       target_entity: entry.targetEntity,
     });
   }
