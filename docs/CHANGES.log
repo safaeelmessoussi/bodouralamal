@@ -2058,3 +2058,79 @@ authoritative requirement gives it another position, so this task does not reord
 
 The whole Production seed drill now exits **0** (12/12 in the seed file, then 318 and 175 in
 the downstream suites), where it had been red on these two assertions.
+
+## Manual-UAT batch — 2026-09-02
+
+Seven findings from Localhost UAT against `d57bedb5`. The lifecycle architecture and its
+R59 retention rules are unchanged; so are R115/R116/R117.
+
+### 1 · Trash purge refusals — correct, but unactionable
+
+The three reported failures are **not** FK defects and none was bypassed:
+
+- **Level** — blocked by `LevelSubject` rows that are themselves soft-deleted but whose
+  ownership the parent's snapshot does not record. These entries predate the exact-id
+  snapshots, so purge deliberately deletes no guessed child and lets PostgreSQL refuse. That
+  is the audit's `INCOMPLETE_SNAPSHOT` behaviour working.
+- **Category** — blocked by a `Level` that is itself in Trash. Ordered purge: the Level goes
+  first. It cannot, for the reason above, so the Category is transitively stuck.
+- **AdministrativeGroup** — blocked by a soft-deleted `RecurringCourseSchedule` **that never
+  materialized a Session**. This is **outstanding Owner decision 1** in
+  `audit-2026-09-01-trash-lifecycle.md` and is NOT decided here.
+
+What was genuinely wrong is that the refusal said only *«something still references this
+record»*. The server now translates the constraint PostgreSQL actually returned into a domain
+blocker and the screen names it in Arabic with the next action. This is a translation of an
+answer already given — not the predictive blocker list the module rules out — and an unmapped
+constraint keeps the old sentence, so it can become less helpful but never wrong. The raw
+constraint stays in the envelope and never reaches a screen (rule M).
+
+### 2 · الجدول الزمني filters
+
+`/calendar`'s parameter builder set three filters and **dropped `type` and `subject_id`**,
+which the page computed and the server accepts. The page never read `subjectId` at all, so it
+was missing from the effect's dependencies too. `/me/calendar`'s builder had the mirror fault
+— four parameters set twice. Two hand-maintained copies of one list caused both; there is now
+one builder.
+
+### 3 · مكتبة المحتوى editing
+
+New `PATCH /content/{id}` for title, Level, Subject and visibility. `.strict()`, so a request
+carrying a filename or key is refused rather than appearing to have replaced an object.
+**B-02 shapes the visibility half**: `private` and `hidden` share the private bucket and swap
+a column, while any change crossing `public` copies → verifies → commits → deletes the source.
+Skipping the move would leave a row claiming to be private with its bytes still anonymously
+reachable. Consent still wins (`CONSENT_FORCED_PRIVATE`). No notification, per R116(9).
+
+### 4 · Level description
+
+The edit form collected `الوصف`, the adapter carried it, the API accepted it — the page's
+`save()` named only `name` and `gender_restriction`. Every edit sent a payload without the
+field and reported success over a server that changed nothing.
+
+### 5 · Monday first
+
+Already correct: one constant, one computation, one grid consumer, and `weekdaysShort`
+beginning with الاثنين. Pinned by regression, including the Sunday-start month that reads 0
+under a Sunday-first grid and 6 under this one. **Native `<input type="date">` popups follow
+the browser's locale and cannot be configured from the page** — see `DateField`'s own
+docstring on why the native control is kept.
+
+### 6 · Event dates — NOT REPRODUCIBLE
+
+Traced end to end and measured at every layer: form → payload → `PATCH /events/{id}` 200 →
+database row → `expandEvent` projection → `/calendar` → the rendered الجدول الزمني page. A
+weekly activity edited to 14 Sept / 9 Nov produced exactly nine occurrences and the page
+showed them; a `none` activity moved to 7 Sept showed on 7 Sept. Nothing was changed, because
+nothing was found wrong. The probe did show that a **«إشعار المعنيين» dialog opens after a
+successful save** (R82/R83's optional announcement), which is the most plausible thing to have
+read as *«it saved but nothing happened»*.
+
+### 7 · Recurrence default
+
+`مرة واحدة` is now the creation default — **for the kinds that can be it**. `allowsOnce` is
+false for a class because *the database refuses that recurrence on a schedule*, so defaulting
+blindly put the form state out of step with its own control. The default is also re-derived
+when the kind changes, since the kind is chosen after the form opens; that also closes a
+latent fault in the other direction, where switching activity → class left a value the server
+would reject.

@@ -183,9 +183,27 @@ function iso(d: Date): string {
  * and a default that disagrees with its own baseline reports the form dirty on
  * open (rule AY.1).
  */
-function initialRecurrenceType(item: SchedulingItem | null): RecurrenceValue['type'] {
-  if (item === null) return 'none';
-  return item.recurrence ?? (item.type === 'activity' || item.type === 'holiday' ? 'none' : 'weekly');
+function initialRecurrenceType(
+  item: SchedulingItem | null,
+  kind: SchedulingType,
+): RecurrenceValue['type'] {
+  if (item !== null) {
+    return item.recurrence ?? (item.type === 'activity' || item.type === 'holiday' ? 'none' : 'weekly');
+  }
+  /**
+   * **Only where `مرة واحدة` is actually offered.**
+   *
+   * `allowsOnce` is `false` for a class, and not as a UI preference: *"the
+   * database refuses `none` on a schedule — a non-recurring occurrence is an
+   * Event, not a class that happens once"*. Defaulting to it there put the form
+   * state out of step with its own control, which rendered `يومياً` while the
+   * state said `none` — a mismatch that would have reached the server as a
+   * value it refuses.
+   *
+   * So the creation default is `once` for every kind that can BE once, and the
+   * previous `weekly` for the one that cannot.
+   */
+  return specOfKind(kind).allowsOnce ? 'none' : 'weekly';
 }
 
 export function SchedulingPage(): ReactNode {
@@ -859,11 +877,36 @@ export function SchedulingDialog({
   const [endTime, setEndTime] = useState(item?.endTime ?? '10:00');
   const [endDate, setEndDate] = useState(item?.endDate ?? '');
   const [recurrence, setRecurrence] = useState<RecurrenceValue>({
-    type: initialRecurrenceType(item),
+    type: initialRecurrenceType(item, type),
     weekdays: item?.weekdays ?? [],
     startDate: item?.startDate ?? '',
     endDate: item?.repeatUntil ?? '',
   });
+
+  /**
+   * **The creation default follows the kind, because the kind is chosen after
+   * the form opens** (Owner, 2026-09-02).
+   *
+   * The state is seeded once, from whichever kind the dialog opened on, so
+   * switching to حفل afterwards left the previous kind's default in place and
+   * the new item was still pre-set to repeat.
+   *
+   * It also closes a latent fault in the other direction. `once` is offered
+   * only where `allowsOnce` is true — the database refuses that recurrence on a
+   * schedule — so switching activity → class used to leave the state on a value
+   * the control no longer displayed and the server would reject.
+   *
+   * **Creation only.** An existing item answers with its stored recurrence and
+   * is never rewritten by opening its form; `item` is fixed for the life of the
+   * dialog, so this cannot fire for an edit.
+   */
+  useEffect(() => {
+    if (item !== null) return;
+    setRecurrence((current) => {
+      const next = initialRecurrenceType(null, type);
+      return current.type === next ? current : { ...current, type: next, weekdays: [] };
+    });
+  }, [item, type]);
 
   /**
    * **The mode is the ROW's, not a default** (2026-08-18).
@@ -1014,7 +1057,7 @@ export function SchedulingDialog({
     endTime: item?.endTime ?? '10:00',
     endDate: item?.endDate ?? '',
     recurrence: {
-      type: initialRecurrenceType(item),
+      type: initialRecurrenceType(item, type),
       weekdays: item?.weekdays ?? [],
       startDate: item?.startDate ?? '',
       endDate: item?.repeatUntil ?? '',
