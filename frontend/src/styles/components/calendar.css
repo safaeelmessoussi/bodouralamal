@@ -25,6 +25,19 @@
   margin-inline: auto;
 }
 
+.cal-page {
+  padding-block-start: clamp(2rem, 5vw, 4rem);
+}
+
+.cal-page__head {
+  margin-block-end: var(--space-6);
+}
+
+.cal-grid:focus-within {
+  outline: 3px solid var(--color-primary-emphasis);
+  outline-offset: 4px;
+}
+
 /* The page's reading order, top to bottom: what month → how to move → what to
    filter → the grid. Generous vertical rhythm between the three, so each reads
    as its own step rather than one dense control block. */
@@ -199,7 +212,7 @@
   outline-offset: -2px;
 }
 
-/* ── Filters ─────────────────────────────────────────────────────────────── */
+/* ── Filters ──────────────────────────��──────────────────────────────────── */
 
 .cal-toolbar {
   display: flex;

@@ -7,7 +7,26 @@
   overflow: hidden;
   background: var(--color-primary-strong);
   color: var(--color-on-primary);
-  padding-block: clamp(3.5rem, 11vw, 7.5rem);
+  padding-block: clamp(2.75rem, 7vw, 5.5rem);
+}
+
+.hero__inner > div:first-child {
+  max-inline-size: 38rem;
+}
+
+.hero__title {
+  max-inline-size: 16ch;
+  text-wrap: balance;
+}
+
+.hero__lede {
+  line-height: 1.8;
+}
+
+@media (min-width: 56rem) {
+  .hero__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.7fr);
+  }
 }
 
 /*

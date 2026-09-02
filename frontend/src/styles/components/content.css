@@ -13,7 +13,28 @@
   display: grid;
   gap: var(--space-3);
   justify-items: start;
-  margin-block-end: var(--space-10);
+  max-inline-size: 48rem;
+  margin-block-end: var(--space-8);
+}
+
+.content-page__title {
+  text-wrap: balance;
+}
+
+.content-group__title,
+.content-year__title {
+  text-wrap: balance;
+}
+
+.level-card,
+.content-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.level-card:focus-visible,
+.content-card:focus-visible {
+  outline: 3px solid var(--color-primary-emphasis);
+  outline-offset: 3px;
 }
 .content-page__title {
   font-size: var(--font-size-lg);

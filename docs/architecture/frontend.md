@@ -112,6 +112,15 @@ A mock adapter is **not** licence to invent a contract. It is a placeholder behi
 and the endpoints it anticipates still require a Document Owner revision before they are
 built (§20 rule 16).
 
+## Public surface presentation
+
+The public landing page, calendar and educational library share one restrained presentation
+system: semantic green/brass tokens, a consistent container rhythm, rounded controls, and
+responsive hierarchy tuned for Arabic RTL. Cards and list rows use elevation only to clarify
+interaction, while the calendar retains its wide timetable treatment and the library keeps its
+Category → Level → Academic Year → Branch drill-down. This is presentation-only; adapters,
+server-owned visibility, routes, filters and public states remain unchanged.
+
 It carries one rule with security weight: **the frontend type for a calendar occurrence does
 not carry the raw name fields at all.** The backend resolves which name is public and sends
 `display_name`; the adapter's type has no other option to choose from.

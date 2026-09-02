@@ -16,6 +16,7 @@
 }
 
 .card {
+  position: relative;
   padding: clamp(1.25rem, 3vw, 1.75rem);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
@@ -23,6 +24,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.card:hover {
+  border-color: var(--color-primary-emphasis);
+  box-shadow: var(--shadow-md);
+}
+
+.card__title,
+.step__title {
+  text-wrap: balance;
+}
+
+.step {
+  padding-inline-start: var(--space-3);
 }
 .card__icon {
   display: grid;

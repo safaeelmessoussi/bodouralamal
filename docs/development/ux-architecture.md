@@ -428,6 +428,14 @@ frequent clutter, and they imply hierarchies §14.1 does not define — the remo
 
 Breadcrumbs are for **genuine hierarchy**, never for duplicate navigation.
 
+## K · Public page composition
+
+The public landing page, calendar and educational library share one visual rhythm rather than
+three separate page identities. The landing page is a compact welcome and entry point; the
+calendar prioritises month scanning and filter grouping; the library prioritises drill-down
+orientation and item action. These are composition decisions only: real content, server-owned
+states, permissions, filters and routes remain authoritative.
+
 **Distinguish two things that look alike:**
 
 * A **duplicate path** — a link to a sibling menu node. Remove it.
