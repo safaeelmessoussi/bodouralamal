@@ -18,6 +18,12 @@ export interface ChildApplicationResult {
 
 export async function submitChildApplications(
   children: ChildInput[],
+  /**
+   * **R119 — the id of the wording this form displayed.** The server refuses a
+   * version no longer in force, so a Super Admin activating new wording while
+   * the form is open cannot turn *displayed X* into *recorded Y*.
+   */
+  consentTextId: string,
   token: string | null,
 ): Promise<ChildApplicationResult> {
   return api<ChildApplicationResult>('/child-applications', {
@@ -25,7 +31,7 @@ export async function submitChildApplications(
     token,
     // §4.1a — a refusal cannot reach this endpoint: the server's schema types
     // the field as the literal `true`, so the form gates on it instead.
-    body: { children, consent_data_processing: true },
+    body: { children, consent_data_processing: true, consent_text_id: consentTextId },
   });
 }
 

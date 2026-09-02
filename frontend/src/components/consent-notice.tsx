@@ -26,30 +26,65 @@ import { Dialog } from './ui/dialog.js';
  *
  * The copy is deliberately plain Arabic rather than legal language: an
  * explanation nobody can read is not an explanation.
+ *
+ * ## R119 — the wording is DATA, the explanation is interface
+ *
+ * `text` is the exact stored `LegalConsentText` this form is about to record,
+ * fetched with its id from `GET /registration/consent-text`. It is rendered
+ * **verbatim and never composed with**: the old version built the sentence from
+ * three i18n keys with the statute's name as an inline button in the middle,
+ * which cannot survive the wording becoming a single stored string — and
+ * templating around legal text is how a notice ends up saying something nobody
+ * approved.
+ *
+ * So the statute explanation moved **below** the checkbox, as its own link. The
+ * boundary this draws is the one the Owner asked for: what a person **agrees
+ * to** comes from the versioned record; the headings, the link, the dialog's
+ * plain-language explanation of Law 09-08 and the buttons stay in `i18n`,
+ * because they are interface, not the statement being accepted.
+ *
+ * `text === null` is **fail-closed**: no wording in force, or the read failed.
+ * The checkbox is not rendered at all, because a tick against nothing is not a
+ * consent — and offering one would let a person believe they had agreed to
+ * something.
  */
 export function ConsentNotice({
   checked,
   onChange,
   error,
+  text,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   error?: string | null;
+  /** The exact stored wording; `null` while unavailable — see the docstring. */
+  text: string | null;
 }): ReactNode {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <label className="check">
-        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <span>
-          {t('register.consentDataProcessingPrefix')}{' '}
-          <button type="button" className="link-button" onClick={() => setOpen(true)}>
-            {t('register.consentLawName')}
-          </button>
-          {t('register.consentDataProcessingSuffix')}
-        </span>
-      </label>
+      {text === null ? (
+        // Rule AH — a page-level condition, in place of the content it replaces.
+        <p className="field__error" role="alert">
+          {t('register.consentVersionMissing')}
+        </p>
+      ) : (
+        <label className="check">
+          <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+          {/* `white-space: pre-line` so the stored wording's own paragraph
+              breaks survive: they are part of what was approved. */}
+          <span className="consent-notice__text">{text}</span>
+        </label>
+      )}
+
+      {/* Interface, not the statement agreed to — so it stays in `i18n` and
+          sits BESIDE the wording rather than inside it. */}
+      <p className="consent-notice__law">
+        <button type="button" className="link-button" onClick={() => setOpen(true)}>
+          {t('register.consentLawExplain')}
+        </button>
+      </p>
 
       {error ? (
         <p className="field__error" role="alert">

@@ -7,13 +7,14 @@ import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { actorFor } from '../test-support/actor.js';
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 import { resolveLogin } from './auth.service.js';
-import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
+import { register } from './registration.service.js';
 import { preProvision } from './user.service.js';
 
 /**
@@ -30,7 +31,7 @@ const TAG = '[email-owner-test]';
 const ADMIN_TAG = '[email-owner-admin]';
 const TEXT_VERSION = 'email-owner-test-v1';
 
-let savedConsentVersion: SavedConsentVersion;
+let consentText: InstalledConsentText | null = null;
 let adminId = '';
 let branchId = '';
 let categoryId = '';
@@ -73,7 +74,7 @@ function adultInput(): RegistrationInput {
     },
     branch_id: branchId,
     category_id: categoryId,
-    consents: { data_processing: true },
+    consents: { data_processing: true, consent_text_id: consentText!.id },
   };
 }
 
@@ -117,12 +118,10 @@ async function clearOwnedRows(): Promise<void> {
 }
 
 beforeAll(async () => {
-  savedConsentVersion = await captureConsentVersion(prisma);
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: TEXT_VERSION },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
-  });
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, TEXT_VERSION);
   // **Super Admin since 2026-08-28**: pre-provisioning is account
   // administration, and this suite uses it only as a fixture step — the
   // properties it asserts are about email ownership, not about who may staff.
@@ -143,15 +142,34 @@ beforeAll(async () => {
 beforeEach(clearOwnedRows);
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
-  await clearOwnedRows();
-  await prisma.auditLog.deleteMany({ where: { actorUserId: adminId } });
-  await prisma.userBranchRole.deleteMany({ where: { userId: adminId } });
-  await prisma.user.delete({ where: { id: adminId } });
-  await prisma.branch.delete({ where: { id: branchId } });
-  await prisma.category.delete({ where: { id: categoryId } });
-  await restoreConsentVersion(prisma, savedConsentVersion);
-  await prisma.$disconnect();
+  /**
+   * **THE B10 LEAK, and its fix.**
+   *
+   * The restore used to be the LAST statement here, after five deletes — so any
+   * one of them throwing skipped it, and this suite's scratch consent version
+   * was left in the shared development database. That is exactly the shape the
+   * consent-version helper was written to prevent, defeated by ordering.
+   *
+   * It runs FIRST now, and the fixture teardown runs in a `finally`: whichever
+   * fails, the installation gets back the wording it had, so the developer's
+   * registration form still works after this file has run.
+   */
+  try {
+    await removeTestConsentText(prisma, consentText);
+  } finally {
+    await clearOwnedRows();
+    await prisma.auditLog.deleteMany({ where: { actorUserId: adminId } });
+    await prisma.userBranchRole.deleteMany({ where: { userId: adminId } });
+    await prisma.user.delete({ where: { id: adminId } });
+    await prisma.branch.delete({ where: { id: branchId } });
+    await prisma.category.delete({ where: { id: categoryId } });
+    // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+    // row is only free to go once this suite's own consent records have gone.
+    await deleteTestConsentText(prisma, consentText);
+    await prisma.$disconnect();
+  }
 });
+
 
 describe('normalized-email ownership serialization', () => {
   it('staff winning after onboarding issuance refuses stale registration and binds the intended account', async () => {

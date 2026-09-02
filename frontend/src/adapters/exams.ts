@@ -46,6 +46,8 @@ export interface Exam {
   level_name: string | null;
   subject_id: string | null;
   subject_name: string | null;
+  /** R110 — the catalogue row, `null` on a pre-catalogue row. */
+  scheduling_type_id: string | null;
   academic_year_id: string | null;
   branch_id: string | null;
   branch_name: string | null;
@@ -70,6 +72,16 @@ export interface ExamInput {
    *  `CourseScheduleInput.visibility` records. */
   visibility?: string;
   date: string;
+  /**
+   * **R110 (Owner, 2026-09-02) — which catalogue row this is.**
+   *
+   * Declared rather than merely spread, for the reason `visibility` records:
+   * a key absent from this interface travels unchecked.
+   *
+   * Omitted leaves it alone; `null` clears it. A row created before the
+   * catalogue carries none, and none was guessed for it.
+   */
+  scheduling_type_id?: string | null;
   start_time: string;
   end_time: string;
   level_id: string;

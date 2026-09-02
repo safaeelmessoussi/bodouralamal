@@ -252,9 +252,20 @@ describe('a type routes to one entity, and the server holds the line', () => {
     // Not a UI concern: a forged body naming the class type must be refused by
     // the server, or the row would be an Event the catalogue calls a class —
     // two answers to *what is this*, which is what storing the kind prevents.
-    await expect(makeActivity('نشاط مزيّف', classType.id)).rejects.toThrow(
-      /not delivered as an activity/,
-    );
+    /**
+     * **Asserted on the CODED reason, not the prose** (2026-09-02).
+     *
+     * This pinned the message *«not delivered as an activity»*, and R119
+     * generalised the rule into `assertTypeOfKind` so a schedule and a sitting
+     * could be validated by the same code rather than a second copy — at which
+     * point the message became kind-agnostic. **The property was never the
+     * wording**: it is that the mismatch is refused with a reason a client can
+     * branch on, and that is what this now says.
+     */
+    await expect(makeActivity('نشاط مزيّف', classType.id)).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { reason: 'STRUCTURAL_KIND_MISMATCH', structural_kind: 'class' },
+    });
   });
 
   it('refuses a type id that names nothing live', async () => {

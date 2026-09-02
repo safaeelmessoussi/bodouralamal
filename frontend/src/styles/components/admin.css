@@ -469,6 +469,36 @@
   justify-content: start;
 }
 
+/* One stored legal consent wording (R119).
+
+   `white-space: pre-line` is the load-bearing declaration: the paragraph breaks
+   in `body_arabic` are part of the wording somebody approved, and collapsing
+   them would display a different notice from the one on record.
+
+   `max-width` is set HERE and not inherited: `p { max-width: var(--measure) }`
+   reaches every paragraph in the application (rule AK), and legal wording is
+   prose, so the measure is right for it — but it must be stated rather than
+   borrowed, since the surrounding card is narrower than the global measure. */
+.consent-version {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted, transparent);
+}
+.consent-version__heading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+.consent-version__body {
+  margin: 0;
+  max-width: 100%;
+  white-space: pre-line;
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+}
+
 /* The teaching-structure overview (حلقات المواد). An accordion rather than two
    dropdowns: a management page shows the data it manages, and a filter narrows
    what is visible rather than being the precondition for anything appearing. */

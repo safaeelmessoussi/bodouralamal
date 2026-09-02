@@ -6,6 +6,7 @@ import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { submitChildApplications } from './child-application.service.js';
+import { resolvePresentedConsentText } from './legal-consent-text.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 import {
   approvalReviewRecipients,
@@ -43,16 +44,24 @@ import {
  */
 
 /**
- * The `SystemSetting` key holding the currently-active consent text version
- * (TD-13: "legal/consent text versions").
+ * **`legal.consent_text_version` is retired** (Owner, 2026-09-02).
  *
- * It is deliberately **not seeded** by §15.1: §2.3 makes legally verifying and
- * versioning the Arabic consent text an owner compliance task, and inventing a
- * version string would mean recording that someone agreed to text nobody has
- * approved. Registration therefore fails closed until the owner sets it.
+ * It was a `SystemSetting` string an administrator typed, with no technical
+ * relationship to the Arabic wording — which lived in the frontend's i18n
+ * catalogue — so the two could drift in either direction and a `ConsentRecord`
+ * could not be resolved back to the words it was recorded against.
+ *
+ * The authority is now `LegalConsentText` (`services/legal-consent-text.service.ts`),
+ * and there is exactly one of it: this module no longer reads a setting, and
+ * `WRITABLE_SETTINGS` no longer offers one, so the two cannot disagree. **The
+ * existing setting row is left in the database untouched** — it is the only
+ * record of which label was last in force before the cutover — but nothing
+ * reads or writes it, so it cannot drift.
+ *
+ * The fail-closed behaviour is unchanged and deliberately so: with no active
+ * version, registration answers `503` / `CONSENT_TEXT_VERSION_NOT_CONFIGURED`
+ * exactly as before. See `activeConsentText`.
  */
-export const CONSENT_TEXT_VERSION_KEY = 'legal.consent_text_version';
-
 
 export interface RegistrationResult {
   applicantId: string;
@@ -61,34 +70,6 @@ export interface RegistrationResult {
   accountStatus: 'pending';
 }
 
-export async function activeConsentTextVersion(
-  tx: Pick<PrismaClient, 'systemSetting'>,
-): Promise<string> {
-  const setting = await tx.systemSetting.findUnique({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-  });
-  const value = setting?.value;
-  if (typeof value !== 'string' || value.trim() === '') {
-    // §4.1a requires the exact text version agreed to be stored on every
-    // record. Without it we cannot honestly say what was consented to, so we
-    // refuse rather than write an unattributable consent.
-    // The `details` are deliberately populated: TD-3.8 defines `details` as
-    // "structured context for codes that carry it", and this is the one 503 a
-    // client can do something about. A bare "service unavailable" sent an
-    // operator hunting through logs for a missing configuration row — the exact
-    // failure this project hit while trying to test registration end to end.
-    //
-    // Safe to expose: a SystemSetting KEY is not a secret, it is already named
-    // in the SRS, and naming it is the difference between an actionable message
-    // and a mystery.
-    throw new AppError(
-      'SERVICE_UNAVAILABLE',
-      `${CONSENT_TEXT_VERSION_KEY} is not configured — see SRS §2.3 owner task`,
-      { reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED', setting: CONSENT_TEXT_VERSION_KEY },
-    );
-  }
-  return value;
-}
 
 /**
  * §4.1b step 5 + TD-4.1.
@@ -121,7 +102,17 @@ export async function register(
   // boundary schema enforces presence for every array element; there is no
   // request-level media decision to inspect here.
 
-  const textVersion = await activeConsentTextVersion(prisma);
+  /**
+   * **The wording this person was actually shown** (Owner, 2026-09-02).
+   *
+   * Resolved from the id the form submitted, checked against what is in force,
+   * and refused if they differ — see `resolvePresentedConsentText`. Reading
+   * *«whatever is active now»* here, as this did while the version was a
+   * `SystemSetting` string, is precisely the race that lets somebody be
+   * recorded as agreeing to a version they never read.
+   */
+  const consentText = await resolvePresentedConsentText(prisma, input.consents.consent_text_id);
+  const textVersion = consentText.versionLabel;
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -315,6 +306,8 @@ export async function register(
           granted: true,
           method: ConsentMethod.online_form,
           consentTextVersion: textVersion,
+          // The technical binding the string above never was.
+          consentTextId: consentText.id,
           grantedByUserId: applicant.id,
         },
       });
@@ -339,6 +332,7 @@ export async function register(
           // R62.3b — the version in force NOW. Approval must never substitute
           // the current value for the one this parent actually saw.
           consentTextVersion: textVersion,
+          consentTextId: consentText.id,
           children: input.children.map((c) => ({
             firstNameArabic: c.first_name_arabic,
             lastNameArabic: c.last_name_arabic,

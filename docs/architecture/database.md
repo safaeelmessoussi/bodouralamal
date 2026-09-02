@@ -249,6 +249,29 @@ recorded are different events with different remedies, and only the second is fi
 Consent is a **state-change history**, never overwritten. Effective status is always
 derived from the most recent record, and absence means no consent.
 
+**`LegalConsentText` is the wording each record was given against** (R119). It
+carries the exact Arabic text, a unique human-readable `version_label`, a
+SHA-256 digest, `draft | active | superseded`, and creation and activation
+provenance. Three properties are load-bearing:
+
+* **Immutable once in force.** A version that has ever been activated cannot be
+  edited; new wording is a new version. Enforced in the service, because *has
+  this been used* is a question about other tables that a CHECK cannot ask.
+* **Exactly one active version, enforced by the DATABASE** —
+  `legal_consent_text_one_active`, a partial unique index over
+  `status = 'active'`. A service-level check alone is a race, and this is the
+  invariant whose violation means somebody could be recorded as agreeing to
+  wording nobody put in force.
+* **Never deleted.** There is no delete verb, and both `consent_record` and
+  `child_application` reference it `ON DELETE RESTRICT`, so consent evidence
+  cannot lose the words it was given against.
+
+`consent_record.consent_text_id` is **nullable only for legacy**: rows written
+before R119 name a version whose wording was never stored, none was
+manufactured for them, and NULL states honestly that the wording is not
+resolvable. `consent_text_version` is retained beside the reference because it
+is what an export, an audit row and a compliance reader act on.
+
 `AuditLog.actor_user_id` is **nullable**, and a null means *system-initiated*, not
 *attribution lost*. Two mandated actions genuinely have no human actor: replay-detected
 session revocation (triggered by an unauthenticated request presenting a stolen secret) and
@@ -480,6 +503,8 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260901103000_r116_exam_changed_notification
 20260901110000_r117_registration_review_details
 20260901220000_partner_deletion_provenance
+20260902160000_scheduling_type_on_schedule_and_exam
+20260902180000_versioned_legal_consent_text
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

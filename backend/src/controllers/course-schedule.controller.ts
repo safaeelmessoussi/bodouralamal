@@ -66,6 +66,9 @@ export function create(prisma: PrismaClient) {
           ? { description: body.description }
           : {}),
         subjectId: body.subject_id,
+        ...(body.scheduling_type_id !== undefined
+          ? { schedulingTypeId: body.scheduling_type_id }
+          : {}),
         teachingMode: body.teaching_mode,
         targetId: body.target_id,
         branchId: body.branch_id,
@@ -127,6 +130,9 @@ export function update(prisma: PrismaClient) {
       idParam(req, "id"),
       {
         version: body.version,
+        ...(body.scheduling_type_id !== undefined
+          ? { schedulingTypeId: body.scheduling_type_id }
+          : {}),
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
         // R97 — delivery travels as sent; the service resolves the three
         // columns through `policies/delivery.ts`.

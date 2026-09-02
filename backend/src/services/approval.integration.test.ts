@@ -10,17 +10,18 @@ import {
   ownedOnboardingTokens,
 } from '../test-support/consumed-tokens.js';
 import { decide, listApprovals } from "./approval.service.js";
-import { CONSENT_TEXT_VERSION_KEY, register } from "./registration.service.js";
+import { register } from "./registration.service.js";
 import {
   clearPlacement,
   provisionPlacement,
   type Placement,
 } from "../test-support/placement.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 
 /**
  * Approval queue (SRS §5.6, TD-4.2, TD-12, TD-15.3) against the real database.
@@ -38,7 +39,7 @@ const issueOnboardingToken = suiteTokens.issue;
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = "[appr-test]";
 /**
@@ -123,7 +124,7 @@ async function submitBundle(
           requested_category_id: placement.categoryId,
         },
       ],
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     },
     KEY,
   );
@@ -207,13 +208,11 @@ let placement: Placement;
  */
 
 beforeEach(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  await clear();
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: "appr-test-v1" },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: "appr-test-v1" },
-  });
+    await clear();
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "appr-test-v1");
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } }))
     .id;
   otherBranchId = (
@@ -223,12 +222,17 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
@@ -508,7 +512,7 @@ describe("§5.6 / TD-4.2 approval queue", () => {
             consent_media_release: false,
           },
         ],
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );

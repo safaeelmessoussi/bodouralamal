@@ -26,6 +26,9 @@ import CALENDAR_PAGE_SOURCE from './calendar.tsx?raw';
  */
 const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   kind: 'session',
+  scheduling_type_id: null,
+  scheduling_type_name: null,
+  structural_kind: null,
   id: 'g1',
   title: 'حلقة تحفيظ',
   date: '2026-06-15',

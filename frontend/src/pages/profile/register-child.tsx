@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchBranches, type PublicBranch } from '../../adapters/branches.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../../adapters/calendar.js';
 import { submitChildApplications } from '../../adapters/child-applications.js';
+import { fetchActiveConsentText, type ActiveConsentText } from '../../adapters/registrations.js';
 import {
   ChildrenFieldset,
   EMPTY_CHILD,
@@ -18,7 +19,7 @@ import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
-import { ApiError } from '../../lib/api.js';
+import { consentFailure } from '../../lib/consent-failure.js';
 
 /**
  * `/profile/register-child` — **any account** registers a child (§14.1, R65).
@@ -65,6 +66,8 @@ export function RegisterChildPage(): ReactNode {
    *  requests here while the public form took them in one. */
   const [children, setChildren] = useState<ChildForm[]>([EMPTY_CHILD]);
   const [dataProcessing, setDataProcessing] = useState(false);
+  /** R119 — the exact wording and its id, in one response. See `/register`. */
+  const [consentText, setConsentText] = useState<ActiveConsentText | null>(null);
 
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [categories, setCategories] = useState<CategoryRef[]>([]);
@@ -100,8 +103,24 @@ export function RegisterChildPage(): ReactNode {
     void loadReference();
   }, [loadReference]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchActiveConsentText()
+      .then((row) => {
+        if (!cancelled) setConsentText(row);
+      })
+      .catch(() => {
+        if (!cancelled) setConsentText(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const errors = validate(children, dataProcessing);
-  const valid = Object.keys(errors).length === 0;
+  // Fail closed: with no wording in force there is nothing to agree to, so the
+  // submit is refused here as well as by the server.
+  const valid = Object.keys(errors).length === 0 && consentText !== null;
 
   async function submit(): Promise<void> {
     setTouched(true);
@@ -116,6 +135,7 @@ export function RegisterChildPage(): ReactNode {
         // R67 — `toChildInput` already carries each child's own branch and
         // stage; there is nothing request-level left to attach.
         children.map(toChildInput),
+        consentText!.id,
         accessToken,
       );
       setDone(true);
@@ -124,9 +144,7 @@ export function RegisterChildPage(): ReactNode {
       // version is a configuration gap an operator fixes in one step, and "try
       // again" would send the reader away from the only action that helps.
       setFailure(
-        error instanceof ApiError && error.details['reason'] === 'CONSENT_TEXT_VERSION_MISSING'
-          ? t('register.consentVersionMissing')
-          : t('child.registerFailed'),
+        consentFailure(error) ?? t('child.registerFailed'),
       );
     } finally {
       setBusy(false);
@@ -190,6 +208,7 @@ export function RegisterChildPage(): ReactNode {
               <fieldset className="register-form__group">
                 <legend>{t('register.consentLegend')}</legend>
                 <ConsentNotice
+                  text={consentText?.body_arabic ?? null}
                   checked={dataProcessing}
                   onChange={setDataProcessing}
                   error={touched ? (errors['dataProcessing'] ?? null) : null}

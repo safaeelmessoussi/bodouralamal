@@ -60,6 +60,11 @@ const ITEM_KEYS = [
   "level_id",
   "level_name",
   "mime_type",
+  /* R99.12 — «هذا تسجيل حصة». It joined the projection with the edit dialog
+     that seeds its control from it (2026-09-02) and this exact-key guard was
+     not updated with it, so the gate was red on develop before R119 touched
+     anything. It states what the file IS, never consent state. */
+  "origin",
   "size_bytes",
   "subject_id",
   "subject_name",

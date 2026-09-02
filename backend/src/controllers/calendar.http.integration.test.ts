@@ -413,8 +413,14 @@ const OCCURRENCE_KEYS = [
   "online_media_mode",
   "recurrence",
   "room_name",
+  // R119 — which catalogue row this is, and its structural kind. `kind` says
+  // `event` for both a نشاط and a عطلة; these are what tell them apart, and
+  // they are how a client marks a holiday without matching an Arabic name.
+  "scheduling_type_id",
+  "scheduling_type_name",
   "start_time",
   "status",
+  "structural_kind",
   "subject_id",
   "subject_name",
   "teaching_mode",

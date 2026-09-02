@@ -18,6 +18,11 @@ import { CalendarHeader } from './calendar-header.js';
 import { DayEventsDialog } from './day-events-dialog.js';
 import { EventDetailsDialog } from './event-details-dialog.js';
 import { OccurrenceTable, type OccurrenceColumn } from './occurrence-table.js';
+import {
+  schedulingTypeOptions,
+  schedulingTypeQuery,
+  withUnlistedValue,
+} from './scheduling-type-filter.js';
 import { viewFromUrl, type CalendarView } from './view-switch.js';
 
 /**
@@ -83,7 +88,8 @@ export function PersonalCalendar({
         ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
         ...(filters.value.groupId ? { groupId: filters.value.groupId } : {}),
         ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
-        ...(filters.value.type ? { kind: filters.value.type } : {}),
+        // R110 — a catalogue id or, from an older link, a storage word.
+        ...schedulingTypeQuery(filters.value.type ?? null),
       });
       setOccurrences(rows);
       setState('ready');
@@ -148,7 +154,10 @@ export function PersonalCalendar({
             filters={filters}
             categories={bootstrap?.categories ?? []}
             levels={bootstrap?.levels ?? []}
-            types={KINDS.map((k) => ({ value: k, label: t(`calendar.kind.${k}`) }))}
+            types={withUnlistedValue(
+              schedulingTypeOptions(bootstrap),
+              filters.value.type ?? null,
+            )}
           />
         }
       />
@@ -221,7 +230,6 @@ export function PersonalCalendar({
 }
 
 /** The occurrence kinds a reader can narrow by — the platform's own taxonomy. */
-const KINDS = ['session', 'event', 'exam'] as const;
 
 const startOfMonth = (d: Date): Date => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 const addMonths = (d: Date, n: number): Date =>

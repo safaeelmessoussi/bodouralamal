@@ -50,6 +50,31 @@ export interface CalendarBootstrap {
    * Admin-only for everything else it carries.
    */
   subjects: { id: string; name: string; displayOrder: number | null }[];
+  /**
+   * **The live SchedulingType catalogue the calendar's النوع filter offers**
+   * (R110, Owner 2026-09-02).
+   *
+   * It replaces a hard-coded session/event/exam list — the STORAGE taxonomy,
+   * which could not distinguish two types sharing one `structural_kind` and so
+   * made a عطلة unfilterable among ordinary activities.
+   *
+   * Public for the same reason `subjects` is: every occurrence the anonymous
+   * calendar returns already carries `scheduling_type_name`, so the list adds
+   * no fact a visitor could not read off the timetable — it saves reading a
+   * whole month to learn which types exist. `GET /admin/scheduling-types` stays
+   * Admin-only for everything else it carries (usage counts, ordering, the
+   * default flag).
+   *
+   * `structuralKind` travels so the client can present a عطلة differently
+   * without a second request, and **without hard-coding which name is a
+   * holiday** — names are the administration's to change.
+   */
+  schedulingTypes: {
+    id: string;
+    name: string;
+    structuralKind: string;
+    displayOrder: number;
+  }[];
 }
 
 /** Moroccan month names, matching how the interface reads (§6, Arabic-first). */
@@ -86,7 +111,7 @@ export async function calendarBootstrap(
   // resolution walks BACK to the month containing a date, so a day early in
   // `from`'s month belongs to a month that began before it.
   const margin = 40 * MS_PER_DAY;
-  const [monthStartRows, categories, levels, branches, subjects] = await Promise.all([
+  const [monthStartRows, categories, levels, branches, subjects, schedulingTypes] = await Promise.all([
     prisma.hijriMonthStart.findMany({
       where: {
         deletedAt: null,
@@ -117,6 +142,15 @@ export async function calendarBootstrap(
       where: { deletedAt: null },
       select: { id: true, name: true, displayOrder: true },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+    }),
+    /* Live types only. A retired type still resolves when a stored row names
+       it (the filter reads it by id), but it is not offered as a new choice. */
+    prisma.schedulingType.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, structuralKind: true, displayOrder: true },
+      /* `display_order` is NOT NULL here, unlike every other list above — the
+         catalogue is explicitly ordered by the administration (R110). */
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     }),
   ]);
 
@@ -169,5 +203,6 @@ export async function calendarBootstrap(
     levels,
     branches,
     subjects,
+    schedulingTypes,
   };
 }

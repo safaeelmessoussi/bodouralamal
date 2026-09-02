@@ -6,7 +6,7 @@ import { assertFreshActive } from '../policies/freshness.policy.js';
 import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueueConsentReevaluationForStudent } from './enrollment.service.js';
-import { activeConsentTextVersion } from './registration.service.js';
+import { activeConsentText } from './legal-consent-text.service.js';
 
 /**
  * Staff-recorded consent (SRS §4.1a, BR-1, TD-2, TD-8, TD-12).
@@ -118,11 +118,21 @@ export async function recordStaffConsent(
   const actor = await assertFreshActive(prisma, caller.userId, CONSENT_ROLES, caller.activeRole);
   await assertCanAccessStudent(prisma, actor, studentId);
 
-  // §2.3/§4.1a: the versioned text is what the family agreed to. Without a
-  // configured version there is nothing to record agreement *against*, so this
-  // fails closed exactly as registration does. The SAME helper is used, so the
-  // two capture paths can never disagree about which wording is active.
-  const textVersion = await activeConsentTextVersion(prisma);
+  /**
+   * §2.3/§4.1a: the versioned text is what the family agreed to. Without an
+   * active version there is nothing to record agreement *against*, so this
+   * fails closed exactly as registration does. The SAME helper is used, so the
+   * two capture paths can never disagree about which wording is in force.
+   *
+   * **No presented-id check here, unlike registration** (Owner, 2026-09-02),
+   * and the asymmetry is the domain speaking: a staff-recorded consent is a
+   * member of staff writing down a decision a family has already communicated —
+   * there is no rendered form whose wording could have gone stale between
+   * drawing and submitting. What must be recorded is the wording in force when
+   * the decision was entered, and that is exactly what this reads.
+   */
+  const consentText = await activeConsentText(prisma);
+  const textVersion = consentText.versionLabel;
 
   return prisma.$transaction(async (tx) => {
     const student = await tx.user.findFirst({
@@ -140,6 +150,7 @@ export async function recordStaffConsent(
         granted: decision.granted,
         method: ConsentMethod.staff_recorded,
         consentTextVersion: textVersion,
+        consentTextId: consentText.id,
         grantedByUserId: actor.userId,
         ...(decision.granted ? {} : { revokedAt: new Date(), revokedByUserId: actor.userId }),
       },

@@ -319,15 +319,39 @@ export async function reorderSchedulingTypes(
  *   is a class — two answers to *what is this*, which is exactly what storing
  *   the kind was meant to prevent.
  */
-export async function assertActivityType(
+/**
+ * **Resolves the type a row of a KNOWN structural kind is being written with.**
+ *
+ * `assertActivityType` was this, specialized to the one entity that could
+ * record a type. R110's catalogue is now recorded by a schedule and a sitting
+ * too (Owner, 2026-09-02), and each has the same two refusals against a
+ * different set of admissible kinds, so the rule is stated once here rather
+ * than copied per entity — the R57 shape this project has already paid for
+ * twice.
+ */
+export async function assertTypeOfKind<K extends SchedulingStructuralKind>(
   tx: { schedulingType: PrismaClient['schedulingType'] },
   schedulingTypeId: string,
-): Promise<'activity' | 'holiday'> {
+  kinds: readonly K[],
+): Promise<K> {
   const type = await tx.schedulingType.findFirst({
     where: { id: schedulingTypeId, deletedAt: null },
     select: { structuralKind: true },
   });
   if (!type) throw new AppError('NOT_FOUND', 'no such scheduling type');
+  if (!(kinds as readonly SchedulingStructuralKind[]).includes(type.structuralKind)) {
+    throw new AppError('VALIDATION_FAILED', 'that type is not delivered as this kind', {
+      reason: 'STRUCTURAL_KIND_MISMATCH',
+      structural_kind: type.structuralKind,
+    });
+  }
+  return type.structuralKind as K;
+}
+
+export async function assertActivityType(
+  tx: { schedulingType: PrismaClient['schedulingType'] },
+  schedulingTypeId: string,
+): Promise<'activity' | 'holiday'> {
   /**
    * **Two kinds are stored as an `Event`, and they are not the same thing.**
    *
@@ -337,11 +361,5 @@ export async function assertActivityType(
    * it can enforce the difference rather than accept an activity-shaped record
    * with the extra fields left empty by convention.
    */
-  if (type.structuralKind !== 'activity' && type.structuralKind !== 'holiday') {
-    throw new AppError('VALIDATION_FAILED', 'that type is not delivered as an activity', {
-      reason: 'STRUCTURAL_KIND_MISMATCH',
-      structural_kind: type.structuralKind,
-    });
-  }
-  return type.structuralKind;
+  return assertTypeOfKind(tx, schedulingTypeId, ['activity', 'holiday'] as const);
 }

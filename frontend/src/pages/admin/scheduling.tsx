@@ -1266,16 +1266,23 @@ export function SchedulingDialog({
     // R57 — required for every kind, so it is checked before anything specific.
     if (title.trim() === '') return t('scheduling.invalid.title');
     /**
-     * **R110 — an activity states which type it is.**
+     * **R110 — every schedulable item states which type it is** (Owner,
+     * 2026-09-02; activities only before that).
      *
-     * Required by the server on create, so refusing here names the field
-     * instead of surfacing a `400` about a key the reader never saw. Only
-     * checked while the catalogue actually loaded: if the read failed the
-     * picker fell back to entity labels, and demanding a row nobody was offered
-     * would be a gate on the platform's own blindness — the shape R94 already
-     * corrected once.
+     * A class and a sitting record their catalogue row too now, so the picker
+     * offers one for every kind and the answer is required for every kind —
+     * otherwise the calendar's النوع filter would have nothing to narrow a
+     * class by, which is the capability-with-no-reach shape (rule P).
+     *
+     * Refusing here names the field instead of surfacing a `400` about a key
+     * the reader never saw. Only checked while the catalogue actually loaded:
+     * if the read failed the picker fell back to entity labels, and demanding a
+     * row nobody was offered would be a gate on the platform's own blindness —
+     * the shape R94 already corrected once. **Never on edit**: a row created
+     * before the catalogue reached its kind has no type and the picker is
+     * locked, so requiring one would make an unrelated edit unsavable.
      */
-    if ((type === 'activity' || type === 'holiday') && catalogue.length > 0 && schedulingTypeId === null) {
+    if (!editing && catalogue.length > 0 && schedulingTypeId === null) {
       return t('scheduling.invalid.itemType');
     }
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
@@ -1401,8 +1408,8 @@ export function SchedulingDialog({
           weekdays: recurrence.weekdays,
           repeatUntil: recurrence.endDate || null,
           visibility,
-          // R110 — the catalogue row the picker chose. Sent for an activity
-          // only; a class and a sitting are typed by the entity they are.
+          // R110 — the catalogue row the picker chose, on every kind since
+          // Owner 2026-09-02.
           schedulingTypeId,
           /**
            * **An unchosen scope is not an empty id** (2026-08-20).

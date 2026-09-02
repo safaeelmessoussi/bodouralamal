@@ -139,9 +139,14 @@ export interface SchedulingIds {
    * value and the intended default were the same string and the widening was
    * therefore invisible.
    *
-   * `null` for a class and a sitting, whose type is implied by the entity, and
-   * for an activity created before R110, which recorded its type nowhere a
-   * query can reach (R56 told administrators to write it in the title).
+   * **Carried by all three kinds since Owner 2026-09-02.** It was `Event`-only,
+   * which made «حصة دراسية» and «محاضرة» — two catalogue rows of one
+   * `structural_kind` — indistinguishable on a class, and left the calendar's
+   * النوع filter with nothing to narrow a class by.
+   *
+   * `null` on a row created before the catalogue reached its kind. **Not
+   * guessed**: nothing in such a row says which of its kind's types it was, and
+   * matching on a name is what §4.4b forbids.
    */
   schedulingTypeId: string | null;
   branchId: string | null;
@@ -266,10 +271,9 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     staffCount: row.staff.length,
     version: row.version,
     ids: {
-      // R110 — a class and a sitting are typed by the ENTITY they are; a
-      // catalogue row adds nothing they do not already state. `null` is "this
-      // kind needs no catalogue row", not a missing value.
-      schedulingTypeId: null,
+      // R110 (Owner, 2026-09-02) — a class and a sitting record their
+      // catalogue row too now; `null` means the row predates the catalogue.
+      schedulingTypeId: row.scheduling_type_id ?? null,
       branchId: row.branch_id,
       roomId: row.room_id,
       deliveryMode: row.delivery_mode,
@@ -372,10 +376,9 @@ function fromExam(row: Exam): SchedulingItem {
     staffCount: row.staff.length,
     version: row.version,
     ids: {
-      // R110 — a class and a sitting are typed by the ENTITY they are; a
-      // catalogue row adds nothing they do not already state. `null` is "this
-      // kind needs no catalogue row", not a missing value.
-      schedulingTypeId: null,
+      // R110 (Owner, 2026-09-02) — a class and a sitting record their
+      // catalogue row too now; `null` means the row predates the catalogue.
+      schedulingTypeId: row.scheduling_type_id ?? null,
       branchId: row.branch_id,
       roomId: row.room_id,
       // R97 — an Exam sitting is physical by §4.6 and carries no delivery
@@ -626,6 +629,12 @@ export async function saveSchedulingItem(
           // not it changed: it is resolved from the row on open, so re-sending
           // the value the class already has is a no-op, while omitting it would
           // make *«leave it alone»* and *«I did not look»* the same request.
+          // R110 (Owner, 2026-09-02) — the catalogue row this is. Sent on
+          // every save for the same reason `visibility` is: omitting it would
+          // make *«leave it alone»* and *«I did not look»* the same request.
+          ...(input.schedulingTypeId !== undefined
+            ? { scheduling_type_id: input.schedulingTypeId }
+            : {}),
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.staff ? { staff: input.staff } : {}),
         },
@@ -658,6 +667,12 @@ export async function saveSchedulingItem(
         // R109 (§D) — the class's own tier, chosen on the form. Absent means
         // the column's default, which is `public`.
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        // R110 (Owner, 2026-09-02) — the catalogue row this is. Sent on
+        // every save for the same reason `visibility` is: omitting it would
+        // make *«leave it alone»* and *«I did not look»* the same request.
+        ...(input.schedulingTypeId !== undefined
+          ? { scheduling_type_id: input.schedulingTypeId }
+          : {}),
         ...(input.staff ? { staff: input.staff } : {}),
       },
       token,
@@ -681,6 +696,10 @@ export async function saveSchedulingItem(
           ...(input.roomId ? { room_id: input.roomId } : {}),
           administrative_group_id: input.examGroupId ?? null,
           ...(input.examStaff ? { staff: input.examStaff } : {}),
+          // R110 (Owner, 2026-09-02) — the catalogue row this sitting is.
+          ...(input.schedulingTypeId !== undefined
+            ? { scheduling_type_id: input.schedulingTypeId }
+            : {}),
           // Editable after creation, unlike the identity fields: the server
           // refuses a maximum below a mark already recorded (R81).
           ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
@@ -709,6 +728,10 @@ export async function saveSchedulingItem(
         room_id: input.roomId!,
         administrative_group_id: input.examGroupId ?? null,
         ...(input.examStaff ? { staff: input.examStaff } : {}),
+        // R110 (Owner, 2026-09-02) — the catalogue row this sitting is.
+        ...(input.schedulingTypeId !== undefined
+          ? { scheduling_type_id: input.schedulingTypeId }
+          : {}),
         max_grade: input.examMaxGrade!,
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
       },

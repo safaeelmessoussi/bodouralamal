@@ -520,6 +520,25 @@ exists to somebody with no business knowing.
 **Writes are unchanged**: every create, edit and delete of a branch or room stays
 Super Admin only (R26), and the screen itself is Super-Admin-only (R61).
 
+## The legal consent wording — Super Admin only, and freshness-checked
+
+Creating, editing and **activating** a `LegalConsentText` (R119) is Super Admin
+only, asserted through `assertFreshActive` like every other §5.6 setting. Two
+things make that stricter than a role check on a token:
+
+* **R60's freshness.** This decides what people are held to have agreed to, so
+  the difference between *held the role when the token was minted* and *holds it
+  now* is exactly the difference that matters.
+* **The read is refused too.** An Admin cannot list the wordings. A read-only
+  leak is still a leak, and the negative half is asserted — a permission test
+  that proves only the yes is not one.
+
+`GET /registration/consent-text` is the deliberate exception and is
+**anonymous**: the registration form is reached before any account exists, so
+the notice a person is legally entitled to read before agreeing cannot sit
+behind a session. It publishes the id, the label and the text — never
+provenance, status or usage counts.
+
 ## Active role
 
 A person may hold several roles at once (§2.1), and the header carries an

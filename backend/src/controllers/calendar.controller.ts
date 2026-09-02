@@ -47,8 +47,23 @@ const querySchema = z.object({
   include_cancelled: z.literal('true').optional(),
   /** R84 — the Teaching Circle (Sessions only; see `CalendarQuery`). */
   teaching_group_id: z.uuid().optional(),
-  /** R84 — the platform's own occurrence taxonomy. */
+  /**
+   * R84 — the STORAGE taxonomy. Retained because deep links carry it and
+   * because it is still the honest answer for a row recording no catalogue
+   * type; `scheduling_type_id` below is the association's own vocabulary.
+   */
   type: z.enum(['session', 'event', 'exam']).optional(),
+  /**
+   * **R110 (Owner, 2026-09-02) — the catalogue filter.**
+   *
+   * `type` could not distinguish two SchedulingTypes sharing one
+   * `structural_kind`: عطلة and نشاط are both stored as an `Event`, so
+   * `type=event` returned both. This narrows to one catalogue row.
+   *
+   * Both may be sent; each narrows independently, and a contradictory pair
+   * (`type=session` with an activity type) legitimately returns nothing.
+   */
+  scheduling_type_id: z.uuid().optional(),
 });
 
 /**
@@ -91,6 +106,9 @@ export function read(prisma: PrismaClient) {
         ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
         ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
         ...(q.type ? { kind: q.type } : {}),
+        ...(q.scheduling_type_id
+          ? { schedulingTypeId: q.scheduling_type_id }
+          : {}),
       }),
       prefilledFilters(prisma, actor),
     ]);
@@ -118,6 +136,10 @@ export function read(prisma: PrismaClient) {
 function occurrenceDto(o: Occurrence): Record<string, unknown> {
   return {
     kind: o.kind,
+    /* R110 — `kind` says `event` for both a نشاط and a عطلة; these say which. */
+    scheduling_type_id: o.schedulingTypeId,
+    scheduling_type_name: o.schedulingTypeName,
+    structural_kind: o.structuralKind,
     id: o.id,
     title: o.title,
     date: o.date,
@@ -255,6 +277,9 @@ export function readMine(prisma: PrismaClient) {
         ...(q.administrative_group_id ? { administrativeGroupId: q.administrative_group_id } : {}),
         ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
         ...(q.type ? { kind: q.type } : {}),
+        ...(q.scheduling_type_id
+          ? { schedulingTypeId: q.scheduling_type_id }
+          : {}),
       },
     );
     res.json({ data: occurrences.map(occurrenceDto) });

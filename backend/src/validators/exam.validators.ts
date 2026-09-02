@@ -70,6 +70,16 @@ export const createExamSchema = z
      * visibility tier of its own"*. The shared vocabulary, imported rather than
      * respelled. Absent is `public`.
      */
+    /**
+     * **Which catalogue row this is** (R110, Owner 2026-09-02) — «حصة دراسية»
+     * or «محاضرة», which are distinct types sharing one `structural_kind`.
+     * Refused unless it names a live type whose kind is `exam`.
+     *
+     * Optional and nullable: every row predating the catalogue records none,
+     * and it is editable precisely so those can be resolved by someone who
+     * knows what they were, rather than guessed by a backfill.
+     */
+    scheduling_type_id: uuid.nullable().optional(),
     visibility: visibility.optional(),
     staff: staff.optional(),
   })
@@ -98,6 +108,16 @@ export const updateExamSchema = z
     end_time: wallClock.optional(),
     room_id: uuid.optional(),
     administrative_group_id: uuid.nullable().optional(),
+    /**
+     * **Which catalogue row this is** (R110, Owner 2026-09-02) — «حصة دراسية»
+     * or «محاضرة», which are distinct types sharing one `structural_kind`.
+     * Refused unless it names a live type whose kind is `exam`.
+     *
+     * Optional and nullable: every row predating the catalogue records none,
+     * and it is editable precisely so those can be resolved by someone who
+     * knows what they were, rather than guessed by a backfill.
+     */
+    scheduling_type_id: uuid.nullable().optional(),
     /** R109 — editable. **Omitting it leaves the tier alone**, never resets it. */
     visibility: visibility.optional(),
     staff: staff.optional(),

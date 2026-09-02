@@ -11,6 +11,11 @@ import {
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../components/calendar/calendar-header.js';
 import { OccurrenceTable } from '../components/calendar/occurrence-table.js';
+import {
+  schedulingTypeOptions,
+  schedulingTypeQuery,
+  withUnlistedValue,
+} from '../components/calendar/scheduling-type-filter.js';
 import { viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
 import { CalendarFilters } from '../components/calendar/calendar-filters.js';
 import { useCalendarFilters } from '../hooks/use-calendar-filters.js';
@@ -157,7 +162,8 @@ export function CalendarPage(): ReactNode {
           categoryId,
           levelId,
           subjectId,
-          ...(filters.value.type ? { kind: filters.value.type } : {}),
+          // R110 — a catalogue id or, from an older link, a storage word.
+          ...schedulingTypeQuery(filters.value.type ?? null),
         });
         if (cancelled) return;
         setLoad({ kind: 'ready', occurrences: result.occurrences });
@@ -285,11 +291,10 @@ export function CalendarPage(): ReactNode {
                   categories={bootstrap?.categories ?? []}
                   levels={bootstrap?.levels ?? []}
                   levelsBusy={bootstrapBusy}
-                  types={[
-                    { value: 'session', label: t('calendar.kind.session') },
-                    { value: 'event', label: t('calendar.kind.event') },
-                    { value: 'exam', label: t('calendar.kind.exam') },
-                  ]}
+                  types={withUnlistedValue(
+                    schedulingTypeOptions(bootstrap),
+                    filters.value.type ?? null,
+                  )}
                 />
               }
             />

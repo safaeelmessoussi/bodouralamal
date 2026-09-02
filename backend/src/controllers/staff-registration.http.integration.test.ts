@@ -14,10 +14,11 @@ import {
   type Placement,
 } from "../test-support/placement.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 
 /**
  * The staff registration workflow, end to end (Revision 49, proposed).
@@ -48,7 +49,7 @@ const TAG = "[http-staffreg-test]";
  */
 const PLACEMENT_TAG = "[http-staffreg-test-place]";
 
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 
 interface Res {
   status: number;
@@ -151,7 +152,7 @@ async function apply(
       ...(requestedRole
         ? { requested_role: requestedRole, framing }
         : { branch_id: branchId, category_id: placement.categoryId }),
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     },
   });
   if (res.status !== 201)
@@ -207,9 +208,14 @@ beforeAll(async () => {
     () => null,
   );
   if (!health || health.status !== 200) throw new Error("API not reachable");
-  savedConsentVersion = await captureConsentVersion(prisma);
-  await clear();
+    await clear();
 
+  // R119 — the wording this suite records against, and it says in Arabic
+  // that it is development text with no legal value.
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "http-staff-reg-v1");
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   superAdmin = bearer(await makeStaff("super_admin", null), ["super_admin"]);
@@ -217,9 +223,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
@@ -306,7 +317,7 @@ describe("a teacher asks for a teacher account", () => {
             },
             branch_id: branchId,
             requested_role: role,
-            consents: { data_processing: true },
+            consents: { data_processing: true, consent_text_id: consentText!.id },
           },
         },
       );
@@ -348,7 +359,7 @@ describe("a teacher asks for a teacher account", () => {
             mode: "in_person",
             willingness: { all_branches: false, branch_ids: [branchId] },
           },
-          consents: { data_processing: true },
+          consents: { data_processing: true, consent_text_id: consentText!.id },
         },
       },
     );
@@ -459,7 +470,7 @@ describe("a teacher asks for a teacher account", () => {
             },
             requested_role: "teacher",
             ...(framing === undefined ? {} : { framing }),
-            consents: { data_processing: true },
+            consents: { data_processing: true, consent_text_id: consentText!.id },
           },
         },
       );

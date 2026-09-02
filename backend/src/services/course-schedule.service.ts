@@ -6,6 +6,7 @@ import type {
   Visibility,
 } from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
+import { assertTypeOfKind } from "./scheduling-type.service.js";
 import {
   intervalsOverlap,
   withinScheduleLife,
@@ -281,6 +282,13 @@ export interface CourseScheduleInput {
   monthOfYear?: number | null;
   anchorDate?: Date | null;
   effectiveUntil?: Date | null;
+  /**
+   * **Which catalogue row this is** (R110, Owner 2026-09-02) — separate from
+   * `structural_kind`, which stays the answer to *which entity delivers it*.
+   * Refused unless it names a live type of kind `class`. Null for every row
+   * predating the catalogue; see the migration for why none was backfilled.
+   */
+  schedulingTypeId?: string | null;
   academicYearId: string;
   staff?: ScheduleStaffInput[];
 }
@@ -622,6 +630,15 @@ export async function createCourseSchedule(
       },
     );
 
+    /**
+     * **The type must be a live catalogue row of THIS kind** (R110, Owner
+     * 2026-09-02). Typing a class «عطلة» would produce a row the calendar
+     * renders as a class and the catalogue claims is a holiday — the two
+     * answers to *what is this* that storing the kind exists to prevent.
+     */
+    if (input.schedulingTypeId) {
+      await assertTypeOfKind(tx, input.schedulingTypeId, ['class'] as const);
+    }
     const staff = input.staff ?? [];
     await assertStaffAccountsAvailable(tx, staff.map((person) => person.userId));
     const conflicts = await findConflicts(
@@ -669,6 +686,7 @@ export async function createCourseSchedule(
         anchorDate: input.anchorDate ?? null,
         effectiveUntil: input.effectiveUntil ?? null,
         academicYearId: input.academicYearId,
+        schedulingTypeId: input.schedulingTypeId ?? null,
       },
       select: { id: true },
     });
@@ -765,6 +783,13 @@ export async function updateCourseSchedule(
     monthOfYear?: number | null;
     anchorDate?: Date | null;
     effectiveUntil?: Date | null;
+    /**
+     * **Which catalogue row this is** (R110, Owner 2026-09-02) — separate from
+     * `structural_kind`, which stays the answer to *which entity delivers it*.
+     * Refused unless it names a live type of kind `class`. Null for every row
+     * predating the catalogue; see the migration for why none was backfilled.
+       */
+    schedulingTypeId?: string | null;
     version: number;
     /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
@@ -868,6 +893,16 @@ export async function updateCourseSchedule(
   const horizon = await horizonFor(prisma, now);
 
   return prisma.$transaction(async (tx) => {
+    /**
+     * **The type must be a live catalogue row of THIS kind** (R110, Owner
+     * 2026-09-02). Typing a class «عطلة» would produce a row the calendar
+     * renders as a class and the catalogue claims is a holiday — the two
+     * answers to *what is this* that storing the kind exists to prevent.
+     */
+    if (data.schedulingTypeId) {
+      await assertTypeOfKind(tx, data.schedulingTypeId, ['class'] as const);
+    }
+
     const merged = {
       branchId: existing.branchId,
       roomId: data.roomId === undefined ? existing.roomId : data.roomId,
@@ -965,6 +1000,9 @@ export async function updateCourseSchedule(
         ...(data.effectiveUntil === undefined
           ? {}
           : { effectiveUntil: data.effectiveUntil }),
+        ...(data.schedulingTypeId === undefined
+          ? {}
+          : { schedulingTypeId: data.schedulingTypeId }),
       },
     });
 

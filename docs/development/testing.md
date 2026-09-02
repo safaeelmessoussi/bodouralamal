@@ -606,13 +606,27 @@ everyone who used the form afterwards.
 The failure was doubly confusing: **the tests were green, the application was
 broken, and the tests were the reason.**
 
-Two lessons, both now enforced in code:
+**It then happened a second time, from an ordering mistake rather than a missing
+restore.** `email-ownership.integration.test.ts` called the restore as the
+**last** statement of an `afterAll` that deleted five fixture rows first — so
+any one of those throwing skipped it, and the suite's scratch value
+(`email-owner-test-v1`) was left in the shared database. The helper was correct
+and was simply not reached.
+
+Four lessons, all now enforced in code:
 
 - **"Clean up after yourself" means restore what was there, not delete what you
-  used.** `test-support/consent-setting.ts` captures the prior logical row once
-  per suite and puts it back — value, version and updater, including *absent*,
-  which is a real state the suites deliberately exercise. Restoring only the
-  JSON while incrementing the version still changes shared application state.
+  used.** `test-support/legal-consent-text.ts` records what was in force,
+  installs the suite's own development wording, and puts the previous one back.
+  It **never deletes** a wording another suite or the developer installed, and
+  it leaves its own row `superseded` rather than deleting it when consent
+  evidence still points at it — a superseded development version is inert and
+  honest, while deleting it would destroy the only copy of the words a stored
+  record names.
+- **Restore FIRST, and put fixture teardown in the `finally`.** A restore that
+  runs after the deletes is a restore that does not run when a delete fails.
+  This is the ordering that leaked, and it is the ordering every suite now
+  avoids.
 - **Capture once, not per test.** A `beforeEach` capture would re-save whatever
   the previous test left, so the suite would "restore" its own scratch value
   rather than the developer's.

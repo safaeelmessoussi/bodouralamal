@@ -2251,3 +2251,124 @@ CONSENT_FORCED_PRIVATE behaviour from 1a56aa9 is deliberately unchanged.
 
 `origin` also joins the library projection, because the dialog has to seed its control from
 the item's current value. It states what the file IS, not consent state.
+
+## «عطلة» became creatable, and the calendar learned the catalogue — SRS R119 Part A, 2026-09-02
+
+R110(9) made `holiday` a structural kind of its own, and it reached the enum, the migration,
+the seed, the write boundary and the label map. **The create form's option list alone still
+offered three**, so a Super Admin could see a عطلة row in `أنواع الجدولة` and had no way to
+create another — the complete-capability-with-no-reach shape (rule P), seventh instance.
+
+`الجدول الزمني → النوع` offered `session | event | exam`: **the storage taxonomy**, which
+cannot express the association's own vocabulary. Three catalogue rows are stored as an
+`Event`, so `type=event` returned نشاط, حفل *and* عطلة together and a holiday could not be
+asked for at all; «حصة دراسية» and «محاضرة» are likewise one `class`.
+
+**Only `Event` recorded a catalogue row.** `RecurringCourseSchedule` and `Exam` now carry the
+same nullable, `RESTRICT` column, set through the picker the form already rendered and
+validated by the same rule — `assertTypeOfKind`, which `assertActivityType` became a wrapper
+over rather than a second copy of.
+
+`GET /calendar?scheduling_type_id=` resolves the type's `structural_kind` **first** — which
+decides *which of the three sources can hold such a row at all*, so a class type never queries
+the `Event` table — and then narrows within that source by id. That ordering is what lets two
+types of one kind be filtered apart. `type` remains accepted, so a link saved earlier still
+works. The options come from `GET /calendar/bootstrap`, which every calendar already fetches,
+through one shared module: the public and personal calendars held two copies of the same
+hard-coded array.
+
+**No legacy row was backfilled, and this is the load-bearing decision.** Every schedule and
+sitting created before this records no type; such a row matches no type filter and stays
+visible under «الكل». A `structural_kind` fallback is the tempting bug and is wrong twice
+over — it would make one untyped class answer to «حصة دراسية» *and* to «محاضرة», two
+contradictory claims from a row that records neither, which is the name-matching §4.4b forbids
+arrived at from the other direction. The column is editable so somebody who *knows* what a row
+was can say so.
+
+A عطلة is marked **from the row**: each occurrence carries `scheduling_type_id`,
+`scheduling_type_name` and `structural_kind`, and the chip renders an outline plus the type's
+own word beside the title (rule AV). Matching «عطلة» as a string would break the moment the
+administration renames the row — the one thing the catalogue exists to let them do.
+
+Migration `20260902160000_scheduling_type_on_schedule_and_exam`.
+
+## The legal consent wording became versioned, immutable evidence — SRS R119 Part B, 2026-09-02
+
+**The defect was an absent relationship, not a bug in a function.** The Arabic wording lived
+in `frontend/src/i18n/ar.ts`; the version lived in the `legal.consent_text_version`
+`SystemSetting`, a free-text box; a `ConsentRecord` stored **only that string**. Editing the
+i18n text without bumping the setting made every record since silently misstate what was
+agreed to; bumping the setting without editing the text made the records claim a version that
+never existed. **Both drifts passed every test**, because nothing asserted a relationship that
+nothing enforced — and the platform could not answer *«what exactly did this person agree
+to»* from its own data at all.
+
+`LegalConsentText` makes it a foreign key: exact Arabic wording, a unique human-readable
+`version_label`, a SHA-256 digest, `draft | active | superseded`, and creation and activation
+provenance. Four invariants, each enforced where it can actually hold:
+
+* **Immutable once in force** — in the service, because *has this been used* is a question
+  about other tables a CHECK cannot ask. New wording is a new version, refused with
+  `CONSENT_TEXT_IMMUTABLE`. A **superseded** version is exactly as frozen as the live one.
+* **Exactly one active version — in the DATABASE**, a partial unique index over
+  `status = 'active'`. A service check alone is a race, and this is the invariant whose
+  violation means somebody could be recorded against wording nobody put in force. Asserted by
+  a direct write that bypasses every service check.
+* **Nothing is destroyed.** No delete verb; `RESTRICT` on both references.
+* **Fail closed, unchanged.** No active version → `503` /
+  `CONSENT_TEXT_VERSION_NOT_CONFIGURED`, as before.
+
+**Displayed X is recorded X, by construction.** `GET /registration/consent-text` (anonymous —
+the notice is reached before any account exists) returns the id and the text **in one
+response**, so there is no *«frontend text X, separately fetched version Y»* to race; the
+submission carries that id and the server refuses a mismatch with `CONSENT_TEXT_SUPERSEDED`.
+Refusing rather than accepting the stale version is deliberate: a wording taken out of force
+may have been withdrawn *because it was wrong*. Filling the blank server-side with *whatever
+is active* is the obvious convenience and is exactly the race the parameter closes — so an
+absent id is `VALIDATION_FAILED`, asserted.
+
+**Legacy evidence is preserved honestly and never fabricated.** Pre-R119 records keep their
+version string and carry `consent_text_id = NULL`. **No `LegalConsentText` was manufactured
+for a historical string**: the wording those people saw was never stored, and attaching them
+to a row containing today's text would assert they read those words, which nobody can prove.
+Nothing existing was altered, restamped or discarded.
+
+`legal.consent_text_version` is retired from `WRITABLE_SETTINGS`, which is now empty — so
+there are not two editable answers to *which wording is in force*. **The stored row is left in
+place**: it is the only record of which label was last in force before the cutover, and being
+unreadable and unwritable it cannot drift. `setting.integration.test.ts` keeps an exact-key-set
+assertion that fails if it ever comes back.
+
+`إعدادات المنصة` now manages versions (rule **BE**, new): what is in force with its exact
+wording and effective date, the history read-only and visible without a click, and a create →
+write → label → review → **activate** flow with activation a separate act. Immutability is
+**shown before it is enforced** — each version carries how many consents name it, and a used
+one says in words that new wording means a new version, rather than a greyed-out «تعديل»
+(rule AF). No hash or UUID is put in front of an administrator.
+
+**i18n split.** Only the accepted statement moved: the checkbox now renders the stored wording
+verbatim, and the Law 09-08 explanation — headings, link, plain-language body, buttons — stays
+in `ar.ts`, because it is interface, not the statement being accepted. The three keys that
+composed the sentence around an inline button are gone: templating around legal text is how a
+notice ends up saying something nobody approved.
+
+TD-8 gains `legalconsenttext.create`, `.update` and `.activate`, carrying the **digest, never
+the body** (audit rows are purged on their own schedule) and **ids, never labels** —
+`assertMinimizedDetail` refuses a copied label, correctly, since the version rows are permanent
+and the label is one join away.
+
+**The test-isolation leak (B10) is fixed, and it was an ordering mistake rather than a missing
+restore.** `email-ownership.integration.test.ts` called the restore as the **last** statement
+of an `afterAll` that deleted five fixture rows first, so any one of them throwing skipped it
+and left `email-owner-test-v1` behind. Restoration now runs **first**, with fixture teardown in
+the `finally`, in that suite and every other. `test-support/legal-consent-text.ts` replaces the
+setting helper: it never deletes a wording somebody else installed, and leaves its own row
+`superseded` rather than deleting it when consent evidence still points at it. No legitimate
+Localhost data was removed.
+
+Development fixtures use wording that **says in Arabic that it is development text with no
+legal value** — R119 made the body the thing a person actually reads, so a placeholder that
+looked like a notice would be displayed as one. Production is seeded with nothing, and §2.3
+keeps approving the real wording an Owner compliance task.
+
+Migration `20260902180000_versioned_legal_consent_text`.

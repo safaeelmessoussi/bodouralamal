@@ -48,6 +48,7 @@ export function create(prisma: PrismaClient) {
       startTime: b.start_time,
       endTime: b.end_time,
       levelId: b.level_id,
+      ...(b.scheduling_type_id !== undefined ? { schedulingTypeId: b.scheduling_type_id } : {}),
       subjectId: b.subject_id,
       academicYearId: b.academic_year_id,
       branchId: b.branch_id,
@@ -68,6 +69,7 @@ export function update(prisma: PrismaClient) {
     const b = parse(updateExamSchema, req.body ?? {});
     await updatePhysicalExam(prisma, requireActor(req), idParam(req, 'id'), {
       version: b.version,
+      ...(b.scheduling_type_id !== undefined ? { schedulingTypeId: b.scheduling_type_id } : {}),
       ...(b.title !== undefined ? { title: b.title } : {}),
       ...(b.description !== undefined ? { description: b.description } : {}),
       ...(b.date !== undefined ? { date: b.date } : {}),

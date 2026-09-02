@@ -13,9 +13,17 @@ import { ConsentNotice } from './consent-notice.js';
  * later"* for a fault that waiting could never fix.
  */
 
+/**
+ * R119 — the wording is DATA now, so a default stands in for the stored
+ * `LegalConsentText` a caller passes. **Not the real notice**: nothing in this
+ * repository holds the approved Arabic wording, and a fixture that looked like
+ * it would be the first step toward one being deployed.
+ */
+const WORDING = 'نص تجريبي — أوافق على معالجة بياناتي الشخصية.';
+
 const render = (over: Partial<Parameters<typeof ConsentNotice>[0]> = {}) =>
   renderToStaticMarkup(
-    <ConsentNotice checked={false} onChange={() => undefined} {...over} />,
+    <ConsentNotice checked={false} onChange={() => undefined} text={WORDING} {...over} />,
   );
 
 describe('ConsentNotice — informed consent, not a cited statute', () => {
@@ -26,6 +34,29 @@ describe('ConsentNotice — informed consent, not a cited statute', () => {
     const html = render();
     expect(html).toContain('<button');
     expect(html).toContain('القانون 09-08');
+  });
+
+  /* ── R119 — the wording is the record's, and only the record's ────────── */
+
+  it('renders the stored wording verbatim, and composes nothing around it', () => {
+    // The sentence used to be built from three i18n keys with the statute name
+    // as an inline button in the middle. Templating around legal text is how a
+    // notice ends up saying something nobody approved.
+    expect(render()).toContain(WORDING);
+  });
+
+  it('offers NO checkbox when no wording is in force — fail closed', () => {
+    // A tick against nothing is not a consent, and offering one would let a
+    // person believe they had agreed to something.
+    const html = render({ text: null });
+    expect(html).not.toContain('type="checkbox"');
+    expect(html).toContain('role="alert"');
+  });
+
+  it('keeps the statute explanation reachable even with no wording', () => {
+    // It is interface, not the statement being accepted — so its availability
+    // does not depend on a version being in force.
+    expect(render({ text: null })).toContain('القانون 09-08');
   });
 
   it('explains all five things a reader needs, in the dialog', () => {
@@ -77,11 +108,29 @@ describe('explainFailure — never "try again" for a cause that is known', () =>
     // THE REGRESSION. The server said `SERVICE_UNAVAILABLE` with
     // `reason: CONSENT_TEXT_VERSION_NOT_CONFIGURED`; the form said "try again
     // later" — advice that could never work, because no amount of waiting
-    // writes a missing SystemSetting row.
+    // activates a legal wording nobody has approved.
+    //
+    // **R119 removed the setting KEY from this message.** It named
+    // `legal.consent_text_version` on a screen a beneficiary reads (rule M),
+    // and after the cutover it was the wrong remedy as well as the wrong
+    // register. What it must still do is send the reader somewhere real, and
+    // never to a retry.
     const message = explainFailure(
       envelope('SERVICE_UNAVAILABLE', { reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED' }),
     );
-    expect(message).toContain('legal.consent_text_version');
+    expect(message).toContain('إعدادات المنصة');
+    expect(message).not.toContain('legal.consent_text_version');
+    expect(message).not.toContain('يرجى المحاولة بعد قليل');
+  });
+
+  it('tells a reader whose wording changed to read it again, not to retry', () => {
+    // R119. A Super Admin activated new wording while the form was open, so the
+    // server refused the stale version rather than recording agreement to words
+    // this person never saw. That is not a fault they can retry past.
+    const message = explainFailure(
+      envelope('STATE_CONFLICT', { reason: 'CONSENT_TEXT_SUPERSEDED' }),
+    );
+    expect(message).toContain('تحديث');
     expect(message).not.toContain('يرجى المحاولة بعد قليل');
   });
 

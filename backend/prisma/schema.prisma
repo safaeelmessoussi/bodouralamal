@@ -681,6 +681,11 @@ model User {
   @@index([nicknameNormalized])
   @@index([phoneNormalized])
   @@map("user")
+  /// Owner 2026-09-02 — who wrote a legal consent wording, and who put it into
+  /// force. Two relations because they are two different decisions and the
+  /// audit asks about each separately.
+  legalConsentTextsCreated   LegalConsentText[] @relation("LegalConsentTextCreatedBy")
+  legalConsentTextsActivated LegalConsentText[] @relation("LegalConsentTextActivatedBy")
 }
 
 /// Provider-abstracted auth linkage (§7). MVP: google only. Local credentials
@@ -756,10 +761,10 @@ model Partner {
   /// TD-15 optimistic locking, like every other Super-Admin-edited row.
   version Int @default(0)
 
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedById String? @map("deleted_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
 
   @@index([deletedAt, isVisible, displayOrder])
   @@map("partner")
@@ -1281,7 +1286,15 @@ model RecurringCourseSchedule {
   title       String  @db.VarChar(120)
   description String? @db.VarChar(2000)
 
-  id        String  @id @default(uuid()) @db.Uuid
+  id               String          @id @default(uuid()) @db.Uuid
+  /// **Which catalogue row this is** (Owner, 2026-09-02) — «حصة دراسية» or
+  /// «محاضرة», both of which are `class`. Separate from `structural_kind`,
+  /// which stays the answer to *which entity delivers it*. Nullable: every row
+  /// predating the catalogue records none, and guessing would be the
+  /// name-matching §4.4b forbids.
+  schedulingTypeId String?         @map("scheduling_type_id") @db.Uuid
+  schedulingType   SchedulingType? @relation(fields: [schedulingTypeId], references: [id], onDelete: Restrict)
+
   subjectId String  @map("subject_id") @db.Uuid
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
 
@@ -1861,6 +1874,13 @@ model ChildApplication {
   consentDataProcessing Boolean  @map("consent_data_processing")
   consentMediaRelease   Boolean  @map("consent_media_release")
   consentTextVersion    String   @map("consent_text_version") @db.VarChar(60)
+  /// Owner 2026-09-02 — the exact wording the parent was shown, carried from
+  /// submission to approval so the child's own `ConsentRecord` is written
+  /// against **what the parent read**, never against whatever is active by the
+  /// time an administrator gets to it. Nullable for the same legacy reason as
+  /// `ConsentRecord.consentTextId`.
+  consentTextId         String?           @map("consent_text_id") @db.Uuid
+  consentText           LegalConsentText? @relation(fields: [consentTextId], references: [id], onDelete: Restrict)
   consentGivenAt        DateTime @map("consent_given_at") @db.Timestamptz(6)
 
   status ChildApplicationStatus @default(pending)
@@ -1893,6 +1913,95 @@ model ChildApplication {
   @@map("child_application")
 }
 
+/// Lifecycle of one stored wording (Owner, 2026-09-02).
+///
+/// `draft` is being written and may still be corrected; `active` is what a
+/// registration form presents and records; `superseded` is what it used to be.
+/// **There is no `deleted`** — a wording somebody agreed to is evidence, and
+/// TD-5's soft delete does not apply to it: it is never removed at all.
+enum LegalConsentTextStatus {
+  draft
+  active
+  superseded
+
+  @@map("legal_consent_text_status")
+}
+
+/// **One immutable, versioned Arabic legal consent wording** (§2.3, §4.1a;
+/// Owner decision 2026-09-02).
+///
+/// ## The defect this replaces
+///
+/// The wording lived in the frontend's `i18n/ar.ts` (git-versioned, deployed)
+/// and the version string lived in a `SystemSetting` an administrator could
+/// type anything into. A `ConsentRecord` stored **only that string**, so:
+///
+/// * nothing technically bound a record to the words it was recorded against;
+/// * the wording could change with no version change, and the version could
+///   change with no wording change — both silently, and in either direction;
+/// * the platform could not answer *«what exactly did this person agree to»*
+///   from its own data. Only a git archaeologist could, and only if the two
+///   halves had happened to move together.
+///
+/// The relationship was human discipline. This makes it a foreign key.
+///
+/// ## The invariants
+///
+/// * **Immutable once used.** A row referenced by any `ConsentRecord` — or any
+///   row that has ever been `active` — cannot have its wording or its label
+///   edited. New wording is a NEW version. Enforced in the service and stated
+///   here because the column types alone cannot say it.
+/// * **Exactly one authoritative active version**, enforced by a partial
+///   unique index over `status = 'active'` — a database constraint, not a
+///   convention, so two concurrent activations cannot both win.
+/// * **Nothing is destroyed.** Superseding is a status change; old rows and
+///   their exact wording stay readable forever, because they are the evidence.
+model LegalConsentText {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// **The human-readable identifier the Owner assigns**, e.g. `v1.0-2026-09`.
+  /// Unique, and it is what travels on a `ConsentRecord`, in the audit log and
+  /// in an export — a UUID is not something a compliance reader can act on.
+  versionLabel String @unique @map("version_label") @db.VarChar(60)
+
+  /// **The exact Arabic wording presented**, character for character. `Text`,
+  /// not a bounded VarChar: a legal notice is not a label, and truncating one
+  /// would destroy the very thing this table exists to keep.
+  bodyArabic String @map("body_arabic")
+
+  /// SHA-256 of `bodyArabic`, lower-case hex. **Defense in depth, never a
+  /// substitute**: a digest proves the text has not changed, and cannot tell
+  /// anybody what it said. The text above is the evidence; this only detects
+  /// tampering with it.
+  bodyDigest String @map("body_digest") @db.Char(64)
+
+  status LegalConsentTextStatus @default(draft)
+
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdBy   User     @relation("LegalConsentTextCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  /// When this wording became the one new registrations are recorded against,
+  /// and who decided. Null while it is a draft.
+  activatedAt   DateTime? @map("activated_at") @db.Timestamptz(6)
+  activatedById String?   @map("activated_by_id") @db.Uuid
+  activatedBy   User?     @relation("LegalConsentTextActivatedBy", fields: [activatedById], references: [id], onDelete: Restrict)
+
+  /// When a later version replaced it. Retained, never cleared: *«this was the
+  /// wording between these two instants»* is the question an audit asks.
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  /// TD-15 optimistic lock, so two administrators editing one draft cannot
+  /// silently overwrite each other.
+  version Int @default(1)
+
+  consentRecords    ConsentRecord[]
+  childApplications ChildApplication[]
+
+  @@index([status])
+  @@map("legal_consent_text")
+}
+
 model ConsentRecord {
   id          String        @id @default(uuid()) @db.Uuid
   studentId   String        @map("student_id") @db.Uuid
@@ -1901,8 +2010,27 @@ model ConsentRecord {
   granted     Boolean
   method      ConsentMethod
 
-  /// The exact legal text version agreed to (§2.3, §4.1a).
+  /// **The human-readable version agreed to** (§2.3, §4.1a). Retained beside
+  /// the reference below rather than derived from it: it is what an export, an
+  /// audit row and a compliance reader use, and every record written before
+  /// 2026-09-02 has ONLY this.
   consentTextVersion String @map("consent_text_version") @db.VarChar(60)
+
+  /// **The exact wording this consent was recorded against** (Owner,
+  /// 2026-09-02) — the technical binding the string above never was.
+  ///
+  /// **Nullable, and only for legacy.** A record written before this revision
+  /// names a version whose wording the platform never stored, and no
+  /// `LegalConsentText` was manufactured for it: attaching such a record to a
+  /// row containing today's text would assert that this person read those
+  /// words, which nobody can prove. `NULL` here says *«the wording is not
+  /// resolvable»*, honestly, and the string above is preserved as the evidence
+  /// that does exist. Every record written since is non-null.
+  ///
+  /// `RESTRICT`: consent evidence must stay reconstructible, so a wording
+  /// somebody agreed to can never be deleted out from under it.
+  consentTextId String?           @map("consent_text_id") @db.Uuid
+  consentText   LegalConsentText? @relation(fields: [consentTextId], references: [id], onDelete: Restrict)
 
   grantedAt       DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
   grantedByUserId String    @map("granted_by_user_id") @db.Uuid
@@ -2125,7 +2253,11 @@ model SchedulingType {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  events Event[]
+  events          Event[]
+  /// Back-relations for the two entities that record their catalogue row
+  /// (Owner, 2026-09-02); `RESTRICT` keeps a retired type resolvable by them.
+  courseSchedules RecurringCourseSchedule[]
+  exams           Exam[]
 
   @@index([displayOrder])
   @@map("scheduling_type")
@@ -2316,8 +2448,13 @@ model StudentSurahProgress {
 /// carries an immutable auto-generated UUID; submissions reference those UUIDs
 /// and never array positions (TD-6).
 model Exam {
-  id        String      @id @default(uuid()) @db.Uuid
-  title     String      @db.VarChar(120)
+  id               String          @id @default(uuid()) @db.Uuid
+  title            String          @db.VarChar(120)
+  /// Which catalogue row this sitting is (Owner, 2026-09-02). See
+  /// `RecurringCourseSchedule.schedulingTypeId`.
+  schedulingTypeId String?         @map("scheduling_type_id") @db.Uuid
+  schedulingType   SchedulingType? @relation(fields: [schedulingTypeId], references: [id], onDelete: Restrict)
+
   levelId   String      @map("level_id") @db.Uuid
   level     Level       @relation(fields: [levelId], references: [id], onDelete: Restrict)
   subjectId String?     @map("subject_id") @db.Uuid

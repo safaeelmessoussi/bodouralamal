@@ -342,7 +342,11 @@ function SchedulingTypeFormDialog({
           value={kind}
           onChange={(v) => setKind(v as SchedulingType)}
           hint={t('admin.schedulingTypes.kindHint')}
-          options={(['class', 'activity', 'exam'] as SchedulingType[]).map((k) => ({
+          /* All four structural kinds — `holiday` was added to the enum, the
+             seed, the write boundary and the label map by SRS R110(9) and was
+             omitted only here, so a Super Admin could see a عطلة type and not
+             create another one. */
+          options={(['class', 'activity', 'exam', 'holiday'] as SchedulingType[]).map((k) => ({
             value: k,
             label: kindLabel(k),
           }))}

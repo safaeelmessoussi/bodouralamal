@@ -49,6 +49,7 @@ const EXAM_KEYS = [
   "mode",
   "room_id",
   "room_name",
+  "scheduling_type_id",
   "staff",
   "start_time",
   "subject_id",

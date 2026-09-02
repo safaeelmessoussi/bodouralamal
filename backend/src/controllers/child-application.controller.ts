@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
   decideChildApplication,
@@ -10,7 +9,7 @@ import {
   proposeMatches,
   submitChildApplications,
 } from '../services/child-application.service.js';
-import { CONSENT_TEXT_VERSION_KEY } from '../services/registration.service.js';
+import { resolvePresentedConsentText } from '../services/legal-consent-text.service.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -37,6 +36,13 @@ const SCHOOLING_STAGE = z.enum([
 
 const submitSchema = z
   .object({
+    /**
+     * **Which wording the parent was shown** (R119). The same rule the public
+     * registration path follows, and for the same reason: this screen renders a
+     * consent notice too, so a Super Admin activating new wording while it is
+     * open must not turn *displayed X* into *recorded Y*.
+     */
+    consent_text_id: z.uuid(),
     children: z
       .array(
         z
@@ -109,39 +115,19 @@ const decideSchema = z
     message: 'level_id and branch_id are given together or not at all',
   });
 
-/**
- * The consent text version **in force now**, captured onto the application.
- *
- * Read here rather than at approval: R62.3b makes this the version the parent
- * actually saw, and `legal.consent_text_version` is editable between the two
- * moments. Approval must never substitute the current value for it.
- */
-async function currentConsentTextVersion(prisma: PrismaClient): Promise<string> {
-  const row = await prisma.systemSetting.findUnique({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    select: { value: true },
-  });
-  const version = typeof row?.value === 'string' ? row.value.trim() : '';
-  if (!version) {
-    // §4.1a: no version, no lawful consent, no application. Failing closed is
-    // what stops one being recorded against text that does not exist.
-    throw new AppError('STATE_CONFLICT', 'no consent text version is configured', {
-      reason: 'CONSENT_TEXT_VERSION_MISSING',
-    });
-  }
-  return version;
-}
 
 export function submit(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const actor = requireActor(req);
     const body = parse(submitSchema, req.body ?? {});
-    const consentTextVersion = await currentConsentTextVersion(prisma);
+    // R119 — the wording the parent read, checked against what is in force.
+    const consentText = await resolvePresentedConsentText(prisma, body.consent_text_id);
 
     const result = await prisma.$transaction((tx) =>
       submitChildApplications(tx, actor.userId, {
         consentDataProcessing: true,
-        consentTextVersion,
+        consentTextVersion: consentText.versionLabel,
+        consentTextId: consentText.id,
         children: body.children.map((c) => ({
           firstNameArabic: c.first_name_arabic,
           lastNameArabic: c.last_name_arabic,

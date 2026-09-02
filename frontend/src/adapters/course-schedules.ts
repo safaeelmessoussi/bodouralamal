@@ -45,6 +45,8 @@ export interface CourseSchedule {
    * read. `null` on a write response, whose caller already knows them.
    */
   subject_name: string | null;
+  /** R110 — the catalogue row, `null` on a pre-catalogue row. */
+  scheduling_type_id: string | null;
   target_name: string | null;
   branch_name: string | null;
   room_name: string | null;
@@ -194,6 +196,16 @@ export interface CourseScheduleInput {
   visibility?: string;
   subject_id: string;
   teaching_mode: string;
+  /**
+   * **R110 (Owner, 2026-09-02) — which catalogue row this is.**
+   *
+   * Declared rather than merely spread, for the reason `visibility` records:
+   * a key absent from this interface travels unchecked.
+   *
+   * Omitted leaves it alone; `null` clears it. A row created before the
+   * catalogue carries none, and none was guessed for it.
+   */
+  scheduling_type_id?: string | null;
   /** Exactly one target, of the kind the mode names (§4.4c). */
   target_id: string;
   branch_id: string;

@@ -44,6 +44,16 @@ export interface Occurrence {
    * **every session rendered as an Event** in the chip and the details dialog.
    */
   kind: OccurrenceKind;
+  /**
+   * **R110 — which catalogue row this is**, and its structural kind. `kind`
+   * says `'event'` for both a نشاط and a عطلة; these tell them apart, so the
+   * grid can present a holiday without hard-coding an Arabic name.
+   *
+   * `null` on a row that predates the catalogue.
+   */
+  scheduling_type_id: string | null;
+  scheduling_type_name: string | null;
+  structural_kind: string | null;
   id: string;
   title: string;
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -126,6 +136,12 @@ export interface CalendarQuery {
   groupId?: string | null;
   circleId?: string | null;
   kind?: string | null;
+  /**
+   * **R110 (Owner, 2026-09-02) — the catalogue filter**, and what the النوع
+   * control now sends. `kind` is the storage taxonomy and could not tell a
+   * عطلة from a نشاط: both are Events.
+   */
+  schedulingTypeId?: string | null;
   levelId?: string | null;
   /**
    * The caller's access token, when there is one (R62.10).
@@ -182,6 +198,7 @@ function calendarParams(query: CalendarQuery): URLSearchParams {
   // The contract names it `type`; the client calls it `kind` because `type` is
   // taken. The rename happens here, at the boundary, and nowhere else.
   if (query.kind) params.set('type', query.kind);
+  if (query.schedulingTypeId) params.set('scheduling_type_id', query.schedulingTypeId);
   return params;
 }
 
@@ -260,6 +277,13 @@ export interface CalendarBootstrap {
   branches: BranchRef[];
   /** R84 — the Subjects the public calendar filters by. */
   subjects: { id: string; name: string; display_order: number | null }[];
+  /** R110 — the live catalogue the النوع filter offers (see the service). */
+  scheduling_types: {
+    id: string;
+    name: string;
+    structural_kind: string;
+    display_order: number;
+  }[];
 }
 
 export interface BootstrapQuery {

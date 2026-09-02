@@ -47,6 +47,19 @@ const KIND_TONE: Record<string, 'neutral' | 'ok' | 'warn'> = {
   exam: 'warn',
 };
 
+/**
+ * **A عطلة is toned apart from an activity** (R110): `kind` is `event` for
+ * both, so the tone is taken from the structural kind where the row carries
+ * one. Read from the row, never matched against an Arabic name — the
+ * catalogue's names are the administration's to change (§4.4b).
+ */
+function toneOf(o: Occurrence): 'neutral' | 'ok' | 'warn' {
+  if (o.structural_kind === 'holiday') return 'neutral';
+  if (o.structural_kind === 'class') return 'ok';
+  if (o.structural_kind === 'exam') return 'warn';
+  return KIND_TONE[o.kind] ?? 'neutral';
+}
+
 export function OccurrenceTable({
   occurrences,
   columns,
@@ -74,8 +87,16 @@ export function OccurrenceTable({
       header: t('calendar.table.kind'),
       // The kind is a shape as well as a word: a reader scanning a month should
       // not have to read every row to find the exam in it.
+      /**
+       * **The catalogue's word where the row has one** (R110, Owner
+       * 2026-09-02) — «عطلة», «حفل», «محاضرة». `kind` says `نشاط` for a
+       * holiday, which is not what it is.
+       *
+       * A row predating the catalogue records no type and keeps the storage
+       * word, which is the honest answer for it rather than a guess.
+       */
       cell: (o) => (
-        <Badge tone={KIND_TONE[o.kind] ?? 'neutral'}>{t(`calendar.kind.${o.kind}`)}</Badge>
+        <Badge tone={toneOf(o)}>{o.scheduling_type_name ?? t(`calendar.kind.${o.kind}`)}</Badge>
       ),
     },
     title: { key: 'title', header: t('calendar.table.title'), cell: (o) => o.title },

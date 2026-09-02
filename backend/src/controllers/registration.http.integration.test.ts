@@ -8,11 +8,11 @@ import {
 } from '../test-support/consumed-tokens.js';
 import { httpCall } from "../test-support/http-client.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
-import { CONSENT_TEXT_VERSION_KEY } from "../services/registration.service.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 
 /**
  * `POST /registrations` over real HTTP (§4.1b step 5, TD-3.2).
@@ -39,7 +39,7 @@ const issueOnboardingToken = suiteTokens.issue;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-reg-test]";
 
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 let branchId = "";
 /** Revision 49 — the applicant's educational stage travels with every
  *  registration, so the fixture provides one. */
@@ -96,7 +96,7 @@ const adult = () => ({
   applicant: adultPerson("خديجة", "بنعلي"),
   branch_id: branchId,
   category_id: categoryId,
-  consents: { data_processing: true },
+  consents: { data_processing: true, consent_text_id: consentText!.id },
 });
 
 async function clear(): Promise<void> {
@@ -140,72 +140,133 @@ beforeAll(async () => {
       `API not reachable — run: docker compose up -d --build api`,
     );
   }
-  savedConsentVersion = await captureConsentVersion(prisma);
   await clear();
+  // R119 — the wording this suite records against, and it says in Arabic
+  // that it is development text with no legal value.
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "http-reg-v1");
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
   categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } }))
     .id;
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // Restore, never delete — deleting is what left the developer's database
   // unable to accept a registration at all.
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
-async function withConsentVersion<T>(
-  value: string | null,
-  run: () => Promise<T>,
-): Promise<T> {
-  if (value === null) {
-    await prisma.systemSetting.deleteMany({
-      where: { key: CONSENT_TEXT_VERSION_KEY },
-    });
-  } else {
-    await prisma.systemSetting.upsert({
-      where: { key: CONSENT_TEXT_VERSION_KEY },
-      update: { value },
-      create: { key: CONSENT_TEXT_VERSION_KEY, value },
+/**
+ * **Runs `run` with NO legal wording in force**, then puts back what was.
+ *
+ * R119 — the state used to be *the `SystemSetting` row is absent*; it is now
+ * *no `LegalConsentText` has `status = 'active'`*. Nothing is deleted: the
+ * suite's own version is stamped `superseded` and stamped back, so a wording
+ * another suite or the developer installed survives untouched.
+ *
+ * `finally`, and that is the point of this helper existing at all: a failing
+ * assertion inside `run` must not leave the shared development database with no
+ * active wording, which is exactly the shape that took registration down for
+ * everybody once already.
+ */
+async function withNoActiveConsentText<T>(run: () => Promise<T>): Promise<T> {
+  const active = await prisma.legalConsentText.findFirst({
+    where: { status: "active" },
+    select: { id: true },
+  });
+  if (active) {
+    await prisma.legalConsentText.update({
+      where: { id: active.id },
+      data: { status: "superseded", supersededAt: new Date() },
     });
   }
-  return run();
+  try {
+    return await run();
+  } finally {
+    if (active) {
+      await prisma.legalConsentText.update({
+        where: { id: active.id },
+        data: { status: "active", supersededAt: null },
+      });
+    }
+  }
 }
 
-describe("the missing consent text version is ACTIONABLE, not a generic outage", () => {
-  it("answers 503 with details naming the exact setting", async () => {
+describe("the missing legal consent wording is ACTIONABLE, not a generic outage", () => {
+  it("answers 503 with a coded reason rather than a bare outage", async () => {
     // The P0, from the browser's side. A bare `SERVICE_UNAVAILABLE` sent the
     // form's author looking at the network and the operator at the logs, when
-    // the cause was one unwritten configuration row.
-    const res = await withConsentVersion(null, () =>
-      submit(adult(), freshToken()),
-    );
+    // the cause was that nobody had put a legal wording in force.
+    //
+    // **R119 removed `setting` from the details.** It named
+    // `legal.consent_text_version`, which after the cutover is neither the
+    // authority nor the remedy; the coded `reason` is what a client branches on
+    // and is unchanged, which is why the message it maps to still works.
+    const res = await withNoActiveConsentText(() => submit(adult(), freshToken()));
 
     expect(res.status).toBe(503);
     expect(res.body.error?.code).toBe("SERVICE_UNAVAILABLE");
     expect(res.body.error?.details).toMatchObject({
       reason: "CONSENT_TEXT_VERSION_NOT_CONFIGURED",
-      setting: CONSENT_TEXT_VERSION_KEY,
     });
     // §14.4 wants it shown discreetly beside the error, so it has to be there.
     expect(res.body.error?.request_id).toBeTruthy();
   });
 
   it("persists NOTHING when it refuses", async () => {
-    await withConsentVersion(null, () => submit(adult(), freshToken()));
+    await withNoActiveConsentText(() => submit(adult(), freshToken()));
     expect(
       await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
     ).toBe(0);
+  });
+
+  /**
+   * **R119 — the wording changed while the form was open.**
+   *
+   * The race the whole `consent_text_id` round trip exists for: a Super Admin
+   * activates a new version between the form being drawn and being submitted.
+   * Recording the NEW version would state that this person agreed to words they
+   * never saw, so the server refuses and the client re-presents.
+   */
+  it("refuses a submission naming a version that is no longer in force", async () => {
+    const superseded = consentText!.id;
+    const replacement = await installTestConsentText(
+      prisma,
+      "http-reg-superseding-v1",
+    );
+    try {
+      const res = await submit(adult(), freshToken());
+      expect(res.status).toBe(409);
+      expect(res.body.error?.details).toMatchObject({
+        reason: "CONSENT_TEXT_SUPERSEDED",
+      });
+      // Nothing was written against either version.
+      expect(
+        await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+      ).toBe(0);
+      expect(superseded).not.toBe(replacement.id);
+    } finally {
+      // Restore, then remove: the replacement is this test's own row and
+      // nothing references it, so it must not survive the run (P1.2).
+      await removeTestConsentText(prisma, replacement);
+      await deleteTestConsentText(prisma, replacement);
+    }
   });
 });
 
 describe("a well-formed submission succeeds end to end", () => {
   it("creates a pending applicant and returns the §4.1b shape", async () => {
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit(adult(), freshToken()),
-    );
+    const res = await submit(adult(), freshToken());
 
     expect(res.status).toBe(201);
     expect(res.body.account_status).toBe("pending");
@@ -220,8 +281,7 @@ describe("a well-formed submission succeeds end to end", () => {
   });
 
   it("§7 R40: stores both name parts and composes name_arabic server-side", async () => {
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit(
+    const res = await submit(
         {
           kind: "parent_child",
           parent: adultPerson("أمينة", "بنعلي"),
@@ -233,11 +293,10 @@ describe("a well-formed submission succeeds end to end", () => {
               requested_category_id: categoryId,
             },
           ],
-          consents: { data_processing: true },
+          consents: { data_processing: true, consent_text_id: consentText!.id },
         },
         freshToken(),
-      ),
-    );
+      );
     expect(res.status).toBe(201);
 
     const parent = await prisma.user.findUnique({
@@ -272,18 +331,16 @@ describe("a well-formed submission succeeds end to end", () => {
         requested_category_id: categoryId,
       }));
 
-      const res = await withConsentVersion("http-reg-v1", () =>
-        submit(
-          {
-            kind: "parent_child",
-            parent: adultPerson("أمينة", "بنعلي"),
-            children,
-            // This is exactly the frontend payload: data processing belongs to
-            // the request; media release belongs to every child.
-            consents: { data_processing: true },
-          },
-          freshToken(),
-        ),
+      const res = await submit(
+        {
+          kind: "parent_child",
+          parent: adultPerson("أمينة", "بنعلي"),
+          children,
+          // This is exactly the frontend payload: data processing belongs to
+          // the request; media release belongs to every child.
+          consents: { data_processing: true, consent_text_id: consentText!.id },
+        },
+        freshToken(),
       );
 
       expect(res.status).toBe(201);
@@ -306,9 +363,7 @@ describe("the boundary refuses what it should, over HTTP", () => {
   it("R117 refuses a new registration without a contact phone", async () => {
     const body = adult();
     const { phone: _phone, ...withoutPhone } = body.applicant;
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit({ ...body, applicant: withoutPhone }, freshToken()),
-    );
+    const res = await submit({ ...body, applicant: withoutPhone }, freshToken());
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
@@ -316,25 +371,22 @@ describe("the boundary refuses what it should, over HTTP", () => {
   it("refuses a client-supplied name_arabic rather than ignoring it", async () => {
     // §1.1 / R40: the server composes the name. Accepting one from the client
     // would make the client the authority on how a person's name reads.
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit(
+    const res = await submit(
         {
           kind: "adult",
           applicant: { ...adultPerson("خديجة", "بنعلي"), name_arabic: "شيء آخر" },
           branch_id: branchId,
           category_id: categoryId,
-          consents: { data_processing: true },
+          consents: { data_processing: true, consent_text_id: consentText!.id },
         },
         freshToken(),
-      ),
-    );
+      );
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("refuses an identity field in the body (§20 rule 9)", async () => {
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit(
+    const res = await submit(
         {
           ...adult(),
           applicant: {
@@ -343,25 +395,51 @@ describe("the boundary refuses what it should, over HTTP", () => {
           },
         },
         freshToken(),
-      ),
-    );
+      );
     expect(res.status).toBe(400);
   });
 
   it("refuses a missing onboarding token", async () => {
-    const res = await withConsentVersion("http-reg-v1", () => submit(adult()));
+    const res = await submit(adult());
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("refuses a refused data-processing consent with CONSENT_REQUIRED", async () => {
-    const res = await withConsentVersion("http-reg-v1", () =>
-      submit(
-        { ...adult(), consents: { data_processing: false } },
-        freshToken(),
-      ),
+    // **The wording is still named** (R119): a refusal is a decision about a
+    // specific text, and dropping the id here would make this assert the schema
+    // rather than the consent rule.
+    const res = await submit(
+      {
+        ...adult(),
+        consents: { data_processing: false, consent_text_id: consentText!.id },
+      },
+      freshToken(),
     );
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe("CONSENT_REQUIRED");
+  });
+
+  /**
+   * **R119 — the version presented is REQUIRED, and the server does not fill
+   * it in.**
+   *
+   * Defaulting to *whatever is active* is the obvious convenience, and it is
+   * exactly the race the parameter exists to close: it would record agreement
+   * to whichever wording happened to be in force at submission rather than the
+   * one the person read.
+   */
+  it("refuses a submission that names no wording at all", async () => {
+    // The count is deliberately NOT asserted here: this describe block does not
+    // clear between tests, so a global count would be measuring the suite's own
+    // earlier successes. *Persists nothing on refusal* is asserted where the
+    // fixture supports it, above.
+    const body = adult();
+    const res = await submit(
+      { ...body, consents: { data_processing: true } } as never,
+      freshToken(),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 });

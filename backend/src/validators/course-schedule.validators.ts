@@ -216,6 +216,16 @@ export const createCourseScheduleSchema = z
      * carried a recurrence end since it shipped. Null is open-ended.
      */
     effective_until: calendarDate.nullable().optional(),
+    /**
+     * **Which catalogue row this is** (R110, Owner 2026-09-02) — «حصة دراسية»
+     * or «محاضرة», which are distinct types sharing one `structural_kind`.
+     * Refused unless it names a live type whose kind is `class`.
+     *
+     * Optional and nullable: every row predating the catalogue records none,
+     * and it is editable precisely so those can be resolved by someone who
+     * knows what they were, rather than guessed by a backfill.
+     */
+    scheduling_type_id: uuid.nullable().optional(),
     academic_year_id: uuid,
     staff: staff.optional(),
   })
@@ -258,6 +268,16 @@ export const updateCourseScheduleSchema = z
     month_of_year: z.number().int().min(1).max(12).nullable().optional(),
     anchor_date: calendarDate.nullable().optional(),
     effective_until: calendarDate.nullable().optional(),
+    /**
+     * **Which catalogue row this is** (R110, Owner 2026-09-02) — «حصة دراسية»
+     * or «محاضرة», which are distinct types sharing one `structural_kind`.
+     * Refused unless it names a live type whose kind is `class`.
+     *
+     * Optional and nullable: every row predating the catalogue records none,
+     * and it is editable precisely so those can be resolved by someone who
+     * knows what they were, rather than guessed by a backfill.
+     */
+    scheduling_type_id: uuid.nullable().optional(),
     /**
      * **Staffing is editable** (R90).
      *

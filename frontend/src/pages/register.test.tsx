@@ -52,6 +52,9 @@ const base = {
   allFramingBranches: false,
   framingBranchIds: [] as string[],
   dataProcessing: true,
+  /* R119 — the id of the wording the form displayed; the payload carries it so
+     the server can refuse a version that went out of force meanwhile. */
+  consentTextId: 'ct-1',
 };
 
 describe('§4.1 Revision 39 — the branch is a required choice', () => {
@@ -133,7 +136,9 @@ describe('هيئة التأطير framing preference', () => {
       },
       requested_role: 'teacher',
       framing: { mode: 'online' },
-      consents: { data_processing: true },
+      // R119 — the payload names the wording that was on screen, so the server
+      // can refuse one that went out of force while the form was open.
+      consents: { data_processing: true, consent_text_id: 'ct-1' },
     });
   });
 
@@ -217,7 +222,7 @@ describe('consent rules (§4.1, BR-1)', () => {
       }));
       const payload = buildPayload({ ...base, intent: 'parent_child', children });
 
-      expect(payload.consents).toEqual({ data_processing: true });
+      expect(payload.consents).toEqual({ data_processing: true, consent_text_id: 'ct-1' });
       expect(payload).not.toHaveProperty('consents.media_release');
       expect(payload.kind).toBe('parent_child');
       if (payload.kind === 'parent_child') {

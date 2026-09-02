@@ -123,9 +123,11 @@ constant in the client. Five rows, and the Owner calls their order canonical:
 | 2 | اختبار | نعم | `exam` | `Exam` |
 | 3 | محاضرة | لا | `activity` | `Event` |
 | 4 | حفل | لا | `activity` | `Event` |
-| 5 | عطلة | لا | `activity` | `Event` |
+| 5 | عطلة | لا | `holiday` | `Event` |
 
-**Five types, three entities — and no fifth scheduling model.** R56 settled that
+**Six types, three entities, four structural kinds — and no fifth scheduling
+model.** (`نشاط` joined the five above; `holiday` became a kind of its own in
+R110(9), so عطلة is no longer an `activity`.) R56 settled that
 *"the type selector's branches are exactly the ones that mean something — the
 three that route to different entities"*, and R110 **stores** that routing rather
 than re-deciding it. Three of the five are the same entity, which is precisely
@@ -173,6 +175,55 @@ reference data can make an `Event` have materialized occurrences, or let a
 * **Seeded does not mean immutable.** The seed finds by live name and creates
   only when absent, so a rename, a reorder, a re-flag and an addition all survive
   the next run.
+
+### The catalogue is what the calendar filters by (Owner, 2026-09-02)
+
+`الجدول الزمني → النوع` offered `session | event | exam` — **the storage
+taxonomy**, which is not the association's vocabulary and cannot express it.
+Three of the six catalogue rows are the same entity, so `type=event` returned
+نشاط, حفل *and* عطلة together: **a holiday could not be asked for at all**, and
+the chip for one read «نشاط».
+
+Three changes, and each is needed for the others to mean anything:
+
+1. **`scheduling_type_id` on the two entities that lacked it.** Only `Event`
+   recorded a catalogue row, so «حصة دراسية» and «محاضرة» — two rows of one
+   `structural_kind` — were indistinguishable on a class, and a class type had
+   nothing to narrow by. `RecurringCourseSchedule` and `Exam` now carry the same
+   nullable, `RESTRICT` column, set through the same picker the form already
+   rendered and validated by the same rule (`assertTypeOfKind`, which
+   `assertActivityType` is now a wrapper over).
+2. **`GET /calendar?scheduling_type_id=` .** The server resolves the type's
+   `structural_kind` **first** — which decides *which of the three sources can
+   hold such a row at all*, so a class type never queries the `Event` table —
+   and then narrows within that source by id. That ordering is what lets two
+   types of one kind be filtered apart.
+3. **The options come from `GET /calendar/bootstrap`**, which every calendar
+   already fetches for its Hijri overlay, so the control costs no request and
+   **cannot be wrong the day somebody adds a type**. One module,
+   `components/calendar/scheduling-type-filter.ts`, serves both the public and
+   the personal calendar: they had two copies of the same hard-coded array.
+
+**Legacy rows are not guessed.** Every schedule and sitting created before this
+revision records no type, none was backfilled, and such a row **matches no type
+filter** while remaining visible under «الكل». A `structural_kind` fallback is
+the tempting bug and is wrong twice over: it would make one untyped class answer
+to «حصة دراسية» *and* to «محاضرة» — two contradictory claims from a row that
+records neither — which is the name-matching §4.4b forbids, arrived at from the
+other direction. The column is editable precisely so somebody who *knows* what a
+row was can say so.
+
+**`type` is still accepted**, so a link saved before the revision narrows the
+same grid; both may be sent and each narrows independently. An id naming no type
+returns an empty set rather than being ignored — silently returning the whole
+grid answers a question nobody asked.
+
+**A عطلة is marked from the row, never from its name.** Each occurrence carries
+`scheduling_type_id`, `scheduling_type_name` and `structural_kind`, and the chip
+renders an outline plus **the type's own word** beside the title (rule AV: the
+word carries the meaning, the tint follows it). Matching «عطلة» as a string
+would break the moment the administration renames the row — which is the one
+thing the catalogue exists to let them do.
 
 ---
 

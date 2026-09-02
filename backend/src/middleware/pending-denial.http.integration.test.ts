@@ -146,6 +146,12 @@ const EXEMPT = new Set([
   // §4.4 / §4.1b / TD-3.9: public by design.
   "/calendar",
   "/registrations",
+  // R119: the legal wording the registration form must display. **Anonymous by
+  // necessity** — the form is reached before any account exists, so the notice
+  // a person is legally entitled to read before agreeing cannot sit behind a
+  // session. It publishes the id, the label and the text; never provenance,
+  // status or usage. **The guard caught this one**, which is what it is for.
+  "/registration/consent-text",
   "/healthz",
   // Revision 35: the §5.1 landing-page branch directory, anonymous.
   "/branches",

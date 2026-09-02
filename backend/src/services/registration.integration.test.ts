@@ -10,12 +10,13 @@ import {
   ownedOnboardingTokens,
 } from '../test-support/consumed-tokens.js';
 import { registrationSchema } from "../validators/registration.validators.js";
-import { CONSENT_TEXT_VERSION_KEY, register } from "./registration.service.js";
+import { register } from "./registration.service.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 import type { RegistrationInput } from "../validators/registration.validators.js";
 
 /**
@@ -34,7 +35,7 @@ const issueOnboardingToken = suiteTokens.issue;
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = "[reg-test]";
 /** Deliberately not a prefix-extension of `TAG` — `clear()` sweeps by prefix,
@@ -79,7 +80,7 @@ const parentChild = (): Extract<
       requested_category_id: categoryId,
     },
   ],
-  consents: { data_processing: true },
+  consents: { data_processing: true, consent_text_id: consentText!.id },
 });
 
 /**
@@ -172,13 +173,11 @@ async function clear(): Promise<void> {
 }
 
 beforeEach(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  await clear();
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: TEXT_VERSION },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
-  });
+    await clear();
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, TEXT_VERSION);
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
   categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } }))
     .id;
@@ -200,6 +199,10 @@ async function waitFor(
 }
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // R64.5 — the approving tests provision a placement, and its group holds an
   // enrolment under RESTRICT, so it goes after the people it enrolled.
@@ -208,10 +211,41 @@ afterAll(async () => {
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
+
+/**
+ * **Runs `run` with NO legal wording in force**, then puts back what was
+ * (R119). Nothing is deleted — the active row is stamped `superseded` and
+ * stamped back — and the restore is in a `finally`, because a failing assertion
+ * must not leave the shared development database unable to accept a
+ * registration.
+ */
+async function withNoActiveConsentText<T>(run: () => Promise<T>): Promise<T> {
+  const active = await prisma.legalConsentText.findFirst({
+    where: { status: "active" },
+    select: { id: true },
+  });
+  if (active) {
+    await prisma.legalConsentText.update({
+      where: { id: active.id },
+      data: { status: "superseded", supersededAt: new Date() },
+    });
+  }
+  try {
+    return await run();
+  } finally {
+    if (active) {
+      await prisma.legalConsentText.update({
+        where: { id: active.id },
+        data: { status: "active", supersededAt: null },
+      });
+    }
+  }
+}
 
 describe("§7 Revision 40 — الاسم الشخصي / الاسم العائلي", () => {
   it("stores both parts AND composes name_arabic from them", async () => {
@@ -229,7 +263,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         },
         branch_id: branchId,
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -268,7 +302,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
             requested_category_id: categoryId,
           },
         ],
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -292,7 +326,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
       },
       branch_id: "00000000-0000-4000-8000-000000000000",
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     });
     expect(parsed.success).toBe(false);
   });
@@ -302,7 +336,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
       kind: "adult" as const,
       branch_id: "00000000-0000-4000-8000-000000000000",
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     };
     // Missing family name.
     expect(
@@ -347,7 +381,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
       },
       branch_id: branchId,
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     };
     const missingAdultFirst = registrationSchema.safeParse({
       ...adult,
@@ -396,7 +430,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         },
         branch_id: "00000000-0000-4000-8000-000000000000",
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       });
       expect(parsed.success, `${field} must be rejected`).toBe(false);
     }
@@ -414,7 +448,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         sex: "female",
       },
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     });
     expect(parsed.success).toBe(false);
   });
@@ -510,7 +544,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         },
         branch_id: branchId,
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -569,7 +603,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           },
           branch_id: "00000000-0000-4000-8000-000000000000",
           category_id: categoryId,
-          consents: { data_processing: true },
+          consents: { data_processing: true, consent_text_id: consentText!.id },
         },
         KEY,
       ),
@@ -598,7 +632,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           },
           branch_id: closed.id,
           category_id: categoryId,
-          consents: { data_processing: true },
+          consents: { data_processing: true, consent_text_id: consentText!.id },
         },
         KEY,
       ),
@@ -629,7 +663,7 @@ describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         },
         branch_id: future.id,
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -664,7 +698,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
             requested_category_id: categoryId,
           },
         ],
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -697,7 +731,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
         },
         branch_id: branchId,
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -715,7 +749,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
       applicant: { first_name_arabic: "خديجة", last_name_arabic: "الاختبارية" },
       branch_id: branchId,
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     });
     expect(parsed.success).toBe(false);
   });
@@ -730,7 +764,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
       },
       branch_id: branchId,
       category_id: categoryId,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     });
     expect(parsed.success).toBe(false);
   });
@@ -747,7 +781,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
         },
         branch_id: "00000000-0000-4000-8000-000000000000",
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       });
       expect(parsed.success).toBe(true);
     }
@@ -1118,7 +1152,7 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
         },
         branch_id: branchId,
         category_id: categoryId,
-        consents: { data_processing: true },
+        consents: { data_processing: true, consent_text_id: consentText!.id },
       },
       KEY,
     );
@@ -1159,11 +1193,9 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
     ).toBe(0);
   });
 
-  it("fails closed when the consent text version is unset (§2.3 owner task)", async () => {
-    await prisma.systemSetting.deleteMany({
-      where: { key: CONSENT_TEXT_VERSION_KEY },
-    });
+  it("fails closed when no legal wording is in force (§2.3 owner task)", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
+    await withNoActiveConsentText(async () => {
     // §4.1a requires the exact text version on every record; without it we
     // cannot say what was agreed to, so we refuse rather than fabricate one.
     await expect(
@@ -1176,10 +1208,12 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
       // work, because no amount of waiting writes a missing configuration row.
       // TD-3.8's `details` is what makes the cause actionable, so it is pinned
       // here rather than left to chance.
-      details: {
-        reason: "CONSENT_TEXT_VERSION_NOT_CONFIGURED",
-        setting: CONSENT_TEXT_VERSION_KEY,
-      },
+      // **R119 dropped `setting` from the details.** It named
+      // `legal.consent_text_version`, which is neither the authority nor the
+      // remedy after the cutover; the coded `reason` a client branches on is
+      // unchanged, which is why the message it maps to still works.
+      details: { reason: "CONSENT_TEXT_VERSION_NOT_CONFIGURED" },
+    });
     });
     expect(
       await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),

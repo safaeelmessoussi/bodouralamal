@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { assertTypeOfKind } from './scheduling-type.service.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import type { Actor } from '../policies/actor.js';
@@ -118,6 +119,13 @@ export interface PhysicalExamInput {
   academicYearId: string;
   branchId: string;
   roomId: string;
+  /**
+   * **Which catalogue row this is** (R110, Owner 2026-09-02) — separate from
+   * `structural_kind`, which stays the answer to *which entity delivers it*.
+   * Refused unless it names a live type of kind `exam`. Null for every row
+   * predating the catalogue; see the migration for why none was backfilled.
+   */
+  schedulingTypeId?: string | null;
   /** `null` is **the whole Level** (R58), never "no target". */
   administrativeGroupId?: string | null;
   /**
@@ -219,6 +227,10 @@ export async function createPhysicalExam(
       administrativeGroupId: input.administrativeGroupId ?? null,
     });
     await assertCoherent(tx, input);
+    /** R110, Owner 2026-09-02 — see the identical guard on update. */
+    if (input.schedulingTypeId) {
+      await assertTypeOfKind(tx, input.schedulingTypeId, ['exam'] as const);
+    }
     const exam = await tx.exam.create({
       data: {
         mode: 'physical',
@@ -231,6 +243,7 @@ export async function createPhysicalExam(
         levelId: input.levelId,
         subjectId: input.subjectId,
         academicYearId: input.academicYearId,
+        schedulingTypeId: input.schedulingTypeId ?? null,
         branchId: input.branchId,
         roomId: input.roomId,
         administrativeGroupId: input.administrativeGroupId ?? null,
@@ -366,6 +379,15 @@ export async function updatePhysicalExam(
      * make a form succeed is the one outcome that must not happen. The edit
      * fails, naming how many rows disagree, and the person decides.
      */
+    /**
+     * **The type must be a live catalogue row of THIS kind** (R110, Owner
+     * 2026-09-02). A sitting typed «حفل» would give the calendar and the
+     * catalogue two different answers to *what is this*.
+     */
+    if (input.schedulingTypeId) {
+      await assertTypeOfKind(tx, input.schedulingTypeId, ['exam'] as const);
+    }
+
     if (input.maxGrade !== undefined) {
       const above = await tx.grade.count({
         where: { examId: id, score: { gt: input.maxGrade } },
@@ -395,6 +417,9 @@ export async function updatePhysicalExam(
         ...(input.startTime === undefined ? {} : { startTime: input.startTime }),
         ...(input.endTime === undefined ? {} : { endTime: input.endTime }),
         ...(input.roomId === undefined ? {} : { roomId: input.roomId }),
+        ...(input.schedulingTypeId === undefined
+          ? {}
+          : { schedulingTypeId: input.schedulingTypeId }),
         ...(input.administrativeGroupId === undefined
           ? {}
           : { administrativeGroupId: input.administrativeGroupId }),

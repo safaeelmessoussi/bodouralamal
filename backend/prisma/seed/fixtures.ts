@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   ConsentMethod,
   ConsentType,
@@ -61,33 +62,69 @@ async function assertNonProduction(): Promise<void> {
 /**
  * A **development** consent text version, so registration is testable.
  *
- * §4.1a requires every `ConsentRecord` to carry the exact text version agreed
+ * §4.1a requires every `ConsentRecord` to be tied to the exact wording agreed
  * to, and registration **fails closed** without one — correctly, because
  * recording that somebody agreed to text nobody has approved would be worse
  * than refusing. §2.3 makes legally verifying and versioning the Arabic consent
- * text an **owner compliance task**, and §15.1's normative seed list therefore
- * does not include this key.
+ * text an **owner compliance task**, and §15.1's normative seed therefore
+ * creates no wording at all.
  *
  * That is right for production and left development with a registration flow
- * that could never succeed: the value is meant to be entered through
- * `/superadmin/settings` (§5.6), a screen no milestone has built, so **no path
- * existed anywhere in the product to set it.**
+ * that could never succeed. Seeding it *here* is the honest split: fixtures are
+ * development-only and refuse to run under `NODE_ENV=production` (the Law 09-08
+ * firewall above), so this can never become a real consent wording by accident.
  *
- * Seeding it *here* is the honest split. Fixtures are development-only and
- * refuse to run under `NODE_ENV=production` (the Law 09-08 firewall above), so
- * this cannot become a real consent version by accident — and the value says so
- * in its own name.
+ * **The wording says what it is, in Arabic, in the text itself** — not only in
+ * its label. R119 made the body the thing a person actually reads on the
+ * registration form, so a placeholder that looked like a legal notice would be
+ * displayed as one; this one cannot be mistaken for approved wording by anybody
+ * who reads it.
  *
- * `update: {}` so re-running never clobbers a version an operator has set.
+ * **Never activated over an existing active version.** A developer who has
+ * written and activated a wording of their own keeps it; this seeds only when
+ * nothing is in force, so a repeated run is not a silent replacement.
  */
-async function seedDevConsentTextVersion(): Promise<void> {
-  const KEY = 'legal.consent_text_version';
-  const result = await prisma.systemSetting.upsert({
-    where: { key: KEY },
-    update: {},
-    create: { key: KEY, value: 'dev-unapproved-v1' },
+async function seedDevConsentText(): Promise<void> {
+  const LABEL = 'dev-unapproved-v1';
+  const BODY = 'نص تجريبي للتطوير فقط — لا قيمة قانونية له ولم تتم الموافقة عليه.';
+
+  const active = await prisma.legalConsentText.findFirst({
+    where: { status: 'active' },
+    select: { versionLabel: true },
   });
-  console.log(`  consent text version: ${JSON.stringify(result.value)} (development only)`);
+  if (active) {
+    console.log(`  consent wording: «${active.versionLabel}» already in force — left alone`);
+    return;
+  }
+
+  // `created_by_id` is NOT NULL and a fixture has no natural author; the first
+  // live account (the §15.1 Super Admin on a seeded database) is the honest one.
+  const author = await prisma.user.findFirstOrThrow({
+    where: { deletedAt: null },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const digest = createHash('sha256').update(BODY, 'utf8').digest('hex');
+  const row = await prisma.legalConsentText.upsert({
+    where: { versionLabel: LABEL },
+    update: {
+      status: 'active',
+      activatedAt: new Date(),
+      activatedById: author.id,
+      supersededAt: null,
+    },
+    create: {
+      versionLabel: LABEL,
+      bodyArabic: BODY,
+      bodyDigest: digest,
+      status: 'active',
+      activatedAt: new Date(),
+      activatedById: author.id,
+      createdById: author.id,
+    },
+    select: { versionLabel: true },
+  });
+  console.log(`  consent wording: «${row.versionLabel}» (development only, not approved)`);
 }
 
 async function main(): Promise<void> {
@@ -123,7 +160,7 @@ async function main(): Promise<void> {
     throw new Error('Run `npm run seed:production` first — fixtures build on the §15.1 seed.');
   }
 
-  await seedDevConsentTextVersion();
+  await seedDevConsentText();
 
   const levels = await prisma.level.findMany({
     where: { categoryId: category.id, deletedAt: null },

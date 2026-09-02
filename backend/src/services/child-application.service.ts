@@ -70,6 +70,13 @@ export interface SubmitInput {
   consentDataProcessing: boolean;
   /** The version in force **now**, captured so approval cannot substitute another. */
   consentTextVersion: string;
+  /**
+   * Owner 2026-09-02 — the immutable wording the parent was actually shown.
+   * Carried alongside the label so the child's own `ConsentRecord` binds to
+   * **what the parent read**, never to whatever is active by the time an
+   * administrator gets to the application.
+   */
+  consentTextId: string;
 }
 
 /**
@@ -128,6 +135,7 @@ export async function submitChildApplications(
         consentMediaRelease: child.consentMediaRelease,
         // Captured, never re-read at approval (R62.3b).
         consentTextVersion: input.consentTextVersion,
+        consentTextId: input.consentTextId,
         consentGivenAt: givenAt,
       },
       select: { id: true },
@@ -339,6 +347,9 @@ export async function decideChildApplication(
             consentType,
             granted,
             consentTextVersion: application.consentTextVersion,
+            // The wording the parent read, resolved through the application —
+            // never re-resolved from what is active today.
+            consentTextId: application.consentTextId,
             // The parent ticked a form; staff merely decided the application.
             method: 'online_form',
             grantedAt: application.consentGivenAt,

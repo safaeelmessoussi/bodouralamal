@@ -33,11 +33,11 @@ import {
   type TeachingFixture,
 } from '../test-support/educational-fixture.js';
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
-import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 import {
   completeUpload,
   deleteContent,
@@ -79,7 +79,7 @@ const trackedContentIds = new Set<string>();
 const trackedUserIds = new Set<string>();
 let server: Server;
 let apiBase: string;
-let savedConsentVersion: SavedConsentVersion;
+let consentText: InstalledConsentText | null = null;
 
 function track(bucket: string, key: string): void {
   trackedObjects.set(`${bucket}\0${key}`, { bucket, key });
@@ -517,12 +517,10 @@ beforeAll(async () => {
   } finally {
     await setup.stop({ graceful: true });
   }
-  savedConsentVersion = await captureConsentVersion(prisma);
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: 'b01-test-v1' },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: 'b01-test-v1' },
-  });
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, 'b01-test-v1');
   server = createServer(
     createApp(prisma, config, {
       snapshot: () => ({
@@ -543,11 +541,17 @@ beforeAll(async () => {
 beforeEach(cleanup);
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await cleanup();
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
-  await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 

@@ -1,8 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { actorFor } from "../test-support/actor.js";
+import {
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from "../test-support/legal-consent-text.js";
 import {
   clearPlacement,
   provisionPlacement,
@@ -34,6 +40,9 @@ import {
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = "[child-app-test]";
+/* R119 — an application binds to the wording the parent was shown, so the
+   fixture needs a real one. Development text, and it says so. */
+let consentText: InstalledConsentText | null = null;
 
 let adminId = "";
 let parentId = "";
@@ -120,6 +129,13 @@ async function clear(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
 
+beforeAll(async () => {
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "child-app-test-v1");
+});
+
 beforeEach(async () => {
   await clear();
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
@@ -128,10 +144,18 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // **The restore comes FIRST and is not conditional on the teardown below.**
+  // It used to be the last statement of an `afterAll` that deleted fixture rows
+  // first, so any failure in that teardown skipped it — which is exactly how a
+  // suite's scratch consent version was left in the shared database.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // After the people: `enrollment.student_id` is ON DELETE RESTRICT, so a group
   // still holding a student refuses to go.
   await clearPlacement(prisma, PLACEMENT_TAG);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
@@ -140,6 +164,7 @@ async function submitTwo(textVersion = "v1.0") {
   return prisma.$transaction((tx) =>
     submitChildApplications(tx, parentId, {
       consentDataProcessing: true,
+      consentTextId: consentText!.id,
       consentTextVersion: textVersion,
       children: [
         {
@@ -177,6 +202,7 @@ describe("one request, many children", () => {
       prisma.$transaction((tx) =>
         submitChildApplications(tx, parentId, {
           consentDataProcessing: false,
+          consentTextId: consentText!.id,
           consentTextVersion: "v1.0",
           children: [
             {
@@ -371,6 +397,7 @@ describe("R64 — the rules the two registration paths must share", () => {
     const submitted = await prisma.$transaction((tx) =>
       submitChildApplications(tx, staffParent, {
         consentDataProcessing: true,
+        consentTextId: consentText!.id,
         consentTextVersion: "v1.0",
         children: [
           {
@@ -444,6 +471,7 @@ describe("R64 — the rules the two registration paths must share", () => {
     const submitted = await prisma.$transaction((tx) =>
       submitChildApplications(tx, parentId, {
         consentDataProcessing: true,
+        consentTextId: consentText!.id,
         consentTextVersion: "v1.0",
         children: [
           {

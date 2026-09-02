@@ -441,6 +441,11 @@ export const ar = {
       all: 'الكل',
       subject: 'المادة',
       type: 'النوع',
+      /* R110 — the النوع filter offers the live catalogue, so a link saved
+         against a type since retired has a value with no option. Naming it
+         beats an empty control, which reads as *no filter* while the results
+         are in fact still narrowed. */
+      retiredType: 'نوع لم يعد مستعملًا',
       group: 'المجموعة',
       circle: 'الحلقة',
     },
@@ -676,9 +681,14 @@ export const ar = {
     // Split so the statute can be a real button inside the sentence, opening
     // the explanation. A checkbox that names a law and explains nothing is one
     // people tick without understanding — the opposite of informed consent.
-    consentDataProcessingPrefix: 'أوافق على معالجة بياناتي الشخصية وفق',
-    consentLawName: 'القانون 09-08',
-    consentDataProcessingSuffix: '.',
+    /**
+     * **The three keys that used to build the consent sentence are gone**
+     * (R119): the wording a person agrees to is now a stored
+     * `LegalConsentText`, rendered verbatim, and is not composed on the client.
+     * What remains here is the LINK to the plain-language explanation, which is
+     * interface rather than the statement being accepted.
+     */
+    consentLawExplain: 'ما هو القانون 09-08؟',
     lawTitle: 'حماية بياناتك الشخصية — القانون 09-08',
     lawIntro:
       'القانون 09-08 هو القانون المغربي المتعلق بحماية الأشخاص الذاتيين تجاه معالجة المعطيات ذات الطابع الشخصي. هذا ملخّص بلغة مبسّطة لما نجمعه ولماذا.',
@@ -732,10 +742,25 @@ export const ar = {
     tokenSpent: 'انتهت صلاحية جلسة التسجيل. يرجى البدء من جديد عبر Google.',
     rejected: 'تعذّر قبول البيانات. يرجى مراجعة الحقول والمحاولة من جديد.',
     failed: 'تعذّر إرسال الطلب حالياً. يرجى المحاولة بعد قليل.',
-    // A configuration gap, not an outage — waiting cannot fix it, so the
-    // message says what is missing and who can set it (§2.3 owner task).
+    /**
+     * A configuration gap, not an outage — waiting cannot fix it, so the
+     * message says what is missing and who can set it (§2.3 owner task).
+     *
+     * **R119 named a setting key here**, `legal.consent_text_version`, on a
+     * screen a beneficiary reads — rule M, and it is now the wrong remedy as
+     * well as the wrong register. It names the screen, which is what somebody
+     * can actually act on.
+     */
     consentVersionMissing:
-      'لا يمكن استقبال الطلبات بعد: لم تُسجَّل نسخة نص الموافقة القانوني (legal.consent_text_version). يرجى إبلاغ إدارة الجمعية لضبطها من إعدادات المنصة.',
+      'لا يمكن استقبال الطلبات بعد: لم تُعتمد بعدُ صيغةُ نصّ الموافقة القانوني. يرجى إبلاغ إدارة الجمعية لاعتمادها من إعدادات المنصة.',
+    /**
+     * R119 — the wording changed while this form was open. Not an error the
+     * person made, and not a retry: they must read the new wording and decide
+     * about **it**, which is why the message says the text was updated rather
+     * than that something failed.
+     */
+    consentTextSuperseded:
+      'تم تحديث نصّ الموافقة القانوني أثناء ملء النموذج. يرجى قراءة النصّ الجديد والموافقة عليه من جديد.',
   },
   teacher: {
     // R83.5 — تقويم المؤطرة الشخصي: حصصها وأنشطتها هي، لا تقويم المنصّة كلّه.
@@ -2283,16 +2308,63 @@ export const ar = {
       reviewUnavailable: 'تم البتّ في هذا الطلب أو لم يعد متاحاً للمراجعة.',
     },
     // §5.6 / Revision 42 — Platform Settings, first iteration.
+    /**
+     * **صيغ نص الموافقة القانوني** (R119) — the versioned legal wording.
+     *
+     * **No engineering reference anywhere in this block** (rule M): no setting
+     * key, no `§`, no revision number, and **no hash or database identifier** —
+     * the Owner's instruction is that an administrator manages wordings and
+     * their own labels, never a digest or a UUID.
+     */
+    consentText: {
+      title: 'نص الموافقة القانوني',
+      lede: 'النصّ الذي توافق عليه كلّ مستفيدة عند التسجيل. يُحفظ بنصّه الكامل مع كلّ موافقة، فلا يمكن تعديل صيغة سبق العمل بها — كلّ تعديل يعني صيغة جديدة.',
+      inForce: 'الصيغة المعمول بها',
+      draft: 'مسوّدة',
+      superseded: 'صيغة سابقة',
+      // Rule AH — the page-level condition. This is the state in which no
+      // registration can be accepted at all, so it says that, not «لا توجد».
+      noneActive:
+        'لا توجد صيغة معمول بها، ولذلك لا يمكن استقبال أي طلب تسجيل. أنشئي صيغة، اكتبي نصّها، ثم اعتمديها.',
+      add: 'صيغة جديدة',
+      addTitle: 'صيغة جديدة لنص الموافقة',
+      editTitle: 'تعديل المسوّدة',
+      labelField: 'معرّف الصيغة',
+      labelHint: 'اسم تختارينه للتمييز بين الصيغ، مثال: صيغة 2026-09. يظهر مع كلّ موافقة مسجَّلة.',
+      bodyField: 'نصّ الموافقة بالعربية',
+      bodyHint:
+        'يُعرض على المستفيدة كما هو، حرفاً بحرف. تُحفظ الفقرات والأسطر كما تكتبينها لأنها جزء من النصّ المعتمد.',
+      saved: 'تم حفظ المسوّدة. لن تُعرض على أحد قبل اعتمادها.',
+      activate: 'اعتماد هذه الصيغة',
+      activateTitle: 'اعتماد صيغة نص الموافقة',
+      activateBody:
+        'ستصبح «{label}» هي الصيغة التي تُعرض على كلّ مسجِّلة جديدة وتُحفظ مع موافقتها. الصيغة المعمول بها حالياً تصير صيغة سابقة، ويبقى نصّها محفوظاً كما هو.',
+      activateConfirm: 'اعتماد',
+      activated: 'تم اعتماد الصيغة. تُعرض من الآن على كلّ مسجِّلة جديدة.',
+      activatedOn: 'معمول بها منذ {date}',
+      neverActivated: 'لم تُعتمد بعد',
+      usedCount: 'مسجَّلة مع {count} موافقة',
+      // Rule AF — the rule as a fact, not a disabled button somebody hunts for
+      // the permission to enable.
+      immutable:
+        'لا تُعدَّل هذه الصيغة لأنها عُرضت على أشخاص ووُوفق عليها. أي تغيير في النصّ يكون بإنشاء صيغة جديدة واعتمادها.',
+      historyTitle: 'الصيغ السابقة',
+      historyHint: 'محفوظة بنصّها الكامل للاطّلاع فقط. لا تُحذف ولا تُعدَّل.',
+      errLabelTaken: 'هذا المعرّف مستعمل في صيغة أخرى. اختاري معرّفاً آخر.',
+      errImmutable: 'هذه الصيغة سبق العمل بها فلا تُعدَّل. أنشئي صيغة جديدة بالنصّ المعدَّل.',
+    },
     settings: {
       lede: 'إعدادات المنصة. يحرّرها المشرف العام وحده، ويُسجَّل كل تغيير في سجل المراجعة.',
-      consentVersionLabel: 'نسخة نص الموافقة القانوني',
-      // States the consequence, because an administrator editing this needs to
-      // know that stored consents keep the version they were given under.
-      consentVersionHint:
-        'المعرّف المسجَّل مع كل موافقة جديدة (مثال: 2026-08-v1). تغييره يسري على التسجيلات اللاحقة فقط — الموافقات المحفوظة تحتفظ بالنسخة التي وُقّعت عليها. لا يمكن استقبال أي طلب تسجيل قبل ضبط هذه القيمة.',
+      /**
+       * **R119 retired `consentVersionLabel`/`consentVersionHint`.** They
+       * labelled a free-text box holding a version *string* whose relationship
+       * to the Arabic wording was nothing but discipline. The wording is now a
+       * stored version, managed under `admin.consentText.*` below.
+       */
       notConfigured: 'غير مضبوط — التسجيل متوقف',
       current: 'القيمة الحالية: {value}',
       saved: 'تم حفظ الإعداد وتسجيله في سجل المراجعة.',
+      notConfiguredAny: 'لا توجد إعدادات قابلة للتحرير حالياً.',
       // R81 — سُلّم النقاط وحدّ النجاح أُلغيا: النقطة القصوى صارت خاصية الامتحان
       // نفسه، ولا حدّ نجاح في هذه المرحلة. المفتاحان حُذفا من السجل ومن قاعدة
       // البيانات معًا حتى لا يبقى إعداد يوحي بميزة لم تعد موجودة.

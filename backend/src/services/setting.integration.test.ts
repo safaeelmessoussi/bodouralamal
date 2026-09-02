@@ -3,26 +3,34 @@ import { actorFor } from "../test-support/actor.js";
 
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
-import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
-import { CONSENT_TEXT_VERSION_KEY } from "./registration.service.js";
 import { listSettings, updateSetting } from "./setting.service.js";
 
 /**
- * Platform settings (§5.6, TD-3.11, Revision 42).
+ * Platform settings (§5.6, TD-3.11, Revision 42; **R119**).
  *
- * The setting these tests cover is the one that decides whether the platform
- * can accept a registration at all, so its permission boundary, its validation
- * and its audit trail are all asserted rather than assumed.
+ * ## What this suite is, after R119
+ *
+ * It used to cover `legal.consent_text_version` — validation, audit, TD-15
+ * locking, and the normative *«a change never rewrites a stored consent»*. The
+ * Owner replaced that setting with `LegalConsentText`, where the version and
+ * its exact wording are one immutable record, so **the allow-list is now
+ * empty** and those properties belong to
+ * `legal-consent-text.integration.test.ts`, which asserts every one of them
+ * against the mechanism that actually holds them.
+ *
+ * What remains here is the part that is about the ALLOW-LIST ITSELF, and it is
+ * worth keeping precisely because there is nothing on it: the generic machinery
+ * is §5.6's contract and will carry settings again, and an authorization
+ * boundary that is only exercised while something happens to be behind it is an
+ * authorization boundary nobody is testing.
+ *
+ * The exact-key-set assertion is the guard that matters: it fails if a key
+ * reappears, which is how *«two independently editable answers to which wording
+ * is in force»* would come back.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = "[setting-test]";
-
-let savedConsentVersion: SavedConsentVersion | null = null;
 
 async function makeUser(role: string | null): Promise<string> {
   const user = await prisma.user.create({
@@ -62,69 +70,40 @@ async function clear(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
 
-beforeEach(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  await clear();
-  await prisma.systemSetting.deleteMany({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-  });
-});
+beforeEach(clear);
 
 afterAll(async () => {
   await clear();
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
 describe("TD-2 / §5.6 — Super Admin only", () => {
-  it("lets a Super Admin read and write", async () => {
-    const su = await makeUser("super_admin");
+  it("lets a Super Admin read, and lists exactly the allow-list", async () => {
     /**
-     * **The allow-list grew from one to three** (2026-08-17): the grading scale
-     * and the passing grade joined `legal.consent_text_version`.
+     * **The allow-list is EMPTY, and that is the assertion.**
      *
-     * §7 describes `SystemSetting` as *"runtime-editable"* and names the grading
-     * scale among its contents; R14 puts both values in it and nowhere else. The
-     * rows were seeded by §15.1 and reachable by **nothing in the product** — the
-     * same gap that made this list exist for the consent version.
-     *
-     * Asserted as the exact key SET rather than a length, because what matters is
-     * *which* settings are reachable: a length still passes when one is swapped
-     * for another, and this list is an authorization surface.
+     * It held `legal.consent_text_version` until R119 replaced it with
+     * `LegalConsentText`. Asserted as an exact key SET rather than a count,
+     * because what matters is *which* settings are reachable: a count still
+     * passes when one key is swapped for another, and this list is an
+     * authorization surface. If the consent key ever reappears here, this fails
+     * — which is the point, since two editable answers to *which wording is in
+     * force* is precisely what R119 removed.
      */
+    const su = await makeUser("super_admin");
     const listed = await listSettings(prisma, await actorFor(prisma, su));
-    // R81 — **the two grading rows are gone**, from the registry and from the
-    // database. An exact key set is what makes that assertable: a length check
-    // would still pass if one reappeared while another was dropped.
-    expect(listed.map((row) => row.key).sort()).toEqual([
-      "legal.consent_text_version",
-    ]);
-    const saved = await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "2026-08-v1",
-      0,
-    );
-    expect(saved.value).toBe("2026-08-v1");
+    expect(listed.map((row) => row.key)).toEqual([]);
   });
 
   it("refuses a plain Admin — this is not a staff setting", async () => {
-    // A consent text version decides what every future applicant is recorded
-    // as having agreed to. §5.6 puts System Settings under Super Admin alone.
+    // §5.6 puts System Settings under Super Admin alone, and the refusal is
+    // asserted on BOTH verbs: a read-only leak is still a leak.
     const admin = await makeUser("admin");
     await expect(
       listSettings(prisma, await actorFor(prisma, admin)),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(
-      updateSetting(
-        prisma,
-        await actorFor(prisma, admin),
-        CONSENT_TEXT_VERSION_KEY,
-        "x",
-        0,
-      ),
+      updateSetting(prisma, await actorFor(prisma, admin), "any.key", "x", 0),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -137,16 +116,6 @@ describe("TD-2 / §5.6 — Super Admin only", () => {
 });
 
 describe("the writable surface is an allow-list", () => {
-  it("lists an unconfigured setting rather than hiding it", async () => {
-    // Omitting it would hide exactly the row an operator is looking for — the
-    // one whose absence stops registration.
-    const su = await makeUser("super_admin");
-    const rows = await listSettings(prisma, await actorFor(prisma, su));
-    expect(rows[0]!.key).toBe(CONSENT_TEXT_VERSION_KEY);
-    expect(rows[0]!.value).toBeNull();
-    expect(rows[0]!.version).toBe(0);
-  });
-
   it("refuses a key that is not writable through this API", async () => {
     // NOT_FOUND rather than FORBIDDEN (§20 rule 17): a 403 would confirm the
     // key exists somewhere, and a typo must create nothing.
@@ -165,195 +134,56 @@ describe("the writable surface is an allow-list", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       updateSetting(prisma, await actorFor(prisma, su), "made.up.key", "x", 0),
-    ).rejects.toMatchObject({
-      code: "NOT_FOUND",
-    });
-  });
-});
-
-describe("validation — a value may never be empty", () => {
-  it("refuses blank and whitespace-only", async () => {
-    // A blank version would LOOK configured while reproducing the exact failure
-    // the setting prevents — harder to diagnose than an absent row, not easier.
-    const su = await makeUser("super_admin");
-    for (const bad of ["", "   ", "\t\n"]) {
-      await expect(
-        updateSetting(
-          prisma,
-          await actorFor(prisma, su),
-          CONSENT_TEXT_VERSION_KEY,
-          bad,
-          0,
-        ),
-      ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
-    }
-    expect(
-      await prisma.systemSetting.count({
-        where: { key: CONSENT_TEXT_VERSION_KEY },
-      }),
-    ).toBe(0);
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("refuses a non-string and an over-long value", async () => {
+  /**
+   * **The retired key is refused like any other unlisted key** (R119).
+   *
+   * The transition's whole point: `legal.consent_text_version` is not merely
+   * *not offered* — it is **unreachable**, so a client that still knows the key
+   * cannot write it and there is no second answer to *which wording is in
+   * force*. The stored row, if the installation has one, is left alone; nothing
+   * reads or writes it.
+   */
+  it("refuses the RETIRED consent key, so there is one authority", async () => {
     const su = await makeUser("super_admin");
-    await expect(
-      updateSetting(
-        prisma,
-        await actorFor(prisma, su),
-        CONSENT_TEXT_VERSION_KEY,
-        42,
-        0,
-      ),
-    ).rejects.toMatchObject({
-      code: "VALIDATION_FAILED",
+    const before = await prisma.systemSetting.findUnique({
+      where: { key: "legal.consent_text_version" },
+      select: { value: true, version: true },
     });
     await expect(
       updateSetting(
         prisma,
         await actorFor(prisma, su),
-        CONSENT_TEXT_VERSION_KEY,
-        "v".repeat(101),
+        "legal.consent_text_version",
+        "forged-v9",
         0,
       ),
-    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
-  });
-
-  it("trims before storing, so a padded value is not a different version", async () => {
-    const su = await makeUser("super_admin");
-    const saved = await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "  v1  ",
-      0,
-    );
-    expect(saved.value).toBe("v1");
-  });
-});
-
-describe("TD-8 audit — the previous value is part of the record", () => {
-  it("writes setting.update carrying OLD and NEW", async () => {
-    const su = await makeUser("super_admin");
-    await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "v1",
-      0,
-    );
-    await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "v2",
-      1,
-    );
-
-    const rows = await prisma.auditLog.findMany({
-      where: { actorUserId: su, actionType: "setting.update" },
-      orderBy: { createdAt: "asc" },
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const after = await prisma.systemSetting.findUnique({
+      where: { key: "legal.consent_text_version" },
+      select: { value: true, version: true },
     });
-    expect(rows).toHaveLength(2);
-    // The first write had no predecessor — null, not an empty string, so
-    // "never set" stays distinguishable from "set to nothing".
-    expect(rows[0]!.detail).toMatchObject({
-      key: CONSENT_TEXT_VERSION_KEY,
-      previous_value: null,
-      new_value: "v1",
-    });
-    // Without the OLD value, an auditor cannot answer "what text was in force
-    // when this person consented", which is the question they actually ask.
-    expect(rows[1]!.detail).toMatchObject({
-      previous_value: "v1",
-      new_value: "v2",
-    });
-  });
-});
-
-describe("TD-15 — a stale write is refused, never silently applied", () => {
-  it("answers VERSION_CONFLICT and leaves the value untouched", async () => {
-    const su = await makeUser("super_admin");
-    await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "v1",
-      0,
-    );
-
-    // Two Super Admins with the form open; the second read version 0.
-    await expect(
-      updateSetting(
-        prisma,
-        await actorFor(prisma, su),
-        CONSENT_TEXT_VERSION_KEY,
-        "v-stale",
-        0,
-      ),
-    ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
-
-    const rows = await listSettings(prisma, await actorFor(prisma, su));
-    expect(rows[0]!.value).toBe("v1");
-  });
-});
-
-describe("§4.1a — changing the setting never rewrites a stored consent", () => {
-  it("leaves existing ConsentRecords on the version they were given under", async () => {
-    // The normative half of Revision 42. Restamping would assert that people
-    // agreed to text they never saw.
-    const su = await makeUser("super_admin");
-    await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "v1",
-      0,
-    );
-
-    const student = await prisma.user.create({
-      data: {
-        // R80 — every person carries a recorded sex; the column is NOT NULL.
-        sex: "female",
-        nameArabic: `${TAG} موافِقة`,
-        accountStatus: "active",
-      },
-    });
-    await prisma.consentRecord.create({
-      data: {
-        studentId: student.id,
-        consentType: "data_processing",
-        granted: true,
-        method: "online_form",
-        consentTextVersion: "v1",
-        grantedByUserId: student.id,
-      },
-    });
-
-    await updateSetting(
-      prisma,
-      await actorFor(prisma, su),
-      CONSENT_TEXT_VERSION_KEY,
-      "v2",
-      1,
-    );
-
-    const record = await prisma.consentRecord.findFirst({
-      where: { studentId: student.id },
-    });
-    expect(record?.consentTextVersion).toBe("v1");
+    // Unchanged, whether or not the row exists here: the refusal writes
+    // nothing, and the record of what was last in force is not destroyed.
+    expect(after).toEqual(before);
   });
 });
 
 /**
- * **The grading scale was here, and R81 retired it** (2026-08-19).
+ * **The grading scale was here, and R81 retired it** (2026-08-19); the consent
+ * text version was here, and R119 replaced it.
  *
- * The block that stood here configured `grading.display_scale` and
- * `grading.passing_grade_bp` and asserted them integer-only. The Owner's
- * decision moved the maximum onto the `Exam` and removed the passing threshold
- * outright, so there is nothing left to configure — and the guard that matters
- * now is the one above: **the settings registry lists neither key**, asserted as
- * an exact set so a reappearance fails rather than passing quietly.
+ * What stood in this space configured `grading.display_scale`,
+ * `grading.passing_grade_bp` and `legal.consent_text_version`, and asserted
+ * validation, TD-8 audit, TD-15 locking and §4.1a's *«a change never rewrites a
+ * stored consent»* against them. Every one of those properties still holds and
+ * is asserted — against `LegalConsentText`, in
+ * `legal-consent-text.integration.test.ts`, which is where the mechanism now
+ * lives. The per-exam maximum has its own coverage in
+ * `exam-max-grade.http.integration.test.ts`.
  *
- * The per-exam maximum has its own coverage in `exam-max-grade.http.integration.test.ts`;
- * a settings test would be the wrong place for it, because it is not a setting.
+ * **The guard that survives here is the exact key set above**, because it is
+ * the one that fails if any of them comes back.
  */

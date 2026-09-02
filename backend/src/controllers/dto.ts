@@ -25,6 +25,7 @@
  * being one.
  */
 
+import type { LegalConsentTextRow } from '../services/legal-consent-text.service.js';
 import type { Prisma } from "../generated/prisma/client.js";
 import { splitComposedName } from '../lib/person-name.js';
 import { toNumber } from "../policies/grading.js";
@@ -479,6 +480,8 @@ function timeOnly(value: Date): string {
 
 export interface CourseScheduleDto {
   id: string;
+  /** R110 — which catalogue row this is; `null` for a pre-catalogue row. */
+  scheduling_type_id: string | null;
   /** R57 — what the class is CALLED. A label, never an identifier: not unique,
    *  and no part of scheduling logic. `subject_id` remains the identifier. */
   title: string;
@@ -618,6 +621,9 @@ export function courseScheduleDto(row: {
   monthOfYear: number | null;
   anchorDate: Date | null;
   effectiveUntil: Date | null;
+  /** R110 (Owner, 2026-09-02) — which catalogue row this is. `null` for a row
+   *  that predates the catalogue; see the migration for why none was guessed. */
+  schedulingTypeId?: string | null;
   academicYearId: string;
   staff: {
     userId: string;
@@ -646,6 +652,7 @@ export function courseScheduleDto(row: {
     description: row.description,
     subject_id: row.subjectId,
     subject_name: row.subject?.name ?? null,
+    scheduling_type_id: row.schedulingTypeId ?? null,
     teaching_mode: row.teachingMode,
     target_id: targetOf(row),
     // Resolved rather than read from one column: only `entire_level` carries a
@@ -2029,6 +2036,8 @@ export function eventDefinitionDto(row: {
  */
 export interface ExamDto {
   id: string;
+  /** R110 — which catalogue row this is; `null` for a pre-catalogue row. */
+  scheduling_type_id: string | null;
   mode: string;
   title: string;
   description: string | null;
@@ -2085,6 +2094,8 @@ export function examDto(row: {
   room?: { name: string } | null;
   administrativeGroupId: string | null;
   administrativeGroup?: { name: string } | null;
+  /** R110 (Owner, 2026-09-02) — which catalogue row this sitting is. */
+  schedulingTypeId?: string | null;
   maxGrade: Prisma.Decimal;
   visibility: string;
   staff: { userId: string; position: string }[];
@@ -2102,6 +2113,7 @@ export function examDto(row: {
     level_name: row.level?.name ?? null,
     subject_id: row.subjectId,
     subject_name: row.subject?.name ?? null,
+    scheduling_type_id: row.schedulingTypeId ?? null,
     academic_year_id: row.academicYearId,
     branch_id: row.branchId,
     branch_name: row.branch?.name ?? null,
@@ -2262,5 +2274,55 @@ export function recordingStateDto(state: {
      * deliberately no provider URL anywhere on this DTO (R99.13).
      */
     educational_content_id: state.educationalContentId,
+  };
+}
+
+/**
+ * **One stored legal consent wording, as the Super Admin screen reads it**
+ * (Owner, 2026-09-02).
+ *
+ * The exact Arabic text travels: the screen's whole purpose is to show what a
+ * version actually SAYS, and a management surface that lists version labels
+ * without their wording reproduces the detached string it replaces.
+ *
+ * `consent_record_count` is what makes immutability legible rather than a
+ * refusal somebody meets by surprise — the screen can say *«this wording has
+ * been agreed to N times and cannot be changed»* before anyone tries.
+ */
+export function legalConsentTextDto(row: LegalConsentTextRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    version_label: row.version_label,
+    body_arabic: row.body_arabic,
+    body_digest: row.body_digest,
+    status: row.status,
+    created_at: row.created_at,
+    activated_at: row.activated_at,
+    superseded_at: row.superseded_at,
+    consent_record_count: row.consent_record_count,
+    version: row.version,
+  };
+}
+
+/**
+ * **What an anonymous registration form receives.**
+ *
+ * The id and the exact wording, and deliberately nothing else: status,
+ * provenance and usage counts are administration's business, and a public read
+ * publishes only what the person in front of the form needs to decide.
+ *
+ * `version_label` travels because it is what the resulting `ConsentRecord`
+ * carries, so the person can be told, and later shown, which version they
+ * agreed to in words a human can act on.
+ */
+export function publicConsentTextDto(row: {
+  id: string;
+  versionLabel: string;
+  bodyArabic: string;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    version_label: row.versionLabel,
+    body_arabic: row.bodyArabic,
   };
 }

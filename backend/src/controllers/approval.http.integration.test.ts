@@ -14,14 +14,14 @@ import {
   type Placement,
 } from "../test-support/placement.js";
 import {
-  CONSENT_TEXT_VERSION_KEY,
   register,
 } from "../services/registration.service.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 
 /**
  * Approval routes over real HTTP, through Nginx (TD-3.2, §5.6).
@@ -45,7 +45,7 @@ const issueOnboardingToken = suiteTokens.issue;
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-appr-test]";
 /**
@@ -151,7 +151,7 @@ async function submitBundle(
       // R49 — the stage the parent chose for the child, which §4.1 step 1
       // preselects the first Level from. The fixture's placement Category, so
       // the preselection and the group the approval uses agree.
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
     },
     config.ONBOARDING_TOKEN_KEY,
   );
@@ -222,8 +222,7 @@ let teacher: string;
 let placement: Placement;
 
 beforeAll(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
+    // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
   // indistinguishable from a passing one.
   const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
     () => null,
@@ -236,11 +235,10 @@ beforeAll(async () => {
 
   await clear();
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: "http-appr-v1" },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: "http-appr-v1" },
-  });
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "http-appr-v1");
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } }))
     .id;
   otherBranchId = (
@@ -253,12 +251,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 

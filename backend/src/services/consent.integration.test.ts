@@ -15,12 +15,12 @@ import {
   readConsent,
   recordStaffConsent,
 } from "./consent.service.js";
-import { CONSENT_TEXT_VERSION_KEY } from "./registration.service.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 
 /**
  * Staff-recorded consent — §4.1a, BR-1, TD-2, TD-7, TD-8, TD-12.
@@ -39,7 +39,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 const TAG = "[consent-test]";
 
 let levelId: string;
@@ -167,24 +167,27 @@ async function clear(): Promise<void> {
 }
 
 beforeEach(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  await clear();
+    await clear();
   const level = await prisma.level.findFirst({ select: { id: true } });
   levelId = level!.id;
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: "consent-test-v1" },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: "consent-test-v1" },
-  });
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "consent-test-v1");
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
@@ -196,6 +199,36 @@ async function scenario() {
   const student = await person("طالبة");
   await enrol(groupId, student);
   return { branchId, groupId, admin, student };
+}
+
+/**
+ * **Runs `run` with NO legal wording in force**, then puts back what was
+ * (R119). Nothing is deleted — the active row is stamped `superseded` and
+ * stamped back — and the restore is in a `finally`, because a failing assertion
+ * must not leave the shared development database unable to accept a
+ * registration.
+ */
+async function withNoActiveConsentText<T>(run: () => Promise<T>): Promise<T> {
+  const active = await prisma.legalConsentText.findFirst({
+    where: { status: "active" },
+    select: { id: true },
+  });
+  if (active) {
+    await prisma.legalConsentText.update({
+      where: { id: active.id },
+      data: { status: "superseded", supersededAt: new Date() },
+    });
+  }
+  try {
+    return await run();
+  } finally {
+    if (active) {
+      await prisma.legalConsentText.update({
+        where: { id: active.id },
+        data: { status: "active", supersededAt: null },
+      });
+    }
+  }
 }
 
 describe("§4.1a — recording a decision declared in person", () => {
@@ -258,19 +291,20 @@ describe("§4.1a — recording a decision declared in person", () => {
     expect(row?.revokedByUserId).toBe(admin);
   });
 
-  it("fails closed when no consent text version is configured (§2.3)", async () => {
+  it("fails closed when no legal wording is in force (§2.3)", async () => {
     const { admin, student } = await scenario();
-    await prisma.systemSetting.deleteMany({
-      where: { key: CONSENT_TEXT_VERSION_KEY },
-    });
 
     // A decision that cannot be tied to a wording is not a record of consent.
-    await expect(
-      recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
-        consentType: "media_release",
-        granted: true,
-      }),
-    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    // **R119 — the state is now *no active `LegalConsentText`***, and the
+    // helper restores what was there rather than deleting a row.
+    await withNoActiveConsentText(async () => {
+      await expect(
+        recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
+          consentType: "media_release",
+          granted: true,
+        }),
+      ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    });
     expect(
       await prisma.consentRecord.count({ where: { studentId: student } }),
     ).toBe(0);
@@ -430,13 +464,12 @@ describe("§4.1a + TD-4 — the re-evaluation enqueue", () => {
     // Force the transaction to fail after the enqueue by deleting the student
     // mid-flight is impractical; instead assert the paired invariant — a refused
     // decision writes neither a record nor a job.
-    await prisma.systemSetting.deleteMany({
-      where: { key: CONSENT_TEXT_VERSION_KEY },
+    await withNoActiveConsentText(async () => {
+      await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
+        consentType: "media_release",
+        granted: true,
+      }).catch(() => undefined);
     });
-    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
-      consentType: "media_release",
-      granted: true,
-    }).catch(() => undefined);
 
     expect(
       await prisma.consentRecord.count({ where: { studentId: student } }),

@@ -3,6 +3,7 @@ import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
+import * as consentTexts from './controllers/legal-consent-text.controller.js';
 import * as settings from './controllers/setting.controller.js';
 import * as teachingProfile from './controllers/teaching-profile.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
@@ -262,6 +263,16 @@ export function createApp(
   // Public, gated by the signed onboarding token — no session exists yet
   // (§4.1b step 4c, TD-3.2).
   api.post('/registrations', createRegistration(prisma, config));
+  /**
+   * The exact legal wording the registration form must display, and whose id it
+   * sends back with the submission (Owner, 2026-09-02).
+   *
+   * **Anonymous, and mounted here beside the registration it serves.** The form
+   * is reached before any account exists, so the notice a person is legally
+   * entitled to read before agreeing cannot be behind a session. It publishes
+   * only the id, the label and the text — never provenance or usage.
+   */
+  api.get('/registration/consent-text', consentTexts.readActive(prisma));
 
   // Branches & Rooms (§5.6, §14.2). Everything below requires a live Active
   // session; role and branch-scope checks live in the service (TD-2).
@@ -339,6 +350,12 @@ export function createApp(
   // one refusal an administrator could not override.
   guarded.get('/admin/teaching-candidates', teachingProfile.candidates(prisma));
   guarded.get('/admin/settings', settings.list(prisma));
+  // The versioned legal consent wording (Owner, 2026-09-02). Super Admin only,
+  // enforced in the service — the `/admin/` prefix is not the boundary.
+  guarded.get('/admin/legal-consent-texts', consentTexts.list(prisma));
+  guarded.post('/admin/legal-consent-texts', consentTexts.create(prisma));
+  guarded.patch('/admin/legal-consent-texts/:id', consentTexts.update(prisma));
+  guarded.post('/admin/legal-consent-texts/:id/activate', consentTexts.activate(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
 
   // R62 — child applications. One request holds several children; each is

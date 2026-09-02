@@ -77,8 +77,26 @@ export interface CalendarQuery {
    * class occurrences, exactly as `subject_id` already does.
    */
   teachingGroupId?: string;
-  /** R84 — `session`, `event` or `exam`: the platform's own taxonomy. */
+  /**
+   * R84 — `session`, `event` or `exam`: **the storage taxonomy**, and the
+   * platform's own words for what it schedules are `schedulingTypeId` below.
+   * Kept because deep links carry it.
+   */
   kind?: "session" | "event" | "exam";
+  /**
+   * **Which catalogue row** (R110, Owner 2026-09-02) — the association's own
+   * vocabulary: «حصة دراسية», «محاضرة», «حفل», «عطلة».
+   *
+   * `kind` could not express this. Two types share one `structural_kind` —
+   * عطلة and نشاط are both stored as an `Event` — so `kind=event` returned
+   * both and a holiday was unfilterable. The type resolves to its kind, which
+   * still selects the source; the id then narrows within it.
+   *
+   * **A row recording no type matches no type filter.** Every schedule and
+   * sitting predating the catalogue is such a row, and inferring one from a
+   * name is what §4.4b forbids. They appear under «الكل».
+   */
+  schedulingTypeId?: string;
 }
 
 export interface Occurrence {
@@ -89,6 +107,14 @@ export interface Occurrence {
    * ordinary class.
    */
   kind: "session" | "event" | "exam";
+  /**
+   * **The catalogue row this occurrence is** (R110, Owner 2026-09-02), and its
+   * `structural_kind`, so a reader can tell a عطلة from an ordinary activity —
+   * `kind` says `event` for both. `null` on rows that predate the catalogue.
+   */
+  schedulingTypeId: string | null;
+  schedulingTypeName: string | null;
+  structuralKind: string | null;
   id: string;
   title: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -390,6 +416,10 @@ const SESSION_OCCURRENCE_INCLUDE = {
   schedule: {
     select: {
       branchId: true,
+      /* R110 (Owner 2026-09-02) — carried so a reader can tell a عطلة from an
+         ordinary activity; `kind` says `event` for both. */
+      schedulingType: { select: { id: true, name: true, structuralKind: true } },
+
       branch: { select: { name: true } },
       subject: { select: { id: true, name: true } },
       teachingMode: true,
@@ -445,6 +475,9 @@ function sessionOccurrence(
     null;
   return {
     kind: "session",
+    schedulingTypeId: sch.schedulingType?.id ?? null,
+    schedulingTypeName: sch.schedulingType?.name ?? null,
+    structuralKind: sch.schedulingType?.structuralKind ?? null,
     id: session.id,
     title: sch.subject.name,
     date: iso(session.date),
@@ -688,6 +721,30 @@ export async function readCalendar(
       ? await personalFilters(prisma, actor.userId)
       : null;
 
+  /**
+   * **The catalogue filter resolves to its structural kind FIRST** (R110, Owner
+   * 2026-09-02).
+   *
+   * The kind decides *which of the three sources can hold such a row at all*,
+   * so a class type never queries the Event table. The id then narrows within
+   * that source. That ordering is what lets عطلة and نشاط — both Events — be
+   * asked for separately, which `kind=event` never could.
+   *
+   * A soft-deleted type still resolves: retiring a type must not make the rows
+   * that used it unfindable, which is the same reason the FK is `RESTRICT`.
+   */
+  const typeFilter = query.schedulingTypeId
+    ? await prisma.schedulingType.findUnique({
+        where: { id: query.schedulingTypeId },
+        select: { id: true, structuralKind: true },
+      })
+    : null;
+  /* An id naming no type is a filter nothing can satisfy, not a filter to
+     ignore: silently returning the whole grid answers a question nobody
+     asked. */
+  if (query.schedulingTypeId && !typeFilter) return [];
+  const typeKind = typeFilter?.structuralKind ?? null;
+
   const floor = await operationalFloor(prisma, query.branchId);
   const from = floor && floor > query.from ? floor : query.from;
   if (from > query.to) return [];
@@ -739,7 +796,9 @@ export async function readCalendar(
     query.kind === "session";
 
   const events =
-    sessionOnlyFilter || (query.kind !== undefined && query.kind !== "event")
+    sessionOnlyFilter ||
+    (query.kind !== undefined && query.kind !== "event") ||
+    (typeKind !== null && typeKind !== "activity" && typeKind !== "holiday")
       ? []
       : await prisma.event.findMany({
           where: {
@@ -750,8 +809,12 @@ export async function readCalendar(
             ...(await visibilityFilter(prisma, actor)),
             ...(scopeFilters.length ? { AND: scopeFilters } : {}),
             ...(personal ? { AND: [...scopeFilters, personal.event] } : {}),
+            ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
           },
           include: {
+            schedulingType: {
+              select: { id: true, name: true, structuralKind: true },
+            },
             branchScopes: {
               select: { branch: { select: { id: true, name: true } } },
               take: 1,
@@ -775,6 +838,9 @@ export async function readCalendar(
     for (const date of expandEvent(event, from, query.to)) {
       out.push({
         kind: "event",
+        schedulingTypeId: event.schedulingType?.id ?? null,
+        schedulingTypeName: event.schedulingType?.name ?? null,
+        structuralKind: event.schedulingType?.structuralKind ?? null,
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -823,7 +889,8 @@ export async function readCalendar(
   const exams =
     query.teacherId !== undefined ||
     query.teachingGroupId !== undefined ||
-    (query.kind !== undefined && query.kind !== "exam")
+    (query.kind !== undefined && query.kind !== "exam") ||
+    (typeKind !== null && typeKind !== "exam")
       ? []
       : await prisma.exam.findMany({
           where: {
@@ -834,6 +901,7 @@ export async function readCalendar(
             // own tier. An anonymous visitor reads public sittings and nothing
             // else.
             ...examTierWhere(actor),
+            ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
             ...(query.branchId ? { branchId: query.branchId } : {}),
             ...(query.levelId ? { levelId: query.levelId } : {}),
             ...(query.subjectId ? { subjectId: query.subjectId } : {}),
@@ -861,12 +929,18 @@ export async function readCalendar(
             branch: { select: { id: true, name: true } },
             room: { select: { name: true } },
             administrativeGroup: { select: { name: true } },
+            schedulingType: {
+              select: { id: true, name: true, structuralKind: true },
+            },
           },
         });
 
   for (const exam of exams) {
     out.push({
       kind: "exam",
+      schedulingTypeId: exam.schedulingType?.id ?? null,
+      schedulingTypeName: exam.schedulingType?.name ?? null,
+      structuralKind: exam.schedulingType?.structuralKind ?? null,
       id: exam.id,
       title: exam.title,
       date: iso(exam.date),
@@ -930,7 +1004,10 @@ export async function readCalendar(
   // R84 — asking for activities alone means no class occurrence belongs in the
   // answer. Skipping the query beats filtering its result: the rows are never
   // read at all.
-  if (query.kind === undefined || query.kind === "session") {
+  if (
+    (query.kind === undefined || query.kind === "session") &&
+    (typeKind === null || typeKind === "class")
+  ) {
     const sessions = await prisma.session.findMany({
       where: {
         deletedAt: null,
@@ -967,6 +1044,7 @@ export async function readCalendar(
             ? { academicYearId: query.academicYearId }
             : {}),
           ...(query.subjectId ? { subjectId: query.subjectId } : {}),
+          ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
         },
         // The session's OWN staffing snapshot, not the schedule's (R43.4): a
         // teacher who covered one occurrence should find it here, and one

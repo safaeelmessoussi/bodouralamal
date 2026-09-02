@@ -95,6 +95,13 @@ export function read(prisma: PrismaClient) {
           name: s.name,
           display_order: s.displayOrder,
         })),
+        // R110's catalogue — see the note on `schedulingTypes` in the service.
+        scheduling_types: bootstrap.schedulingTypes.map((t) => ({
+          id: t.id,
+          name: t.name,
+          structural_kind: t.structuralKind,
+          display_order: t.displayOrder,
+        })),
       },
     };
 

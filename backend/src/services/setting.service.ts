@@ -3,7 +3,6 @@ import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
-import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
 
 /**
  * Platform settings (SRS §5.6, TD-3.11, Revision 42).
@@ -64,33 +63,26 @@ function settingValue(value: unknown): string | null {
  * creates nothing and an unlisted key cannot be written by a client that
  * guesses at it.
  */
-export const WRITABLE_SETTINGS: WritableSetting[] = [
-  {
-    key: CONSENT_TEXT_VERSION_KEY,
-    labelKey: 'admin.settings.consentVersionLabel',
-    hintKey: 'admin.settings.consentVersionHint',
-    kind: 'text',
-    validate: (value) => {
-      if (typeof value !== 'string') {
-        throw new AppError('VALIDATION_FAILED', 'consent text version must be a string', {
-          issues: [{ path: 'value', message: 'expected a string' }],
-        });
-      }
-      const trimmed = value.trim();
-      // Blank is refused deliberately: a blank version would *look* configured
-      // while reproducing the exact failure the setting exists to prevent —
-      // registration refusing every applicant — and would be harder to
-      // diagnose than an absent row, not easier.
-      if (trimmed === '' || trimmed.length > 100) {
-        throw new AppError('VALIDATION_FAILED', 'consent text version must be 1–100 characters', {
-          issues: [{ path: 'value', message: 'must be between 1 and 100 characters' }],
-        });
-      }
-      return trimmed;
-    },
-  },
-
-];
+/**
+ * **Empty since 2026-09-02, and that is the point.**
+ *
+ * Its only entry was `legal.consent_text_version` — a free-text string with no
+ * technical relationship to the Arabic wording it claimed to version. The Owner
+ * replaced it with `LegalConsentText`, where the version and the exact wording
+ * are one immutable record, so keeping the key here would leave **two
+ * independently editable answers** to *which wording is in force* — which is
+ * the drift the replacement exists to end.
+ *
+ * The machinery stays. It is generic, it is TD-3.11's contract, and §5.6 will
+ * have settings again; what it must not do is offer this one. An empty list
+ * means `GET /admin/settings` honestly returns nothing rather than a route
+ * pretending to configure something no longer read.
+ *
+ * **The stored row is not deleted.** It is the only record of which label was
+ * last in force before the cutover, and nothing reads or writes it now, so it
+ * cannot drift.
+ */
+export const WRITABLE_SETTINGS: WritableSetting[] = [];
 
 /**
  * **`integerSetting` lived here and went with R81** (2026-08-19).

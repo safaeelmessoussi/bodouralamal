@@ -2166,6 +2166,48 @@ the class begins is ordinary; only a period sharing no day at all is refused.
 A client check that demanded containment would be *stricter* than the server,
 which is the one thing a mirror must never be.
 
+## BE · A legally binding value is managed as the record it is, never as a detached string
+
+`إعدادات المنصة` carried `legal.consent_text_version`: a **text box** holding a
+version identifier. The wording it claimed to version lived in the frontend's
+`i18n/ar.ts`, deployed separately, and a `ConsentRecord` stored only the string.
+
+So the screen invited an administrator to change something that changed nothing.
+Typing `v2` there altered no word anybody read; editing the Arabic altered no
+version anybody recorded. **Both drifts were silent and both passed every test**,
+because nothing asserted a relationship that nothing enforced.
+
+**The control was not the defect — the model was, and the control made it look
+managed.** A screen that offers a handle to a thing it is not attached to is
+worse than no screen: it produces the confident belief that the value is under
+control.
+
+The rule, in three parts:
+
+* **If a value is legally or contractually binding, the thing under management
+  is the CONTENT, not a label for it.** The Super Admin now writes the exact
+  Arabic wording, gives it an identifier, reviews it, and **activates it as a
+  separate explicit act** — R119's `LegalConsentText`.
+* **Show what is in force, in full, with the date it took effect, and the
+  history read-only.** A compliance reader arrives asking *«what did somebody
+  agree to in March»*; a list of version labels cannot answer it, and an
+  accordion hides the answer behind a click nobody knows to make.
+* **Never make an administrator manage a hash or a UUID.** A digest travels for
+  a support engineer comparing an export against the record; the identifier a
+  person assigns and reads is their own label.
+
+**Immutability is shown before it is enforced** (rule AF): each version carries
+how many consents were recorded against it, and a used version says in words
+that new wording means a new version — rather than a greyed-out «تعديل» that
+invites somebody to hunt for the permission that would enable it.
+
+**Guarded by** `services/legal-consent-text.integration.test.ts` (immutability,
+the single-active invariant against a direct write, the displayed-is-recorded
+round trip, and honest legacy evidence) and
+`services/setting.integration.test.ts`, whose exact-key-set assertion fails if
+the retired setting ever reappears — which is how *two independently editable
+answers to which wording is in force* would come back.
+
 ## BA · A table shows every meaningful field of what it manages
 
 **Owner rule (2026-08-27).** *Every table in the platform must show all

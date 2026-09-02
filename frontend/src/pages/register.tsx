@@ -6,13 +6,16 @@ import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
   LIMITS,
   PHONE_PATTERN,
+  fetchActiveConsentText,
   submitRegistration,
+  type ActiveConsentText,
   type PersonInput,
   type RegistrationInput,
 } from '../adapters/registrations.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { ConsentNotice } from '../components/consent-notice.js';
+import { consentFailure } from '../lib/consent-failure.js';
 import { ErrorState } from '../components/states.js';
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../adapters/calendar.js';
@@ -92,6 +95,20 @@ export function Register(): ReactNode {
   const [allFramingBranches, setAllFramingBranches] = useState(false);
   const [framingBranchIds, setFramingBranchIds] = useState<string[]>([]);
   const [dataProcessing, setDataProcessing] = useState(false);
+  /**
+   * **The exact wording this form will record** (R119).
+   *
+   * The text and its id arrive in ONE response, which is what removes the
+   * *«frontend text X, separately fetched version Y»* race by construction: the
+   * checkbox renders `consentText.body_arabic`, and the submission carries
+   * `consentText.id`, so there is no second source for either half.
+   *
+   * `null` is fail-closed and is a real state — nothing in force, or the read
+   * failed. `ConsentNotice` then renders the refusal instead of a checkbox, and
+   * `validationErrors` refuses the submit, so a tick against nothing is
+   * impossible rather than merely unlikely.
+   */
+  const [consentText, setConsentText] = useState<ActiveConsentText | null>(null);
 
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,6 +116,23 @@ export function Register(): ReactNode {
   const [failureId, setFailureId] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<ServerErrors>({ fields: {}, unmapped: [] });
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchActiveConsentText()
+      .then((row) => {
+        if (!cancelled) setConsentText(row);
+      })
+      // A refusal here is the fail-closed 503 as often as it is a network
+      // fault, and both mean the same thing to the person: there is no wording
+      // to agree to. `null` says so; inventing a fallback would not.
+      .catch(() => {
+        if (!cancelled) setConsentText(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -169,6 +203,9 @@ export function Register(): ReactNode {
           framingMode,
           allFramingBranches,
           framingBranchIds,
+          // R119 — the id of the wording that was actually on screen. Guarded
+          // above: `valid` is false without it.
+          consentTextId: consentText!.id,
         }),
         token,
       );
@@ -422,6 +459,8 @@ export function Register(): ReactNode {
                 checked={dataProcessing}
                 onChange={setDataProcessing}
                 error={touched ? (errors['dataProcessing'] ?? null) : null}
+                // R119 — the stored wording, rendered verbatim.
+                text={consentText?.body_arabic ?? null}
               />
 
               {/* R62.3b moved the media release **into each child's own
@@ -615,13 +654,9 @@ export function mapServerIssues(error: unknown): ServerErrors {
 export function explainFailure(error: unknown): string {
   if (!(error instanceof ApiError)) return t('register.failed');
 
-  const reason = error.details['reason'];
-
-  // A configuration gap, not a transient outage. Naming it is what lets an
-  // operator fix it in one step instead of reading logs.
-  if (reason === 'CONSENT_TEXT_VERSION_NOT_CONFIGURED') {
-    return t('register.consentVersionMissing');
-  }
+  // R119 — the consent-wording refusals, worded once and shared with تسجيل طفل.
+  const consent = consentFailure(error);
+  if (consent) return consent;
 
   switch (error.code) {
     case 'CONSENT_REQUIRED':
@@ -751,6 +786,13 @@ export function buildPayload(state: {
   framingMode: '' | 'in_person' | 'online' | 'both';
   allFramingBranches: boolean;
   framingBranchIds: string[];
+  /**
+   * **R119 — the id of the wording that was on screen**, not *whatever is
+   * active*. Passed in rather than fetched here: this function is pure and
+   * directly tested, and a second fetch would be a second source for the half
+   * of the pair that has to match the text the person read.
+   */
+  consentTextId: string;
 }): RegistrationInput {
   const person = (p: PersonForm): PersonInput => ({
     // The parts only — the server composes `name_arabic` (§1.1, R40), and
@@ -786,7 +828,7 @@ export function buildPayload(state: {
                 ? { all_branches: true }
                 : { all_branches: false, branch_ids: state.framingBranchIds },
             },
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: state.consentTextId },
     };
   }
 
@@ -796,7 +838,7 @@ export function buildPayload(state: {
       applicant: person(state.applicant),
       branch_id: state.branchId!,
       category_id: state.categoryId!,
-      consents: { data_processing: true },
+      consents: { data_processing: true, consent_text_id: state.consentTextId },
     };
   }
   return {
@@ -805,6 +847,6 @@ export function buildPayload(state: {
     // R67 — each child carries its own branch and stage; the request carries
     // neither, and the server refuses one that does.
     children: state.children.map(toChildInput),
-    consents: { data_processing: true },
+    consents: { data_processing: true, consent_text_id: state.consentTextId },
   };
 }

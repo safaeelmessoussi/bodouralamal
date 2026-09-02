@@ -98,7 +98,20 @@ const personCore = z.object({
  * child because siblings may have different answers. Accepting a second,
  * request-level copy would give one consent two sources of truth.
  */
-const consents = z.object({ data_processing: z.boolean() }).strict();
+/**
+ * **The consents, and WHICH WORDING they were given against** (Owner,
+ * 2026-09-02).
+ *
+ * `consent_text_id` is the `LegalConsentText` the form actually rendered.
+ * Required, and deliberately not defaulted to *whatever is active*: the whole
+ * failure this closes is a Super Admin activating new wording between the
+ * moment a form is drawn and the moment it is submitted. A server that fills
+ * the blank itself would record agreement to words the person never saw, which
+ * is the one outcome §4.1a exists to prevent.
+ */
+const consents = z
+  .object({ data_processing: z.boolean(), consent_text_id: z.uuid() })
+  .strict();
 
 /**
  * The branch the applicant chooses (§4.1, Revision 39).

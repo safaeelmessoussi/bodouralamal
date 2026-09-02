@@ -388,3 +388,22 @@
 .staff-picker__assistant .staff-picker__warnings {
   margin-block: 0;
 }
+
+/* The registration consent notice (R119).
+
+   The wording beside the checkbox is a STORED legal text, not a label, so its
+   own line breaks are preserved — collapsing them would show a different notice
+   from the one on record. `max-width: 100%` is deliberate: `p`'s global
+   `--measure` does not apply inside a `<label>`, and the surrounding form is
+   already narrower than the measure. */
+.consent-notice__text {
+  white-space: pre-line;
+  line-height: 1.7;
+}
+/* The statute explanation sits BELOW the wording rather than inside it: it is
+   interface, and legal text is not something to template a button into. */
+.consent-notice__law {
+  margin: var(--space-2) 0 0;
+  max-width: 100%;
+  font-size: var(--font-size-sm);
+}

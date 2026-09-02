@@ -178,12 +178,19 @@ refreshing".
 >
 > TD-3.8 defines `details` as *"structured context for codes that carry it"*, and
 > this is exactly such a code. It now reports
-> `{ reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED', setting: 'legal.consent_text_version' }`.
-> A setting **key** is not a secret — it is already named in the SRS — and naming
-> it is the difference between an actionable message and a mystery.
+> `{ reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED' }`.
+>
+> **R119 removed the `setting` key from those details, and the setting itself.**
+> The wording is a `LegalConsentText` now, not a `SystemSetting` string, so
+> naming the key would name neither the authority nor the remedy — and it was
+> reaching a user-facing message, which rule M forbids. **The coded `reason` is
+> unchanged**, which is the whole reason the client's message still works: a
+> client branches on the code, and the code is the contract.
 >
 > The rule: **when a failure has one known cause, say which.** Reserve the
-> generic message for causes that are genuinely unknown.
+> generic message for causes that are genuinely unknown. And **the actionable
+> part of a message is the remedy, not the implementation** — «إعدادات المنصة»
+> is something an administrator can go to; a setting key is not.
 
 
 Errors are thrown as **typed domain errors** and mapped centrally to the single response

@@ -46,6 +46,11 @@ POST /admin/trash/{id}/restore                # §7 (R52) — only where the TD-
 DELETE /admin/trash/{id}                      # §7 (R59.1) — permanent delete; Super Admin only; declared cascade children; DEPENDENTS_EXIST otherwise
 GET /admin/settings                           # TD-3.11, §5.6 (R42) — Super Admin only
 PUT /admin/settings/{key}                     # TD-3.11 (R42) — allow-listed keys, audited
+GET /admin/legal-consent-texts                # TD-3.11, §2.3, §4.1a (R119) — Super Admin only; every version with its exact wording
+POST /admin/legal-consent-texts               # TD-3.11, §2.3, §4.1a (R119) — creates a DRAFT; activating is a separate decision
+PATCH /admin/legal-consent-texts/{id}         # TD-3.11, §2.3, §4.1a (R119) — a never-activated draft only; used wording is immutable
+POST /admin/legal-consent-texts/{id}/activate # TD-3.11, §2.3, §4.1a (R119) — puts one version into force; exactly one active
+GET /registration/consent-text                # TD-3.2, §2.3, §4.1a (R119) — anonymous; the exact wording the form displays and submits the id of
 GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2; R49 optional assignments[] granted in the same transaction
 POST /child-applications                      # §4.1/§4.3 (R62) — one request, many children; signed-in adult

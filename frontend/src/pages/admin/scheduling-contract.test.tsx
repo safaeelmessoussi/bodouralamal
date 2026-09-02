@@ -31,6 +31,7 @@ const WIRE: CourseSchedule = {
   subject_id: '00000000-0000-4000-8000-000000000002',
   // R55.1 — resolved labels, so a timetable can be read without ids.
   subject_name: 'تفسير',
+  scheduling_type_id: null,
   target_name: 'المجموعة 1',
   // Which Level the class is for, resolved server-side. For a Group-taught
   // class the row's own column is NULL, so this is the ONLY way a client learns
@@ -81,6 +82,7 @@ describe('the adapter type matches the wire contract', () => {
       'recurrence',
       'room_id',
       'room_name',
+      'scheduling_type_id',
       'staff',
       'start_time',
       'subject_id',

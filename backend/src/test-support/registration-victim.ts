@@ -60,6 +60,13 @@ const prisma = base.$extends({
   },
 });
 
+const activeConsentTextId = (
+  await prisma.legalConsentText.findFirstOrThrow({
+    where: { status: 'active' },
+    select: { id: true },
+  })
+).id;
+
 const input: RegistrationInput = {
   kind: 'parent_child',
   parent: { first_name_arabic: `${tag}`, last_name_arabic: `والدة`, phone: '+212 600 000 009', sex: 'female' },
@@ -74,7 +81,10 @@ const input: RegistrationInput = {
       requested_category_id: categoryId,
     },
   ],
-  consents: { data_processing: true },
+  /* R119 — the wording in force at the moment this script runs. This process
+     is meant to die mid-registration, so it reads the active version directly
+     rather than installing one it would never get to remove. */
+  consents: { data_processing: true, consent_text_id: activeConsentTextId },
 };
 
 const { token } = issueOnboardingToken({ email, providerSubjectId: subject }, config.ONBOARDING_TOKEN_KEY);

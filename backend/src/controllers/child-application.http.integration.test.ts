@@ -3,12 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
-import { CONSENT_TEXT_VERSION_KEY } from "../services/registration.service.js";
 import {
-  captureConsentVersion,
-  restoreConsentVersion,
-  type SavedConsentVersion,
-} from "../test-support/consent-setting.js";
+  deleteTestConsentText,
+  installTestConsentText,
+  removeTestConsentText,
+  type InstalledConsentText,
+} from '../test-support/legal-consent-text.js';
 import { httpCall } from "../test-support/http-client.js";
 import {
   clearPlacement,
@@ -35,7 +35,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-childapp-test]";
 
-let savedConsentVersion: SavedConsentVersion | null = null;
+let consentText: InstalledConsentText | null = null;
 /** R64.5 — approving a child places it (§4.1), so every approval names a group. */
 let placement: Placement;
 const PLACEMENT_TAG = "[http-childapp-test-place]";
@@ -123,6 +123,9 @@ function payload(firstName: string, mediaRelease = true): unknown {
       },
     ],
     consent_data_processing: true,
+    // R119 — the wording this form displayed; the server refuses one no longer
+    // in force, so the id travels with every submission.
+    consent_text_id: consentText!.id,
   };
 }
 
@@ -163,8 +166,7 @@ let admin: { id: string; token: string };
 let teacher: { id: string; token: string };
 
 beforeAll(async () => {
-  savedConsentVersion ??= await captureConsentVersion(prisma);
-  // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
+    // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
   // indistinguishable from a passing one.
   const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
     () => null,
@@ -177,20 +179,24 @@ beforeAll(async () => {
 
   await clear();
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
-  await prisma.systemSetting.upsert({
-    where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: "http-childapp-v1" },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: "http-childapp-v1" },
-  });
+  // **Installed ONCE**, not per test: a second install would take the
+  // suite's own row as *what was there before* and lose the installation's,
+  // leaving it superseded after the run (P1.2).
+  consentText ??= await installTestConsentText(prisma, "http-childapp-v1");
   admin = await makeStaff("admin");
   teacher = await makeStaff("teacher");
 });
 
 afterAll(async () => {
+  // **Restored FIRST, not last** (B10): the restore used to sit after the
+  // fixture teardown, so any failure there skipped it and left this suite's
+  // scratch wording in the shared database. See `test-support/legal-consent-text`.
+  await removeTestConsentText(prisma, consentText);
   await clear();
   await clearPlacement(prisma, PLACEMENT_TAG);
-  if (savedConsentVersion)
-    await restoreConsentVersion(prisma, savedConsentVersion);
+  // **Last, after the fixture teardown**: `consent_text_id` is RESTRICT, so a
+  // row is only free to go once this suite's own consent records have gone.
+  await deleteTestConsentText(prisma, consentText);
   await prisma.$disconnect();
 });
 
@@ -255,6 +261,7 @@ describe("POST /child-applications", () => {
     const res = await call("POST", "/child-applications", parent.token, {
       children: [first.children[0], second.children[0]],
       consent_data_processing: true,
+      consent_text_id: consentText!.id,
     });
     expect(res.status).toBe(201);
 

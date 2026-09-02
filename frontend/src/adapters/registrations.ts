@@ -42,7 +42,15 @@ export interface PersonInput {
 interface AdultRegistrationBase {
   kind: 'adult';
   applicant: PersonInput;
-  consents: { data_processing: boolean };
+  /**
+   * **R119 — the exact wording that was displayed, and the id proving it.**
+   *
+   * The server refuses a `consent_text_id` that is no longer in force
+   * (`CONSENT_TEXT_SUPERSEDED`), so *displayed X, recorded X* is a property of
+   * the system rather than a hope: a Super Admin activating new wording while
+   * this form is open cannot turn it into *displayed X, recorded Y*.
+   */
+  consents: { data_processing: boolean; consent_text_id: string };
 }
 
 export type FramingPreferenceInput =
@@ -158,7 +166,15 @@ export interface ParentChildRegistration {
    * a parent enrols in nothing and asking separately would put a request-level
    * branch back on the form this revision removes it from.
    */
-  consents: { data_processing: boolean };
+  /**
+   * **R119 — the exact wording that was displayed, and the id proving it.**
+   *
+   * The server refuses a `consent_text_id` that is no longer in force
+   * (`CONSENT_TEXT_SUPERSEDED`), so *displayed X, recorded X* is a property of
+   * the system rather than a hope: a Super Admin activating new wording while
+   * this form is open cannot turn it into *displayed X, recorded Y*.
+   */
+  consents: { data_processing: boolean; consent_text_id: string };
 }
 
 export type RegistrationInput = AdultRegistration | ParentChildRegistration;
@@ -206,3 +222,29 @@ export const LIMITS = {
 
 /** TD-9: digits, `+` and spaces only. Non-unique — families share phones. */
 export const PHONE_PATTERN = /^[0-9+ ]+$/;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * The legal consent wording (R119, `GET /registration/consent-text`).
+ *
+ * **Anonymous**, and it must be: the registration form is reached before any
+ * account exists, and the notice a person is entitled to read before agreeing
+ * cannot sit behind a session.
+ *
+ * The wording used to live in `i18n/ar.ts` — deployed with the frontend, with
+ * no technical relationship to the version string a `ConsentRecord` stored. The
+ * text and the id now come from **one record, in one response**, which is what
+ * removes the *«frontend text X, separately fetched version Y»* race by
+ * construction rather than by care.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export interface ActiveConsentText {
+  id: string;
+  /** What a person can be told, and later shown, they agreed to. */
+  version_label: string;
+  /** The exact Arabic wording. Rendered verbatim; never composed with. */
+  body_arabic: string;
+}
+
+export async function fetchActiveConsentText(): Promise<ActiveConsentText> {
+  return api<ActiveConsentText>('/registration/consent-text');
+}

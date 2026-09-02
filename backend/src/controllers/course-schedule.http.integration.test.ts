@@ -51,6 +51,7 @@ const SCHEDULE_KEYS = [
   "recurrence",
   "room_id",
   "room_name",
+  "scheduling_type_id",
   "staff",
   "start_time",
   "subject_id",

@@ -477,6 +477,27 @@ tr:last-child .cal-cell {
   font-weight: 600;
 }
 
+/* R110 (Owner, 2026-09-02) — a عطلة is not an activity, and `--event` styles
+   both because both are stored as an `Event`. It is the one chip that means
+   *nothing is delivered*, so it is drawn as an outline rather than a wash: a
+   held space, not another item competing with the classes around it.
+
+   **The word does the work** (rule AV) — the chip renders the type's own name
+   beside the title, and this only follows it. Placed AFTER `--event` so it wins
+   without needing a higher specificity to do it. */
+.event-chip--holiday {
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  font-weight: 500;
+}
+.event-chip__tag {
+  flex: none;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
 .event-chip--interactive {
   cursor: pointer;
   transition: filter var(--transition-fast);

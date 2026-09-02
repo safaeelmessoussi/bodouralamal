@@ -42,9 +42,31 @@ export function EventChip({
    */
   const online = occurrence.delivery_mode === 'online' ? deliveryLabel(occurrence) : null;
 
+  /**
+   * **R110 (Owner, 2026-09-02) — a عطلة is not an activity.**
+   *
+   * `kind` says `'event'` for both, because both are stored as an `Event`; the
+   * structural kind is what tells them apart, and it is read from the row
+   * rather than matched against an Arabic name — the catalogue's names are the
+   * administration's to change (§4.4b).
+   *
+   * Marked the way this chip marks everything else: **a word first** (rule AV),
+   * the type's own name, so a reader who cannot distinguish the tint still sees
+   * that nothing is delivered that day. The wash follows the word; it never
+   * carries the meaning alone.
+   */
+  const holiday = occurrence.structural_kind === 'holiday';
+
+  /* Announced as what it IS: «نشاط» would be wrong for a عطلة. */
+  const announced =
+    holiday && occurrence.scheduling_type_name ? occurrence.scheduling_type_name : t(kindKey);
+
   const inner = (
     <>
       <span className="event-chip__title">{occurrence.title}</span>
+      {holiday && occurrence.scheduling_type_name ? (
+        <span className="event-chip__tag">{occurrence.scheduling_type_name}</span>
+      ) : null}
       {online ? <span className="event-chip__delivery">{online}</span> : null}
       {occurrence.start_time ? (
         // `dir="ltr"` so a clock value is not reordered by the RTL context.
@@ -55,11 +77,13 @@ export function EventChip({
     </>
   );
 
-  const className = `event-chip event-chip--${occurrence.kind}`;
+  const className = `event-chip event-chip--${occurrence.kind}${
+    holiday ? ' event-chip--holiday' : ''
+  }`;
   if (!onOpen) {
     return (
       <span className={className}>
-        <span className="visually-hidden">{t(kindKey)}: </span>
+        <span className="visually-hidden">{announced}: </span>
         {inner}
       </span>
     );
@@ -77,7 +101,7 @@ export function EventChip({
       }}
     >
       <span className="visually-hidden">
-        {t(kindKey)}: {t('calendar.openDetails')} —{' '}
+        {announced}: {t('calendar.openDetails')} —{' '}
       </span>
       {inner}
     </button>
