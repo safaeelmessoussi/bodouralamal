@@ -80,6 +80,8 @@ export function CalendarPage(): ReactNode {
   const branchId = filters.value.branchId ?? null;
   const categoryId = filters.value.categoryId ?? null;
   const levelId = filters.value.levelId ?? null;
+  /** المادة — read here so it is both SENT and in the effect's dependencies. */
+  const subjectId = filters.value.subjectId ?? null;
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [bootstrapBusy, setBootstrapBusy] = useState(true);
@@ -154,6 +156,7 @@ export function CalendarPage(): ReactNode {
           branchId,
           categoryId,
           levelId,
+          subjectId,
           ...(filters.value.type ? { kind: filters.value.type } : {}),
         });
         if (cancelled) return;
@@ -183,7 +186,13 @@ export function CalendarPage(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [from, to, branchId, categoryId, levelId, filters.value.type, accessToken]);
+  /**
+   * **`subjectId` belongs in this list** (UAT, 2026-09-02). Without it the
+   * request carried the new value only when some OTHER dependency changed —
+   * the same silent-filter failure `sort` had on طلبات الانضمام: the control
+   * looks alive and the results simply never move.
+   */
+  }, [from, to, branchId, categoryId, levelId, subjectId, filters.value.type, accessToken]);
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 

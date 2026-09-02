@@ -154,7 +154,24 @@ export interface CalendarResult {
  * unchanged: a personal calendar is a narrower READ, never a different screen.
  * Cancelled occurrences are absent here as everywhere (R83.1).
  */
-export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurrence[]> {
+/**
+ * **Every filter the two calendar reads accept, written once** (UAT, 2026-09-02).
+ *
+ * `الجدول الزمني`'s النوع and المادة controls did nothing: this screen reads
+ * `/calendar`, whose builder set `branch_id`, `category_id` and `level_id` and
+ * **silently dropped `type` and `subject_id`** — the page computed both, the
+ * server accepts both, and neither ever left the browser. A filter that is
+ * neither sent nor refused looks exactly like a filter that matches everything.
+ *
+ * The personal builder had the mirror-image fault: four of its parameters were
+ * set **twice**, harmless only because `URLSearchParams.set` is idempotent.
+ * Two hand-maintained copies of one parameter list is what produced both, so
+ * there is now one.
+ *
+ * Absent values are omitted rather than sent empty — TD-10's rule that a filter
+ * left unanswered narrows nothing.
+ */
+function calendarParams(query: CalendarQuery): URLSearchParams {
   const params = new URLSearchParams({ from: query.from, to: query.to });
   if (query.branchId) params.set('branch_id', query.branchId);
   if (query.categoryId) params.set('category_id', query.categoryId);
@@ -162,23 +179,21 @@ export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurren
   if (query.subjectId) params.set('subject_id', query.subjectId);
   if (query.groupId) params.set('administrative_group_id', query.groupId);
   if (query.circleId) params.set('teaching_group_id', query.circleId);
+  // The contract names it `type`; the client calls it `kind` because `type` is
+  // taken. The rename happens here, at the boundary, and nowhere else.
   if (query.kind) params.set('type', query.kind);
-  if (query.subjectId) params.set('subject_id', query.subjectId);
-  if (query.groupId) params.set('administrative_group_id', query.groupId);
-  if (query.circleId) params.set('teaching_group_id', query.circleId);
-  if (query.kind) params.set('type', query.kind);
-  const page = await api<CalendarPage>(`/me/calendar?${params.toString()}`, {
+  return params;
+}
+
+export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurrence[]> {
+  const page = await api<CalendarPage>(`/me/calendar?${calendarParams(query).toString()}`, {
     token: query.token ?? null,
   });
   return page.data;
 }
 
 export async function fetchOccurrences(query: CalendarQuery): Promise<CalendarResult> {
-  const params = new URLSearchParams({ from: query.from, to: query.to });
-  if (query.branchId) params.set('branch_id', query.branchId);
-  if (query.categoryId) params.set('category_id', query.categoryId);
-  if (query.levelId) params.set('level_id', query.levelId);
-  const page = await api<CalendarPage>(`/calendar?${params.toString()}`, {
+  const page = await api<CalendarPage>(`/calendar?${calendarParams(query).toString()}`, {
     token: query.token ?? null,
   });
   return { occurrences: page.data, prefilled: page.prefilled_filters ?? null };
