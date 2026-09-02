@@ -2372,3 +2372,37 @@ looked like a notice would be displayed as one. Production is seeded with nothin
 keeps approving the real wording an Owner compliance task.
 
 Migration `20260902180000_versioned_legal_consent_text`.
+
+## The registration consent wording collapsed by default — 2026-09-02
+
+R119 put the exact `LegalConsentText` beside the checkbox, and on the real form the notice is
+long enough to dominate the page: the rest of the registration became hard to scan. It is now
+behind an **inline disclosure** — the checkbox carries the consent's name, a line of help says
+to read the wording before submitting, and «قراءة نص الموافقة كاملاً» reveals it in place.
+
+**Presentation only.** The wording revealed and the version id submitted come from the same
+`ActiveConsentText` the page holds; opening or closing touches no consent state, and the
+schema, recording, activation and concurrency behaviour are untouched. A source guard pins the
+one-source property, because a rendering test would pass equally with two independent sources —
+which is the race R119 exists to close.
+
+**Inline rather than a modal**: the applicant is deciding about this text right here, and a
+dialog would take the checkbox off screen at the moment they need to compare the two. The
+Law 09-08 explanation stays a modal, because it is background rather than the thing agreed to.
+
+The region stays in the DOM and is hidden with `hidden`, so `aria-controls` names something
+real in both states — **and nothing sets `display` on it** (rule AG: `[hidden]`'s only defence
+is the UA's `display: none`, which an author rule of any specificity outranks). Measured in a
+browser rather than asserted from CSS.
+
+**The `<legend>` gap was real and was not a `gap`.** `.register-form__group` is `display: grid`
+and a `<legend>` is not a grid item — the fieldset lays it out by its own algorithm, so the
+grid's `gap` never applied to it. It now carries an explicit `margin-block-end`; measured at
+32px, against 20px of incidental leading before. **Reported honestly: a literal overlap could
+not be reproduced in Chrome**, so if «الموافقات» still collides with the line under it on the
+Owner's browser, that is a separate rendering issue and a screenshot is needed.
+
+New browser harness `scripts/dev/browser/verify-consent-disclosure.sh` — 19/19, including a
+character-for-character comparison of the revealed wording against what
+`GET /registration/consent-text` serves, and a 360px check. `verify-registration.sh` still
+passes 41/41 plus 12/12 database assertions, so the submission path is unchanged.

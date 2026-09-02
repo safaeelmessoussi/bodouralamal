@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import REGISTER_SOURCE from '../pages/register.tsx?raw';
+import CHILD_SOURCE from '../pages/profile/register-child.tsx?raw';
 import { ApiError } from '../lib/api.js';
 import { explainFailure, mapServerIssues } from '../pages/register.js';
 import { ConsentNotice } from './consent-notice.js';
@@ -43,6 +45,52 @@ describe('ConsentNotice — informed consent, not a cited statute', () => {
     // as an inline button in the middle. Templating around legal text is how a
     // notice ends up saying something nobody approved.
     expect(render()).toContain(WORDING);
+  });
+
+  /* ── Collapsed by default (Owner, 2026-09-02) ──────────────────────────── */
+
+  it('ships the wording COLLAPSED, so the form can be scanned', () => {
+    // A full legal notice beside the checkbox dominated the registration page.
+    // `hidden` rather than absent, so `aria-controls` names a real element in
+    // both states — and **no CSS may set `display` on it** (rule AG), which the
+    // browser harness measures because a stylesheet cannot prove it.
+    const html = render();
+    expect(html).toMatch(/id="consent-text-full"[^>]*hidden/);
+  });
+
+  it('carries the wording in the DOM even while collapsed', () => {
+    // Collapsing is presentation. The text is still there, still exact, and
+    // still the one the submitted id belongs to.
+    expect(render()).toContain(WORDING);
+  });
+
+  it('labels the checkbox with the consent NAME, not the legal statement', () => {
+    // `register.consentTitle` names *which* consent this is, the way a field
+    // label names a field. Anybody asking what was agreed to reads the stored
+    // wording, never this key.
+    expect(render()).toContain('الموافقة على معالجة المعطيات ذات الطابع الشخصي');
+  });
+
+  it('tells the applicant to read the wording before submitting', () => {
+    const html = render();
+    expect(html).toContain('قبل إرسال الطلب');
+    // Announced with the control it qualifies, rather than left to be found.
+    expect(html).toContain('aria-describedby="consent-text-hint"');
+  });
+
+  it('opens with a real disclosure button that announces its state', () => {
+    // Not a styled span and not a link: a keyboard reaches it in order and a
+    // screen reader is told whether the region is open.
+    const html = render();
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-expanded="false"/);
+    expect(html).toContain('aria-controls="consent-text-full"');
+    expect(html).toContain('قراءة نص الموافقة كاملاً');
+  });
+
+  it('keeps the Law 09-08 explanation separate from the wording', () => {
+    // Background reference, not the statement being accepted — so it stays in
+    // i18n, stays a modal, and is reachable whether or not the wording is open.
+    expect(render()).toContain('القانون 09-08');
   });
 
   it('offers NO checkbox when no wording is in force — fail closed', () => {
@@ -248,5 +296,42 @@ describe('mapServerIssues — the user learns WHICH field, not "review the field
   it('returns nothing for an error carrying no issues', () => {
     expect(mapServerIssues(new ApiError(500)).fields).toEqual({});
     expect(mapServerIssues(new Error('boom')).unmapped).toEqual([]);
+  });
+});
+
+/**
+ * **The R119 invariant, pinned at the source** (Owner, 2026-09-02).
+ *
+ * Collapsing the wording changes what is shown and must not change what is
+ * recorded: the text revealed by the disclosure and the id the form submits
+ * have to come from the **same** `ActiveConsentText`. A rendering test cannot
+ * see that — it would pass just as happily with two independent sources, which
+ * is precisely the *«frontend text X, separately fetched version Y»* race R119
+ * exists to close.
+ */
+describe('the wording shown and the version submitted are ONE source', () => {
+  const sources: [string, string][] = [
+    ['/register', REGISTER_SOURCE],
+    ['تسجيل طفل', CHILD_SOURCE],
+  ];
+
+  it.each(sources)('%s reads both halves off the same state', (_name, source) => {
+    const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    // One piece of state holds the pair.
+    expect(code).toContain('consentText?.body_arabic');
+    expect(code).toContain('consentText!.id');
+    // And nothing fetches the wording a second time — the CALL, not the
+    // import beside it.
+    expect(code.split('fetchActiveConsentText(').length - 1).toBe(1);
+    // Exactly one place holds the pair, so the two halves cannot diverge.
+    expect(code.split('setConsentText(').length - 1).toBe(2);
+  });
+
+  it.each(sources)('%s never sources the wording from i18n', (_name, source) => {
+    // The retired keys composed the accepted sentence on the client. A
+    // reappearance would be a second source for the thing being agreed to.
+    for (const key of ['consentDataProcessingPrefix', 'consentDataProcessingSuffix']) {
+      expect(source).not.toContain(key);
+    }
   });
 });

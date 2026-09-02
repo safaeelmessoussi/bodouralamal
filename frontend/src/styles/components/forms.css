@@ -258,8 +258,16 @@
   padding: var(--space-5);
   margin: 0;
 }
+/* **A `<legend>` is not a grid item**, and that is why this needs a margin.
+   The fieldset is `display: grid`, so `gap` spaces the fields from each other
+   and does nothing between the legend and the first of them — the legend is
+   laid out by the fieldset's own special algorithm, outside the grid. It read
+   as «الموافقاتالموافقة على…» once the consent group's first child became a
+   line of text rather than a labelled field with its own leading. Measured in
+   a browser, not asserted from this file. */
 .register-form__group > legend {
   padding-inline: var(--space-2);
+  margin-block-end: var(--space-3);
   font-weight: 700;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
@@ -389,21 +397,51 @@
   margin-block: 0;
 }
 
-/* The registration consent notice (R119).
+/* The registration consent notice (R119; collapsed by default, 2026-09-02).
 
-   The wording beside the checkbox is a STORED legal text, not a label, so its
-   own line breaks are preserved — collapsing them would show a different notice
-   from the one on record. `max-width: 100%` is deliberate: `p`'s global
-   `--measure` does not apply inside a `<label>`, and the surrounding form is
-   already narrower than the measure. */
-.consent-notice__text {
-  white-space: pre-line;
-  line-height: 1.7;
+   The checkbox carries the consent's NAME; the stored wording lives in an
+   inline disclosure under it, because a full legal notice beside the checkbox
+   dominated the page and made the rest of the form hard to scan. */
+.consent-notice {
+  display: grid;
+  gap: var(--space-2);
 }
-/* The statute explanation sits BELOW the wording rather than inside it: it is
-   interface, and legal text is not something to template a button into. */
+/* `max-width: 100%` on each of these is deliberate: `p { max-width: var(--measure) }`
+   reaches every paragraph in the application (rule AK), and the registration
+   column is already narrower than the measure, so inheriting it would wrap
+   short helper text early. */
+.consent-notice__hint,
+.consent-notice__disclosure,
 .consent-notice__law {
-  margin: var(--space-2) 0 0;
+  margin: 0;
   max-width: 100%;
+  font-size: var(--font-size-sm);
+}
+.consent-notice__hint {
+  color: var(--color-text-muted);
+}
+.consent-notice__law {
+  margin-block-start: var(--space-2);
+}
+
+/* **The stored wording. NO `display` here, ever** (rule AG).
+
+   The element is always in the DOM so `aria-controls` names something real in
+   both states, and `[hidden]`'s only defence is the UA's `display: none` —
+   which an author `display` of any specificity outranks. Everything below is
+   typography, spacing and colour.
+
+   `white-space: pre-line` keeps the wording's own paragraph breaks: they are
+   part of what was approved, and collapsing them would show a different notice
+   from the one on record. `overflow-wrap` is for an unbroken URL or reference
+   inside legal text, which must not push the form wider on a phone. */
+.consent-notice__text {
+  max-width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
   font-size: var(--font-size-sm);
 }

@@ -2201,12 +2201,44 @@ how many consents were recorded against it, and a used version says in words
 that new wording means a new version — rather than a greyed-out «تعديل» that
 invites somebody to hunt for the permission that would enable it.
 
+### The applicant's side: available in full, collapsed by default
+
+The same value has a second surface, and it wants the opposite treatment. The
+registration form rendered the entire wording beside the checkbox, where it
+dominated the page and made the rest of the form hard to scan — so it is behind
+an **inline disclosure** (Owner, 2026-09-02): the checkbox carries the consent's
+name, a line of help says to read the wording before submitting, and a button
+reveals it in place.
+
+* **Collapsing changes what is SHOWN, never what is recorded.** The wording
+  revealed and the version id submitted come from one `ActiveConsentText` the
+  page holds; opening or closing touches no consent state. Guarded at the
+  source, because a rendering test would pass just as happily with two
+  independent sources — which is the race R119 exists to close.
+* **Inline, not a modal.** The applicant is deciding about this text right here,
+  and a dialog would take the checkbox off screen at the moment they need to
+  compare the two. The Law 09-08 explanation stays a modal because it is
+  *background*, not the thing being agreed to.
+* **A real disclosure**: a `<button>` with `aria-expanded` and `aria-controls`,
+  the platform's own focus ring, and a label that states what the next press
+  does. The region stays in the DOM and is hidden with `hidden`, so
+  `aria-controls` names something real in both states — **and nothing may set
+  `display` on it** (rule AG).
+* **The label beside the checkbox is a NAME, not the statement.** It says which
+  consent this is, the way a field label names a field. Anybody asking what an
+  applicant agreed to reads `LegalConsentText`, never an i18n key.
+
 **Guarded by** `services/legal-consent-text.integration.test.ts` (immutability,
 the single-active invariant against a direct write, the displayed-is-recorded
 round trip, and honest legacy evidence) and
 `services/setting.integration.test.ts`, whose exact-key-set assertion fails if
 the retired setting ever reappears — which is how *two independently editable
 answers to which wording is in force* would come back.
+The applicant's side is guarded by `components/consent-notice.test.tsx` and
+`scripts/dev/browser/verify-consent-disclosure.sh` — the first for the markup
+and the one-source invariant, the second for the two things only a browser can
+answer: that `[hidden]` is not defeated by an author `display`, and that the
+legend and the notice are actually apart.
 
 ## BA · A table shows every meaningful field of what it manages
 

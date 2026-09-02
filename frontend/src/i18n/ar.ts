@@ -688,6 +688,21 @@ export const ar = {
      * What remains here is the LINK to the plain-language explanation, which is
      * interface rather than the statement being accepted.
      */
+    /**
+     * **A LABEL, not the statement agreed to** (Owner, 2026-09-02).
+     *
+     * It names *which* consent this is, the way a field label names a field.
+     * The statement is the stored `LegalConsentText` wording revealed by the
+     * disclosure below it, which is never summarised or rewritten. Anybody
+     * looking for *what an applicant agreed to* must read the version record,
+     * never this key.
+     */
+    consentTitle: 'الموافقة على معالجة المعطيات ذات الطابع الشخصي',
+    consentReadHint:
+      'يرجى الاطلاع على نص الموافقة المتعلق بمعالجة معطياتك الشخصية قبل إرسال الطلب.',
+    // Each label states what the NEXT press does — the disclosure convention.
+    consentTextShow: 'قراءة نص الموافقة كاملاً',
+    consentTextHide: 'إخفاء نص الموافقة',
     consentLawExplain: 'ما هو القانون 09-08؟',
     lawTitle: 'حماية بياناتك الشخصية — القانون 09-08',
     lawIntro:
