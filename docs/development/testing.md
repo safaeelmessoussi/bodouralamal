@@ -614,6 +614,32 @@ any one of those throwing skipped it, and the suite's scratch value
 (`email-owner-test-v1`) was left in the shared database. The helper was correct
 and was simply not reached.
 
+**And a third time, from a cause no code change can prevent: the run was
+KILLED.** On 2026-09-03 `scripts/dev/test-integration.sh` was started twice
+concurrently by accident, and the second was killed by a `timeout` mid-suite. An
+`afterAll` that never runs restores nothing, so `appr-test-v1` was left **active**
+in the shared database — and every later suite that installs its own wording then
+failed with *«appr-test-v1 is already in force»*, seventeen tests at a time, in a
+file that had passed minutes earlier.
+
+Three consequences worth carrying:
+
+* **The suite is not safe to run concurrently with itself.** Two runs share one
+  database, one consent text and one fixture namespace. Start one, wait for it.
+* **A killed run leaves damage a green re-run cannot clear**, because the
+  scratch wording is now the *pre-existing* state the next run refuses to
+  overwrite. That refusal is correct — it is the guard doing its job — and the
+  fix is to restore, not to weaken it.
+* **Restore through `removeTestConsentText`, never by hand-written SQL.** It
+  supersedes the scratch row and reactivates the one it displaced, putting the
+  version counter back too, which is exactly the state the suite would have left.
+  It also declines to *delete* a row that consent records still reference: a
+  superseded development version is inert and honest, while deleting it would
+  destroy the only copy of the words a stored record points at.
+
+Diagnosing this is quick if the shape is recognised: `SELECT version_label,
+status FROM legal_consent_text` shows a `*-test-*` label sitting `active`.
+
 Four lessons, all now enforced in code:
 
 - **"Clean up after yourself" means restore what was there, not delete what you
