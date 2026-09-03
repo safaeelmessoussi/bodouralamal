@@ -25,6 +25,9 @@ const child = (over: Partial<ChildForm> = {}): ChildForm => ({
   lastNameArabic: 'بنعلي',
   sex: 'female',
   mediaRelease: 'no',
+  // R130 — required per child, like the pair below. Every child on a request is
+  // a beneficiary, and a sibling's date is never inherited.
+  birthDate: '2015-06-02',
   // R67 — required per child; a fixture omitting them is testing the refusal.
   branchId: 'b1',
   categoryId: 'c1',

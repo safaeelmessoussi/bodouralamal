@@ -3706,3 +3706,42 @@ then implement.** Everything else — design, migration shape, unchanged auth
 behaviour, and eight named tests including the original race and an
 `information_schema` assertion that no raw address remains — is ready for one
 pass.
+
+## Test isolation — a suite was destroying audit rows it did not own (2026-09-03)
+
+**Found by the all-table isolation guard during the final gate**, as `audit_log`
+losing two pre-existing rows across a full run.
+
+`refresh-token.integration.test.ts` cleaned up with
+
+```ts
+await prisma.auditLog.deleteMany({ where: { targetEntity: "User", actorUserId: null } });
+```
+
+— **no ownership term at all.** System-written audit rows carry
+`actor_user_id = NULL`, so they cannot be found through the tagged actor the rest
+of that cleanup uses, and the predicate was widened until it matched them. What
+it actually matched was *every* system-written User audit row in the database,
+whoever wrote it and whenever. In Local Development that quietly destroyed real
+audit history on every run; pointed at a populated database it would destroy
+audit evidence, which is the one record §7's attribution invariant says must
+survive everything else.
+
+**The fix scopes by target instead**, resolving the suite's own tagged user ids
+first — the same shape the earlier P1.2 isolation fix used for staffing — and
+deletes nothing when that list is empty, which is the correct first-run
+behaviour rather than a reason to widen the predicate again.
+
+**Proved against the defect rather than assumed.** An unowned system-written
+probe row was inserted, then: with the fix it survives (1 → 1); with the old
+predicate temporarily restored it is destroyed (1 → 0). A cleanup guard that has
+never been shown to catch its own defect is not protection.
+
+Also corrected in the same pass: `children.test.ts`'s child factory predated
+R130 and built children with no birth date, so five of its cases failed once the
+requirement landed. The fixture now carries one, with the rule named beside it.
+
+**The other half of the drift was not a defect.** The HTTP suites in the same run
+were failing against an `api` image built before R126–R130; rebuilding it from
+current source is a documented precondition of those files, and the gate was
+re-run against the rebuilt image.

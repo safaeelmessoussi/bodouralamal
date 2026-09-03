@@ -47,16 +47,43 @@ async function makeUser(): Promise<string> {
   return user.id;
 }
 
+/**
+ * **Deletes only the audit rows this suite owns** (isolation fix, 2026-09-03).
+ *
+ * The system-written rows — `revokeAllSessions` and friends — carry
+ * `actor_user_id = NULL`, so they cannot be found through the actor the rest of
+ * this cleanup uses. The previous predicate was
+ * `{ targetEntity: 'User', actorUserId: null }` with **no ownership term at
+ * all**, so every run destroyed every system-written User audit row in the
+ * database, whoever wrote it and whenever. The all-table isolation guard caught
+ * it as `audit_log` losing two pre-existing rows across a full run.
+ *
+ * They are scoped by **target** instead, resolved from this suite's own tagged
+ * users first — the same shape the P1.2 isolation fix used for staffing. An
+ * empty id list deletes nothing, which is the correct behaviour on a first run
+ * rather than a reason to widen the predicate.
+ */
+async function clearOwnedAuditRows(): Promise<void> {
+  const owned = await prisma.user.findMany({
+    where: { nameArabic: { startsWith: TEST_TAG } },
+    select: { id: true },
+  });
+  const ids = owned.map((u) => u.id);
+  await prisma.auditLog.deleteMany({
+    where: { actor: { nameArabic: { startsWith: TEST_TAG } } },
+  });
+  if (ids.length > 0) {
+    await prisma.auditLog.deleteMany({
+      where: { targetEntity: "User", actorUserId: null, targetId: { in: ids } },
+    });
+  }
+}
+
 beforeEach(async () => {
   await prisma.refreshToken.deleteMany({
     where: { user: { nameArabic: { startsWith: TEST_TAG } } },
   });
-  await prisma.auditLog.deleteMany({
-    where: { actor: { nameArabic: { startsWith: TEST_TAG } } },
-  });
-  await prisma.auditLog.deleteMany({
-    where: { targetEntity: "User", actorUserId: null },
-  });
+  await clearOwnedAuditRows();
   await prisma.user.deleteMany({
     where: { nameArabic: { startsWith: TEST_TAG } },
   });
@@ -70,12 +97,7 @@ afterAll(async () => {
   await prisma.refreshToken.deleteMany({
     where: { user: { nameArabic: { startsWith: TEST_TAG } } },
   });
-  await prisma.auditLog.deleteMany({
-    where: { actor: { nameArabic: { startsWith: TEST_TAG } } },
-  });
-  await prisma.auditLog.deleteMany({
-    where: { targetEntity: "User", actorUserId: null },
-  });
+  await clearOwnedAuditRows();
   await prisma.user.deleteMany({
     where: { nameArabic: { startsWith: TEST_TAG } },
   });
