@@ -3655,3 +3655,54 @@ infrastructure deployed.
 **The active `LegalConsentText` is untouched.** The six wording changes R131
 requires are enumerated in `TASKS.md` for the Document Owner to draft, review and
 activate.
+
+## Email-lock keying — ratified design, blocked on one operational precondition (2026-09-03)
+
+**The Owner authorised implementing this in the same session only if six
+conditions held. Condition 5 does not, so this is the design and the migration is
+not written.**
+
+`normalized_email_lock` is a **concurrency primitive**, not a directory: the
+invariant *one live account per email* spans `user_identity.email` and
+`user.pre_provisioned_email`, either row may be absent, and same-table uniqueness
+therefore cannot close the check-then-insert race. The defect it exists for is
+real — `POST /admin/users` once answered `201` for an address that already had a
+live active identity. The problem is that its primary key is the **raw lowercased
+address**, and after a permanent de-identification that row survives, ownerless,
+with no purpose statement or retention rule.
+
+**The design.** `HMAC-SHA-256(EMAIL_LOCK_KEY, "bodour.email-lock.v1|" +
+normalized)`, hex, as the primary key. **HMAC rather than bare `SHA-256(email)`**
+because the space of real addresses is small and enumerable — an unkeyed digest
+is the address in a thin disguise — and the domain-separation prefix means a
+digest here can never equal one computed elsewhere under the same key. The
+canonical input is the address after the `trim()`/`toLowerCase()` every ownership
+path already applies and **nothing else**: dot-stripping or plus-tag removal
+would change *which addresses collide*, which is an authentication decision, not
+a storage one.
+
+**A new required secret, not a reused one.** Borrowing `JWT_SIGNING_KEY` would
+couple routine session-key rotation to the integrity of every email lock. Making
+the new variable optional would be worse still: a raw-email fallback yields two
+key spaces and silently breaks the invariant wherever it fell back.
+
+**Rotation, secret loss and migration are one answer: truncate and continue.** A
+digest is a lookup key, so re-keying needs the plaintext this design stops
+storing — there is deliberately no dual-key lookup and no computed backfill. It
+is safe because the rows are **disposable by nature**: they carry no ownership
+and no history, ownership lives in the two authoritative channels, and any
+address still in use re-establishes its lock on the next claim. A collision would
+cost liveness, not correctness, since the authoritative re-read still consults
+both channels. Transaction semantics and lock ordering are unchanged, so no new
+deadlock class appears. `deIdentifyAccount` locks by digest and still does **not**
+delete lock rows — that reasoning was always right.
+
+**The blocker, exactly.** `EMAIL_LOCK_KEY` must join `REQUIRED_ENV_VARS`, and a
+missing required variable throws `MissingRequiredEnvError` at boot by design
+(TD-13 gives secrets no defaults). Shipping the code first would break the next
+Staging deploy — a mutation this session is forbidden to make, with a secret it
+must not invent. **The order is: install the secret in Localhost and Staging,
+then implement.** Everything else — design, migration shape, unchanged auth
+behaviour, and eight named tests including the original race and an
+`information_schema` assertion that no raw address remains — is ready for one
+pass.
