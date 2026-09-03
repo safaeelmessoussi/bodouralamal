@@ -675,6 +675,11 @@ export const ar = {
     phoneOptional: 'رقم الهاتف (اختياري للحسابات الحالية)',
     phoneHint: 'أرقام وعلامة + والمسافات فقط.',
     sex: 'الجنس',
+    // R130 — تاريخ ميلاد كامل لكل مستفيدة؛ العمر يُحسب عند الحاجة ولا يُخزَّن.
+    birthDate: 'تاريخ الميلاد',
+    birthDateHint: 'يُستعمل لتحديد الفئة العمرية المناسبة عند التسجيل.',
+    errBirthDateFuture: 'تاريخ الميلاد لا يمكن أن يكون في المستقبل.',
+    errBirthDateInvalid: 'أدخلي تاريخاً صحيحاً.',
     sexFemale: 'أنثى',
     sexMale: 'ذكر',
     // Revision 39 — the one organisational choice the applicant makes.

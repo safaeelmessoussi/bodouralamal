@@ -30,6 +30,7 @@ import {
 } from '../components/registration/children.js';
 import { PersonFields } from '../components/registration/person-fields.js';
 import { t } from '../i18n/index.js';
+import { isRealPastDate } from '../lib/birth-date.js';
 import { ApiError } from '../lib/api.js';
 
 /**
@@ -337,6 +338,12 @@ export function Register(): ReactNode {
                 errors={touched ? errors : {}}
                 prefix="applicant"
                 phoneRequired
+                /* R130 — asked only when the applicant IS the beneficiary. A
+                   staff request is not a beneficiary admission and the server
+                   refuses the field; a guardian registering children is
+                   admitted to nothing (R129) and each child is asked instead. */
+                collectBirthDate={intent === 'adult'}
+                birthDateRequired={intent === 'adult'}
               />
             </fieldset>
 
@@ -513,6 +520,14 @@ interface PersonForm {
   nickname: string;
   phone: string;
   sex: '' | 'female' | 'male';
+  /**
+   * **R130 — the applicant's own, and only when the applicant IS the
+   * beneficiary.** A woman registering herself carries one; a مؤطِّرة applying
+   * to teach does not, and neither does a guardian registering children (R129).
+   * Kept on the shared shape and omitted from the payload on those two paths,
+   * because the server refuses it there rather than ignoring it.
+   */
+  birthDate: string;
 }
 
 const emptyPerson: PersonForm = {
@@ -523,6 +538,7 @@ const emptyPerson: PersonForm = {
   nickname: '',
   phone: '',
   sex: '',
+  birthDate: '',
 };
 
 /**
@@ -565,6 +581,7 @@ const SERVER_FIELD_PATHS: Record<string, string> = {
   nickname: 'nickname',
   phone: 'phone',
   sex: 'sex',
+  birth_date: 'birthDate',
   // R62 — the two fields a child has and an adult does not.
   schooling_stage: 'schoolingStage',
   consent_media_release: 'mediaRelease',
@@ -756,6 +773,21 @@ export function validate(state: FormState): Record<string, string> {
   if (state.intent === 'adult' && !state.categoryId)
     errors['category'] = t('register.errCategory');
 
+  /**
+   * **R130 — required on the beneficiary arm and asked on no other.**
+   *
+   * `intent === 'adult'` is the applicant registering HERSELF, so she carries a
+   * date of birth. `'teacher'` is a staff request — not a beneficiary admission,
+   * and the server refuses the field there — and `'parent_child'` asks it of
+   * each child instead, because the guardian is admitted to nothing (R129).
+   */
+  if (state.intent === 'adult') {
+    const dob = state.applicant.birthDate.trim();
+    if (dob === '') errors['applicant.birthDate'] = t('register.errRequired');
+    else if (!isRealPastDate(dob))
+      errors['applicant.birthDate'] = t('register.errBirthDateInvalid');
+  }
+
   if (state.intent === 'teacher') {
     if (state.framingMode === '') errors['framingMode'] = t('register.errFramingMode');
     if (
@@ -809,6 +841,16 @@ export function buildPayload(state: {
     phone: p.phone.trim(),
   });
 
+  /**
+   * **R130 — sent only on the beneficiary arm.** The server refuses a
+   * `birth_date` on a staff request rather than dropping it, so the two payload
+   * builders below differ by exactly this field.
+   */
+  const beneficiary = (p: PersonForm): PersonInput => ({
+    ...person(p),
+    birth_date: p.birthDate,
+  });
+
   if (state.intent === 'teacher') {
     const mode = state.framingMode as 'in_person' | 'online' | 'both';
     return {
@@ -831,7 +873,10 @@ export function buildPayload(state: {
   if (state.intent === 'adult') {
     return {
       kind: 'adult',
-      applicant: person(state.applicant),
+      // R130 — on THIS arm the applicant is the beneficiary, so she carries a
+      // date of birth. The teacher arm above and the parent arm below use
+      // `person()` without one, deliberately.
+      applicant: beneficiary(state.applicant),
       branch_id: state.branchId!,
       category_id: state.categoryId!,
       consents: { data_processing: true, consent_text_id: state.consentTextId },

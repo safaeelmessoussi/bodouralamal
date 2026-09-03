@@ -11,6 +11,7 @@ import {
   listDirectory,
   listUsers,
   preProvision,
+  updateUser,
 } from "./user.service.js";
 
 /**
@@ -153,6 +154,137 @@ describe("structural role grants share the User serialization anchor", () => {
         where: { userId: target.id, deletedAt: null, role: { name: "student" } },
       }),
     ).toBe(1);
+  });
+});
+
+describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () => {
+  /**
+   * **25 beneficiaries predate the requirement and no date was invented for
+   * them.** The Owner's instruction is explicit: do not fabricate, and do not
+   * infer from a Category, a schooling stage, an enrolment or a row's creation
+   * date. So the column is nullable, the requirement lives at the write
+   * boundary, and a legacy row stays visibly incomplete until somebody who
+   * knows records the real date.
+   *
+   * **The smallest coherent way to record it is the surface that already
+   * exists**: §5.6's account edit, Super Admin only since R112. No new route, no
+   * new role, and no weakening of ordinary profile protections — the write
+   * carries the same TD-15 version check and the same TD-12 freshness assertion
+   * as every other field on it.
+   *
+   * **Completion, never correction** (the R80.3 shape, for the R80.3 reason): a
+   * recorded date decides minor/adult status and eligibility for a self-managed
+   * account, so changing one is its own decision.
+   */
+  async function beneficiaryWithNoBirthDate(): Promise<string> {
+    const row = await prisma.user.create({
+      data: {
+        sex: "female",
+        nameArabic: `${TAG} مستفيدة قديمة`,
+        accountStatus: "active",
+        isBeneficiary: true,
+      },
+    });
+    return row.id;
+  }
+
+  it("13 · an authorised Super Admin records a missing date, and it is auditable", async () => {
+    const admin = await makeStaff("super_admin");
+    const legacy = await beneficiaryWithNoBirthDate();
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    expect(before.birthDate).toBeNull();
+
+    await updateUser(prisma, await actorFor(prisma, admin), legacy, before.version, {
+      birthDate: new Date("2009-05-20T00:00:00Z"),
+    });
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    expect(after.birthDate?.toISOString().slice(0, 10)).toBe("2009-05-20");
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { targetEntity: "User", targetId: legacy, actionType: "user.update" },
+    });
+    expect(entry.actorUserId).toBe(admin);
+    // 15 · **the FIELD, never the value.** TD-8's record must not become a
+    // second copy of somebody's personal data, and a date of birth is exactly
+    // that. The audit says a birth date was recorded; it does not say which.
+    expect(entry.detail).toMatchObject({ fields: ["birthDate"] });
+    expect(JSON.stringify(entry.detail)).not.toContain("2009");
+  });
+
+  it("13b · REFUSES to rewrite a date that is already recorded", async () => {
+    const admin = await makeStaff("super_admin");
+    const legacy = await beneficiaryWithNoBirthDate();
+    let row = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    await updateUser(prisma, await actorFor(prisma, admin), legacy, row.version, {
+      birthDate: new Date("2009-05-20T00:00:00Z"),
+    });
+
+    row = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    await expect(
+      updateUser(prisma, await actorFor(prisma, admin), legacy, row.version, {
+        birthDate: new Date("2011-01-01T00:00:00Z"),
+      }),
+    ).rejects.toMatchObject({ details: { reason: "BIRTH_DATE_ALREADY_RECORDED" } });
+
+    const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    expect(unchanged.birthDate?.toISOString().slice(0, 10)).toBe("2009-05-20");
+  });
+
+  it("13c · re-sending the SAME date is idempotent, not a conflict", async () => {
+    // A form that hydrates the field and saves an unrelated change resends it.
+    // Refusing that would make the screen unusable for everything else.
+    const admin = await makeStaff("super_admin");
+    const legacy = await beneficiaryWithNoBirthDate();
+    let row = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    await updateUser(prisma, await actorFor(prisma, admin), legacy, row.version, {
+      birthDate: new Date("2009-05-20T00:00:00Z"),
+    });
+    row = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+    await expect(
+      updateUser(prisma, await actorFor(prisma, admin), legacy, row.version, {
+        birthDate: new Date("2009-05-20T00:00:00Z"),
+        nickname: "لقب",
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("14 · an Admin, a teacher and the person herself cannot write it", async () => {
+    const legacy = await beneficiaryWithNoBirthDate();
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
+
+    // R112 — account administration is Super Admin's, asserted in the service.
+    // The refusal is uniform, which is what keeps it non-disclosing.
+    for (const role of ["admin", "teacher", "student", "parent"]) {
+      const caller = await makeStaff(role);
+      await expect(
+        updateUser(prisma, await actorFor(prisma, caller), legacy, row.version, {
+          birthDate: new Date("2000-01-01T00:00:00Z"),
+        }),
+        role,
+      ).rejects.toBeTruthy();
+    }
+    // And nothing moved.
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: legacy } })).birthDate,
+    ).toBeNull();
+  });
+
+  it("11 · nothing schedules work against a birth date — eligibility is not a transition", async () => {
+    /**
+     * The Owner ruled out every automatic consequence of turning eighteen: no
+     * midnight job, no family-link revocation, no identity binding, no role
+     * change. The property is the ABSENCE of machinery, so it is asserted
+     * against the source: no pg-boss job, scheduler or cron path may name the
+     * column, because such a thing could only exist to act on a birthday.
+     */
+    const { readFile, readdir } = await import("node:fs/promises");
+    const dir = new URL("../jobs/", import.meta.url);
+    const files = await readdir(dir);
+    for (const file of files.filter((f) => f.endsWith(".ts") && !f.includes(".test."))) {
+      const source = await readFile(new URL(file, dir), "utf8");
+      expect(source, file).not.toMatch(/birthDate|birth_date/);
+    }
   });
 });
 

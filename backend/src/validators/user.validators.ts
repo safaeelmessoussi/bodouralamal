@@ -57,6 +57,22 @@ export const updateUserSchema = z
     last_name_french: optionalNamePart.optional(),
     nickname: nickname.optional(),
     phone: phone.optional(),
+    /**
+     * **R130 — COMPLETION of a missing date of birth, never correction.**
+     *
+     * Exactly the R80.3 shape, for exactly the R80.3 reason. 25 beneficiaries
+     * predate the requirement and cannot be given an invented date, so an
+     * authorised administrator records the real one here — on the surface that
+     * already exists for this, under its existing Super Admin authority (R112).
+     * No new route, no new role and no weakening of ordinary profile
+     * protections.
+     *
+     * The service refuses it when one is already recorded
+     * (`BIRTH_DATE_ALREADY_RECORDED`): a recorded birth date decides minor/adult
+     * status and self-management eligibility, so **changing** one is its own
+     * decision and is not introduced silently under the name of completion.
+     */
+    birth_date: person.birthDate.optional(),
   })
   .strict();
 

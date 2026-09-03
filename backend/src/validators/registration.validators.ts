@@ -76,6 +76,21 @@ const personCore = z.object({
   // boundary rule, not a destructive schema backfill.
   phone,
   sex: z.enum(['female', 'male']),
+  /**
+   * **R130 — optional HERE and required by the arm that admits a beneficiary.**
+   *
+   * `personCore` is shared by the adult applicant and by the parent on a family
+   * request, and those two are not the same person in the domain: the adult IS
+   * the beneficiary, while the parent is **guardian-only** and is admitted to
+   * nothing (R129). Making it required here would demand a date of birth from a
+   * woman registering her daughter, which the Owner ruled out in terms.
+   *
+   * The adult schema's `superRefine` below therefore requires it for a
+   * beneficiary applicant and REFUSES it on a staff request — a مؤطِّرة is not
+   * admitted to a Level either, so asking would be collecting personal data
+   * with no stated purpose.
+   */
+  birth_date: person.birthDate.optional(),
 })
   // `.strict()` for the same reason §20 rule 9 refuses identity fields: an
   // unknown key must be REFUSED, not silently stripped. Revision 39 lets an
@@ -253,6 +268,17 @@ export const adultRegistrationSchema = z
   .superRefine((value, ctx) => {
     const staff = value.requested_role === 'teacher';
     if (staff) {
+      if (value.applicant.birth_date !== undefined) {
+        // R130 — a staff request is not a beneficiary admission, and this path
+        // is shared infrastructure rather than a statement about the person.
+        // Accepting a date here would collect a beneficiary's personal datum
+        // from somebody who is not one.
+        ctx.addIssue({
+          code: 'custom',
+          path: ['applicant', 'birth_date'],
+          message: 'a staff request is not a beneficiary admission, so it takes no birth_date',
+        });
+      }
       if (value.category_id !== undefined) {
         ctx.addIssue({
           code: 'custom',
@@ -277,6 +303,15 @@ export const adultRegistrationSchema = z
       return;
     }
 
+    if (value.applicant.birth_date === undefined) {
+      // R130 — on this path the applicant IS the beneficiary, and every
+      // beneficiary carries a full date of birth.
+      ctx.addIssue({
+        code: 'custom',
+        path: ['applicant', 'birth_date'],
+        message: 'birth_date is required for a beneficiary (R130)',
+      });
+    }
     if (value.branch_id === undefined) {
       ctx.addIssue({ code: 'custom', path: ['branch_id'], message: 'branch_id is required' });
     }
@@ -321,6 +356,14 @@ const childCore = z
     last_name_french: namePart.optional(),
     nickname: nickname.optional(),
     sex: z.enum(['female', 'male']),
+    /**
+     * **R130 — required, per child, and never inherited from a sibling.**
+     *
+     * Every child on a family request is a beneficiary, so each carries her own
+     * date. The application holds it because the child `User` does not exist
+     * until approval (R62), which then materialises this exact calendar date.
+     */
+    birth_date: person.birthDate,
     /**
      * R62.6 — **informs placement and gates nothing.** No validation here or
      * anywhere may refuse a category because of it: a student older than the

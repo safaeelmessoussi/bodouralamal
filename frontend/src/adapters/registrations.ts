@@ -33,6 +33,13 @@ export interface PersonInput {
   nickname?: string;
   /** R117 — required prospectively; persisted User rows remain nullable. */
   phone: string;
+  /**
+   * **R130 — required when the applicant IS the beneficiary**, and refused by
+   * the server on a staff request, which is not a beneficiary admission. A
+   * guardian registering children sends none: she is admitted to nothing
+   * (R129).
+   */
+  birth_date?: string;
   /** Required for every person created (§4.1b step 5, Revision 27) — the
    *  person-side half of `Level.gender_restriction`. */
   sex: 'female' | 'male';
@@ -115,6 +122,12 @@ export interface ChildInput {
   last_name_french?: string;
   nickname?: string;
   sex: 'female' | 'male';
+  /**
+   * **R130 — this child's full date of birth, `YYYY-MM-DD`.** Required: every
+   * child on a request is a beneficiary. A TD-11 calendar date, never an
+   * instant, and never a sibling's.
+   */
+  birth_date: string;
   /**
    * R62.7 — what the child is currently studying, which **informs** an
    * administrator's placement decision and gates nothing. Optional: a parent

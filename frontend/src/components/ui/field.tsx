@@ -85,7 +85,18 @@ interface BaseProps {
 export function TextField({
   type = 'text',
   ...props
-}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url' }): ReactNode {
+  /**
+   * **`date` is a documented variant, not a second component** (rule C).
+   *
+   * R130 needs a date of birth on the registration form and on the account
+   * edit. A native `type="date"` gives the platform's own calendar, keyboard
+   * entry and locale formatting for free, and the value it produces is already
+   * `YYYY-MM-DD` — exactly what the server's TD-11 boundary expects, with no
+   * parsing on either side. Hand-writing the input here would have been the
+   * fourth `<input>` outside this shell, which is the thing the rule exists to
+   * stop.
+   */
+}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url' | 'date' }): ReactNode {
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (

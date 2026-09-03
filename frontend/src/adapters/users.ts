@@ -47,6 +47,13 @@ export interface UserSummary {
   last_name_french: string | null;
   /** R80.6 amended 2026-08-28 — published on this Super-Admin-only read only. */
   sex: string | null;
+  /**
+   * **R130 — `YYYY-MM-DD`, on this Super-Admin-only read only** (narrowed
+   * exactly as `sex` is: not on `/admin/directory`, not on any beneficiary
+   * list). **`null` is a fact, not a gap** — 25 beneficiaries predate the
+   * requirement. No age accompanies it: an age is derived where it is needed.
+   */
+  birth_date: string | null;
   nickname: string | null;
   phone: string | null;
   /**
@@ -166,6 +173,9 @@ export interface UserProfileInput {
   phone?: string | null;
   /** R80.3 — completes a missing sex; the server refuses a change. */
   sex?: 'female' | 'male';
+  /** R130 — completes a MISSING date of birth, `YYYY-MM-DD`; the server refuses
+   *  a change (`BIRTH_DATE_ALREADY_RECORDED`), on the R80.3 pattern. */
+  birth_date?: string;
 }
 
 /**

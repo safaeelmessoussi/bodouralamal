@@ -620,6 +620,10 @@ function ProfileDialog({
     // `sex`, so the form hydrates it. R80.3/R80.4 still govern the write —
     // completing a missing value is allowed, changing a recorded one is refused.
     sex: (user.sex === 'female' || user.sex === 'male' ? user.sex : '') as PersonForm['sex'],
+    // R130 — `null` here is a recorded fact, not a gap: 25 beneficiaries predate
+    // the requirement and no date was invented for them. The form shows it
+    // empty and offers completion.
+    birthDate: user.birth_date ?? '',
   };
   const pristineRoles = user.roles.map((r) => ({ role: r.role, branch_id: r.branch_id }));
 
@@ -667,7 +671,18 @@ function ProfileDialog({
       {guard.confirmation}
       <div className="form">
         {formNotice === null ? null : <Feedback>{formNotice}</Feedback>}
-        <PersonFields value={person} onChange={setPerson} errors={touched ? errors : {}} prefix="user" />
+        {/* R130 — this screen is where a MISSING legacy date is completed, so
+            it collects one on every account; `required` stays false because a
+            row that legitimately has none must still be savable for its other
+            fields. The server refuses a CHANGE to a recorded date
+            (`BIRTH_DATE_ALREADY_RECORDED`), which is the real protection. */}
+        <PersonFields
+          value={person}
+          onChange={setPerson}
+          errors={touched ? errors : {}}
+          prefix="user"
+          collectBirthDate
+        />
 
         <h3>{t('admin.users.rolesHeading')}</h3>
         {platformOwner ? (
@@ -801,6 +816,10 @@ function ProfileDialog({
                   phone: orNull(person.phone),
                   // R80.3 completes a missing sex; the server refuses a change.
                   ...(person.sex === '' ? {} : { sex: person.sex }),
+                  // R130 — the same shape, for the same reason. Omitted when
+                  // blank: an empty string is a value where absence is meant,
+                  // and the server would read it as an attempt to write one.
+                  ...(person.birthDate === '' ? {} : { birth_date: person.birthDate }),
                 },
                 assignmentsForSave(rows, role, branchId),
               );

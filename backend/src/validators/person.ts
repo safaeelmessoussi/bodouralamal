@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseBirthDate } from '../lib/birth-date.js';
+
 /**
  * **The person fields, defined once** (2026-08-28).
  *
@@ -35,3 +37,35 @@ export const phone = z
 
 /** §4.4b/R80 — recorded for everyone; the column is NOT NULL. */
 export const sex = z.enum(['female', 'male']);
+
+/**
+ * **R130 — a full date of birth, validated once** (Owner, 2026-09-03).
+ *
+ * The parsing, the real-calendar check, the future bound and the plausibility
+ * floor all live in `lib/birth-date.ts`, because four boundaries need the same
+ * answer and one of them decides who may hold their own login. This wrapper only
+ * translates a `problem` into the Zod issue the offending field owes.
+ *
+ * `new Date('2010-02-31')` is the 3rd of March, silently — which is why this is
+ * NOT the shared `calendarDate` validator.
+ */
+export const birthDate = z
+  .string()
+  .superRefine((value, ctx) => {
+    const parsed = parseBirthDate(value);
+    if (parsed.ok) return;
+    ctx.addIssue({
+      code: 'custom',
+      // The reason, not «تاريخ غير صالح»: an applicant who typed next year and
+      // one who typed the 31st of February need different corrections.
+      message:
+        parsed.problem === 'SHAPE'
+          ? 'expected YYYY-MM-DD'
+          : parsed.problem === 'NOT_A_REAL_DATE'
+            ? 'that date does not exist in the calendar'
+            : parsed.problem === 'IN_THE_FUTURE'
+              ? 'a date of birth cannot be in the future'
+              : 'that date is implausibly far in the past',
+    });
+  })
+  .transform((value) => new Date(`${value}T00:00:00Z`));

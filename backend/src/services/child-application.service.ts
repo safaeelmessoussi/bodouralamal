@@ -63,6 +63,15 @@ export interface ChildApplicationInput {
   requestedBranchId?: string;
   /** R62.3b — per child: a parent may permit photographs of one and not another. */
   consentMediaRelease: boolean;
+  /**
+   * **R130 — this child's full date of birth**, a TD-11 calendar date.
+   *
+   * Required by both write boundaries and typed as required here, so a caller
+   * cannot omit it silently: it was dropped once already, by a mapped literal
+   * whose excess property TypeScript did not flag, and the value reached the
+   * database as NULL with nothing failing.
+   */
+  birthDate: Date;
 }
 
 export interface SubmitInput {
@@ -127,6 +136,9 @@ export async function submitChildApplications(
         ...(child.lastNameFrench ? { lastNameFrench: child.lastNameFrench.trim() } : {}),
         ...(child.nickname ? { nickname: child.nickname.trim() } : {}),
         sex: child.sex,
+        // R130 — preserved exactly as submitted; approval materialises this same
+        // calendar date onto the `User` it creates.
+        birthDate: child.birthDate,
         ...(child.schoolingStage ? { schoolingStage: child.schoolingStage } : {}),
         ...(child.requestedBranchId ? { requestedBranchId: child.requestedBranchId } : {}),
         ...(child.requestedCategoryId
@@ -321,6 +333,13 @@ export async function decideChildApplication(
           nickname: application.nickname,
           // R80.1 — the application carried one, so the child it creates does.
           sex: application.sex,
+          // R130 — the SUBMITTED calendar date, materialised unchanged. The
+          // application is the evidence and the `User` becomes the authority;
+          // copying rather than recomputing is what keeps the two from
+          // disagreeing. Legacy applications carry none and are approved without
+          // one rather than being given an invented date — the administrator
+          // records the real one afterwards.
+          ...(application.birthDate ? { birthDate: application.birthDate } : {}),
           ...(application.schoolingStage ? { schoolingStage: application.schoolingStage } : {}),
           // Approved here, so the child is usable immediately (TD-4.2).
           accountStatus: 'active',

@@ -1617,6 +1617,20 @@ export interface UserDto {
    * COMPLETES a missing value and refuses a change.
    */
   sex: string | null;
+  /**
+   * **R130 — the beneficiary's full date of birth, `YYYY-MM-DD`.**
+   *
+   * Narrowed exactly as `sex` above is: published on this Super-Admin-only
+   * screen, because §5.6 is where a missing legacy value is **completed**, and
+   * **nowhere else** — not on `/admin/directory`, not on any beneficiary list,
+   * not on a public surface. **`null` is a fact, not a gap**: 25 beneficiaries
+   * predate the requirement and no date was invented for them.
+   *
+   * **No age accompanies it, ever.** An age is derived at the moment it is
+   * needed, by `lib/birth-date.ts`; a number on the wire would be wrong the day
+   * after it was sent.
+   */
+  birth_date: string | null;
   nickname: string | null;
   public_display_name: string | null;
   phone: string | null;
@@ -1651,6 +1665,7 @@ export function userDto(row: {
   firstNameFrench: string | null;
   lastNameFrench: string | null;
   sex: string | null;
+  birthDate?: Date | null;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -1675,6 +1690,17 @@ export function userDto(row: {
     first_name_french: row.firstNameFrench,
     last_name_french: row.lastNameFrench,
     sex: row.sex,
+    /**
+     * **R130 — a TD-11 calendar date, and no derived age beside it.**
+     *
+     * On this DTO because §5.6 is where an administrator **completes** a missing
+     * one, and a form cannot offer that without knowing whether it is missing.
+     * Deliberately NOT added to the operational directory (`GET
+     * /admin/directory`), which exists to pick a person and can do nothing that
+     * would need this — and not to any beneficiary-facing list. An age is never
+     * sent: it is derived where it is needed, from `lib/birth-date.ts`.
+     */
+    birth_date: row.birthDate ? row.birthDate.toISOString().slice(0, 10) : null,
     nickname: row.nickname,
     public_display_name: row.publicDisplayName,
     phone: row.phone,

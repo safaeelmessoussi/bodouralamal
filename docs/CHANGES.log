@@ -3457,3 +3457,86 @@ surviving.
 `TASKS.md` items are closed, including one that recorded the *opposite* email
 model — *a minor signs in through her guardian's address* — which this decision
 supersedes.
+
+## R130 — a full date of birth for every beneficiary (2026-09-03)
+
+**Owner decision.** Every beneficiary carries one — adult women, teenagers and
+children alike — for four stated purposes: minor/adult status, age-appropriate
+placement, registration and placement decisions, and eligibility for the
+controlled transition to a self-managed account.
+
+**The question follows ADMISSION, not authentication.** On the adult path the
+applicant *is* the beneficiary, so she is asked. Every child on a family request
+is asked, per child, because two siblings are two people. A **guardian** is not
+asked — R129 admits her to nothing — and a **staff request is refused** if it
+sends one, rather than having it ignored: accepting it would collect a
+beneficiary's personal datum from somebody who is not one.
+
+**Two columns, one fact.** `User.birth_date` is the durable answer, beside `sex`,
+which is the other fact captured about the person themselves.
+`ChildApplication.birth_date` is the SUBMITTED answer, because the child `User`
+does not exist until approval (R62) — and approval **copies** the same calendar
+date onto the row it creates rather than recomputing it, so the evidence and the
+authority cannot disagree. Both are `DATE`, never a timestamp: an instant puts a
+person's birthday a day earlier for half the world.
+
+**One module owns the rule.** `lib/birth-date.ts` holds the parse, the real
+calendar check, the future bound, the plausibility floor and the eighteen-year
+predicate. Four boundaries need the same answer and one has a safeguarding
+consequence. `new Date('2010-02-31')` is the 3rd of March **silently**, which is
+why this does not reuse the shared `calendarDate` validator — the components are
+read back. The browser runs a deliberately **thinner** pre-check, so it can only
+be quieter than the server, never in conflict with it.
+
+**No age is stored, and the test asserts it against `information_schema`** rather
+than against a memory of the schema. An age is wrong the day after it is written.
+
+**Eighteen establishes eligibility and triggers nothing.** No birthday job, no
+automatic family-link revocation, no automatic identity binding, no role change.
+The property is the **absence** of machinery, so it is guarded by asserting that
+no job source names the column — such a thing could only exist to act on a
+birthday.
+
+**Legacy rows, stated honestly.** Read-only first: Localhost 73 users (18 live),
+25 beneficiaries, **0 with a birth date**, 4 child applications. Nothing is
+fabricated and nothing is inferred — not from a Category, a schooling stage, an
+enrolment or a row's creation date — and no sentinel is used, because a sentinel
+is indistinguishable from a recorded fact a year later. The column is therefore
+nullable with the requirement at the **write boundary**, exactly as R122 did for
+`enrollment.academic_period_id`. **The `NOT NULL` contraction is not performed
+and cannot honestly be performed until every live beneficiary has a real date** —
+recorded as a pending sub-task rather than claimed as complete.
+
+**Completion uses the surface that already exists.** `PATCH /admin/users/{id}`,
+Super Admin only since R112, accepts `birth_date` under the same TD-15 version
+check and TD-12 freshness assertion as every other field. No new route, no new
+role. **Completion, never correction**: a change to a recorded date is refused as
+`BIRTH_DATE_ALREADY_RECORDED`, on the R80.3 pattern and for the R80.3 reason.
+Re-sending the *same* date is idempotent, because a form that hydrates the field
+and saves an unrelated change resends it.
+
+**Privacy.** The audit row names the **field, never the value** — asserted, not
+assumed. Published on the Super-Admin-only `/admin/users` read and nowhere else:
+not `/admin/directory`, not any beneficiary list, the same exact narrowing R80.6
+applies to `sex`. Never logged, never an identifier, never accompanied by an age.
+
+**One shared control gained a documented variant** rather than a second
+implementation (rule C): `TextField` accepts `type="date"`, whose native value is
+already `YYYY-MM-DD` — exactly what the TD-11 boundary expects, with no parsing
+on either side. `PersonFields` gained a **required** `collectBirthDate` prop, not
+a defaulted one: rule AE warns that a behaviour each caller must opt into will be
+missing somewhere, and the two callers here want opposite answers, so TypeScript
+refuses a caller that has not decided.
+
+**A defect the types caught while it was being written.** `ChildApplicationInput`
+gained `birthDate` as **required**, and the compiler immediately named the second
+write boundary — the student-area `POST /child-applications` — which would
+otherwise have accepted a child with no date. Before that, a mapped object
+literal dropped the field silently and it reached the database as NULL with
+nothing failing.
+
+**Tests: 48/48** registration (12 new), **45/45** user service (5 new), **26/26**
+child-application, **10/10** the birth-date unit suite, **16/16** the users wire
+contract. Frontend typecheck, lint and build clean; fresh migration chain and the
+existing database both verified; OpenAPI regenerated and reconciled against the
+live router.

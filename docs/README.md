@@ -146,6 +146,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
+| [`SRS-PROPOSAL-R130.md`](SRS-PROPOSAL-R130.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A full date of birth for every beneficiary, required at the write boundary and nullable for legacy rows; eighteen establishes eligibility and triggers nothing | Document Owner only |
 | [`SRS-PROPOSAL-R129.md`](SRS-PROPOSAL-R129.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A platform account is not association membership; a guardian's email is hers and never the child's login; a guardian who joins keeps her account. No schema or contract change | Document Owner only |
 | [`SRS-PROPOSAL-R128.md`](SRS-PROPOSAL-R128.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A rejected family link is soft-deleted with its decision, so a corrected request is possible; supersedes R118.3's special-case purge route | Document Owner only |
 | [`SRS-PROPOSAL-R127.md`](SRS-PROPOSAL-R127.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** Save-and-resume is the only assessment response policy; `exam.access_policy`, its enum and `SINGLE_SUBMISSION_FINAL` are withdrawn, resolving §17's contradiction with R124 | Document Owner only |

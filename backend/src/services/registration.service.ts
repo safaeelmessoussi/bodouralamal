@@ -252,6 +252,11 @@ export async function register(
           // §4.1b step 5, Revision 27: written HERE, in the same transaction
           // that creates the person — the registration precedes the User.
           sex: applicantData.sex,
+          // R130 — beside `sex`, and for the same reason: it is a fact about the
+          // person, captured where the person is created. Present only on the
+          // adult beneficiary path — a guardian and a staff request both send
+          // none, and the validator refuses one from the latter.
+          ...(applicantData.birth_date ? { birthDate: applicantData.birth_date } : {}),
           // Revision 39 — what the applicant ASKED FOR, not where they end up.
           // On the applicant only: the parent chose one branch for the family,
           // and copying it onto the child would be a second value to keep in
@@ -339,6 +344,10 @@ export async function register(
             ...(c.last_name_french ? { lastNameFrench: c.last_name_french } : {}),
             ...(c.nickname ? { nickname: c.nickname } : {}),
             sex: c.sex,
+            // R130 — this child's own date, preserved exactly as submitted.
+            // Approval materialises this same calendar date onto the `User` it
+            // creates; nothing recomputes or rounds it in between.
+            birthDate: c.birth_date,
             ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
             // R67 — **this child's own**, not the family's. They used to be one
             // answer copied onto every application, so a parent could not ask

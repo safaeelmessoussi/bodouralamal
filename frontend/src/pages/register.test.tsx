@@ -23,6 +23,8 @@ const person = {
   nickname: '',
   phone: '+212 600000000',
   sex: 'female' as const,
+  // R130 — the adult arm's applicant IS the beneficiary, so she carries one.
+  birthDate: '1995-04-12',
 };
 /** R62 — a child is no longer a `person`: no phone, no notes, and two
  *  decisions of its own. */
@@ -33,6 +35,8 @@ const child = {
   lastNameFrench: '',
   nickname: '',
   sex: 'female' as const,
+  // R130 — every child on a request is a beneficiary and carries her own.
+  birthDate: '2015-06-02',
   schoolingStage: '' as const,
   mediaRelease: '' as const,
   // R67 — the branch and stage are the child's now, not the request's.

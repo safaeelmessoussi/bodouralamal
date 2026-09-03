@@ -620,6 +620,13 @@ model User {
   /// always meant *not eligible* for a restricted Level rather than
   /// *unknown-but-fine* (R27), which is why it could not stay optional.
   sex               Sex     @map("sex")
+  /// R130 — **the beneficiary's full date of birth**, a TD-11 calendar date and
+  /// never an instant. Required at the write boundary for every beneficiary and
+  /// NOT collected from a guardian-only adult or a staff request; nullable here
+  /// because 25 existing beneficiaries have none and inventing one would be
+  /// indistinguishable from a recorded fact. **No age column exists** — an age
+  /// is wrong the day after it is written, so `lib/birth-date.ts` derives it.
+  birthDate         DateTime? @map("birth_date") @db.Date
 
   /// **Is this person one of the institute's مستفيدات?** (Revision 79)
   ///
@@ -2001,6 +2008,12 @@ model ChildApplication {
   lastNameFrench  String?         @map("last_name_french") @db.VarChar(60)
   nickname        String?         @db.VarChar(60)
   sex             Sex?
+  /// R130 — the child's date of birth as SUBMITTED. The child `User` does not
+  /// exist until approval, so the application carries it exactly as `sex` and
+  /// the name parts are carried, and approval materialises the same calendar
+  /// date onto the row it creates. Nullable for applications written before the
+  /// revision; required at the write boundary.
+  birthDate       DateTime?       @map("birth_date") @db.Date
   schoolingStage  SchoolingStage? @map("schooling_stage")
 
   /// The stage the parent is applying to — the administrator may change it

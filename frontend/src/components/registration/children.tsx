@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { LIMITS, type ChildInput } from '../../adapters/registrations.js';
 import { t } from '../../i18n/index.js';
+import { isRealPastDate } from '../../lib/birth-date.js';
 import { Button } from '../ui/button.js';
 import { SelectField, TextField } from '../ui/field.js';
 
@@ -34,6 +35,8 @@ export interface ChildForm {
   lastNameFrench: string;
   nickname: string;
   sex: '' | 'female' | 'male';
+  /** R130 — `YYYY-MM-DD`, straight from the native date control. */
+  birthDate: string;
   schoolingStage: '' | NonNullable<ChildInput['schooling_stage']>;
   /** Three-state: an unanswered release is not a refused one (BR-1). */
   mediaRelease: '' | 'yes' | 'no';
@@ -49,6 +52,7 @@ export const EMPTY_CHILD: ChildForm = {
   lastNameFrench: '',
   nickname: '',
   sex: '',
+  birthDate: '',
   schoolingStage: '',
   mediaRelease: '',
   branchId: '',
@@ -87,6 +91,8 @@ export function NameFields({
     lastNameFrench: string;
     nickname: string;
     sex: '' | 'female' | 'male';
+    /** R130 — present on both callers: a child and an adult beneficiary alike. */
+    birthDate: string;
   };
   onChange: (patch: Record<string, string>) => void;
   errors: Record<string, string>;
@@ -123,6 +129,18 @@ export function NameFields({
         ]}
         required
         error={errors[`${prefix}.sex`] ?? null}
+      />
+      {/* R130 — every child is a beneficiary, so each carries her own date.
+          Never inherited from a sibling: two children on one request are two
+          people. */}
+      <TextField
+        type="date"
+        label={t('register.birthDate')}
+        value={value.birthDate}
+        onChange={(next) => set({ birthDate: next })}
+        hint={t('register.birthDateHint')}
+        required
+        error={errors[`${prefix}.birthDate`] ?? null}
       />
       {/* Revision 41 — split like the Arabic pair. Optional as a PAIR. */}
       <TextField
@@ -325,6 +343,12 @@ export function validateChildren(children: ChildForm[]): Record<string, string> 
       else if (raw.length > LIMITS.namePart) errors[`${prefix}.${part}`] = t('register.errTooLong');
     }
     if (child.sex === '') errors[`${prefix}.sex`] = t('register.errRequired');
+    // R130 — the server is the authority (it refuses an impossible or future
+    // date by name); the form says so first, so nobody discovers it on submit.
+    const dob = child.birthDate.trim();
+    if (dob === '') errors[`${prefix}.birthDate`] = t('register.errRequired');
+    else if (!isRealPastDate(dob))
+      errors[`${prefix}.birthDate`] = t('register.errBirthDateInvalid');
 
     // R41: both French parts or neither. Half a name is not a name, and the
     // server refuses it — so the form says which half is missing.
@@ -353,6 +377,7 @@ export function toChildInput(child: ChildForm): ChildInput {
     first_name_arabic: child.firstNameArabic.trim(),
     last_name_arabic: child.lastNameArabic.trim(),
     sex: child.sex as 'female' | 'male',
+    birth_date: child.birthDate,
     ...(child.firstNameFrench.trim() && child.lastNameFrench.trim()
       ? {
           first_name_french: child.firstNameFrench.trim(),

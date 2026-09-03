@@ -24,6 +24,10 @@ export interface PersonForm {
   nickname: string;
   phone: string;
   sex: '' | 'female' | 'male';
+  /** R130 — `YYYY-MM-DD`. Empty means *not recorded*, which is a real state:
+   *  beneficiaries who predate the requirement have no date and none was
+   *  invented for them. */
+  birthDate: string;
 }
 
 export const emptyPerson: PersonForm = {
@@ -34,6 +38,7 @@ export const emptyPerson: PersonForm = {
   nickname: '',
   phone: '',
   sex: '',
+  birthDate: '',
 };
 
 export function PersonFields({
@@ -42,6 +47,8 @@ export function PersonFields({
   errors,
   prefix,
   phoneRequired = false,
+  collectBirthDate,
+  birthDateRequired = false,
 }: {
   value: PersonForm;
   onChange: (next: PersonForm) => void;
@@ -51,6 +58,22 @@ export function PersonFields({
   prefix: string;
   /** Prospective public registrations require contact; legacy profile edits do not. */
   phoneRequired?: boolean;
+  /**
+   * **R130 — whether this person is a BENEFICIARY**, which is the only thing
+   * that decides whether a date of birth is asked for.
+   *
+   * **Required, deliberately, and not defaulted** (rule AE): a behaviour each
+   * caller must remember to opt into is one that will be missing somewhere, and
+   * the two answers here are opposite — the public form asks a woman
+   * registering herself and must NOT ask a مؤطِّرة or a guardian, while the
+   * back office asks on every account because that screen is where a missing
+   * legacy date is completed. Making it required means TypeScript refuses a
+   * caller that has not decided.
+   */
+  collectBirthDate: boolean;
+  /** Whether the date is REQUIRED once collected. False on the back-office
+   *  edit, where a legacy row legitimately has none yet. */
+  birthDateRequired?: boolean;
 }): ReactNode {
   const set = (patch: Partial<PersonForm>) => onChange({ ...value, ...patch });
 
@@ -66,6 +89,17 @@ export function PersonFields({
         error={errors[`${prefix}.phone`] ?? null}
         required={phoneRequired}
       />
+      {collectBirthDate ? (
+        <TextField
+          type="date"
+          label={t('register.birthDate')}
+          value={value.birthDate}
+          onChange={(next) => set({ birthDate: next })}
+          hint={t('register.birthDateHint')}
+          required={birthDateRequired ?? false}
+          error={errors[`${prefix}.birthDate`] ?? null}
+        />
+      ) : null}
     </>
   );
 }

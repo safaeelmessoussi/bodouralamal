@@ -30,6 +30,9 @@ const WIRE: UserSummary = {
   last_name_arabic: 'العلوي',
   first_name_french: null,
   sex: 'female',
+  // R130 — on this Super-Admin-only read; `null` is what a legacy beneficiary
+  // legitimately carries, so the contract fixture states one.
+  birth_date: null,
   last_name_french: null,
   nickname: null,
   phone: null,
@@ -69,6 +72,11 @@ describe('the adapter type matches the wire contract', () => {
   it('carries exactly the keys the staff list publishes', () => {
     expect(Object.keys(WIRE).sort()).toEqual([
       'account_status',
+      // R130 — the beneficiary's date of birth, published on this
+      // Super-Admin-only read because §5.6 is where a missing legacy one is
+      // COMPLETED. Deliberately absent from `/admin/directory` and from every
+      // beneficiary list, and never accompanied by a derived age.
+      'birth_date',
       // R55: the administrative identifier a staff screen recognises a person
       // by. **Not** a display identity (§20 rule 21) — that rule governs the
       // name shown to the public, and this list is staff-only (TD-2).

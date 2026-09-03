@@ -207,6 +207,7 @@ export function update(prisma: PrismaClient) {
         ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
         ...(body.sex !== undefined ? { sex: body.sex } : {}),
+        ...(body.birth_date !== undefined ? { birthDate: body.birth_date } : {}),
       },
     );
     res.json({ data: userDto(user) });

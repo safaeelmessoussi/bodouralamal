@@ -247,6 +247,215 @@ async function withNoActiveConsentText<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+describe("R130 — every beneficiary carries a full date of birth (Owner, 2026-09-03)", () => {
+  /**
+   * **Required where a person is ADMITTED, not where a person authenticates.**
+   *
+   * The adult path's applicant *is* the beneficiary, so she carries one. Every
+   * child on a family request carries her own. A **guardian** carries none —
+   * R129 makes her guardian-only and the Owner ruled the question out for her —
+   * and a **staff request** carries none either, because a مؤطِّرة is not
+   * admitted to a Level and asking would collect a beneficiary's personal datum
+   * from somebody who is not one.
+   *
+   * Stored as a full calendar date and never as an age: an age column is wrong
+   * the day after it is written, so `lib/birth-date.ts` derives it on demand.
+   */
+  const adultBeneficiary = (over: Record<string, unknown> = {}) => ({
+    kind: "adult" as const,
+    applicant: {
+      first_name_arabic: `${TAG}`,
+      last_name_arabic: "بالغة",
+      phone: "+212 600 000 111",
+      sex: "female" as const,
+      birth_date: "1998-03-14",
+      ...over,
+    },
+    branch_id: branchId,
+    category_id: categoryId,
+    consents: { data_processing: true, consent_text_id: consentText!.id },
+  });
+
+  /**
+   * **Parsed, because `birth_date` is the first field whose validator
+   * transforms.** Every other registration field reaches the service as the
+   * literal the test wrote, so the suite has always passed raw objects. A date
+   * arrives as a `string` and leaves as a `Date`, so a raw literal would hand
+   * the service a value the controller could never produce — and Prisma
+   * refuses it, which is how this was found.
+   */
+  const parsed = (payload: unknown): RegistrationInput =>
+    registrationSchema.parse(payload);
+
+  it("1 · REFUSES an adult beneficiary registration with no date of birth", () => {
+    const { birth_date: _omitted, ...applicant } = adultBeneficiary().applicant;
+    const parsed = registrationSchema.safeParse({
+      ...adultBeneficiary(),
+      applicant,
+    });
+    expect(parsed.success).toBe(false);
+    expect(JSON.stringify(parsed.error?.issues)).toContain("birth_date");
+  });
+
+  it("2 · accepts one and preserves the EXACT calendar date", async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(prisma, token, parsed(adultBeneficiary()), KEY);
+
+    const applicant = await prisma.user.findUniqueOrThrow({
+      where: { id: result.applicantId },
+    });
+    // TD-11 — a date, never an instant. Not shifted by a zone, not rounded.
+    expect(applicant.birthDate?.toISOString().slice(0, 10)).toBe("1998-03-14");
+  });
+
+  it("3 · a STAFF request needs none, and is REFUSED if it sends one", () => {
+    const staff = {
+      kind: "adult" as const,
+      applicant: {
+        first_name_arabic: `${TAG}`,
+        last_name_arabic: "مؤطرة",
+        phone: "+212 600 000 112",
+        sex: "female" as const,
+      },
+      requested_role: "teacher" as const,
+      framing: { mode: "online" as const },
+      consents: { data_processing: true, consent_text_id: consentText!.id },
+    };
+    expect(registrationSchema.safeParse(staff).success).toBe(true);
+
+    const withDob = {
+      ...staff,
+      applicant: { ...staff.applicant, birth_date: "1990-01-01" },
+    };
+    const parsed = registrationSchema.safeParse(withDob);
+    expect(parsed.success).toBe(false);
+    expect(JSON.stringify(parsed.error?.issues)).toContain("birth_date");
+  });
+
+  it("4 · EACH child on a family request must carry her own", () => {
+    const base = parentChild();
+    const withoutDob = registrationSchema.safeParse(base);
+    expect(withoutDob.success).toBe(false);
+    expect(JSON.stringify(withoutDob.error?.issues)).toContain("birth_date");
+
+    // And the GUARDIAN needs none — the same payload passes once the child has
+    // one, with nothing added for the mother.
+    const withDob = {
+      ...base,
+      children: [{ ...base.children[0]!, birth_date: "2015-06-02" }],
+    };
+    expect(registrationSchema.safeParse(withDob).success).toBe(true);
+  });
+
+  it("5 · siblings' dates are independent and both preserved exactly", async () => {
+    const base = parentChild();
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      parsed({
+        ...base,
+        children: [
+          { ...base.children[0]!, birth_date: "2015-06-02" },
+          {
+            ...base.children[0]!,
+            last_name_arabic: "أخت",
+            birth_date: "2012-11-30",
+          },
+        ],
+      }),
+      KEY,
+    );
+
+    const applications = await prisma.childApplication.findMany({
+      where: { id: { in: result.childApplicationIds } },
+      select: { lastNameArabic: true, birthDate: true },
+      orderBy: { lastNameArabic: "asc" },
+    });
+    expect(applications).toHaveLength(2);
+    const dates = applications.map((a) => a.birthDate?.toISOString().slice(0, 10)).sort();
+    expect(dates).toEqual(["2012-11-30", "2015-06-02"]);
+  });
+
+  it("6 · approval MATERIALISES the application's date onto the beneficiary", async () => {
+    const base = parentChild();
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      parsed({ ...base, children: [{ ...base.children[0]!, birth_date: "2014-01-09" }] }),
+      KEY,
+    );
+
+    const childId = await approveFirstChild(result.childApplicationIds[0]!);
+    const child = await prisma.user.findUniqueOrThrow({ where: { id: childId } });
+    // Copied, never recomputed: the application is the evidence and the `User`
+    // becomes the authority, and the two must not be able to disagree.
+    expect(child.birthDate?.toISOString().slice(0, 10)).toBe("2014-01-09");
+  });
+
+  it("7 · a GUARDIAN-only account is not required to have one", async () => {
+    const base = parentChild();
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      parsed({ ...base, children: [{ ...base.children[0]!, birth_date: "2016-02-29" }] }),
+      KEY,
+    );
+
+    const guardian = await prisma.user.findUniqueOrThrow({
+      where: { id: result.applicantId },
+    });
+    // R129 — she authenticates to manage a child and is admitted to nothing, so
+    // the question is not asked of her. `null` is the correct recorded answer.
+    expect(guardian.birthDate).toBeNull();
+    expect(guardian.isBeneficiary).toBe(false);
+  });
+
+  it("8 · REFUSES a date that is impossible, in the future, or malformed", () => {
+    for (const bad of ["2010-02-31", "2099-01-01", "14/03/1998", "1998-3-14", "1200-01-01"]) {
+      const parsed = registrationSchema.safeParse(adultBeneficiary({ birth_date: bad }));
+      expect(parsed.success, bad).toBe(false);
+    }
+    // A leap day is a real date and is accepted.
+    expect(registrationSchema.safeParse(adultBeneficiary({ birth_date: "1996-02-29" })).success).toBe(
+      true,
+    );
+  });
+
+  it("9 · NO stored age exists anywhere on the person", async () => {
+    /**
+     * The Owner's rule, asserted against the live schema rather than against a
+     * memory of it: a derived value that is persisted becomes wrong the day
+     * after it is written, and then two sources disagree about how old somebody
+     * is.
+     */
+    const columns = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name IN ('user', 'child_application')`,
+    );
+    const names = columns.map((c) => c.column_name);
+    expect(names).toContain("birth_date");
+    expect(names.filter((n) => /(^|_)age($|_)/.test(n))).toEqual([]);
+  });
+
+  it("12 · a legacy beneficiary with no date is left alone, never given one", async () => {
+    const legacy = await prisma.user.create({
+      data: {
+        sex: "female",
+        nameArabic: `${TAG} مستفيدة قديمة`,
+        accountStatus: "active",
+        isBeneficiary: true,
+      },
+    });
+    // Nothing in the read path fabricates, defaults or infers a value — not from
+    // the Category, the schooling stage, an enrolment or the row's own age.
+    const read = await prisma.user.findUniqueOrThrow({ where: { id: legacy.id } });
+    expect(read.birthDate).toBeNull();
+  });
+});
+
 describe("a PLATFORM ACCOUNT is not ASSOCIATION MEMBERSHIP (Owner, 2026-09-03)", () => {
   /**
    * **The rule, stated so nobody has to infer it from behaviour.** Fatima
@@ -567,7 +776,10 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
     const missingChildLast = registrationSchema.safeParse({
       ...family,
       children: [
-        { ...family.children[0]!, first_name_french: "Meriem" },
+        // R130 — supplied so this assertion still isolates the R41 rule; the
+        // shared `parentChild()` fixture deliberately omits it, because the
+        // *requirement* is asserted in the R130 block.
+        { ...family.children[0]!, first_name_french: "Meriem", birth_date: "2015-06-02" },
       ],
     });
     expect(missingChildLast.success).toBe(false);
@@ -946,6 +1158,9 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
           last_name_arabic: "الاختبارية",
           phone: '+212600000051',
           sex,
+          // R130 — an adult applicant IS the beneficiary, so the boundary now
+          // requires one. This test is about `sex`; the date keeps it valid.
+          birth_date: "1997-08-21",
         },
         branch_id: "00000000-0000-4000-8000-000000000000",
         category_id: categoryId,

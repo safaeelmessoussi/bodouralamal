@@ -441,6 +441,8 @@ async function listUsersUnchecked(
         firstNameFrench: true,
         lastNameFrench: true,
         sex: true,
+        // R130 — the §5.6 edit form completes a missing one, so it must know.
+        birthDate: true,
         nickname: true,
         publicDisplayName: true,
         phone: true,
@@ -617,6 +619,12 @@ export interface UserProfileInput {
   nickname?: string | null;
   phone?: string | null;
   /**
+   * **R130 — COMPLETION, never correction**, on the R80.3 pattern below.
+   * A recorded date decides minor/adult status and self-management
+   * eligibility, so rewriting one is its own decision.
+   */
+  birthDate?: Date;
+  /**
    * **R80.3 — COMPLETION, never correction.**
    *
    * Accepted only while the stored value is absent. Supplying one for a person
@@ -650,6 +658,7 @@ async function loadManageable(
   lastNameArabic: string | null;
   firstNameFrench: string | null;
   lastNameFrench: string | null;
+  birthDate: Date | null;
 }> {
   const managed = branchesForRole(actor.roleScopes, 'admin');
   const user = await db.user.findFirst({
@@ -674,6 +683,9 @@ async function loadManageable(
       lastNameArabic: true,
       firstNameFrench: true,
       lastNameFrench: true,
+      // R130 — like `sex`, the stored value travels so the completion guard can
+      // see whether one is already recorded. Read here and nowhere else.
+      birthDate: true,
     },
   });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
@@ -700,6 +712,23 @@ export async function updateUser(
      * silently under the name of completion: changing a recorded sex has
      * consequences for placements already made, and is its own decision.
      */
+    /**
+     * **R130 — this path COMPLETES a missing date of birth; it does not correct
+     * one.** Same reasoning as `sex` immediately below: the check is about the
+     * STORED row, and a recorded birth date decides minor/adult status and
+     * eligibility for a self-managed account, so changing one is its own
+     * decision rather than a side effect of an edit form.
+     */
+    if (
+      input.birthDate !== undefined &&
+      target.birthDate !== null &&
+      target.birthDate.getTime() !== input.birthDate.getTime()
+    ) {
+      throw new AppError('VALIDATION_FAILED', 'a date of birth is already recorded for this person', {
+        reason: 'BIRTH_DATE_ALREADY_RECORDED',
+      });
+    }
+
     if (input.sex !== undefined && target.sex !== null && target.sex !== input.sex) {
       throw new AppError('VALIDATION_FAILED', 'sex is already recorded for this person', {
         reason: 'SEX_ALREADY_RECORDED',
@@ -742,6 +771,7 @@ export async function updateUser(
         ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.sex !== undefined ? { sex: input.sex } : {}),
+        ...(input.birthDate !== undefined ? { birthDate: input.birthDate } : {}),
         version: { increment: 1 },
       },
     });
@@ -1245,6 +1275,8 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
       firstNameFrench: true,
       lastNameFrench: true,
       sex: true,
+      // R130 — as on the list read: §5.6 hydrates the completion field from it.
+      birthDate: true,
       nickname: true,
       publicDisplayName: true,
       phone: true,

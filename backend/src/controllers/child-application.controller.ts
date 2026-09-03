@@ -10,6 +10,7 @@ import {
   submitChildApplications,
 } from '../services/child-application.service.js';
 import { resolvePresentedConsentText } from '../services/legal-consent-text.service.js';
+import { birthDate } from '../validators/person.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -53,6 +54,14 @@ const submitSchema = z
             // admitted without one could never be placed in a restricted Level,
             // and nothing inside the application could repair it.
             sex: z.enum(['female', 'male']),
+            /**
+             * **R130 — required, on this path too**, and for the reason `sex`
+             * and R67's pair are: one rule with two answers is the divergence
+             * R64 and R65 were each written to repair. An existing parent adding
+             * a second child is making the same statement the registration form
+             * makes, so it asks the same question.
+             */
+            birth_date: birthDate,
             schooling_stage: SCHOOLING_STAGE.optional(),
             /**
              * R67 — **required, on this path too.** They were optional while
@@ -132,6 +141,7 @@ export function submit(prisma: PrismaClient) {
           firstNameArabic: c.first_name_arabic,
           lastNameArabic: c.last_name_arabic,
           sex: c.sex,
+          birthDate: c.birth_date,
           ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
           requestedCategoryId: c.requested_category_id,
           requestedBranchId: c.requested_branch_id,

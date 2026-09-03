@@ -122,6 +122,38 @@ written against a `userId`, and none of them is created by registration. What
 does not exist yet is a *screen* for it — an existing guardian applying for
 herself — which is a separate piece of work and not a second membership system.
 
+## Date of birth, and who is asked for one
+
+**Every beneficiary carries a full date of birth (R130); nobody else is asked.**
+The question follows *admission*, not authentication:
+
+| Who | Asked? | Why |
+|---|---|---|
+| An adult registering herself | **yes, required** | on that path the applicant *is* the beneficiary |
+| Each child on a family request | **yes, required, per child** | every child is a beneficiary, and two siblings are two people |
+| A guardian registering children | **no** | she is admitted to nothing (above) |
+| A staff request (`requested_role`) | **refused, not ignored** | a مؤطِّرة is not a beneficiary; accepting one would collect a beneficiary's personal datum from somebody who is not one |
+| A guardian who later applies as a beneficiary | **yes** | through that application, on the same account |
+
+`User.birth_date` is the durable answer; `ChildApplication.birth_date` is the
+submitted one, materialised unchanged at approval because the child `User` does
+not exist until then (R62). **`lib/birth-date.ts` owns the rule** — the parse,
+the calendar check, the future bound, the plausibility floor and the
+eighteen-year predicate — and nothing repeats the arithmetic. **No age is ever
+stored**: it is wrong the day after it is written.
+
+**25 beneficiaries predate the requirement and no date was invented for them.**
+The column is nullable, the requirement lives at the write boundary, and a
+missing one is completed by a Super Admin on `/admin/users` — **completion,
+never correction**, refused as `BIRTH_DATE_ALREADY_RECORDED` if one is already
+recorded. The `NOT NULL` contraction cannot honestly happen until every live
+beneficiary has a real recorded date.
+
+**Eighteen establishes eligibility and triggers nothing.** No birthday job, no
+automatic family-link revocation, no automatic identity binding, no role change
+— an account that changes hands while nobody is looking is one nobody decided to
+hand over. A guard asserts that no job source names the column.
+
 ## The minor who becomes an adult
 
 See [`docs/development/person-identity.md`](person-identity.md) for the
@@ -143,4 +175,14 @@ happens automatically on a birthday**.
 | Her email reaches neither the child's identity nor the child's pre-provisioned address, and exactly one account claims it | same |
 | The upgrade attaches to the same `User`, and her `FamilyLink`s survive it | same |
 | A child has no login identity, so linking refuses an account that has one | `child-application.integration.test.ts` (`ACCOUNT_HAS_LOGIN`) |
+| An adult beneficiary registration is refused without a date of birth, and a staff request is refused *with* one | `registration.integration.test.ts` |
+| Each child needs her own; siblings' dates are independent and preserved exactly | same |
+| Approval materialises the application's date onto the beneficiary | same |
+| A guardian is not asked for one | same |
+| An impossible, future or malformed date is refused | same, and `birth-date.test.ts` |
+| No stored age column exists on either table | same (asserted against `information_schema`) |
+| A Super Admin completes a missing date; a recorded one cannot be rewritten; an Admin, teacher, student or parent cannot write it at all | `user.integration.test.ts` |
+| The audit row names the field and never the value | same |
+| No job source names the birth-date column | same |
+| Eighteen is a boundary and a pure predicate | `birth-date.test.ts` |
 | One live account per email, across both ownership channels | `email-ownership.integration.test.ts` |

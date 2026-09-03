@@ -1118,6 +1118,23 @@ was hiding behind it: the run went green on the first attempt.
 - [x] نوع التسجيل relabelled so it stops naming a Category
 - [x] Table rule established and applied (branches +4 columns, levels +1); `إضافة مجموعة` converted to `FormDialog`
 - [ ] **OWNER DECISION — Categories and Levels have no `description`, and NEW K/L supplied one for each.** The Owner's canonical dataset gives every Category a description (المرأة: *النساء من سن الجامعة الى ما فوق*, and so on) and every Level one of the form *المستوى N - برنامج X*. **Neither entity has a column to store it**, and §7 defines Category as carrying only `name` and `display_order`, and Level only those plus `gender_restriction` — the seed says so in a deliberate comment. Storing the descriptions is a schema addition against a normative §7 clause, which is the Document Owner's call and not the agent's. Everything else in NEW J/K/L shipped on 2026-08-27. **In simple words: do you want the platform to store and show a short description under each Category and Level? If yes, that is a small change to §7 and to the database, and the descriptions you already wrote are ready to load.**
+- [x] **R130 — a full date of birth for every beneficiary (Owner, 2026-09-03).**
+      `User.birth_date` is the durable answer and `ChildApplication.birth_date`
+      the submitted one, materialised unchanged at approval. Required at the
+      write boundary on the adult beneficiary path and on **every** child;
+      **not asked** of a guardian (R129) and **refused** on a staff request.
+      `lib/birth-date.ts` owns the parse, the calendar check, the future bound,
+      the plausibility floor and the eighteen-year predicate — no age is stored
+      anywhere, asserted against `information_schema`. **18 establishes
+      eligibility and triggers nothing**: no birthday job, guarded by asserting
+      no job source names the column.
+      - [ ] **CONTRACT PHASE PENDING, and honestly so — `birth_date` cannot
+            become `NOT NULL` until every live beneficiary has a real recorded
+            date.** 25 have none (Localhost, 2026-09-03) and none was
+            fabricated. Completion is a Super Admin recording the real date on
+            `/admin/users`: **completion, never correction**
+            (`BIRTH_DATE_ALREADY_RECORDED`). Revisit the contraction only when
+            the count of live beneficiaries with a null date reaches zero.
 - [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
 ### R65 — the personal section is role-independent (2026-08-11)
