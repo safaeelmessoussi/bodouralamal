@@ -576,6 +576,38 @@ describe("GET /exams", () => {
     );
     expect((byLevel.body.data ?? []).map((r) => r["id"])).not.toContain(mine);
   });
+
+  it("lists SITTINGS only — an online assessment is not one", async () => {
+    /**
+     * **R124's paper must not appear on the sittings list.** This route feeds
+     * الجدولة, where every row is an arrangement: a branch, a room, a clock
+     * window. An online assessment has none of them by construction
+     * (`exam_online_has_no_room_check` forbids a branch), so it would render as
+     * a sitting somebody forgot to finish — and clicking edit answers
+     * `ONLINE_NOT_AVAILABLE`, which is a refusal the reader did nothing to earn.
+     *
+     * It is created directly because `/assessments` is the route that makes one
+     * and this suite is about `/exams`; the row is what matters, not who wrote it.
+     */
+    const online = await prisma.exam.create({
+      data: {
+        title: `${TAG} ورقة إلكترونية`,
+        mode: "online",
+        status: "draft",
+        levelId,
+        subjectId,
+        academicYearId,
+        date: new Date("2099-05-12T00:00:00.000Z"),
+        maxGrade: 20,
+        targetKind: "level",
+      },
+      select: { id: true },
+    });
+
+    const listed = await call("GET", "/exams?page_size=100", superAdmin);
+    expect(listed.status).toBe(200);
+    expect((listed.body.data ?? []).map((r) => r["id"])).not.toContain(online.id);
+  });
 });
 
 describe("GET /calendar", () => {

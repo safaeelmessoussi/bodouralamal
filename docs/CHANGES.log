@@ -3032,3 +3032,25 @@ guard. **The guard was right and the ad-hoc check was wrong.** The true pending
 count is **8**, every one of them already carrying a recorded finding: the four
 online-exam shapes R124 reshaped, the three `/grades/{id}`-and-`quran-logs`
 addressing differences, and `GET /jobs/{id}`, which is genuinely unbuilt.
+
+## An online assessment leaked into the sittings list — 2026-09-04
+
+`GET /exams` filtered `deleted_at` and the caller's scope, and **not `mode`**, so
+R124's papers appeared on الجدولة beside real sittings — for a Super Admin and an
+all-branches Admin. A branch-scoped Admin never saw them, because
+`branch_id IN (…)` excludes NULL and an online row has no branch; the leak
+reached exactly the callers with no branch filter, which is why it was invisible
+in the branch-scoped tests.
+
+**Why it is a defect and not a cosmetic difference.** Every row on that screen is
+an *arrangement* — a branch, a room, a clock window — and an online assessment
+has none of them by construction (`exam_online_has_no_room_check` forbids a
+branch). It rendered as a sitting somebody had forgotten to finish, and clicking
+edit answered `ONLINE_NOT_AVAILABLE`: a refusal the reader did nothing to earn.
+
+Reproduced first with a failing HTTP test that creates the row directly, then
+fixed by filtering `mode: 'physical'` — which is what the route has always meant
+and what the ratified §4.6 split now says in terms: this endpoint schedules a
+sitting, `/assessments` writes a paper. OpenAPI updated to say so.
+
+exam.http + exam + teacher-exam-scope + assessment integration: **70/70**.

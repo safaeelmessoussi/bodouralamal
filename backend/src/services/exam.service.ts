@@ -702,6 +702,21 @@ export async function listExams(
 
   const where: Prisma.ExamWhereInput = {
     deletedAt: null,
+    /**
+     * **This route lists SITTINGS, and a paper is not one** (R124).
+     *
+     * Every row here is an arrangement — a branch, a room, a clock window — and
+     * الجدولة renders it as such. An online assessment has none of them by
+     * construction (`exam_online_has_no_room_check` forbids a branch), so it
+     * appeared as a sitting somebody had forgotten to finish, and editing it
+     * answered `ONLINE_NOT_AVAILABLE` — a refusal the reader did nothing to
+     * earn. Papers are listed by their own screen, `/admin/assessments`.
+     *
+     * A branch-scoped Admin never saw them anyway, because `branch_id IN (…)`
+     * excludes NULL; the leak reached exactly the callers with no branch filter,
+     * which is the Super Admin and an all-branches Admin.
+     */
+    mode: 'physical',
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.levelId ? { levelId: filters.levelId } : {}),
     ...(filters.from || filters.to
