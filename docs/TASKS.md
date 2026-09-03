@@ -1693,6 +1693,16 @@ was hiding behind it: the run went green on the first attempt.
         and breaks the invariant in whichever environment fell back. **Order: generate
         and install `EMAIL_LOCK_KEY` in Localhost and Staging, then implement.**
         Everything else is ready and testable in one pass.
+- [x] **TEST ISOLATION (2026-09-03) — the refresh-token suite destroyed audit rows it did not
+  own.** Its cleanup deleted `auditLog` where `{ targetEntity: 'User', actorUserId: null }`
+  **with no ownership term at all**, so every run swept every system-written User audit row in
+  the database, whoever wrote it and whenever — caught by the all-table guard as `audit_log`
+  losing two pre-existing rows across a full run. System rows carry a null actor and cannot be
+  found through the tagged actor the rest of the cleanup uses, so they are now scoped by
+  **target**, resolved from the suite's own users first — the shape the P1.2 fix below used for
+  staffing. **Proved against the defect**: an unowned probe row survives the fixed cleanup
+  (1 → 1) and is destroyed by the old predicate (1 → 0).
+- [x] **P1.2 TEST ISOLATION — the integration sweep now leaves shared Local Development state
   unchanged.** The staffing loss reproduced in `branch.integration.test.ts` alone: its first
   `beforeEach` cleared with `userId: actorUserId ?? undefined` before the id existed, and Prisma
   omitted the undefined predicate, deleting all staffing. Cleanup now resolves suite-tagged user
