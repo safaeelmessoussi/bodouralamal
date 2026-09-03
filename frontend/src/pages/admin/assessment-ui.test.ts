@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import builder from './assessments.tsx?raw';
 import studentPage from '../dashboard/assessments.tsx?raw';
 import adapter from '../../adapters/assessments.ts?raw';
+import teacherPage from '../teacher/assessments.tsx?raw';
 
 /**
  * **The assessment interface's rules, as opposed to its styling** (SRS §4.6,
@@ -92,5 +93,28 @@ describe('R124 — the whole sequence, and the occurrence’s own date', () => {
     // A quick test belongs to the occurrence's day; a second date could
     // disagree with it about which students were expected.
     expect(builder).toContain("const needsDate = targetKind !== 'session';");
+  });
+});
+
+describe('R124 — one builder, two frames', () => {
+  it('the teaching portal renders the shared BODY inside its own chrome', () => {
+    /**
+     * **The defect this pins.** `/teacher/assessments` first routed straight to
+     * the back-office page, which dragged `AdminLayout` — and with it the
+     * administration sidebar — into the teaching portal: a مؤطِّرة saw the back
+     * office's navigation and none of her own. A browser check caught it; no
+     * unit test could have, because both frames render perfectly well alone.
+     *
+     * The property is R70.1's, applied again: one implementation, two ways in.
+     */
+    expect(teacherPage).toContain('AssessmentsView');
+    expect(teacherPage).toContain('TeacherLayout');
+    // The property is *does not IMPORT it*, not *does not mention it* — the
+    // comment above the component names the defect and must stay free to.
+    expect(teacherPage).not.toMatch(/import\s*\{[^}]*AdminLayout/);
+    expect(teacherPage).not.toContain('<AdminLayout');
+    // And the shared body itself owns no frame — it takes one.
+    expect(builder).toContain('layout: PortalLayout');
+    expect(builder).toContain('export function AssessmentsView');
   });
 });

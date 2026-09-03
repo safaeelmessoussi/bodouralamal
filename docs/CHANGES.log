@@ -3078,3 +3078,32 @@ because *where the absent-zero row came from* is the more interesting fact.
 
 Two teardown gaps surfaced and were closed: `attendance.exam_id` and the suite's
 own rooms and scheduling types. Both are the FKs doing their job.
+
+## The assessment builder, verified in a browser — and it found two things — 2026-09-04
+
+R124 shipped without a browser harness, unlike R123. `verify-assessments.sh`
+closes that, and it earned its keep on the first run twice over.
+
+**A real defect: the teaching portal was rendering the back office's sidebar.**
+`/teacher/assessments` routed straight at the back-office *page*, which owns its
+own `AdminLayout` — so a مؤطِّرة opening the builder got the administration's
+navigation and none of her own. **No unit test could have caught it**: both
+frames render perfectly well alone, and the module guards only assert that the
+node exists and the router has a case.
+
+The fix is R70.1's rule applied again, the way `/teacher/exams` already applies
+it: the builder's **body** becomes `AssessmentsView`, each portal passes its own
+chrome, and neither owns a frame the other has to inherit. The property is now
+pinned in CI as *the teaching page imports no `AdminLayout`* — asserted as an
+import rather than a word, because the comment above the component names the
+defect and must stay free to.
+
+**A harness precision bug, in the harness.** The submit check asked whether the
+page still offered «إرسال الإجابات» and found the **confirmation dialog's own
+confirm button**, which carries the same label. Scoped to outside any `<dialog>`.
+
+Five checks: the builder creates and publishes through its own API; a مؤطِّرة
+reaches بناء الاختبارات and gets the builder rather than a pending placeholder;
+the published paper is on the beneficiary's list; حفظ saves a **draft**; and
+إرسال **asks first, then locks every control and stops offering itself**.
+**5/5.** Frontend 1004/1004, build green.

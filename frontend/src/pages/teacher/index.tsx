@@ -6,7 +6,7 @@ import { ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
-import { AssessmentsPage } from '../admin/assessments.js';
+import { TeacherAssessmentsPage } from './assessments.js';
 import { TeacherExamsPage } from './exams.js';
 import { TeacherQuranPage } from './quran.js';
 import { ScheduleSessionsPage } from '../admin/schedule-sessions.js';
@@ -84,13 +84,15 @@ export function TeacherRouter(): ReactNode {
         return <TeacherExamsPage />;
       case '/teacher/assessments':
         /**
-         * R124 — the same builder the back office renders, as `/teacher/exams`
-         * reuses the grade sheet (R70.1). `?exam=` opens one paper; absent, the
-         * page offers «اختبار جديد». Authorization is the server's: her scope is
+         * R124 — the same builder BODY the back office renders (`AssessmentsView`),
+         * inside **this portal's own frame**, as `/teacher/exams` reuses the grade
+         * sheet (R70.1). Routing straight to the back-office page dragged its
+         * sidebar in with it. `?exam=` opens one paper; absent, the page offers
+         * «اختبار جديد». Authorization is the server's: her scope is
          * `assertExamInTeacherScope`, and this route grants nothing.
          */
         return (
-          <AssessmentsPage
+          <TeacherAssessmentsPage
             examId={new URLSearchParams(window.location.search).get('exam')}
           />
         );

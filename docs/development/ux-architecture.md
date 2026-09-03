@@ -592,6 +592,15 @@ published.
 paper is fixed, and the builder says why in one sentence instead of offering
 controls that answer `409`.
 
+**One builder, two frames.** `/teacher/assessments` renders `AssessmentsView` —
+the shared **body** — inside `TeacherLayout`, and the back office renders the
+same body inside `AdminLayout`. The first version routed the teaching portal
+straight at the back-office *page*, which dragged its sidebar in with it: a
+مؤطِّرة saw the administration's navigation and none of her own. **A browser
+harness caught it and no unit test could have**, because both frames render
+perfectly well on their own — which is why the property is now pinned as *the
+teaching page imports no `AdminLayout`*.
+
 **A مؤطِّرة is one of the three authorised authors, and she needs a route.** The
 service implemented her arm through `assertExamInTeacherScope` from the first
 commit, so the authority existed while the node did not — rule **P** in its most

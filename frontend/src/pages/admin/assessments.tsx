@@ -79,51 +79,90 @@ const TARGET_LABELS: Record<TargetKind, string> = {
 
 const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId'] as const;
 
-export function AssessmentsPage({ examId }: { examId: string | null }): ReactNode {
+/**
+ * **The builder's body, without a frame** (R124).
+ *
+ * `/admin/assessments` and `/teacher/assessments` render THIS, each inside its
+ * own portal chrome — the `GradeSheetView` pattern R70.1 established, and for
+ * the reason it gives: one implementation, two ways in. The first version of the
+ * teacher route reused the whole page, which dragged `AdminLayout` — and with it
+ * the back-office sidebar — into the teaching portal. A browser check caught it;
+ * a unit test could not have, because both frames render.
+ */
+export function AssessmentsView({
+  examId,
+  layout,
+}: {
+  examId: string | null;
+  /** The portal's own chrome. Each caller passes its own; this component has none. */
+  layout: (props: { title: string; actions: ReactNode; children: ReactNode }) => ReactNode;
+}): ReactNode {
   const { accessToken } = useSession();
   const { activeRoles } = useActiveRole();
   const canWrite = activeRoles.some((r) => ['admin', 'super_admin', 'teacher'].includes(r));
 
-  if (examId !== null) return <OnePaper examId={examId} token={accessToken} canWrite={canWrite} />;
-  return <NewPaper token={accessToken} canWrite={canWrite} />;
+  if (examId !== null) {
+    return <OnePaper examId={examId} token={accessToken} canWrite={canWrite} layout={layout} />;
+  }
+  return <NewPaper token={accessToken} canWrite={canWrite} layout={layout} />;
 }
+
+/** `/admin/assessments` — the builder in the back-office chrome. */
+export function AssessmentsPage({ examId }: { examId: string | null }): ReactNode {
+  return (
+    <AssessmentsView
+      examId={examId}
+      layout={({ title, actions, children }) => (
+        <AdminLayout title={title} lede={t('assessments.lede')} actions={actions}>
+          {children}
+        </AdminLayout>
+      )}
+    />
+  );
+}
+
+type PortalLayout = (props: {
+  title: string;
+  actions: ReactNode;
+  children: ReactNode;
+}) => ReactNode;
 
 /** The create form. Once it saves, the page moves to `?exam=` and the builder. */
 function NewPaper({
   token,
   canWrite,
+  layout,
 }: {
   token: string | null;
   canWrite: boolean;
+  layout: PortalLayout;
 }): ReactNode {
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, mode: 'form' });
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  return (
-    <AdminLayout
-      title={t('assessments.title')}
-      lede={t('assessments.lede')}
-      actions={
-        canWrite ? (
-          <Button variant="add" onClick={() => setOpen(true)}>
-            {t('assessments.create')}
-          </Button>
-        ) : null
-      }
-    >
-      {notice ? <Feedback tone="warn">{notice}</Feedback> : null}
-      <p className="hint">{t('assessments.grading')}</p>
-      {open ? (
-        <CreateDialog
-          scope={scope}
-          token={token}
-          onCancel={() => setOpen(false)}
-          onFailed={() => setNotice(t('assessments.createFailed'))}
-        />
-      ) : null}
-    </AdminLayout>
-  );
+  return layout({
+    title: t('assessments.title'),
+    actions: canWrite ? (
+      <Button variant="add" onClick={() => setOpen(true)}>
+        {t('assessments.create')}
+      </Button>
+    ) : null,
+    children: (
+      <>
+        {notice ? <Feedback tone="warn">{notice}</Feedback> : null}
+        <p className="hint">{t('assessments.grading')}</p>
+        {open ? (
+          <CreateDialog
+            scope={scope}
+            token={token}
+            onCancel={() => setOpen(false)}
+            onFailed={() => setNotice(t('assessments.createFailed'))}
+          />
+        ) : null}
+      </>
+    ),
+  });
 }
 
 function CreateDialog({
@@ -259,10 +298,12 @@ function OnePaper({
   examId,
   token,
   canWrite,
+  layout,
 }: {
   examId: string;
   token: string | null;
   canWrite: boolean;
+  layout: PortalLayout;
 }): ReactNode {
   const [paper, setPaper] = useState<AssessmentPaper | null>(null);
   const [rows, setRows] = useState<SubmissionRow[]>([]);
@@ -354,11 +395,9 @@ function OnePaper({
     },
   ];
 
-  return (
-    <AdminLayout
-      title={paper?.title ?? t('assessments.title')}
-      lede={t('assessments.lede')}
-      actions={
+  return layout({
+    title: paper?.title ?? t('assessments.title'),
+    actions: (
         canWrite && paper ? (
           <>
             {paper.status === 'draft' ? (
@@ -373,8 +412,9 @@ function OnePaper({
             ) : null}
           </>
         ) : null
-      }
-    >
+    ),
+    children: (
+      <>
       {notice ? <Feedback tone="warn">{notice}</Feedback> : null}
       {status === 'loading' ? <p className="hint">{t('common.loading')}</p> : null}
       {status === 'error' ? <Feedback tone="warn">{t('assessments.loadFailed')}</Feedback> : null}
@@ -504,8 +544,9 @@ function OnePaper({
         }
         onCancel={() => setConfirm(null)}
       />
-    </AdminLayout>
-  );
+      </>
+    ),
+  });
 }
 
 function QuestionDialog({
