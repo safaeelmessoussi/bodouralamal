@@ -2870,3 +2870,52 @@ keep is an Owner decision, not an operator's.
 **No code was changed.** The migration is not rewritten: it was found safe under
 a precondition, and the precondition is now enforced by procedure rather than
 assumed.
+
+## R122/R123/R124 cross-feature audit, and the one defect it found — 2026-09-04
+
+**One demonstrable defect, fixed.** R123 resolved an exam's attendance roster
+with its own two-arm rule — *named group, else the whole Level* — which was R58's
+entire targeting model and correct when it was written. R124 then gave `Exam`
+three further arms and a canonical `examAudienceWhere`, and the second answer
+survived: an exam targeting **one beneficiary** would have opened its attendance
+sheet on **everybody in the Level**.
+
+**No route produces such a row today** — `/assessments` records no scheduling
+type, so an online assessment has no sheet at all, and `/exams` writes only the
+two old arms. It is fixed anyway, because *unreachable* is not *impossible* and a
+second answer to *who sits this exam* is the defect whether or not something
+currently reaches it (§4.4c). Reproduced first with a failing test that builds
+the row directly, then fixed by calling the canonical resolver.
+
+**Everything else the audit checked held.**
+
+*Audience logic* — every call site in the codebase (`online-class`,
+`consent-reevaluation`, `grade`, `attendance`, `assessment`, `session`,
+`notification`, `quran`) composes `roster-resolution.ts`. After this fix there is
+**no second implementation of any arm** anywhere.
+
+*R122* — eligibility resolves against the period covering the **occurrence or
+assessment date**, never today's; a `NULL` `academic_period_id` matches no period
+filter, so unclassified history never becomes current; `deleted_at` keeps its one
+meaning and natural expiry is not a deletion; a historical enrolment stays
+readable.
+
+*R123* — the expected roster uses the occurrence date; a recurring `Event`'s date
+is half the attendance key, so two dates are two sheets; marking somebody beyond
+the roster writes an `Attendance` row and touches no `Enrollment`; attendance
+writes no `Grade`; self check-in is refused for a Category without
+`self_attendance_allowed` even when an occurrence says `self_or_staff`.
+
+*R124* — a Session target resolves through the class's own audience, so it cannot
+leak to unrelated students; a Level target carries the period rule; a
+TeachingGroup target requires seat membership *and* a live enrolment in that
+Level for the period; an individual target is exactly one id; a submission
+survives later enrolment changes and remains its own permission to read; the
+first submission freezes the paper; grade publication is `Grade.status` and is
+untouched by assessment publication.
+
+*Exam attendance ≠ submission ≠ grade* — verified as three independent writes
+with no read of one gating another, which is now normative in §4.7.
+
+*Physical exams* — unchanged by R124 except where the ratified revision says so:
+`status` is inert for them, and the grade sheet still resolves them period-blind.

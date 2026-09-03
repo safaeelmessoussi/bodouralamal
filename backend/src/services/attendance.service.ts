@@ -9,6 +9,7 @@ import {
   audienceWhere,
   enrolmentInPeriodOn,
   eventAudienceWhere,
+  examAudienceWhere,
   staffsSession,
 } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -160,6 +161,12 @@ async function resolveOccurrence(
         levelId: true,
         branchId: true,
         administrativeGroupId: true,
+        // R124's three further arms. Read so this resolves through the ONE
+        // exam-audience rule rather than re-deciding two of the five here.
+        targetKind: true,
+        sessionId: true,
+        teachingGroupId: true,
+        studentId: true,
         schedulingType: { select: { attendanceMode: true } },
       },
     });
@@ -174,25 +181,32 @@ async function resolveOccurrence(
       // an exam is not a workflow the association has, so offering a setting
       // whose only correct value is the default would be a configuration trap.
       marking: 'staff_only',
-      audience: audienceWhere(
-        exam.administrativeGroupId === null
-          ? {
-              teachingMode: 'entire_level',
-              levelId: exam.levelId,
-              administrativeGroupId: null,
-              teachingGroupId: null,
-              branchId: exam.branchId ?? '',
-              on: exam.date,
-            }
-          : {
-              teachingMode: 'administrative_group',
-              levelId: null,
-              administrativeGroupId: exam.administrativeGroupId,
-              teachingGroupId: null,
-              branchId: exam.branchId ?? '',
-              on: exam.date,
-            },
-      ),
+      /**
+       * **Through `examAudienceWhere`, so there is one answer to *who sits this
+       * exam*.**
+       *
+       * This branched on `administrative_group_id` being null, which was R58's
+       * ENTIRE targeting model and correct when R123 was written. R124 gave
+       * `Exam` three more arms, and the second answer would have resolved a
+       * paper addressed to one beneficiary to the whole Level. No route
+       * produces such a row today — an online assessment records no scheduling
+       * type, so it has no sheet at all — but *unreachable* is not
+       * *impossible*, and a second answer is the defect whether or not
+       * something currently reaches it (§4.4c).
+       *
+       * **The exam's own date**, for the reason every other arm passes one: the
+       * roster is the roster of the day it was sat (R122).
+       */
+      audience: await examAudienceWhere(prisma, {
+        targetKind: exam.targetKind,
+        levelId: exam.levelId,
+        branchId: exam.branchId,
+        administrativeGroupId: exam.administrativeGroupId,
+        sessionId: exam.sessionId,
+        teachingGroupId: exam.teachingGroupId,
+        studentId: exam.studentId,
+        on: exam.date,
+      }),
     };
   }
 

@@ -985,3 +985,45 @@ describe('24 · a correction is staff work, and leaves one honest history', () =
     expect(rows[0]!.deletedAt).not.toBeNull();
   });
 });
+
+describe('R123 × R124 · an exam sheet resolves through the ONE exam-audience rule', () => {
+  /**
+   * **The divergence this pins.** R123 wrote its own two-arm resolution for an
+   * exam's roster — *named group, else the whole Level* — which was R58's entire
+   * targeting model and correct at the time. R124 then gave `Exam` three more
+   * arms and a canonical `examAudienceWhere`. Two answers to *who sits this
+   * exam* now existed, and the attendance one would resolve a paper addressed to
+   * ONE beneficiary to the whole Level.
+   *
+   * No route produces such a row today — `/assessments` sets no scheduling type,
+   * so an online assessment has no sheet, and `/exams` writes only the two old
+   * arms. The row is constructed directly here because *unreachable* is not
+   * *impossible*, and the second answer is the defect whether or not something
+   * currently reaches it.
+   */
+  it('shows only the targeted beneficiary, not everybody in the Level', async () => {
+    const examType = await schedulingType('اختبار موجَّه', 'exam', 'required', 807);
+    const targeted = await prisma.exam.create({
+      data: {
+        title: `${TAG} اختبار لمستفيدة واحدة`,
+        schedulingTypeId: examType,
+        mode: 'online',
+        status: 'published',
+        levelId: womenLevelId,
+        subjectId,
+        academicYearId,
+        date: TODAY,
+        maxGrade: 20,
+        targetKind: 'student',
+        studentId: womanId,
+        staff: { create: [{ userId: teacherId, position: 'supervisor' }] },
+      },
+      select: { id: true },
+    });
+
+    const sheet = await attendanceSheet(prisma, superAdmin(), exam(targeted.id));
+    expect(sheet.expected.map((e) => e.id)).toEqual([womanId]);
+    // The other woman is enrolled in the same Level and is NOT expected here.
+    expect(sheet.expected.map((e) => e.id)).not.toContain(otherWomanId);
+  });
+});
