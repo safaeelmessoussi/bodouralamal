@@ -3006,3 +3006,29 @@ still holds and the assertion is unchanged; only its reason was false, and a
 guard whose stated reason is wrong is one the next person misreads or deletes.
 
 Frontend: typecheck, lint, build, **1004/1004**.
+
+## Two more planning lines were stale, and one apparent TD-3 gap was my own error — 2026-09-04
+
+**Visibility transitions are complete**, not partial. The line said *«general
+visibility editing and the friendly stale-link page remain»*; both are built.
+Editing goes through `VisibilityField` on the content dialog and
+`PATCH /content/{id}`, and the transition is not a flag flip: it **copies to the
+target bucket, verifies size and SHA-256 against the source, commits under an
+optimistic version guard and only then retires the old key** — a failed copy is
+discarded and the original left untouched. `/content-unavailable` is routed and
+rendered.
+
+**Teacher scope is complete.** `teacher-scope.ts` does not exist; `GroupTeacher`
+survives only in two historical schema comments. Every staff-scope question
+composes `studentsTaughtBy`, which R91 extended with the occurrence arm and
+which R123 and R124 both compose.
+
+**A correction to my own earlier enumeration.** While auditing TD-3 I listed
+`POST /uploads/{id}/complete`, `/abort` and `PATCH /content/{id}` among the
+pending endpoints. They are not: my ad-hoc script compared raw strings while the
+guard uses `split(None, 1)`, so a registry line written with two spaces —
+`PATCH  /content/{id}` — read as a mismatch to me and matches correctly for the
+guard. **The guard was right and the ad-hoc check was wrong.** The true pending
+count is **8**, every one of them already carrying a recorded finding: the four
+online-exam shapes R124 reshaped, the three `/grades/{id}`-and-`quran-logs`
+addressing differences, and `GET /jobs/{id}`, which is genuinely unbuilt.

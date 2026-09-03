@@ -596,7 +596,11 @@ was hiding behind it: the run went green on the first attempt.
   - ⚠ **`createBranch` is no longer a single-row operation.** The existing branch suite's teardown could not delete its own branches afterwards — fixed there, and recorded because any future caller inherits the same side effect
 - [x] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
   - ✓ 17 integration tests; both claims mutation-proven (drop the branch bound → 2 fail; resolve a split to the administrative roster → 4 fail)
-- [~] Teacher scope from `CourseScheduleStaff` (§4.4c, TD-2) — **replaces `teacher-scope.ts`'s `GroupTeacher` resolution**
+- [x] **Teacher scope from `CourseScheduleStaff` — COMPLETE.** Verified 2026-09-04:
+      `teacher-scope.ts` no longer exists and `GroupTeacher` survives only in two
+      historical schema comments; every staff-scope question composes
+      `studentsTaughtBy` in `roster-resolution.ts`, which is the single §4.4c
+      definition. R91 later added the occurrence arm and R123/R124 both compose it.
   - ✓ Backend — `studentsTaughtBy`, `teacherBranchIds`, `staffsSession` in `roster-resolution.ts`; branch scope now **stated** by the schedule instead of inferred through two hops
   - ✓ Tests — assistants have identical reach; a teacher with no schedules reaches nobody; revoking a staffing ends reach on the next call
   - ✓ **Consumers migrated** — `calendar`, `event` and `consent` services all resolve through `roster-resolution.ts`; **no production code reads `GroupTeacher`**
@@ -1398,7 +1402,15 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Hash-segmented immutable canonical keys; clients write staging only, completion canonicalizes one fully read SHA-256-verified byte stream, and replacement mints a new key + quarantines old (TD-9, R103)
 - [x] FileUploader: progress, failure, clean retry (R-9) (§14.3) — `XMLHttpRequest` for the PUT, because `fetch` cannot report upload progress
 - [~] Phone-recording upload guidance panel on /teacher/content (§4.9) — **panel shipped**; cross-browser playback E2E for TD-9 containers (§14.7) still to run
-- [~] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9) — the consent-forced exact-key public → private worker and Nginx fail-closed public gate are complete; general visibility editing and the friendly stale-link page remain
+- [x] **Visibility transitions + bucket-migrate job + `/content-unavailable` — COMPLETE.**
+      Verified 2026-09-04: the consent-forced worker and the Nginx fail-closed gate
+      were already done, and **both items listed as remaining are built**.
+      *General visibility editing* — `VisibilityField` on the content edit dialog,
+      `PATCH /content/{id}` accepting `visibility`, and a transition that **copies
+      to the target bucket, verifies size and SHA-256, commits under an optimistic
+      version guard and only then retires the old key**; a failed copy is discarded
+      and the original left alone. *The stale-link page* — `/content-unavailable`
+      is routed in `route.ts` and rendered in `main.tsx`.
 - [x] Consent re-evaluation engine wired to enrollment/Teaching Group membership, consent, R92 audience changes, retained Sessions after schedule deletion, recording upload/import/replacement and Session-content links; bounded startup sweep; monotonic `consent_forced_private`; **empty resolved audience disengages the gate** (§4.1a, §4.9, BR-2 as restated by R43)
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
 - [x] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
