@@ -592,6 +592,14 @@ published.
 paper is fixed, and the builder says why in one sentence instead of offering
 controls that answer `409`.
 
+**A مؤطِّرة is one of the three authorised authors, and she needs a route.** The
+service implemented her arm through `assertExamInTeacherScope` from the first
+commit, so the authority existed while the node did not — rule **P** in its most
+repeated shape, and the seventh instance. `/teacher/assessments` renders **the
+same component** the back office does, exactly as `/teacher/exams` reuses the
+grade sheet (R70.1): one implementation, two chromes, and what differs is what
+the server will accept rather than what the screen can do.
+
 **Grading is deliberately elsewhere.** The mark is entered on «نقاط الامتحانات»
 — the sheet every other exam uses — because `Grade` is keyed to this row and
 already carries the scale and the publication rule. A second grading surface here

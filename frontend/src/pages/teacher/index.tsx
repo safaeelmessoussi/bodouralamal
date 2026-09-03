@@ -6,6 +6,7 @@ import { ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
+import { AssessmentsPage } from '../admin/assessments.js';
 import { TeacherExamsPage } from './exams.js';
 import { TeacherQuranPage } from './quran.js';
 import { ScheduleSessionsPage } from '../admin/schedule-sessions.js';
@@ -79,8 +80,20 @@ export function TeacherRouter(): ReactNode {
           />
         );
       case '/teacher/exams':
-        // R70 — the marking half. The online paper builder stays out (§4.6).
+        // R70 — the marking half. The paper is the node below (R124).
         return <TeacherExamsPage />;
+      case '/teacher/assessments':
+        /**
+         * R124 — the same builder the back office renders, as `/teacher/exams`
+         * reuses the grade sheet (R70.1). `?exam=` opens one paper; absent, the
+         * page offers «اختبار جديد». Authorization is the server's: her scope is
+         * `assertExamInTeacherScope`, and this route grants nothing.
+         */
+        return (
+          <AssessmentsPage
+            examId={new URLSearchParams(window.location.search).get('exam')}
+          />
+        );
       case '/teacher/content':
         // The same screen the back office renders. The capability is identical;
         // only the chrome and what the server will accept differ (§4.9).

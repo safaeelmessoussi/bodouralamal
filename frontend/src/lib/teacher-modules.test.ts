@@ -34,9 +34,16 @@ describe('the teacher registry matches §14.1', () => {
     // **`/teacher/availability` joined on 2026-08-26 (R106)** — the question
     // R88.2 reserved in terms and the Owner has now answered: she states her
     // own availability, and only that.
+    //
+    // **`/teacher/assessments` joined on 2026-09-04 (R124)**, and it is rule P
+    // again in the same shape as `/teacher/quran`: the service implemented a
+    // مؤطِّرة's authoring arm through `assertExamInTeacherScope`, so the
+    // authority existed while the route did not. She is one of the three
+    // authorised author roles; the node is what makes that true on screen.
     expect(TEACHER_MODULES.map((m) => m.path).sort()).toEqual(
       [
         '/teacher',
+        '/teacher/assessments',
         '/teacher/availability',
         '/teacher/content',
         '/teacher/exams',
@@ -167,6 +174,7 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
       '/teacher/availability', // إدخال متى أنا متاحة
       '/teacher/quran', // إدخال حفظ المستفيدات
       '/teacher/exams', // إدخال نقاط الامتحانات
+      '/teacher/assessments', // بناء الاختبارات (R124) — the paper, beside its marking
       '/teacher/schedules', // الجدولة
       '/teacher/content', // مكتبة المحتوى
     ]);

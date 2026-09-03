@@ -812,6 +812,7 @@ export const ar = {
       // R106 — «إدخال»: she enters marks here. «نقاط الامتحانات» alone named a
       // report; the verb is what every other entry in this menu carries.
       exams: 'إدخال نقاط الامتحانات',
+      assessments: 'بناء الاختبارات',
       // R85 — «إدخال الحفظ»: the Owner's word, and the operational one. «تتبع»
       // describes watching; this screen is where a مؤطرة RECORDS what was
       // memorised, which is what she comes to it to do.

@@ -130,6 +130,29 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
   },
   {
     /**
+     * **R124 — the paper, where R70 left only the marking.**
+     *
+     * The node above says *"§4.6's online paper builder is still declared and
+     * refused"*. It is neither: the Owner ratified Revision 124 and the builder
+     * is live — and **a مؤطِّرة is one of its three authorised author roles**,
+     * alongside Admin and Super Admin. The service implements her arm through
+     * `assertExamInTeacherScope`, so the authority existed while the route did
+     * not: a complete capability with no reach, which is this project's most
+     * repeated defect (rule P).
+     *
+     * **The same component the back office renders**, exactly as
+     * `/teacher/exams` reuses the grade sheet (R70.1). One implementation, two
+     * chromes; what differs is what the server will accept, not what the screen
+     * can do.
+     */
+    path: '/teacher/assessments',
+    labelKey: 'teacher.nav.assessments',
+    section: null,
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
      * §14.1: *"Course Schedules … /teacher/schedules (teacher view)"*; §5.6 line
      * 753 defines its content — the schedules this teacher staffs, with their
      * co-staff and roster access. R72 added Activity authoring in her own scope

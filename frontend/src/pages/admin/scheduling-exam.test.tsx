@@ -84,9 +84,18 @@ describe('the adapter type matches the wire contract', () => {
   });
 
   it('has no online field, deliberately', () => {
-    // A field with nothing behind it is a promise the platform has not made.
-    // When the mode arrives it needs a link, an audience, an open/close window
-    // and submission rules — a shape nobody has decided.
+    /**
+     * **The property holds; its old reason does not.** This said *«when the
+     * mode arrives it needs … a shape nobody has decided»*. R124 decided it and
+     * built it — at `/assessments`, which is a different write boundary: this
+     * form schedules a SITTING (a room, a clock window, supervisors) and that
+     * one writes a PAPER. One form accepting either would ask half its
+     * questions of everybody.
+     *
+     * `access_policy` in particular stays off the wire because **nothing reads
+     * it**: v1 gives every assessment save-and-resume, and offering a setting
+     * that changes nothing would be worse than offering none.
+     */
     for (const column of ['exam_url', 'opens_at', 'closes_at', 'access_policy', 'questions']) {
       expect(WIRE).not.toHaveProperty(column);
     }

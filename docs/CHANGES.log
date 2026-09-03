@@ -2978,3 +2978,31 @@ R81 rather than left as work. The postponement check was actually run: no
 **One line was simply stale.** The raw-`<select>` sweep listed approvals, levels
 and users as outstanding; all three contain no raw `<select>` and import
 `SelectField`.
+
+## The assessment builder was unreachable for مؤطِّرات — rule P, instance seven — 2026-09-04
+
+The Owner named **three** authorised author roles: Super Admin, Admin and
+**Teacher**. `assessment.service` implemented all three from the first commit —
+a مؤطِّرة authors within her own teaching through `assertExamInTeacherScope`, and
+a test already proved that one outside scope is refused. **She had no route.**
+`/admin/assessments` carries `roles: STAFF`, and `STAFF` on this platform is
+`['admin', 'super_admin']`; no teacher node existed.
+
+So the authority was real, the screen was built, and one of its three intended
+users could not reach any of it — a complete capability with no reach, which is
+this project's most repeated defect and the reason rule P is written down.
+
+**`/teacher/assessments` renders the same component**, exactly as
+`/teacher/exams` reuses the grade sheet (R70.1). One implementation, two
+chromes; what differs is what the server will accept, not what the screen can
+do. The two menu guards were **restated, not relaxed** — the node list and the
+R106 flat order both name it now, with the reason recorded beside the
+`/teacher/quran` precedent, which was the same defect in the same shape.
+
+**One stale guard reason corrected while here.** `scheduling-exam.test.tsx`
+justified having no online field on the sitting form with *«when the mode
+arrives it needs … a shape nobody has decided»*. R124 decided it. The property
+still holds and the assertion is unchanged; only its reason was false, and a
+guard whose stated reason is wrong is one the next person misreads or deletes.
+
+Frontend: typecheck, lint, build, **1004/1004**.
