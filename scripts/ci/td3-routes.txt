@@ -87,7 +87,6 @@ POST /admin/partners                          # R113; Super Admin only
 PATCH /admin/partners/{id}                    # R113; Super Admin only; TD-15
 DELETE /admin/partners/{id}                   # R113; Super Admin only; TD-5 soft delete (nothing references a Partner)
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
-DELETE /admin/family-links/{id}/rejected     # Owner 2026-09-02; removes a TERMINAL REJECTED link; audit row survives the row
 
 # ── Calendar & events (TD-3.4)
 GET /calendar                                 # TD-3.4, §4.4

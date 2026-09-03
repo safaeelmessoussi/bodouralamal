@@ -85,6 +85,20 @@ which is the property that makes removing it acceptable. `pending` and `approved
 are refused by name (`NOT_TERMINAL_REJECTED`): one still owes an answer, the
 other is authority and is revoked rather than removed.
 
+> **SUPERSEDED on 2026-09-03 (SRS Revision 128) — retained as the record of what
+> was decided on 2026-09-02 and why.** The finding above was correct about the
+> symptom and treated it at the wrong end. A rejected link accumulated because it
+> was **live**, and the same partial unique index that keeps one live pair per
+> `(student, parent)` therefore made a refusal permanent: the family could never
+> make a **corrected** request. R118.3 gave the row a way out through a
+> special-case hard delete; R128 removes the reason it was stuck instead — a
+> rejection is now soft-deleted with its decision, its Trash snapshot and its
+> audit row, so the ordinary Trash lifecycle owns it (`PURGEABLE` already carried
+> `FamilyLink`) and the pair is released. `DELETE
+> /admin/family-links/{id}/rejected` and `familylink.purge_rejected` are
+> withdrawn: two competing deletion lifecycles for one entity is how a
+> destructive verb reaches the wrong row.
+
 ## Owner decisions required (answered above; retained for provenance)
 
 1. **Schedule history:** may a deleted schedule be permanently purged only when it has never

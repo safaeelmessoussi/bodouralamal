@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
@@ -115,6 +115,110 @@ export async function createLink(
 }
 
 /**
+ * **Records a decision on a pending link — and a rejection leaves no live row**
+ * (Owner decision, 2026-09-03).
+ *
+ * ## Why a rejection soft-deletes
+ *
+ * A `rejected` link granted no authority and was never soft-deleted, so it
+ * stayed **live** — and the TD-6 partial unique index on
+ * `(student_id, parent_id) WHERE deleted_at IS NULL` therefore made it a
+ * permanent block: the same adult could never make a corrected request for the
+ * same child. A **revoked** link, which is the stronger outcome, freed the pair
+ * immediately because revocation soft-deletes. The weaker outcome was the more
+ * permanent one, which is the inversion this fixes.
+ *
+ * The two outcomes now have **one shape**: a decided, recorded, soft-deleted row
+ * that grants nothing and blocks nothing. The decision and its reason survive in
+ * the row itself, in the Trash snapshot and in the audit trail; only the *live*
+ * pair is released.
+ *
+ * ## What this deliberately is NOT
+ *
+ * * **Not a `rejected → pending` reopen.** The decision stands. A corrected
+ *   request is a **new** row with its own history, so the old refusal is never
+ *   overwritten or reused.
+ * * **Not a weakening of authorization.** A rejected link never granted
+ *   anything, and a soft-deleted one is already a `404` condition for the
+ *   `X-Active-Child-ID` middleware — so it is refused twice over.
+ * * **Not a second deletion lifecycle.** The row enters Trash exactly as a
+ *   revoked one does, under BR-15's ninety days, and `PURGEABLE` already carries
+ *   `FamilyLink`.
+ *
+ * ## Why it lives here and not at the call sites
+ *
+ * Two paths decide a link — the registration bundle and the standalone queue
+ * item — and both previously wrote the same four-field update inline. A rule
+ * stated twice drifts, and this one now has a **destructive** half that §20 rule
+ * 11 requires to write Trash and AuditLog every time. One implementation, so a
+ * future third caller inherits the evidence rather than having to remember it.
+ *
+ * Runs inside the caller's transaction: the decision, the tombstone, the
+ * snapshot and the audit row are one atomic fact (TD-4.8).
+ */
+export async function decideLink(
+  tx: Prisma.TransactionClient,
+  link: { id: string; parentId: string; studentId: string; createdAt: Date },
+  opts: { approve: boolean; actor: Actor; reason?: string | undefined },
+): Promise<void> {
+  const { approve, actor, reason } = opts;
+  const now = new Date();
+
+  await tx.familyLink.update({
+    where: { id: link.id },
+    data: {
+      status: approve ? 'approved' : 'rejected',
+      decidedAt: now,
+      decidedById: actor.userId,
+      ...(reason ? { decisionReason: reason } : {}),
+      // The rejection's own tombstone, stamped with the SAME instant as the
+      // decision: the two are one act, and a restore identifies the rows a
+      // deletion removed by comparing tombstones (the R59 defect).
+      ...(approve ? {} : { deletedAt: now, deletedById: actor.userId }),
+    },
+  });
+
+  if (!approve) {
+    // TD-5/BR-15: a soft delete without a snapshot is a row nobody can find and
+    // nobody can restore. The snapshot carries the decision itself, because that
+    // is the half a future reader needs — the pair alone says nothing about why.
+    await trash.snapshot(tx, {
+      targetEntity: 'FamilyLink',
+      targetId: link.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          id: link.id,
+          parentId: link.parentId,
+          studentId: link.studentId,
+          status: 'rejected',
+          decidedAt: now,
+          decidedById: actor.userId,
+          ...(reason ? { decisionReason: reason } : {}),
+          createdAt: link.createdAt,
+        }),
+      ) as object,
+      deletedById: actor.userId,
+    });
+  }
+
+  // §7's attribution invariant: who asked, who decided and why must be
+  // reconstructable from the audit row alone, without reading a row that is now
+  // soft-deleted. Ids and a reason only — never a name (TD-14).
+  await audit.write(tx, {
+    actorUserId: actor.userId,
+    activeRole: actor.activeRole,
+    actionType: approve ? 'familylink.approve' : 'familylink.reject',
+    targetEntity: 'FamilyLink',
+    targetId: link.id,
+    detail: {
+      parent_id: link.parentId,
+      student_id: link.studentId,
+      ...(reason ? { reason } : {}),
+    },
+  });
+}
+
+/**
  * Soft-deletes an approved link (§4.3 Revision 16).
  *
  * Runs the TD-12 freshness assertion: severing a parent's access to a child's
@@ -122,96 +226,6 @@ export async function createLink(
  * suspended mid-session must not be able to perform it on a still-valid token.
  * One indexed read on a low-frequency endpoint (TD-11a unaffected).
  */
-/**
- * **A terminal rejection may be removed, and the audit proves it happened**
- * (Owner decision, 2026-09-02).
- *
- * A `rejected` FamilyLink grants no authority over any child and is not a Trash
- * item: it records a decision that was taken and then went nowhere. Until now
- * no transition removed it, so it stayed live forever for want of a verb rather
- * than for a reason — the state the lifecycle audit flagged as class C with no
- * retention horizon.
- *
- * ## What survives, and what does not
- *
- * The **operational row** is destroyed: it is not history, it is a request that
- * was refused, and the platform keeps no queue of refusals. The **audit trail
- * is untouched and gains one row**, so *who asked, who refused, and who later
- * removed the record* is reconstructable from `AuditLog` alone — §7's
- * attribution invariant, which is precisely why the row itself need not be kept.
- *
- * ## Only a terminal rejection
- *
- * `pending` is a live decision somebody still owes an answer to, and `approved`
- * is authority — that one is revoked (soft, with a Trash snapshot), never
- * removed. Both are refused here by name rather than silently ignored.
- *
- * ## Authorization
- *
- * The same fresh-role check the revoke path takes (TD-12), and the same roles:
- * removing the evidence-bearing operational row is an administrative act about
- * a child's relationships, not a tidy-up.
- */
-export async function purgeRejectedLink(
-  prisma: PrismaClient,
-  caller: Actor,
-  linkId: string,
-): Promise<{ parentId: string; studentId: string }> {
-  const actor = await assertFreshActive(prisma, caller.userId, REVOKER_ROLES, caller.activeRole);
-
-  return prisma.$transaction(async (tx) => {
-    const link = await tx.familyLink.findFirst({
-      // **`deletedAt: null`, like every read of a soft-deletable model.** A
-      // withdrawn link is already absent from every surface; destroying one is
-      // the Trash path's business, not this verb's, and the coverage guard is
-      // right to insist the constraint is written rather than assumed.
-      where: { id: linkId, deletedAt: null },
-      select: {
-        id: true,
-        parentId: true,
-        studentId: true,
-        status: true,
-        decidedAt: true,
-        decidedById: true,
-        createdAt: true,
-      },
-    });
-    // §20 rule 17 — a link the caller may not reach and one that is gone answer
-    // alike.
-    if (!link) throw new AppError('NOT_FOUND', 'no such family link');
-    if (link.status !== 'rejected') {
-      throw new AppError('STATE_CONFLICT', 'only a rejected link may be removed (§4.3)', {
-        reason: 'NOT_TERMINAL_REJECTED',
-      });
-    }
-
-    /**
-     * **The audit row is written BEFORE the delete**, inside the same
-     * transaction, and carries the whole decision. `AuditLog.target_id` is not a
-     * foreign key, so the record survives the row it describes — which is the
-     * property that makes removing the operational row acceptable at all.
-     */
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'familylink.purge_rejected',
-      targetEntity: 'FamilyLink',
-      targetId: link.id,
-      detail: {
-        parent_id: link.parentId,
-        student_id: link.studentId,
-        rejected_at: link.decidedAt,
-        rejected_by: link.decidedById,
-        requested_at: link.createdAt,
-      },
-    });
-
-    await tx.familyLink.delete({ where: { id: link.id } });
-
-    return { parentId: link.parentId, studentId: link.studentId };
-  });
-}
-
 export async function revokeLink(
   prisma: PrismaClient,
   caller: Actor,

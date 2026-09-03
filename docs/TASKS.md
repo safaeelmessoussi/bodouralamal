@@ -1346,9 +1346,19 @@ was hiding behind it: the run went green on the first attempt.
   `RecurringCourseSchedule` indefinitely as `CASCADE_CHILDREN`, or permit permanent purge only when
   it has never materialized a Session (and decide separately whether derived future Session
   tombstones may follow it). Historical/held Sessions and their venue coordinates remain retained.
-- [ ] **OWNER DECISION REQUIRED — TERMINAL REJECTED FAMILY LINKS:** the current terminal live row
-  grants no authority and preserves the decision history, but neither a retention period nor an
-  explicit removal transition is specified. Do not invent one or treat it as disposable Trash.
+- [x] **DECIDED AND IMPLEMENTED (Owner, 2026-09-03) — TERMINAL REJECTED FAMILY LINKS.** *(This
+  entry was already stale before it was closed: R118.3 supplied a removal transition on
+  2026-09-02, and the text above was never updated. R128 supersedes both.)* A rejection is now
+  **soft-deleted with its decision** — status, instant, decider, reason, Trash snapshot and a
+  `familylink.reject` audit row, atomically — so the live partial unique index releases the pair
+  and the same adult may make a **corrected** request, which is a NEW `pending` row with its own
+  id. No `rejected → pending` transition exists. Retention is BR-15's ninety days, like every
+  other soft-deleted record, so no second window was invented. `DELETE
+  /admin/family-links/{id}/rejected`, `familylink.purge_rejected` and `NOT_TERMINAL_REJECTED` are
+  **withdrawn**: they existed only because the row stayed live, and two competing deletion
+  lifecycles for one entity is how a destructive verb reaches the wrong row. A generic Trash
+  restore still cannot resurrect one into live authority (`CASCADE_RELATIONSHIPS`, proved by
+  test). `docs/SRS-PROPOSAL-R128.md` **awaits application to `SRS.md`**.
 - [ ] **OWNER DECISION REQUIRED — HISTORICAL REFERENCE RETENTION/PRESENTATION:** Branch/Room/
   Level/Subject/Category/AdministrativeGroup rows still referenced by retained schedules or
   Sessions remain FK-protected. Decide whether those tombstones stay visibly non-purgeable in Trash

@@ -12,6 +12,7 @@ import * as users from '../repositories/user.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 import { applyRoleAssignments, ensureRoleAssignment } from './user.service.js';
+import { decideLink } from './family-link.service.js';
 import { notifySubjectUserChange } from './notification.service.js';
 
 /**
@@ -793,14 +794,15 @@ export async function decide(
         if (!decision.approve && childTransition.count === 1) {
           rejectedUserIds.add(link.studentId);
         }
-        await tx.familyLink.update({
-          where: { id: link.id },
-          data: {
-            status: decision.approve ? 'approved' : 'rejected',
-            decidedAt: new Date(),
-            decidedById: actor.userId,
-            ...(decision.reason ? { decisionReason: decision.reason } : {}),
-          },
+        // One implementation for both decision paths (R128): a rejection is
+        // also soft-deleted here, with its Trash snapshot and its own audit row.
+        // This path previously wrote `user.reject` alone, so the link's decision
+        // was attributable only through its parent — and a destructive step
+        // needs its own evidence (§20 rule 11).
+        await decideLink(tx, link, {
+          approve: decision.approve,
+          actor,
+          reason: decision.reason,
         });
         activated += 1;
       }
@@ -1181,27 +1183,9 @@ export async function decide(
       throw new AppError('NOT_FOUND', 'no such approval item');
     }
 
-    await tx.familyLink.update({
-      where: { id: link.id },
-      data: {
-        status: decision.approve ? 'approved' : 'rejected',
-        decidedAt: new Date(),
-        decidedById: actor.userId,
-        ...(decision.reason ? { decisionReason: decision.reason } : {}),
-      },
-    });
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: decision.approve ? 'familylink.approve' : 'familylink.reject',
-      targetEntity: 'FamilyLink',
-      targetId: link.id,
-      detail: {
-        parent_id: link.parentId,
-        student_id: link.studentId,
-        ...(decision.reason ? { reason: decision.reason } : {}),
-      },
-    });
+    // The decision, its evidence and — for a rejection — its tombstone and Trash
+    // snapshot, in one place shared with the registration bundle above (R128).
+    await decideLink(tx, link, { approve: decision.approve, actor, reason: decision.reason });
 
     await notifySubjectUserChange(tx, {
       type: decision.approve ? 'family_link_approved' : 'family_link_rejected',

@@ -3326,3 +3326,71 @@ decision turns on, all pre-existing and reused rather than rewritten: a partial
 draft saves as `in_progress` (16), reopening finds exactly what was written (17),
 and a submitted response refuses further edits with `ALREADY_SUBMITTED` (18–19).
 Plus 8/8 on the error catalogue and 9/9 on the scheduling-exam wire guard.
+
+## R128 — a rejected family link is soft-deleted with its decision (2026-09-03)
+
+**Owner decision.** `FamilyLinkStatus` is `pending | approved | rejected`, and
+the TD-6 partial unique index keeps one live row per `(student, parent)`. A
+**revoked** link is soft-deleted, so it leaves that index and the pair can be
+requested again — §4.3 says so in terms. A **rejected** link was never
+soft-deleted, so it stayed **live** and occupied the index forever.
+
+**The weaker outcome was therefore the more permanent one.** An adult refused
+because the relationship was recorded wrongly could never submit a corrected
+request for the same child, while an adult whose *approved* authority was
+deliberately revoked could. The only way out was an administrator invoking a
+destructive route — a **deletion performed to enable a correction**.
+
+**One shape with two endings now.** A rejection writes, atomically: the status,
+the decision instant, the decider, the reason, `deleted_at`/`deleted_by` stamped
+with **that same instant**, a Trash snapshot carrying the decision itself, and a
+`familylink.reject` audit row with both ids, the reason and no name (TD-14). A
+corrected request is a **NEW `pending` row** with its own id; the old refusal is
+never reopened, reused or overwritten, and no `rejected → pending` transition
+exists. Live uniqueness is untouched — a second pending request and a request
+against an approved link are both still refused.
+
+**R118.3 is superseded, and its machinery is withdrawn.** That revision gave the
+stuck row a special exit; this one removes the reason it was stuck. `DELETE
+/admin/family-links/{id}/rejected`, the `familylink.purge_rejected` audit action
+and the `NOT_TERMINAL_REJECTED` code — whose only thrower it was — are gone from
+TD-3, the router, the controller, the service, the OpenAPI document and the
+tests. Nothing is lost: `PURGEABLE` already carried `FamilyLink`, so the ordinary
+Trash lifecycle performs exactly what the special route performed, under BR-15's
+ninety days, with one implementation instead of two. §0's R118 text is **not**
+edited — it records what was decided on 2026-09-02 — and the audit document that
+proposed it carries a superseding note rather than a rewrite.
+
+**One implementation, because a rule stated twice drifts.** The registration
+bundle and the standalone queue item both wrote the same four-field update
+inline; they now share `decideLink`, which owns the status write, the rejection's
+tombstone and snapshot, and the audit row for both arms. The bundle path
+therefore **gains** a per-link audit row it never had — it wrote `user.reject`
+alone, so a link's decision was attributable only through its parent, and §20
+rule 11 requires a destructive step to carry its own evidence.
+
+**The safeguarding property is proved, not assumed.** `FamilyLink` is absent from
+the Trash restore plan and blocked as `CASCADE_RELATIONSHIPS`, so a generic
+restore is refused by name however senior the caller — a rejected link can never
+come back as live authority. The test asserts the refusal *and* that the row is
+still tombstoned afterwards.
+
+**The migration does not stamp today.** `20260904110000_soft_delete_rejected_family_links`
+tombstones each legacy row with **its own decision instant** — the deletion is
+the decision, and `now()` would claim the refusal happened today — carries
+`decided_by` across as `deleted_by`, falls back to `created_at` where no decision
+instant exists so no edge case stays live, changes no status, destroys nothing,
+and writes a Trash entry per row while skipping rows that already have one.
+Verified read-only first: Localhost 3 links (1 pending, 1 approved, 1 rejected,
+all live). Proved against the existing database and a fresh disposable one.
+Staging was not queried; Production is not deployed.
+
+**Tests: 32/32** on the family-link suite — the decision's four recorded fields
+and the tombstone sharing the decision's instant; no authority through
+`resolveActingStudent`; the Trash snapshot carrying the reason; the audit row
+with ids and no name; **the corrected request succeeding with a new id while the
+old rejection stays historical**; both live-uniqueness refusals; revoke refusing a
+rejected link; first-wins on a second decision; the restore refusal; an approval
+still leaving live authority with its own audit row; and the obsolete route
+absent from both the registry and the router. Plus 49/49 with the approval suite
+and 58/58 on child-application and registration.

@@ -4,7 +4,11 @@ import { actorFor } from "../test-support/actor.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { resolveActingStudent } from "../middleware/child-context.js";
-import { createLink, purgeRejectedLink, revokeLink } from "./family-link.service.js";
+import { readFile } from "node:fs/promises";
+
+import { decide } from "./approval.service.js";
+import { createLink, revokeLink } from "./family-link.service.js";
+import { restoreEntry } from "./trash.service.js";
 
 /**
  * FamilyLink revocation (§4.3 Revision 16) against the real database.
@@ -333,97 +337,247 @@ describe("§4.3 Revision 16 — revoking an approved link", () => {
   });
 });
 
-describe("removing a TERMINAL REJECTED link (Owner decision, 2026-09-02)", () => {
+describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09-03)", () => {
   /**
-   * A rejected link grants no authority over any child and is not Trash: it
-   * records a request that was refused and then went nowhere. Until this
-   * decision no transition removed it, so it stayed live forever for want of a
-   * verb rather than for a reason.
+   * **The weaker outcome used to be the more permanent one.**
    *
-   * **The operational row goes; the audit proves it happened.** `AuditLog`
-   * carries no foreign key to the link, which is exactly the property that
-   * makes removing the row acceptable — *who asked, who refused, and who
-   * removed it* stays reconstructable from the trail alone (§7).
+   * A `rejected` link granted no authority and was never soft-deleted, so it
+   * stayed **live** — and the TD-6 partial unique index on
+   * `(student_id, parent_id) WHERE deleted_at IS NULL` therefore blocked the
+   * same adult from ever making a **corrected** request for the same child. A
+   * **revoked** link, the stronger outcome, freed the pair immediately. That
+   * inversion is what this decision removes: rejection and revocation now have
+   * one shape — a decided, recorded, soft-deleted row that grants nothing and
+   * blocks nothing.
+   *
+   * The special-case route `DELETE /admin/family-links/{id}/rejected` (R118.3)
+   * existed **only** because such rows stayed live and never reached Trash.
+   * With rejection soft-deleting, the ordinary Trash lifecycle owns them —
+   * `PURGEABLE` already carries `FamilyLink` — so the second deletion lifecycle
+   * is withdrawn rather than kept beside the first.
    */
-  async function rejectedLink(parentId: string, studentId: string): Promise<string> {
+  async function pendingLink(parentId: string, studentId: string): Promise<string> {
     const row = await prisma.familyLink.create({
-      data: { parentId, studentId, status: "rejected", decidedAt: new Date() },
+      data: { parentId, studentId, status: "pending" },
     });
     return row.id;
   }
 
-  it("removes the row and leaves durable audit evidence behind", async () => {
+  it("records the decision, its reason and its decider — and leaves no live row", async () => {
+    const parent = await makeUser("ولي مرفوض");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+
+    await decide(prisma, await actorFor(prisma, admin), linkId, {
+      approve: false,
+      reason: "صلة القرابة غير صحيحة",
+    });
+
+    const row = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
+    expect(row.status).toBe("rejected");
+    expect(row.decisionReason).toBe("صلة القرابة غير صحيحة");
+    expect(row.decidedById).toBe(admin);
+    expect(row.decidedAt).not.toBeNull();
+    // The tombstone, stamped with the SAME instant as the decision: they are one
+    // act, and a restore identifies rows by comparing tombstones.
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedById).toBe(admin);
+    expect(row.deletedAt!.getTime()).toBe(row.decidedAt!.getTime());
+  });
+
+  it("grants no authority — the child context refuses it on the very next request", async () => {
     const parent = await makeUser("ولي");
     const student = await makeUser("طفلة");
     const admin = await makeStaff("admin");
-    const linkId = await rejectedLink(parent, student);
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, {
+      approve: false,
+      reason: "سبب",
+    });
 
-    await purgeRejectedLink(prisma, await actorFor(prisma, admin), linkId);
+    // The same resolver every child-scoped endpoint uses. A rejected link is
+    // refused twice over: by status and by the tombstone.
+    await expect(resolveActingStudent(prisma, parent, student)).rejects.toBeTruthy();
+  });
 
-    expect(await prisma.familyLink.count({ where: { id: linkId } })).toBe(0);
+  it("TD-5/BR-15: writes a Trash snapshot carrying the decision itself", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, {
+      approve: false,
+      reason: "معلومات ناقصة",
+    });
 
-    const trail = await prisma.auditLog.findMany({
+    const entry = await prisma.trash.findFirstOrThrow({
       where: { targetEntity: "FamilyLink", targetId: linkId },
-      select: { actionType: true, actorUserId: true, detail: true },
     });
-    const removal = trail.find((r) => r.actionType === "familylink.purge_rejected");
-    expect(removal, "the removal must be provable after the row is gone").toBeDefined();
-    expect(removal!.actorUserId).toBe(admin);
-    // Both parties, so the trail answers WHOSE relationship this was without
-    // the row it describes.
-    expect(removal!.detail).toMatchObject({ parent_id: parent, student_id: student });
-  });
-
-  it("REFUSES an approved link — that one is revoked, never removed", async () => {
-    const parent = await makeUser("ولي معتمد");
-    const student = await makeUser("طفل معتمد");
-    const admin = await makeStaff("admin");
-    const linkId = await approvedLink(parent, student);
-
-    await expect(
-      purgeRejectedLink(prisma, await actorFor(prisma, admin), linkId),
-    ).rejects.toMatchObject({ details: expect.objectContaining({ reason: "NOT_TERMINAL_REJECTED" }) });
-    // Live authority is untouched.
-    expect(await prisma.familyLink.count({ where: { id: linkId, deletedAt: null } })).toBe(1);
-  });
-
-  it("REFUSES a pending link — somebody still owes it an answer", async () => {
-    const parent = await makeUser("ولي منتظر");
-    const student = await makeUser("طفل منتظر");
-    const admin = await makeStaff("admin");
-    const row = await prisma.familyLink.create({
-      data: { parentId: parent, studentId: student, status: "pending" },
+    expect(entry.deletedById).toBe(admin);
+    // The pair alone says nothing about WHY; the snapshot carries the decision.
+    expect(entry.snapshot).toMatchObject({
+      parentId: parent,
+      studentId: student,
+      status: "rejected",
+      decisionReason: "معلومات ناقصة",
     });
-
-    await expect(
-      purgeRejectedLink(prisma, await actorFor(prisma, admin), row.id),
-    ).rejects.toMatchObject({ details: expect.objectContaining({ reason: "NOT_TERMINAL_REJECTED" }) });
-    expect(await prisma.familyLink.count({ where: { id: row.id } })).toBe(1);
   });
 
-  it("refuses a caller without the revoking role, and destroys nothing", async () => {
+  it("writes an attributable audit row, with ids and a reason and NO name", async () => {
     const parent = await makeUser("ولي");
     const student = await makeUser("طفلة");
-    const teacher = await makeStaff("teacher");
-    const linkId = await rejectedLink(parent, student);
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, {
+      approve: false,
+      reason: "غير مطابق",
+    });
 
-    await expect(
-      purgeRejectedLink(prisma, await actorFor(prisma, teacher), linkId),
-    ).rejects.toBeTruthy();
-    expect(await prisma.familyLink.count({ where: { id: linkId } })).toBe(1);
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { targetEntity: "FamilyLink", targetId: linkId, actionType: "familylink.reject" },
+    });
+    expect(row.actorUserId).toBe(admin);
+    expect(row.detail).toMatchObject({ parent_id: parent, student_id: student, reason: "غير مطابق" });
+    // TD-14 — ids and a reason, never a person's name.
+    expect(JSON.stringify(row.detail)).not.toContain(TAG);
   });
 
-  it("answers NOT_FOUND for a link that is already gone (§20 rule 17)", async () => {
+  it("THE POINT: the same adult may make a corrected request afterwards", async () => {
+    const parent = await makeUser("ولي يصحّح");
+    const student = await makeUser("طفلة");
     const admin = await makeStaff("admin");
+    const rejectedId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), rejectedId, {
+      approve: false,
+      reason: "صلة خاطئة",
+    });
+
+    const fresh = await createLink(prisma, await actorFor(prisma, admin), parent, student);
+
+    // A NEW row with its own history — never the old decision reopened.
+    expect(fresh.id).not.toBe(rejectedId);
+    expect(fresh.status).toBe("pending");
+    const old = await prisma.familyLink.findUniqueOrThrow({ where: { id: rejectedId } });
+    expect(old.status).toBe("rejected");
+    expect(old.deletedAt).not.toBeNull();
+    expect(old.decisionReason).toBe("صلة خاطئة");
+  });
+
+  it("live uniqueness still refuses a second PENDING request for the same pair", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    await pendingLink(parent, student);
+
     await expect(
-      purgeRejectedLink(
-        prisma,
-        await actorFor(prisma, admin),
-        "00000000-0000-4000-8000-000000000000",
-      ),
+      createLink(prisma, await actorFor(prisma, admin), parent, student),
+    ).rejects.toMatchObject({ code: "DUPLICATE" });
+  });
+
+  it("live uniqueness still refuses a request while an APPROVED link exists", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    await approvedLink(parent, student);
+
+    await expect(
+      createLink(prisma, await actorFor(prisma, admin), parent, student),
+    ).rejects.toMatchObject({ code: "DUPLICATE" });
+  });
+
+  it("a rejected link cannot be revoked — there is no live authority to withdraw", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, { approve: false, reason: "سبب" });
+
+    // NOT_FOUND rather than STATE_CONFLICT: revoke reads live rows only, and the
+    // row is already soft-deleted. §20 rule 17 — gone and out of reach answer alike.
+    await expect(
+      revokeLink(prisma, await actorFor(prisma, admin), linkId, "محاولة"),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  it("first-wins: a second decision on the same link is STATE_CONFLICT", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, { approve: false, reason: "أولاً" });
+
+    await expect(
+      decide(prisma, await actorFor(prisma, admin), linkId, { approve: true }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+  });
+
+  it("TRASH RESTORE CANNOT RESURRECT IT into a live relationship", async () => {
+    const parent = await makeUser("ولي");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const superAdmin = await makeStaff("super_admin");
+    const linkId = await pendingLink(parent, student);
+    await decide(prisma, await actorFor(prisma, admin), linkId, { approve: false, reason: "سبب" });
+
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: "FamilyLink", targetId: linkId },
+      select: { id: true },
+    });
+
+    /**
+     * **The safeguarding property, proved rather than assumed.** `FamilyLink` is
+     * absent from `RESTORABLE` and carries `CASCADE_RELATIONSHIPS` in
+     * `BLOCKED_REASON`, so a generic restore is refused by name — a rejected
+     * link can never come back as a live row, whatever a Super Admin clicks.
+     */
+    await expect(
+      restoreEntry(prisma, await actorFor(prisma, superAdmin), entry.id),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      details: expect.objectContaining({ reason: "CASCADE_RELATIONSHIPS" }),
+    });
+    const still = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
+    expect(still.deletedAt).not.toBeNull();
+    expect(still.status).toBe("rejected");
+  });
+
+  it("an APPROVAL still leaves a live, authority-bearing row", async () => {
+    const parent = await makeUser("ولي معتمد");
+    const student = await makeUser("طفلة");
+    const admin = await makeStaff("admin");
+    const linkId = await pendingLink(parent, student);
+
+    await decide(prisma, await actorFor(prisma, admin), linkId, { approve: true });
+
+    const row = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
+    expect(row.status).toBe("approved");
+    expect(row.deletedAt).toBeNull();
+    await expect(resolveActingStudent(prisma, parent, student)).resolves.toBeTruthy();
+    // And the approval writes its own audit row, from the same shared helper.
+    expect(
+      await prisma.auditLog.count({
+        where: { targetId: linkId, actionType: "familylink.approve" },
+      }),
+    ).toBe(1);
+  });
+
+  it("the obsolete rejected-purge route is gone from the registry and the router", async () => {
+    /**
+     * It existed only because rejected rows stayed live and never reached Trash.
+     * Two competing deletion lifecycles for one entity is how a destructive verb
+     * reaches the wrong row, so the special case is withdrawn, not kept.
+     */
+    const registry = await readFile(
+      new URL("../../../scripts/ci/td3-routes.txt", import.meta.url),
+      "utf8",
+    );
+    expect(registry).not.toContain("/rejected");
+    const router = await readFile(new URL("../app.ts", import.meta.url), "utf8");
+    expect(router).not.toContain("purgeRejected");
+  });
 });
+
 
 describe("§4.3 Revision 23 — POST /family-links is staff-mediated", () => {
   it("creates a PENDING link that lands in the approval queue", async () => {

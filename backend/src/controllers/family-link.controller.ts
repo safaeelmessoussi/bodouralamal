@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { createLink, purgeRejectedLink, revokeLink } from '../services/family-link.service.js';
+import { createLink, revokeLink } from '../services/family-link.service.js';
 
 const createSchema = z.object({ parent_id: z.uuid(), student_id: z.uuid() });
 
@@ -40,30 +40,6 @@ const revokeSchema = z.object({ reason: z.string().trim().min(1).max(500) });
  * Expressed as a DELETE because §4.3 is explicit that the soft-delete IS the
  * revocation: there is no `Approved → Revoked` state to PATCH into.
  */
-/**
- * `DELETE /admin/family-links/{id}/rejected` — **remove a terminal rejection**
- * (Owner, 2026-09-02).
- *
- * A separate path from revoke, deliberately: they are different acts on
- * different states. Revoking withdraws live authority and keeps a restorable
- * record; this removes a request that was refused and never granted anything.
- * One route doing both would make the state decide which of two meanings the
- * caller got, which is how a destructive verb reaches the wrong row.
- *
- * **No reason is required.** Revoke demands one because cutting a parent off
- * from a child's record is a decision about a live relationship; the decision
- * here was already made and audited when the request was rejected.
- */
-export function purgeRejected(prisma: PrismaClient) {
-  return async (req: Request, res: Response): Promise<void> => {
-    const id = z.uuid().safeParse(req.params['id']);
-    if (!id.success) throw new AppError('VALIDATION_FAILED', 'bad id');
-
-    const result = await purgeRejectedLink(prisma, requireActor(req), id.data);
-    res.json({ removed: true, parent_id: result.parentId, student_id: result.studentId });
-  };
-}
-
 export function revoke(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const id = z.uuid().safeParse(req.params['id']);

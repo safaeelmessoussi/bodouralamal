@@ -3281,7 +3281,7 @@
     "/family-links": {
       "post": {
         "summary": "Link an existing child to a parent (staff-mediated)",
-        "description": "§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.",
+        "description": "§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. **A previous REJECTION does not block a corrected request** (Owner, 2026-09-03): a rejected link is soft-deleted with its decision, its Trash snapshot and its audit row, so the TD-6 partial unique index — which covers non-deleted rows only — releases the pair. The corrected request is a NEW `Pending` row with its own id and its own history; the old refusal is never reopened, reused or overwritten. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.",
         "responses": {
           "201": {
             "description": "Pending link created; awaits an approval decision."
@@ -3349,81 +3349,10 @@
         }
       }
     },
-    "/admin/family-links/{id}/rejected": {
-      "delete": {
-        "summary": "Remove a terminal rejected family link",
-        "description": "§4.3, TD-8, **Revision 118 (Owner, 2026-09-02)**. A `rejected` link grants no authority over any child and is not Trash: it records a request that was refused and, until this decision, had no transition to leave by — which is why such rows accumulated. The **operational row is destroyed** and the **audit trail is the evidence**: `familylink.purge_rejected` is written BEFORE the delete and in the same transaction, carrying both parties, who rejected it and when. `AuditLog.target_id` is deliberately not a foreign key, so *who asked, who refused, and who removed the record* survives the row (§7's attribution invariant) — that is what makes removing it acceptable rather than a loss. **A separate route from revoke, deliberately**: they are different acts on different states, and one route deciding by status is how a destructive verb reaches the wrong row. **`pending` and `approved` are refused by name** (`NOT_TERMINAL_REJECTED`) — a pending link still owes somebody an answer, and an approved one is live authority that is revoked (soft, with a Trash snapshot), never removed. Same fresh-role check and same roles as revoke (TD-12). No reason is required: the decision was made and audited when the request was rejected.",
-        "responses": {
-          "200": {
-            "description": "The link was removed; both party ids are returned."
-          },
-          "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a malformed id.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Error envelope (TD-3.8).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN below the revoking roles.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a link that does not exist (§20 rule 17).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT — NOT_TERMINAL_REJECTED.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/family-links/{id}": {
       "delete": {
         "summary": "Revoke an approved family link",
-        "description": "Admin or Super Admin (TD-2), asserted against live rows per request. §4.3 Revision 16: soft-deleting the row IS the revocation mechanism — TD-1 keeps `Approved` terminal and no `Approved → Revoked` transition exists, because enforcement is already complete: the `X-Active-Child-ID` middleware re-checks the link on every request, so revocation takes effect on the very NEXT request. Follows the ordinary TD-4.8 soft-delete transaction (`deleted_at`/`deleted_by` + Trash snapshot + `familylink.revoke` audit carrying both parties and the reason). A reason of 1–500 characters is required (TD-9). The TD-6 partial unique index covers non-deleted rows only, so the same pair can be requested again later as a fresh Pending link.",
+        "description": "Admin or Super Admin (TD-2), asserted against live rows per request. §4.3 Revision 16: soft-deleting the row IS the revocation mechanism — TD-1 keeps `Approved` terminal and no `Approved → Revoked` transition exists, because enforcement is already complete: the `X-Active-Child-ID` middleware re-checks the link on every request, so revocation takes effect on the very NEXT request. Follows the ordinary TD-4.8 soft-delete transaction (`deleted_at`/`deleted_by` + Trash snapshot + `familylink.revoke` audit carrying both parties and the reason). A reason of 1–500 characters is required (TD-9). The TD-6 partial unique index covers non-deleted rows only, so the same pair can be requested again later as a fresh Pending link — which is the same property a rejection now has (Owner, 2026-09-03), giving revocation and rejection one shape: a decided, recorded, soft-deleted row that grants nothing and blocks nothing.",
         "responses": {
           "200": {
             "description": "Revoked; the parent loses access to that child immediately."
@@ -3469,7 +3398,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the link is not Approved — pending and rejected links are decided through the approval queue.",
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the link is not Approved — a pending link is decided through the approval queue, and a rejected one is already soft-deleted by that decision.",
             "content": {
               "application/json": {
                 "schema": {
