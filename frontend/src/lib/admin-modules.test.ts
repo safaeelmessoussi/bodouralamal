@@ -38,6 +38,14 @@ describe('the registry matches §14.1', () => {
         // R74 — enrolment had no node: R66 made the group optional and gave
         // the service `enrolInLevel`, but only approval ever called it.
         '/admin/enrollments',
+        /**
+         * **R124 added `/admin/assessments`**, and it is recorded here for the
+         * same reason its neighbours are: the online assessment builder is the
+         * half `exam.mode = 'online'` declared in R58 and refused until now.
+         * It sits beside «نقاط الامتحانات» because they are two halves of one
+         * thing — this writes the paper, that one marks it.
+         */
+        '/admin/assessments',
         '/admin/exam-grades',
         '/admin/level-subjects',
         // M4c — the Quran-side curriculum join (§4.5, §7, BR-11).
@@ -346,6 +354,7 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/groups', // مجموعات المستويات
     '/admin/teaching-groups', // حلقات المواد
     '/admin/quran', // إدخال الحفظ
+    '/admin/assessments', // بناء الاختبارات (R124)
     '/admin/exam-grades', // نقاط الامتحانات
     '/admin/schedules', // الجدولة
     '/admin/content', // مكتبة المحتوى

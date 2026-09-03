@@ -22,6 +22,7 @@ import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
 import * as attendanceCtl from './controllers/attendance.controller.js';
+import * as assessments from './controllers/assessment.controller.js';
 import * as onlineClassCtl from './controllers/online-class.controller.js';
 import * as recordingCtl from './controllers/session-recording.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
@@ -685,6 +686,42 @@ export function createApp(
   guarded.post('/events/:id/attendance', attendanceCtl.mark(prisma, 'event'));
   guarded.post('/events/:id/attendance/self', attendanceCtl.selfCheckIn(prisma, 'event'));
   guarded.delete('/events/:id/attendance/:studentId', attendanceCtl.remove(prisma, 'event'));
+
+  /**
+   * **The assessment builder (§4.6, R124)** — the ONLINE half of `Exam`, which
+   * R58 declared and refused with `ONLINE_NOT_AVAILABLE`.
+   *
+   * Rooted at `/assessments` rather than `/exams` because the two ask different
+   * things: `/exams` schedules a **sitting** — a room, a clock window,
+   * supervisors — and this writes a **paper**. One table, one grade sheet, two
+   * write boundaries, because an endpoint accepting either would be a schema
+   * with two disjoint halves.
+   *
+   * **Grading is not here.** `/exams/{id}/grades` already grades this row: the
+   * whole reason no second assessment entity exists is that `Grade` is keyed
+   * `(exam_id, student_id)` and carries the scale, the draft/published split
+   * and the student's results screen.
+   */
+  guarded.post('/assessments', assessments.create(prisma));
+  guarded.post('/assessments/:id/questions', assessments.addQuestionHandler(prisma));
+  guarded.patch('/assessments/:id/questions/order', assessments.reorder(prisma));
+  guarded.patch('/assessments/:id/questions/:questionId', assessments.patchQuestion(prisma));
+  guarded.delete('/assessments/:id/questions/:questionId', assessments.deleteQuestion(prisma));
+  guarded.post('/assessments/:id/publish', assessments.publish(prisma));
+  guarded.post('/assessments/:id/close', assessments.close(prisma));
+  guarded.get('/assessments/:id/submissions', assessments.submissions(prisma));
+  guarded.get('/assessments/:id/submissions/:studentId', assessments.submission(prisma));
+
+  /**
+   * The beneficiary's own three. **No student id appears in any of them** — the
+   * subject is the JWT `sub`, resolved through `resolveActingStudent` so a
+   * guardian reaches her child only through an approved `FamilyLink` (§20 rule
+   * 6). A parent may READ a paper and may never write one.
+   */
+  guarded.get('/me/assessments', assessments.myAssessments(prisma));
+  guarded.get('/assessments/:id/paper', assessments.paper(prisma));
+  guarded.put('/assessments/:id/responses', assessments.saveDraft(prisma));
+  guarded.post('/assessments/:id/submit', assessments.submit(prisma));
 
   guarded.get('/exams/:id/attendance', attendanceCtl.sheet(prisma, 'exam'));
   guarded.get('/exams/:id/attendance/candidates', attendanceCtl.candidates(prisma, 'exam'));

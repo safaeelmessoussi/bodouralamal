@@ -125,6 +125,15 @@ generic message for all of these is hiding the only useful part of the answer.**
 | `SELF_CHECK_IN_NOT_ALLOWED` | «تسجيل حضوري» | R123 — either the occurrence is `staff_only`, or the caller's Category does not permit self-marking. **A teen or a child is refused here even when the occurrence says `self_or_staff`**, which is the rule the configuration cannot override |
 | `SELF_CHECK_IN_OTHER_PERSON` | The self route, with somebody else's id | R123 — a woman marks only herself. The route accepts no student id at all; this is the backstop that makes the rule structural rather than a property of one controller |
 | `OCCURRENCE_DATE_REQUIRED` (`400`) | An activity's attendance sheet with no date | R123 — a recurring نشاط is one row expanded over many dates, so the date is half the occurrence's identity |
+| `ONLINE_NOT_AVAILABLE` | ~~`POST /exams` with `mode: online`~~ | **Retired by R124** — the online half is built, and `/assessments` is where a paper is written. `/exams` still refuses `online`, because it schedules a *sitting* |
+| `ASSESSMENT_HAS_SUBMISSIONS` | Editing a paper after somebody submitted | R124 — the simplest safe freeze, and the reason no versioning scheme exists. A question whose wording, order or options changed after an answer was given makes that answer mean something the student never said. A draft in progress does not freeze anything |
+| `NO_QUESTIONS` | Publishing an empty paper | A student opening one would see a title and nothing to answer, with no way to tell that from a fault |
+| `ALREADY_SUBMITTED` | Saving or re-submitting after إرسال | Submitted is final for the student. Reopening is not in v1 and no route offers one |
+| `NOT_YOUR_SUBMISSION` | The student write path | She writes only her own. The routes accept no student id at all; this is the backstop that makes it structural |
+| `INCOMPLETE_SUBMISSION` · `SINGLE_CHOICE_ONLY` · `JUSTIFICATION_REQUIRED` · `ANSWER_REQUIRED` | إرسال | Completeness is required only on **submit** — a draft is half-finished by definition |
+| `TEXT_NOT_ALLOWED` · `OPTIONS_NOT_ALLOWED` · `OPTIONS_REQUIRED` · `UNKNOWN_OPTION` · `UNKNOWN_QUESTION` · `DUPLICATE_ANSWER` · `DUPLICATE_OPTION` · `JUSTIFICATION_NOT_ALLOWED` | Any response or question write | Each mistake gets its own reason: *«invalid»* alone leaves a student re-reading a form with nothing to correct. `UNKNOWN_OPTION` is the sharpest — an option from another question would attach an answer to a choice she was never shown |
+| `INCOMPLETE_ORDER` | Reordering questions | The **whole** sequence or nothing (R76); a partial list leaves the omitted ones somewhere the caller did not decide |
+| `TARGET_ID_REQUIRED` · `DATE_REQUIRED` | Creating an assessment | Four of the five targets name something; and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122) |
 | `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
 
 Two more travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a

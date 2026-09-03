@@ -410,6 +410,25 @@ an interim formula is a second grading engine that would have to be torn out.
 
 ---
 
+### Online assessments are built question by question, and marked by hand
+
+A مؤطِّرة or an administrator writes a paper one question at a time — a short
+answer, a long one, a single choice or several, with an optional or required
+reason for a choice — and publishes it to a Level, an Administrative Group, a
+class occurrence, a subject circle, or one named beneficiary. A quick test after
+a lesson and a formal online exam are the same paper with a different audience.
+
+A beneficiary saves her answers and comes back to them; sending is a separate,
+confirmed act, and after it she cannot change them. **Once anybody has sent
+answers the paper is fixed** — a question reworded afterwards would make an
+answer mean something she never said.
+
+Marking is by hand, on the same sheet every other exam uses, out of 20. **The
+mark is invisible to her until it is published**, and publishing the paper and
+publishing the mark are two different decisions.
+
+> SRS §4.6 (extended by R124) · [API endpoints](../reference/api-endpoints.md)
+
 ## 7. Educational content
 
 Teachers and Admins attach files — PDFs, images, slides, audio recordings — to a level, and

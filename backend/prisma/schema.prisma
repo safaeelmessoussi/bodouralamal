@@ -418,6 +418,74 @@ enum EventStaffPosition {
   @@map("event_staff_position")
 }
 
+/**
+ * **R124 — an assessment's lifecycle.**
+ * Replaces `Exam.is_published`, a boolean that had **no application reader at
+ * all** and could not express *closed*: an assessment that is no longer
+ * accepting answers is not the same as one that was never published, and a
+ * student meeting the two must be told different things.
+ */
+enum ExamStatus {
+  draft
+  published
+  closed
+
+  @@map("exam_status")
+}
+
+/**
+ * **R124 — who an assessment is for.**
+ * R58 gave an exam a Level and an optional Administrative Group, and said NULL
+ * meant *the whole Level*. That is two of the five arms the Owner asked for;
+ * this names all five so the target is stored rather than inferred from which
+ * columns happen to be null. **The Level stays required on every arm** — it is
+ * what the paper is written for, and every consumer that already reads it
+ * (the grade sheet, notifications, visibility, the exam list) keeps working.
+ */
+enum ExamTarget {
+  /// Everyone enrolled in the Level, at the exam's branch.
+  level
+  /// One roster inside it — R58's narrower sitting.
+  administrative_group
+  /// **A quick test attached to one class occurrence.** Its audience is that
+  /// Session's own, resolved through §4.4c like everything else.
+  session
+  /// One subject split (§4.4b).
+  teaching_group
+  /// **One named beneficiary**, and nobody else.
+  student
+
+  @@map("exam_target")
+}
+
+/**
+ * R124 — the four question types v1 supports, and no fifth.
+ */
+enum ExamQuestionKind {
+  short_text
+  long_text
+  /// «UCQ» — exactly one option.
+  single_choice
+  /// «MCQ» — zero or more options.
+  multiple_choice
+
+  @@map("exam_question_kind")
+}
+
+/**
+ * **R124 — whether a choice question also asks the student to say why.**
+ * Three states rather than a boolean, for the reason R123 learned on
+ * attendance: *not asked* and *asked but optional* are different questions, and
+ * a boolean forces one of them to masquerade as the other.
+ */
+enum JustificationRule {
+  none
+  optional
+  required
+
+  @@map("justification_rule")
+}
+
 enum ExamAccessPolicy {
   single_submission
   save_and_resume
@@ -686,6 +754,8 @@ model User {
   /// R123 — presence, and presence somebody else recorded. Two relations
   /// because one person is both: a مؤطِّرة marks a roster and, if she also
   /// studies, is marked on one.
+  /// R124 — assessments published to this beneficiary alone.
+  targetedExams              Exam[]             @relation("ExamTargetStudent")
   attendance                 Attendance[]       @relation("AttendanceStudent")
   attendanceMarked           Attendance[]       @relation("AttendanceMarkedBy")
 
@@ -1225,6 +1295,8 @@ model TeachingGroup {
 
   members   StudentTeachingGroup[]
   schedules RecurringCourseSchedule[]
+  /// R124 — assessments published to this split.
+  exams     Exam[]
 
   // Same technique as `AdministrativeGroup(id, level_id)`: the referenced pair
   // a composite FK needs. `StudentTeachingGroup` carries subject+level and this
@@ -1642,6 +1714,7 @@ model Session {
   /// R99 — attempts to record this occurrence. Usually none: recording is
   /// optional and explicit, and a class that nobody recorded has no rows here.
   recordings       SessionRecording[]
+  exams            Exam[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.
@@ -2666,10 +2739,38 @@ model Exam {
   /// to keep in step.
   visibility Visibility @default(public)
 
-  questions Json @db.JsonB
+  /**
+   * **R124 — draft → published → closed.**
+   * `draft` is invisible to students; `published` is available to whoever the
+   * target resolves to; `closed` stops accepting answers while leaving every
+   * submitted one readable. A **physical** sitting is `published` from creation
+   * — there is nothing to build, and the row IS the announcement.
+   */
+  status      ExamStatus @default(draft)
+  publishedAt DateTime?  @map("published_at") @db.Timestamptz(6)
+  closedAt    DateTime?  @map("closed_at") @db.Timestamptz(6)
 
-  isPublished Boolean   @default(false) @map("is_published")
-  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  /**
+   * **R124 — which of the five audiences this is for.** Stored, never inferred
+   * from which columns are null: `administrative_group_id IS NULL` meant *the
+   * whole Level* under R58, and with three more arms that inference stops being
+   * decidable. `exam_target_check` enforces that the arm's own column is set
+   * and the other three are not.
+   */
+  targetKind ExamTarget @default(level) @map("target_kind")
+
+  /// `session` target — the class occurrence this quick test belongs to.
+  sessionId       String?        @map("session_id") @db.Uuid
+  session         Session?       @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  /// `teaching_group` target.
+  teachingGroupId String?        @map("teaching_group_id") @db.Uuid
+  teachingGroup   TeachingGroup? @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)
+  /// `student` target — one named beneficiary.
+  studentId       String?        @map("student_id") @db.Uuid
+  student         User?          @relation("ExamTargetStudent", fields: [studentId], references: [id], onDelete: Restrict)
+
+  /// R124 — the paper, in order.
+  questions ExamQuestion[]
 
   version Int @default(0)
 
@@ -2694,6 +2795,136 @@ model Exam {
   @@map("exam")
 }
 
+/**
+ * **R124 — one question on one assessment.**
+ * ## Normalized, not a JSON blob
+ * `Exam.questions` was a `jsonb` column and this replaces it. The blob could
+ * not express three things the Owner requires: **stable explicit ordering**
+ * (an array's index is its order, so an edit reorders by accident), a
+ * **response that references the option it chose** (a blob answer can only name
+ * a string, so renaming an option silently rewrites history), and a database
+ * that **refuses** to delete a question somebody has answered. All three are
+ * `RESTRICT` and `display_order` here, rather than conventions a service has to
+ * remember.
+ * ## The set freezes on the first submission
+ * Enforced in the service, not here: *«questions may not change once a student
+ * has submitted»* is a statement about another table's rows, which a CHECK
+ * cannot reach. The FK is the backstop — a question an answer names cannot be
+ * deleted at all.
+ */
+model ExamQuestion {
+  id     String @id @default(uuid()) @db.Uuid
+  examId String @map("exam_id") @db.Uuid
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Restrict)
+
+  /// **Explicit and stable** (R76's rule for every ordered collection here).
+  /// Unique per exam among live rows, so two questions cannot claim one place.
+  displayOrder Int @map("display_order")
+
+  kind   ExamQuestionKind
+  /// The question itself. Plain text — no rich text, no images, no formulae in
+  /// v1, so there is nothing here a renderer has to be trusted with.
+  prompt String           @db.VarChar(1000)
+
+  /**
+   * **Only meaningful on a choice question**, and `exam_question_justification_check`
+   * says so: a text question IS its own justification, so asking for a second
+   * one would be asking the same question twice.
+   */
+  justification JustificationRule @default(none)
+
+  /// TD-15 — two authors editing one paper must not clobber each other.
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  options ExamQuestionOption[]
+  answers StudentExamAnswer[]
+
+  @@index([examId, displayOrder])
+  @@map("exam_question")
+}
+
+/**
+ * **R124 — one answer choice.**
+ * A row rather than a string in an array, so a `StudentExamAnswerOption` can
+ * point at it. That is what makes *«she chose the second option»* survive the
+ * second option being reworded — and it is why renaming an option is safe while
+ * deleting one a student has chosen is refused.
+ */
+model ExamQuestionOption {
+  id         String       @id @default(uuid()) @db.Uuid
+  questionId String       @map("question_id") @db.Uuid
+  question   ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  displayOrder Int    @map("display_order")
+  label        String @db.VarChar(500)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  chosenBy StudentExamAnswerOption[]
+
+  @@index([questionId, displayOrder])
+  @@map("exam_question_option")
+}
+
+/**
+ * **R124 — one student's answer to one question.**
+ * Replaces `StudentExamSubmission.answers`, a `jsonb` column whose own comment
+ * said *"answers keyed by question UUID — never by array position"*: the right
+ * instinct, expressed where nothing could enforce it. A row per question makes
+ * the key a foreign key.
+ * `text` carries a short or long answer; `justification` carries the *why* a
+ * choice question may ask for. Both are nullable because a choice question
+ * needs neither, and `exam_answer_shape_check` refuses the combinations the
+ * question's own kind cannot produce.
+ */
+model StudentExamAnswer {
+  id           String                @id @default(uuid()) @db.Uuid
+  submissionId String                @map("submission_id") @db.Uuid
+  submission   StudentExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  questionId   String                @map("question_id") @db.Uuid
+  question     ExamQuestion          @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  /// The written answer, for `short_text` and `long_text`.
+  text          String? @db.VarChar(5000)
+  /// The *why*, where the question asks for one.
+  justification String? @db.VarChar(2000)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  options StudentExamAnswerOption[]
+
+  @@unique([submissionId, questionId])
+  @@index([questionId])
+  @@map("student_exam_answer")
+}
+
+/**
+ * **R124 — one option a student selected.**
+ * A join, because `multiple_choice` selects several and `single_choice` selects
+ * one; the *«exactly one»* rule is the service's, since a CHECK cannot count
+ * rows in another table. `RESTRICT` on the option is what makes an answered
+ * option undeletable.
+ */
+model StudentExamAnswerOption {
+  answerId String             @map("answer_id") @db.Uuid
+  answer   StudentExamAnswer  @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  optionId String             @map("option_id") @db.Uuid
+  option   ExamQuestionOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@id([answerId, optionId])
+  @@index([optionId])
+  @@map("student_exam_answer_option")
+}
+
 model StudentExamSubmission {
   id        String @id @default(uuid()) @db.Uuid
   examId    String @map("exam_id") @db.Uuid
@@ -2701,8 +2932,10 @@ model StudentExamSubmission {
   studentId String @map("student_id") @db.Uuid
   student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
-  /// Answers keyed by question UUID — never by array position (TD-6).
-  answers Json @db.JsonB
+  /// R124 — one row per question, replacing the `answers` jsonb column. Its own
+  /// comment asked for *"keyed by question UUID, never by array position"*;
+  /// a foreign key is that key, enforced.
+  answers StudentExamAnswer[]
 
   state SubmissionState @default(in_progress)
 

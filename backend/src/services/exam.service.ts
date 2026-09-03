@@ -247,13 +247,27 @@ export async function createPhysicalExam(
         branchId: input.branchId,
         roomId: input.roomId,
         administrativeGroupId: input.administrativeGroupId ?? null,
+        /**
+         * **R124 — R58's targeting, now stored rather than inferred.**
+         *
+         * A named group meant *this roster* and a null one meant *the whole
+         * Level*; with three more arms that inference stops being decidable, so
+         * the arm is written. `exam_target_check` refuses any disagreement
+         * between the two, which is what turned a silent mismatch into a
+         * refusal here.
+         */
+        targetKind: input.administrativeGroupId ? 'administrative_group' : 'level',
+        /**
+         * **R124 — a physical sitting is `published` from creation.** There is
+         * no paper to build in the platform (R58 puts it outside), so the row
+         * IS the announcement; leaving it a draft would hide an arranged exam
+         * from the people it was arranged for.
+         */
+        status: 'published',
+        publishedAt: new Date(),
         // R109 — absent is the column's default, so the key is omitted rather
         // than written as a literal: one place decides what "unchosen" means.
         ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
-        // §4.6's question array belongs to the ONLINE mode. A physical sitting's
-        // paper is not in the platform, so this stays empty rather than holding
-        // a placeholder that would read as an exam somebody forgot to write.
-        questions: [],
       },
       select: { id: true },
     });
@@ -422,7 +436,13 @@ export async function updatePhysicalExam(
           : { schedulingTypeId: input.schedulingTypeId }),
         ...(input.administrativeGroupId === undefined
           ? {}
-          : { administrativeGroupId: input.administrativeGroupId }),
+          : {
+              administrativeGroupId: input.administrativeGroupId,
+              // R124 — the arm moves with the column, or `exam_target_check`
+              // refuses the row. Narrowing a Level-wide sitting to one group,
+              // and widening it back, are both this edit.
+              targetKind: input.administrativeGroupId ? ('administrative_group' as const) : ('level' as const),
+            }),
         // R109 — absent means *leave the tier as it is*, never *reset it to the
         // default*. Collapsing those two would silently publish a hidden sitting
         // on any unrelated edit — the shape NEW B §A found on the نشاط form,

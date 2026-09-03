@@ -8800,6 +8800,807 @@
         }
       }
     },
+    "/assessments": {
+      "post": {
+        "summary": "Create an assessment",
+        "description": "**§4.6, R124 — a new paper, in `draft`.** This is `exam.mode = 'online'`, which R58 declared and then refused with `ONLINE_NOT_AVAILABLE` because — in that service's own words — *«physical carries a place and staff and no questions; online will carry questions and no place»*. **No second assessment entity was created**: one would fork `Grade`, which is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet, the student's results screen and the parent visibility rule. Body: `{ title, description?, max_grade, level_id, subject_id?, academic_year_id?, target, date? }`, **strictly**. `target` is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`, with the id of whatever it names (absent only for `level`); `exam_target_check` refuses any disagreement between the arm and the columns. **`date` is refused on a `session` target and required on every other**: a quick test belongs to the occurrence's own day, and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122), so a paper with no date has no answerable audience. Authoring authority is the exam's own (TD-2 as split by R70.4) and is **not** widened: Super Admin, Admin in branch scope, Teacher within their own teaching. Audited as `assessment.create` with ids and a kind — **never the title**, which is free text a person wrote.",
+        "responses": {
+          "201": {
+            "description": "Created; `{ id }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, TARGET_ID_REQUIRED, or DATE_REQUIRED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN outside the caller’s teaching or branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown level, group, occurrence, teaching group or beneficiary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/questions": {
+      "post": {
+        "summary": "Append a question",
+        "description": "**§4.6, R124 — one question, appended.** Body: `{ kind, prompt, justification?, options? }`. Four kinds and no fifth: `short_text` · `long_text` · `single_choice` (UCQ) · `multiple_choice` (MCQ). **Appended, never inserted at a position** — a create that also chose one would be a second ordering mechanism beside the reorder route, and R76 settled that ordering is expressed as a whole sequence. **A choice question needs at least two options** (`OPTIONS_REQUIRED`) and a text question refuses them outright (`OPTIONS_NOT_ALLOWED`) rather than dropping them: a client sending options on a `short_text` has misunderstood something, and a `201` would confirm the misunderstanding. `justification` is `none` | `optional` | `required` and is **meaningful only on a choice question** — a text answer IS its own justification, and both the schema and `exam_question_justification_check` say so. **The paper freezes the moment somebody submits** (`ASSESSMENT_HAS_SUBMISSIONS`): adding, editing, removing or reordering after that would make an answer mean something the student never said. Audited with the kind and an option COUNT — never the prompt or a label (TD-14).",
+        "responses": {
+          "201": {
+            "description": "Created; `{ id }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — OPTIONS_REQUIRED, OPTIONS_NOT_ALLOWED or JUSTIFICATION_NOT_ALLOWED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ASSESSMENT_HAS_SUBMISSIONS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/questions/order": {
+      "patch": {
+        "summary": "Reorder the questions",
+        "description": "**§4.6, R124 — the WHOLE sequence, as R76 requires.** Body: `{ ids }`, listing every live question exactly once; a partial list is `VALIDATION_FAILED` with `INCOMPLETE_ORDER`, because the omitted ones would end up somewhere the caller did not decide. Renumbered through a negative range first — `exam_question_order_unique` is a real index, so writing `1,2,3` over `3,1,2` collides halfway unless the rows are parked where no live row can be.",
+        "responses": {
+          "204": {
+            "description": "Reordered."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED with reason INCOMPLETE_ORDER.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ASSESSMENT_HAS_SUBMISSIONS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/questions/{questionId}": {
+      "patch": {
+        "summary": "Edit a question",
+        "description": "**§4.6, R124 — wording, justification and the option set.** TD-15 `version`. **`kind` is not accepted**: changing a `short_text` into a `multiple_choice` would leave an answer that answers a different question, so a new question is a new question. `options` replaces the **whole set** — their order is part of what the student saw, so a partial edit has no meaning. Refused once anybody has submitted (`ASSESSMENT_HAS_SUBMISSIONS`); the database would refuse the option soft-delete anyway, since a chosen option is referenced under `RESTRICT`, but the service refuses first with a sentence an administrator can act on.",
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason ASSESSMENT_HAS_SUBMISSIONS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a question",
+        "description": "**§4.6, R124, TD-5 — a question removed, and the order closes up.** The partial unique index would let a gap stand, but «السؤال 4» on a paper of three reads as a question that went missing. Refused once anybody has submitted.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ASSESSMENT_HAS_SUBMISSIONS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/publish": {
+      "post": {
+        "summary": "Publish an assessment",
+        "description": "**§4.6, R124 — draft → published.** The moment the paper becomes available to whoever the target resolves to. **An empty paper is refused** (`NO_QUESTIONS`): a student opening one would see a title and nothing to answer, with no way to tell that from a fault. **Publishing the assessment is not publishing the grade** — that is `POST /exams/{id}/grades/publish`, and the two are deliberately separate acts.",
+        "responses": {
+          "204": {
+            "description": "Published."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — NO_QUESTIONS, or INVALID_TRANSITION when it is not a draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/close": {
+      "post": {
+        "summary": "Close an assessment",
+        "description": "**§4.6, R124 — published → closed.** Stops new answers and **hides nothing**: every submitted response stays readable to whoever may read it and a published grade stays published. A closed assessment has finished; it has not been withdrawn.",
+        "responses": {
+          "204": {
+            "description": "Closed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason INVALID_TRANSITION.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/submissions": {
+      "get": {
+        "summary": "Who answered",
+        "description": "**§4.6, R124 — who answered, and where their grade is.** `{ eligible_count, data[] }` with `state`, `submitted_at`, `grade_status` and the score. **Statuses, not analytics**: no percentages, no averages, no charts — this is a list a person works through, and §10.1's reporting engine is a different feature nobody has asked for. `eligible_count` is how many the target resolves to **now**; a submitted-versus-eligible difference is deliberately not computed, because eligibility moves and the difference would read as a finding. The score is **staff-only here** and reaches a student only through the existing grade surfaces, once published.",
+        "responses": {
+          "200": {
+            "description": "The eligible count and one row per submission."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/submissions/{studentId}": {
+      "get": {
+        "summary": "One submitted paper",
+        "description": "**§4.6, R124 — one submitted paper, with her answers.** **A draft in progress is NOT readable** (`404`): a half-written answer is not something she has handed in, and reading it would be reading over her shoulder — the list above says she has started, and this refuses to open it. Same projection the student's own `GET /assessments/{id}/paper` returns, so staff and student see one paper and there is no second shape to drift.",
+        "responses": {
+          "200": {
+            "description": "The paper and her answers."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown assessment, one out of scope, or answers not yet submitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/assessments": {
+      "get": {
+        "summary": "My assessments",
+        "description": "**§4.6, R124 — what this beneficiary may open, and what she has done.** **No student id appears anywhere**: the subject is the JWT `sub`, resolved through the §4.3 middleware so a guardian reaches her child only through an approved `FamilyLink` (§20 rule 6). Published and closed alike — a closed one she answered is her record, and a closed one she did not is the honest *«انتهى»* rather than an item that quietly vanishes. **A submission keeps a paper on her list even after eligibility lapses**: *may start* and *has answered* are different questions with different sources, which is exactly why the second is a row and the first is a query.",
+        "responses": {
+          "200": {
+            "description": "What this beneficiary may open, and what she has done."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a parent-only caller sending no child header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unapproved family link (§4.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/paper": {
+      "get": {
+        "summary": "The paper, and my answers",
+        "description": "**§4.6, R124 — the paper, and HER answers.** A **draft assessment answers `404`**, the same answer one she is not eligible for gives: distinguishing them would leak that a paper exists (§20 rule 17). **A submission is its own permission to read** — she may no longer be eligible, the period ended or she moved Level, and what she answered stays readable to her regardless. Eligibility decides *may I start*, never *may I see what I wrote*. No other student's answers are reachable through this or any other route.",
+        "responses": {
+          "200": {
+            "description": "The ordered questions and this person’s own answers."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a draft, one she is not eligible for, or an unknown id — deliberately indistinguishable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/responses": {
+      "put": {
+        "summary": "Save my answers",
+        "description": "**§4.6, R124 — حفظ.** A draft: incomplete is fine, and nothing is final. **SAVE is not SUBMIT** — the distinction is the Owner's and it is the only difference between this route and the one below. **Nothing autosaves and nothing autosubmits**: a closed browser leaves a draft, which is what a person expects. Body: `{ answers[] }` with `question_id` and, by kind, `text` | `option_ids` | `justification`. **Every response type is checked server-side against the question's own kind** and each mistake gets its own reason — `TEXT_NOT_ALLOWED`, `OPTIONS_NOT_ALLOWED`, `UNKNOWN_OPTION` (an option from another question would attach an answer to a choice she was never shown), `SINGLE_CHOICE_ONLY`, `DUPLICATE_ANSWER` — because *«invalid»* alone leaves her re-reading a form with nothing to correct. **No student id in the body**: she writes only her own.",
+        "responses": {
+          "200": {
+            "description": "Saved; `{ state }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED with the reason naming which answer is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason NOT_YOUR_SUBMISSION.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ALREADY_SUBMITTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/submit": {
+      "post": {
+        "summary": "Send my answers",
+        "description": "**§4.6, R124 — إرسال, and it is final for the student.** Everything `PUT …/responses` validates, **plus completeness**: every question answered, every `single_choice` carrying exactly one option, every `required` justification present (`INCOMPLETE_SUBMISSION`, `JUSTIFICATION_REQUIRED`). After it, `ALREADY_SUBMITTED` — a silent second submission would let the answers a teacher has already read change underneath her. **Reopening is not in v1**; it would be an explicit staff act, and no route offers one. The interface asks for confirmation in Arabic first; this endpoint is the point of no return, not the warning.",
+        "responses": {
+          "200": {
+            "description": "Submitted; `{ state }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — INCOMPLETE_SUBMISSION, SINGLE_CHOICE_ONLY, JUSTIFICATION_REQUIRED, ANSWER_REQUIRED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason NOT_YOUR_SUBMISSION.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ALREADY_SUBMITTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}/attendance": {
       "get": {
         "summary": "The attendance sheet for a class occurrence",

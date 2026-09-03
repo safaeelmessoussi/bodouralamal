@@ -44,6 +44,7 @@ export type Route =
   | 'dashboard-student-quran'
   /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
   | 'dashboard-student-grades'
+  | 'dashboard-student-assessments'
   /**
    * **R98 — the online classroom**, `/classroom/{sessionId}`.
    *
@@ -129,6 +130,8 @@ export function resolveRoute(pathname: string): Route {
   // §5.3 has listed this node since R62 and nothing rendered it; the grades were
   // publishable and unreachable by the مستفيدة they were about.
   if (path === '/dashboard/student/grades') return 'dashboard-student-grades';
+  // R124 — her own assessments: what she may open, and what she has sent.
+  if (path === '/dashboard/student/assessments') return 'dashboard-student-assessments';
   if (path === '/dashboard/student') return 'dashboard-student';
   // R65 — the personal section, and the child-registration page under it.
   // Registering is an act of a PERSON, so neither is under a role's area: R64

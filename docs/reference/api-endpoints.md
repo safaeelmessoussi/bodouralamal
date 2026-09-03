@@ -437,6 +437,23 @@ authenticates; it does not authorise.
 |---|---|---|
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
 
+**Assessment builder (§4.6, R124)** — the ONLINE half of `Exam`, which R58 declared and refused. **No second entity**: `Grade` is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet and the student's results screen, so a parallel model would have forked all four.
+
+| | Path | Notes |
+|---|---|---|
+| `POST` | `/assessments` | A paper, in `draft`. `target` is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`. **`date` is refused on a session target and required otherwise** — a quick test takes the occurrence's own day, and eligibility resolves against the `AcademicPeriod` covering it (R122) |
+| `POST` `PATCH` `DELETE` | `/assessments/{id}/questions[/{questionId}]` | Four kinds: short text · long text · single choice · multiple choice. **Appended**, never inserted at a position. A choice question needs two options and refuses none; a text question refuses options and a justification outright — a text answer IS its own justification |
+| `PATCH` | `/assessments/{id}/questions/order` | The **whole** sequence (R76) |
+| `POST` | `/assessments/{id}/publish` · `/close` | draft → published → closed. **An empty paper is refused.** Closing stops new answers and hides nothing |
+| `GET` | `/assessments/{id}/submissions[/{studentId}]` | Who answered, and one submitted paper. **A draft in progress is NOT readable** — she has not handed it in |
+| `GET` | `/me/assessments` · `/assessments/{id}/paper` | Hers. **No student id anywhere**: the subject is the JWT `sub` through the §4.3 middleware |
+| `PUT` `POST` | `/assessments/{id}/responses` · `/submit` | **حفظ ≠ إرسال.** A draft may be incomplete; a submission may not, and is final for the student |
+
+**The paper freezes on the first submission** (`ASSESSMENT_HAS_SUBMISSIONS`) — the
+simplest safe rule, and the reason no versioning scheme exists. **A submission is
+its own permission to read**: eligibility can lapse, and what she answered stays
+hers. **Grading is not here** — it is `/exams/{id}/grades`, unchanged.
+
 **Attendance (§4.7, R123)** — the register, on the three dated occurrence carriers. Entity-rooted like `/sessions/{id}/roster`, and the **kind is bound where the route is mounted**, never read from the path.
 
 | | Path | Notes |

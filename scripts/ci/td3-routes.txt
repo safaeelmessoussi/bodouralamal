@@ -159,6 +159,24 @@ GET /events/{id}/attendance/candidates        # §4.7 R123; the same picker, for
 POST /events/{id}/attendance                  # §4.7 R123; staff marks a beneficiary present
 POST /events/{id}/attendance/self             # §4.7 R123; «تسجيل حضوري» at an activity
 DELETE /events/{id}/attendance/{studentId}    # §4.7 R123, TD-5
+
+# ── Assessment builder (§4.6, R124) ─────────────────────────────────────────
+# The ONLINE half of `Exam`, which R58 declared and refused. Grading is NOT
+# here: `/exams/{id}/grades` already grades this row.
+POST /assessments                             # §4.6 R124; a new paper, in draft
+POST /assessments/{id}/questions              # §4.6 R124; appended, never inserted at a position
+PATCH /assessments/{id}/questions/order       # §4.6 R124; the WHOLE sequence (R76)
+PATCH /assessments/{id}/questions/{questionId} # §4.6 R124; wording, justification, options; TD-15
+DELETE /assessments/{id}/questions/{questionId} # §4.6 R124, TD-5; the order closes up
+POST /assessments/{id}/publish                # §4.6 R124; draft → published
+POST /assessments/{id}/close                  # §4.6 R124; published → closed
+GET /assessments/{id}/submissions             # §4.6 R124; who answered, and where their grade is
+GET /assessments/{id}/submissions/{studentId} # §4.6 R124; one submitted paper
+GET /me/assessments                           # §4.6 R124; what this beneficiary may open
+GET /assessments/{id}/paper                   # §4.6 R124; the paper and HER answers
+PUT /assessments/{id}/responses               # §4.6 R124; حفظ — a draft, never a submission
+POST /assessments/{id}/submit                 # §4.6 R124; إرسال — final for the student
+
 GET /exams/{id}/attendance                    # §4.7 R123; the sitting's register
 GET /exams/{id}/attendance/candidates         # §4.7 R123; the same picker, for a sitting
 POST /exams/{id}/attendance                   # §4.7 R123; the supervisor marks

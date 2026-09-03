@@ -288,7 +288,6 @@ beforeAll(async () => {
         startTime: AT_9,
         endTime: AT_10,
         maxGrade: 20,
-        questions: [],
         visibility: tier,
       },
     });

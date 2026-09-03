@@ -646,24 +646,35 @@ async function main(): Promise<void> {
         maxGrade: 20,
         date: daysAgo(7),
         accessPolicy: ExamAccessPolicy.save_and_resume,
-        // Every question carries an immutable auto-generated UUID; submissions
-        // reference these, never array positions (TD-6).
-        questions: [
-          {
-            id: crypto.randomUUID(),
-            type: 'mcq',
-            prompt: 'سؤال اختيار من متعدد',
-            options: ['أ', 'ب', 'ج'],
-            correctIndex: 0,
-            maxPointsBp: 5000,
-          },
-          {
-            id: crypto.randomUUID(),
-            type: 'free_text',
-            prompt: 'سؤال مقالي',
-            maxPointsBp: 5000,
-          },
-        ],
+        // R124 — a PHYSICAL sitting, so it is `published` from creation and
+        // carries no paper: the questions are on real paper, outside the
+        // platform (R58). The builder's own fixture is the online exam below.
+        status: 'published',
+        /**
+         * **R124 — the paper, as rows.** This was a `questions` jsonb blob
+         * holding `correctIndex` and `maxPointsBp` — an auto-scoring shape v1
+         * deliberately does not have (grading is manual). The blob was
+         * snapshotted into `trash` by the migration rather than discarded, and
+         * what replaces it is a real online assessment a developer can open.
+         */
+        questions: {
+          create: [
+            {
+              displayOrder: 1,
+              kind: 'multiple_choice',
+              prompt: 'سؤال اختيار من متعدد',
+              justification: 'optional',
+              options: {
+                create: [
+                  { displayOrder: 1, label: 'أ' },
+                  { displayOrder: 2, label: 'ب' },
+                  { displayOrder: 3, label: 'ج' },
+                ],
+              },
+            },
+            { displayOrder: 2, kind: 'long_text', prompt: 'سؤال مقالي' },
+          ],
+        },
       },
     });
   }

@@ -54,7 +54,8 @@ erDiagram
 ```
 
 Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
-`AcademicPeriod`, `Attendance`,
+`AcademicPeriod`, `Attendance`, `ExamQuestion`, `ExamQuestionOption`,
+`StudentExamAnswer`, `StudentExamAnswerOption`,
 `EducationalContent`, `ConsumedToken`, `RateLimitCounter`, and `HijriMonthStart`.
 
 > The authoritative field-by-field definition is SRS §7. This page explains the parts that
@@ -335,6 +336,9 @@ the consent job's forced visibility changes.
 | `ConsumedToken (jti)` | **The onboarding-token replay guard.** A replay hits this violation, the transaction aborts, and the request fails — enforcement is mechanical, not aspirational |
 | `FamilyLink (student_id, parent_id)` **where not deleted** | A revoked link can be requested again later |
 | `AcademicYear` exactly one `is_current` | Partial unique index |
+| `ExamQuestion (exam_id, display_order)` **where not deleted** | **Two questions cannot claim one place** (R124). Partial, so a removed question frees its position rather than blocking the one that takes it — and the reorder writes through a negative range first, because writing `1,2,3` over `3,1,2` collides halfway otherwise |
+| `ExamQuestionOption (question_id, display_order)` **where not deleted** | The same, for a question's own choices: their order is part of what the student saw |
+| `StudentExamAnswer (submission_id, question_id)` | **One answer per question.** The `answers` jsonb column it replaces asked for *"keyed by question UUID, never by array position"* — the right instinct, expressed where nothing could enforce it. This is that key, as a foreign key |
 | `Attendance (session_id, event_id, exam_id, occurrence_date, student_id)` **where not deleted**, `NULLS NOT DISTINCT` | **One presence per person per occurrence** (R123). `NULLS NOT DISTINCT` is what makes it work with two of the three occurrence columns null — without it PostgreSQL treats every NULL as unique and the index would permit unlimited duplicates, which is exactly the double-tap on «تسجيل حضوري» the rule exists for |
 | `AcademicPeriod (academic_year_id, sequence)` | One الفصل 1، one الفصل 2 per year — a second row for the same semester would make *which period is this enrolment in* ambiguous |
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
@@ -376,6 +380,16 @@ into exactly the kind of copy that the platform has been burned by before.
   nothing can resolve a roster for. Also `recurrence <> 'none'` — a non-recurring occurrence
   is an Event, not a schedule.
 - `AcademicYear.label` matches `^\d{4}-\d{4}$`.
+- `Exam`: **exactly one target, and it matches the declared arm**
+  (`exam_target_check`, R124). R58 stored the narrower sitting as a non-null
+  `administrative_group_id` and read NULL as *the whole Level*; with a Session, a
+  Teaching Group and a single beneficiary added, that inference stops being
+  decidable, so the arm is stored. Same idiom as
+  `course_schedule_mode_target_check`.
+- `ExamQuestion`: `justification = 'none'` unless the kind is a choice
+  (`exam_question_justification_check`) — **a text answer IS its own
+  justification**, so asking for a second one would ask the same question twice.
+  Prompts and option labels are refused blank.
 - `Attendance`: **exactly one** of `session_id`, `event_id`, `exam_id` is
   non-null (`attendance_one_occurrence_check`) — the same idiom `Notification`
   uses for its four targets. A row naming none would be presence at nothing; one
@@ -739,3 +753,4 @@ Interactive transactions must finish well inside the statement timeout.
 **Next:** [API](api.md) · **Related:** [Backend](backend.md),
 [Performance and scale](performance-and-scale.md), [Runbooks](../operations/runbooks.md)
 20260903180000_r123_attendance
+20260904090000_r124_assessment_builder

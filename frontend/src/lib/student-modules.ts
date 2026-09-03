@@ -92,6 +92,21 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
     status: 'ready',
   },
   {
+    /**
+     * **R124 — her own assessments**: the papers she may open, the drafts she
+     * saved, and what she has sent. **Her grade is not here** — it reaches her
+     * through «نقاطي» below, and only once published.
+     */
+    path: '/dashboard/student/assessments',
+    // `/me/assessments` resolves the subject through the §4.3 middleware, so a
+    // guardian reaches her child's list the same way she reaches everything
+    // else.
+    childContext: true,
+    labelKey: 'student.nav.assessments',
+    roles: STUDENT,
+    status: 'ready',
+  },
+  {
     /** §5.3 — published grades only, `score / max_grade` (R81). */
     path: '/dashboard/student/grades',
     // `/students/me/grades` under child context (BR-8).

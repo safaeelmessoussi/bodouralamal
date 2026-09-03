@@ -2712,3 +2712,86 @@ signatures, photos, device identifiers or IP recording.** Audit detail is ids an
 a date only, mechanically enforced by the audit repository's minimisation guard
 and asserted directly, because a register is about minors often enough that «no
 name reached the log» must be a test rather than a convention.
+
+## The online assessment builder — SRS R124 (proposed), 2026-09-04
+
+**Nothing here is a new domain.** `exam.mode = 'online'` has existed since R58
+and was refused at the service level with `ONLINE_NOT_AVAILABLE`, because — in
+that service's own words — *"`physical` carries a place and staff and no
+questions; `online` will carry questions and no place"*. This builds the half
+that was declared and postponed. The Owner commissioned it; **`docs/SRS.md` is
+untouched** and the wording is drafted in
+[`SRS-PROPOSAL-R124.md`](SRS-PROPOSAL-R124.md) awaiting ratification.
+
+**No second assessment entity, and that was the whole decision.** `Grade` is
+keyed `(exam_id, student_id)` and already carries the 20-point scale, the
+draft/published split, the grade sheet, the student's results screen and the
+parent visibility rule. An `Assessment` table beside it would have forked all
+five, and the Owner's *«reuse the existing Grade model»* would have been
+impossible to honour. What makes a quick test not *«forced awkwardly into a
+formal Exam»* is the **target**, not a second model.
+
+**Five targets, one resolver.** A Level · an Administrative Group · a **Session**
+· a Teaching Group · **one named beneficiary**. R58 stored the narrower sitting
+as a non-null `administrative_group_id` and read NULL as *the whole Level*; with
+three more arms that inference stops being decidable, so `target_kind` is stored
+and `exam_target_check` refuses any disagreement between the arm and the columns.
+Every consumer — the student's list, the paper, the inbox, **and the grade sheet**
+— composes one `examAudienceWhere`. That last one matters: the sheet branched on
+`administrativeGroupId` being null, and left alone it would have resolved a quick
+test's marks to the whole Level.
+
+**Eligibility is derived; a submission is a fact.** Nobody is copied into an
+assignment table (§20 rule 22). *Who may start now* resolves from live enrolment
+against the `AcademicPeriod` covering **the assessment's own date** (R122); *who
+answered* is a row nothing later touches. A beneficiary who leaves the Level
+keeps her submission, keeps it on her own list, and loses only the ability to
+start a new one — **a submission is its own permission to read**.
+
+**R124 narrows only what R124 introduces.** `examAudienceWhere` takes an explicit
+`on: Date | null`, and a **physical** sitting passes `null`: those have been
+resolved period-blind since R58, and narrowing them would have silently dropped
+every pre-R122 enrolment off a grade sheet that has always shown her.
+
+**The two `jsonb` blobs are gone.** `exam.questions` and
+`student_exam_submission.answers` could not express three things this feature
+requires: **stable explicit ordering** (an array's index IS its order, so any
+edit reorders by accident), **an answer that references the option it chose** (a
+blob names a string, so rewording an option silently rewrites what a student
+said), and **a database that refuses to delete an answered question**. Both were
+snapshotted into `Trash` before being dropped — nothing was discarded, including
+the one development fixture holding sample questions in an auto-scoring shape v1
+deliberately does not have.
+
+**The paper freezes on the first submission**, and that is why no versioning
+scheme exists. A question whose wording, order or options changed after an answer
+was given makes that answer mean something the student never said. A draft in
+progress freezes nothing: she has answered nothing anybody has read.
+
+**SAVE is not SUBMIT.** حفظ leaves a draft; إرسال is confirmed in Arabic and
+final for her. **Nothing autosaves and nothing autosubmits** — an assessment that
+submitted itself because a phone locked would be a mark nobody chose to hand in.
+Completeness is required only on submit, or a save would be useless.
+
+**Every response type is checked server-side against the question's own kind**,
+and each mistake gets its own reason. The sharpest is `UNKNOWN_OPTION`: an option
+belonging to another question would attach an answer to a choice she was never
+shown.
+
+**Two defects found while building, both fixed.** `assertExamInTeacherScope` was
+handed an empty string for a branchless online assessment and PostgreSQL raised a
+cast error (P2007) that would have surfaced as a 500 — it now narrows the
+question honestly to *does she teach anybody in this Level*. And
+`createPhysicalExam` had to learn to write `target_kind`, or every existing
+`POST /exams` with a group would have failed the new CHECK.
+
+**Grading is manual and unchanged**: the same sheet, the same 20-point scale, the
+same `SystemSetting` passing basis, the same publication act. **No automatic
+scoring, no analytics, no reports, no percentages.** No branching, file uploads,
+images, rich text, timers, proctoring, geolocation, random pools or negative
+marking.
+
+**A student's answer never reaches `AuditLog`, `Trash`, a notification or a
+log.** Question text and option labels are kept out on the same rule — *what did
+the paper ask* is not a question the audit trail exists to answer — and the
+property is asserted directly rather than left as a convention.

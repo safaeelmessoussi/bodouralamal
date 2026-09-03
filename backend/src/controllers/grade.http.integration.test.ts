@@ -579,7 +579,6 @@ describe("an exam that predates Revision 58", () => {
         maxGrade: 20,
         levelId,
         date: new Date("2024-05-05T00:00:00Z"),
-        questions: [],
       },
     });
 

@@ -166,9 +166,10 @@ async function makeExam(
       roomId: data.roomId,
       subjectId: data.subjectId,
       administrativeGroupId: data.administrativeGroupId ?? null,
-      // §4.6 — a physical sitting carries no online paper; the column is NOT
-      // NULL, so the empty structure is the honest value rather than a gap.
-      questions: [],
+      // R124 — the arm is stored now; `exam_target_check` refuses a row whose
+      // columns disagree with it, and R58's *null group means the whole Level*
+      // stopped being decidable once three more targets existed.
+      targetKind: data.administrativeGroupId ? 'administrative_group' : 'level',
     },
     select: { id: true },
   });

@@ -777,7 +777,6 @@ describe("a published grade notifies the student it is about (R82.4)", () => {
         startTime: new Date("1970-01-01T09:00:00Z"),
         endTime: new Date("1970-01-01T11:00:00Z"),
         date: new Date("2099-06-06T00:00:00Z"),
-        questions: [],
       },
       select: { id: true },
     });

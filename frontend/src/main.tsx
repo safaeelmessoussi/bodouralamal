@@ -11,6 +11,7 @@ import { ClassroomPage } from './pages/classroom.js';
 import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
+import { StudentAssessmentsPage } from './pages/dashboard/assessments.js';
 import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentAccountPage } from './pages/dashboard/account.js';
@@ -144,6 +145,15 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentQuranPage />
+        </PendingGuard>
+      );
+    case 'dashboard-student-assessments':
+      // R124 — the same `PendingGuard` her other screens carry: a Pending
+      // account reaches nothing (TD-1), and the guard is not this page's to
+      // reinvent.
+      return (
+        <PendingGuard>
+          <StudentAssessmentsPage />
         </PendingGuard>
       );
     case 'dashboard-student-grades':

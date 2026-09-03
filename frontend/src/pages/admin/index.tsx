@@ -26,6 +26,7 @@ import { TeachingStructurePage } from './teaching-structure.js';
 import { TaxonomyPage } from './taxonomy.js';
 import { PartnersPage } from './partners.js';
 import { AcademicPeriodsPage } from './academic-periods.js';
+import { AssessmentsPage } from './assessments.js';
 import { SchedulingTypesPage } from './scheduling-types.js';
 import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
@@ -60,6 +61,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/enrollments',
   '/admin/teachers',
   '/admin/exam-grades',
+  '/admin/assessments',
   '/admin/level-subjects',
   '/admin/level-surahs',
   '/admin/quran',
@@ -141,6 +143,11 @@ export function AdminRouter(): ReactNode {
   // R70.1 — the grade sheet, with the exam id as `?exam=` (the `/resources`
   // pattern). The page is a frame; the sheet itself is `GradeSheetView`, which
   // the teacher portal renders too — one implementation, two ways in.
+  if (path === '/admin/assessments') {
+    // R124 — `?exam=` opens the builder for one paper, the same deep-link
+    // pattern «نقاط الامتحانات» uses. Absent, the page offers «اختبار جديد».
+    return <AssessmentsPage examId={params.get('exam')} />;
+  }
   if (path === '/admin/exam-grades') {
     return <ExamGradesPage examId={params.get('exam')} />;
   }

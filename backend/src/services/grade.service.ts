@@ -5,7 +5,10 @@ import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { isValidScore, toNumber } from '../policies/grading.js';
 import { notifyGradePublished } from './notification.service.js';
-import { assertExamInTeacherScope, audienceWhere } from '../policies/roster-resolution.js';
+import {
+  assertExamInTeacherScope,
+  examAudienceWhere,
+} from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
 /**
@@ -117,9 +120,21 @@ interface ExamForGrading {
   date: Date;
   createdAt: Date;
   levelId: string;
-  subjectId: string;
-  branchId: string;
+  /** R124 — `null` on an ONLINE assessment: a quick test needs no Subject, and
+   *  the pre-R58 guard below is narrowed to physical sittings for that reason. */
+  subjectId: string | null;
+  /** R124 — `null` on an ONLINE assessment, which is sat nowhere and whose
+   *  audience is therefore not branch-bound. */
+  branchId: string | null;
   administrativeGroupId: string | null;
+  mode: string;
+  /** R124 — which of the five audiences this paper is for. `level` and
+   *  `administrative_group` are R58's two; the other three arrive with the
+   *  online builder and resolve through the same shared function. */
+  targetKind: string;
+  sessionId: string | null;
+  teachingGroupId: string | null;
+  studentId: string | null;
   level: { name: string };
   subject: { name: string } | null;
   branch: { name: string } | null;
@@ -139,6 +154,13 @@ const EXAM_SELECT = {
   subjectId: true,
   branchId: true,
   administrativeGroupId: true,
+  // R124 — the mode and the five-way target, so `audienceOf` resolves the sheet
+  // through the one shared definition of *who is this for*.
+  mode: true,
+  targetKind: true,
+  sessionId: true,
+  teachingGroupId: true,
+  studentId: true,
   level: { select: { name: true } },
   subject: { select: { name: true } },
   branch: { select: { name: true } },
@@ -172,17 +194,28 @@ async function loadForGrading(
   // branch and no subject. Without a branch the audience — *the Level's
   // students at the exam's branch* — has no meaning, and resolving it Level-wide
   // would put students from other branches on the sheet.
-  if (exam.branchId === null || exam.subjectId === null) {
+  /**
+   * **R124 — an ONLINE assessment legitimately has neither**, and that is not
+   * the pre-R58 hole this guard exists for. `exam_online_has_no_room_check`
+   * forbids a branch on an online row, and a quick test needs no Subject; its
+   * audience comes from the target rather than from *the Level at this branch*,
+   * so there is nothing missing to refuse.
+   */
+  if (exam.mode === 'physical' && (exam.branchId === null || exam.subjectId === null)) {
     throw new AppError('STATE_CONFLICT', 'this exam names no branch or subject (pre-R58)', {
       reason: 'EXAM_INCOMPLETE',
     });
   }
-  const sitting: ExamForGrading = { ...exam, branchId: exam.branchId, subjectId: exam.subjectId };
+  const sitting: ExamForGrading = exam;
 
   if (scope.isSuperAdmin(actor.roleScopes)) return sitting;
 
   if (scope.hasRole(actor.roleScopes, 'admin')) {
-    scope.assertCanActOnBranch(actor.roleScopes, 'admin', sitting.branchId, 'no such exam');
+    // An online assessment is sat nowhere, so there is no branch to assert
+    // against and the Level is the whole scope an Admin needs.
+    if (sitting.branchId !== null) {
+      scope.assertCanActOnBranch(actor.roleScopes, 'admin', sitting.branchId, 'no such exam');
+    }
     return sitting;
   }
 
@@ -191,9 +224,9 @@ async function loadForGrading(
   }
 
   await assertExamInTeacherScope(prisma, actor.userId, {
-    branchId: sitting.branchId,
+    branchId: sitting.branchId ?? '',
     levelId: sitting.levelId,
-    subjectId: sitting.subjectId,
+    subjectId: sitting.subjectId ?? '',
     administrativeGroupId: sitting.administrativeGroupId,
   });
   return sitting;
@@ -209,29 +242,40 @@ async function loadForGrading(
  * teaching-group mode is deliberately never used here, because R58 states that
  * *"the Teaching Group split has no bearing on who sits a paper"*.
  */
-function audienceOf(exam: ExamForGrading): Prisma.UserWhereInput {
-  return exam.administrativeGroupId !== null
-    ? audienceWhere({
-        teachingMode: 'administrative_group',
-        levelId: null,
-        administrativeGroupId: exam.administrativeGroupId,
-        teachingGroupId: null,
-        branchId: exam.branchId,
-        // Period-blind: R58 makes the sheet's roster *who sits this paper*, a
-        // membership question, not *who was expected on a date* (R123).
-        on: null,
-      })
-    : audienceWhere({
-        teachingMode: 'entire_level',
-        levelId: exam.levelId,
-        administrativeGroupId: null,
-        teachingGroupId: null,
-        branchId: exam.branchId,
-        // Period-blind: R58 makes the sheet's roster *who sits this paper*, a
-        // membership question, not *who was expected on a date* (R123).
-        on: null,
-      });
+async function audienceOf(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  exam: ExamForGrading,
+): Promise<Prisma.UserWhereInput> {
+  /**
+   * **R124 — through the shared resolver, so the sheet and the paper agree.**
+   *
+   * This branched on `administrativeGroupId` being null, which was R58's whole
+   * targeting model. With a Session, a Teaching Group and a single beneficiary
+   * added, that branch would silently resolve a quick test's sheet to the whole
+   * Level — grading people who were never eligible to answer it. One function
+   * answers *who is this for* everywhere (§4.4c).
+   */
+  const where = await examAudienceWhere(prisma, {
+    targetKind: exam.targetKind,
+    levelId: exam.levelId,
+    branchId: exam.branchId,
+    administrativeGroupId: exam.administrativeGroupId,
+    sessionId: exam.sessionId,
+    teachingGroupId: exam.teachingGroupId,
+    studentId: exam.studentId,
+    /**
+     * **R124 — the date only for an ONLINE assessment.** A physical sitting has
+     * been resolved period-blind since R58, and narrowing it here would drop
+     * every pre-R122 enrolment off a sheet that has always shown her. What R124
+     * introduces, R124 narrows.
+     */
+    on: exam.mode === 'online' ? exam.date : null,
+  });
+  // `null` means the target is gone — an occurrence deleted underneath a quick
+  // test. An empty sheet is the honest answer; a Level-wide one would not be.
+  return where ?? { id: { in: [] } };
 }
+
 
 function toRow(
   student: { id: string; nameArabic: string },
@@ -275,7 +319,7 @@ export async function readGradeSheet(
       // `deletedAt: null` is redundant — every arm of `audienceWhere` already
       // constrains it — and it is written anyway, deliberately: this call site
       // must be safe on its own reading, not on a promise made one module over.
-      where: { ...audienceOf(exam), deletedAt: null },
+      where: { ...(await audienceOf(prisma, exam)), deletedAt: null },
       select: { id: true, nameArabic: true },
       orderBy: { nameArabic: 'asc' },
     }),
@@ -439,7 +483,7 @@ export async function saveGradeDraft(
     const audience = await tx.user.findMany({
       // Redundant with `audienceWhere`'s own `deletedAt: null`, and written
       // anyway for the reason given in `readGradeSheet`.
-      where: { ...audienceOf(exam), deletedAt: null },
+      where: { ...(await audienceOf(prisma, exam)), deletedAt: null },
       select: { id: true },
     });
     const inAudience = new Set(audience.map((s) => s.id));

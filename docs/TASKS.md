@@ -2113,3 +2113,14 @@ approved scope covers Partners only, so this is reported rather than taken.
       may apply it**. Two sub-decisions are named there: whether حفل stays
       `disabled`, and whether an exam sitting takes attendance at all — each is
       one click on أنواع الجدولة and no code change.
+- [x] **R124 — the online assessment builder.** `exam.mode = 'online'` activated;
+      `ExamQuestion`/`ExamQuestionOption`/`StudentExamAnswer`/`StudentExamAnswerOption`
+      replace two `jsonb` blobs; five targets behind one resolver; draft →
+      published → closed; حفظ ≠ إرسال; the paper freezes on the first
+      submission. **Grading is the existing sheet** — no second scale, no
+      automatic scoring, no analytics.
+- [ ] **OWNER RATIFICATION REQUIRED — SRS Revision 124**, drafted in
+      `docs/SRS-PROPOSAL-R124.md`. Two sub-decisions are named there: whether the
+      blunt *freeze on first submission* is the wanted rule (the alternative is
+      question versioning, which nobody has asked for), and whether a staff
+      **reopen** action is wanted — there is none in v1.

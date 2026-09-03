@@ -465,6 +465,19 @@ A few rows worth knowing without opening the table:
   **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
   writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
   operational APIs they are authorised to use (Revision 30).
+- **The assessment builder (§4.6, R124) invents no reach either.** Authoring,
+  publishing and reading the inbox use the exam's own rule (TD-2 as split by
+  R70.4): Super Admin, Admin in branch scope, Teacher within their own teaching.
+  Grading is `/exams/{id}/grades`, unchanged. **A student writes only her own
+  answers** — the routes accept no student id at all, and the subject is the JWT
+  `sub` resolved through the §4.3 middleware, so a guardian reaches her child
+  only through an approved `FamilyLink`. **A parent may read a paper and may
+  never write one.** An unpublished grade is invisible to both, by the rule
+  `Grade.status` already enforces.
+- **Assessments are deliberately NOT a TD-12 freshness surface**, for the reason
+  attendance is not: writing a question is ordinary operational work, and adding
+  one write to that catalogue would make it assert against live rows while its
+  siblings on the same screen do not.
 - **Attendance (§4.7, R123) invents no reach of its own.** Marking is delegated
   to the rule each occurrence kind already has: a Session to whoever staffs
   **that occurrence on its date** (R91's `staffsSession`, the only honest answer

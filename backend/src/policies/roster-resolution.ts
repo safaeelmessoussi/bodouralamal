@@ -964,8 +964,16 @@ export async function assertExamInTeacherScope(
   const schedules = await prisma.recurringCourseSchedule.findMany({
     where: {
       deletedAt: null,
-      branchId: spec.branchId,
-      subjectId: spec.subjectId,
+      /**
+       * **R124 — an ONLINE assessment carries neither a branch nor a Subject**,
+       * and `exam_online_has_no_room_check` forbids the first outright. The
+       * question then narrows honestly to *does she teach anybody in this
+       * Level* rather than being forced through an empty UUID, which
+       * PostgreSQL refused as a cast error (P2007) surfacing as a 500 — the
+       * exact shape §4.3's own note warns about one file over.
+       */
+      ...(spec.branchId === '' ? {} : { branchId: spec.branchId }),
+      ...(spec.subjectId === '' ? {} : { subjectId: spec.subjectId }),
       staff: { some: { userId: teacherId, ...effectiveOn(on) } },
     },
     select: {
@@ -1358,4 +1366,122 @@ export function eventAudienceWhere(
   }
 
   return { deletedAt: null, levelEnrollments: { some: enrolment } };
+}
+
+/**
+ * **R124 — who an assessment is for, in one place.**
+ *
+ * R58 gave an exam a Level and an optional Administrative Group; R124 adds a
+ * Session, a Teaching Group and a single beneficiary. Five arms, and **every
+ * consumer composes this one function** — the grade sheet, the student's list
+ * of what she may open, the staff inbox and the eligibility check on submit.
+ * A second implementation of any arm is the drift §4.4c's own wording warns
+ * about, and here it would mean a student graded on a paper she was never
+ * eligible for.
+ *
+ * `on` is R123's division, restated, and the caller states it: `null` asks *who
+ * is in this population*, a date asks *who was expected on that day* — narrowed
+ * to the enrolments whose `AcademicPeriod` covers it (R122).
+ *
+ * **An online assessment passes its own date; a physical sitting passes
+ * `null`.** That asymmetry is deliberate and is the whole scope of R124's
+ * change to grading: R58's sittings have been resolved period-blind since they
+ * existed, and narrowing them here would silently drop every student whose
+ * enrolment predates R122 off a grade sheet that has always shown her. What
+ * R124 introduces, R124 narrows; what it inherits, it leaves alone.
+ *
+ * `null` is returned for a `session` target whose Session is gone, so a caller
+ * decides what a missing occurrence means rather than being handed an empty
+ * audience that reads as *nobody is eligible*.
+ */
+export interface ExamAudienceSpec {
+  targetKind: string;
+  levelId: string;
+  branchId: string | null;
+  administrativeGroupId: string | null;
+  sessionId: string | null;
+  teachingGroupId: string | null;
+  studentId: string | null;
+  /** The exam's own date, or `null` to ask the period-blind question. */
+  on: Date | null;
+}
+
+export async function examAudienceWhere(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  exam: ExamAudienceSpec,
+): Promise<Prisma.UserWhereInput | null> {
+  switch (exam.targetKind) {
+    case 'student':
+      if (exam.studentId === null) return null;
+      /**
+       * **One named beneficiary, and no enrolment condition at all.**
+       *
+       * The author chose this person; requiring her to be enrolled somewhere on
+       * the exam's date would let an administrative change silently withdraw a
+       * paper addressed to her by name. Every other arm derives its audience,
+       * so a period rule is what makes it honest; this one does not derive
+       * anything.
+       */
+      return { id: exam.studentId, deletedAt: null };
+
+    case 'session': {
+      if (exam.sessionId === null) return null;
+      // Through `audienceForSession`, so a quick test's audience is exactly the
+      // class's — resolved on the occurrence's own date, never re-derived here.
+      const spec = await audienceForSession(prisma, exam.sessionId, 'occurrence');
+      return spec === null ? null : audienceWhere(spec);
+    }
+
+    case 'teaching_group':
+      if (exam.teachingGroupId === null) return null;
+      return audienceWhere({
+        teachingMode: 'teaching_group',
+        levelId: null,
+        administrativeGroupId: null,
+        teachingGroupId: exam.teachingGroupId,
+        branchId: exam.branchId ?? '',
+        on: exam.on,
+      });
+
+    case 'administrative_group':
+      if (exam.administrativeGroupId === null) return null;
+      return audienceWhere({
+        teachingMode: 'administrative_group',
+        levelId: null,
+        administrativeGroupId: exam.administrativeGroupId,
+        teachingGroupId: null,
+        branchId: exam.branchId ?? '',
+        on: exam.on,
+      });
+
+    default:
+      /**
+       * **`level` — the whole Level at the exam's branch.**
+       *
+       * An online assessment carries no branch (`exam_online_has_no_room_check`
+       * forbids one), and `entire_level` is branch-bound by R66. With no branch
+       * to bind to, the honest audience is the Level across branches: the paper
+       * is not sat in a room, so *«the students at this branch»* is not a
+       * constraint the assessment has.
+       */
+      return exam.branchId === null
+        ? {
+            deletedAt: null,
+            levelEnrollments: {
+              some: {
+                deletedAt: null,
+                levelId: exam.levelId,
+                ...(exam.on === null ? {} : enrolmentInPeriodOn(exam.on)),
+              },
+            },
+          }
+        : audienceWhere({
+            teachingMode: 'entire_level',
+            levelId: exam.levelId,
+            administrativeGroupId: null,
+            teachingGroupId: null,
+            branchId: exam.branchId,
+            on: exam.on,
+          });
+  }
 }

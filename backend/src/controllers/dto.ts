@@ -2456,3 +2456,173 @@ export function attendanceSheetDto(row: {
     })),
   };
 }
+
+/* ── Assessments (§4.6, R124) ────────────────────────────────────────────── */
+
+export interface AssessmentPaperDto {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  target_kind: string;
+  /** TD-11 calendar date — the day the paper belongs to, and the day its
+   *  eligibility is resolved for (R122). */
+  date: string;
+  max_grade: string;
+  questions: {
+    id: string;
+    display_order: number;
+    kind: string;
+    prompt: string;
+    justification: string;
+    options: { id: string; display_order: number; label: string }[];
+  }[];
+  /** `null` when this person has not started. Never another student's. */
+  submission: {
+    state: string;
+    submitted_at: string | null;
+    answers: {
+      question_id: string;
+      text: string | null;
+      justification: string | null;
+      option_ids: string[];
+    }[];
+  } | null;
+}
+
+export function assessmentPaperDto(row: {
+  exam: {
+    id: string;
+    title: string;
+    description: string | null;
+    status: string;
+    targetKind: string;
+    date: Date;
+    maxGrade: { toString(): string };
+  };
+  questions: {
+    id: string;
+    displayOrder: number;
+    kind: string;
+    prompt: string;
+    justification: string;
+    options: { id: string; displayOrder: number; label: string }[];
+  }[];
+  submission: {
+    state: string;
+    submittedAt: Date | null;
+    answers: {
+      questionId: string;
+      text: string | null;
+      justification: string | null;
+      optionIds: string[];
+    }[];
+  } | null;
+}): AssessmentPaperDto {
+  return {
+    id: row.exam.id,
+    title: row.exam.title,
+    description: row.exam.description,
+    status: String(row.exam.status),
+    target_kind: String(row.exam.targetKind),
+    date: row.exam.date.toISOString().slice(0, 10),
+    max_grade: row.exam.maxGrade.toString(),
+    questions: row.questions.map((q) => ({
+      id: q.id,
+      display_order: q.displayOrder,
+      kind: String(q.kind),
+      prompt: q.prompt,
+      justification: String(q.justification),
+      options: q.options.map((o) => ({
+        id: o.id,
+        display_order: o.displayOrder,
+        label: o.label,
+      })),
+    })),
+    submission:
+      row.submission === null
+        ? null
+        : {
+            state: String(row.submission.state),
+            submitted_at: row.submission.submittedAt?.toISOString() ?? null,
+            answers: row.submission.answers.map((a) => ({
+              question_id: a.questionId,
+              text: a.text,
+              justification: a.justification,
+              option_ids: a.optionIds,
+            })),
+          },
+  };
+}
+
+export interface AssessmentSubmissionListDto {
+  /** How many people the target resolves to **now** — context for the list, not
+   *  a statistic. `submitted + not yet` is not computed here, deliberately:
+   *  eligibility moves and a difference would read as a finding. */
+  eligible_count: number;
+  data: {
+    student_id: string;
+    name: string | null;
+    state: string;
+    submitted_at: string | null;
+    /** `null` when nobody has graded her yet. The score is **staff-only**; it
+     *  reaches a student through the existing grade surfaces, and only once
+     *  `grade_status` is `published`. */
+    grade_status: string | null;
+    score: string | null;
+  }[];
+}
+
+export function assessmentSubmissionListDto(row: {
+  eligibleCount: number;
+  rows: {
+    studentId: string;
+    name: string | null;
+    state: string;
+    submittedAt: Date | null;
+    gradeStatus: string | null;
+    score: string | null;
+  }[];
+}): AssessmentSubmissionListDto {
+  return {
+    eligible_count: row.eligibleCount,
+    data: row.rows.map((r) => ({
+      student_id: r.studentId,
+      name: r.name,
+      state: String(r.state),
+      submitted_at: r.submittedAt?.toISOString() ?? null,
+      grade_status: r.gradeStatus === null ? null : String(r.gradeStatus),
+      score: r.score,
+    })),
+  };
+}
+
+export interface StudentAssessmentDto {
+  id: string;
+  title: string;
+  status: string;
+  date: string;
+  /** `null` = not started · `in_progress` = saved but not sent · `submitted`. */
+  state: string | null;
+  /** Whether her grade has been PUBLISHED. The mark itself is not here — it
+   *  reaches her through the grades surface that already exists. */
+  grade_published: boolean;
+}
+
+export function studentAssessmentDto(row: {
+  id: string;
+  title: string;
+  status: string;
+  date: Date;
+  state: string | null;
+  gradePublished: boolean;
+}): StudentAssessmentDto {
+  return {
+    id: row.id,
+    title: row.title,
+    status: String(row.status),
+    date: row.date.toISOString().slice(0, 10),
+    state: row.state === null ? null : String(row.state),
+    grade_published: row.gradePublished,
+  };
+}

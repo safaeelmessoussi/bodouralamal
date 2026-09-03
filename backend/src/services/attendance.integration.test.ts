@@ -487,6 +487,10 @@ beforeAll(async () => {
         schedulingTypeId: examTypeId,
         levelId: teenLevelId,
         administrativeGroupId: teenGroupId,
+        // R124 — the arm is stored now; `exam_target_check` refuses a row whose
+        // columns disagree with it, and R58's *null group means the whole Level*
+        // stopped being decidable once three more targets existed.
+        targetKind: 'administrative_group',
         subjectId,
         academicYearId,
         // R58 — a physical sitting names branch, room and both times or none of
@@ -498,7 +502,6 @@ beforeAll(async () => {
         date: TODAY,
         maxGrade: 20,
         // A physical sitting has no questions (§4.6 R58); the column is NOT NULL.
-        questions: [],
         staff: { create: [{ userId: teacherId, position: 'supervisor' }] },
       },
     })

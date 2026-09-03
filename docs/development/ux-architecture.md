@@ -564,6 +564,39 @@ backwards). Two places apply it:
 expanded over many dates, so every attendance call for an activity sends
 `?date=`. Without it, «حضرت يوم 15 يونيو» would silently mean «حضرت كل أسبوع».
 
+## BF · الاختبارات — a paper, not a form designer
+
+**One builder for both products.** A formal online exam and a quick test on one
+class are the same paper with a different **target**; there is no second builder
+and no second screen. What distinguishes them is `target_kind`, resolved
+server-side through the one definition of *who is this for* (§4.4c).
+
+**Four question kinds, up/down reordering, and no drag-and-drop.** The platform
+has no reusable drag component, and one screen is not a reason to add a library
+(§14.3). Up/down is also better for a keyboard and for a screen reader, which is
+why it is not merely the cheap option.
+
+**SAVE is not SUBMIT, and only one of them is confirmed.** حفظ leaves a draft;
+إرسال asks in Arabic first and cannot be undone. **Nothing autosaves and nothing
+autosubmits** — an assessment that submitted itself because a phone locked would
+be a mark nobody chose to hand in. Once sent, every control is `disabled` and the
+page says so rather than silently ignoring a click.
+
+**A beneficiary sees her own paper and nothing else.** Not the roster, not
+another student's answers, not an answer key — and her page has no route that
+could ask for any of them. **Her grade is not on it either**: it reaches her
+through «نقاطي», the screen that already shows published grades, and only once
+published.
+
+**The freeze is stated, not enforced by hiding.** Once anybody has submitted the
+paper is fixed, and the builder says why in one sentence instead of offering
+controls that answer `409`.
+
+**Grading is deliberately elsewhere.** The mark is entered on «نقاط الامتحانات»
+— the sheet every other exam uses — because `Grade` is keyed to this row and
+already carries the scale and the publication rule. A second grading surface here
+would be a second answer to *what did she score*.
+
 ## M · User-facing text
 
 **No engineering reference ever reaches a user-facing surface**: no `§4.4c`, no
@@ -2392,6 +2425,8 @@ system's internals, break on every restyle, and catch nothing.
 | [`pages/admin/enrolment-period.test.ts`](../../frontend/src/pages/admin/enrolment-period.test.ts) | **R122** — the enrolment form asks for the semester, sends it, defaults to the current one, refuses to save without it, and the table's جارٍ / منتهٍ badge is read from the period rather than from `deleted_at`. Proved against the defect: deleting `academic_period_id` from the payload fails it |
 | [`services/enrollment-period.integration.test.ts`](../../backend/src/services/enrollment-period.integration.test.ts) | **R122** — the Owner's four-step progression against the database: الفصل 2 of the first year, then الفصل 1 of the first *and* second years in the next academic year, then الفصل 2 of the second. Four rows survive, an old-period enrolment is not current with `deleted_at IS NULL`, and the attestation history reconstructs exactly |
 | [`components/calendar/attendance-ui.test.ts`](../../frontend/src/components/calendar/attendance-ui.test.ts) | **BE/R123** — a عطلة renders no panel · «تسجيل حضوري» needs both the occurrence's setting **and** the server's capability · a beneficiary's branch never reads the sheet · an activity call carries its date · the form withholds `self_or_staff` and says why · no Category name is ever compared. Proved against the defect: deleting either the `disabled` check or the capability check fails it |
+| [`pages/admin/assessment-ui.test.ts`](../../frontend/src/pages/admin/assessment-ui.test.ts) | **BF/R124** — حفظ and إرسال go to different routes and only the second is confirmed · nothing autosaves or autosubmits · every control locks once sent · the student page has no route for another student's answers and never shows a score · the builder sends options only on a choice question, reorders with up/down and adds no drag library, states the freeze, and does not grade. Proved against the defect: removing the `disabled={sent}` lock or the choice-shape branch fails it |
+| [`services/assessment.integration.test.ts`](../../backend/src/services/assessment.integration.test.ts) | **R124, 32 assertions against PostgreSQL** — all four kinds with justification allowed and refused · the five targets and the student each does not reach · a draft is invisible · save ≠ submit · submitted is immutable and freezes the paper · every response type validated · an unpublished grade is invisible · a later enrolment change does not erase a submission · an expired or period-less enrolment is not eligible · no answer or question text reaches the audit log |
 | [`services/attendance.integration.test.ts`](../../backend/src/services/attendance.integration.test.ts) | **R123, 37 assertions against PostgreSQL** — vacation and party refused · optional starts empty and required on its roster · a non-enrolled beneficiary is markable and flagged `beyond_roster` · one row however many marks · no absence row · a woman self-marks only where allowed and only herself · a teen and a child refused **even on a `self_or_staff` class** · the roster is the occurrence date's period, not today's · a recurring activity's two dates are two sheets · audit carries no name · `HAS_ATTENDANCE` protects the Session |
 | [`scripts/dev/browser/verify-academic-periods.sh`](../../scripts/dev/browser/verify-academic-periods.sh) | **R122/A/AF** — الفصول الدراسية in a real browser: the table renders with no year chosen, a period is created end to end and appears while the filter is still unset, جارٍ follows the dates, and the year is text with its reason on edit |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |

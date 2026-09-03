@@ -147,10 +147,37 @@ displayed and nothing more. That is collection without purpose.
 | Grades (integer basis points) | `Grade` | Assessment | Yes | Yes | **KEEP** |
 | `Grade.overrideReason` | free text | Accountability for an override | Yes | Yes | **KEEP** — bound the length |
 | Exam submissions | `StudentExamSubmission` | Assessment | Yes | Yes | **KEEP** |
+| **Assessment answers (R124)** | `StudentExamAnswer`, `StudentExamAnswerOption` | Assessment | Yes | Yes | **KEEP** — what a beneficiary wrote in her own words, and which choices she made. Replaces the `answers` jsonb column, which held the same data less legibly |
 | `Session.cancellationReason` | free text | Operational record | Yes | No | **KEEP** |
 
 **[CODE] There is no attendance model.** `grep "model Attendance"` returns
 nothing. If attendance is planned, it is a new purpose (see E).
+
+### R124 — where an answer must never appear
+
+Four surfaces, named because each is a place free text has reached by accident
+on other projects and this one has a mechanical guard for only the first:
+
+* **`AuditLog`** — `assessment.save`, `assessment.submit`, `assessment.question.*`
+  carry ids, a kind and a **count**. Never an answer, never a prompt, never an
+  option label, never a title. The repository's minimisation guard refuses a
+  copied identity outright; the free-text rule it cannot detect is asserted
+  directly in `assessment.integration.test.ts`.
+* **`Trash`** — one path writes one, and it holds **no student answer**:
+  removing a question snapshots the question and its options, because that is
+  text a member of staff wrote and Trash is what lets a deletion be undone
+  (§20 rule 11). Removal is refused once anybody has submitted, so an answer can
+  never be attached to what is snapshotted. The migration's snapshot of the
+  retired `questions` blob is the same kind of thing — a column being removed,
+  not a person's answer.
+* **Notifications** — none is sent for an assessment in v1.
+* **Logs** — TD-14 already forbids request bodies on these paths, and no
+  assessment endpoint logs one.
+
+**A question and an option label are personal data too**, in the weaker sense
+that they are free text a member of staff wrote. They are kept out of the log on
+the same rule, because *«what did the paper ask»* is not a question the audit
+trail exists to answer.
 
 ## A.4 Authentication, audit and security
 

@@ -231,6 +231,25 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **بناء الاختبارات** (R124) — the online assessment builder.
+     *
+     * Beside «نقاط الامتحانات» because they are two halves of one thing: this
+     * writes the paper, that one marks it. **It is not in الإدارة**: R61 makes
+     * that section Super-Admin-only by placement, and authoring an assessment
+     * is a مؤطِّرة's work within her own teaching (TD-2 as split by R70.4).
+     *
+     * The list is empty until a paper exists, which is ordinary — and the one
+     * action, «اختبار جديد», is what a data-first page offers when there is
+     * nothing yet (rule A/§14.4), not a filter standing in the way.
+     */
+    path: '/admin/assessments',
+    labelKey: 'admin.nav.assessments',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
      * R70.1 — grade entry had no node at all: §14.1 listed grading under
      * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
      * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
