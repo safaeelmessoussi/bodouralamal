@@ -1019,6 +1019,9 @@ export const ar = {
     targetTeachingGroup: 'حلقة مادة',
     targetStudent: 'مستفيدة واحدة',
     targetPick: 'اختاري',
+    targetSearch: 'بحث',
+    targetHint: 'تُعرض هنا الخيارات التي يحق لك توجيه الاختبار إليها فقط.',
+    targetNone: 'لا توجد خيارات متاحة لك ضمن هذا النطاق.',
     // The builder.
     question: 'السؤال {n}',
     questionType: 'نوع السؤال',

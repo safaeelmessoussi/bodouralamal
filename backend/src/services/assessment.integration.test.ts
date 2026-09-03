@@ -21,6 +21,7 @@ import {
   reorderQuestions,
   saveResponses,
   studentPaper,
+  targetCandidates,
   updateQuestion,
 } from './assessment.service.js';
 
@@ -61,6 +62,12 @@ let carol = '';
 let alumna = '';
 
 let branchId = '';
+/** A SECOND branch the scoped Admin does NOT reach. */
+let otherBranchId = '';
+/** Enrolled in the SAME Level, at the other branch — what makes it span. */
+let farStudent = '';
+/** A Level taught only at `branchId`, so a branch-bound target is possible. */
+let localOnlyLevelId = '';
 let levelId = '';
 let otherLevelId = '';
 let subjectId = '';
@@ -205,9 +212,11 @@ beforeAll(async () => {
   alice = await person('أمينة', true);
   bob = await person('بشرى', true);
   carol = await person('كوثر', true);
+  farStudent = await person('بعيدة', true);
   alumna = await person('خريجة', true);
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
+  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} فرع آخر` } })).id;
   subjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة` } })).id;
   const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
   levelId = (
@@ -232,6 +241,12 @@ beforeAll(async () => {
       data: { name: `${TAG} مجموعة ثانية`, levelId, branchId },
     })
   ).id;
+  localOnlyLevelId = (
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى محلي`, categoryId: category.id, genderRestriction: 'any' },
+    })
+  ).id;
+
   teachingGroupId = (
     await prisma.teachingGroup.create({
       data: { name: `${TAG} حلقة`, levelId, subjectId },
@@ -279,6 +294,19 @@ beforeAll(async () => {
   await enrol(carol, otherLevelId, null, currentPeriodId);
   // Never soft-deleted, and long over.
   await enrol(alumna, levelId, groupId, oldPeriodId);
+  // **The Level now spans two branches.** `farStudent` is in the same Level at a
+  // branch the scoped Admin cannot reach, which is exactly the case R125 refuses.
+  await prisma.enrollment.create({
+    data: {
+      studentId: farStudent,
+      levelId,
+      branchId: otherBranchId,
+      academicPeriodId: currentPeriodId,
+    },
+  });
+  // And one Level that lives only at `branchId`, so a branch-bound Level target
+  // is a real thing rather than a hypothetical.
+  await enrol(bob, localOnlyLevelId, null, currentPeriodId);
 
   await prisma.studentTeachingGroup.create({
     data: { studentId: alice, teachingGroupId, subjectId, levelId },
@@ -316,6 +344,33 @@ afterAll(async () => {
   await clear();
   await prisma.$disconnect();
 });
+
+const paperFor = (who: string, actor: Actor, level = levelId) =>
+  createAssessment(prisma, actor, {
+    title: `${TAG} ورقة موجَّهة`,
+    maxGrade: 20,
+    levelId: level,
+    subjectId,
+    target: { kind: 'student', id: who },
+    date: TODAY,
+  });
+
+const scopedAdmin = (): Actor => ({
+  userId: superAdminId,
+  roles: ['admin'],
+  roleScopes: [{ role: 'admin', branches: [branchId] }],
+  activeRole: 'admin',
+});
+
+const levelPaper = (level: string, actor: Actor) =>
+  createAssessment(prisma, actor, {
+    title: `${TAG} ورقة لمستوى`,
+    maxGrade: 20,
+    levelId: level,
+    subjectId,
+    target: { kind: 'level' },
+    date: TODAY,
+  });
 
 describe('1–10 · authoring', () => {
   let examId = '';
@@ -1081,32 +1136,119 @@ describe('SECURITY · an individual target may not name somebody outside the aut
    * `carol` is enrolled in another Level entirely and is taught by nobody in
    * this fixture.
    */
-  it('refuses a مؤطِّرة who does not teach the whole Level the paper names', async () => {
+
+  it('5–6 · a مؤطِّرة addresses her OWN student without owning the whole Level', async () => {
     /**
-     * **Stricter than the leak this probe was written for**, and recorded as it
-     * is rather than as it was assumed. A `student` target names no group, so
-     * `assertExamInTeacherScope` asks *do you teach this whole Level* — and a
-     * مؤطِّرة staffing one Administrative Group inside it does not. She is
-     * refused for `carol`, whom she does not teach, **and for `alice`, whom she
-     * does**.
+     * **The Owner's rule** (R125): the question is *may this مؤطِّرة address THIS
+     * student*, not *may she address every student in this Level*. She staffs
+     * one Administrative Group inside the Level and nothing else — so under the
+     * pre-R125 reading she was refused for a student she teaches every week.
      *
-     * The refusal is safe; the second half is a **usability gap, recorded for
-     * the Owner**: she cannot address a paper to her own student by name.
-     * Widening it means deciding what «her own» means for a target that carries
-     * no group, which is a product decision and not this session's to take.
+     * `studentsTaughtBy` is the canonical answer and is reused rather than
+     * restated: §4.4c names it as the derivation behind Quran logging on *her
+     * own students*, exam authoring and sensitive social data.
      */
-    for (const who of [carol, alice]) {
-      await expect(
-        createAssessment(prisma, teacherActor(), {
-          title: `${TAG} ورقة موجَّهة`,
-          maxGrade: 20,
-          levelId,
-          subjectId,
-          target: { kind: 'student', id: who },
-          date: TODAY,
-        }),
-      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(paperFor(alice, teacherActor())).resolves.toBeTruthy();
+  });
+
+  it('7 · and cannot address an unrelated student in the SAME Level', async () => {
+    // `bob` is in this Level, in a group she does not staff. Same Level is not
+    // the question; her teaching is.
+    await expect(paperFor(bob, teacherActor())).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('8 · nor one at another branch, nor one in another Level', async () => {
+    for (const who of [farStudent, carol]) {
+      await expect(paperFor(who, teacherActor())).rejects.toMatchObject({ code: 'NOT_FOUND' });
     }
+  });
+
+  it('10 · a raw UUID buys nothing — the refusal is the server, not a form', async () => {
+    // The id is well-formed and names a real beneficiary; knowing it is exactly
+    // what the frontend cannot be trusted with. §20 rule 17 — indistinguishable
+    // from one that does not exist, or the refusal becomes a lookup.
+    await expect(paperFor(carol, teacherActor(), otherLevelId)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  /** An Admin who reaches `branchId` and nothing else. */
+
+
+  it('1 · a Super Admin targets a whole Level across branches', async () => {
+    // Global scope is unchanged by R125; the Level spans two branches and that
+    // is exactly what she may address.
+    await expect(levelPaper(levelId, superAdmin())).resolves.toBeTruthy();
+  });
+
+  it('2–3 · a branch-scoped Admin cannot target a Level that spans another branch', async () => {
+    /**
+     * **The Owner's rule** (R125): a Level target does not override branch
+     * authorization. `farStudent` is enrolled in this Level at a branch the
+     * Admin does not reach, so the audience escapes her scope and the target is
+     * refused — **naming the Level by its raw id changes nothing**, because the
+     * check is on the resolved audience rather than on the shape of the request.
+     */
+    await expect(levelPaper(levelId, scopedAdmin())).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
+    });
+  });
+
+  it('4 · and CAN target a Level that lives only at her own branch', async () => {
+    // The rule is about the audience, not about forbidding Level targets: a
+    // Level taught only where she works is entirely within her scope.
+    await expect(levelPaper(localOnlyLevelId, scopedAdmin())).resolves.toBeTruthy();
+  });
+
+  it('2b · the same rule is re-asked at PUBLISH, because the audience moves', async () => {
+    // **Its own Level.** This test deliberately makes a Level escape her scope,
+    // and doing that to `localOnlyLevelId` would leave the picker case below
+    // asserting against a Level this one had just spoiled.
+    const ownLevel = (
+      await prisma.level.create({
+        data: {
+          name: `${TAG} مستوى للنشر`,
+          categoryId: (
+            await prisma.level.findUniqueOrThrow({
+              where: { id: localOnlyLevelId },
+              select: { categoryId: true },
+            })
+          ).categoryId,
+          genderRestriction: 'any',
+        },
+      })
+    ).id;
+    await prisma.enrollment.create({
+      data: { studentId: bob, levelId: ownLevel, branchId, academicPeriodId: currentPeriodId },
+    });
+    /**
+     * A Level entirely at her branch when she drafted the paper may gain a
+     * second branch before she publishes. **Publishing is the moment it reaches
+     * people**, so it is the moment the question is asked again — the Owner's
+     * words were «author or publish».
+     */
+    const created = await levelPaper(ownLevel, scopedAdmin());
+    await addQuestion(prisma, scopedAdmin(), created.id, {
+      kind: 'short_text',
+      prompt: 'سؤال',
+    });
+
+    const intruder = await person('وافدة', true);
+    await prisma.enrollment.create({
+      data: {
+        studentId: intruder,
+        levelId: ownLevel,
+        branchId: otherBranchId,
+        academicPeriodId: currentPeriodId,
+      },
+    });
+
+    await expect(publishAssessment(prisma, scopedAdmin(), created.id)).rejects.toMatchObject({
+      details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
+    });
+    // A Super Admin may still publish it — her scope did not change.
+    await expect(publishAssessment(prisma, superAdmin(), created.id)).resolves.toBeUndefined();
   });
 
   it('an Admin scoped to another branch cannot name a beneficiary at this one', async () => {
@@ -1134,5 +1276,91 @@ describe('SECURITY · an individual target may not name somebody outside the aut
         date: TODAY,
       }),
     ).rejects.toBeTruthy();
+  });
+});
+
+describe('9, 11–14 · the target picker is scoped by the SERVER', () => {
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+  it('9 · a مؤطِّرة’s student search shows only students she teaches', async () => {
+    const rows = await targetCandidates(prisma, teacherActor(), { kind: 'student' });
+    expect(ids(rows)).toContain(alice);
+    // Same Level, another group. Another branch. Another Level. None of them.
+    for (const hidden of [bob, farStudent, carol]) {
+      expect(ids(rows)).not.toContain(hidden);
+    }
+    // **And no name leaks either** — the label is what the picker renders, so an
+    // out-of-scope beneficiary must not appear even as a string.
+    const labels = rows.map((r) => r.label).join(' ');
+    expect(labels).toContain('بشرى'.slice(0, 0) + 'أمينة');
+    expect(labels).not.toContain('بعيدة');
+    expect(labels).not.toContain('كوثر');
+  });
+
+  it('9b · a searched name she may not address returns nothing rather than that person', async () => {
+    // The search term is exact and the beneficiary exists. Knowing a name is not
+    // authority to see it.
+    const rows = await targetCandidates(prisma, teacherActor(), {
+      kind: 'student',
+      query: 'بعيدة',
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it('a branch-scoped Admin sees her branch’s beneficiaries and not the far one', async () => {
+    const rows = await targetCandidates(prisma, scopedAdmin(), { kind: 'student' });
+    expect(ids(rows)).toContain(alice);
+    expect(ids(rows)).not.toContain(farStudent);
+  });
+
+  it('2c · and is offered only the Levels that stay inside her branches', async () => {
+    const rows = await targetCandidates(prisma, scopedAdmin(), { kind: 'level' });
+    // `levelId` spans two branches; `localOnlyLevelId` does not.
+    expect(ids(rows)).not.toContain(levelId);
+    expect(ids(rows)).toContain(localOnlyLevelId);
+    // A Super Admin is offered both — R125 changed nothing about global scope.
+    const all = await targetCandidates(prisma, superAdmin(), { kind: 'level' });
+    expect(ids(all)).toContain(levelId);
+  });
+
+  it('11 · a مؤطِّرة is offered the occurrences of classes she staffs, and no others', async () => {
+    const rows = await targetCandidates(prisma, teacherActor(), { kind: 'session' });
+    expect(ids(rows)).toContain(sessionId);
+    // The same call for an unrelated مؤطِّرة reaches none of them.
+    const outsiderRows = await targetCandidates(prisma, outsider(), { kind: 'session' });
+    expect(ids(outsiderRows)).not.toContain(sessionId);
+  });
+
+  it('12 · circle targets follow the same Level bound, not a second rule', async () => {
+    const mine = await targetCandidates(prisma, teacherActor(), { kind: 'teaching_group' });
+    expect(ids(mine)).toContain(teachingGroupId);
+    // A scoped Admin is refused it because its LEVEL escapes her branches — the
+    // Level rule applied to a circle, rather than a branch column a circle has
+    // no business carrying.
+    const scoped = await targetCandidates(prisma, scopedAdmin(), { kind: 'teaching_group' });
+    expect(ids(scoped)).not.toContain(teachingGroupId);
+  });
+
+  it('13 · a beneficiary and a guardian may not ask at all', async () => {
+    for (const who of [student(alice), actorOf(alice, 'parent')]) {
+      await expect(
+        targetCandidates(prisma, who, { kind: 'student' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
+  });
+
+  it('14 · and every one of these refusals is re-made on the WRITE', async () => {
+    /**
+     * **The picker is not the boundary.** Each id below was withheld from the
+     * caller's own candidate list above; naming it directly is refused again by
+     * `assertMayAuthor`, which is what makes the list a convenience rather than
+     * a control (rule O).
+     */
+    await expect(paperFor(farStudent, teacherActor())).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(levelPaper(levelId, scopedAdmin())).rejects.toMatchObject({
+      details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
+    });
   });
 });

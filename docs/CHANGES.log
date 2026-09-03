@@ -3141,3 +3141,52 @@ second half is a **usability gap needing an Owner decision**, because widening i
 means defining what *«her own»* means for a target that carries no group.
 
 assessment + exam.http + attendance + grade.http: **127/127**.
+
+## Two Owner decisions, implemented — SRS Revision 125, 2026-09-05
+
+**A Level target does not override branch authorization.** A Level spans
+branches, and an online paper carries none of its own, so a branch-scoped Admin
+could author one that reached every student in a Level wherever they studied.
+The rule is now the Owner's, **stated over the audience rather than the target's
+shape**: she may create, use or publish a target only when everybody it resolves
+to is inside her branches. One check for all five arms, composed from
+`examAudienceWhere` — §4.4c's single definition of *who is this for* — so **no
+second source of truth for branch membership** is introduced; enrolment is the
+branch fact (§20 rule 22). A beneficiary enrolled at two branches, one of them
+hers, is somebody she already administers and does not make a target escape.
+
+**It is re-asked at publish**, which is the Owner's word: the audience is
+resolved and never stored, so a Level entirely at her branch when she drafted may
+have gained a second branch since, and publishing is the moment it reaches
+people. `403` with `TARGET_OUTSIDE_BRANCH_SCOPE`, naming how many escape. **A
+Super Admin is unaffected**, and no other Admin permission moved.
+
+**A مؤطِّرة addresses THIS student, not a whole Level.** A `student` target names
+no group, so the old path degenerated to *do you teach the entire Level* and
+refused her for a student she teaches every week. It is now `studentsTaughtBy` —
+§4.4c's canonical derivation, the same one behind Quran logging on *her own
+students*, exam authoring and sensitive social data — **reused rather than
+restated**. She gains no association-wide lookup: not a student outside her
+teaching, not another branch's beneficiary, and not anybody merely because she
+knows a UUID. Out of scope answers `404`, never `403`, or the refusal becomes a
+way to discover who exists (§20 rule 17).
+
+**The picker is built, and it is not the boundary.** `GET /assessments/targets`
+answers *what may I address* per caller, staff-only, capped and searchable, with
+labels composed server-side. A مؤطِّرة sees her own students and the occurrences
+she staffs; an Admin sees what stays inside her branches and **is not offered a
+Level whose audience escapes them** — computed as *which Levels hold an enrolment
+at an unreachable branch*, one query rather than one per Level. The builder
+composes the existing `SearchInput` and `SelectField`; **no second generic
+picker**. Every refusal is made again on the write.
+
+**One real bug found while testing.** `reachableBranches(scopes, ['admin'])`
+returns an **empty array** for a مؤطِّرة, not `null` — she holds no admin
+assignment — and an empty array used as a filter matches nobody, so every arm of
+the picker silently returned an empty list for her. `null` is *every branch* and
+`[]` is *none*; a caller with no branch scope of that kind must ask a different
+question, and hers is `studentsTaughtBy`.
+
+**Tests: 56/56** on the assessment suite, covering all fourteen required proofs.
+Browser **6/6**, including the picker offering a مؤطِّرة her own student by name
+with no UUID box anywhere in the dialog.

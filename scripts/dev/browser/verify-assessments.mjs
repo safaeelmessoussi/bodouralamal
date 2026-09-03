@@ -121,6 +121,59 @@ check(
   JSON.stringify(teacherView),
 );
 
+/* ── 1b · the picker offers people, not UUIDs ────────────────────────────── */
+
+const picker = await evaluate(`(async () => {
+  const add = [...document.querySelectorAll('button')].find((b) =>
+    b.textContent.includes('اختبار جديد'),
+  );
+  if (!add) return { noAdd: true };
+  add.click();
+  await new Promise((r) => setTimeout(r, 1200));
+  const d = document.querySelector('dialog[open]');
+  if (!d) return { noDialog: true };
+
+  const setSelect = (el, v) => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, v);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  // Choose the individual-beneficiary target, which is the arm that used to ask
+  // for a pasted UUID and the one R125's teaching rule governs.
+  const selects = [...d.querySelectorAll('select')];
+  const targetSelect = selects.find((sel) =>
+    [...sel.options].some((o) => o.textContent.includes('مستفيدة واحدة')),
+  );
+  if (!targetSelect) return { noTargetSelect: true, labels: selects.map((x) => x.options.length) };
+  const opt = [...targetSelect.options].find((o) => o.textContent.includes('مستفيدة واحدة'));
+  setSelect(targetSelect, opt.value);
+  await new Promise((r) => setTimeout(r, 2500));
+
+  const after = [...d.querySelectorAll('select')];
+  const candidates = after
+    .flatMap((sel) => [...sel.options].map((o) => o.textContent.trim()))
+    .filter((label) => label.includes(${JSON.stringify(TAG)}));
+
+  return {
+    // **Named people, not identifiers.** The whole point of the picker.
+    candidates,
+    // A UUID would look like one; none must.
+    anyUuidShaped: candidates.some((c) => /[0-9a-f]{8}-[0-9a-f]{4}-/i.test(c)),
+    hasTextIdBox: [...d.querySelectorAll('input[type="text"]')].some((i) =>
+      /^[0-9a-f-]{20,}$/i.test(i.value),
+    ),
+  };
+})()`);
+
+check(
+  '1b · the target picker offers her OWN student by name, never a UUID box',
+  Array.isArray(picker.candidates) &&
+    picker.candidates.some((c) => c.includes('مستفيدة')) &&
+    picker.anyUuidShaped === false &&
+    picker.hasTextIdBox === false,
+  JSON.stringify(picker),
+);
+
 /* ── 2–4 · the beneficiary answers ───────────────────────────────────────── */
 
 await setCookie(process.env.STUDENT_COOKIE);

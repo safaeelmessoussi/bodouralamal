@@ -212,3 +212,27 @@ export async function submitResponses(
     token,
   });
 }
+
+/**
+ * **What THIS author may address** (R125) — the target picker's source.
+ *
+ * Server-scoped per caller: a مؤطِّرة is offered the students she teaches and the
+ * occurrences she staffs, an Admin what stays inside her branches, a Super Admin
+ * everything. **The list is a convenience, never the boundary** — naming an id
+ * it never contained is refused again on the write.
+ */
+export async function listAssessmentTargets(
+  kind: TargetKind,
+  filters: { levelId?: string; q?: string },
+  token: string | null,
+): Promise<{ id: string; label: string }[]> {
+  const params = new URLSearchParams({ kind });
+  if (filters.levelId) params.set('level_id', filters.levelId);
+  if (filters.q && filters.q.trim() !== '') params.set('q', filters.q.trim());
+  return (
+    await api<{ data: { id: string; label: string }[] }>(
+      `/assessments/targets?${params.toString()}`,
+      { token },
+    )
+  ).data;
+}

@@ -169,6 +169,7 @@ DELETE /events/{id}/attendance/{studentId}    # §4.7 R123, TD-5
 # The ONLINE half of `Exam`, which R58 declared and refused. Grading is NOT
 # here: `/exams/{id}/grades` already grades this row.
 POST /assessments                             # §4.6 R124; a new paper, in draft
+GET /assessments/targets                      # §4.6 R125; what THIS author may address — server-scoped, staff only
 POST /assessments/{id}/questions              # §4.6 R124; appended, never inserted at a position
 PATCH /assessments/{id}/questions/order       # §4.6 R124; the WHOLE sequence (R76)
 PATCH /assessments/{id}/questions/{questionId} # §4.6 R124; wording, justification, options; TD-15

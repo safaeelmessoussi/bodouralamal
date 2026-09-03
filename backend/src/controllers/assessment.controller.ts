@@ -15,10 +15,12 @@ import {
   reorderQuestions,
   saveResponses,
   studentPaper,
+  targetCandidates,
   updateQuestion,
 } from '../services/assessment.service.js';
 import {
   createAssessmentSchema,
+  targetCandidatesSchema,
   questionPatchSchema,
   questionSchema,
   reorderQuestionsSchema,
@@ -115,6 +117,27 @@ export function close(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await closeAssessment(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
+  };
+}
+
+/**
+ * `GET /assessments/targets` — what THIS author may address (R125).
+ *
+ * **A picker, never the boundary.** Every arm is scoped in the service and
+ * `assertMayAuthor` refuses the same thing again on the write, so a UUID typed
+ * by hand buys nothing. Staff only: a beneficiary or a guardian is refused
+ * outright rather than handed an empty list, because an empty list is an answer
+ * and *«you may not ask»* is a different one.
+ */
+export function targets(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse(targetCandidatesSchema, req.query ?? {});
+    const rows = await targetCandidates(prisma, requireActor(req), {
+      kind: q.kind,
+      ...(q.level_id === undefined ? {} : { levelId: q.level_id }),
+      ...(q.q === undefined ? {} : { query: q.q }),
+    });
+    res.json({ data: rows });
   };
 }
 

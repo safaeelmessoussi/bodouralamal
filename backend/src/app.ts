@@ -703,6 +703,10 @@ export function createApp(
    * and the student's results screen.
    */
   guarded.post('/assessments', assessments.create(prisma));
+  // R125 — the picker's source. Registered BEFORE `/assessments/:id/...` would
+  // matter only for a conflicting shape; it has none, and it is placed with the
+  // create it serves.
+  guarded.get('/assessments/targets', assessments.targets(prisma));
   guarded.post('/assessments/:id/questions', assessments.addQuestionHandler(prisma));
   guarded.patch('/assessments/:id/questions/order', assessments.reorder(prisma));
   guarded.patch('/assessments/:id/questions/:questionId', assessments.patchQuestion(prisma));

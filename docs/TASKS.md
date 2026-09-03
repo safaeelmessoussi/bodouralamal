@@ -2166,22 +2166,21 @@ approved scope covers Partners only, so this is reported rather than taken.
 
 ### Open questions from the autonomous session of 2026-09-04
 
-- [ ] **OWNER DECISION REQUIRED — may a branch-scoped Admin author a Level-wide
-      online paper?** An online assessment carries no branch, and its `level`
-      target resolves the Level **across branches** by construction (the paper is
-      sat nowhere). A named-individual target is now checked against the
-      beneficiary's own enrolment branches; the Level, group and circle arms are
-      not, because bounding them is a policy choice. Today a branch-scoped Admin
-      may author a paper every student in a Level receives, wherever they study.
-      **Not a leak of anybody's answers by name** — that half is closed — but a
-      wider audience than TD-2's branch scope otherwise implies.
-- [ ] **OWNER DECISION REQUIRED — may a مؤطِّرة address a paper to one of her own
-      students?** Today she cannot: a `student` target names no group, so the
-      scope check asks *do you teach this whole Level*, and a مؤطِّرة staffing one
-      Administrative Group inside it is refused — for a student she does not
-      teach **and for one she does**. Widening it means defining what *«her
-      own»* means for a target carrying no group (her Administrative Groups? her
-      circles? every student her schedules reach?), which is a product decision.
+- [x] **ANSWERED AND IMPLEMENTED — SRS Revision 125 (2026-09-05).** A Level
+      target **does not** override branch authorization: a branch-scoped Admin
+      may create, use or publish one only when the resolved audience is entirely
+      within her branches — checked through §4.4c's single audience definition,
+      re-asked **at publish**, and refused with `TARGET_OUTSIDE_BRANCH_SCOPE`. A
+      Super Admin is unaffected.
+- [x] **ANSWERED AND IMPLEMENTED — SRS Revision 125 (2026-09-05).** A مؤطِّرة may
+      address an individual beneficiary **within her own teaching**, answered by
+      `studentsTaughtBy` — *may she address THIS student*, never *this whole
+      Level*. She gains no association-wide beneficiary lookup, and out of scope
+      answers `404` rather than `403`.
+- [x] **The R124 target picker is built** (R125). `GET /assessments/targets` is
+      server-scoped per caller and staff-only; the builder composes the existing
+      `SearchInput` and `SelectField` rather than a second generic picker. **The
+      list is not the boundary** — every refusal is made again on the write.
 - [ ] **RECORDED, NOT FIXED — `DELETE /exams/{id}` does not refuse an exam that
       has grades or submissions.** It soft-deletes with a `Trash` snapshot and
       the FKs are `RESTRICT`, so **nothing is lost** and recovery exists; but a
@@ -2195,10 +2194,3 @@ approved scope covers Partners only, so this is reported rather than taken.
       that). Enforcing `single_submission` would contradict R124's ratified
       *«a student saves an incomplete draft and returns to it»*, so it needs an
       Owner decision before it is either enforced or dropped.
-- [ ] **RECORDED — the assessment builder asks for a target id as free text.**
-      For `session`, `teaching_group`, `administrative_group` and `student`
-      targets the author must paste a UUID. Making it a picker needs a candidate
-      source per arm that each author role can actually reach — and for the
-      beneficiary arm that is a new narrow endpoint, the shape R123's attendance
-      candidates set. Safe engineering work, but large enough to be its own
-      slice, and the `student` arm is blocked on the مؤطِّرة question above.

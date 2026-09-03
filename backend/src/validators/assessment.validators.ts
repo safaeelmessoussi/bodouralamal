@@ -95,3 +95,18 @@ export const responsesSchema = z
       .max(200),
   })
   .strict();
+
+/**
+ * **R125 — the target picker's query.**
+ *
+ * `kind` is required: *which of the five am I choosing* has no sensible default,
+ * and a default would make an omitted parameter mean something.
+ */
+export const targetCandidatesSchema = z
+  .object({
+    kind: z.enum(['level', 'administrative_group', 'session', 'teaching_group', 'student']),
+    /** Narrows the offer to one Level where the arm has one. Never widens it. */
+    level_id: z.uuid().optional(),
+    q: z.string().trim().max(120).optional(),
+  })
+  .strict();

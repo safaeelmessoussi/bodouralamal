@@ -592,6 +592,19 @@ published.
 paper is fixed, and the builder says why in one sentence instead of offering
 controls that answer `409`.
 
+**The target picker offers people, not identifiers (R125).** Four of the five
+targets used to ask an author to paste a UUID — unusable, and it made the client
+the only thing between her and a target she may not address. The picker is the
+**server's** answer to *what may I address*: a مؤطِّرة sees the students
+`studentsTaughtBy` resolves and the occurrences she staffs, an Admin what stays
+inside her branches, and a Level whose audience escapes those branches is simply
+not offered. **It is not the boundary** — every refusal it enacts is made again
+on the write, so a remembered id buys nothing (rule O). It composes the existing
+`SearchInput` and `SelectField`; a bespoke combobox would be a second generic
+picker for the platform to keep in step (rule C). A selection the narrowed list
+no longer offers is **cleared**, because a stale id reaches the server as a
+target the author can no longer see.
+
 **One builder, two frames.** `/teacher/assessments` renders `AssessmentsView` —
 the shared **body** — inside `TeacherLayout`, and the back office renders the
 same body inside `AdminLayout`. The first version routed the teaching portal

@@ -3,10 +3,15 @@ import { AppError } from '../lib/errors.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
-import { examAudienceWhere } from '../policies/roster-resolution.js';
+
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
-import { assertExamInTeacherScope } from '../policies/roster-resolution.js';
+import {
+  assertExamInTeacherScope,
+  examAudienceWhere,
+  studentsTaughtBy,
+  teacherEventScope,
+} from '../policies/roster-resolution.js';
 
 /**
  * **A simple online assessment — the paper, its audience, and the answers**
@@ -67,6 +72,11 @@ async function assertMayAuthor(
     administrativeGroupId: string | null;
     /** R124 — the named individual, when the target is one. */
     studentId?: string | null;
+    /** R125 — the arm, so the audience can be resolved without re-deriving it. */
+    targetKind?: string;
+    sessionId?: string | null;
+    teachingGroupId?: string | null;
+    date?: Date;
   },
 ): Promise<void> {
   if (scope.isSuperAdmin(actor.roleScopes)) return;
@@ -75,49 +85,114 @@ async function assertMayAuthor(
     if (exam.branchId !== null) {
       scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, exam.branchId, 'no such assessment');
     }
-    /**
-     * **An online paper carries no branch — and «no branch to check» is not «no
-     * check».**
-     *
-     * That was the first reading here, and it let a branch-scoped Admin address
-     * a paper **by name** to a beneficiary at any other branch, and then read
-     * her submitted answers through the inbox that comes with authoring it.
-     * TD-2 scopes an Admin to her branches; nothing about the paper having no
-     * room of its own widens that.
-     *
-     * **The named individual is checked against the branches she is actually
-     * enrolled at.** The other arms are not checked here and that is deliberate,
-     * not an oversight: a Level-wide online paper is cross-branch **by
-     * construction** — `examAudienceWhere`'s `level` arm resolves the Level
-     * across branches precisely because the paper is sat nowhere — so whether a
-     * branch-scoped Admin may author one is a **policy question the Owner has
-     * not answered**, recorded rather than decided here. Naming one child at
-     * another branch is not that question; it is unambiguously outside her
-     * scope.
-     */
-    if (exam.studentId !== null && exam.studentId !== undefined) {
-      const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
-      if (reachable !== null) {
-        const within = await prisma.enrollment.count({
-          where: {
-            studentId: exam.studentId,
-            deletedAt: null,
-            branchId: { in: reachable },
-          },
-        });
-        // §20 rule 17 — out of scope answers NOT_FOUND, never a 403 that would
-        // confirm which beneficiaries exist elsewhere.
-        if (within === 0) throw new AppError('NOT_FOUND', 'no such beneficiary');
-      }
-    }
+    await assertAudienceWithinBranchScope(prisma, actor, exam);
     return;
   }
+
+  /**
+   * **R125 — «may this مؤطِّرة address THIS student», not «this whole Level».**
+   *
+   * A `student` target names no group, so the pre-R125 path asked
+   * `assertExamInTeacherScope` with a null group — which is the question *do you
+   * teach the entire Level*. A مؤطِّرة staffing one Administrative Group inside
+   * it was refused for a student she teaches every week, and the Owner has
+   * ruled that too broad.
+   *
+   * **`studentsTaughtBy` is the canonical answer and is reused, not restated.**
+   * §4.4c names it as the derivation behind Quran logging on *her own students*,
+   * exam authoring, sensitive social data, hidden-event visibility and content
+   * scope; a second rule here would be the drift that file's own comment warns
+   * about. It resolves the union of the audiences of the schedules she staffs —
+   * so knowing a UUID grants nothing, and a student in the same Level taught by
+   * somebody else is not hers.
+   */
+  if (exam.targetKind === 'student' && exam.studentId != null) {
+    const taught = await studentsTaughtBy(prisma as PrismaClient, actor.userId);
+    const reaches = await (prisma as PrismaClient).user.count({
+      where: { AND: [taught, { id: exam.studentId, deletedAt: null }] },
+    });
+    // §20 rule 17 — a student she may not address is indistinguishable from one
+    // who does not exist, or the refusal becomes a lookup.
+    if (reaches === 0) throw new AppError('NOT_FOUND', 'no such beneficiary');
+    return;
+  }
+
   await assertExamInTeacherScope(prisma as PrismaClient, actor.userId, {
     branchId: exam.branchId ?? '',
     levelId: exam.levelId,
     subjectId: exam.subjectId ?? '',
     administrativeGroupId: exam.administrativeGroupId,
   });
+}
+
+/**
+ * **R125 — a Level target does not override branch authorization.**
+ *
+ * A Level spans branches; an online paper carries none of its own, and the
+ * pre-R125 reading turned *no branch to assert* into *no assertion*. The Owner's
+ * rule is stated in terms of the **audience**: a branch-scoped Admin may use a
+ * target only when everybody it resolves to is inside her branches.
+ *
+ * **So the audience is what is checked, not the target's shape.** One rule for
+ * all five arms, composed from `examAudienceWhere` — the single definition of
+ * *who is this for* (§4.4c) — rather than five per-arm branch lookups that would
+ * be a second source of truth for branch membership. A Level that exists only at
+ * her branch is usable; the same Level once a second branch teaches it is not,
+ * and she is told so rather than silently reaching those students.
+ *
+ * **Enrolment is the branch fact** (§20 rule 22): a beneficiary is outside her
+ * scope only when she has **no** live enrolment at any reachable branch — a
+ * student enrolled at two branches, one of them hers, is somebody she already
+ * administers.
+ */
+async function assertAudienceWithinBranchScope(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  actor: Actor,
+  exam: {
+    levelId: string;
+    branchId: string | null;
+    administrativeGroupId: string | null;
+    studentId?: string | null;
+    targetKind?: string;
+    sessionId?: string | null;
+    teachingGroupId?: string | null;
+    date?: Date;
+  },
+): Promise<void> {
+  const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+  // `null` is every branch (§7, R24) — never "no branches".
+  if (reachable === null) return;
+
+  const audience = await examAudienceWhere(prisma, {
+    targetKind: exam.targetKind ?? 'level',
+    levelId: exam.levelId,
+    branchId: exam.branchId,
+    administrativeGroupId: exam.administrativeGroupId ?? null,
+    sessionId: exam.sessionId ?? null,
+    teachingGroupId: exam.teachingGroupId ?? null,
+    studentId: exam.studentId ?? null,
+    on: exam.date ?? null,
+  });
+  // A target that resolves to nobody in particular reaches nobody, so there is
+  // nothing outside her scope in it.
+  if (audience === null) return;
+
+  const outside = await (prisma as PrismaClient).user.count({
+    where: {
+      AND: [
+        audience,
+        { deletedAt: null },
+        { levelEnrollments: { none: { deletedAt: null, branchId: { in: reachable } } } },
+      ],
+    },
+  });
+  if (outside > 0) {
+    throw new AppError(
+      'FORBIDDEN',
+      'this target reaches beneficiaries outside your branches',
+      { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE', outside_count: outside },
+    );
+  }
 }
 
 const ASSESSMENT_SELECT = {
@@ -156,7 +231,9 @@ async function loadForAuthor(
     select: ASSESSMENT_SELECT,
   });
   if (!exam) throw new AppError('NOT_FOUND', 'no such assessment');
-  await assertMayAuthor(prisma, actor, exam);
+  // `ASSESSMENT_SELECT` already carries the arm and the date, so the branch rule
+  // resolves this row's real audience rather than a partial view of it.
+  await assertMayAuthor(prisma, actor, { ...exam, date: exam.date });
   return exam;
 }
 
@@ -230,6 +307,12 @@ export async function createAssessment(
       branchId: null,
       administrativeGroupId: target.administrativeGroupId,
       studentId: target.studentId,
+      // R125 — the whole arm, so the branch rule can resolve the audience it is
+      // stated in terms of rather than guessing from which columns are set.
+      targetKind: input.target.kind,
+      sessionId: target.sessionId,
+      teachingGroupId: target.teachingGroupId,
+      date: target.date,
     });
 
     const created = await tx.exam.create({
@@ -665,6 +748,15 @@ export async function publishAssessment(
   }
 
   await prisma.$transaction(async (tx) => {
+    /**
+     * **Re-checked at publish, and that is the Owner's word — «author or
+     * publish»** (R125). The audience is resolved, not stored, so a Level that
+     * was entirely at her branch when she drafted the paper may have gained a
+     * second branch since. Publishing is the moment it reaches people, so it is
+     * the moment the question has to be asked again.
+     */
+    await assertAudienceWithinBranchScope(tx, actor, { ...exam, date: exam.date });
+
     const questions = await tx.examQuestion.count({ where: { examId, deletedAt: null } });
     // **An empty paper is not publishable.** A student opening one would be
     // shown a title and nothing to answer, and would have no way to tell that
@@ -1334,4 +1426,225 @@ export async function assessmentsForStudent(
     });
   }
   return rows;
+}
+
+/* ── The target picker's candidates ───────────────────────────────────────── */
+
+export type TargetKind =
+  | 'level'
+  | 'administrative_group'
+  | 'session'
+  | 'teaching_group'
+  | 'student';
+
+export interface TargetCandidate {
+  id: string;
+  /** What the author reads. Composed server-side, so no client re-derives a
+   *  label — rule D's `{Category} — {Level}` among them. */
+  label: string;
+}
+
+/**
+ * **`GET /assessments/targets` — what THIS author may address** (R125).
+ *
+ * ## Why an endpoint rather than reusing the existing lists
+ *
+ * The builder needs four pickers, and the obvious sources are wrong for two of
+ * them. `GET /admin/directory` is Admin and Super Admin only (TD-2), so a
+ * مؤطِّرة could not populate a student picker at all; and none of the reference
+ * lists answers *which of these may **I** address*, which after R125 is a
+ * different question from *which exist*. **A smaller question, never a wider
+ * permission** — the shape R123's attendance candidates set.
+ *
+ * ## The client is not the authorization boundary
+ *
+ * Every arm is scoped here, and `assertMayAuthor` refuses the same thing again
+ * on the write. The picker exists so an author is not offered a target that
+ * would be refused; it is not what makes the refusal true. Typing a UUID the
+ * list never contained changes nothing.
+ *
+ * ## Staff only
+ *
+ * A beneficiary or a guardian has no business enumerating Levels, circles or
+ * other beneficiaries, and this refuses them outright rather than returning an
+ * empty list — an empty list is an answer, and *«you may not ask»* is a
+ * different one.
+ */
+export async function targetCandidates(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { kind: TargetKind; levelId?: string | undefined; query?: string | undefined },
+): Promise<TargetCandidate[]> {
+  const isSuper = scope.isSuperAdmin(actor.roleScopes);
+  const isAdmin = scope.hasRole(actor.roleScopes, MANAGING_ROLE);
+  const isTeacher = scope.hasRole(actor.roleScopes, 'teacher');
+  if (!isSuper && !isAdmin && !isTeacher) {
+    throw new AppError('FORBIDDEN', 'listing assessment targets requires staff (TD-2)');
+  }
+
+  /**
+   * **Only an Admin has branches here.**
+   *
+   * `reachableBranches(scopes, ['admin'])` for a مؤطِّرة returns an **empty
+   * array**, not `null` — she holds no admin assignment — and an empty array
+   * used as a filter matches nobody, so every arm silently returned an empty
+   * list. `null` is *every branch* (§7, R24) and `[]` is *none*; a caller who
+   * has no branch scope of that kind at all must ask a different question, and
+   * hers is `studentsTaughtBy` / `teacherEventScope` below.
+   */
+  const reachable = isSuper || !isAdmin
+    ? null
+    : scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+  const q = (input.query ?? '').trim();
+  const TAKE = 30;
+
+  /**
+   * **Levels a scoped Admin may address, in one query rather than N.**
+   *
+   * The rule is R125's: a Level is offerable when nobody it resolves to is
+   * outside her branches. Asking that Level by Level would be an N+1 wearing a
+   * picker's clothing, so the complement is asked instead — *which Levels hold
+   * an enrolment at a branch she cannot reach* — and those are removed.
+   */
+  const levelsEscapingScope = async (): Promise<string[]> => {
+    if (reachable === null) return [];
+    const rows = await prisma.enrollment.findMany({
+      where: { deletedAt: null, branchId: { notIn: reachable } },
+      select: { levelId: true },
+      distinct: ['levelId'],
+    });
+    return rows.map((r) => r.levelId);
+  };
+
+  if (input.kind === 'level') {
+    // A مؤطِّرة is offered the Levels she actually teaches (§4.4c), and an Admin
+    // the Levels that stay inside her branches.
+    const taught = isSuper || isAdmin ? null : await teacherEventScope(prisma, actor.userId);
+    const escaping = isAdmin && !isSuper ? await levelsEscapingScope() : [];
+    const levels = await prisma.level.findMany({
+      where: {
+        deletedAt: null,
+        ...(q === '' ? {} : { name: { contains: q } }),
+        ...(taught === null ? {} : { id: { in: taught.levelIds } }),
+        ...(escaping.length === 0 ? {} : { id: { notIn: escaping } }),
+      },
+      select: { id: true, name: true, category: { select: { name: true } } },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      take: TAKE,
+    });
+    // Rule D — a Level name is not unique across Categories (§4.4b), so a bare
+    // one does not identify a Level.
+    return levels.map((l) => ({ id: l.id, label: `${l.category.name} — ${l.name}` }));
+  }
+
+  if (input.kind === 'administrative_group') {
+    const taught = isSuper || isAdmin ? null : await teacherEventScope(prisma, actor.userId);
+    const groups = await prisma.administrativeGroup.findMany({
+      where: {
+        deletedAt: null,
+        ...(input.levelId ? { levelId: input.levelId } : {}),
+        ...(q === '' ? {} : { name: { contains: q } }),
+        // A group IS at one branch (§7), so the branch bound is the group's own.
+        ...(reachable === null ? {} : { branchId: { in: reachable } }),
+        ...(taught === null ? {} : { id: { in: taught.administrativeGroupIds } }),
+      },
+      select: { id: true, name: true, branch: { select: { name: true } } },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      take: TAKE,
+    });
+    return groups.map((g) => ({ id: g.id, label: `${g.name} — ${g.branch.name}` }));
+  }
+
+  if (input.kind === 'teaching_group') {
+    const taught = isSuper || isAdmin ? null : await teacherEventScope(prisma, actor.userId);
+    const escaping = isAdmin && !isSuper ? await levelsEscapingScope() : [];
+    const circles = await prisma.teachingGroup.findMany({
+      where: {
+        deletedAt: null,
+        ...(input.levelId ? { levelId: input.levelId } : {}),
+        ...(q === '' ? {} : { name: { contains: q } }),
+        // A circle carries no branch of its own, so it is bounded by its Level:
+        // the same rule the Level arm applies, not a second one.
+        ...(escaping.length === 0 ? {} : { levelId: { notIn: escaping } }),
+        ...(taught === null ? {} : { levelId: { in: taught.levelIds } }),
+      },
+      select: { id: true, name: true, subject: { select: { name: true } } },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      take: TAKE,
+    });
+    return circles.map((c) => ({ id: c.id, label: `${c.name} — ${c.subject.name}` }));
+  }
+
+  if (input.kind === 'session') {
+    const sessions = await prisma.session.findMany({
+      where: {
+        deletedAt: null,
+        schedule: {
+          deletedAt: null,
+          ...(reachable === null ? {} : { branchId: { in: reachable } }),
+          // A مؤطِّرة is offered the occurrences of classes she staffs — the
+          // same `CourseScheduleStaff` fact §4.4c makes her scope everywhere.
+          ...(isSuper || isAdmin
+            ? {}
+            : { staff: { some: { userId: actor.userId, deletedAt: null } } }),
+          ...(input.levelId
+            ? {
+                OR: [
+                  { levelId: input.levelId },
+                  { administrativeGroup: { levelId: input.levelId } },
+                  { teachingGroup: { levelId: input.levelId } },
+                ],
+              }
+            : {}),
+        },
+        ...(q === '' ? {} : { schedule: { title: { contains: q } } }),
+      },
+      select: { id: true, date: true, schedule: { select: { title: true } } },
+      orderBy: { date: 'desc' },
+      take: TAKE,
+    });
+    return sessions.map((s) => ({
+      id: s.id,
+      // The date is half the identity of an occurrence, so it is half the label.
+      label: `${s.schedule.title} — ${s.date.toISOString().slice(0, 10)}`,
+    }));
+  }
+
+  /**
+   * **The student arm, and the one that must not become a directory.**
+   *
+   * A مؤطِّرة is offered exactly `studentsTaughtBy` — the canonical §4.4c set,
+   * reused rather than restated — so the picker cannot show her a beneficiary
+   * she may not address, and R125's write check refuses the same person again.
+   * An Admin is bounded by enrolment branch, which is the branch fact (§20 rule
+   * 22). **Nobody gains association-wide beneficiary lookup.**
+   */
+  const taughtBy = isSuper || isAdmin ? null : await studentsTaughtBy(prisma, actor.userId);
+  const students = await prisma.user.findMany({
+    where: {
+      AND: [
+        ...(taughtBy === null ? [] : [taughtBy]),
+        {
+          deletedAt: null,
+          isBeneficiary: true,
+          ...(q === '' ? {} : { nameArabic: { contains: q } }),
+          ...(reachable === null && input.levelId === undefined
+            ? {}
+            : {
+                levelEnrollments: {
+                  some: {
+                    deletedAt: null,
+                    ...(reachable === null ? {} : { branchId: { in: reachable } }),
+                    ...(input.levelId ? { levelId: input.levelId } : {}),
+                  },
+                },
+              }),
+        },
+      ],
+    },
+    select: { id: true, nameArabic: true },
+    orderBy: { nameArabic: 'asc' },
+    take: TAKE,
+  });
+  return students.map((s) => ({ id: s.id, label: s.nameArabic ?? '' }));
 }

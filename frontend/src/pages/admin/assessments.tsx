@@ -4,6 +4,7 @@ import {
   addQuestion,
   closeAssessment,
   createAssessment,
+  listAssessmentTargets,
   listSubmissions,
   publishAssessment,
   readPaper,
@@ -22,7 +23,13 @@ import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type TableStatus } from '../../components/ui/data-table.js';
-import { DateField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
+import {
+  DateField,
+  SearchInput,
+  SelectField,
+  TextArea,
+  TextField,
+} from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -165,6 +172,89 @@ function NewPaper({
   });
 }
 
+/**
+ * **The target picker** (R125) — one control set for all four arms.
+ *
+ * **Composed from the shared primitives**, not a new picker: `SearchInput` to
+ * narrow and `SelectField` to choose, which is the pair `attendance-panel`
+ * already uses to add a beneficiary. A bespoke combobox would be a second
+ * generic picker for the platform to keep in step.
+ *
+ * **The list is server-scoped and is not the boundary.** A مؤطِّرة is offered the
+ * students she teaches and the occurrences she staffs; an Admin what stays
+ * inside her branches. Naming an id the list never contained is refused again on
+ * the write — this exists so an author is not shown a target that would be
+ * refused, which is the opposite of deciding the permission here (rule O).
+ */
+function TargetPicker({
+  kind,
+  levelId,
+  value,
+  onChange,
+  error,
+}: {
+  kind: Exclude<TargetKind, 'level'>;
+  levelId: string;
+  value: string;
+  onChange: (next: string) => void;
+  error: string | null;
+}): ReactNode {
+  const { accessToken } = useSession();
+  const [query, setQuery] = useState('');
+  const [options, setOptions] = useState<{ id: string; label: string }[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let live = true;
+    setState('loading');
+    void listAssessmentTargets(
+      kind,
+      { ...(levelId ? { levelId } : {}), ...(query ? { q: query } : {}) },
+      accessToken,
+    )
+      .then((rows) => {
+        if (!live) return;
+        setOptions(rows);
+        setState('ready');
+        // A chosen id that the narrowed list no longer offers is cleared rather
+        // than left behind — a stale selection is what reaches the server as a
+        // target the author can no longer see.
+        if (value !== '' && !rows.some((r) => r.id === value)) onChange('');
+      })
+      .catch(() => {
+        if (live) setState('error');
+      });
+    return () => {
+      live = false;
+    };
+    // `onChange` and `value` are deliberately absent from the dependency list:
+    // this reloads when the QUESTION changes, not when the answer does. Adding
+    // them would refetch on every keystroke of a selection.
+  }, [kind, levelId, query, accessToken]);
+
+  return (
+    <>
+      <SearchInput label={t('assessments.targetSearch')} value={query} onChange={setQuery} />
+      <SelectField
+        label={t('assessments.targetPick')}
+        value={value}
+        onChange={onChange}
+        required
+        error={error}
+        hint={
+          state === 'ready' && options.length === 0
+            ? t('assessments.targetNone')
+            : t('assessments.targetHint')
+        }
+        options={[
+          { value: '', label: t('common.notSet') },
+          ...options.map((o) => ({ value: o.id, label: o.label })),
+        ]}
+      />
+    </>
+  );
+}
+
 function CreateDialog({
   scope,
   token,
@@ -270,11 +360,11 @@ function CreateDialog({
         }))}
       />
       {needsId ? (
-        <TextField
-          label={t('assessments.targetPick')}
+        <TargetPicker
+          kind={targetKind as Exclude<TargetKind, 'level'>}
+          levelId={scope.value.levelId}
           value={targetId}
           onChange={setTargetId}
-          required
           error={touched && targetId.trim() === '' ? t('common.required') : null}
         />
       ) : null}

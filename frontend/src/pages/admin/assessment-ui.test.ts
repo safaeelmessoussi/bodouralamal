@@ -118,3 +118,33 @@ describe('R124 — one builder, two frames', () => {
     expect(builder).toContain('export function AssessmentsView');
   });
 });
+
+describe('R125 — the picker offers what the server allows, and is not the boundary', () => {
+  it('asks the server for candidates instead of taking a typed UUID', () => {
+    /**
+     * **The defect this closes.** Four of the five targets asked the author to
+     * paste a UUID, which is unusable and — worse — makes the *client* the only
+     * thing standing between an author and a target she may not address. The
+     * list is now the server's answer to *what may I address*, and the write
+     * refuses the same thing again (rule O).
+     */
+    expect(builder).toContain('listAssessmentTargets');
+    expect(builder).toContain('function TargetPicker');
+    // No raw id entry survives for a target.
+    expect(builder).not.toMatch(/label=\{t\('assessments\.targetPick'\)\}\s*\n\s*value=\{targetId\}\s*\n\s*onChange=\{setTargetId\}\s*\n\s*required\s*\n\s*error/);
+  });
+
+  it('composes the shared primitives rather than a second picker', () => {
+    // `SearchInput` + `SelectField` is the pair `attendance-panel` already uses
+    // to add a beneficiary. A bespoke combobox would be a second generic picker
+    // for the platform to keep in step (rule C).
+    expect(builder).toContain('<SearchInput');
+    expect(builder).toContain('<SelectField');
+  });
+
+  it('clears a selection the narrowed list no longer offers', () => {
+    // A stale id is what reaches the server as a target the author can no longer
+    // see — refused there, but only after she has been shown it as chosen.
+    expect(builder).toContain("if (value !== '' && !rows.some((r) => r.id === value)) onChange('');");
+  });
+});

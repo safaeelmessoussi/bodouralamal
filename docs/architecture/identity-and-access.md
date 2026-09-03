@@ -465,6 +465,24 @@ A few rows worth knowing without opening the table:
   **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
   writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
   operational APIs they are authorised to use (Revision 30).
+- **A Level target does not override branch authorization (R125).** A Level spans
+  branches, so a **branch-scoped Admin** may create, use or publish a
+  Level-targeted assessment only when the **resolved audience** is entirely
+  within her branches. The rule is stated over the audience rather than the
+  target's shape — one check for all five arms, composed from
+  `examAudienceWhere`, introducing **no second source of truth for branch
+  membership** (enrolment is the branch fact, §20 rule 22). It is **re-asked at
+  publish**, because the audience is resolved rather than stored. A Super Admin
+  is unaffected.
+- **A مؤطِّرة addresses THIS student, not a whole Level (R125).** The individual
+  target is answered by **`studentsTaughtBy`** — §4.4c's canonical derivation,
+  the same one behind Quran logging, exam authoring and sensitive social data —
+  and is **reused, not restated**. She gains no association-wide beneficiary
+  lookup, and a student outside her teaching answers `404`, never `403`, so the
+  refusal never becomes a way to discover who exists.
+- **`GET /assessments/targets` is a smaller question, not a wider permission.**
+  Staff only; scoped per caller; **and it is not the boundary** — every refusal
+  it enacts is made again on the write, so an id typed by hand buys nothing.
 - **An online paper carries no branch, and «no branch to check» is not «no
   check» (R124, corrected 2026-09-04).** The first reading skipped the branch
   assertion entirely because the row has no `branch_id`, which let a

@@ -8803,7 +8803,7 @@
     "/assessments": {
       "post": {
         "summary": "Create an assessment",
-        "description": "**§4.6, R124 — a new paper, in `draft`.** This is `exam.mode = 'online'`, which R58 declared and then refused with `ONLINE_NOT_AVAILABLE` because — in that service's own words — *«physical carries a place and staff and no questions; online will carry questions and no place»*. **No second assessment entity was created**: one would fork `Grade`, which is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet, the student's results screen and the parent visibility rule. Body: `{ title, description?, max_grade, level_id, subject_id?, academic_year_id?, target, date? }`, **strictly**. `target` is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`, with the id of whatever it names (absent only for `level`); `exam_target_check` refuses any disagreement between the arm and the columns. **`date` is refused on a `session` target and required on every other**: a quick test belongs to the occurrence's own day, and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122), so a paper with no date has no answerable audience. Authoring authority is the exam's own (TD-2 as split by R70.4) and is **not** widened: Super Admin, Admin in branch scope, Teacher within their own teaching. Audited as `assessment.create` with ids and a kind — **never the title**, which is free text a person wrote.",
+        "description": "**§4.6, R124 — a new paper, in `draft`.** This is `exam.mode = 'online'`, which R58 declared and then refused with `ONLINE_NOT_AVAILABLE` because — in that service's own words — *«physical carries a place and staff and no questions; online will carry questions and no place»*. **No second assessment entity was created**: one would fork `Grade`, which is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet, the student's results screen and the parent visibility rule. Body: `{ title, description?, max_grade, level_id, subject_id?, academic_year_id?, target, date? }`, **strictly**. `target` is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`, with the id of whatever it names (absent only for `level`); `exam_target_check` refuses any disagreement between the arm and the columns. **`date` is refused on a `session` target and required on every other**: a quick test belongs to the occurrence's own day, and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122), so a paper with no date has no answerable audience. Authoring authority is the exam's own (TD-2 as split by R70.4) and is **not** widened: Super Admin, Admin in branch scope, Teacher within their own teaching. **R125 makes two rules explicit.** (1) **A Level target does not override branch authorization**: a Level spans branches, so a branch-scoped Admin may use a target only when **everybody it resolves to** is inside her branches — checked on the resolved audience rather than on the shape of the request, so naming the Level by its raw id changes nothing, and **re-checked at publish**, because the audience is resolved rather than stored and a Level may gain a branch between drafting and publishing. `403 FORBIDDEN` with `TARGET_OUTSIDE_BRANCH_SCOPE`, naming how many people escape. A Super Admin is unaffected. (2) **A مؤطِّرة may address an individual beneficiary who is within her own teaching**, answered by `studentsTaughtBy` — the canonical §4.4c derivation, reused rather than restated. The pre-R125 path asked whether she taught the student's **whole Level**, which the Owner has ruled too broad. A student outside her teaching answers `404`, indistinguishable from one who does not exist (§20 rule 17), so the refusal never becomes a lookup. Audited as `assessment.create` with ids and a kind — **never the title**, which is free text a person wrote.",
         "responses": {
           "201": {
             "description": "Created; `{ id }`."
@@ -8840,6 +8840,57 @@
           },
           "404": {
             "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown level, group, occurrence, teaching group or beneficiary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/targets": {
+      "get": {
+        "summary": "What this author may address",
+        "description": "**§4.6, R125 — what THIS author may address.** `?kind=` is required and is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`; `?level_id=` narrows an arm that has a Level and never widens it; `?q=` searches by name. Answers `{ id, label }`, capped at 30, with the label composed server-side — `{Category} — {Level}` among them, because a Level name is not unique across Categories (§4.4b). **Server-scoped per caller, and the client is not the boundary.** A مؤطِّرة is offered the students `studentsTaughtBy` resolves — the canonical §4.4c set, the same one behind Quran logging on *her own students* — and the occurrences of classes she staffs; **she gains no association-wide beneficiary lookup**, and a name she searches for but may not address returns nothing rather than that person. A branch-scoped Admin is offered what stays inside her branches: a **Level whose audience escapes them is withheld**, computed as *which Levels hold an enrolment at a branch she cannot reach* rather than Level by Level. A Super Admin is offered everything, unchanged. **Staff only**: a beneficiary or a guardian is refused outright rather than handed an empty list — an empty list is an answer and *«you may not ask»* is a different one. **The list is a convenience, never the permission.** `POST /assessments` refuses the same targets again, so an id typed by hand or remembered from elsewhere buys nothing.",
+        "responses": {
+          "200": {
+            "description": "Up to 30 candidates, each `{ id, label }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or unknown kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is not staff.",
             "content": {
               "application/json": {
                 "schema": {
