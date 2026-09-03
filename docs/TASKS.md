@@ -1044,14 +1044,41 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Quran Progress checklist green (incl. deletion-un-completes-level test)
 
 ## M5 — Exams & Grading
-- [ ] Exam builder: immutable question UUIDs, MCQ + free-text (digital-only; print CSS post-MVP §10.1)
-- [ ] Access policies single_submission / save_and_resume + submission lifecycle (TD-1)
-- [ ] All scores as integer bp (0–10,000), round-half-up once at persistence; no float score columns (§4.6, TD-6)
-- [ ] MCQ auto-grade → draft Grade; subjective grading flow; absent-zero rows initialized at first draft save (BR-7, §4.6)
-- [ ] `Grade.administrative_group_id` sitting provenance (R43) + aggregation scoped to active-template exams × currently-enrolled students (§4.6)
-- [ ] Grade + User optimistic versioning incl. recalc-job participation (TD-15)
-- [ ] Postponement check: no template tables/UI/recalc anywhere (§10.1)
-- [ ] Pass/fail override endpoint + audit (TD-8)
+- [x] **Exam builder — BUILT by R124**, in the shape the ratified revision states
+      rather than this line's: **four** question kinds (short text, long text,
+      UCQ, MCQ) with an optional or required justification on a choice question,
+      each question an immutable **row** with an explicit `display_order` rather
+      than a UUID inside a JSON array — a blob could not make ordering stable,
+      could not let an answer reference the option it chose, and could not refuse
+      the deletion of an answered question. Print CSS remains post-MVP §10.1.
+- [~] **Submission lifecycle — BUILT by R124; `access_policy` is NOT consumed.**
+      `in_progress → submitted` is live, save is separate from submit, and
+      submitted is final for the student (no reopen in v1). **`single_submission`
+      vs `save_and_resume` is a column nothing reads**: v1 gives every assessment
+      save-and-resume, and enforcing the other mode is unbuilt. Recorded as a gap
+      rather than ticked, because the column exists and would read as honoured.
+- [x] ~~All scores as integer bp~~ — **SUPERSEDED by R81.** `Grade.score` is
+      `NUMERIC(6,2)`, the mark as given out of the exam's own `max_grade`; there
+      is nothing to normalise against and so nothing to round. §20 rule 3's
+      prohibition on **float** arithmetic stands and is better served by exact
+      decimal.
+- [~] **Absent-zero rows — BUILT** (BR-7): initialised at the teacher's first
+      draft save, against the exam's audience. **MCQ auto-grade — EXPLICITLY
+      EXCLUDED by R124**: v1 marks everything by hand, and §4.6 now says so. The
+      subjective grading flow is the existing sheet.
+- [x] **`Grade.administrative_group_id` sitting provenance — BUILT** (R43); it is
+      selected and written by `grade.service`. Template-scoped aggregation
+      belongs to the postponed engine (§10.1) and is deliberately absent.
+- [x] **Grade optimistic versioning — BUILT** (TD-15), and proved by the
+      stale-version test on the sheet. Recalc-job participation belongs to the
+      postponed engine.
+- [x] **Postponement check — VERIFIED 2026-09-04:** no `GradingTemplate` table,
+      service, route or UI exists anywhere; the only occurrence of the name in
+      the repository is the schema comment recording that it is post-MVP.
+- [x] ~~Pass/fail override endpoint + audit~~ — **RETIRED by R81**, which removed
+      the endpoint, dropped the columns and retired `grade.passfail_override`
+      from TD-8: with nothing computing a verdict there is nothing to override.
+      The two stale TD-3 registry lines were removed on 2026-09-04.
 - [ ] LevelSurah/LevelSubject auto-draft components incl. the Adult-stage dual generation (BR-9, §4.6)
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
@@ -1356,7 +1383,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ `MaterializationDialog` was the last bare `<Dialog>`, and printed R43.6 codes untranslated
   - ✓ **The guard now asserts ABSENCE, not just presence** — a page can use the shared components and keep custom UI beside them, and one did for a whole revision. Mutation-proved
 - [x] مواد المستوى made findable — the screen existed; the count column is now the link to it
-- [ ] Sweep the remaining screens for raw `<select>`/`<label>` pairs — الحلقات, الحصص and الأنشطة are done; **approvals, levels and users still build their own filter rows** rather than going through `SelectField`/`ScopeSelectors`
+- [x] **Sweep for raw `<select>`/`<label>` pairs — COMPLETE.** Verified 2026-09-04: `approvals.tsx`, `levels.tsx` and `users.tsx` contain **no raw `<select>`** and all three import `SelectField`. The line was stale, not outstanding.
 
 ## M6 — Content, Consent & Storage
 - [x] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)

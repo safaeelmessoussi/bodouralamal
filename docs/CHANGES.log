@@ -2940,3 +2940,41 @@ row** and does not move the submission — the three facts stay independent (§4
 `notification.exam_id` is `RESTRICT`, so the suite could not delete its own exams.
 The hand-written `grade.create` never sent a notification, which is exactly the
 kind of thing a test that skips the real path cannot see.
+
+## Planning state reconciled against what R81, R122–R124 actually shipped — 2026-09-04
+
+Derived planning artefacts had drifted from the ratified specification. Corrected
+by **checking each claim against the code**, not by ticking things near a
+finished feature.
+
+**Two TD-3 registry lines removed, with authority.** `POST
+/exams/{id}/grades/{studentId}/override` and `POST
+/grades/{id}/pass-fail-override` were listed as pending. **Revision 81 removes
+them in terms** — *"BR-12's manual override [is] retired … the endpoint is
+removed, and `grade.passfail_override` is retired from TD-8"* — so the registry
+was stale against its own source. Removing them is following the SRS, which is
+the opposite of the drift this file's rule warns about: it forbids editing the
+registry to fit an *implementation*, and these were edited to fit a *revision*.
+
+**The four online-exam shapes are recorded, not edited.** `POST
+/exams/{id}/publish`, `POST /exams/{id}/submissions`, `PATCH /submissions/{id}`
+and `POST /submissions/{id}/submit` are superseded in shape by R124's
+`/assessments/…`, but **§4.6 as ratified describes the capability without naming
+route shapes**, so this file may not ratify shapes on the SRS's behalf. They stay
+PENDING with the finding and a recommendation, following the convention the file
+already uses for `/grades/{id}/…`. The addressing differs for a stated reason:
+`/submissions/{id}` is keyed by an id no contract exposes, and §20 rule 6 forbids
+taking the subject from the request at all.
+
+**M5 reconciled item by item, and two lines are honest gaps rather than ticks.**
+The exam builder is built in R124's shape (four kinds, rows not a blob). The
+submission lifecycle is built **but `access_policy` is a column nothing reads** —
+recorded as `[~]`, because a column that exists reads as honoured. Absent-zero is
+built; **MCQ auto-grading is explicitly excluded by R124** and is not a pending
+task. Integer basis points and the pass/fail override are marked superseded by
+R81 rather than left as work. The postponement check was actually run: no
+`GradingTemplate` table, service, route or UI exists.
+
+**One line was simply stale.** The raw-`<select>` sweep listed approvals, levels
+and users as outstanding; all three contain no raw `<select>` and import
+`SelectField`.

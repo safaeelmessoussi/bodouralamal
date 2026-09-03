@@ -126,7 +126,12 @@ POST /quran-logs                              # §4.5, TD-3.6; three-layer ayah 
 GET /exams/{id}/grades                        # §4.6, TD-3.6 R70; the sheet, with the R14 scale
 PUT /exams/{id}/grades                        # §4.6, TD-3.6 R70; draft; per-row TD-15 version
 POST /exams/{id}/grades/publish               # §4.6, TD-3.6, TD-4.5 R70; publication is the visibility moment
-POST /exams/{id}/grades/{studentId}/override  # §4.6, BR-12, TD-3.6 R70; verdict only, never the mark
+# RETIRED BY REVISION 81, not pending. R81 in §0 says it in terms: "BR-12's
+# manual override [is] retired … `POST /exams/{id}/grades/{studentId}/override`
+# is removed, and `grade.passfail_override` is retired from TD-8". With nothing
+# computing a verdict there is nothing to override. The line is removed here
+# because this registry is the projection of what the SRS DOCUMENTS, and the SRS
+# documents it no longer — that is following the source, not fitting the code.
 GET /students/me/grades                       # TD-3.3 clause, §5.3 R63.3; PUBLISHED only; the ACTING student
 
 # ── Reads added with their screens ──────────────────────────────────────────
@@ -331,6 +336,31 @@ POST /exams/{id}/publish                      # TD-3.6, BR-8
 POST /exams/{id}/submissions                  # TD-3.6, TD-1
 PATCH /submissions/{id}                       # TD-3.6, §4.6
 POST /submissions/{id}/submit                 # TD-3.6, TD-1
+# ── THE FOUR ABOVE ARE SUPERSEDED IN SHAPE BY REVISION 124, NOT ABANDONED ────
+#
+# R124 built the online assessment and it lives at `/assessments/…`:
+#   * `POST /exams/{id}/publish`        → `POST /assessments/{id}/publish`
+#   * `POST /exams/{id}/submissions`    → the submission is CREATED by the first
+#     save; there is no separate "start" act, because a student who opens a paper
+#     and writes nothing has begun nothing worth a row.
+#   * `PATCH /submissions/{id}`         → `PUT  /assessments/{id}/responses`
+#   * `POST /submissions/{id}/submit`   → `POST /assessments/{id}/submit`
+#
+# **They are NOT edited to match**, following this file's own rule two blocks
+# down: the registry is the projection of the SRS, and R124's ratified §4.6 text
+# describes the CAPABILITY without naming route shapes — so the shapes are an
+# implementation choice this file may not ratify on the SRS's behalf. Unlike the
+# override entries above, which R81 removes *in terms*.
+#
+# The addressing differs for one stated reason: `/submissions/{id}` is keyed by a
+# submission id **no contract exposes** — the same defect the block below finds in
+# `/grades/{id}/…`. A student addresses her paper by the assessment; the server
+# resolves whose submission it is from the JWT `sub`, because §20 rule 6 forbids
+# taking the subject from the request at all.
+#
+# RECOMMENDATION (Document Owner's call): adopt the four `/assessments` shapes in
+# TD-3.6. Nothing is blocked meanwhile — they report PENDING, which is not a
+# failure — but they DO fail the M8 release gate where TD3_REQUIRE_COMPLETE=1.
 # ── FOUR ENTRIES THE IMPLEMENTATION ADDRESSES DIFFERENTLY ────────────────────
 #
 # These stay PENDING and are NOT edited to match the code, because the registry
@@ -366,7 +396,8 @@ POST /submissions/{id}/submit                 # TD-3.6, TD-1
 # decision before that gate and not before anything earlier.
 POST /grades/{id}/publish                     # TD-3.6, TD-4.5; implemented as POST /exams/{id}/grades/publish (see above)
 POST /grades/{id}/republish                   # TD-3.6, TD-4.5; absorbed into the publish verb by R70.4 (see above)
-POST /grades/{id}/pass-fail-override          # TD-3.6, BR-12; implemented as POST /exams/{id}/grades/{studentId}/override
+# `POST /grades/{id}/pass-fail-override` — RETIRED WITH IT by Revision 81, and
+# for the same reason. It was TD-3.6's original addressing of the same operation.
 POST /students/{id}/quran-logs                # TD-3.6, §4.5; implemented as POST /quran-logs with student_id in the body
 PATCH /quran-logs/{id}                        # TD-3.6, §4.5
 DELETE /quran-logs/{id}                       # TD-3.6, §4.5
