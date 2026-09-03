@@ -142,6 +142,20 @@ describe('R125 — the picker offers what the server allows, and is not the boun
     expect(builder).toContain('<SelectField');
   });
 
+  it('scopes the LEVEL list too when the Level is itself the audience', () => {
+    /**
+     * **The gap this closes.** The ordinary scope selector lists every Level, so
+     * a branch-scoped Admin choosing a `level` target was offered one whose
+     * audience escapes her branches and refused at save — a control leading to a
+     * refusal she did nothing to earn. On the other arms the Level is not the
+     * audience (a group at her own branch inside a Level that spans two is
+     * legitimate), so it stays the ordinary selector there.
+     */
+    expect(builder).toContain("targetKind === 'level' ? (");
+    expect(builder).toContain('SCOPE_FIELDS_WITHOUT_LEVEL');
+    expect(builder).toContain('kind="level"');
+  });
+
   it('clears a selection the narrowed list no longer offers', () => {
     // A stale id is what reaches the server as a target the author can no longer
     // see — refused there, but only after she has been shown it as chosen.

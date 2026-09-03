@@ -85,6 +85,16 @@ const TARGET_LABELS: Record<TargetKind, string> = {
 };
 
 const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId'] as const;
+/**
+ * **Everything but the Level, for a `level` target.**
+ *
+ * R125 withholds a Level whose audience escapes a branch-scoped Admin's
+ * branches — and the ordinary scope selector lists every Level, so leaving it in
+ * charge would offer her one and refuse it at save. On the other arms the Level
+ * is not the audience (a group at her own branch inside a Level that spans two
+ * is perfectly legitimate), so it stays the ordinary selector there.
+ */
+const SCOPE_FIELDS_WITHOUT_LEVEL = ['subjectId', 'academicYearId'] as const;
 
 /**
  * **The builder's body, without a frame** (R124).
@@ -193,7 +203,7 @@ function TargetPicker({
   onChange,
   error,
 }: {
-  kind: Exclude<TargetKind, 'level'>;
+  kind: TargetKind;
   levelId: string;
   value: string;
   onChange: (next: string) => void;
@@ -345,7 +355,22 @@ function CreateDialog({
       />
       <TextField label={t('assessments.maxGrade')} value={maxGrade} onChange={setMaxGrade} required />
 
-      <ScopeSelectors scope={scope} fields={SCOPE_FIELDS} mode="form" />
+      {targetKind === 'level' ? (
+        <>
+          {/* The Level IS the audience here, so it comes from the scoped list
+              rather than from the full curriculum (R125). */}
+          <TargetPicker
+            kind="level"
+            levelId=""
+            value={scope.value.levelId}
+            onChange={(next) => scope.set('levelId', next)}
+            error={touched && scope.value.levelId === '' ? t('common.required') : null}
+          />
+          <ScopeSelectors scope={scope} fields={SCOPE_FIELDS_WITHOUT_LEVEL} mode="form" />
+        </>
+      ) : (
+        <ScopeSelectors scope={scope} fields={SCOPE_FIELDS} mode="form" />
+      )}
 
       <SelectField
         label={t('assessments.target')}
@@ -361,7 +386,7 @@ function CreateDialog({
       />
       {needsId ? (
         <TargetPicker
-          kind={targetKind as Exclude<TargetKind, 'level'>}
+          kind={targetKind}
           levelId={scope.value.levelId}
           value={targetId}
           onChange={setTargetId}

@@ -3190,3 +3190,14 @@ question, and hers is `studentsTaughtBy`.
 **Tests: 56/56** on the assessment suite, covering all fourteen required proofs.
 Browser **6/6**, including the picker offering a مؤطِّرة her own student by name
 with no UUID box anywhere in the dialog.
+
+**Follow-up the same day — the Level list is scoped too.** R125 withholds a Level
+whose audience escapes a branch-scoped Admin's branches, but the create form took
+its Level from the ordinary scope selector, which lists every Level. She was
+therefore still *offered* one and refused at save — a control leading to a
+refusal she did nothing to earn, which is the inverse of rule P and the reason
+the picker exists at all. When the target **is** the Level, the Level now comes
+from the scoped list; on the other arms it stays the ordinary selector, because
+there the Level is not the audience — a group at her own branch inside a Level
+that spans two is perfectly legitimate, and withholding that Level would block a
+real case.
