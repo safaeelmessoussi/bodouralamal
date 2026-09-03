@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
+import { markPresent, removeAttendance } from './attendance.service.js';
 import {
   publishGrades,
   readGradeSheet,
@@ -152,6 +153,10 @@ async function clear(): Promise<void> {
   // Exercising the REAL grading path is what made this necessary; the earlier
   // hand-written `grade.create` never sent one.
   await prisma.notification.deleteMany({ where: { examId: { in: examIds } } });
+  // R123 — a sitting's register, and `attendance.exam_id` is RESTRICT too. The
+  // independence tests below mark somebody present at a physical sitting, which
+  // is the point of them.
+  await prisma.attendance.deleteMany({ where: { examId: { in: examIds } } });
   await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
 
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
@@ -168,11 +173,13 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 
+  await prisma.schedulingType.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.administrativeGroup.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.levelSubject.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 
   // Only this suite's own years, by the exact labels it mints — never a range a
@@ -933,5 +940,130 @@ describe('23–27b · the REAL grading path, not a hand-written Grade row', () =
       select: { state: true },
     });
     expect(submission.state).toBe('submitted');
+  });
+});
+
+describe('R123 × R124 · attendance, submission and grade are three independent facts', () => {
+  /**
+   * **The invariant the Owner added at ratification** (§4.7, R123 clause 10):
+   * nothing gates any of the three on another, in either direction. All three
+   * states below are legitimate, and the platform must be able to hold each.
+   *
+   * The sitting is **physical** because that is the only kind with an
+   * attendance sheet — an online paper records no scheduling type, so it has
+   * none — and it is the case the Owner named: *«اختبار / exam sitting:
+   * attendance REQUIRED»*.
+   */
+  let sittingId = '';
+
+  beforeAll(async () => {
+    const examType = await prisma.schedulingType.create({
+      data: {
+        name: `${TAG} اختبار حضوري`,
+        structuralKind: 'exam',
+        attendanceMode: 'required',
+        displayOrder: 940,
+      },
+      select: { id: true },
+    });
+    const room = await prisma.room.create({
+      data: { name: `${TAG} قاعة`, branchId },
+      select: { id: true },
+    });
+    sittingId = (
+      await prisma.exam.create({
+        data: {
+          title: `${TAG} جلسة امتحان`,
+          schedulingTypeId: examType.id,
+          mode: 'physical',
+          status: 'published',
+          levelId,
+          subjectId,
+          academicYearId,
+          date: TODAY,
+          maxGrade: 20,
+          // R58 — a physical sitting states branch, room and both times or none.
+          branchId,
+          roomId: room.id,
+          startTime: new Date('1970-01-01T09:00:00.000Z'),
+          endTime: new Date('1970-01-01T11:00:00.000Z'),
+          targetKind: 'level',
+        },
+        select: { id: true },
+      })
+    ).id;
+  });
+
+  it('records attendance with NO submission and NO grade', async () => {
+    await markPresent(prisma, superAdmin(), { kind: 'exam', id: sittingId }, alice);
+
+    expect(
+      await prisma.attendance.count({ where: { examId: sittingId, deletedAt: null } }),
+    ).toBe(1);
+    // She sat in the room. Whether she answered anything is a different record,
+    // and this sitting's paper is on paper.
+    expect(await prisma.studentExamSubmission.count({ where: { examId: sittingId } })).toBe(0);
+    expect(await prisma.grade.count({ where: { examId: sittingId } })).toBe(0);
+  });
+
+  it('grades her without her ever having submitted, and attendance is untouched', async () => {
+    // BR-7's world: an offline paper marked by hand. Nothing about the grade
+    // reads the attendance row, and nothing about the attendance row moves.
+    await saveGradeDraft(prisma, superAdmin(), sittingId, [
+      { studentId: alice, score: 14, absent: false, version: 0 },
+    ]);
+    await publishGrades(prisma, superAdmin(), sittingId);
+
+    const grade = await prisma.grade.findFirstOrThrow({
+      where: { examId: sittingId, studentId: alice },
+      select: { status: true, score: true },
+    });
+    expect(grade.status).toBe('published');
+    expect(await prisma.studentExamSubmission.count({ where: { examId: sittingId } })).toBe(0);
+    expect(
+      await prisma.attendance.count({ where: { examId: sittingId, deletedAt: null } }),
+    ).toBe(1);
+  });
+
+  it('and marks somebody who was NOT present at all — absence gates no grade', async () => {
+    /**
+     * **`bob` has no attendance row for this sitting**, and BR-7 has already
+     * given him a draft `0`/absent row: the first draft save initialises every
+     * student in the audience, so nobody is missing from an average by omission.
+     * That row was initialised from the AUDIENCE and **not** from the register —
+     * which is the invariant, seen from the other side.
+     */
+    const before = await prisma.grade.findFirstOrThrow({
+      where: { examId: sittingId, studentId: bob },
+      select: { version: true, absent: true },
+    });
+    expect(before.absent).toBe(true);
+
+    // He can then be marked a real score, with no attendance row anywhere.
+    await saveGradeDraft(prisma, superAdmin(), sittingId, [
+      { studentId: bob, score: 9, absent: false, version: before.version },
+    ]);
+    expect(
+      await prisma.attendance.count({ where: { examId: sittingId, studentId: bob } }),
+    ).toBe(0);
+    const after = await prisma.grade.findFirstOrThrow({
+      where: { examId: sittingId, studentId: bob },
+      select: { score: true, absent: true },
+    });
+    expect(after.score.toString()).toBe('9');
+    expect(after.absent).toBe(false);
+  });
+
+  it('withdrawing the attendance mark leaves the published grade standing', async () => {
+    await removeAttendance(prisma, superAdmin(), { kind: 'exam', id: sittingId }, alice);
+    expect(
+      await prisma.attendance.count({ where: { examId: sittingId, deletedAt: null } }),
+    ).toBe(0);
+    // The mark she was given is not a consequence of the register.
+    const grade = await prisma.grade.findFirstOrThrow({
+      where: { examId: sittingId, studentId: alice },
+      select: { status: true },
+    });
+    expect(grade.status).toBe('published');
   });
 });

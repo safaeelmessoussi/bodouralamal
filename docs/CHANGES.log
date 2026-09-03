@@ -3054,3 +3054,27 @@ and what the ratified §4.6 split now says in terms: this endpoint schedules a
 sitting, `/assessments` writes a paper. OpenAPI updated to say so.
 
 exam.http + exam + teacher-exam-scope + assessment integration: **70/70**.
+
+## The independence invariant is now tested, not asserted — 2026-09-04
+
+R123 clause (10), added by the Owner at ratification, says exam attendance, exam
+submission and exam grade are **three independent facts** with no gating between
+them in either direction. It was true by construction and proved by nothing.
+
+Four assertions on a real physical sitting — the only kind with a register, and
+the case the Owner named (*«اختبار: attendance REQUIRED»*):
+
+* attendance is recorded with **no submission and no grade**;
+* she is **graded without ever having submitted**, and the register does not move;
+* somebody with **no attendance row at all** is graded — and BR-7's absent-zero
+  row for him was initialised **from the audience, not from the register**, which
+  is the invariant seen from the other side;
+* **withdrawing the attendance mark leaves the published grade standing**.
+
+The third case corrected the test rather than the code: `bob` already had BR-7's
+draft row, so the stale `version: 0` was refused. The platform was right and the
+test's assumption was wrong — and restating it made the assertion stronger,
+because *where the absent-zero row came from* is the more interesting fact.
+
+Two teardown gaps surfaced and were closed: `attendance.exam_id` and the suite's
+own rooms and scheduling types. Both are the FKs doing their job.
