@@ -640,6 +640,27 @@ Three consequences worth carrying:
 Diagnosing this is quick if the shape is recognised: `SELECT version_label,
 status FROM legal_consent_text` shows a `*-test-*` label sitting `active`.
 
+## Two defects a browser found that no source test could (R132)
+
+`verify-self-managed-claim.sh` drives the whole account-claim journey — her
+entry point, the Super Admin's review screen, and a database assertion that a
+pending claim exists while **nothing is bound**. Writing it found two real
+defects in code that typechecked, linted and passed every unit test:
+
+1. **A silent dead end.** The claim arm's early return in `validate` sat *after*
+   `person(state.applicant, …)`, so a form whose name fields are not even
+   rendered was permanently invalid. `valid` stayed false, the submit button did
+   nothing at all — no error, no request, no explanation — and every source-level
+   check was green. It is now pinned by four cases in `register.test.tsx`.
+2. **The wrong success message.** A claim rendered the *registration* wording,
+   telling her an application had been received and would be decided. True of a
+   different thing: she asked to be given a login on a record that already
+   exists.
+
+Neither is visible from a service test (the service was correct) or from a unit
+test of the component (both rendered). What showed them was performing the
+journey and reading what a person actually sees.
+
 ## A rebuilt frontend image is not a rebuilt container
 
 `docker compose up -d --build nginx` rebuilds `bodour-web:dev` and **may leave

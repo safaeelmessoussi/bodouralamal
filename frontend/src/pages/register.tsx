@@ -260,9 +260,26 @@ export function Register(): ReactNode {
       <>
         <ApplicationHeader />
         <main id="main" className="auth-page" role="status">
-          <h1>{t('register.submittedTitle')}</h1>
-          <p>{t('register.submittedBody')}</p>
-          <p className="muted">{t('register.submittedNext')}</p>
+          {/**
+            * **R132 — a claim did not submit a registration**, and saying so
+            * matters: the registration wording tells her an application was
+            * received and will be decided, which is true of a different thing.
+            * She asked to be given her own login on a record that already
+            * exists, and what she needs to read is that nothing has changed yet.
+            */}
+          <h1>
+            {intent === 'self_managed'
+              ? t('register.selfManagedLegend')
+              : t('register.submittedTitle')}
+          </h1>
+          <p>
+            {intent === 'self_managed'
+              ? t('register.selfManagedSent')
+              : t('register.submittedBody')}
+          </p>
+          {intent === 'self_managed' ? null : (
+            <p className="muted">{t('register.submittedNext')}</p>
+          )}
           <div className="auth-page__links">
             <ButtonLink variant="primary" href="/">
               {t('nav.home')}
@@ -378,6 +395,16 @@ export function Register(): ReactNode {
               </p>
             ) : null}
 
+            {/**
+              * **R132 — everything below is REGISTRATION, and a claim is not
+              * one.** She is not creating a record; the record exists, her
+              * identity comes from the token, and her name, branch, stage and
+              * consents are already held by the association. Rendering them
+              * would ask her to restate what the platform already knows and
+              * would imply the answers matter to a decision that ignores them.
+              */}
+            {intent === 'self_managed' ? null : (
+              <>
             <fieldset className="register-form__group">
               <legend>{kind === 'adult' ? t('register.you') : t('register.parent')}</legend>
               <PersonFields
@@ -543,6 +570,9 @@ export function Register(): ReactNode {
                 ) : null}
               </div>
             ) : null}
+
+              </>
+            )}
 
             <div className="register-form__actions">
               <Button type="submit" variant="primary" disabled={busy}>
@@ -807,15 +837,15 @@ export function validate(state: FormState): Record<string, string> {
       errors[`${prefix}.phone`] = t('register.errPhone');
   };
 
-  person(state.applicant, 'applicant');
-  // The children's rules live with the children's fields (R65), so the two
-  // flows validate identically by construction rather than by review.
   /**
-   * **R132 — this arm validates the code and nothing else.** She is not
-   * registering: the record exists, the identity comes from the token, and
-   * asking her for a name or a branch would be asking her to restate what the
-   * association already holds. Returning early keeps every other rule below
-   * from firing against fields this mode does not render.
+   * **R132 — this arm validates the code and NOTHING else, and it returns
+   * BEFORE the applicant is validated.**
+   *
+   * She is not registering: the record exists, her identity comes from the
+   * token, and the fields below are not even rendered on this arm. Placing this
+   * check after `person(state.applicant, …)` made the form permanently invalid
+   * against fields nobody could see, so the submit button did nothing at all —
+   * a silent dead end the browser harness found and no source test would have.
    */
   if (state.intent === 'self_managed') {
     const code = state.selfManagedCode.trim().toUpperCase();
@@ -825,6 +855,9 @@ export function validate(state: FormState): Record<string, string> {
     return errors;
   }
 
+  person(state.applicant, 'applicant');
+  // The children's rules live with the children's fields (R65), so the two
+  // flows validate identically by construction rather than by review.
   if (state.intent === 'parent_child') Object.assign(errors, validateChildren(state.children));
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place

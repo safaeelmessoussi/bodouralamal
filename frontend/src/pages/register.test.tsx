@@ -62,6 +62,41 @@ const base = {
   consentTextId: 'ct-1',
 };
 
+describe('R132 — the self-managed claim validates its code and nothing else', () => {
+  /**
+   * **The defect this pins was a silent dead end.** The arm's early return sat
+   * *after* the applicant was validated, so a form whose name fields are not
+   * even rendered was permanently invalid, `valid` stayed false and the submit
+   * button did nothing at all — no error, no request, no explanation. A browser
+   * run found it; nothing in the source could.
+   */
+  const claim = (code: string) => ({ ...base, intent: 'self_managed' as const, selfManagedCode: code });
+
+  it('accepts a well-formed reference code with every other field empty', () => {
+    // The applicant, children, branch, category and consent are all untouched
+    // defaults here — exactly what the rendered form sends on this arm.
+    expect(validate(claim('BA-7K4M2'))).toEqual({});
+  });
+
+  it('is case- and space-insensitive, because the code is copied off paper', () => {
+    expect(validate(claim('  ba-7k4m2 '))).toEqual({});
+  });
+
+  it('refuses a malformed code, and names that field alone', () => {
+    for (const bad of ['', '7K4M2', 'BA_7K4M2', 'XX-7K4M2', 'BA-']) {
+      const errors = validate(claim(bad));
+      expect(Object.keys(errors), bad).toEqual(['selfManagedCode']);
+    }
+  });
+
+  it('does NOT ask for the branch, category or consent this arm never renders', () => {
+    const errors = validate(claim('BA-7K4M2'));
+    for (const key of ['branch', 'category', 'dataProcessing', 'applicant.firstNameArabic']) {
+      expect(errors, key).not.toHaveProperty(key);
+    }
+  });
+});
+
 describe('§4.1 Revision 39 — the branch is a required choice', () => {
   it('refuses a submission with no branch chosen', () => {
     // A default would place someone at a branch nobody picked, which is the

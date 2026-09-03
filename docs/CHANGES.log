@@ -3852,3 +3852,29 @@ across the family-link, registration, child-application and auth suites, and
 42/42 on child-context and Quran, which the middleware change touches. Frontend
 1013/1013, typecheck, lint and build clean. Fourteen CI guards green, fresh
 migration chain verified, OpenAPI reconciled at 166 paths.
+
+### R132 follow-up — two defects the browser found (2026-09-03)
+
+`verify-self-managed-claim.sh` drives the whole journey and asserts the central
+invariant from the database: **`claims=1 pending=1 identities=0`** — a pending
+claim exists and nothing is bound. Writing it found two defects in code that
+typechecked, linted and passed every unit test.
+
+**A silent dead end.** The claim arm's early return in `validate` sat *after*
+`person(state.applicant, …)`, so a form whose name fields are not even rendered
+was permanently invalid: `valid` stayed false and the submit button did nothing
+at all — no error, no request, no explanation. Now returned before, and pinned by
+four cases.
+
+**The wrong success message.** A claim rendered the *registration* wording,
+telling her an application had been received and would be decided. That is true
+of a different thing; she asked to be given a login on a record that already
+exists, and what she needs to read is that nothing has changed yet.
+
+Also corrected while verifying: the arm rendered the entire registration body —
+name, branch, stage, consents — which would have asked her to restate what the
+association already holds. The claim panel is now the only thing that arm shows.
+
+**13/13 browser checks**, including that the Super Admin can find the claim (rule
+P, on the most takeover-sensitive decision the platform offers) and that the
+Google provider subject appears nowhere in the page's text or markup.
