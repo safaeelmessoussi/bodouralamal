@@ -115,6 +115,9 @@ function payload(firstName: string, mediaRelease = true): unknown {
         first_name_arabic: firstName,
         last_name_arabic: `${TAG}-عائلة`,
         sex: "female",
+        // R130 — required per child on this path too: an existing parent adding
+        // a second child makes the same statement the registration form makes.
+        birth_date: "2015-06-02",
         schooling_stage: "primary",
         consent_media_release: mediaRelease,
         // R67 — required per child on this path too.

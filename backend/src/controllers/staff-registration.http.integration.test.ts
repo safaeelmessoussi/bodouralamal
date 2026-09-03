@@ -146,6 +146,12 @@ async function apply(
         last_name_arabic: `أستاذة${counter}`,
         phone: '+212600000040',
         sex: "female",
+        // R130 — the SAME asymmetry as `category_id` below, and for the same
+        // reason: an ordinary applicant is a beneficiary and carries a date of
+        // birth, while a staff request is not a beneficiary admission and the
+        // schema refuses one. This helper builds both, so the field follows the
+        // arm rather than the person.
+        ...(requestedRole ? {} : { birth_date: "1994-07-19" }),
       },
       // R49: a student states a stage; a staff request must NOT — a teacher
       // is admitted to no Level, and the schema refuses the pair together.

@@ -90,10 +90,16 @@ const adultPerson = (first: string, last: string) => ({
   ...person(first, last),
   phone: '+212600000020',
 });
+/** R130 — the adult BENEFICIARY arm: the applicant is the beneficiary, so she
+ *  carries a date of birth. A staff request deliberately does not. */
+const adultBeneficiaryPerson = (first: string, last: string) => ({
+  ...adultPerson(first, last),
+  birth_date: "1996-05-11",
+});
 
 const adult = () => ({
   kind: "adult" as const,
-  applicant: adultPerson("خديجة", "بنعلي"),
+  applicant: adultBeneficiaryPerson("خديجة", "بنعلي"),
   branch_id: branchId,
   category_id: categoryId,
   consents: { data_processing: true, consent_text_id: consentText!.id },
@@ -288,6 +294,8 @@ describe("a well-formed submission succeeds end to end", () => {
           children: [
             {
               ...person("سارة", "بنعلي"),
+              // R130 — every child on a request is a beneficiary.
+              birth_date: "2016-03-21",
               consent_media_release: false,
               requested_branch_id: branchId,
               requested_category_id: categoryId,
@@ -326,6 +334,9 @@ describe("a well-formed submission succeeds end to end", () => {
     async (childCount) => {
       const children = Array.from({ length: childCount }, (_, index) => ({
         ...person(`طفلة ${index + 1}`, "بنعلي"),
+        // R130 — per child and never inherited: siblings get different dates
+        // here so a payload that collapsed them onto one would be visible.
+        birth_date: `201${index}-04-0${index + 1}`,
         consent_media_release: index % 2 === 0,
         requested_branch_id: branchId,
         requested_category_id: categoryId,
