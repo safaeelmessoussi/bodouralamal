@@ -2163,3 +2163,42 @@ approved scope covers Partners only, so this is reported rather than taken.
       entities. Both sub-decisions were answered: **the first submission freezes
       the paper** (no question versioning in v1) and **there is no staff reopen,
       reset or resubmit action in v1**.
+
+### Open questions from the autonomous session of 2026-09-04
+
+- [ ] **OWNER DECISION REQUIRED — may a branch-scoped Admin author a Level-wide
+      online paper?** An online assessment carries no branch, and its `level`
+      target resolves the Level **across branches** by construction (the paper is
+      sat nowhere). A named-individual target is now checked against the
+      beneficiary's own enrolment branches; the Level, group and circle arms are
+      not, because bounding them is a policy choice. Today a branch-scoped Admin
+      may author a paper every student in a Level receives, wherever they study.
+      **Not a leak of anybody's answers by name** — that half is closed — but a
+      wider audience than TD-2's branch scope otherwise implies.
+- [ ] **OWNER DECISION REQUIRED — may a مؤطِّرة address a paper to one of her own
+      students?** Today she cannot: a `student` target names no group, so the
+      scope check asks *do you teach this whole Level*, and a مؤطِّرة staffing one
+      Administrative Group inside it is refused — for a student she does not
+      teach **and for one she does**. Widening it means defining what *«her
+      own»* means for a target carrying no group (her Administrative Groups? her
+      circles? every student her schedules reach?), which is a product decision.
+- [ ] **RECORDED, NOT FIXED — `DELETE /exams/{id}` does not refuse an exam that
+      has grades or submissions.** It soft-deletes with a `Trash` snapshot and
+      the FKs are `RESTRICT`, so **nothing is lost** and recovery exists; but a
+      paper with student answers disappears from every screen with no warning,
+      where deleting a Level is refused with `blocked_by` for exactly this kind
+      of reason. Adding a refusal **changes what an Admin may do**, so it is an
+      Owner decision rather than a defect fix. Predates R124.
+- [ ] **RECORDED — `Exam.access_policy` is a column nothing reads.**
+      `single_submission` vs `save_and_resume`: v1 gives every assessment
+      save-and-resume, and no write boundary offers the setting (a guard pins
+      that). Enforcing `single_submission` would contradict R124's ratified
+      *«a student saves an incomplete draft and returns to it»*, so it needs an
+      Owner decision before it is either enforced or dropped.
+- [ ] **RECORDED — the assessment builder asks for a target id as free text.**
+      For `session`, `teaching_group`, `administrative_group` and `student`
+      targets the author must paste a UUID. Making it a picker needs a candidate
+      source per arm that each author role can actually reach — and for the
+      beneficiary arm that is a new narrow endpoint, the shape R123's attendance
+      candidates set. Safe engineering work, but large enough to be its own
+      slice, and the `student` arm is blocked on the مؤطِّرة question above.
