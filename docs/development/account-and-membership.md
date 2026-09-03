@@ -156,13 +156,66 @@ hand over. A guard asserts that no job source names the column.
 
 ## The minor who becomes an adult
 
-See [`docs/development/person-identity.md`](person-identity.md) for the
-identifiers, and SRS Revision 129 for the rule. In outline: when a former minor
-needs her own login, a **verified Google identity is bound to her existing
-beneficiary `User`** through a controlled approval — never a second account, so
-`Enrollment`, `Grade`, Quran progress, attendance and assessments stay on the one
-person. Eligibility is established from date of birth (18 years) and **nothing
-happens automatically on a birthday**.
+**The direction is settled. The workflow is NOT built, and the reason is
+recorded here rather than improvised.**
+
+### What the Owner has decided
+
+When a former minor needs her own login, a **verified Google identity is bound to
+her existing beneficiary `User`** — never a second account, so `Enrollment`,
+`Grade`, Quran progress, attendance and assessments stay on the one person.
+Eligibility is established from date of birth at 18 (R130) and **nothing happens
+automatically on a birthday**. Once the account is self-managed she exercises her
+own account and privacy rights, and a former guardian does not exercise them for
+her: a historical `FamilyLink` does not make anybody the owner of an adult's
+account.
+
+### What already exists
+
+The **binding mechanism** is complete and in daily use. §4.1b resolves a sign-in
+by verified email: an account carrying a `pre_provisioned_email` is found, the
+real Google subject is bound to it on first login, and no second row is created.
+That is exactly the shape this transition needs, and it does not need to be
+built.
+
+### The blocker, stated exactly
+
+**There is no operation that points an EXISTING account at an email address, and
+its absence is deliberate.**
+
+* `preProvision` **creates** a user; it cannot target an existing row.
+* `PATCH /admin/users/{id}` **refuses** `pre_provisioned_email` by name, and the
+  code says why: *"it authorises **claiming** an account (§7 R15)"*. The field is
+  refused rather than ignored precisely so that no edit form can hand one
+  person's account to somebody else.
+
+So the missing piece is not a screen. It is the answer to one safeguarding
+question:
+
+> **Who attests that this Google address belongs to the young woman herself?**
+
+The question is sharp because of who is available to ask. A minor has no login,
+so she cannot make the request through the platform; the only person who can act
+for her today is her **guardian** — and a guardian is exactly the party an
+anti-takeover control has to guard against. Letting a guardian nominate the
+address would let her bind a second account of her own to her daughter's record
+and inherit the whole educational history, which is the outcome the refusal above
+exists to prevent.
+
+Staff pre-provisioning does not have this problem: a Super Admin creating an
+account for a مؤطِّرة knows the address out of band, from the person, and the
+association can say who confirmed it. **The equivalent trusted channel for a
+former beneficiary has not been decided**, and choosing one is a safeguarding
+decision about how the association identifies people — not an engineering choice.
+
+### What must NOT be done meanwhile
+
+Do not add a generic *set the pre-provisioned email on an existing account*
+capability to close the gap. It would reintroduce the exact claim path the
+refusal removes, for every account on the platform, in order to serve one
+workflow that has not been specified.
+
+**Recorded as an Owner decision in [`TASKS.md`](../TASKS.md).**
 
 ## The guards
 

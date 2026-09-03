@@ -3540,3 +3540,41 @@ child-application, **10/10** the birth-date unit suite, **16/16** the users wire
 contract. Frontend typecheck, lint and build clean; fresh migration chain and the
 existing database both verified; OpenAPI regenerated and reconciled against the
 live router.
+
+## Minor → adult account transition — direction recorded, workflow deliberately not built (2026-09-03)
+
+**The Owner's direction is settled and the workflow is blocked on a safeguarding
+decision, so it is recorded rather than improvised.**
+
+Settled: a former minor who needs her own login has a **verified Google identity
+bound to her existing beneficiary `User`** — never a second account, so
+`Enrollment`, `Grade`, Quran progress, attendance and assessments stay on one
+person. Eligibility comes from date of birth at 18 (R130), **nothing happens on a
+birthday**, and once the account is self-managed she exercises her own rights: a
+historical `FamilyLink` makes nobody the owner of an adult's account.
+
+**The binding mechanism already exists and needs no work.** §4.1b resolves a
+sign-in by verified email, finds the account carrying that `pre_provisioned_email`
+and binds the real Google subject to it, creating no second row.
+
+**The blocker is exact, and it is a refusal that exists on purpose.** No
+operation points an *existing* account at an address: `preProvision` only
+creates, and `PATCH /admin/users/{id}` refuses `pre_provisioned_email` by name
+because *"it authorises claiming an account (§7 R15)"*. The missing piece is
+therefore not a screen but an answer to **who attests that this Google address
+belongs to the young woman herself** — and the question is sharp because of who
+is available to ask. A minor has no login and cannot request it; the only party
+who can act for her is her guardian, who is precisely the party an anti-takeover
+control must guard against. Letting a guardian nominate the address would let her
+bind a second account of her own to her daughter's record and inherit the entire
+educational history.
+
+Staff pre-provisioning does not have this problem — a Super Admin has the address
+from the person, out of band, and can say who confirmed it. The equivalent
+trusted channel for a former beneficiary is a safeguarding decision about how the
+association identifies people, not an engineering choice.
+
+**Recorded with an explicit prohibition:** do not add a generic *set the
+pre-provisioned email on an existing account* capability to close the gap. It
+would reopen that claim path for every account on the platform in order to serve
+one workflow nobody has specified.

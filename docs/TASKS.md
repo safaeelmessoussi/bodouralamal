@@ -1135,6 +1135,26 @@ was hiding behind it: the run went green on the first attempt.
             `/admin/users`: **completion, never correction**
             (`BIRTH_DATE_ALREADY_RECORDED`). Revisit the contraction only when
             the count of live beneficiaries with a null date reaches zero.
+- [ ] **OWNER DECISION REQUIRED — the trusted channel for a minor→adult account
+      transition.** *(Direction ratified 2026-09-03; the workflow is deliberately
+      NOT built. Full audit in
+      [account-and-membership](development/account-and-membership.md).)* The
+      **binding mechanism already exists** — §4.1b finds an account by its
+      `pre_provisioned_email` and binds the real Google subject on first login,
+      creating no second row — so nothing needs inventing there. What is missing
+      is an operation that points an **existing** account at an address, and its
+      absence is deliberate: `PATCH /admin/users/{id}` refuses
+      `pre_provisioned_email` because *"it authorises claiming an account"*. The
+      one open question is **who attests that the address belongs to the young
+      woman herself**. A minor has no login and cannot ask; the only party who
+      can act for her is her guardian, who is exactly the party an anti-takeover
+      control must guard against — nominating the address would let a guardian
+      bind her own second account to her daughter's record and inherit the whole
+      educational history. Staff pre-provisioning avoids this because a Super
+      Admin has the address from the person out of band. **Do not add a generic
+      "set the pre-provisioned email on an existing account" capability to close
+      the gap**: it reopens that claim path for every account on the platform to
+      serve one unspecified workflow.
 - [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
 ### R65 — the personal section is role-independent (2026-08-11)
