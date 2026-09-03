@@ -145,8 +145,8 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
-| [`SRS-PROPOSAL-R124.md`](SRS-PROPOSAL-R124.md) | **Draft revision awaiting the Document Owner** — the online assessment builder, which R58 declared and refused. **The behaviour is already live**, on the Owner's explicit instruction | Contributors may draft; only the Owner applies |
-| [`SRS-PROPOSAL-R123.md`](SRS-PROPOSAL-R123.md) | **Draft revision awaiting the Document Owner** — attendance is built, so §4.7 and §20 rule 16 need amending. **The behaviour is already live**, on the Owner's explicit instruction, which is why the conflict is reported here rather than resolved silently (§20 rule 20) | Contributors may draft; only the Owner applies |
+| [`SRS-PROPOSAL-R124.md`](SRS-PROPOSAL-R124.md) | **APPLIED — ratified by the Document Owner as SRS Revision 124, 2026-09-04.** Kept as the drafting record for the online assessment builder; `SRS.md` §0 is now authoritative | Document Owner only |
+| [`SRS-PROPOSAL-R123.md`](SRS-PROPOSAL-R123.md) | **APPLIED — ratified by the Document Owner as SRS Revision 123, 2026-09-04.** Kept as the drafting record for attendance; `SRS.md` §0 is now authoritative | Document Owner only |
 | [`SRS-PROPOSAL-R110.md`](SRS-PROPOSAL-R110.md) | **APPLIED — ratified by the Document Owner as SRS Revision 110, 2026-08-30.** Kept as the drafting record; `SRS.md` §0 is now authoritative | Document Owner only |
 | [`SRS-PROPOSAL-R109.md`](SRS-PROPOSAL-R109.md) | **APPLIED — ratified by the Document Owner as SRS Revision 109, 2026-08-30.** Kept as the drafting record; `SRS.md` §0 is now authoritative | Document Owner only |
 | [`SRS-PROPOSAL-R44.md`](SRS-PROPOSAL-R44.md) | **Draft revision awaiting the Document Owner** — the completion-report format. Delete once applied or rejected | Contributors may draft; only the Owner applies |

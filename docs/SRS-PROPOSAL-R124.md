@@ -5,12 +5,7 @@
 **The online assessment builder. §4.6's *"digital exams"* stop being a promise,
 and `exam.mode = 'online'` stops being refused.**
 
-**Status: DRAFT REVISION AWAITING THE DOCUMENT OWNER.** The Owner commissioned
-the implementation on 2026-09-04 and it is **live in the code**, so this
-document is the wording that has to catch up — the same position
-[R123](SRS-PROPOSAL-R123.md), [R45](SRS-PROPOSAL-R45.md) and
-[R46](SRS-PROPOSAL-R46.md) are in. **No agent has edited `docs/SRS.md`**, and
-none may (§20 rule 20).
+**Status: APPLIED — ratified by the Document Owner as SRS Revision 124, 2026-09-04.** Kept as the drafting record; **`SRS.md` §0 and the sections it amends are now authoritative**. The code/specification conflict this document reported is closed: §4.7 and §4.6 describe what is built, and §20 rule 16 no longer names it among the postponed features.
 
 ---
 

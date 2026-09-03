@@ -2107,20 +2107,20 @@ approved scope covers Partners only, so this is reported rather than taken.
       machine-readable. The register lives in the shared occurrence dialog, the
       beneficiary gets «تسجيل حضوري» and never the roster, and عطلة/حفل are
       refused server-side on every path. **No analytics, no QR.**
-- [ ] **OWNER RATIFICATION REQUIRED — SRS Revision 123.** The code is live on the
-      Owner's instruction while §4.7 and §20 rule 16 still say attendance is
-      unbuilt. The wording is drafted in `docs/SRS-PROPOSAL-R123.md`; **no agent
-      may apply it**. Two sub-decisions are named there: whether حفل stays
-      `disabled`, and whether an exam sitting takes attendance at all — each is
-      one click on أنواع الجدولة and no code change.
+- [x] **SRS Revision 123 RATIFIED** by the Document Owner, 2026-09-04. §4.7 is
+      replaced, §20 rule 16 no longer names attendance, §10.1's roadmap bullet is
+      retired and §7 carries `Attendance`. Both sub-decisions were answered:
+      **حفل stays `disabled`** and **اختبار is `required`** — and exam attendance
+      is normatively independent of exam submission and exam grade.
 - [x] **R124 — the online assessment builder.** `exam.mode = 'online'` activated;
       `ExamQuestion`/`ExamQuestionOption`/`StudentExamAnswer`/`StudentExamAnswerOption`
       replace two `jsonb` blobs; five targets behind one resolver; draft →
       published → closed; حفظ ≠ إرسال; the paper freezes on the first
       submission. **Grading is the existing sheet** — no second scale, no
       automatic scoring, no analytics.
-- [ ] **OWNER RATIFICATION REQUIRED — SRS Revision 124**, drafted in
-      `docs/SRS-PROPOSAL-R124.md`. Two sub-decisions are named there: whether the
-      blunt *freeze on first submission* is the wanted rule (the alternative is
-      question versioning, which nobody has asked for), and whether a staff
-      **reopen** action is wanted — there is none in v1.
+- [x] **SRS Revision 124 RATIFIED** by the Document Owner, 2026-09-04. §4.6's
+      *«online is declared and refused»* is superseded, its question-type and
+      auto-grading clauses are narrowed to v1, and §7 carries the four new
+      entities. Both sub-decisions were answered: **the first submission freezes
+      the paper** (no question versioning in v1) and **there is no staff reopen,
+      reset or resubmit action in v1**.

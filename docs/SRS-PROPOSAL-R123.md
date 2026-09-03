@@ -5,15 +5,7 @@
 **Attendance is built. §4.7 stops saying "postponed", and §20 rule 16 stops
 naming it.**
 
-**Status: DRAFT REVISION AWAITING THE DOCUMENT OWNER.** The Owner commissioned
-the implementation on 2026-09-03 and it is **live in the code**, so this
-document is the wording that has to catch up — the same position
-[R45](SRS-PROPOSAL-R45.md) and [R46](SRS-PROPOSAL-R46.md) are in. **No agent
-has edited `docs/SRS.md`**, and none may: §20 rule 20 reserves that to the
-Document Owner. Until this is applied, §4.7 and §20 rule 16 remain the
-normative text and **this repository contains a code/specification conflict
-that only the Owner can close** — which is reported here rather than resolved
-silently, as rule 20 requires.
+**Status: APPLIED — ratified by the Document Owner as SRS Revision 123, 2026-09-04.** Kept as the drafting record; **`SRS.md` §0 and the sections it amends are now authoritative**. The code/specification conflict this document reported is closed: §4.7 and §4.6 describe what is built, and §20 rule 16 no longer names it among the postponed features.
 
 ---
 

@@ -2795,3 +2795,39 @@ marking.
 log.** Question text and option labels are kept out on the same rule — *what did
 the paper ask* is not a question the audit trail exists to answer — and the
 property is asserted directly rather than left as a convention.
+
+## R123 and R124 ratified into the SRS — 2026-09-04
+
+The Document Owner ratified both revisions. `docs/SRS.md` is amended; the two
+proposal documents are marked **APPLIED** and kept as the drafting record, which
+is the convention R109 and R110 established.
+
+**What moved into the authoritative text.** Revision 123 and Revision 124 are
+recorded in §0 with the rest. §4.7 is **replaced in full** — it no longer says
+*"nothing in this section is built in the MVP"*. §4.6's *"`online` is declared
+and refused until it is planned as its own feature"* is superseded, and its
+question-type and auto-grading clauses are **narrowed to what v1 actually does**:
+four kinds, manual marking, no MCQ auto-scoring. §20 rule 16 no longer names
+attendance or the exam builder among the postponed features — **its sentence
+«a specification written ahead of its build is not permission to build it» stays**
+and now attaches to session announcements, which is the case it still describes.
+§10.1's Attendance System roadmap bullet is retired in place. §7 gains
+`Attendance`, `ExamQuestion`, `ExamQuestionOption`, `StudentExamAnswer`,
+`StudentExamAnswerOption` and `Category.self_attendance_allowed`.
+
+**Two Owner sub-decisions are now normative rather than open.** حفل stays
+`attendance_mode = disabled` and **اختبار is `required`** — and the Owner added an
+invariant the proposals did not state: **exam attendance, exam submission and
+exam grade are three independent facts**, with no gating between them in either
+direction. Attendance with no submission, and a submission with no attendance,
+are both legitimate. §4.7 states it and R123 clause (10) records it.
+
+**R110's superseded clauses are annotated in place, not rewritten.** Clause (4)'s
+`attendance_required` boolean and clause (6)'s عطلة flag carry a note saying
+Revision 123 replaced the boolean with the three-state mode, and why. The
+historical wording stays readable — a revision log that edits its own past is a
+log nobody can trust.
+
+**Documentation-only.** No schema, service, contract or test changed, so the
+executable evidence from `b979393` — backend 320 unit / 2071 integration, frontend
+1004, all CI guards — remains valid for this HEAD.
