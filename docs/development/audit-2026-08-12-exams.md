@@ -384,8 +384,8 @@ why nothing here needs redesigning:
 | Piece | State |
 |---|---|
 | `Exam.mode = online` | exists; **refused loudly** by the service, offered disabled in the UI (§14.4) |
-| `Exam.questions` JSONB, stable question UUIDs | exists (TD-6) |
-| `Exam.access_policy` (`single_submission` / `save_and_resume`) | exists |
+| `Exam.questions` JSONB, stable question UUIDs | **SUPERSEDED by R124** — the paper became rows (`ExamQuestion`/`ExamQuestionOption`), not a JSONB blob |
+| `Exam.access_policy` (`single_submission` / `save_and_resume`) | **WITHDRAWN 2026-09-03 (R127)** — it existed when this audit was written and was never implemented; save-and-resume is now the only policy. The column, the enum and `SINGLE_SUBMISSION_FINAL` are gone |
 | `StudentExamSubmission` (answers by UUID, state, `auto_score_bp`) | exists |
 | `Grade` keyed on `(exam, student)` | **mode-agnostic** |
 
