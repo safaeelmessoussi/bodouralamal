@@ -22,22 +22,30 @@ import { idParam, parse } from './parse.js';
 /**
  * Exams (TD-3.6 as amended by SRS Revision 58).
  *
- * **Only the `physical` mode exists.** `online` is declared in the schema and
- * refused here with a coded reason, so a client learns *which* capability is
- * missing rather than receiving a generic validation error — the interface
- * offers the option disabled for the same purpose (§14.4).
+ * **This route schedules a `physical` SITTING, and `online` still belongs
+ * elsewhere** — but no longer because it does not exist.
  *
- * No online endpoint is added *"for later"*: a route with nothing behind it is a
- * promise the platform has not made, and it would appear in the contract as a
- * capability that exists.
+ * R124 built the online half, at `/assessments`: that boundary asks for a paper
+ * — a title, a maximum, a target and questions — while this one asks for a
+ * room, a clock window and supervisors. One endpoint accepting either would be
+ * a schema with two disjoint halves, so `online` is refused here and the reason
+ * **names where to go** instead of saying it is unbuilt, which stopped being
+ * true when the Owner ratified Revision 124.
+ *
+ * The code stays `ONLINE_NOT_AVAILABLE`: it is part of the TD-3.8 contract and
+ * a client branching on it is still right to — *not available on this route* is
+ * what it has always meant operationally. Renaming it would break that client
+ * to improve a word.
  */
 export function create(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const b = parse(createExamSchema, req.body ?? {});
     if (b.mode === 'online') {
-      throw new AppError('STATE_CONFLICT', 'online exams are not built yet (§4.6, R58)', {
-        reason: 'ONLINE_NOT_AVAILABLE',
-      });
+      throw new AppError(
+        'STATE_CONFLICT',
+        'an online assessment is created at /assessments, not here (§4.6, R124)',
+        { reason: 'ONLINE_NOT_AVAILABLE' },
+      );
     }
 
     const result = await createPhysicalExam(prisma, requireActor(req), {
