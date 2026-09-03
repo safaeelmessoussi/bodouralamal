@@ -2919,3 +2919,24 @@ with no read of one gating another, which is now normative in §4.7.
 
 *Physical exams* — unchanged by R124 except where the ratified revision says so:
 `status` is inert for them, and the grade sheet still resolves them period-blind.
+
+## The online assessment's grading path is now proved, not argued — 2026-09-04
+
+R124's tests wrote `prisma.grade.create` directly, which proves the *visibility*
+rule and nothing about whether an online assessment can actually be graded. That
+mattered because R124 **widened `loadForGrading`**: an online paper has neither a
+branch nor a Subject, and the pre-R58 guard that refuses both had to be narrowed
+to physical sittings. A path changed that way deserves a test rather than an
+argument.
+
+Three assertions through the real service: the sheet opens on the assessment's
+own audience with its own maximum (the Level's students, resolved through the one
+exam-audience rule — not the branch-bound arm an online paper has no branch for);
+a draft mark stays invisible and publishing reveals it, so **publishing the
+assessment is still not publishing the grade**; and grading writes **no attendance
+row** and does not move the submission — the three facts stay independent (§4.7).
+
+**It found a real teardown gap immediately.** `publishGrades` notifies (R116), and
+`notification.exam_id` is `RESTRICT`, so the suite could not delete its own exams.
+The hand-written `grade.create` never sent a notification, which is exactly the
+kind of thing a test that skips the real path cannot see.

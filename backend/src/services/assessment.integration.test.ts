@@ -4,6 +4,11 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import {
+  publishGrades,
+  readGradeSheet,
+  saveGradeDraft,
+} from './grade.service.js';
+import {
   addQuestion,
   assessmentsForStudent,
   closeAssessment,
@@ -143,6 +148,10 @@ async function clear(): Promise<void> {
   });
   await prisma.examQuestion.deleteMany({ where: { examId: { in: examIds } } });
   await prisma.examStaff.deleteMany({ where: { examId: { in: examIds } } });
+  // R116 — publishing a grade notifies, and `notification.exam_id` is RESTRICT.
+  // Exercising the REAL grading path is what made this necessary; the earlier
+  // hand-written `grade.create` never sent one.
+  await prisma.notification.deleteMany({ where: { examId: { in: examIds } } });
   await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
 
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
@@ -856,5 +865,73 @@ describe('28–31 · history and privacy', () => {
     // And what was answered is still hers to read.
     const paper = await studentPaper(prisma, student(alice), examId, alice);
     expect(paper.submission?.answers[0]!.text).toBe('قبل الإغلاق');
+  });
+});
+
+describe('23–27b · the REAL grading path, not a hand-written Grade row', () => {
+  /**
+   * **The gap this closes.** The cases above wrote `prisma.grade.create`
+   * directly, which proves the visibility rule and nothing about whether an
+   * online assessment can actually be graded. R124 widened `loadForGrading` —
+   * an online paper has neither a branch nor a Subject, and the pre-R58 guard
+   * that refuses both had to be narrowed to physical sittings — so the path
+   * itself needed a test rather than an argument.
+   */
+  let examId = '';
+
+  beforeAll(async () => {
+    examId = await publishedPaper({ kind: 'level' });
+    const question = await prisma.examQuestion.findFirstOrThrow({
+      where: { examId },
+      select: { id: true },
+    });
+    await saveResponses(
+      prisma,
+      student(alice),
+      examId,
+      alice,
+      [{ questionId: question.id, text: 'إجابة للتنقيط' }],
+      { submit: true },
+    );
+  });
+
+  it('opens the sheet on the assessment’s own audience, with its own maximum', async () => {
+    const sheet = await readGradeSheet(prisma, superAdmin(), examId);
+    const ids = sheet.rows.map((r) => r.student_id);
+    expect(ids).toContain(alice);
+    // The Level's students, resolved through the ONE exam-audience rule — not
+    // the pre-R58 branch-bound arm, which an online paper has no branch for.
+    expect(ids).toContain(bob);
+    expect(ids).not.toContain(carol);
+    expect(String(sheet.max_grade)).toBe('20');
+  });
+
+  it('saves a draft mark and publishes it, through the sheet every exam uses', async () => {
+    const saved = await saveGradeDraft(prisma, superAdmin(), examId, [
+      { studentId: alice, score: 17, absent: false, version: 0 },
+    ]);
+    expect(saved.saved).toBe(1);
+
+    // Still invisible: publishing the assessment is not publishing the grade.
+    expect(
+      (await assessmentsForStudent(prisma, alice)).find((a) => a.id === examId)?.gradePublished,
+    ).toBe(false);
+
+    const published = await publishGrades(prisma, superAdmin(), examId);
+    expect(published.published).toBeGreaterThan(0);
+    expect(
+      (await assessmentsForStudent(prisma, alice)).find((a) => a.id === examId)?.gradePublished,
+    ).toBe(true);
+  });
+
+  it('and marking a grade does not touch attendance or the submission', async () => {
+    // The three facts are independent (§4.7, R123 clause 10). Grading wrote no
+    // attendance row and did not move the submission out of `submitted`.
+    expect(await prisma.attendance.count({ where: { examId } })).toBe(0);
+    const submission = await prisma.studentExamSubmission.findFirstOrThrow({
+      where: { examId, studentId: alice },
+      select: { state: true },
+    });
+    expect(submission.state).toBe('submitted');
   });
 });
