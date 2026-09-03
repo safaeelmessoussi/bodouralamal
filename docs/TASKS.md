@@ -1673,16 +1673,26 @@ was hiding behind it: the run went green on the first attempt.
             restic design and choose the smallest reliable mechanism that stops
             a restore silently resurrecting deleted personal data. No backup
             infrastructure is deployed by this work.
-- [ ] **OWNER / LEGAL DECISION REQUIRED — R111 normalized-email coordinate retention.**
-  Classified **C (unresolved retention/specification boundary)** after the synthetic Staging
-  finding. Permanent de-identification clears both ownership channels and a real regression proves
-  the address can be reclaimed, but the stable `NormalizedEmailLock` retains the exact lowercased
-  former address without an owner so future absent-row claims serialize. R111 requires the lock to
-  be released and identifying fields cleared, but does not say whether this raw ownerless
-  coordinate may remain. Decide between an explicit purpose/access/retention basis and an
-  erasable/non-reversible serialization design; do not delete it ad hoc and reintroduce the race.
-  This is **BEFORE REAL USERS**, not a blocker to an empty deployment.
-- [x] **P1.2 TEST ISOLATION — the integration sweep now leaves shared Local Development state
+- [x] **DIRECTION SETTLED (Owner, 2026-09-03) — the normalized-email lock is to be
+  keyed, not raw.** The design is ratified and complete in
+  [email-lock-keying](development/email-lock-keying.md):
+  `HMAC-SHA-256(EMAIL_LOCK_KEY, "bodour.email-lock.v1|" + normalized)` as the primary
+  key — **HMAC and not bare SHA-256**, because the space of real addresses is
+  enumerable and an unkeyed digest is the address in a thin disguise. Rotation and
+  secret loss are both *truncate and continue*: a lock row carries no ownership and no
+  history, so nothing is lost, and there is deliberately **no dual-key lookup** (a
+  digest is a lookup key, and recomputing one needs the plaintext this design stops
+  storing). The migration is forward-only and truncates rather than backfilling, for
+  the same reason. `deIdentifyAccount` still must **not** delete lock rows.
+  - [ ] **BLOCKED ON ONE OPERATIONAL PRECONDITION — the secret must exist before the
+        code does.** `EMAIL_LOCK_KEY` joins `REQUIRED_ENV_VARS`, and a missing required
+        variable **throws at boot** by design (TD-13 gives secrets no defaults), so
+        shipping first would break the next Staging deploy — a mutation this work is
+        not authorised to make, with a secret it must not invent. **Making the variable
+        optional is the one worse option**: a raw-email fallback produces two key spaces
+        and breaks the invariant in whichever environment fell back. **Order: generate
+        and install `EMAIL_LOCK_KEY` in Localhost and Staging, then implement.**
+        Everything else is ready and testable in one pass.
   unchanged.** The staffing loss reproduced in `branch.integration.test.ts` alone: its first
   `beforeEach` cleared with `userId: actorUserId ?? undefined` before the id existed, and Prisma
   omitted the undefined predicate, deleting all staffing. Cleanup now resolves suite-tagged user
