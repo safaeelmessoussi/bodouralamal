@@ -3745,3 +3745,32 @@ requirement landed. The fixture now carries one, with the rule named beside it.
 were failing against an `api` image built before R126–R130; rebuilding it from
 current source is a documented precondition of those files, and the gate was
 re-run against the rebuilt image.
+
+## The guardian was being asked for a date of birth (2026-09-03)
+
+**Found by the browser harness, and a source test could not have found it.**
+
+R130's date control went into `NameFields` — the block `PersonFields` shares
+with the **guardian** — so a woman registering her daughter was asked for her
+own date of birth, which R129 says must never happen. The `collectBirthDate`
+gate on `PersonFields` looked correct while being **dead**: the field arrived
+from the shared block whatever the gate said.
+
+Both callers compiled and both rendered. What showed it was **counting the
+controls on a real page**: three date inputs for two children.
+
+**The harness now asserts the shape rather than the count.** It reports the
+`<legend>` of the fieldset each date field sits in, so a regression reads
+`["بيانات ولي الأمر", …]` — naming *whose* form grew a field — instead of
+`3 ≠ 2`. A count would have told a future reader that something was wrong; this
+tells them what.
+
+**One diagnostic trap cost most of the time and is worth recording**: `docker
+compose up -d --build nginx` rebuilt the image and **did not recreate the
+container**, so the browser kept serving the previous bundle and the fix looked
+ineffective. The tell was comparing the served asset hash with a local
+`vite build` — `index-C5lNaLiI.js` against `index-H7wkzRVs.js`. `--force-recreate`
+is what makes a frontend change reach the harness.
+
+**verify-registration: 44/44** — the two dates in the two children's fieldsets,
+none in the guardian's, and the registration itself `201`.

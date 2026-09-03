@@ -640,6 +640,27 @@ Three consequences worth carrying:
 Diagnosing this is quick if the shape is recognised: `SELECT version_label,
 status FROM legal_consent_text` shows a `*-test-*` label sitting `active`.
 
+## A rebuilt frontend image is not a rebuilt container
+
+`docker compose up -d --build nginx` rebuilds `bodour-web:dev` and **may leave
+the running container on the previous image**, so a browser harness keeps
+serving the old bundle and a correct fix looks ineffective. On 2026-09-03 that
+cost most of an investigation: the source was right, the image was right, and
+the page was stale.
+
+**The tell is the content-hashed asset name.** Compare what the edge serves with
+what a local build produces:
+
+```
+curl -s http://127.0.0.1/ | grep -o '/assets/index-[^"]*\.js'   # served
+cd frontend && npx vite build                                    # local
+```
+
+Two different hashes means the container is stale. `docker compose ... up -d
+--force-recreate nginx` is what makes a frontend change reach the harness — and
+it is worth checking **before** concluding that a browser failure is a code
+defect.
+
 Four lessons, all now enforced in code:
 
 - **"Clean up after yourself" means restore what was there, not delete what you
