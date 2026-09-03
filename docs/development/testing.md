@@ -636,6 +636,13 @@ Four lessons, all now enforced in code:
   those coordinates. A before/after database delta is unsafe too: a real user
   can finish registration during the sweep, and deleting that newly observed
   replay guard would make their spent token usable again.
+- **A browser harness owns its rows by its own tag, and sweeps nothing else.**
+  R123's `seed-attendance-scenario.ts` creates a branch, a Category, a Level, a
+  group, a year, a period, a beneficiary, two scheduling types, a schedule, a
+  session and an event — all prefixed `[attguard]` — and `--clean` removes
+  exactly those. It deletes no academic year outside the label it minted and no
+  user outside its tag, because the local database is shared with whatever else
+  is running against it.
 - **A shared fixture must never sweep a namespace it does not own.** R122's
   `test-support/academic-period.ts` mints academic years into a far-future label
   band, and its first teardown swept *the whole band*. Integration files run

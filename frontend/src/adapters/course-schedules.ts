@@ -30,6 +30,10 @@ export interface ScheduleStaff {
 
 export interface CourseSchedule {
   id: string;
+  /** R123 — who may record presence at this class's occurrences. Optional on
+   *  the type because reads that predate the field carry none; the mapper
+   *  falls back to `staff_only`, never to the permissive setting. */
+  attendance_marking?: 'staff_only' | 'self_or_staff';
   /** R57 — what the class is CALLED. A label, never an identifier. */
   title: string;
   description: string | null;

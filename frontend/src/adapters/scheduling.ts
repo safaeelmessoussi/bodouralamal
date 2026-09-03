@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { AttendanceMarking } from './attendance.js';
 import {
   createCourseSchedule,
   deleteCourseSchedule,
@@ -84,6 +85,9 @@ export interface SchedulingItem {
   endTime: string | null;
   recurrence: string;
   weekdays: string[];
+  /** R123 — who may record presence at this item's occurrences. `staff_only`
+   *  for an exam sitting, which carries no column. */
+  attendanceMarking: AttendanceMarking;
   /** `recurrence_end_date` for an activity, `effective_until` for a class — one
    *  concept, two column names, reconciled here rather than on six screens. */
   repeatUntil: string | null;
@@ -190,6 +194,8 @@ export interface SchedulingIds {
 
 interface EventDefinitionWire {
   id: string;
+  /** R123 — who may record presence at this activity's occurrences. */
+  attendance_marking?: 'staff_only' | 'self_or_staff';
   title: string;
   description: string | null;
   /** R110 — `null` for an activity created before the catalogue existed. */
@@ -237,6 +243,10 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
   return {
     type: 'class',
     id: row.id,
+    // R123 — `staff_only` where the read does not carry it, which is the safe
+    // direction: an edit form must never propose the permissive setting on a
+    // field it could not read.
+    attendanceMarking: row.attendance_marking ?? 'staff_only',
     // R57 — the schedule's own name. The Subject is still shown, in its own
     // column: it identifies the class, the title names it.
     title: row.title,
@@ -306,6 +316,7 @@ export function fromEvent(row: EventDefinitionWire): SchedulingItem {
   return {
     type: 'activity',
     id: row.id,
+    attendanceMarking: row.attendance_marking ?? 'staff_only',
     title: row.title,
     visibility: row.visibility,
     description: row.description,
@@ -355,6 +366,8 @@ function fromExam(row: Exam): SchedulingItem {
   return {
     type: 'exam',
     id: row.id,
+    // An exam sitting is invigilated and carries no column (R123).
+    attendanceMarking: 'staff_only',
     title: row.title,
     // R109 gave a sitting a tier of its own, superseding §4.6 — hydrated for the
     // same reason as the class above, and it is the same defect if it is not.
@@ -506,6 +519,15 @@ export interface SchedulingInput {
   /** R110 — the catalogue row the picker chose. Sent on the Event payload only:
    *  a class and a sitting are typed by the entity they are. */
   schedulingTypeId?: string | null;
+  /**
+   * **R123 — who may record presence at this item's occurrences.**
+   *
+   * Sent on a class and on an activity, which are the two carriers that have a
+   * standing marking policy; an exam sitting is invigilated by construction and
+   * has no column at all. `self_or_staff` is refused server-side on a type that
+   * takes no attendance, and grants a teen or a child nothing whatever it says.
+   */
+  attendanceMarking?: AttendanceMarking;
   /** §4.4's four-way scope. **`groupIds` was missing until R72**, and it is the
    *  ONLY kind a Teacher may use (TD-2, §4.9) — so the form could offer them
    *  nothing the server would accept. */
@@ -635,6 +657,11 @@ export async function saveSchedulingItem(
           ...(input.schedulingTypeId !== undefined
             ? { scheduling_type_id: input.schedulingTypeId }
             : {}),
+          // R123 — sent on every save for the same reason: omitting it would
+          // make *«leave it alone»* and *«I did not look»* the same request.
+          ...(input.attendanceMarking !== undefined
+            ? { attendance_marking: input.attendanceMarking }
+            : {}),
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.staff ? { staff: input.staff } : {}),
         },
@@ -673,6 +700,10 @@ export async function saveSchedulingItem(
         ...(input.schedulingTypeId !== undefined
           ? { scheduling_type_id: input.schedulingTypeId }
           : {}),
+        // R123 — see the note on the edit path above.
+        ...(input.attendanceMarking !== undefined
+          ? { attendance_marking: input.attendanceMarking }
+          : {}),
         ...(input.staff ? { staff: input.staff } : {}),
       },
       token,
@@ -699,6 +730,11 @@ export async function saveSchedulingItem(
           // R110 (Owner, 2026-09-02) — the catalogue row this sitting is.
           ...(input.schedulingTypeId !== undefined
             ? { scheduling_type_id: input.schedulingTypeId }
+            : {}),
+          // R123 — sent on every save for the same reason: omitting it would
+          // make *«leave it alone»* and *«I did not look»* the same request.
+          ...(input.attendanceMarking !== undefined
+            ? { attendance_marking: input.attendanceMarking }
             : {}),
           // Editable after creation, unlike the identity fields: the server
           // refuses a maximum below a mark already recorded (R81).
@@ -732,6 +768,10 @@ export async function saveSchedulingItem(
         ...(input.schedulingTypeId !== undefined
           ? { scheduling_type_id: input.schedulingTypeId }
           : {}),
+        // R123 — see the note on the edit path above.
+        ...(input.attendanceMarking !== undefined
+          ? { attendance_marking: input.attendanceMarking }
+          : {}),
         max_grade: input.examMaxGrade!,
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
       },
@@ -747,6 +787,10 @@ export async function saveSchedulingItem(
     // can re-type an activity. `input.schedulingTypeId` is what the picker
     // chose; the form refuses to submit without one.
     scheduling_type_id: input.schedulingTypeId ?? '',
+    // R123 — who may record presence at this activity's occurrences.
+    ...(input.attendanceMarking !== undefined
+      ? { attendance_marking: input.attendanceMarking }
+      : {}),
     visibility: (input.visibility ?? 'public') as EventInput['visibility'],
     start_date: input.startDate,
     end_date: input.endDate,

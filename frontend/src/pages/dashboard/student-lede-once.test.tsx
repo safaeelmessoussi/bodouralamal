@@ -55,6 +55,7 @@ const me: Me = {
   active_role: 'student',
   approved_child_links: [],
   teaches_quran: false,
+  self_attendance_allowed: false,
 };
 
 function render(body: React.ReactNode): string {

@@ -115,6 +115,19 @@ export interface Occurrence {
   schedulingTypeId: string | null;
   schedulingTypeName: string | null;
   structuralKind: string | null;
+  /**
+   * **R123 — whether this occurrence has an attendance sheet, and who may mark
+   * on it.**
+   *
+   * Published for the same reason `delivery_mode` is: it is a fact about the
+   * arrangement, and without it the details dialog would have to either probe
+   * the server for every occurrence anybody merely *looked* at, or offer
+   * «الحضور» on a عطلة and lead the reader to a refusal. `attendanceMode` is
+   * `disabled` — never `null` — on a row whose type is unrecorded, which is the
+   * same answer the attendance service gives such a row.
+   */
+  attendanceMode: string;
+  attendanceMarking: string;
   id: string;
   title: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -418,7 +431,9 @@ const SESSION_OCCURRENCE_INCLUDE = {
       branchId: true,
       /* R110 (Owner 2026-09-02) — carried so a reader can tell a عطلة from an
          ordinary activity; `kind` says `event` for both. */
-      schedulingType: { select: { id: true, name: true, structuralKind: true } },
+      schedulingType: { select: { id: true, name: true, structuralKind: true, attendanceMode: true } },
+      /** R123 — who may mark at this class's occurrences. */
+      attendanceMarking: true,
 
       branch: { select: { name: true } },
       subject: { select: { id: true, name: true } },
@@ -478,6 +493,10 @@ function sessionOccurrence(
     schedulingTypeId: sch.schedulingType?.id ?? null,
     schedulingTypeName: sch.schedulingType?.name ?? null,
     structuralKind: sch.schedulingType?.structuralKind ?? null,
+    // `disabled` for an unrecorded type, which is exactly what the attendance
+    // service answers such a row — one rule, two places that must agree.
+    attendanceMode: sch.schedulingType?.attendanceMode ?? 'disabled',
+    attendanceMarking: sch.attendanceMarking,
     id: session.id,
     title: sch.subject.name,
     date: iso(session.date),
@@ -813,7 +832,7 @@ export async function readCalendar(
           },
           include: {
             schedulingType: {
-              select: { id: true, name: true, structuralKind: true },
+              select: { id: true, name: true, structuralKind: true, attendanceMode: true },
             },
             branchScopes: {
               select: { branch: { select: { id: true, name: true } } },
@@ -841,6 +860,8 @@ export async function readCalendar(
         schedulingTypeId: event.schedulingType?.id ?? null,
         schedulingTypeName: event.schedulingType?.name ?? null,
         structuralKind: event.schedulingType?.structuralKind ?? null,
+        attendanceMode: event.schedulingType?.attendanceMode ?? 'disabled',
+        attendanceMarking: event.attendanceMarking,
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -930,7 +951,7 @@ export async function readCalendar(
             room: { select: { name: true } },
             administrativeGroup: { select: { name: true } },
             schedulingType: {
-              select: { id: true, name: true, structuralKind: true },
+              select: { id: true, name: true, structuralKind: true, attendanceMode: true },
             },
           },
         });
@@ -941,6 +962,9 @@ export async function readCalendar(
       schedulingTypeId: exam.schedulingType?.id ?? null,
       schedulingTypeName: exam.schedulingType?.name ?? null,
       structuralKind: exam.schedulingType?.structuralKind ?? null,
+      attendanceMode: exam.schedulingType?.attendanceMode ?? 'disabled',
+      // An exam sitting is invigilated — no column, and none is wanted (R123).
+      attendanceMarking: 'staff_only',
       id: exam.id,
       title: exam.title,
       date: iso(exam.date),

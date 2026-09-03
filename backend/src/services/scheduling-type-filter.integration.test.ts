@@ -81,7 +81,7 @@ async function makeType(name: string, kind: 'class' | 'activity' | 'exam' | 'hol
   const row = await createSchedulingType(prisma, superAdmin(), {
     name: `${TAG} ${name}`,
     structuralKind: kind,
-    attendanceRequired: false,
+    attendanceMode: 'optional',
   });
   ids[name] = row.id;
   return row.id;

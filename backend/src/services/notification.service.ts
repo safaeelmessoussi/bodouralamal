@@ -608,6 +608,8 @@ export async function notifySessionChange(
     administrativeGroupId: session.schedule.administrativeGroupId,
     teachingGroupId: session.schedule.teachingGroupId,
     branchId: session.schedule.branchId,
+    // Period-blind: who this class concerns, not who was expected on a day.
+    on: null,
   };
 
   return prisma.$transaction(async (tx) => {
@@ -1302,6 +1304,8 @@ async function examStudentRecipients(
           administrativeGroupId: null,
           teachingGroupId: null,
           branchId: spec.branchId,
+          // Period-blind: recipients are who the exam concerns (R123).
+          on: null,
         })
       : audienceWhere({
           teachingMode: 'administrative_group',
@@ -1309,6 +1313,8 @@ async function examStudentRecipients(
           administrativeGroupId: spec.administrativeGroupId,
           teachingGroupId: null,
           branchId: spec.branchId,
+          // Period-blind: recipients are who the exam concerns (R123).
+          on: null,
         });
   const rows = await tx.user.findMany({
     // `audienceWhere` is also live-only; keep the recipient read itself

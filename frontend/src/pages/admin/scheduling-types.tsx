@@ -6,6 +6,7 @@ import {
   listSchedulingTypes,
   reorderSchedulingTypes,
   updateSchedulingType,
+  type AttendanceMode,
   type SchedulingTypeRow,
 } from '../../adapters/scheduling-catalogue.js';
 import type { SchedulingType } from '../../adapters/scheduling.js';
@@ -58,6 +59,13 @@ import { isDirty } from '../../lib/form-dirty.js';
  * edit it is shown **as text with the reason**, not as a disabled control
  * pretending to be one (rule AF).
  */
+/** R123 — the three states, in the reader's words. */
+const ATTENDANCE_MODE_KEYS: Record<AttendanceMode, string> = {
+  disabled: 'admin.schedulingTypes.attendanceDisabled',
+  optional: 'admin.schedulingTypes.attendanceOptional',
+  required: 'admin.schedulingTypes.attendanceRequired',
+};
+
 const KIND_KEYS: Record<SchedulingType, string> = {
   class: 'scheduling.type.class',
   activity: 'scheduling.type.activity',
@@ -99,7 +107,7 @@ export function SchedulingTypesPage(): ReactNode {
   }, [load]);
 
   async function save(
-    input: { name: string; structural_kind: SchedulingType; attendance_required: boolean },
+  input: { name: string; structural_kind: SchedulingType; attendance_mode: AttendanceMode },
     existing: SchedulingTypeRow | null,
   ): Promise<void> {
     setBusy(true);
@@ -112,7 +120,7 @@ export function SchedulingTypesPage(): ReactNode {
         await updateSchedulingType(
           existing.id,
           existing.version,
-          { name: input.name, attendance_required: input.attendance_required },
+          { name: input.name, attendance_mode: input.attendance_mode },
           accessToken,
         );
       } else {
@@ -177,11 +185,13 @@ export function SchedulingTypesPage(): ReactNode {
       cell: (r) => kindLabel(r.structural_kind),
     },
     {
-      key: 'attendance_required',
+      key: 'attendance_mode',
       header: t('admin.schedulingTypes.colAttendance'),
       // نعم / لا, exactly as the Owner's own table states it. A checkbox here
       // would read as a control on a row nobody is editing.
-      cell: (r) => (r.attendance_required ? t('common.yes') : t('common.no')),
+      // Three words, not نعم/لا: the whole point of R123 is that «no sheet at
+      // all» and «an empty sheet» are different answers.
+      cell: (r) => t(ATTENDANCE_MODE_KEYS[r.attendance_mode]),
     },
     {
       key: 'event_count',
@@ -280,13 +290,15 @@ function SchedulingTypeFormDialog({
   onSave: (input: {
     name: string;
     structural_kind: SchedulingType;
-    attendance_required: boolean;
+    attendance_mode: AttendanceMode;
   }) => void;
   onCancel: () => void;
 }): ReactNode {
   const [name, setName] = useState(initial?.name ?? '');
   const [kind, setKind] = useState<SchedulingType>(initial?.structural_kind ?? 'activity');
-  const [attendance, setAttendance] = useState(initial?.attendance_required ?? false);
+  const [attendance, setAttendance] = useState<AttendanceMode>(
+    initial?.attendance_mode ?? 'optional',
+  );
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
 
@@ -297,14 +309,14 @@ function SchedulingTypeFormDialog({
     {
       name: initial?.name ?? '',
       kind: initial?.structural_kind ?? 'activity',
-      attendance: initial?.attendance_required ?? false,
+      attendance: initial?.attendance_mode ?? 'optional',
     },
   );
 
   function submit(): void {
     setTouched(true);
     if (error) return;
-    onSave({ name: name.trim(), structural_kind: kind, attendance_required: attendance });
+    onSave({ name: name.trim(), structural_kind: kind, attendance_mode: attendance });
   }
 
   return (
@@ -353,15 +365,21 @@ function SchedulingTypeFormDialog({
         />
       )}
 
-      <label className="field field--choice">
-        <input
-          type="checkbox"
-          checked={attendance}
-          onChange={(e) => setAttendance(e.target.checked)}
-        />
-        <span>{t('admin.schedulingTypes.colAttendance')}</span>
-      </label>
-      <p className="hint">{t('admin.schedulingTypes.attendanceHint')}</p>
+      {/**
+        * **A three-state choice, not a checkbox** (R123). A checkbox could only
+        * ever say *required or not*, and the state the Owner needed for عطلة and
+        * حفل — no sheet at all — has no box to be in.
+        */}
+      <SelectField
+        label={t('admin.schedulingTypes.colAttendance')}
+        value={attendance}
+        onChange={(v) => setAttendance(v as AttendanceMode)}
+        hint={t('admin.schedulingTypes.attendanceHint')}
+        options={(['disabled', 'optional', 'required'] as AttendanceMode[]).map((m) => ({
+          value: m,
+          label: t(ATTENDANCE_MODE_KEYS[m]),
+        }))}
+      />
     </FormDialog>
   );
 }

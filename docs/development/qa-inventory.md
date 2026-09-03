@@ -129,6 +129,7 @@ under the table.
 | `verify-visibility-ui.sh` | 19 | NEW B §D — the visibility tier on the forms, and where each R50 scope lands | 19/19 |
 | `verify-scheduling-types.sh` | 10 | R110 — the scheduling-type catalogue on أنواع الجدولة and the الجدولة picker | 10/10 |
 | `verify-academic-periods.sh` | 4 | **R122** — الفصول الدراسية renders and creates a period end to end, جارٍ is read from the period's own dates, and the academic year is text on edit (rule AF). **The screen the required `academic_period_id` depends on**: without it, approval refuses every applicant | 4/4 |
+| `verify-attendance.sh` | 4 | **R123** — الحضور on the real pages: the occurrence dialog offers it, a `required` sheet opens on its expected roster, marking sends the request and the row reads **حاضرة**, and a **عطلة offers no attendance control at all**. It found a real defect in itself on the first run — the public calendar labels a class by its **Subject**, not by the schedule's title, so the needle was reading the wrong field | 4/4 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 

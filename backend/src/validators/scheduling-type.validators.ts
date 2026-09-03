@@ -31,18 +31,28 @@ const typeName = z.string().trim().min(1).max(60);
  */
 export const structuralKind = z.enum(['class', 'activity', 'exam']);
 
+/**
+ * **R123 — the three states, and why `disabled` is one of them.**
+ *
+ * `disabled` is what a عطلة and a حفل are: no sheet exists, and the server
+ * refuses to read, mark or configure attendance for an occurrence of that type
+ * rather than the client merely hiding a button.
+ */
+export const attendanceMode = z.enum(['disabled', 'optional', 'required']);
+
 export const createSchedulingTypeSchema = z
   .object({
     name: typeName,
     structural_kind: structuralKind,
     /**
-     * **Required, and deliberately not defaulted.** Whether a type takes
-     * attendance is a decision about what the type MEANS, and a default would
-     * let one be created without anybody making it — which is precisely how a
-     * catalogue ends up with a flag nobody chose. اختبار takes attendance and
-     * محاضرة does not, and nothing about either word says so.
+     * **Required, and deliberately not defaulted** (R123). What attendance
+     * means for a type is a decision about what the type IS, and a default
+     * would let one be created without anybody making it — which is precisely
+     * how a catalogue ends up with a setting nobody chose. اختبار takes
+     * attendance, محاضرة may, عطلة never does, and nothing about any of those
+     * words says so.
      */
-    attendance_required: z.boolean(),
+    attendance_mode: attendanceMode,
   })
   .strict();
 
@@ -50,6 +60,6 @@ export const updateSchedulingTypeSchema = z
   .object({
     version,
     name: typeName.optional(),
-    attendance_required: z.boolean().optional(),
+    attendance_mode: attendanceMode.optional(),
   })
   .strict();

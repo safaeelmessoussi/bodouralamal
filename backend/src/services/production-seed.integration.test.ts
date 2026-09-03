@@ -454,13 +454,18 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
  * and a pre-marker install is adopted only when every canonical name is already
  * accounted for.
  */
+// **R123 restated the attendance column rather than relaxing the assertion.**
+// The boolean became three states, so the pin moved from *does it take
+// attendance* to *what does attendance mean here* — and the two rows the Owner
+// excluded, عطلة and حفل, are pinned as `disabled` because that exclusion is
+// the requirement, not an incidental default.
 const CANONICAL_TYPES = [
-  { name: 'حصة دراسية', structuralKind: 'class', attendanceRequired: true },
-  { name: 'اختبار', structuralKind: 'exam', attendanceRequired: true },
-  { name: 'محاضرة', structuralKind: 'class', attendanceRequired: false },
-  { name: 'حفل', structuralKind: 'activity', attendanceRequired: false },
-  { name: 'عطلة', structuralKind: 'holiday', attendanceRequired: false },
-  { name: 'نشاط', structuralKind: 'activity', attendanceRequired: false },
+  { name: 'حصة دراسية', structuralKind: 'class', attendanceMode: 'required' },
+  { name: 'اختبار', structuralKind: 'exam', attendanceMode: 'required' },
+  { name: 'محاضرة', structuralKind: 'class', attendanceMode: 'optional' },
+  { name: 'حفل', structuralKind: 'activity', attendanceMode: 'disabled' },
+  { name: 'عطلة', structuralKind: 'holiday', attendanceMode: 'disabled' },
+  { name: 'نشاط', structuralKind: 'activity', attendanceMode: 'optional' },
 ] as const;
 
 async function typeSnapshot() {
@@ -470,7 +475,7 @@ async function typeSnapshot() {
       id: true,
       name: true,
       structuralKind: true,
-      attendanceRequired: true,
+      attendanceMode: true,
       displayOrder: true,
       deletedAt: true,
     },
@@ -506,7 +511,7 @@ describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install
       const row = rows.find((r) => r.name === expected.name);
       expect(row, `missing canonical type ${expected.name}`).toBeDefined();
       expect(row!.structuralKind).toBe(expected.structuralKind);
-      expect(row!.attendanceRequired).toBe(expected.attendanceRequired);
+      expect(row!.attendanceMode).toBe(expected.attendanceMode);
       expect(row!.deletedAt).toBeNull();
     }
     // All four structural kinds reachable — the postcondition the seed asserts,
@@ -523,7 +528,7 @@ describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install
       data: {
         name: 'نشاط',
         structuralKind: 'activity',
-        attendanceRequired: false,
+        attendanceMode: 'optional',
         displayOrder: 1,
       },
     });
@@ -550,7 +555,7 @@ describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install
     });
     await prisma.schedulingType.update({
       where: { id: before.id },
-      data: { attendanceRequired: true, displayOrder: 99 },
+      data: { attendanceMode: 'required', displayOrder: 99 },
     });
 
     await runProductionSeed();
@@ -559,7 +564,7 @@ describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install
       where: { name: 'حفل', deletedAt: null },
     });
     expect(after.id).toBe(before.id);
-    expect(after.attendanceRequired).toBe(true);
+    expect(after.attendanceMode).toBe('required');
     expect(after.displayOrder).toBe(99);
     // And no second حفل was created beside it.
     expect(await prisma.schedulingType.count({ where: { name: 'حفل' } })).toBe(1);

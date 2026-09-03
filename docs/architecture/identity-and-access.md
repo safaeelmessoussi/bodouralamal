@@ -465,6 +465,20 @@ A few rows worth knowing without opening the table:
   **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
   writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
   operational APIs they are authorised to use (Revision 30).
+- **Attendance (§4.7, R123) invents no reach of its own.** Marking is delegated
+  to the rule each occurrence kind already has: a Session to whoever staffs
+  **that occurrence on its date** (R91's `staffsSession`, the only honest answer
+  for a past class), an Event to whoever may edit it (R71's responsible person,
+  an Admin in scope, a Super Admin), an Exam to its supervisor or an Admin in the
+  branch. Widening any of those later widens attendance with them rather than
+  leaving a second matrix behind. **Self check-in is not a role** — it is the
+  occurrence's `attendance_marking` plus the caller's own Category flag, and it
+  authorises her to mark exactly one person: herself.
+- **Attendance is deliberately NOT a TD-12 freshness surface.** The catalogue is
+  approvals, consent overrides, pass/fail overrides, user management, settings
+  and presigned minting; marking a register is ordinary operational work and
+  adding it would make one class of write assert against live rows while its
+  siblings on the same screen do not.
 - **Branch event backfill** stays an **Admin** capability, because it is operational work
   (populating events when a branch activates), not reference management.
 

@@ -55,18 +55,26 @@ const CATEGORIES = [
     description: 'النساء من سن الجامعة الى ما فوق',
     displayOrder: 1,
     defaultVisibility: Visibility.public,
+    /**
+     * **R123 — the only Category whose beneficiaries may record their own
+     * presence.** An adult signs herself in; a teen or a child never does, and
+     * the server refuses it regardless of how an occurrence is configured.
+     */
+    selfAttendanceAllowed: true,
   },
   {
     name: 'اليافعات',
     description: 'البنات اليافعات من سن السنة الأولى اعدادي الى سن السنة الأخيرة ثانوي',
     displayOrder: 2,
     defaultVisibility: Visibility.private,
+    selfAttendanceAllowed: false,
   },
   {
     name: 'الطفل',
     description: 'الأطفال اناثا و ذكورا من سن السنة الأخيرة من الروض الى سن السادسة ابتدائي',
     displayOrder: 3,
     defaultVisibility: Visibility.private,
+    selfAttendanceAllowed: false,
   },
 ] as const;
 
@@ -150,12 +158,15 @@ const MEMORISATION_SUBJECT = SUBJECTS[1];
  * name — §4.4b forbids that, and a catalogue whose behaviour depended on its
  * label could never be renamed.
  *
- * **`attendanceRequired` is the Owner's column, verbatim**: نعم for حصة دراسية
- * and اختبار, لا for the other three. It is not derivable — اختبار takes
- * attendance and محاضرة does not, and nothing about either word says so.
+ * **`attendanceMode` is the Owner's column, widened by R123** from a boolean to
+ * the three states the association actually has: `required` for حصة دراسية and
+ * اختبار (the register), `optional` for محاضرة and نشاط (the blank list), and
+ * `disabled` for عطلة and حفل — the two the Owner excluded from attendance
+ * entirely. It is not derivable: اختبار takes attendance and محاضرة may, and
+ * nothing about either word says so.
  *
  * **عطلة is an ordinary schedulable Event** (OD-03), shown on the calendar like
- * any other, with `attendanceRequired: false`. It is not a suppression
+ * any other, with `attendanceMode: 'disabled'`. It is not a suppression
  * mechanism: BR-17 keeps non-teaching activity out of the timetable and §4.4(6)
  * makes a cancellation an edit to a Session row, so **a holiday cancels no
  * class**.
@@ -177,12 +188,12 @@ const MEMORISATION_SUBJECT = SUBJECTS[1];
  * Nothing here is inferred: every value is either R110(2)'s or the amendment's.
  */
 const SCHEDULING_TYPES = [
-  { name: 'حصة دراسية', structuralKind: 'class', attendanceRequired: true, displayOrder: 1 },
-  { name: 'اختبار', structuralKind: 'exam', attendanceRequired: true, displayOrder: 2 },
-  { name: 'محاضرة', structuralKind: 'class', attendanceRequired: false, displayOrder: 3 },
-  { name: 'حفل', structuralKind: 'activity', attendanceRequired: false, displayOrder: 4 },
-  { name: 'عطلة', structuralKind: 'holiday', attendanceRequired: false, displayOrder: 5 },
-  { name: 'نشاط', structuralKind: 'activity', attendanceRequired: false, displayOrder: 6 },
+  { name: 'حصة دراسية', structuralKind: 'class', attendanceMode: 'required', displayOrder: 1 },
+  { name: 'اختبار', structuralKind: 'exam', attendanceMode: 'required', displayOrder: 2 },
+  { name: 'محاضرة', structuralKind: 'class', attendanceMode: 'optional', displayOrder: 3 },
+  { name: 'حفل', structuralKind: 'activity', attendanceMode: 'disabled', displayOrder: 4 },
+  { name: 'عطلة', structuralKind: 'holiday', attendanceMode: 'disabled', displayOrder: 5 },
+  { name: 'نشاط', structuralKind: 'activity', attendanceMode: 'optional', displayOrder: 6 },
 ] as const;
 
 const ACADEMIC_YEAR = '2026-2027';
@@ -304,6 +315,7 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
           name: category.name,
           description: category.description,
           displayOrder: category.displayOrder,
+          selfAttendanceAllowed: category.selfAttendanceAllowed,
         },
       }));
     categoryIds.set(category.name, row.id);
@@ -515,8 +527,8 @@ async function seedSubjects(): Promise<void> {
  *   administrator with two;
  * * a **reordered** catalogue keeps its order — `displayOrder` is written only
  *   on the create, so the Owner's arrangement survives;
- * * a **re-flagged** row keeps its flag — `attendanceRequired` is hers to
- *   decide once the row exists, which is the whole point of it being a column;
+ * * a **re-flagged** row keeps its flag — `attendanceMode` is hers to decide
+ *   once the row exists, which is the whole point of it being a column;
  * * a **soft-deleted** row stays deleted, and its name is free for a fresh one.
  *
  * **One preflight, and it is a real ambiguity rather than a tidiness check.**
@@ -596,7 +608,7 @@ async function seedSchedulingTypes(): Promise<void> {
           data: {
             name: type.name,
             structuralKind: type.structuralKind,
-            attendanceRequired: type.attendanceRequired,
+            attendanceMode: type.attendanceMode,
             displayOrder: type.displayOrder,
           },
         });

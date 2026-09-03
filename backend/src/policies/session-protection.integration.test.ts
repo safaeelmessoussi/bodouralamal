@@ -235,21 +235,28 @@ describe("the built-in rules hold with NO registration step", () => {
 
 describe("a module contributes a rule knowing nothing about scheduling", () => {
   it("is consulted alongside the built-ins", async () => {
-    // This is the shape a future attendance/grades/evaluations module takes: it
-    // names its own condition and never mentions schedules, materialization or
-    // regeneration.
+    // This is the shape a future grades/behaviour/certification module takes:
+    // it names its own condition and never mentions schedules, materialization
+    // or regeneration.
+    //
+    // **The example is no longer attendance, and that is the point.** R123
+    // shipped `HAS_ATTENDANCE` as a BUILT-IN — a protection that can be switched
+    // off by forgetting a bootstrap call, or by `resetContributedRules` inside a
+    // test, is not a protection — so registering that code now throws as a
+    // duplicate. The property this test exists for is unchanged: **a rule
+    // contributed by a module is consulted alongside the built-ins.**
     const plain = sessions.find((s) =>
       s.date.toISOString().startsWith("2026-06-02"),
     )!;
     registerSessionProtectionRule({
-      code: "HAS_ATTENDANCE",
-      describes: "attendance has been recorded for this session",
+      code: "HAS_BEHAVIOUR_REPORT",
+      describes: "a behavioural report was recorded against this session",
       evaluate: (_tx, candidates) =>
         new Set(candidates.filter((c) => c.id === plain.id).map((c) => c.id)),
     });
 
     const reasons = await protectionReasons(prisma, sessions);
-    expect(bySession(plain.id, reasons)).toEqual(["HAS_ATTENDANCE"]);
+    expect(bySession(plain.id, reasons)).toEqual(["HAS_BEHAVIOUR_REPORT"]);
   });
 
   it("ADDS to an existing reason rather than replacing it", async () => {

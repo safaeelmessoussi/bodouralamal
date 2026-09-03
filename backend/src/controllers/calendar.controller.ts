@@ -140,6 +140,18 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     scheduling_type_id: o.schedulingTypeId,
     scheduling_type_name: o.schedulingTypeName,
     structural_kind: o.structuralKind,
+    /**
+     * **R123 — whether this occurrence has an attendance sheet, and who marks.**
+     *
+     * Published for the same reason `delivery_mode` is: it is a fact about the
+     * arrangement, and without it the details dialog must either probe the
+     * server for every occurrence anybody merely looked at, or offer «الحضور»
+     * on a عطلة and lead the reader to a refusal (rule P, read the other way).
+     * `attendance_mode` is `disabled` on a row whose type is unrecorded — the
+     * same answer the attendance service gives such a row.
+     */
+    attendance_mode: o.attendanceMode,
+    attendance_marking: o.attendanceMarking,
     id: o.id,
     title: o.title,
     date: o.date,

@@ -6,6 +6,7 @@ import { DateField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import { SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
 import type { SchedulingTypeRow } from '../../adapters/scheduling-catalogue.js';
+import type { AttendanceMarking } from '../../adapters/attendance.js';
 import { Feedback } from '../ui/feedback.js';
 import { VisibilityField } from './visibility-field.js';
 
@@ -77,6 +78,31 @@ export interface SchedulingFormProps {
    *  never recorded (R56 told administrators to write it in the title). */
   schedulingTypeId?: string | null;
   onSchedulingTypeChange?: (row: SchedulingTypeRow) => void;
+  /**
+   * **R123 — who may record presence at this item's occurrences.**
+   *
+   * A property of the class or activity, not of its type: حصة دراسية is the
+   * type of both a women's class each woman signs herself into and a
+   * children's class only the مؤطِّرة may mark. Absent `onAttendanceMarkingChange`
+   * means this caller does not configure it, and the control is not rendered —
+   * the value is still the row's, and the server still decides who may act.
+   */
+  attendanceMarking?: AttendanceMarking;
+  onAttendanceMarkingChange?: (next: AttendanceMarking) => void;
+  /**
+   * **R123 — whether the chosen population may self-mark at all.**
+   *
+   * `true` offers both settings; `false` offers **only** `staff_only` and says
+   * why — اليافعات and الطفل are always staff-recorded, and a control whose
+   * every use the server refuses is worse than no control. `null` is *not yet
+   * known* (no Level chosen, or the lists still arriving) and is treated as
+   * `false`, because guessing *allowed* is the one direction that ships the
+   * misleading option.
+   *
+   * Structural: the caller resolves it from the Level's Category flag, and
+   * **no client compares a Category's Arabic name** (§4.4b).
+   */
+  selfAttendanceAllowed?: boolean | null;
 
   title: string;
   onTitle: (v: string) => void;
@@ -128,6 +154,9 @@ export function SchedulingForm({
   catalogue = [],
   schedulingTypeId = null,
   onSchedulingTypeChange,
+  attendanceMarking = 'staff_only',
+  onAttendanceMarkingChange,
+  selfAttendanceAllowed = null,
   visibility,
   onVisibility,
   title,
@@ -162,6 +191,9 @@ export function SchedulingForm({
         schedulingTypeId={schedulingTypeId}
         onTypeChange={onTypeChange}
         {...(onSchedulingTypeChange ? { onSchedulingTypeChange } : {})}
+        attendanceMarking={attendanceMarking}
+        {...(onAttendanceMarkingChange ? { onAttendanceMarkingChange } : {})}
+        selfAttendanceAllowed={selfAttendanceAllowed}
       />
 
       {/* Beside the type, because both answer *what is this and who sees it* —
@@ -251,13 +283,16 @@ export function SchedulingForm({
  * عطلة it was. Guessing from the title is exactly the name-matching §4.4b
  * forbids.
  *
- * ## Attendance
+ * ## Attendance (R123)
  *
- * `attendance_required` is a fact about the type, so it is stated where the type
- * is chosen (OD-03). **Attendance-specific controls render only where it is
- * true** — there are none yet, and this notice is the seam they attach to;
- * putting the flag anywhere else would leave the next person to build them
- * hunting for it.
+ * `attendance_mode` is a fact about the TYPE, so it is stated where the type is
+ * chosen (OD-03). **Who may mark is a fact about this class or activity**, not
+ * about its type — حصة دراسية is the type of both a women's class each woman
+ * signs herself into and a children's class only the مؤطِّرة may mark — so the
+ * marking selector is the one attendance control that lives on the item, and it
+ * renders only where the type has a sheet at all. On عطلة and حفل there is
+ * nothing to configure and the form says so instead of offering a setting whose
+ * every value would be refused.
  */
 function TypePicker({
   type,
@@ -267,6 +302,9 @@ function TypePicker({
   schedulingTypeId,
   onTypeChange,
   onSchedulingTypeChange,
+  attendanceMarking,
+  onAttendanceMarkingChange,
+  selfAttendanceAllowed,
 }: {
   type: SchedulingType;
   typeLocked: boolean;
@@ -275,6 +313,9 @@ function TypePicker({
   schedulingTypeId: string | null;
   onTypeChange: (next: SchedulingType) => void;
   onSchedulingTypeChange?: (row: SchedulingTypeRow) => void;
+  attendanceMarking: AttendanceMarking;
+  onAttendanceMarkingChange?: (next: AttendanceMarking) => void;
+  selfAttendanceAllowed: boolean | null;
 }): ReactNode {
   // Narrowed to what this caller may author (R72). A مؤطِّرة is offered the
   // activity rows and nothing else, because that is what the server grants her.
@@ -319,9 +360,52 @@ function TypePicker({
         hint={typeLocked ? t('scheduling.typeFixed') : undefined}
         options={offered.map((r) => ({ value: r.id, label: r.name }))}
       />
-      {selected?.attendance_required ? (
-        <Feedback>{t('scheduling.attendanceTaken')}</Feedback>
-      ) : null}
+      {selected === null ? null : selected.attendance_mode === 'disabled' ? (
+        <Feedback>{t('scheduling.attendanceNone')}</Feedback>
+      ) : (
+        <>
+          <Feedback>
+            {t(
+              selected.attendance_mode === 'required'
+                ? 'scheduling.attendanceRequired'
+                : 'scheduling.attendanceOptional',
+            )}
+          </Feedback>
+          {onAttendanceMarkingChange ? (
+            <SelectField
+              label={t('scheduling.attendanceMarking')}
+              value={attendanceMarking}
+              onChange={(v) => onAttendanceMarkingChange(v as AttendanceMarking)}
+              /**
+               * **The option is withheld, not disabled** where the population
+               * may never self-mark — and the hint says which it is, so the
+               * absence reads as a rule rather than as a missing feature.
+               */
+              hint={t(
+                selfAttendanceAllowed === true
+                  ? 'scheduling.attendanceMarkingHint'
+                  : 'scheduling.attendanceMarkingStaffOnlyHint',
+              )}
+              options={
+                /**
+                 * Both offered where the population may self-mark — **and also
+                 * where the row already says `self_or_staff`**, so an existing
+                 * configuration is never rendered as a value the select does
+                 * not contain. The caller resets it when the Category actually
+                 * forbids it; a select silently showing the wrong option is how
+                 * a save would change a setting nobody touched.
+                 */
+                selfAttendanceAllowed === true || attendanceMarking === 'self_or_staff'
+                  ? [
+                      { value: 'staff_only', label: t('scheduling.markingStaffOnly') },
+                      { value: 'self_or_staff', label: t('scheduling.markingSelfOrStaff') },
+                    ]
+                  : [{ value: 'staff_only', label: t('scheduling.markingStaffOnly') }]
+              }
+            />
+          ) : null}
+        </>
+      )}
     </>
   );
 }

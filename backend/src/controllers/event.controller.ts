@@ -60,6 +60,16 @@ const createSchema = z
      * write an Event the catalogue calls a class.
      */
     scheduling_type_id: z.uuid(),
+    /**
+     * **R123 — who may record presence at this activity's occurrences.**
+     *
+     * Absent is `staff_only`, the column's default and the safe answer: a
+     * setting nobody chose must never be the permissive one. `self_or_staff` is
+     * refused outright on a type that takes no attendance
+     * (`ATTENDANCE_NOT_AVAILABLE`), and it still grants a teen or a child
+     * nothing — the Category decides that, server-side.
+     */
+    attendance_marking: z.enum(['staff_only', 'self_or_staff']).optional(),
     visibility: z.enum(['public', 'private', 'hidden']),
     start_date: calendarDate,
     end_date: calendarDate.nullable().optional(),
@@ -93,6 +103,9 @@ const patchSchema = z
     /** R110 — editable. Absent leaves the type alone; it is never cleared by
      *  an edit that does not mention it. */
     scheduling_type_id: z.uuid().optional(),
+    /** R123 — absent leaves it alone; it is never reset by an edit that does
+     *  not mention it. */
+    attendance_marking: z.enum(['staff_only', 'self_or_staff']).optional(),
     visibility: z.enum(['public', 'private', 'hidden']).optional(),
     start_date: calendarDate.optional(),
     end_date: calendarDate.nullable().optional(),
@@ -136,6 +149,9 @@ export function create(prisma: PrismaClient) {
       title: b.title,
       ...(b.description !== undefined ? { description: b.description } : {}),
       schedulingTypeId: b.scheduling_type_id,
+      ...(b.attendance_marking !== undefined
+        ? { attendanceMarking: b.attendance_marking }
+        : {}),
       visibility: b.visibility,
       startDate: b.start_date,
       ...(b.end_date !== undefined ? { endDate: b.end_date } : {}),
@@ -175,6 +191,9 @@ export function update(prisma: PrismaClient) {
       ...(b.description !== undefined ? { description: b.description } : {}),
       ...(b.scheduling_type_id !== undefined
         ? { schedulingTypeId: b.scheduling_type_id }
+        : {}),
+      ...(b.attendance_marking !== undefined
+        ? { attendanceMarking: b.attendance_marking }
         : {}),
       ...(b.visibility !== undefined ? { visibility: b.visibility } : {}),
       ...(b.start_date !== undefined ? { startDate: b.start_date } : {}),

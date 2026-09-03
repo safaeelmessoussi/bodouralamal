@@ -217,6 +217,9 @@ function audienceOf(exam: ExamForGrading): Prisma.UserWhereInput {
         administrativeGroupId: exam.administrativeGroupId,
         teachingGroupId: null,
         branchId: exam.branchId,
+        // Period-blind: R58 makes the sheet's roster *who sits this paper*, a
+        // membership question, not *who was expected on a date* (R123).
+        on: null,
       })
     : audienceWhere({
         teachingMode: 'entire_level',
@@ -224,6 +227,9 @@ function audienceOf(exam: ExamForGrading): Prisma.UserWhereInput {
         administrativeGroupId: null,
         teachingGroupId: null,
         branchId: exam.branchId,
+        // Period-blind: R58 makes the sheet's roster *who sits this paper*, a
+        // membership question, not *who was expected on a date* (R123).
+        on: null,
       });
 }
 

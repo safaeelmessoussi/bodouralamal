@@ -147,7 +147,7 @@ beforeAll(async () => {
       data: {
         name: `${TAG} نوع`,
         structuralKind: "activity",
-        attendanceRequired: false,
+        attendanceMode: 'optional',
         displayOrder: 990,
       },
     })

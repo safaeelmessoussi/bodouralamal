@@ -40,6 +40,39 @@ import { calendarDay, effectiveOn } from "./effective-staffing.js";
  * remove, reappearing one table over.
  */
 
+/**
+ * **R122/R123 — the enrolments that were live IN the academic period covering a
+ * given day.**
+ *
+ * ## Why a date and not «now»
+ *
+ * An attendance sheet is opened for an occurrence, and the occurrence has its
+ * own date. Deriving *who was expected* from today's period would answer the
+ * wrong question on every historical sheet: reading last February's register in
+ * September would show this September's students. The period is chosen by the
+ * OCCURRENCE date, never by the clock.
+ *
+ * ## Why `deleted_at IS NULL` is not enough
+ *
+ * R122 separated two facts a single nullable column used to carry. `deleted_at`
+ * says *a human ended this enrolment early*; whether it is **running** is the
+ * period's dates. An enrolment from three years ago that nobody bothered to
+ * close is `deleted_at IS NULL` and is not a current student — treating it as
+ * one is precisely the defect R122 exists to close.
+ *
+ * ## Why a NULL period never matches
+ *
+ * `academic_period_id` is NULL on every enrolment that predates R122, and
+ * nothing in those rows says which semester they belonged to. A relation filter
+ * cannot be satisfied by a null relation, so those rows drop out — which is the
+ * correct and honest answer: unclassified history is not a claim about who is
+ * expected today or on any other day.
+ */
+export function enrolmentInPeriodOn(on: Date): Prisma.EnrollmentWhereInput {
+  const day = calendarDay(on);
+  return { academicPeriod: { startDate: { lte: day }, endDate: { gte: day } } };
+}
+
 /** The parts of a schedule that decide its audience. Deliberately structural: a
  *  `Session` inherits these from its schedule and never carries its own. */
 export interface AudienceSpec {
@@ -63,6 +96,22 @@ export interface AudienceSpec {
    * `audienceWhere`.
    */
   audienceBranchIds?: string[] | null;
+
+  /**
+   * **R123 — which day's enrolments count, or `null` for the period-blind
+   * question.**
+   *
+   * Deliberately **not optional**: every caller states which of two different
+   * questions it is asking, rather than inheriting one by omission. *«Who is in
+   * this class»* — the consent gate, the calendar, notification recipients — is
+   * period-blind and passes `null`, because narrowing those is a separate
+   * decision with its own consequences and nobody asked for it. *«Who was
+   * expected at this occurrence»* — attendance — passes the occurrence's date.
+   *
+   * A behaviour each caller must opt INTO is a behaviour that goes missing
+   * somewhere (rule AE); a field each caller must FILL IN cannot.
+   */
+  on: Date | null;
 }
 
 /**
@@ -81,6 +130,9 @@ export interface AudienceSpec {
  * query, with nothing to invalidate.
  */
 export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
+  // Empty for the period-blind question, so the two enrolment arms below read
+  // identically whichever one is being asked.
+  const period = spec.on === null ? {} : enrolmentInPeriodOn(spec.on);
   switch (spec.teachingMode) {
     case "entire_level": {
       if (spec.levelId === null)
@@ -105,6 +157,7 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
         levelEnrollments: {
           some: {
             deletedAt: null,
+            ...period,
             levelId: spec.levelId,
             // Branch-bound: the Level spans branches, this class does not.
             // R66 — the enrolment's branch, not the group's. Same meaning
@@ -127,6 +180,7 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
         levelEnrollments: {
           some: {
             deletedAt: null,
+            ...period,
             administrativeGroupId: spec.administrativeGroupId,
             administrativeGroup: { deletedAt: null },
           },
@@ -157,6 +211,27 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
             teachingGroup: { deletedAt: null },
           },
         },
+        /**
+         * **A seat carries no period, so the enrolment behind it answers for
+         * it** (R123). BR-22 makes enrolment precede placement and un-enrolling
+         * removes the seats for that Level — but a period simply *ending*
+         * removes nothing, so without this a circle's sheet would open on last
+         * year's members. The Level comes from the seat itself, which the
+         * composite FK keeps honest.
+         */
+        ...(spec.on === null
+          ? {}
+          : {
+              levelEnrollments: {
+                some: {
+                  deletedAt: null,
+                  ...enrolmentInPeriodOn(spec.on),
+                  level: {
+                    teachingGroups: { some: { id: spec.teachingGroupId } },
+                  },
+                },
+              },
+            }),
       };
     }
   }
@@ -191,10 +266,21 @@ function unreachable(mode: string, field: string): string {
 export async function audienceForSession(
   prisma: Prisma.TransactionClient | PrismaClient,
   sessionId: string,
+  /**
+   * **R123 — `'occurrence'` narrows the audience to the academic period
+   * covering the session's OWN date; `null` keeps the period-blind membership
+   * question every pre-R123 caller asks.**
+   *
+   * A literal rather than a `Date`, because the only date that is ever correct
+   * here is the occurrence's, and reading it from the row this function already
+   * loads removes the chance of a caller passing today's by accident.
+   */
+  on: 'occurrence' | null = null,
 ): Promise<AudienceSpec | null> {
   const session = await prisma.session.findFirst({
     where: { id: sessionId, deletedAt: null },
     select: {
+      date: true,
       audienceBranches: { select: { branchId: true } },
       schedule: {
         select: {
@@ -215,6 +301,7 @@ export async function audienceForSession(
     // Empty means INHERIT — the ordinary case, and every occurrence but the
     // rare combined one.
     audienceBranchIds: override.length > 0 ? override : null,
+    on: on === 'occurrence' ? session.date : null,
   };
 }
 
@@ -1228,6 +1315,13 @@ export interface EventScopeRows {
 
 export function eventAudienceWhere(
   scopes: EventScopeRows,
+  /**
+   * **R123** — the occurrence's date, or `null` for the period-blind question.
+   * Same division as `AudienceSpec.on`, and stated for the same reason:
+   * notification recipients are *who this activity concerns*, while an
+   * attendance sheet is *who was expected on this day*.
+   */
+  on: Date | null = null,
 ): Prisma.UserWhereInput | null {
   const { branchIds, categoryIds, levelIds, administrativeGroupIds } = scopes;
   if (
@@ -1250,7 +1344,10 @@ export function eventAudienceWhere(
    * Category A at Branch 1 and Category B at Branch 2 would match an event for
    * "Category A at Branch 2" — which describes nobody.
    */
-  const enrolment: Prisma.EnrollmentWhereInput = { deletedAt: null };
+  const enrolment: Prisma.EnrollmentWhereInput = {
+    deletedAt: null,
+    ...(on === null ? {} : enrolmentInPeriodOn(on)),
+  };
   if (branchIds.length > 0) enrolment.branchId = { in: branchIds };
   if (levelIds.length > 0) enrolment.levelId = { in: levelIds };
   if (categoryIds.length > 0)

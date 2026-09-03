@@ -436,6 +436,22 @@ authenticates; it does not authorise.
 | | Path | Notes |
 |---|---|---|
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
+
+**Attendance (§4.7, R123)** — the register, on the three dated occurrence carriers. Entity-rooted like `/sessions/{id}/roster`, and the **kind is bound where the route is mounted**, never read from the path.
+
+| | Path | Notes |
+|---|---|---|
+| `GET` `POST` | `/sessions|events|exams/{id}/attendance` | The sheet, and a staff mark. `required` opens on the expected roster, `optional` opens **empty** — the association's two paper sheets. **`?date=` is required for an activity** and must be a date its recurrence produces. عطلة and حفل are refused with `ATTENDANCE_NOT_AVAILABLE` |
+| `GET` | `/sessions|events|exams/{id}/attendance/candidates` | Who may be **added** — beneficiaries at the occurrence's branch, excluding those already marked. A picker for one sheet, **not** a directory: `/admin/directory` is Admin-only, and widening it would hand every مؤطِّرة the whole people-picker to solve one sheet's problem |
+| `POST` | `/sessions|events/{id}/attendance/self` | «تسجيل حضوري». **The body is empty and `.strict()` refuses any key** — *only herself* is expressed by there being nowhere to name anybody else. No `self` route on an exam: a sitting is invigilated |
+| `DELETE` | `/sessions|events|exams/{id}/attendance/{studentId}` | Staff withdraw a mistaken mark — a soft delete with a Trash snapshot (TD-5) |
+
+**Enrolment decides who is EXPECTED, never who is ALLOWED.** Any live beneficiary
+may be marked, including one not enrolled in that class; she is reported as
+`beyond_roster`. **The roster is resolved against the `AcademicPeriod` covering
+the occurrence's own date** (R122), so a historical sheet shows who was expected
+*then* — and an enrolment recording no period never appears.
+
 | `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group**, requires an `academic_period_id` (R122) and **enqueues consent re-evaluation** per session. **No capacity check exists** |
 | `DELETE` | `/admin/administrative-groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — grades, submissions and Quran logs survive. Subject-split seats for that Level go with it |
 | `PATCH` | `/admin/administrative-groups/order` | `{ within: levelId, ids }` — one Level's groups, within the caller's branch scope |

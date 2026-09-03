@@ -226,6 +226,15 @@ export const createCourseScheduleSchema = z
      * knows what they were, rather than guessed by a backfill.
      */
     scheduling_type_id: uuid.nullable().optional(),
+    /**
+     * **R123 — who may record presence at this class's occurrences.**
+     *
+     * Absent is `staff_only`: a setting nobody chose must never be the
+     * permissive one. `self_or_staff` is refused on a type that takes no
+     * attendance, and even where it is accepted it grants a teen or a child
+     * nothing — the Category decides that, server-side.
+     */
+    attendance_marking: z.enum(['staff_only', 'self_or_staff']).optional(),
     academic_year_id: uuid,
     staff: staff.optional(),
   })
@@ -278,6 +287,15 @@ export const updateCourseScheduleSchema = z
      * knows what they were, rather than guessed by a backfill.
      */
     scheduling_type_id: uuid.nullable().optional(),
+    /**
+     * **R123 — who may record presence at this class's occurrences.**
+     *
+     * Absent is `staff_only`: a setting nobody chose must never be the
+     * permissive one. `self_or_staff` is refused on a type that takes no
+     * attendance, and even where it is accepted it grants a teen or a child
+     * nothing — the Category decides that, server-side.
+     */
+    attendance_marking: z.enum(['staff_only', 'self_or_staff']).optional(),
     /**
      * **Staffing is editable** (R90).
      *

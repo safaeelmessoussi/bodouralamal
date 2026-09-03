@@ -138,9 +138,10 @@ beforeEach(async () => {
       data: {
         name: `${TAG} نوع`,
         structuralKind: "activity",
-        // The three activity types the Owner seeded all take no attendance
-        // (OD-03); this fixture matches, and nothing here depends on the flag.
-        attendanceRequired: false,
+        // R123 — an activity's blank list. Nothing here depends on the mode;
+        // it is stated because the column is NOT NULL and has no default, by
+        // design: what attendance means for a type is always a decision.
+        attendanceMode: 'optional',
         displayOrder: 900,
       },
     })
@@ -198,7 +199,7 @@ describe("POST /events — R110's type, over real HTTP", () => {
       data: {
         name: `${TAG} حصة`,
         structuralKind: "class",
-        attendanceRequired: true,
+        attendanceMode: 'required',
         displayOrder: 901,
       },
     });

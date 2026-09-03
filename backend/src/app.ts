@@ -21,6 +21,7 @@ import * as administrativeGroups from './controllers/administrative-group.contro
 import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
+import * as attendanceCtl from './controllers/attendance.controller.js';
 import * as onlineClassCtl from './controllers/online-class.controller.js';
 import * as recordingCtl from './controllers/session-recording.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
@@ -45,6 +46,7 @@ import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
 import { teachesQuran } from './policies/roster-resolution.js';
+import { selfMarkingPermittedFor } from './services/attendance.service.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { createOnlineClassProvider } from './lib/online-class-provider.js';
@@ -141,6 +143,19 @@ function meController(prisma: PrismaClient, config: AppConfig) {
        * short-circuits on the marker before touching the staffing tables.
        */
       teaches_quran: await teachesQuran(prisma, user.id),
+      /**
+       * **R123 — may this person record her own presence at all?**
+       *
+       * Derived exactly as the attendance service derives it: **every** Category
+       * she is enrolled in must carry `self_attendance_allowed`. On the same
+       * footing as `teaches_quran` above and for the same reason — a client
+       * cannot compute it without every enrolment and every Category, and the
+       * Owner's rule is that اليافعات and الطفل must see **no** self check-in
+       * control, which is only possible if the server says so before the
+       * control renders. The POST refuses regardless; this is what stops a
+       * child being offered a button that can only fail.
+       */
+      self_attendance_allowed: await selfMarkingPermittedFor(prisma, user.id),
       /**
        * §14.3 ChildContextSwitcher renders approved links only (§4.3).
        *
@@ -645,6 +660,36 @@ export function createApp(
   // coincide for every occurrence but the combined one.
   guarded.get('/sessions/:id/roster', sessionsCtl.roster(prisma));
   guarded.put('/sessions/:id/audience-branches', sessionsCtl.setAudience(prisma));
+
+  /**
+   * **Attendance — the register, §4.7 as built by R123.**
+   *
+   * Entity-rooted like `/sessions/{id}/roster` above, and the **kind is bound
+   * here rather than read from the path**, so a caller cannot name a kind the
+   * route was not mounted for. Vacations and parties reach these routes and are
+   * refused by the service (`ATTENDANCE_NOT_AVAILABLE`) — the exclusion is a
+   * server rule, never a hidden button.
+   *
+   * `self` exists for classes and activities and **not for exams**: a sitting is
+   * invigilated, and offering a self route whose every call would be refused is
+   * a worse contract than not offering one.
+   */
+  guarded.get('/sessions/:id/attendance', attendanceCtl.sheet(prisma, 'session'));
+  guarded.get('/sessions/:id/attendance/candidates', attendanceCtl.candidates(prisma, 'session'));
+  guarded.post('/sessions/:id/attendance', attendanceCtl.mark(prisma, 'session'));
+  guarded.post('/sessions/:id/attendance/self', attendanceCtl.selfCheckIn(prisma, 'session'));
+  guarded.delete('/sessions/:id/attendance/:studentId', attendanceCtl.remove(prisma, 'session'));
+
+  guarded.get('/events/:id/attendance', attendanceCtl.sheet(prisma, 'event'));
+  guarded.get('/events/:id/attendance/candidates', attendanceCtl.candidates(prisma, 'event'));
+  guarded.post('/events/:id/attendance', attendanceCtl.mark(prisma, 'event'));
+  guarded.post('/events/:id/attendance/self', attendanceCtl.selfCheckIn(prisma, 'event'));
+  guarded.delete('/events/:id/attendance/:studentId', attendanceCtl.remove(prisma, 'event'));
+
+  guarded.get('/exams/:id/attendance', attendanceCtl.sheet(prisma, 'exam'));
+  guarded.get('/exams/:id/attendance/candidates', attendanceCtl.candidates(prisma, 'exam'));
+  guarded.post('/exams/:id/attendance', attendanceCtl.mark(prisma, 'exam'));
+  guarded.delete('/exams/:id/attendance/:studentId', attendanceCtl.remove(prisma, 'exam'));
   /**
    * **R98 — the door into an online class.**
    *

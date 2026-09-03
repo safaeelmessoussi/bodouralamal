@@ -32,6 +32,7 @@ const person = (roles: string[]): Me => ({
   active_role: null,
   approved_child_links: [],
   teaches_quran: false,
+  self_attendance_allowed: false,
 });
 
 /** Renders a probe inside the provider and returns what it observed. */

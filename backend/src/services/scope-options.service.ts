@@ -80,6 +80,20 @@ export interface ScopeOptions {
      *  (§15.1) — carried on the Level because that is the list a screen loads. */
     defaultVisibility: string;
     /**
+     * **R123 — may a beneficiary of this Level's Category record her own
+     * presence?**
+     *
+     * Carried on the Level for exactly the reason `defaultVisibility` is: this
+     * is the list a scheduling screen loads, and the alternative is a second
+     * request for a single boolean. It exists so the form does not **offer**
+     * `self_or_staff` where the server will always refuse it — a control whose
+     * every use is refused is worse than no control (rule P, read backwards).
+     *
+     * **Structural, never the Category's name** (§4.4b): the flag is a column,
+     * and no client anywhere compares اليافعات to a string.
+     */
+    selfAttendanceAllowed: boolean;
+    /**
      * **The Subjects this Level teaches** (§4.4b `LevelSubject`).
      *
      * Carried inline so the Level → Subject narrowing needs no second request.
@@ -114,7 +128,7 @@ export async function readScopeOptions(
         id: true,
         name: true,
         categoryId: true,
-        category: { select: { name: true } },
+        category: { select: { name: true, selfAttendanceAllowed: true } },
         subjects: {
           where: { deletedAt: null, subject: { deletedAt: null } },
           select: { subjectId: true },
@@ -171,6 +185,7 @@ export async function readScopeOptions(
       categoryId: l.categoryId,
       categoryName: l.category.name,
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
+      selfAttendanceAllowed: l.category.selfAttendanceAllowed,
       subjectIds: l.subjects.map((s) => s.subjectId),
     })),
     subjects,

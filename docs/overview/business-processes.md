@@ -254,6 +254,28 @@ silently auto-filled and never silently ignored.
 
 ---
 
+### Attendance replaces the paper sheet, and changes nothing else
+
+The association kept two kinds of paper sheet and the platform keeps both. A
+**register** — a class or an exam — opens with the enrolled names already on it
+and the مؤطِّرة marks the ones who came. A **blank list** — a lecture, an
+activity — starts empty and names are added as people arrive. Which one an
+occurrence gets is a property of its type; **عطلة and حفل get neither**, and the
+server refuses attendance for them outright.
+
+Somebody who is not enrolled in that class may still attend and be marked: the
+enrolment says who is *expected*, not who is *allowed*. Nobody is ever recorded
+as absent — an expected person who was not marked simply has no row — and
+**attendance decides nothing**: not a grade, not a certificate, not a level
+completion. An absence here routinely means *watched the recording*.
+
+In المرأة, a class may be set so each woman records her own presence; she may
+record **only her own**. In اليافعات and الطفل a مؤطِّرة always records it, and
+the server refuses a self check-in for them whatever an occurrence is configured
+to say.
+
+> SRS §4.7 (built by R123) · [Identity and access](../architecture/identity-and-access.md)
+
 ## 4. The Hijri calendar
 
 The platform displays Hijri dates alongside Gregorian ones. How it obtains them is a

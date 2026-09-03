@@ -29,6 +29,10 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   scheduling_type_id: null,
   scheduling_type_name: null,
   structural_kind: null,
+  // R123 — `disabled` is what an occurrence with no recorded type answers, so
+  // the fixture states the default a pre-catalogue row actually carries.
+  attendance_mode: 'disabled',
+  attendance_marking: 'staff_only',
   id: 'g1',
   title: 'حلقة تحفيظ',
   date: '2026-06-15',

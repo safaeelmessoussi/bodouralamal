@@ -103,6 +103,14 @@ export interface ScopeOptions {
    *  Category (§15.1). `null` when no Level is chosen or the lists have not
    *  arrived — never guessed, and never `public` on absence. */
   defaultVisibility: 'public' | 'private' | 'hidden' | null;
+  /**
+   * **R123 — may beneficiaries of the chosen Level's Category record their own
+   * presence?** `null` when no Level is chosen or the lists have not arrived —
+   * never guessed, and **never `true` on absence**: offering self check-in for
+   * a population the server refuses is the misleading control this exists to
+   * prevent.
+   */
+  selfAttendanceAllowed: boolean | null;
 }
 
 export interface UseScopeOptionsInput {
@@ -521,6 +529,7 @@ export function useScopeOptions({
      * screen re-deriving it would be a second answer to one question.
      */
     defaultVisibility: defaultVisibilityForLevel(levels, value.levelId),
+    selfAttendanceAllowed: selfAttendanceAllowedForLevel(levels, value.levelId),
   };
 }
 
@@ -544,4 +553,24 @@ export function defaultVisibilityForLevel(
   // was still arriving would preselect it, and a distracted person would ship
   // content publicly because a request was slow.
   return level?.default_visibility ?? null;
+}
+
+/**
+ * **R123 — the Category's self-attendance rule, read through the Level.**
+ *
+ * Same reasoning as `defaultVisibilityForLevel` above, and the same shape:
+ * `/admin/categories` is Admin-only (TD-2 R26/R30) and a مؤطِّرة scheduling a
+ * class never loads it, so resolving through a Category list would answer
+ * `null` on the screen that needs this.
+ *
+ * **Absent is `null`, never `true`.** A form that guessed *allowed* while the
+ * list was arriving would offer self check-in for a children's class, which is
+ * exactly the control the Owner said must never appear.
+ */
+export function selfAttendanceAllowedForLevel(
+  levels: readonly Level[],
+  levelId: string,
+): boolean | null {
+  if (levelId === '') return null;
+  return levels.find((row) => row.id === levelId)?.self_attendance_allowed ?? null;
 }

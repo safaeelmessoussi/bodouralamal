@@ -572,7 +572,7 @@ describe('leaf lifecycle coverage', () => {
     const row = await createSchedulingType(prisma, superAdmin(), {
       name: `${TAG} نوع`,
       structuralKind: 'activity',
-      attendanceRequired: false,
+      attendanceMode: 'optional',
     });
     await deleteSchedulingType(prisma, superAdmin(), row.id);
     const entry = await prisma.trash.findFirstOrThrow({

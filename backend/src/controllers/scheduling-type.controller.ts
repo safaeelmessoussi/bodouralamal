@@ -39,7 +39,7 @@ export function create(prisma: PrismaClient) {
     const created = await createSchedulingType(prisma, requireActor(req), {
       name: body.name,
       structuralKind: body.structural_kind,
-      attendanceRequired: body.attendance_required,
+      attendanceMode: body.attendance_mode,
     });
     // The count is 0 on a fresh row by construction; stating it keeps the
     // create response the same shape the list returns.
@@ -57,9 +57,9 @@ export function update(prisma: PrismaClient) {
       body.version,
       {
         ...(body.name === undefined ? {} : { name: body.name }),
-        ...(body.attendance_required === undefined
+        ...(body.attendance_mode === undefined
           ? {}
-          : { attendanceRequired: body.attendance_required }),
+          : { attendanceMode: body.attendance_mode }),
       },
     );
     res.json(schedulingTypeDto({ ...updated, eventCount: 0 }));

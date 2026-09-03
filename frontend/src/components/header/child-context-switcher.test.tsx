@@ -23,6 +23,7 @@ const me = (links: { id: string; display_name: string }[]): Me => ({
   active_role: 'parent',
   approved_child_links: links,
   teaches_quran: false,
+  self_attendance_allowed: false,
 });
 
 function render(links: { id: string; display_name: string }[]): string {

@@ -202,6 +202,43 @@ enum SchedulingStructuralKind {
   @@map("scheduling_structural_kind")
 }
 
+/// **R123 — what attendance means for a scheduling type.**
+///
+/// Replaces `SchedulingType.attendance_required`, which collapsed two different
+/// questions into one boolean: *may presence be recorded at all* and *are people
+/// expected to be there*. A vacation and an optional activity are both "not
+/// required", and treating them the same is what would put an attendance sheet
+/// on عطلة.
+enum AttendanceMode {
+  /// **No sheet exists.** عطلة and حفل — the two the Owner excluded. Reading,
+  /// marking and configuring self-marking are all refused server-side, not
+  /// merely hidden.
+  disabled
+  /// The sheet starts **empty** and names are added as people arrive — the
+  /// association's blank paper list.
+  optional
+  /// The sheet opens on the **expected roster** — the paper register.
+  required
+
+  @@map("attendance_mode")
+}
+
+/// **R123 — who may record presence at an occurrence.**
+///
+/// A property of the class or activity, not of the catalogue type: حصة دراسية is
+/// the type of both a women's class where each woman signs herself in and a
+/// children's class where only the مؤطِّرة may. `staff_only` is the default
+/// because it is the safe answer for a Category nobody has classified yet.
+enum AttendanceMarking {
+  staff_only
+  /// Permitted, **and still refused** for any beneficiary whose Category does
+  /// not carry `self_attendance_allowed` — the configuration proposes, the
+  /// server decides (§4.7, R123).
+  self_or_staff
+
+  @@map("attendance_marking")
+}
+
 enum Visibility {
   public
   private
@@ -629,8 +666,8 @@ model User {
   deletedBy    User?   @relation("UserDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
   deletedUsers User[]  @relation("UserDeletedBy")
 
-  identities    UserIdentity[]
-  branchRoles   UserBranchRole[]
+  identities  UserIdentity[]
+  branchRoles UserBranchRole[]
 
   // Revision 43 (expand phase) — see the educational-model block below.
   levelEnrollments   Enrollment[]
@@ -642,10 +679,16 @@ model User {
   childLinks  FamilyLink[] @relation("FamilyLinkChild")
 
   /// R62 — child applications, in each of the four roles a User can play on one.
-  childApplicationsAsParent  ChildApplication[]      @relation("ChildApplicationParent")
-  childApplicationsAsChild   ChildApplication[]      @relation("ChildApplicationChild")
-  childApplicationsAsMatch   ChildApplication[]      @relation("ChildApplicationMatch")
-  childApplicationsAsDecider ChildApplication[]      @relation("ChildApplicationDecider")
+  childApplicationsAsParent  ChildApplication[] @relation("ChildApplicationParent")
+  childApplicationsAsChild   ChildApplication[] @relation("ChildApplicationChild")
+  childApplicationsAsMatch   ChildApplication[] @relation("ChildApplicationMatch")
+  childApplicationsAsDecider ChildApplication[] @relation("ChildApplicationDecider")
+  /// R123 — presence, and presence somebody else recorded. Two relations
+  /// because one person is both: a مؤطِّرة marks a roster and, if she also
+  /// studies, is marked on one.
+  attendance                 Attendance[]       @relation("AttendanceStudent")
+  attendanceMarked           Attendance[]       @relation("AttendanceMarkedBy")
+
   quranLogs                  QuranProgressLog[]      @relation("QuranLogStudent")
   quranLogsAuthored          QuranProgressLog[]      @relation("QuranLogLoggedBy")
   surahProgress              StudentSurahProgress[]
@@ -663,6 +706,11 @@ model User {
   /// cover may stop what the main مؤطِّرة began, and both facts are audited.
   recordingsStarted          SessionRecording[]      @relation("RecordingStartedBy")
   recordingsStopped          SessionRecording[]      @relation("RecordingStoppedBy")
+  /// Owner 2026-09-02 — who wrote a legal consent wording, and who put it into
+  /// force. Two relations because they are two different decisions and the
+  /// audit asks about each separately.
+  legalConsentTextsCreated   LegalConsentText[]      @relation("LegalConsentTextCreatedBy")
+  legalConsentTextsActivated LegalConsentText[]      @relation("LegalConsentTextActivatedBy")
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -679,11 +727,6 @@ model User {
   @@index([nicknameNormalized])
   @@index([phoneNormalized])
   @@map("user")
-  /// Owner 2026-09-02 — who wrote a legal consent wording, and who put it into
-  /// force. Two relations because they are two different decisions and the
-  /// audit asks about each separately.
-  legalConsentTextsCreated   LegalConsentText[] @relation("LegalConsentTextCreatedBy")
-  legalConsentTextsActivated LegalConsentText[] @relation("LegalConsentTextActivatedBy")
 }
 
 /// Provider-abstracted auth linkage (§7). MVP: google only. Local credentials
@@ -905,17 +948,32 @@ model Room {
 
 /// The three tracks (§4.4b): المرأة / اليافعات / الطفل.
 model Category {
-  teacherCapabilities TeacherCategoryCapability[]
-  id                  String                      @id @default(uuid()) @db.Uuid
-  name                String                      @db.VarChar(120)
+  teacherCapabilities   TeacherCategoryCapability[]
+  id                    String                      @id @default(uuid()) @db.Uuid
+  name                  String                      @db.VarChar(120)
+  /// **R123 — may a beneficiary of this Category record her own presence?**
+  ///
+  /// `true` for المرأة; `false` for اليافعات and الطفل, where attendance is
+  /// always marked by an authorised member of staff. **A minor must never
+  /// self-mark**, and before this column the platform had no machine-readable
+  /// way to say so — §4.4b forbids matching on the Category's name, R62.7
+  /// forbids `schooling_stage` gating anything, and nothing else distinguished
+  /// an adult Category from a children's one.
+  ///
+  /// **The default is `false`**, so a Category created later is safe until
+  /// somebody decides otherwise. It is an attribute OF the Category, exactly as
+  /// `description` is — the population is what makes self-marking acceptable,
+  /// not the class.
+  selfAttendanceAllowed Boolean                     @default(false) @map("self_attendance_allowed")
+
   /// **NEW K — what this Category is, in the Owner's words** (2026-08-27).
   ///
   /// Nullable because a Category without one is ordinary, not incomplete. It is
   /// an attribute OF the Category rather than a policy attached to it, which is
   /// why it is a column here and not a `system_setting` row like §4.9's default
   /// visibility.
-  description         String?                     @db.VarChar(500)
-  displayOrder        Int?                        @map("display_order")
+  description  String? @db.VarChar(500)
+  displayOrder Int?    @map("display_order")
 
   // NOTE: the per-Category default content visibility (§4.9) is NOT a column
   // here — §7 defines Category as carrying only `name` and `display_order`,
@@ -1313,6 +1371,15 @@ model RecurringCourseSchedule {
   schedulingTypeId String?         @map("scheduling_type_id") @db.Uuid
   schedulingType   SchedulingType? @relation(fields: [schedulingTypeId], references: [id], onDelete: Restrict)
 
+  /// **R123 — who may record presence at this class's occurrences.**
+  ///
+  /// On the schedule rather than on each `Session`: it is a standing property of
+  /// the class, and a per-occurrence copy would have to be kept in step with
+  /// nothing deciding which copy wins. An occurrence-only exception is not a
+  /// case the association has; if it ever is, it is an override on `Session`
+  /// with `overridden` set, exactly as room and delivery mode already are.
+  attendanceMarking AttendanceMarking @default(staff_only) @map("attendance_marking")
+
   subjectId String  @map("subject_id") @db.Uuid
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
 
@@ -1562,6 +1629,9 @@ model Session {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
+  /// R123 — presence records for this occurrence. Their existence protects it
+  /// from a schedule edit (§20 rule 24, via `session-protection.ts`).
+  attendance       Attendance[]
   linkedContent    SessionContent[]
   staff            SessionStaff[]
   notifications    Notification[]
@@ -1889,9 +1959,9 @@ model ChildApplication {
   requestedBranch   Branch? @relation(fields: [requestedBranchId], references: [id], onDelete: Restrict)
 
   /// R62.3b — as given at submission, never re-read at approval.
-  consentDataProcessing Boolean  @map("consent_data_processing")
-  consentMediaRelease   Boolean  @map("consent_media_release")
-  consentTextVersion    String   @map("consent_text_version") @db.VarChar(60)
+  consentDataProcessing Boolean           @map("consent_data_processing")
+  consentMediaRelease   Boolean           @map("consent_media_release")
+  consentTextVersion    String            @map("consent_text_version") @db.VarChar(60)
   /// Owner 2026-09-02 — the exact wording the parent was shown, carried from
   /// submission to approval so the child's own `ConsentRecord` is written
   /// against **what the parent read**, never against whatever is active by the
@@ -1899,7 +1969,7 @@ model ChildApplication {
   /// `ConsentRecord.consentTextId`.
   consentTextId         String?           @map("consent_text_id") @db.Uuid
   consentText           LegalConsentText? @relation(fields: [consentTextId], references: [id], onDelete: Restrict)
-  consentGivenAt        DateTime @map("consent_given_at") @db.Timestamptz(6)
+  consentGivenAt        DateTime          @map("consent_given_at") @db.Timestamptz(6)
 
   status ChildApplicationStatus @default(pending)
 
@@ -2215,6 +2285,80 @@ model RateLimitCounter {
 /// `Event.scheduling_type_id` is `Restrict` and deletion is TD-5 soft with a
 /// blocked-delete check (`assertNoBlockingReferences`). A hard delete would
 /// orphan the record of what an activity WAS.
+/// **R123 — one person was present at one occurrence.**
+///
+/// ## The shape, and what is deliberately absent
+///
+/// A row **is** the presence. There is no absence table and no status column:
+/// the association's paper sheet is a list of names with a mark beside the ones
+/// who came, and a row that says *absent* would have to be created for every
+/// expected person at every occurrence — thousands of rows recording that
+/// nothing happened. **Present = a live row. Not marked = no row.** §4.7 makes
+/// attendance informational and gates nothing (BR-11), so the absence of a row
+/// never has to be defended as a decision.
+///
+/// The expected roster is **not** copied here (§20 rule 22). It is resolved from
+/// enrolment at read time, against the `AcademicPeriod` covering
+/// `occurrence_date` (R122) — see `expectedAttendeesWhere`.
+///
+/// ## Why three occurrence columns
+///
+/// The platform has three dated occurrence carriers and no fourth abstraction
+/// over them: `Session` (a materialised class), `Event` (an activity, whose
+/// occurrences are expanded from a recurrence at read time) and `Exam` (one
+/// sitting). Inventing a shared `Occurrence` table would be the parallel model
+/// §4.4 forbids. Exactly one is non-null, enforced by
+/// `attendance_one_occurrence_check` — the same idiom `Notification` uses for
+/// its four targets.
+///
+/// ## Why `occurrence_date` is stored
+///
+/// For an `Event` it is **not derivable**: a weekly نشاط is one row expanded
+/// over many dates, so the date is half of the occurrence's identity. Storing it
+/// for all three keeps one code path and one unique index, and it records the
+/// day the sheet was actually for — which stays true if a human later overrides
+/// the occurrence's date.
+model Attendance {
+  id String @id @default(uuid()) @db.Uuid
+
+  sessionId String?  @map("session_id") @db.Uuid
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  eventId   String?  @map("event_id") @db.Uuid
+  event     Event?   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  examId    String?  @map("exam_id") @db.Uuid
+  exam      Exam?    @relation(fields: [examId], references: [id], onDelete: Restrict)
+
+  /// A calendar date, never an instant (TD-11). Set by the server from the
+  /// occurrence; never taken from the client for a Session or an Exam.
+  occurrenceDate DateTime @map("occurrence_date") @db.Date
+
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Restrict)
+
+  /// **Who recorded it**, which is also how self-marking is told from staff
+  /// marking: equal to `student_id` for a self check-in. A separate `source`
+  /// column would be a second answer to a question this one already settles,
+  /// and the TD-8 audit row records the action (`attendance.self` /
+  /// `attendance.mark`) besides.
+  markedById String @map("marked_by") @db.Uuid
+  markedBy   User   @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  /// TD-5 — removing a mistaken mark is a soft delete with a Trash snapshot and
+  /// an audit row (§20 rule 11). A hard delete would erase the fact that
+  /// somebody was marked and then unmarked, which is exactly the correction a
+  /// register has to be able to show.
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@index([sessionId, deletedAt])
+  @@index([eventId, occurrenceDate, deletedAt])
+  @@index([examId, deletedAt])
+  @@index([studentId, deletedAt])
+  @@map("attendance")
+}
+
 model SchedulingType {
   id String @id @default(uuid()) @db.Uuid
 
@@ -2226,12 +2370,13 @@ model SchedulingType {
   /// Which entity it routes to. Stored, never inferred (see the enum).
   structuralKind SchedulingStructuralKind @map("structural_kind")
 
-  /// **Whether attendance is taken for this type.** Structural data: the form
-  /// presents attendance-specific controls only where this is true (OD-03), so
-  /// it is a column and not display text. It is not derivable from the name —
+  /// **What attendance means for this type** (R123, replacing OD-03's boolean).
+  ///
+  /// Structural data, not display text: it is not derivable from the name —
   /// اختبار takes attendance and محاضرة does not, and nothing about either word
-  /// says so.
-  attendanceRequired Boolean @map("attendance_required")
+  /// says so. The boolean it replaces could not express the Owner's third
+  /// state, which is the one عطلة and حفل need: *no sheet at all*.
+  attendanceMode AttendanceMode @map("attendance_mode")
 
   /// The Owner calls the order canonical, so it is a column an administrator
   /// can change — not the order the rows happen to have been inserted in.
@@ -2301,11 +2446,20 @@ model Event {
   schedulingTypeId String?         @map("scheduling_type_id") @db.Uuid
   schedulingType   SchedulingType? @relation(fields: [schedulingTypeId], references: [id], onDelete: Restrict)
 
+  /// **R123 — who may record presence at this activity's occurrences.** The
+  /// same column `RecurringCourseSchedule` carries, for the same reason; a
+  /// women's نشاط may be self-marked, a children's may never be.
+  attendanceMarking AttendanceMarking @default(staff_only) @map("attendance_marking")
+
   /// R71 — who is responsible for it, and who assists. An event had an
   /// audience and nobody answerable for it, which left a مؤطرة running a
   /// celebration with no way to be recorded and — because event scope derived
   /// from TEACHING schedules — no way to manage it.
   staff EventStaff[]
+
+  /// R123 — presence records for this activity's occurrences, each keyed by its
+  /// own `occurrence_date`.
+  attendance Attendance[]
 
   branchScopes   EventBranch[]
   categoryScopes EventCategory[]
@@ -2486,7 +2640,9 @@ model Exam {
   administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
   administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
 
-  staff ExamStaff[]
+  staff      ExamStaff[]
+  /// R123 — who was present at the sitting.
+  attendance Attendance[]
 
   round Int?
 
@@ -2666,11 +2822,11 @@ model AcademicYear {
   /// R122 — the year's semesters. The year itself carries NO dates: they would
   /// be a second, driftable copy of `min(start_date)`/`max(end_date)` here.
   periods   AcademicPeriod[]
-  id        String  @id @default(uuid()) @db.Uuid
+  id        String           @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
-  label     String  @unique @db.VarChar(9)
+  label     String           @unique @db.VarChar(9)
   /// Exactly one `true` row application-wide — partial unique index in SQL.
-  isCurrent Boolean @default(false) @map("is_current")
+  isCurrent Boolean          @default(false) @map("is_current")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 

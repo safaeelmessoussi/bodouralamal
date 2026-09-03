@@ -394,6 +394,12 @@ describe("prefilled_filters changes where the dropdowns start, nothing else", ()
  * field added to the interface fails here, whatever it is called.
  */
 const OCCURRENCE_KEYS = [
+  // R123 — carried so the details dialog can offer الحضور on the occurrences
+  // that have a sheet and offer NOTHING on a عطلة, without a request per
+  // occurrence anybody merely looked at. Exactly the reason `delivery_mode` is
+  // here, and exactly the failure the comment above describes.
+  "attendance_marking",
+  "attendance_mode",
   "audience_label",
   "branch_id",
   "branch_name",

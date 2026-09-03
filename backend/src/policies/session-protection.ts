@@ -28,12 +28,12 @@ import type { Prisma } from '../generated/prisma/client.js';
  * ## Contributing a rule
  *
  * ```ts
- * // in the attendance module — imports nothing from scheduling
+ * // in the evaluations module — imports nothing from scheduling
  * registerSessionProtectionRule({
- *   code: 'HAS_ATTENDANCE',
- *   describes: 'attendance has been recorded for this session',
+ *   code: 'HAS_EVALUATION',
+ *   describes: 'an evaluation was recorded against this session',
  *   async evaluate(tx, sessions) {
- *     const rows = await tx.attendance.findMany({
+ *     const rows = await tx.evaluation.findMany({
  *       where: { sessionId: { in: sessions.map((s) => s.id) }, deletedAt: null },
  *       select: { sessionId: true },
  *     });
@@ -41,6 +41,10 @@ import type { Prisma } from '../generated/prisma/client.js';
  *   },
  * });
  * ```
+ *
+ * **Attendance was this example until R123 shipped it as a built-in** — see the
+ * note on `BUILT_IN_RULES` for why a protection that a bootstrap call can omit
+ * is not a protection.
  *
  * **Two properties are required of every rule and are not negotiable (§4.4):**
  *
@@ -103,6 +107,20 @@ export interface SessionProtectionRule {
  *   itself a record. Rewriting either changes what is true of the past.
  * - **`HAS_CONTENT`** — a recording, homework or materials someone attached.
  *   Losing the link orphans real work.
+ * - **`HAS_ATTENDANCE`** — somebody was recorded as present. §20 rule 24 names
+ *   attendance explicitly, and a register is the clearest case of the semantic
+ *   rule there is: regenerating the occurrence would leave marks pointing at a
+ *   class that no longer exists, or lose them outright.
+ *
+ * **`HAS_ATTENDANCE` is a built-in rather than a contributed rule**, although
+ * the doc-comment above shows attendance as the example of contribution. The
+ * argument for registration is dependency direction, and it is real — but this
+ * file already reads `session_content`, so the direction was never pure, and
+ * the stronger property is the one stated two paragraphs up: **a protection
+ * that can be switched off by forgetting to call a bootstrap function is not a
+ * protection**, and `resetContributedRules` can switch a contributed one off
+ * inside a test. Registration remains the pattern for a rule whose data lives
+ * behind an optional module; attendance is not optional.
  */
 const BUILT_IN_RULES: SessionProtectionRule[] = [
   {
@@ -126,6 +144,21 @@ const BUILT_IN_RULES: SessionProtectionRule[] = [
         select: { sessionId: true },
       });
       return new Set(rows.map((r) => r.sessionId));
+    },
+  },
+  {
+    code: 'HAS_ATTENDANCE',
+    describes: 'attendance has been recorded for this occurrence',
+    async evaluate(tx, sessions) {
+      if (sessions.length === 0) return new Set();
+      // ONE query for every candidate, as every rule must be: at a full
+      // academic-year horizon a per-session check is an N+1 wearing a guard's
+      // clothing.
+      const rows = await tx.attendance.findMany({
+        where: { sessionId: { in: sessions.map((s) => s.id) }, deletedAt: null },
+        select: { sessionId: true },
+      });
+      return new Set(rows.flatMap((r) => (r.sessionId === null ? [] : [r.sessionId])));
     },
   },
 ];

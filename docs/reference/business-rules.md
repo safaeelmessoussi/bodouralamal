@@ -171,6 +171,16 @@ several such splits at once, one per subject. Non-teaching activity is a separat
 *Before SRS Revision 43* this rule read *"a student's weekly class time is implied by group
 enrolment"*, which held only while one group could mean one timetable slot.
 
+### BR-11 and attendance
+
+**Attendance gates nothing** (§4.7, built by R123). It informs; it never decides
+a grade, a certification or a level completion. The reason is the Fluid
+Engagement Model: an absence in this association routinely means *watched the
+recording*, so treating it as a deficiency would misrepresent the beneficiary it
+describes. **There is no absence row** — present is a live `Attendance` row and
+not-marked is the absence of one — which is only safe *because* nothing reads
+absence as a decision.
+
 ### BR-21
 **One organisational group per level, and it is where the student's place is.** A student
 may be enrolled in several levels at once and belongs to **exactly one** organisational

@@ -488,6 +488,9 @@ export interface CourseScheduleDto {
   id: string;
   /** R110 — which catalogue row this is; `null` for a pre-catalogue row. */
   scheduling_type_id: string | null;
+  /** R123 — who may record presence at this class's occurrences. Carried so the
+   *  edit form hydrates the setting rather than proposing the default over it. */
+  attendance_marking: string;
   /** R57 — what the class is CALLED. A label, never an identifier: not unique,
    *  and no part of scheduling logic. `subject_id` remains the identifier. */
   title: string;
@@ -608,6 +611,7 @@ export function courseScheduleDto(row: {
   title: string;
   description: string | null;
   subjectId: string;
+  attendanceMarking: string;
   teachingMode: string;
   levelId: string | null;
   administrativeGroupId: string | null;
@@ -659,6 +663,7 @@ export function courseScheduleDto(row: {
     subject_id: row.subjectId,
     subject_name: row.subject?.name ?? null,
     scheduling_type_id: row.schedulingTypeId ?? null,
+    attendance_marking: String(row.attendanceMarking),
     teaching_mode: row.teachingMode,
     target_id: targetOf(row),
     // Resolved rather than read from one column: only `entire_level` carries a
@@ -1774,6 +1779,17 @@ export interface ScopeOptionsDto {
     category_name: string;
     /** §4.9's default content tier for this Level, through its Category (§15.1). */
     default_visibility: string;
+    /**
+     * **R123 — may a beneficiary of this Level's Category record her own
+     * presence?**
+     *
+     * Carried on the Level for the same reason `default_visibility` is: this is
+     * the list a scheduling screen already loads. It exists so the form does
+     * not **offer** `self_or_staff` where the server will always refuse it — a
+     * control whose every use is refused is worse than no control. Structural,
+     * never the Category's name (§4.4b).
+     */
+    self_attendance_allowed: boolean;
     /** The Subjects this Level teaches (§4.4b). Inline so narrowing needs no
      *  second request — and that request was itself Admin-only. */
     subject_ids: string[];
@@ -1791,6 +1807,7 @@ export function scopeOptionsDto(row: {
     categoryId: string;
     categoryName: string;
     defaultVisibility: string;
+    selfAttendanceAllowed: boolean;
     subjectIds: string[];
   }[];
   subjects: { id: string; name: string }[];
@@ -1805,6 +1822,7 @@ export function scopeOptionsDto(row: {
       category_id: l.categoryId,
       category_name: l.categoryName,
       default_visibility: l.defaultVisibility,
+      self_attendance_allowed: l.selfAttendanceAllowed,
       subject_ids: l.subjectIds,
     })),
     subjects: row.subjects,
@@ -1833,13 +1851,17 @@ export interface SchedulingTypeDto {
    */
   structural_kind: string;
   /**
-   * **Whether attendance is taken for this type** (OD-03).
+   * **What attendance means for this type** — `disabled` | `optional` |
+   * `required` (R123, replacing OD-03's boolean).
    *
-   * The form presents attendance-specific controls only where this is true, so
-   * it travels on the contract rather than being re-decided per client — which
-   * is what makes it a column and not display text.
+   * Two questions the boolean collapsed into one: *may presence be recorded at
+   * all*, and *are people expected to be there*. A vacation and an optional
+   * activity are both "not required" and must behave completely differently —
+   * one has no sheet, the other has an empty one. It travels on the contract
+   * rather than being re-decided per client, which is what makes it a column
+   * and not display text.
    */
-  attendance_required: boolean;
+  attendance_mode: string;
   /** The Owner's canonical order, changed through `PATCH .../order` (R76). */
   display_order: number;
   /** Live activities already using it — what makes a blocked deletion legible
@@ -1853,7 +1875,7 @@ export function schedulingTypeDto(row: {
   id: string;
   name: string;
   structuralKind: string;
-  attendanceRequired: boolean;
+  attendanceMode: string;
   displayOrder: number;
   eventCount: number;
   version: number;
@@ -1862,7 +1884,7 @@ export function schedulingTypeDto(row: {
     id: row.id,
     name: row.name,
     structural_kind: String(row.structuralKind),
-    attendance_required: row.attendanceRequired,
+    attendance_mode: String(row.attendanceMode),
     display_order: row.displayOrder,
     event_count: row.eventCount,
     version: row.version,
@@ -1966,6 +1988,8 @@ export interface EventDefinitionDto {
    * not the same as any type.
    */
   scheduling_type_id: string | null;
+  /** R123 — who may record presence at this activity's occurrences. */
+  attendance_marking: string;
   visibility: string;
   /** TD-11 calendar dates and wall-clock times — never instants. `null` times
    *  mean an ALL-DAY event, which is a real state and not a missing value. */
@@ -1991,6 +2015,7 @@ export function eventDefinitionDto(row: {
   title: string;
   description: string | null;
   schedulingTypeId: string | null;
+  attendanceMarking: string;
   visibility: string;
   startDate: Date;
   endDate: Date | null;
@@ -2007,6 +2032,7 @@ export function eventDefinitionDto(row: {
     title: row.title,
     description: row.description,
     scheduling_type_id: row.schedulingTypeId,
+    attendance_marking: String(row.attendanceMarking),
     visibility: String(row.visibility),
     start_date: dateOnly(row.startDate)!,
     end_date: dateOnly(row.endDate),
@@ -2357,5 +2383,76 @@ export function academicPeriodDto(row: {
     end_date: row.endDate.toISOString().slice(0, 10),
     is_current: row.isCurrent,
     version: row.version,
+  };
+}
+
+/* ── Attendance (§4.7, R123) ─────────────────────────────────────────────── */
+
+export interface AttendanceSheetDto {
+  occurrence_kind: string;
+  occurrence_id: string;
+  /** TD-11 calendar date — for a recurring activity it is half the occurrence's
+   *  identity, so it travels on every attendance payload. */
+  occurrence_date: string;
+  /** `optional` | `required`. `disabled` never reaches a client: the server
+   *  refuses the read outright, so a sheet that exists is one that may exist. */
+  mode: string;
+  marking: string;
+  /** Whether THIS caller may record her own presence here — the three
+   *  conditions resolved server-side, so a client renders a button instead of
+   *  deciding a permission (rule O). */
+  self_check_in_available: boolean;
+  /** The register. **Empty for an `optional` occurrence**, whose sheet starts
+   *  blank by design — and empty is not *nobody is enrolled*, it is *this kind
+   *  of sheet does not open on a roster*. */
+  expected: { id: string; name: string | null }[];
+  present: {
+    id: string;
+    student_id: string;
+    name: string | null;
+    recorded_at: string;
+    self: boolean;
+    beyond_roster: boolean;
+  }[];
+}
+
+export function attendanceSheetDto(row: {
+  kind: string;
+  occurrenceId: string;
+  occurrenceDate: Date;
+  mode: string;
+  marking: string;
+  selfCheckInAvailable: boolean;
+  expected: { id: string; name: string | null }[];
+  present: {
+    id: string;
+    studentId: string;
+    name: string | null;
+    recordedAt: Date;
+    self: boolean;
+    beyondRoster: boolean;
+  }[];
+}): AttendanceSheetDto {
+  return {
+    occurrence_kind: row.kind,
+    occurrence_id: row.occurrenceId,
+    occurrence_date: row.occurrenceDate.toISOString().slice(0, 10),
+    mode: row.mode,
+    marking: row.marking,
+    self_check_in_available: row.selfCheckInAvailable,
+    // The staff-facing legal name, as on the approval queue and the roster: §7's
+    // public display-identity rule governs PUBLIC surfaces, and a register is
+    // not one.
+    expected: row.expected,
+    present: row.present.map((p) => ({
+      id: p.id,
+      student_id: p.studentId,
+      name: p.name,
+      // An instant, correctly — a mark is made at a moment, unlike the
+      // occurrence's own calendar date.
+      recorded_at: p.recordedAt.toISOString(),
+      self: p.self,
+      beyond_roster: p.beyondRoster,
+    })),
   };
 }

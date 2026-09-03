@@ -1,6 +1,17 @@
 import { api } from '../lib/api.js';
+
 import { reorderResource } from './reorder.js';
 import type { SchedulingType } from './scheduling.js';
+
+/**
+ * **R123 — what attendance means for a scheduling type.**
+ *
+ * Replaces the `attendance_required` boolean, which collapsed two questions
+ * into one: *may presence be recorded at all* and *are people expected*. A
+ * vacation and an optional activity were both "not required" and must behave
+ * completely differently — one has no sheet, the other has an empty one.
+ */
+export type AttendanceMode = 'disabled' | 'optional' | 'required';
 
 /**
  * **The scheduling-type catalogue — server data since R110** (NEW H).
@@ -41,7 +52,7 @@ export interface SchedulingTypeRow {
    * is read from the row and **never inferred from the name** — اختبار takes
    * attendance and محاضرة does not, and nothing about either word says so.
    */
-  attendance_required: boolean;
+  attendance_mode: AttendanceMode;
   display_order: number;
   /** Live activities using it — what makes a blocked deletion legible before an
    *  administrator meets it (rule AZ.1). */
@@ -53,7 +64,7 @@ export interface SchedulingTypeRow {
 export interface SchedulingTypeInput {
   name: string;
   structural_kind: SchedulingType;
-  attendance_required: boolean;
+  attendance_mode: AttendanceMode;
 }
 
 /**
@@ -91,7 +102,7 @@ export async function createSchedulingType(
 export async function updateSchedulingType(
   id: string,
   version: number,
-  input: { name?: string; attendance_required?: boolean },
+  input: { name?: string; attendance_mode?: AttendanceMode },
   token: string | null,
 ): Promise<SchedulingTypeRow> {
   return api<SchedulingTypeRow>(`/admin/scheduling-types/${id}`, {

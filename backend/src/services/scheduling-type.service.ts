@@ -1,4 +1,5 @@
 import type {
+  AttendanceMode,
   PrismaClient,
   SchedulingStructuralKind,
   SchedulingType,
@@ -84,7 +85,7 @@ export interface SchedulingTypeRef {
   id: string;
   name: string;
   structuralKind: SchedulingStructuralKind;
-  attendanceRequired: boolean;
+  attendanceMode: AttendanceMode;
   displayOrder: number;
   /**
    * **How many activities already use it** — the one number that says whether
@@ -122,7 +123,7 @@ export async function listSchedulingTypes(
     id: r.id,
     name: r.name,
     structuralKind: r.structuralKind,
-    attendanceRequired: r.attendanceRequired,
+    attendanceMode: r.attendanceMode,
     displayOrder: r.displayOrder,
     eventCount: r._count.events,
     version: r.version,
@@ -135,7 +136,7 @@ export async function createSchedulingType(
   data: {
     name: string;
     structuralKind: SchedulingStructuralKind;
-    attendanceRequired: boolean;
+    attendanceMode: AttendanceMode;
   },
 ): Promise<SchedulingType> {
   assertCanWrite(actor);
@@ -156,7 +157,7 @@ export async function createSchedulingType(
       data: {
         name: data.name,
         structuralKind: data.structuralKind,
-        attendanceRequired: data.attendanceRequired,
+        attendanceMode: data.attendanceMode,
         displayOrder: (last._max.displayOrder ?? 0) + 1,
       },
     });
@@ -169,7 +170,7 @@ export async function createSchedulingType(
       targetId: created.id,
       detail: {
         structural_kind: created.structuralKind,
-        attendance_required: created.attendanceRequired,
+        attendance_mode: created.attendanceMode,
       },
     });
     return created;
@@ -177,7 +178,7 @@ export async function createSchedulingType(
 }
 
 /**
- * Renames a type, or changes whether it takes attendance.
+ * Renames a type, or changes what attendance means for it.
  *
  * **`structural_kind` is NOT editable, and `.strict()` refuses it rather than
  * dropping it.** It decides which entity the type routes to, so changing it
@@ -191,13 +192,13 @@ export async function updateSchedulingType(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; attendanceRequired?: boolean },
+  data: { name?: string; attendanceMode?: AttendanceMode },
 ): Promise<SchedulingType> {
   assertCanWrite(actor);
 
   const existing = await prisma.schedulingType.findFirst({
     where: { id, deletedAt: null },
-    select: { name: true, attendanceRequired: true },
+    select: { name: true, attendanceMode: true },
   });
   if (!existing) throw new AppError('NOT_FOUND', 'no such scheduling type');
 
@@ -222,11 +223,11 @@ export async function updateSchedulingType(
     // transition.
     detail: {
       fields: Object.keys(data),
-      ...(data.attendanceRequired !== undefined &&
-      data.attendanceRequired !== existing.attendanceRequired
+      ...(data.attendanceMode !== undefined &&
+      data.attendanceMode !== existing.attendanceMode
         ? {
-            attendance_required_from: existing.attendanceRequired,
-            attendance_required_to: data.attendanceRequired,
+            attendance_mode_from: existing.attendanceMode,
+            attendance_mode_to: data.attendanceMode,
           }
         : {}),
     },
@@ -362,4 +363,39 @@ export async function assertActivityType(
    * with the extra fields left empty by convention.
    */
   return assertTypeOfKind(tx, schedulingTypeId, ['activity', 'holiday'] as const);
+}
+
+/**
+ * **R123 — an occurrence whose type takes no attendance may not be configured
+ * to be self-marked.**
+ *
+ * The Owner's rule is that vacations and parties support no attendance at all,
+ * and that *configuring* it must fail rather than the button merely being
+ * hidden. `self_or_staff` on a عطلة is exactly that configuration: it says
+ * *people may sign themselves in here*, at something that has no sheet. Refused
+ * at the write boundary of both carriers rather than tolerated as inert, because
+ * a stored contradiction is one the next reader has to decide about.
+ *
+ * A type recorded as NULL (every row predating R110) is refused too: what it was
+ * is unknown, and guessing the permissive branch is how a holiday acquires a
+ * sheet.
+ */
+export async function assertMarkingAllowedForType(
+  tx: { schedulingType: PrismaClient['schedulingType'] },
+  schedulingTypeId: string | null | undefined,
+  marking: 'staff_only' | 'self_or_staff' | undefined,
+): Promise<void> {
+  if (marking !== 'self_or_staff') return;
+  const type =
+    schedulingTypeId == null
+      ? null
+      : await tx.schedulingType.findFirst({
+          where: { id: schedulingTypeId, deletedAt: null },
+          select: { attendanceMode: true },
+        });
+  if (type === null || type.attendanceMode === 'disabled') {
+    throw new AppError('STATE_CONFLICT', 'this kind of activity takes no attendance', {
+      reason: 'ATTENDANCE_NOT_AVAILABLE',
+    });
+  }
 }

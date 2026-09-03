@@ -54,6 +54,17 @@ export interface Occurrence {
   scheduling_type_id: string | null;
   scheduling_type_name: string | null;
   structural_kind: string | null;
+  /**
+   * **R123 — whether this occurrence has an attendance sheet, and who marks.**
+   *
+   * Carried on the occurrence for the same reason `delivery_mode` is: without
+   * it the details dialog must either probe the server for every occurrence
+   * anybody merely looked at, or offer «الحضور» on a عطلة and lead the reader
+   * to a refusal. `disabled` on a row whose type is unrecorded, which is the
+   * same answer the attendance service gives such a row.
+   */
+  attendance_mode: 'disabled' | 'optional' | 'required';
+  attendance_marking: 'staff_only' | 'self_or_staff';
   id: string;
   title: string;
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */

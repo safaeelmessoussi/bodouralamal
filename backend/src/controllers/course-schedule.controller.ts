@@ -66,6 +66,9 @@ export function create(prisma: PrismaClient) {
           ? { description: body.description }
           : {}),
         subjectId: body.subject_id,
+        ...(body.attendance_marking !== undefined
+          ? { attendanceMarking: body.attendance_marking }
+          : {}),
         ...(body.scheduling_type_id !== undefined
           ? { schedulingTypeId: body.scheduling_type_id }
           : {}),
@@ -130,6 +133,9 @@ export function update(prisma: PrismaClient) {
       idParam(req, "id"),
       {
         version: body.version,
+        ...(body.attendance_marking !== undefined
+          ? { attendanceMarking: body.attendance_marking }
+          : {}),
         ...(body.scheduling_type_id !== undefined
           ? { schedulingTypeId: body.scheduling_type_id }
           : {}),

@@ -12,7 +12,7 @@ import {
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
-import { assertActivityType } from './scheduling-type.service.js';
+import { assertActivityType, assertMarkingAllowedForType } from './scheduling-type.service.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 
 /**
@@ -102,6 +102,8 @@ export interface EventInput extends EventScopes {
    * renders as an activity and the catalogue calls a class.
    */
   schedulingTypeId?: string | null;
+  /** R123 — who may record presence at this activity's occurrences. */
+  attendanceMarking?: 'staff_only' | 'self_or_staff';
   visibility: 'public' | 'private' | 'hidden';
   startDate: Date;
   endDate?: Date | null;
@@ -217,6 +219,9 @@ export async function createEvent(
       const kind = await assertActivityType(tx, input.schedulingTypeId);
       if (kind === 'holiday') assertHolidayShape(input);
     }
+    // R123 — self-marking cannot be configured on a عطلة or a حفل, which have
+    // no attendance sheet at all. Refused, not silently stored.
+    await assertMarkingAllowedForType(tx, input.schedulingTypeId, input.attendanceMarking);
 
     if (!isAdmin(actor) && isTeacher(actor)) {
       await assertStaffAccountsAvailable(tx, [actor.userId]);
@@ -227,6 +232,9 @@ export async function createEvent(
         title: input.title,
         description: input.description ?? null,
         schedulingTypeId: input.schedulingTypeId ?? null,
+        ...(input.attendanceMarking === undefined
+          ? {}
+          : { attendanceMarking: input.attendanceMarking }),
         visibility: input.visibility as never,
         startDate: input.startDate,
         endDate: input.endDate ?? null,
@@ -420,6 +428,9 @@ export async function updateEvent(
           ? existing.schedulingTypeId
           : patch.schedulingTypeId,
       visibility: (patch.visibility ?? existing.visibility) as EventInput['visibility'],
+      attendanceMarking: (patch.attendanceMarking ?? existing.attendanceMarking) as
+        | 'staff_only'
+        | 'self_or_staff',
       startDate: patch.startDate ?? existing.startDate,
       endDate: patch.endDate === undefined ? existing.endDate : patch.endDate,
       startTime: patch.startTime === undefined ? existing.startTime : patch.startTime,
@@ -437,6 +448,13 @@ export async function updateEvent(
       // Levels or staff is refused rather than silently keeping them.
       if (kind === 'holiday') assertHolidayShape(merged);
     }
+    // R123 — on the merged value too, so an activity cannot be retyped حفل while
+    // keeping `self_or_staff`.
+    await assertMarkingAllowedForType(
+      tx,
+      merged.schedulingTypeId,
+      merged.attendanceMarking as 'staff_only' | 'self_or_staff' | undefined,
+    );
 
     // TD-15.1: conditional UPDATE on `version` — a stale version is a coded 409,
     // never a silent overwrite of a colleague's edit.
@@ -450,6 +468,7 @@ export async function updateEvent(
         description: merged.description ?? null,
         schedulingTypeId: merged.schedulingTypeId ?? null,
         visibility: merged.visibility as never,
+        attendanceMarking: merged.attendanceMarking as never,
         startDate: merged.startDate,
         endDate: merged.endDate ?? null,
         startTime: merged.startTime ?? null,

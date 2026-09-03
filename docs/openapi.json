@@ -8800,6 +8800,899 @@
         }
       }
     },
+    "/sessions/{id}/attendance": {
+      "get": {
+        "summary": "The attendance sheet for a class occurrence",
+        "description": "**§4.7, R123 — the attendance sheet, and it is one contract on three occurrence carriers.** Returns `mode` (`optional`|`required`), `marking` (`staff_only`|`self_or_staff`), `self_check_in_available`, the `expected` roster and the `present` marks. **`required` opens on the roster and `optional` opens EMPTY** — the association keeps two kinds of paper sheet and the difference is the whole design: a register has the enrolled names written on it, a blank list is filled as people arrive. An empty `expected` on an optional occurrence is therefore not *nobody is enrolled*. **The expected roster is a QUERY, never a stored copy** (§20 rule 22), resolved against the `AcademicPeriod` covering the occurrence's OWN date (R122) — so a sheet read years later shows who was expected *then*, and an enrolment whose `academic_period_id` is NULL (every row predating R122) is unclassified history and never appears. **Vacations and parties have no sheet at all**: a `scheduling_type` whose `attendance_mode` is `disabled`, and an occurrence recording no type, are refused with `409 STATE_CONFLICT` / `ATTENDANCE_NOT_AVAILABLE` — the exclusion is a server rule, not a hidden button. `beyond_roster` marks somebody who attended without being expected, which is the note the paper sheet takes in the margin. `self` says the beneficiary recorded it herself, derived from `marked_by` — there is no `source` column.",
+        "responses": {
+          "200": {
+            "description": "The sheet: policy, expected roster, and the marks recorded."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE for a type that takes no attendance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record a beneficiary as present",
+        "description": "**§4.7, R123 — staff records a presence.** Body: `{ student_id }`, **strictly**. **A row IS the presence**: there is no `present` flag and no absence row, so *not marked* is simply the absence of a row and `DELETE` is how a mark is withdrawn. Creating an absent row for every expected person at every occurrence would record, thousands of times, that nothing happened — and §4.7 makes attendance informational, gating nothing (BR-11), because an absence in this association routinely means *watched the recording*. **Enrolment decides EXPECTED, never ALLOWED**: any live beneficiary may be marked, including one not enrolled in this class, because refusing her would make the platform contradict the register in front of the person using it. **Idempotent** — a repeat answers `200` with the same id, a new mark `201`; the partial unique index is the enforcement, since a check-then-insert loses a double-tap. Audited as `attendance.mark`, with ids and a date and **never a name** (TD-14).",
+        "responses": {
+          "200": {
+            "description": "Already marked; the same attendance id."
+          },
+          "201": {
+            "description": "Marked; the new attendance id."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a missing or unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown beneficiary or an occurrence outside scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/attendance/candidates": {
+      "get": {
+        "summary": "Who may be added to this sheet",
+        "description": "**§4.7, R123 — who may be ADDED to this sheet.** A **picker for one sheet, never a directory**: `GET /admin/directory` is Admin and Super Admin only (TD-2), so a مؤطِّرة marking her own class could not reach it, and widening that endpoint would hand every teacher the whole people-picker in order to solve one sheet's problem — a smaller question instead (rule O). Answers live beneficiaries **at the occurrence's own branch**, by name, capped at 20: somebody who could walk into that room is the honest boundary, and the caller has already been authorised to mark this occurrence before the search runs, so it discloses nothing she cannot already act on. People already on the sheet are excluded — offering one again would let a second click produce a no-op the reader cannot explain. `?q=` narrows by name; `?date=` names the occurrence for an activity.",
+        "responses": {
+          "200": {
+            "description": "Up to 20 matching beneficiaries."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/attendance/self": {
+      "post": {
+        "summary": "Record my own presence",
+        "description": "**§4.7, R123 — «تسجيل حضوري».** **The body is empty and `.strict()` refuses any key**: *a woman may mark ONLY herself* is expressed by there being nowhere to name anybody else, not by a check on a field the schema still accepts. Three conditions, all server-side: the occurrence is configured `self_or_staff`; the caller is the subject; and **every Category she is enrolled in carries `self_attendance_allowed`**. That third one is the Owner's rule that a teen or a child must NEVER self-mark, and it holds **even if a schedule accidentally says `self_or_staff`** — read from a column rather than the Category's name (§4.4b forbids that) and rather than `schooling_stage` (R62.7 says it gates nothing). *Every*, not *any*: a beneficiary in both an adult and a teen Category is refused, which is the safe direction and needs no tie-break nobody has decided. Idempotent, exactly as the staff route is. Removing a mark is always staff work, including a self-marked one: recording your own presence and withdrawing a record of what happened are different acts. Audited as `attendance.self`.",
+        "responses": {
+          "200": {
+            "description": "Already recorded."
+          },
+          "201": {
+            "description": "Recorded."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — the body must be empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason SELF_CHECK_IN_NOT_ALLOWED, or SELF_CHECK_IN_OTHER_PERSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/attendance/{studentId}": {
+      "delete": {
+        "summary": "Withdraw a mark",
+        "description": "**§4.7, R123, TD-5 — a mistaken mark withdrawn.** A **soft delete** with a Trash snapshot and an audit row in one transaction (§20 rule 11): *she was marked and then unmarked* is a correction a register has to be able to show, and a row that simply disappears leaves the administrator who removed it with nothing to point at. Re-marking the same person afterwards revives that row rather than creating a second one. **Staff only**, including on a self-marked row.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn; no body."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence outside scope, or no such mark.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/attendance": {
+      "get": {
+        "summary": "The attendance sheet for an activity occurrence",
+        "description": "Only for an activity: `?date=YYYY-MM-DD` names which occurrence of a recurring نشاط is meant, and it must be a date the recurrence actually produces — an arbitrary one is `404`, never a sheet for a day nothing happened on. **§4.7, R123 — the attendance sheet, and it is one contract on three occurrence carriers.** Returns `mode` (`optional`|`required`), `marking` (`staff_only`|`self_or_staff`), `self_check_in_available`, the `expected` roster and the `present` marks. **`required` opens on the roster and `optional` opens EMPTY** — the association keeps two kinds of paper sheet and the difference is the whole design: a register has the enrolled names written on it, a blank list is filled as people arrive. An empty `expected` on an optional occurrence is therefore not *nobody is enrolled*. **The expected roster is a QUERY, never a stored copy** (§20 rule 22), resolved against the `AcademicPeriod` covering the occurrence's OWN date (R122) — so a sheet read years later shows who was expected *then*, and an enrolment whose `academic_period_id` is NULL (every row predating R122) is unclassified history and never appears. **Vacations and parties have no sheet at all**: a `scheduling_type` whose `attendance_mode` is `disabled`, and an occurrence recording no type, are refused with `409 STATE_CONFLICT` / `ATTENDANCE_NOT_AVAILABLE` — the exclusion is a server rule, not a hidden button. `beyond_roster` marks somebody who attended without being expected, which is the note the paper sheet takes in the margin. `self` says the beneficiary recorded it herself, derived from `marked_by` — there is no `source` column.",
+        "responses": {
+          "200": {
+            "description": "The sheet."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED with reason OCCURRENCE_DATE_REQUIRED when the date is absent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown activity, one outside scope, or a date it does not occur on.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE — عطلة and حفل.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record a beneficiary as present at an activity",
+        "description": "**§4.7, R123 — staff records a presence.** Body: `{ student_id }`, **strictly**. **A row IS the presence**: there is no `present` flag and no absence row, so *not marked* is simply the absence of a row and `DELETE` is how a mark is withdrawn. Creating an absent row for every expected person at every occurrence would record, thousands of times, that nothing happened — and §4.7 makes attendance informational, gating nothing (BR-11), because an absence in this association routinely means *watched the recording*. **Enrolment decides EXPECTED, never ALLOWED**: any live beneficiary may be marked, including one not enrolled in this class, because refusing her would make the platform contradict the register in front of the person using it. **Idempotent** — a repeat answers `200` with the same id, a new mark `201`; the partial unique index is the enforcement, since a check-then-insert loses a double-tap. Audited as `attendance.mark`, with ids and a date and **never a name** (TD-14).",
+        "responses": {
+          "200": {
+            "description": "Already marked."
+          },
+          "201": {
+            "description": "Marked."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/attendance/candidates": {
+      "get": {
+        "summary": "Who may be added to this sheet",
+        "description": "**§4.7, R123 — who may be ADDED to this sheet.** A **picker for one sheet, never a directory**: `GET /admin/directory` is Admin and Super Admin only (TD-2), so a مؤطِّرة marking her own class could not reach it, and widening that endpoint would hand every teacher the whole people-picker in order to solve one sheet's problem — a smaller question instead (rule O). Answers live beneficiaries **at the occurrence's own branch**, by name, capped at 20: somebody who could walk into that room is the honest boundary, and the caller has already been authorised to mark this occurrence before the search runs, so it discloses nothing she cannot already act on. People already on the sheet are excluded — offering one again would let a second click produce a no-op the reader cannot explain. `?q=` narrows by name; `?date=` names the occurrence for an activity.",
+        "responses": {
+          "200": {
+            "description": "Up to 20 matching beneficiaries."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/attendance/self": {
+      "post": {
+        "summary": "Record my own presence at an activity",
+        "description": "**§4.7, R123 — «تسجيل حضوري».** **The body is empty and `.strict()` refuses any key**: *a woman may mark ONLY herself* is expressed by there being nowhere to name anybody else, not by a check on a field the schema still accepts. Three conditions, all server-side: the occurrence is configured `self_or_staff`; the caller is the subject; and **every Category she is enrolled in carries `self_attendance_allowed`**. That third one is the Owner's rule that a teen or a child must NEVER self-mark, and it holds **even if a schedule accidentally says `self_or_staff`** — read from a column rather than the Category's name (§4.4b forbids that) and rather than `schooling_stage` (R62.7 says it gates nothing). *Every*, not *any*: a beneficiary in both an adult and a teen Category is refused, which is the safe direction and needs no tie-break nobody has decided. Idempotent, exactly as the staff route is. Removing a mark is always staff work, including a self-marked one: recording your own presence and withdrawing a record of what happened are different acts. Audited as `attendance.self`.",
+        "responses": {
+          "200": {
+            "description": "Already recorded."
+          },
+          "201": {
+            "description": "Recorded."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason SELF_CHECK_IN_NOT_ALLOWED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/attendance/{studentId}": {
+      "delete": {
+        "summary": "Withdraw a mark at an activity",
+        "description": "**§4.7, R123, TD-5 — a mistaken mark withdrawn.** A **soft delete** with a Trash snapshot and an audit row in one transaction (§20 rule 11): *she was marked and then unmarked* is a correction a register has to be able to show, and a row that simply disappears leaves the administrator who removed it with nothing to point at. Re-marking the same person afterwards revives that row rather than creating a second one. **Staff only**, including on a self-marked row.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/attendance": {
+      "get": {
+        "summary": "The attendance sheet for an exam sitting",
+        "description": "**An exam sitting has no self route** — invigilated by construction, so `attendance_marking` is `staff_only` and no column offers otherwise. **§4.7, R123 — the attendance sheet, and it is one contract on three occurrence carriers.** Returns `mode` (`optional`|`required`), `marking` (`staff_only`|`self_or_staff`), `self_check_in_available`, the `expected` roster and the `present` marks. **`required` opens on the roster and `optional` opens EMPTY** — the association keeps two kinds of paper sheet and the difference is the whole design: a register has the enrolled names written on it, a blank list is filled as people arrive. An empty `expected` on an optional occurrence is therefore not *nobody is enrolled*. **The expected roster is a QUERY, never a stored copy** (§20 rule 22), resolved against the `AcademicPeriod` covering the occurrence's OWN date (R122) — so a sheet read years later shows who was expected *then*, and an enrolment whose `academic_period_id` is NULL (every row predating R122) is unclassified history and never appears. **Vacations and parties have no sheet at all**: a `scheduling_type` whose `attendance_mode` is `disabled`, and an occurrence recording no type, are refused with `409 STATE_CONFLICT` / `ATTENDANCE_NOT_AVAILABLE` — the exclusion is a server rule, not a hidden button. `beyond_roster` marks somebody who attended without being expected, which is the note the paper sheet takes in the margin. `self` says the beneficiary recorded it herself, derived from `marked_by` — there is no `source` column.",
+        "responses": {
+          "200": {
+            "description": "The sheet."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record a beneficiary as present at a sitting",
+        "description": "**§4.7, R123 — staff records a presence.** Body: `{ student_id }`, **strictly**. **A row IS the presence**: there is no `present` flag and no absence row, so *not marked* is simply the absence of a row and `DELETE` is how a mark is withdrawn. Creating an absent row for every expected person at every occurrence would record, thousands of times, that nothing happened — and §4.7 makes attendance informational, gating nothing (BR-11), because an absence in this association routinely means *watched the recording*. **Enrolment decides EXPECTED, never ALLOWED**: any live beneficiary may be marked, including one not enrolled in this class, because refusing her would make the platform contradict the register in front of the person using it. **Idempotent** — a repeat answers `200` with the same id, a new mark `201`; the partial unique index is the enforcement, since a check-then-insert loses a double-tap. Audited as `attendance.mark`, with ids and a date and **never a name** (TD-14).",
+        "responses": {
+          "200": {
+            "description": "Already marked."
+          },
+          "201": {
+            "description": "Marked."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/attendance/candidates": {
+      "get": {
+        "summary": "Who may be added to this sheet",
+        "description": "**§4.7, R123 — who may be ADDED to this sheet.** A **picker for one sheet, never a directory**: `GET /admin/directory` is Admin and Super Admin only (TD-2), so a مؤطِّرة marking her own class could not reach it, and widening that endpoint would hand every teacher the whole people-picker in order to solve one sheet's problem — a smaller question instead (rule O). Answers live beneficiaries **at the occurrence's own branch**, by name, capped at 20: somebody who could walk into that room is the honest boundary, and the caller has already been authorised to mark this occurrence before the search runs, so it discloses nothing she cannot already act on. People already on the sheet are excluded — offering one again would let a second click produce a no-op the reader cannot explain. `?q=` narrows by name; `?date=` names the occurrence for an activity.",
+        "responses": {
+          "200": {
+            "description": "Up to 20 matching beneficiaries."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason ATTENDANCE_NOT_AVAILABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/attendance/{studentId}": {
+      "delete": {
+        "summary": "Withdraw a mark at a sitting",
+        "description": "**§4.7, R123, TD-5 — a mistaken mark withdrawn.** A **soft delete** with a Trash snapshot and an audit row in one transaction (§20 rule 11): *she was marked and then unmarked* is a correction a register has to be able to show, and a row that simply disappears leaves the administrator who removed it with nothing to point at. Re-marking the same person afterwards revives that row rather than creating a second one. **Staff only**, including on a self-marked row.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}/audience-branches": {
       "put": {
         "summary": "Set this occurrence’s audience branches",

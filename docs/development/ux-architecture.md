@@ -519,6 +519,51 @@ The confirmation answers three questions, not one: what ends · what is kept
 be done next. The third is what makes the dialog a step in a route rather than a
 dead end, and it was the one missing when the edit form stopped offering Level.
 
+## BE · الحضور — the register, and the two sheets it is
+
+**A management page shows what it manages, and attendance manages an
+occurrence** — so the register lives **inside the shared occurrence dialog**
+every calendar already opens, not behind a menu node that would show nothing
+until a deep link filled it (rule A, read forwards).
+
+**Three states, three different screens** (R123). `disabled` renders **nothing
+at all** — عطلة and حفل have no sheet, and offering a control that leads to a
+refusal is worse than offering none. `required` opens on the **expected
+roster**, the paper register. `optional` opens **empty**, the blank list filled
+as people arrive; an empty optional sheet is never *«nobody is enrolled»* and
+the copy says which sheet the reader is looking at.
+
+**Nobody is written as absent.** An expected person with no mark simply has
+none. That is the model, not a rendering choice, and it is safe only because
+attendance gates nothing (BR-11).
+
+**Two audiences, two controls, never both.** Staff open the sheet; a beneficiary
+is offered **«تسجيل حضوري»** and never the roster — who else is in her class is
+not a question she may ask, and the server refuses her the sheet rather than the
+client merely declining to render it.
+
+**A control the server would always refuse is not offered** (rule O, read
+backwards). Two places apply it:
+
+- **«تسجيل حضوري» is hidden from a teen and a child**, from
+  `me.self_attendance_allowed` — derived server-side exactly as `teaches_quran`
+  is, because a client cannot compute it without every enrolment and every
+  Category. The POST refuses regardless; this is what stops a child being
+  offered a button that can only fail.
+- **`self_or_staff` is withheld from the scheduling form** where the chosen
+  Level's Category forbids it, and the hint says which it is — so the absence
+  reads as a rule rather than as a missing feature. A row that *already* says
+  `self_or_staff` still shows it, or a save would change a setting nobody
+  touched.
+
+**Neither reads a Category's name.** §4.4b forbids it, and the flag is a column
+(`Category.self_attendance_allowed`) carried on the Level for the same reason
+`default_visibility` is: that is the list the screen already loads.
+
+**An activity occurrence carries its date.** A recurring نشاط is **one** row
+expanded over many dates, so every attendance call for an activity sends
+`?date=`. Without it, «حضرت يوم 15 يونيو» would silently mean «حضرت كل أسبوع».
+
 ## M · User-facing text
 
 **No engineering reference ever reaches a user-facing surface**: no `§4.4c`, no
@@ -2346,6 +2391,8 @@ system's internals, break on every restyle, and catch nothing.
 | [`pages/admin/enrolment-save.test.ts`](../../frontend/src/pages/admin/enrolment-save.test.ts) | **BC/AH** — the enrolment dialog takes the row rather than an id it re-resolves, never derives the branch from a directory search, falls back through group → role → existing enrolment, gates حفظ only on the Level, and turns the service's own reasons into Arabic |
 | [`pages/admin/enrolment-period.test.ts`](../../frontend/src/pages/admin/enrolment-period.test.ts) | **R122** — the enrolment form asks for the semester, sends it, defaults to the current one, refuses to save without it, and the table's جارٍ / منتهٍ badge is read from the period rather than from `deleted_at`. Proved against the defect: deleting `academic_period_id` from the payload fails it |
 | [`services/enrollment-period.integration.test.ts`](../../backend/src/services/enrollment-period.integration.test.ts) | **R122** — the Owner's four-step progression against the database: الفصل 2 of the first year, then الفصل 1 of the first *and* second years in the next academic year, then الفصل 2 of the second. Four rows survive, an old-period enrolment is not current with `deleted_at IS NULL`, and the attestation history reconstructs exactly |
+| [`components/calendar/attendance-ui.test.ts`](../../frontend/src/components/calendar/attendance-ui.test.ts) | **BE/R123** — a عطلة renders no panel · «تسجيل حضوري» needs both the occurrence's setting **and** the server's capability · a beneficiary's branch never reads the sheet · an activity call carries its date · the form withholds `self_or_staff` and says why · no Category name is ever compared. Proved against the defect: deleting either the `disabled` check or the capability check fails it |
+| [`services/attendance.integration.test.ts`](../../backend/src/services/attendance.integration.test.ts) | **R123, 37 assertions against PostgreSQL** — vacation and party refused · optional starts empty and required on its roster · a non-enrolled beneficiary is markable and flagged `beyond_roster` · one row however many marks · no absence row · a woman self-marks only where allowed and only herself · a teen and a child refused **even on a `self_or_staff` class** · the roster is the occurrence date's period, not today's · a recurring activity's two dates are two sheets · audit carries no name · `HAS_ATTENDANCE` protects the Session |
 | [`scripts/dev/browser/verify-academic-periods.sh`](../../scripts/dev/browser/verify-academic-periods.sh) | **R122/A/AF** — الفصول الدراسية in a real browser: the table renders with no year chosen, a period is created end to end and appears while the filter is still unset, جارٍ follows the dates, and the year is text with its reason on edit |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |

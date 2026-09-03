@@ -145,6 +145,24 @@ PUT /me/teaching-profile/availability         # R106; AVAILABILITY ONLY — capa
 PUT /me/teaching-profile/capabilities         # Owner 2026-08-30; CAPABILITIES ONLY — supersedes R88.2's refusal; planning metadata, grants nothing (R88.3)
 GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
+
+# ── Attendance (§4.7, R123) ─────────────────────────────────────────────────
+# The register, on the three dated occurrence carriers. `self` exists for
+# classes and activities only — an exam sitting is invigilated.
+GET /sessions/{id}/attendance                 # §4.7 R123; the sheet: policy, expected roster, marks
+GET /sessions/{id}/attendance/candidates      # §4.7 R123; who may be ADDED — a picker for one sheet, not a directory
+POST /sessions/{id}/attendance                # §4.7 R123; staff marks a beneficiary present
+POST /sessions/{id}/attendance/self           # §4.7 R123; «تسجيل حضوري» — herself, and no body
+DELETE /sessions/{id}/attendance/{studentId}  # §4.7 R123, TD-5; a mistaken mark withdrawn
+GET /events/{id}/attendance                   # §4.7 R123; `?date=` selects the occurrence of a recurring activity
+GET /events/{id}/attendance/candidates        # §4.7 R123; the same picker, for an activity occurrence
+POST /events/{id}/attendance                  # §4.7 R123; staff marks a beneficiary present
+POST /events/{id}/attendance/self             # §4.7 R123; «تسجيل حضوري» at an activity
+DELETE /events/{id}/attendance/{studentId}    # §4.7 R123, TD-5
+GET /exams/{id}/attendance                    # §4.7 R123; the sitting's register
+GET /exams/{id}/attendance/candidates         # §4.7 R123; the same picker, for a sitting
+POST /exams/{id}/attendance                   # §4.7 R123; the supervisor marks
+DELETE /exams/{id}/attendance/{studentId}     # §4.7 R123, TD-5
 PUT /sessions/{id}/audience-branches          # R92; this occurrence's audience branches; empty list clears the override
 POST /sessions/{id}/online-join               # R98; Bodour authorizes, the provider executes; derived room, bounded token
 POST /sessions/{id}/recording                 # R99; OPTIONAL and explicit; teacher/assistant/admin only; server-side capture

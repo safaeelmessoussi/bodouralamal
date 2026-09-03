@@ -6,7 +6,7 @@ import type {
   Visibility,
 } from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
-import { assertTypeOfKind } from "./scheduling-type.service.js";
+import { assertMarkingAllowedForType, assertTypeOfKind } from "./scheduling-type.service.js";
 import {
   intervalsOverlap,
   withinScheduleLife,
@@ -289,6 +289,8 @@ export interface CourseScheduleInput {
    * predating the catalogue; see the migration for why none was backfilled.
    */
   schedulingTypeId?: string | null;
+  /** R123 — who may record presence at this class's occurrences. */
+  attendanceMarking?: 'staff_only' | 'self_or_staff';
   academicYearId: string;
   staff?: ScheduleStaffInput[];
 }
@@ -639,6 +641,8 @@ export async function createCourseSchedule(
     if (input.schedulingTypeId) {
       await assertTypeOfKind(tx, input.schedulingTypeId, ['class'] as const);
     }
+    // R123 — self-marking cannot be configured on a type that has no sheet.
+    await assertMarkingAllowedForType(tx, input.schedulingTypeId, input.attendanceMarking);
     const staff = input.staff ?? [];
     await assertStaffAccountsAvailable(tx, staff.map((person) => person.userId));
     const conflicts = await findConflicts(
@@ -687,6 +691,9 @@ export async function createCourseSchedule(
         effectiveUntil: input.effectiveUntil ?? null,
         academicYearId: input.academicYearId,
         schedulingTypeId: input.schedulingTypeId ?? null,
+        ...(input.attendanceMarking === undefined
+          ? {}
+          : { attendanceMarking: input.attendanceMarking }),
       },
       select: { id: true },
     });
@@ -790,6 +797,8 @@ export async function updateCourseSchedule(
      * predating the catalogue; see the migration for why none was backfilled.
        */
     schedulingTypeId?: string | null;
+  /** R123 — who may record presence at this class's occurrences. */
+  attendanceMarking?: 'staff_only' | 'self_or_staff';
     version: number;
     /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
@@ -860,6 +869,10 @@ export async function updateCourseSchedule(
       // visibility change is an access decision and *«it was public until
       // Tuesday»* has to be answerable afterwards.
       visibility: true,
+      // R123 — both read so the marking guard resolves against what the row
+      // will BE after this edit rather than against what was sent.
+      schedulingTypeId: true,
+      attendanceMarking: true,
       startTime: true,
       endTime: true,
       recurrence: true,
@@ -902,6 +915,13 @@ export async function updateCourseSchedule(
     if (data.schedulingTypeId) {
       await assertTypeOfKind(tx, data.schedulingTypeId, ['class'] as const);
     }
+    // R123 — checked against the type the row will HAVE after this edit, so a
+    // schedule cannot be retyped عطلة while keeping `self_or_staff`.
+    await assertMarkingAllowedForType(
+      tx,
+      data.schedulingTypeId === undefined ? existing.schedulingTypeId : data.schedulingTypeId,
+      data.attendanceMarking ?? (existing.attendanceMarking as 'staff_only' | 'self_or_staff'),
+    );
 
     const merged = {
       branchId: existing.branchId,
@@ -979,6 +999,11 @@ export async function updateCourseSchedule(
         // default*. That distinction is exactly the one NEW B §A found broken on
         // the Event form, where the wrong value and the intended default were
         // the same string and the widening was therefore invisible.
+        // R123 — absent means *leave it*, for exactly the reason the line below
+        // records about the tier.
+        ...(data.attendanceMarking === undefined
+          ? {}
+          : { attendanceMarking: data.attendanceMarking }),
         ...(data.visibility === undefined
           ? {}
           : { visibility: data.visibility }),
@@ -1791,8 +1816,11 @@ export async function resolveScheduleRoster(
   // schedule exists somewhere the caller may not look.
   if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
 
-  return resolveAudience(prisma, schedule, {
-    id: true,
-    nameArabic: true,
-  }) as Promise<{ id: string; nameArabic: string | null }[]>;
+  return resolveAudience(
+    prisma,
+    // Period-blind (R123): this read answers *who is in this class*, which is
+    // the schedule's standing membership rather than a question about one day.
+    { ...schedule, on: null },
+    { id: true, nameArabic: true },
+  ) as Promise<{ id: string; nameArabic: string | null }[]>;
 }

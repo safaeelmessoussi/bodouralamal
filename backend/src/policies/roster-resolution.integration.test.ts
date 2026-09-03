@@ -139,7 +139,10 @@ const specOf = async (scheduleId: string): Promise<AudienceSpec> => {
       branchId: true,
     },
   });
-  return s;
+  // R123 — this suite's subject is mode/target resolution, which is the
+  // period-blind membership question. The period narrowing has its own suite,
+  // `attendance-roster.integration.test.ts`.
+  return { ...s, on: null };
 };
 
 beforeAll(async () => {
@@ -465,6 +468,7 @@ describe("the audience is live, never a snapshot (§20 rule 22)", () => {
         administrativeGroupId: null,
         teachingGroupId: null,
         branchId: amerchichId,
+        on: null,
       }),
     ).toThrow(/course_schedule_mode_target_check/);
   });

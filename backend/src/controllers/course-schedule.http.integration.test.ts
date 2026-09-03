@@ -27,6 +27,10 @@ const TAG = "[http-course-schedule-test]";
 const SCHEDULE_KEYS = [
   "academic_year_id",
   "anchor_date",
+  // R123 — who may record presence at this class's occurrences. Carried on the
+  // read so the edit form hydrates the setting rather than proposing the
+  // default over it, which would change a configuration nobody touched.
+  "attendance_marking",
   "branch_id",
   // R55.1 — resolved labels, so a timetable can be rendered without five
   // further requests. Labels only; the ids above stay the identifiers.

@@ -10,6 +10,7 @@ import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
 import { ButtonLink } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
+import { AttendancePanel } from './attendance-panel.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
 
 /**
@@ -183,6 +184,18 @@ export function EventDetailsDialog({
           </dl>
 
           <JoinAction occurrence={occurrence} />
+
+          {/**
+            * **R123 — الحضور, where the occurrence already is.**
+            *
+            * All four calendars open this dialog, so putting the register here
+            * gives one entry point for a class, an activity and a sitting with
+            * no new route and no menu node that would show nothing until a deep
+            * link filled it (rule A). The panel decides nothing: staff get the
+            * sheet because the server allows the read, a beneficiary gets one
+            * button and never the roster, and a عطلة or a حفل renders neither.
+            */}
+          <AttendancePanel occurrence={occurrence} />
 
           <OccurrenceMaterials occurrence={occurrence} />
         </>

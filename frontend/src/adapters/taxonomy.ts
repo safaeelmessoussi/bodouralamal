@@ -141,6 +141,17 @@ export interface Level {
    * read is a default it cannot honour.
    */
   default_visibility?: 'public' | 'private' | 'hidden';
+  /**
+   * **R123 — may beneficiaries of this Level's Category record their own
+   * presence?**
+   *
+   * Rides the Level for the same reason `default_visibility` does: it is the
+   * list a scheduling screen loads, and `/admin/categories` is Admin-only
+   * (TD-2 R26/R30) so a مؤطِّرة could not resolve it through the Category.
+   * Optional on the type because `/admin/levels` does not carry it — only
+   * `/me/scope-options`, which is the read the forms use.
+   */
+  self_attendance_allowed?: boolean;
   id: string;
   name: string;
   /**

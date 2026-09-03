@@ -2100,3 +2100,16 @@ approved scope covers Partners only, so this is reported rather than taken.
       academic year must be entered on that screen. Until one covers today,
       approval refuses with `NO_CURRENT_ACADEMIC_PERIOD` — which is the intended
       behaviour, not a defect.
+- [x] **R123 — attendance (§4.7) is built.** `Attendance` on the three dated
+      occurrence carriers; `attendance_mode` replaces `attendance_required`;
+      `attendance_marking` on the class and the activity;
+      `Category.self_attendance_allowed` makes «a minor never self-marks»
+      machine-readable. The register lives in the shared occurrence dialog, the
+      beneficiary gets «تسجيل حضوري» and never the roster, and عطلة/حفل are
+      refused server-side on every path. **No analytics, no QR.**
+- [ ] **OWNER RATIFICATION REQUIRED — SRS Revision 123.** The code is live on the
+      Owner's instruction while §4.7 and §20 rule 16 still say attendance is
+      unbuilt. The wording is drafted in `docs/SRS-PROPOSAL-R123.md`; **no agent
+      may apply it**. Two sub-decisions are named there: whether حفل stays
+      `disabled`, and whether an exam sitting takes attendance at all — each is
+      one click on أنواع الجدولة and no code change.

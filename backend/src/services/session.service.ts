@@ -438,6 +438,9 @@ export async function cancelSession(
     administrativeGroupId: session.schedule.administrativeGroupId,
     teachingGroupId: session.schedule.teachingGroupId,
     branchId: session.schedule.branchId,
+    // Period-blind — `audience_size` on the cancellation audit row is how many
+    // people the class concerns (R123).
+    on: null,
   };
   const affected = await audienceSize(prisma, spec);
 

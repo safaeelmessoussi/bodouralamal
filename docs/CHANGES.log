@@ -2615,3 +2615,100 @@ year per test file with a counter, so uniqueness is structural rather than proba
 **Unrelated documentation drift fixed:** `identity-and-access.md` still described
 `StudentSocialProfile` reads as a permission row and as a TD-12 freshness surface, three
 revisions after R120 removed the table.
+
+## Attendance — the register the association keeps on paper — SRS R123 (proposed), 2026-09-03
+
+**The Owner commissioned this build; the SRS has not been amended.** §20 rule 16
+still names attendance as a postponed feature and §4.7 still says *"nothing in
+this section is built"*. That is now a code/specification conflict, and rule 20
+requires it be reported rather than resolved silently: the wording is drafted in
+[`SRS-PROPOSAL-R123.md`](SRS-PROPOSAL-R123.md) and **awaits Owner ratification**.
+No agent edited `docs/SRS.md`.
+
+**What attendance MEANS is a property of the type; who may MARK is a property of
+the class.** `SchedulingType.attendance_required` — a boolean — collapsed two
+questions the Owner states separately, and a عطلة and an optional نشاط were both
+"not required" while needing completely different behaviour. It becomes
+`attendance_mode`: `disabled` · `optional` · `required`. Separately,
+`RecurringCourseSchedule.attendance_marking` and `Event.attendance_marking` say
+`staff_only` or `self_or_staff` — حصة دراسية is the type of both a women's class
+each woman signs herself into and a children's class only the مؤطِّرة may mark,
+so this could never live on the type.
+
+**A row IS the presence.** No absence table, no status column, no snapshot.
+Present is a live `Attendance` row; not marked is the absence of one. Creating an
+absent row per expected person per occurrence would record, thousands of times,
+that nothing happened — and §4.7 makes attendance informational, gating nothing
+(BR-11), which is what makes the missing row safe.
+
+**Three occurrence carriers, no fourth abstraction.** A `Session`, an `Event`
+**with its date**, or an `Exam`; exactly one, enforced by
+`attendance_one_occurrence_check` — the idiom `Notification` already uses. The
+date is stored because for a recurring نشاط it is **half the occurrence's
+identity**: one Event row expanded over many dates, so a record keyed only by
+`event_id` would make «حضرت يوم 15 يونيو» mean «حضرت كل أسبوع». Idempotency is a
+partial unique index with `NULLS NOT DISTINCT` — without that, PostgreSQL treats
+every NULL occurrence column as unique and the index permits unlimited
+duplicates, which is exactly the double-tap on «تسجيل حضوري».
+
+**The expected roster is a query against the OCCURRENCE's date** (§20 rule 22,
+R122). `audienceWhere` and `eventAudienceWhere` gained an **explicitly required**
+`on: Date | null`, so every caller states which of two questions it is asking —
+*who is in this class* (period-blind: the consent gate, the calendar,
+notification recipients, unchanged) or *who was expected on this day*
+(attendance). A field each caller must FILL IN cannot go missing the way a
+behaviour each caller must opt INTO does (rule AE).
+
+**Enrolment decides EXPECTED, never ALLOWED.** Any live beneficiary may be
+marked, including one not enrolled in that class; the sheet flags her
+`beyond_roster` — the note the paper sheet takes in the margin. Finding her needs
+a search, and `GET /admin/directory` is Admin-only, so a **narrower question**
+was added instead of widening it: `…/attendance/candidates` answers beneficiaries
+at the occurrence's own branch, excluding those already marked. Handing every
+مؤطِّرة the whole people-picker to solve one sheet's problem is the widening rule
+O forbids.
+
+**A minor never self-marks, and never sees the control.** Three server
+conditions: the occurrence is `self_or_staff`, the caller is the subject, and
+**every Category she is enrolled in carries `self_attendance_allowed`** — a new
+column, because the platform had no machine-readable way to say which Categories
+are adults (§4.4b forbids matching the name; R62.7 forbids `schooling_stage`
+gating anything). It holds **even when a schedule says `self_or_staff`**. The
+capability is published on `GET /me` beside `teaches_quran` and for the same
+reason, so the control can be hidden rather than discovered by pressing a button
+that can only fail. The scheduling form withholds `self_or_staff` from the outset
+where the Level's Category forbids it, and says which it is.
+
+**Vacations and parties are refused server-side on every path** — reading,
+marking, removing **and configuring** — with `ATTENDANCE_NOT_AVAILABLE`. So is an
+occurrence whose type was never recorded: *we do not know* is answered by
+refusing, not by guessing the permissive branch.
+
+**A Session carrying attendance is protected from schedule regeneration** (§20
+rule 24) by `HAS_ATTENDANCE` — added as a **built-in** rather than a contributed
+rule. The registry's own doc-comment uses attendance as the contribution example,
+and the dependency argument is real; but the file already reads `session_content`
+so that direction was never pure, and the stronger property is the one the file
+states two paragraphs up: *a protection that can be switched off by forgetting to
+call a bootstrap function is not a protection* — and `resetContributedRules` can
+switch a contributed one off inside a test.
+
+**Authorization invents nothing.** A Session is marked by whoever staffs *that
+occurrence on its date* (R91), an Event by whoever may edit it (R71), an Exam by
+its supervisor or an Admin in the branch. TD-12 freshness was deliberately **not**
+added: its catalogue is approvals, overrides, user management and settings, and
+marking a register is ordinary operational work.
+
+**Migration mapping, stated exactly.** `holiday → disabled` is **structural** — no
+name is read. Everything else: `true → required`, `false → optional`. The seeded
+**حفل** row is set `disabled` by name **once, in the migration**, guarded to a row
+still of kind `activity` and still carrying that name; the same one-time
+classification sets المرأة's `self_attendance_allowed`. **Nothing at runtime ever
+matches a name.** Both are one click to change on أنواع الجدولة afterwards, which
+is why the proposal asks the Owner to confirm rather than assume them.
+
+**No analytics, no reports, no percentages. No QR, geolocation, biometrics,
+signatures, photos, device identifiers or IP recording.** Audit detail is ids and
+a date only, mechanically enforced by the audit repository's minimisation guard
+and asserted directly, because a register is about minors often enough that «no
+name reached the log» must be a test rather than a convention.

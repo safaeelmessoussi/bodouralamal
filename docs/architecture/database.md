@@ -54,7 +54,7 @@ erDiagram
 ```
 
 Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
-`AcademicPeriod`,
+`AcademicPeriod`, `Attendance`,
 `EducationalContent`, `ConsumedToken`, `RateLimitCounter`, and `HijriMonthStart`.
 
 > The authoritative field-by-field definition is SRS §7. This page explains the parts that
@@ -335,6 +335,7 @@ the consent job's forced visibility changes.
 | `ConsumedToken (jti)` | **The onboarding-token replay guard.** A replay hits this violation, the transaction aborts, and the request fails — enforcement is mechanical, not aspirational |
 | `FamilyLink (student_id, parent_id)` **where not deleted** | A revoked link can be requested again later |
 | `AcademicYear` exactly one `is_current` | Partial unique index |
+| `Attendance (session_id, event_id, exam_id, occurrence_date, student_id)` **where not deleted**, `NULLS NOT DISTINCT` | **One presence per person per occurrence** (R123). `NULLS NOT DISTINCT` is what makes it work with two of the three occurrence columns null — without it PostgreSQL treats every NULL as unique and the index would permit unlimited duplicates, which is exactly the double-tap on «تسجيل حضوري» the rule exists for |
 | `AcademicPeriod (academic_year_id, sequence)` | One الفصل 1، one الفصل 2 per year — a second row for the same semester would make *which period is this enrolment in* ambiguous |
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
@@ -375,6 +376,10 @@ into exactly the kind of copy that the platform has been burned by before.
   nothing can resolve a roster for. Also `recurrence <> 'none'` — a non-recurring occurrence
   is an Event, not a schedule.
 - `AcademicYear.label` matches `^\d{4}-\d{4}$`.
+- `Attendance`: **exactly one** of `session_id`, `event_id`, `exam_id` is
+  non-null (`attendance_one_occurrence_check`) — the same idiom `Notification`
+  uses for its four targets. A row naming none would be presence at nothing; one
+  naming two would be presence in two places at once.
 - `AcademicPeriod`: `sequence >= 1` and `end_date >= start_date`. **Overlap between two
   periods of one year is refused in the service, not by the database** — an exclusion
   constraint over a date range needs the `btree_gist` extension, and the platform's
@@ -733,3 +738,4 @@ Interactive transactions must finish well inside the statement timeout.
 
 **Next:** [API](api.md) · **Related:** [Backend](backend.md),
 [Performance and scale](performance-and-scale.md), [Runbooks](../operations/runbooks.md)
+20260903180000_r123_attendance

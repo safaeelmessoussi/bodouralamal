@@ -29,6 +29,13 @@ export interface ScopeOptionsPayload {
     category_id: string;
     category_name: string;
     default_visibility: 'public' | 'private' | 'hidden';
+    /**
+     * **R123 — may a beneficiary of this Level's Category record her own
+     * presence?** Carried on the Level exactly as `default_visibility` is, so
+     * the scheduling form can decline to OFFER `self_or_staff` where the server
+     * would always refuse it. Structural — no client compares Category names.
+     */
+    self_attendance_allowed: boolean;
     subject_ids: string[];
   }[];
   subjects: { id: string; name: string }[];

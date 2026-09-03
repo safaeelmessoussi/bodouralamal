@@ -56,12 +56,12 @@ const mine = <T extends { name: string }>(rows: T[]): T[] =>
 async function makeType(
   name: string,
   structuralKind: 'class' | 'activity' | 'exam',
-  attendanceRequired = false,
+  attendanceMode: 'disabled' | 'optional' | 'required' = 'optional',
 ) {
   return createSchedulingType(prisma, superAdmin(), {
     name: `${TAG} ${name}`,
     structuralKind,
-    attendanceRequired,
+    attendanceMode,
   });
 }
 
@@ -140,24 +140,24 @@ describe('who may read the catalogue, and who may change it', () => {
       createSchedulingType(prisma, admin(), {
         name: `${TAG} ورشة`,
         structuralKind: 'activity',
-        attendanceRequired: false,
+        attendanceMode: 'optional',
       }),
     ).rejects.toThrow(/Super Admin only/);
     await expect(reorderSchedulingTypes(prisma, admin(), [])).rejects.toThrow(/Super Admin only/);
   });
 
   it('lets a Super Admin create, rename and re-flag', async () => {
-    const created = await makeType('ورشة', 'activity', false);
-    expect(created.attendanceRequired).toBe(false);
+    const created = await makeType('ورشة', 'activity', 'optional');
+    expect(created.attendanceMode).toBe('optional');
 
     const renamed = await updateSchedulingType(prisma, superAdmin(), created.id, created.version, {
       name: `${TAG} ورشة تطبيقية`,
-      attendanceRequired: true,
+      attendanceMode: 'required',
     });
     expect(renamed.name).toBe(`${TAG} ورشة تطبيقية`);
-    // The flag is hers to change once the row exists — the whole point of it
-    // being a column rather than display text (OD-03).
-    expect(renamed.attendanceRequired).toBe(true);
+    // The setting is hers to change once the row exists — the whole point of it
+    // being a column rather than display text (OD-03, widened by R123).
+    expect(renamed.attendanceMode).toBe('required');
     // Unchanged by a rename: what a type ROUTES to is not a label.
     expect(renamed.structuralKind).toBe('activity');
   });
@@ -247,7 +247,7 @@ describe('the catalogue is data, and the seed preserves what the Owner changed',
 
 describe('a type routes to one entity, and the server holds the line', () => {
   it('refuses an activity typed as a class', async () => {
-    const classType = await makeType('حصة دراسية', 'class', true);
+    const classType = await makeType('حصة دراسية', 'class', 'required');
 
     // Not a UI concern: a forged body naming the class type must be refused by
     // the server, or the row would be an Event the catalogue calls a class —
@@ -300,7 +300,7 @@ describe('a type routes to one entity, and the server holds the line', () => {
   });
 
   it('عطلة is an ordinary schedulable activity that takes no attendance (OD-03)', async () => {
-    const holiday = await makeType('عطلة', 'activity', false);
+    const holiday = await makeType('عطلة', 'activity', 'disabled');
     const created = await makeActivity('عطلة عيد', holiday.id);
 
     // Schedulable and on the calendar like any other (OD-03) — it is NOT a
@@ -308,7 +308,7 @@ describe('a type routes to one entity, and the server holds the line', () => {
     // timetable and §4.4(6) makes a cancellation an edit to a Session row, so a
     // holiday cancels no class. Asserted because the opposite is the intuition.
     expect(created.event.id).toBeTruthy();
-    expect(holiday.attendanceRequired).toBe(false);
+    expect(holiday.attendanceMode).toBe('disabled');
     const row = await prisma.event.findUniqueOrThrow({
       where: { id: created.event.id },
       select: { schedulingTypeId: true },

@@ -38,6 +38,16 @@ export interface Me {
    * declared capability, not the Subject's name.
    */
   teaches_quran: boolean;
+  /**
+   * **R123 — may this person record her own presence at all?**
+   *
+   * Structural, from the server, on the same footing as `teaches_quran`: every
+   * Category she is enrolled in must permit it. **This is what hides the
+   * «تسجيل حضوري» control from a teen and a child**, rather than a client
+   * comparing a Category's Arabic name (§4.4b forbids that) or discovering the
+   * rule by pressing a button that can only fail.
+   */
+  self_attendance_allowed: boolean;
 }
 
 interface SessionState {

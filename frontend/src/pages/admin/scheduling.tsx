@@ -18,6 +18,7 @@ import {
   listSchedulingTypes,
   type SchedulingTypeRow,
 } from '../../adapters/scheduling-catalogue.js';
+import type { AttendanceMarking } from '../../adapters/attendance.js';
 import {
   deleteSchedulingItem,
   listSchedulingItems,
@@ -1027,6 +1028,15 @@ export function SchedulingDialog({
   const [catalogue, setCatalogue] = useState<SchedulingTypeRow[]>([]);
   // R72 — a Teacher may scope an event to their own groups and nothing else
   // (TD-2, §4.9), so `global` would be a default the server refuses.
+  /**
+   * **R123 — who may record presence at this item's occurrences.**
+   *
+   * `staff_only` is the initial value on a create, which is the safe direction:
+   * a setting nobody chose must never be the permissive one.
+   */
+  const [attendanceMarking, setAttendanceMarking] = useState<AttendanceMarking>(
+    item?.attendanceMarking ?? 'staff_only',
+  );
   const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
   const [scopeId, setScopeId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -1094,6 +1104,9 @@ export function SchedulingDialog({
     schedulingTypeId: item?.ids.schedulingTypeId ?? null,
     scopeKind: canAssignStaff ? 'global' : 'group',
     scopeId: '',
+    // Mirrors the initialiser above — a pristine baseline that disagreed with
+    // it is what kept `dirty` false while the value was wrong (§A).
+    attendanceMarking: item?.attendanceMarking ?? 'staff_only',
   };
   const dirty = isDirty(
     {
@@ -1119,6 +1132,7 @@ export function SchedulingDialog({
       visibility,
       scopeKind,
       scopeId,
+      attendanceMarking,
     },
     pristine,
   );
@@ -1411,6 +1425,8 @@ export function SchedulingDialog({
           // R110 — the catalogue row the picker chose, on every kind since
           // Owner 2026-09-02.
           schedulingTypeId,
+          // R123 — who may mark at this item's occurrences.
+          attendanceMarking,
           /**
            * **An unchosen scope is not an empty id** (2026-08-20).
            *
@@ -1551,6 +1567,11 @@ export function SchedulingDialog({
         catalogue={catalogue}
         schedulingTypeId={schedulingTypeId}
         onSchedulingTypeChange={(row) => setSchedulingTypeId(row.id)}
+        // R123 — the marking setting, and the structural fact that decides
+        // whether `self_or_staff` may even be offered.
+        attendanceMarking={attendanceMarking}
+        onAttendanceMarkingChange={setAttendanceMarking}
+        selfAttendanceAllowed={scope.selfAttendanceAllowed}
         // R109 (§D) — every kind carries a tier now, so the shell owns the
         // control and the sections no longer each keep one.
         visibility={visibility}

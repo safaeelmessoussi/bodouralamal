@@ -103,6 +103,23 @@ interface ActiveRoleState {
 const ActiveRoleContext = createContext<ActiveRoleState | null>(null);
 
 /**
+ * **The same answer, for a component that must also work outside the provider.**
+ *
+ * `useActiveRole` throws without one, deliberately: an authenticated screen that
+ * has escaped its container is a bug, not a state to render around. But the
+ * shared occurrence dialog is opened by the **public** calendar and is rendered
+ * standalone in tests, so a component inside it cannot require the container —
+ * the same reason it reads `SessionContext` optionally rather than through a
+ * hook that throws.
+ *
+ * `null` means *no provider*, which for a role check reads as **no roles** — the
+ * safe direction, and the only honest one for an anonymous reader.
+ */
+export function useActiveRoleOrNull(): ActiveRoleState | null {
+  return useContext(ActiveRoleContext);
+}
+
+/**
  * Held roles in precedence order.
  *
  * `ROLE_HOMES` already declares that order — most privileged first — and reusing
