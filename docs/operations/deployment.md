@@ -272,6 +272,54 @@ live row visible at that point. Prisma records it in `_prisma_migrations`, so re
 SQL manually is not an operating procedure. Step 7 is the only point that may begin issuing
 the new cookie.
 
+### The R124 migration has a mandatory preflight, and it is three counts
+
+`20260904090000_r124_assessment_builder` **drops two `jsonb` columns and writes a
+value that no old column proves**. It was audited clause by clause on 2026-09-04;
+the audit is recorded in [Database § the R124 legacy mapping](../architecture/database.md#the-r124-legacy-mapping),
+and this is the operational half of it.
+
+**Run these three against production BEFORE `prisma migrate deploy`, and stop if
+any is non-zero:**
+
+```sql
+-- 1. A paper somebody authored through direct SQL. v1 has no representation for
+--    the old blob's `correctIndex`/`maxPointsBp`, so migrating it would either
+--    discard the marking key or invent a shape the builder cannot edit.
+SELECT count(*) FROM exam
+ WHERE questions IS NOT NULL AND questions::text NOT IN ('[]', '{}', 'null');
+
+-- 2. An answer somebody submitted. No submission endpoint has ever existed, so a
+--    row here is an artefact — and it is a beneficiary's answer, which must not
+--    be dropped on an assumption.
+SELECT count(*) FROM student_exam_submission;
+
+-- 3. An online exam. The service refused `mode = 'online'` from R58 until R124,
+--    so a row here was written around the application.
+SELECT count(*) FROM exam WHERE mode = 'online';
+```
+
+**All three are expected to be `0`.** If any is not, **do not migrate** — the
+rows are evidence of something the application did not do, and what to keep is
+an Owner decision, not an operator's. The migration does snapshot a non-empty
+`questions` value into `Trash` before dropping it, but that snapshot carries a
+**90-day `purge_after`** like every other, so it is a safety net and never a
+retention plan.
+
+**What the migration writes that no old column proves.** Every pre-existing
+`exam` row is set `status = 'published'`. `is_published` existed but **no
+application code ever wrote or read it** (verified by search, not assumed), so
+there was no better fact to consult. The value is **inert for a physical
+sitting**: every reader of `exam.status` is in `assessment.service.ts` and every
+one of them is scoped `mode = 'online'`. `published` was chosen because it is the
+reading that cannot hide an arranged sitting if a future feature ever does read
+the column without scoping to the mode — the conservative direction.
+
+`target_kind`, by contrast, **is** derived from a real old fact: R58 stored the
+narrower sitting as a non-null `administrative_group_id` and read `NULL` as *the
+whole Level*. `NULL → level`, `NOT NULL → administrative_group` re-encodes that
+inference exactly. Nothing is fabricated.
+
 > [Database § migrations](../architecture/database.md#migrations)
 
 ## Rollback

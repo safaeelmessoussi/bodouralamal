@@ -2831,3 +2831,42 @@ log nobody can trust.
 **Documentation-only.** No schema, service, contract or test changed, so the
 executable evidence from `b979393` — backend 320 unit / 2071 integration, frontend
 1004, all CI guards — remains valid for this HEAD.
+
+## R124 migration — semantic audit, and a mandatory production preflight — 2026-09-04
+
+Read-only audit of `20260904090000_r124_assessment_builder`, clause by clause,
+because it does two things the compatibility policy normally forbids in one file:
+it **drops two `jsonb` columns** and it **writes a value no old column proves**.
+
+**`target_kind` is derived, not invented.** R58 stored the narrower sitting as a
+non-null `administrative_group_id` and read `NULL` as *the whole Level* — its own
+schema comment says so in those words. `NULL → level`,
+`NOT NULL → administrative_group` re-encodes that inference exactly. The
+inference had to become explicit because with three more target arms, *which
+target is this* stopped being decidable from which columns happen to be null.
+
+**`status = 'published'` is a choice, and the audit establishes it is inert.**
+`is_published` existed from the first migration and **no application code ever
+wrote or read it**. What makes the choice safe rather than merely convenient is
+that **every reader of `exam.status` is scoped `mode = 'online'`** — they are all
+in `assessment.service.ts` — so a physical sitting's status is consulted by
+nothing. `published` is the conservative direction if that ever changes: a future
+unscoped reader would show an arranged sitting rather than hide one.
+`createPhysicalExam` writes the same value, so legacy and new rows agree.
+
+**Trash preservation is a safety net, not a plan.** A non-empty blob is
+snapshotted before the drop, but the snapshot carries the ordinary 90-day
+`purge_after` like every other. Depending on it would be depending on a window.
+
+**Therefore a mandatory production preflight, recorded in three places** — the
+deployment runbook (the SQL), the database architecture page (the reasoning) and
+the deployment-readiness blocker register (the gate). Three counts, all expected
+`0`: a non-empty question blob, any `student_exam_submission` row, any
+`mode = 'online'` exam. If any is non-zero the migration **does not run**: those
+rows are evidence of something the application did not do — no submission
+endpoint ever existed, and `online` was refused from R58 until R124 — and what to
+keep is an Owner decision, not an operator's.
+
+**No code was changed.** The migration is not rewritten: it was found safe under
+a precondition, and the precondition is now enforced by procedure rather than
+assumed.

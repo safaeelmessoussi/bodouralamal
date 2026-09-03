@@ -483,6 +483,51 @@ The mandatory workflow:
 4. **`prisma db push` is prohibited in every environment** — it bypasses the history and
    silently drops the hand-written SQL. CI enforces this.
 
+### The R124 legacy mapping
+
+`20260904090000_r124_assessment_builder` is the migration most worth reading
+before trusting, because it does two things this policy normally forbids in one
+file: it **drops two `jsonb` columns** and it **writes a value no old column
+proves**. Both were audited on 2026-09-04 and the reasoning is recorded here so
+the next person does not have to re-derive it. The operational half — three
+counts that must be run against production first — is in
+[Deployment](../operations/deployment.md#the-r124-migration-has-a-mandatory-preflight-and-it-is-three-counts).
+
+**`target_kind` is derived from a real fact.** R58 stored the narrower sitting as
+a non-null `administrative_group_id` and read `NULL` as *the whole Level* — its
+own schema comment says so: *«`null` is **the whole Level**, never "no target"»*.
+The migration re-encodes that inference exactly: `NULL → level`,
+`NOT NULL → administrative_group`. **Nothing is fabricated**, and the inference
+had to be made explicit because with a Session, a Teaching Group and a single
+beneficiary added, *which target is this* stopped being decidable from which
+columns happen to be null.
+
+**`status = 'published'` is a CHOICE, and it is inert.** `is_published` existed
+since the schema's first migration and **no application code ever wrote or read
+it** — established by search, not assumed — so there was no better fact to
+consult. What makes the choice safe rather than merely convenient is that
+**every reader of `exam.status` is scoped `mode = 'online'`**: they are all in
+`assessment.service.ts`, and a physical sitting's `status` is consulted by
+nothing. `published` is the conservative direction *if* that ever changes: a
+future feature reading the column without scoping to the mode would show an
+arranged sitting rather than hide one. `createPhysicalExam` writes the same
+value for the same reason, so legacy and new physical rows agree.
+
+**Neither blob is discarded.** A non-empty `exam.questions` or
+`student_exam_submission.answers` is snapshotted into `Trash` before the column
+goes. **That is a safety net, not a retention plan** — the snapshot carries the
+ordinary 90-day `purge_after` — which is why the production preflight refuses to
+migrate at all when either is non-empty, rather than relying on it. On this
+installation both were empty except one development fixture, whose blob held an
+auto-scoring shape (`correctIndex`, `maxPointsBp`) that v1 deliberately does not
+have; migrating it would have meant inventing a marking key the builder cannot
+edit.
+
+**The `NOT NULL` window is inside one transaction.** `ADD COLUMN` → `UPDATE` →
+`SET NOT NULL` would be a gap if a row could be inserted between them; Prisma
+applies each migration file in a single transaction, and the application is not
+running during step 5 of the deployment runbook.
+
 ### Compatibility policy
 
 - **Forward-only in production.** Down-migrations are never written or run. Rollback means
