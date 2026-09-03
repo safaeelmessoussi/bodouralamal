@@ -2196,9 +2196,15 @@ approved scope covers Partners only, so this is reported rather than taken.
       `docs/SRS-PROPOSAL-R126.md` carries the clauses and **awaits application
       to `SRS.md`** — including the correction of R59 clause (3), whose
       *"cascades to exactly one child table"* rationale R123 and R124 made false.
-- [ ] **RECORDED — `Exam.access_policy` is a column nothing reads.**
-      `single_submission` vs `save_and_resume`: v1 gives every assessment
-      save-and-resume, and no write boundary offers the setting (a guard pins
-      that). Enforcing `single_submission` would contradict R124's ratified
-      *«a student saves an incomplete draft and returns to it»*, so it needs an
-      Owner decision before it is either enforced or dropped.
+- [x] **DECIDED AND REMOVED (Owner, 2026-09-03) — `Exam.access_policy` and the
+      `single_submission` policy are withdrawn.** Save-and-resume is the only
+      response policy in v1, which resolves §17's contradiction with R124 in
+      R124's favour. The column, the `ExamAccessPolicy` enum, the unused
+      `SINGLE_SUBMISSION_FINAL` code and its Arabic fallback are gone;
+      `20260904100000_drop_exam_access_policy` is a TD-6b contract-phase drop
+      that **refuses** while any exam reads `single_submission` and passes
+      default rows without comment. Proved against the existing local database
+      and against a fresh disposable one. `errors.test.ts` now pins
+      `CAPACITY_FULL` and `SINGLE_SUBMISSION_FINAL` as retired **by name**.
+      `docs/SRS-PROPOSAL-R127.md` lists the six current normative references to
+      withdraw and **awaits application to `SRS.md`**.

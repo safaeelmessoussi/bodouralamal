@@ -32,7 +32,13 @@ export const ERROR_CODES = {
   CONSENT_GATE_LOCKED: { status: 403, messageKey: 'errors.consent_gate_locked' },
   CONSENT_REQUIRED: { status: 400, messageKey: 'errors.consent_required' },
   FAMILY_LINK_PENDING: { status: 409, messageKey: 'errors.family_link_pending' },
-  SINGLE_SUBMISSION_FINAL: { status: 409, messageKey: 'errors.single_submission_final' },
+  /* SINGLE_SUBMISSION_FINAL was RETIRED by Revision 127 and is deliberately
+   * absent (SRS TD-3.8). It was the refusal for `exam.access_policy =
+   * 'single_submission', a value nothing ever wrote and nothing ever read;
+   * the code had no thrower for its whole life. R124 ratified save-and-resume
+   * unconditionally, so there is no state left that could raise it — and
+   * TD-3.8's own reason for removing a code is that an unraisable one invites
+   * somebody to find a use for it. */
   UPLOAD_INCOMPLETE: { status: 409, messageKey: 'errors.upload_incomplete' },
   PAYLOAD_TOO_LARGE: { status: 413, messageKey: 'errors.payload_too_large' },
   RATE_LIMITED: { status: 429, messageKey: 'errors.rate_limited' },
@@ -104,7 +110,6 @@ const FALLBACK_MESSAGES: Record<ErrorCode, string> = {
   CONSENT_GATE_LOCKED: 'لا يمكن نشر هذا المحتوى: الموافقة على النشر غير متوفرة.',
   CONSENT_REQUIRED: 'يجب الموافقة على الشروط للمتابعة.',
   FAMILY_LINK_PENDING: 'طلب الربط قيد المراجعة.',
-  SINGLE_SUBMISSION_FINAL: 'لا يمكن تعديل هذا الامتحان بعد الإرسال.',
   UPLOAD_INCOMPLETE: 'لم يكتمل رفع الملف.',
   PAYLOAD_TOO_LARGE: 'حجم الملف أكبر من الحد المسموح به.',
   RATE_LIMITED: 'عدد كبير من المحاولات. يرجى المحاولة بعد قليل.',

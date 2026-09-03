@@ -145,6 +145,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
+| [`SRS-PROPOSAL-R127.md`](SRS-PROPOSAL-R127.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** Save-and-resume is the only assessment response policy; `exam.access_policy`, its enum and `SINGLE_SUBMISSION_FINAL` are withdrawn, resolving §17's contradiction with R124 | Document Owner only |
 | [`SRS-PROPOSAL-R126.md`](SRS-PROPOSAL-R126.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** Student educational evidence forbids deleting an assessment; publication and attendance do not. Also corrects R59 clause (3)'s stale one-child-table rationale | Document Owner only |
 | [`SRS-PROPOSAL-R124.md`](SRS-PROPOSAL-R124.md) | **APPLIED — ratified by the Document Owner as SRS Revision 124, 2026-09-04.** Kept as the drafting record for the online assessment builder; `SRS.md` §0 is now authoritative | Document Owner only |
 | [`SRS-PROPOSAL-R123.md`](SRS-PROPOSAL-R123.md) | **APPLIED — ratified by the Document Owner as SRS Revision 123, 2026-09-04.** Kept as the drafting record for attendance; `SRS.md` §0 is now authoritative | Document Owner only |

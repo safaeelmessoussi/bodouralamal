@@ -3,7 +3,6 @@ import {
   ConsentMethod,
   ConsentType,
   DayOfWeek,
-  ExamAccessPolicy,
   FamilyLinkStatus,
   RecurrenceType,
   Visibility,
@@ -645,7 +644,6 @@ async function main(): Promise<void> {
         // platform-wide scale left to inherit one from.
         maxGrade: 20,
         date: daysAgo(7),
-        accessPolicy: ExamAccessPolicy.save_and_resume,
         // R124 — a PHYSICAL sitting, so it is `published` from creation and
         // carries no paper: the questions are on real paper, outside the
         // platform (R58). The builder's own fixture is the online exam below.

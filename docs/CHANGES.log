@@ -3269,3 +3269,60 @@ preflight asked for: both permissive cases, four blocking cases, both
 non-blocking dependents, the combined case, four authorization cases (including
 a Super Admin meeting the same refusal — evidence is not a permission) and the
 FK-safe purge.
+
+## R127 — save-and-resume is the only response policy (2026-09-03)
+
+**Owner decision.** R124's ratified §4.6 says *«a student saves an incomplete
+draft and returns to it»* **unconditionally**; §17 said *«single_submission
+exams skip resume»*. Both were in force. The Owner resolved it in R124's
+favour: SAVE ≠ SUBMIT, a saved response stays resumable, and Final Submit is
+explicit and final. There is one policy.
+
+**What `access_policy` actually was.** Present since the initial migration,
+`NOT NULL DEFAULT 'save_and_resume'`, from the R56/R58 online-exam design — the
+same family in which `online` was declared and then refused. Audited at
+`652ce3f`: one writer (the dev seed fixture), one reader (`accessPolicy: true`
+in `ASSESSMENT_SELECT`, **selected and never branched on**), no write boundary,
+a `SINGLE_SUBMISSION_FINAL` code with **no thrower for its whole life**, no UI,
+and a frontend guard pinning it off the wire. R124's drafting record calls it one
+of four things *"dormant and now used"* — true of the other three, not of this
+one, and R127 corrects that.
+
+**Removed, not documented as dormant.** *An unused capability is still a
+capability* (R111 clause 2): an empty alternative is a declared behaviour a
+future maintainer implements by guessing its semantics from the enum name. §18
+made it worse by listing *"single_submission vs save_and_resume enforced"* as an
+**acceptance criterion** for behaviour that never existed — so §18 could not be
+satisfied by any implementation.
+
+**The migration refuses rather than assumes.** Every row carries a value, so
+*"is the column empty"* is not the question it was for `user.notes`. The question
+is whether anybody recorded the **withdrawn** intention, so
+`20260904100000_drop_exam_access_policy` counts `single_submission` rows, refuses
+with the count if any exist, and lets default rows through without comment — a
+default is what every row got for free, not a decision somebody made. It is a
+TD-6b **contract-phase** drop with no expand and no migrate step, deliberately: a
+transitional column would preserve exactly the capability being withdrawn.
+
+**Verified in both directions.** Localhost read-only before writing: 1 exam,
+1 `save_and_resume`, 0 `single_submission`. Then `migrate deploy` against the
+**existing** database, and the **full chain against a fresh disposable
+database** — after each, neither the column nor the enum type exists. Staging was
+not queried and Production is not deployed; the guard is what makes the check
+authoritative wherever it runs. The initial migration is untouched: the column's
+history stays in the chain where it happened.
+
+**Two guards restated rather than deleted.** `errors.test.ts` already closed the
+catalogue by exact key set, which refuses a re-addition with a diff and no
+reason; it now also pins `CAPACITY_FULL` and `SINGLE_SUBMISSION_FINAL` as retired
+**by name**, with the shared reason — an unraisable code invites somebody to find
+a use for it (TD-3.8). The scheduling form's wire guard keeps `access_policy` in
+its list: the property it now protects is *a withdrawn field does not come back
+through this form*, which is exactly what dropping the assertion would let
+through silently.
+
+**Tests: 56/56** on the assessment suite — including the three properties the
+decision turns on, all pre-existing and reused rather than rewritten: a partial
+draft saves as `in_progress` (16), reopening finds exactly what was written (17),
+and a submitted response refuses further edits with `ALREADY_SUBMITTED` (18–19).
+Plus 8/8 on the error catalogue and 9/9 on the scheduling-exam wire guard.

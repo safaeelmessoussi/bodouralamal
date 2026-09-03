@@ -92,9 +92,13 @@ describe('the adapter type matches the wire contract', () => {
      * one writes a PAPER. One form accepting either would ask half its
      * questions of everybody.
      *
-     * `access_policy` in particular stays off the wire because **nothing reads
-     * it**: v1 gives every assessment save-and-resume, and offering a setting
-     * that changes nothing would be worse than offering none.
+     * **`access_policy` no longer exists at all** (Revision 127). It stayed off
+     * this wire while it was a column nothing read; the Owner has since
+     * withdrawn the policy itself, because R124 ratified save-and-resume
+     * unconditionally and `single_submission` had never been implemented. The
+     * name is kept in this list on purpose: the property being guarded is now
+     * *a withdrawn field does not come back through the scheduling form*, which
+     * is the failure a dropped assertion would let through silently.
      */
     for (const column of ['exam_url', 'opens_at', 'closes_at', 'access_policy', 'questions']) {
       expect(WIRE).not.toHaveProperty(column);

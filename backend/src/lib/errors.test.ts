@@ -30,7 +30,6 @@ describe("TD-3.8 error envelope", () => {
       CONSENT_GATE_LOCKED: 403,
       CONSENT_REQUIRED: 400,
       FAMILY_LINK_PENDING: 409,
-      SINGLE_SUBMISSION_FINAL: 409,
       UPLOAD_INCOMPLETE: 409,
       PAYLOAD_TOO_LARGE: 413,
       RATE_LIMITED: 429,
@@ -47,6 +46,24 @@ describe("TD-3.8 error envelope", () => {
     expect(Object.keys(ERROR_CODES).sort()).toEqual(
       Object.keys(expected).sort(),
     );
+  });
+
+  it("keeps retired codes retired, by name", () => {
+    /**
+     * The closed-set assertion above already refuses a re-addition, but it fails
+     * with a diff rather than a reason. These two were removed for the SAME
+     * reason and the reason is what a future reader needs: an unraisable code
+     * invites somebody to find a use for it (TD-3.8).
+     *
+     * `CAPACITY_FULL` outlived its one caller when R43 removed room capacity as
+     * a refusal. `SINGLE_SUBMISSION_FINAL` never had a caller at all — it was
+     * the refusal for `exam.access_policy = 'single_submission'`, a value
+     * nothing wrote and nothing read, and Revision 127 withdrew the policy
+     * itself when R124 ratified save-and-resume unconditionally.
+     */
+    for (const retired of ["CAPACITY_FULL", "SINGLE_SUBMISSION_FINAL"]) {
+      expect(Object.keys(ERROR_CODES), retired).not.toContain(retired);
+    }
   });
 
   it("every code carries an i18n key and an Arabic fallback", () => {

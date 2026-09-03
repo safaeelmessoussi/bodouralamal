@@ -486,13 +486,6 @@ enum JustificationRule {
   @@map("justification_rule")
 }
 
-enum ExamAccessPolicy {
-  single_submission
-  save_and_resume
-
-  @@map("exam_access_policy")
-}
-
 /// TD-1 submission lifecycle.
 enum SubmissionState {
   in_progress
@@ -2718,8 +2711,6 @@ model Exam {
   attendance Attendance[]
 
   round Int?
-
-  accessPolicy ExamAccessPolicy @default(save_and_resume) @map("access_policy")
 
   /// R81 — **the maximum grade belongs to the exam**, and nothing else defines
   /// one. R58 refused this field as *"a second answer to what

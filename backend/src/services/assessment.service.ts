@@ -212,7 +212,6 @@ const ASSESSMENT_SELECT = {
   academicYearId: true,
   date: true,
   maxGrade: true,
-  accessPolicy: true,
   publishedAt: true,
   closedAt: true,
   version: true,
