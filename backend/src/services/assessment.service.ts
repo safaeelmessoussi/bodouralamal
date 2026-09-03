@@ -65,13 +65,50 @@ async function assertMayAuthor(
     subjectId: string | null;
     branchId: string | null;
     administrativeGroupId: string | null;
+    /** R124 — the named individual, when the target is one. */
+    studentId?: string | null;
   },
 ): Promise<void> {
-  if (scope.isSuperAdmin(actor.roleScopes) || scope.hasRole(actor.roleScopes, MANAGING_ROLE)) {
-    // An online paper carries no branch at all, so there is no branch to assert
-    // against; the Level is the scope, and an Admin reaches every Level.
+  if (scope.isSuperAdmin(actor.roleScopes)) return;
+
+  if (scope.hasRole(actor.roleScopes, MANAGING_ROLE)) {
     if (exam.branchId !== null) {
       scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, exam.branchId, 'no such assessment');
+    }
+    /**
+     * **An online paper carries no branch — and «no branch to check» is not «no
+     * check».**
+     *
+     * That was the first reading here, and it let a branch-scoped Admin address
+     * a paper **by name** to a beneficiary at any other branch, and then read
+     * her submitted answers through the inbox that comes with authoring it.
+     * TD-2 scopes an Admin to her branches; nothing about the paper having no
+     * room of its own widens that.
+     *
+     * **The named individual is checked against the branches she is actually
+     * enrolled at.** The other arms are not checked here and that is deliberate,
+     * not an oversight: a Level-wide online paper is cross-branch **by
+     * construction** — `examAudienceWhere`'s `level` arm resolves the Level
+     * across branches precisely because the paper is sat nowhere — so whether a
+     * branch-scoped Admin may author one is a **policy question the Owner has
+     * not answered**, recorded rather than decided here. Naming one child at
+     * another branch is not that question; it is unambiguously outside her
+     * scope.
+     */
+    if (exam.studentId !== null && exam.studentId !== undefined) {
+      const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+      if (reachable !== null) {
+        const within = await prisma.enrollment.count({
+          where: {
+            studentId: exam.studentId,
+            deletedAt: null,
+            branchId: { in: reachable },
+          },
+        });
+        // §20 rule 17 — out of scope answers NOT_FOUND, never a 403 that would
+        // confirm which beneficiaries exist elsewhere.
+        if (within === 0) throw new AppError('NOT_FOUND', 'no such beneficiary');
+      }
     }
     return;
   }
@@ -192,6 +229,7 @@ export async function createAssessment(
       // `exam_online_has_no_room_check` refuses one outright.
       branchId: null,
       administrativeGroupId: target.administrativeGroupId,
+      studentId: target.studentId,
     });
 
     const created = await tx.exam.create({

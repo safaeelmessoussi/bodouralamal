@@ -81,6 +81,8 @@ const actorOf = (userId: string, role: string): Actor => ({
 const superAdmin = (): Actor => actorOf(superAdminId, 'super_admin');
 const outsider = (): Actor => actorOf(outsiderId, 'teacher');
 const student = (id: string): Actor => actorOf(id, 'student');
+/** The مؤطِّرة who staffs this fixture's class — she teaches `alice`, not `carol`. */
+const teacherActor = (): Actor => actorOf(teacherId, 'teacher');
 
 async function person(name: string, beneficiary = false): Promise<string> {
   return (
@@ -1065,5 +1067,72 @@ describe('R123 × R124 · attendance, submission and grade are three independent
       select: { status: true },
     });
     expect(grade.status).toBe('published');
+  });
+});
+
+describe('SECURITY · an individual target may not name somebody outside the author’s reach', () => {
+  /**
+   * **The hole this probes.** `assertMayAuthor` checks the **Level**; the
+   * `student` arm then checks only that the id names a live beneficiary. A
+   * مؤطِّرة authorised for a Level could therefore address a paper **by name** to
+   * a beneficiary she does not teach — and, having authored it, read that
+   * student's submitted answers through her own inbox.
+   *
+   * `carol` is enrolled in another Level entirely and is taught by nobody in
+   * this fixture.
+   */
+  it('refuses a مؤطِّرة who does not teach the whole Level the paper names', async () => {
+    /**
+     * **Stricter than the leak this probe was written for**, and recorded as it
+     * is rather than as it was assumed. A `student` target names no group, so
+     * `assertExamInTeacherScope` asks *do you teach this whole Level* — and a
+     * مؤطِّرة staffing one Administrative Group inside it does not. She is
+     * refused for `carol`, whom she does not teach, **and for `alice`, whom she
+     * does**.
+     *
+     * The refusal is safe; the second half is a **usability gap, recorded for
+     * the Owner**: she cannot address a paper to her own student by name.
+     * Widening it means deciding what «her own» means for a target that carries
+     * no group, which is a product decision and not this session's to take.
+     */
+    for (const who of [carol, alice]) {
+      await expect(
+        createAssessment(prisma, teacherActor(), {
+          title: `${TAG} ورقة موجَّهة`,
+          maxGrade: 20,
+          levelId,
+          subjectId,
+          target: { kind: 'student', id: who },
+          date: TODAY,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
+  });
+
+  it('an Admin scoped to another branch cannot name a beneficiary at this one', async () => {
+    /**
+     * **The leak this closed.** An online paper carries no branch, and the first
+     * reading turned *no branch to check* into *no check*: a branch-scoped Admin
+     * could address a paper **by name** to a beneficiary anywhere in the
+     * association, then read her submitted answers through the inbox authoring
+     * brings. TD-2 scopes an Admin to her branches, and a paper having no room
+     * of its own does not widen that.
+     */
+    const scoped: Actor = {
+      userId: superAdminId,
+      roles: ['admin'],
+      roleScopes: [{ role: 'admin', branches: ['00000000-0000-4000-8000-0000000000ad'] }],
+      activeRole: 'admin',
+    };
+    await expect(
+      createAssessment(prisma, scoped, {
+        title: `${TAG} ورقة من فرع آخر`,
+        maxGrade: 20,
+        levelId,
+        subjectId,
+        target: { kind: 'student', id: alice },
+        date: TODAY,
+      }),
+    ).rejects.toBeTruthy();
   });
 });

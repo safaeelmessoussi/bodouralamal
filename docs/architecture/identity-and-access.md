@@ -465,6 +465,16 @@ A few rows worth knowing without opening the table:
   **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
   writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
   operational APIs they are authorised to use (Revision 30).
+- **An online paper carries no branch, and «no branch to check» is not «no
+  check» (R124, corrected 2026-09-04).** The first reading skipped the branch
+  assertion entirely because the row has no `branch_id`, which let a
+  branch-scoped Admin address a paper **by name** to a beneficiary at any other
+  branch and then read her submitted answers through the inbox authoring brings.
+  **A named individual is now checked against the branches she is actually
+  enrolled at**, answering `NOT_FOUND` rather than `403` (§20 rule 17). **The
+  other target arms are deliberately not checked this way**: a Level-wide online
+  paper is cross-branch *by construction*, so whether a branch-scoped Admin may
+  author one is an **open Owner question**, recorded rather than decided.
 - **The assessment builder (§4.6, R124) invents no reach either.** Authoring,
   publishing and reading the inbox use the exam's own rule (TD-2 as split by
   R70.4): Super Admin, Admin in branch scope, Teacher within their own teaching.

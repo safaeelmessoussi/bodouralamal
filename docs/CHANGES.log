@@ -3107,3 +3107,37 @@ reaches بناء الاختبارات and gets the builder rather than a pending
 the published paper is on the beneficiary's list; حفظ saves a **draft**; and
 إرسال **asks first, then locks every control and stops offering itself**.
 **5/5.** Frontend 1004/1004, build green.
+
+## A branch-scoped Admin could name any beneficiary in the association — 2026-09-04
+
+Found by probing R124's individual target rather than by a failure. An online
+paper carries no branch (`exam_online_has_no_room_check` forbids one), and
+`assertMayAuthor` read that as *nothing to assert*:
+
+```ts
+if (exam.branchId !== null) { assertCanActOnBranch(...); }   // else: no check
+```
+
+So an Admin scoped to one branch could create a paper **addressed by name** to a
+beneficiary at any other branch — and, because authoring brings the submissions
+inbox with it, **read that student's submitted answers**. TD-2 scopes an Admin to
+her branches; a paper having no room of its own does not widen that.
+
+**Fixed narrowly and deliberately.** The named individual is checked against the
+branches she is actually enrolled at, answering `NOT_FOUND` rather than `403`
+(§20 rule 17 — a 403 would confirm which beneficiaries exist elsewhere). **The
+other arms are not checked this way**, and that is a decision rather than an
+oversight: a Level-wide online paper is cross-branch *by construction* —
+`examAudienceWhere`'s `level` arm resolves the Level across branches precisely
+because the paper is sat nowhere — so whether a branch-scoped Admin may author
+one is a **policy question for the Owner**, recorded below and not decided here.
+
+**The probe also found the teacher arm is stricter than expected, and that is
+recorded as it is rather than as it was assumed.** A `student` target names no
+group, so `assertExamInTeacherScope` asks *do you teach this whole Level* — and a
+مؤطِّرة staffing one Administrative Group inside it does not. She is refused for a
+student she does not teach **and for one she does**. The refusal is safe; the
+second half is a **usability gap needing an Owner decision**, because widening it
+means defining what *«her own»* means for a target that carries no group.
+
+assessment + exam.http + attendance + grade.http: **127/127**.
