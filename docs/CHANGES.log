@@ -3932,3 +3932,68 @@ handbook index and `TASKS.md` no longer claim any of them awaits application.
 the active `LegalConsentText`, `notification.subject_user_id`'s provisional
 classification, the adult-Category marker, and R59.4 — each recorded as open
 rather than decided here.
+
+## R131 Option A — account closure keeps the reference code (2026-09-04)
+
+**Option A only.** Option B is not implemented, no retention automation was
+written, and the R131 map's remaining reconciliations are untouched.
+
+**The correction.** R122 committed the association to answering *«كنت أدرس عندكم
+وأريد شهادة تثبت المستوى الذي وصلت إليه»* years later; R111's de-identification
+cleared every field that could match a returning person to her preserved record —
+**including `reference_code`** — and neither cited the other. R131 resolved it:
+**the code survives Option A** as part of the protected minimal educational
+archive. `deIdentifyAccount` no longer clears it.
+
+**One line was not enough, which is the interesting part.** `hadIdentitySurface`
+decides *both* whether `qr_ref` rotates *and* whether a `user.deidentify` audit
+row is written, and it counted `reference_code`. Removing only the assignment
+would have left that predicate permanently true — so every retry of an
+**idempotent** job would rotate the QR again and write another audit row, making
+one operation look like repeated human decisions. The field had to leave the
+predicate in the same change, and a test now pins it.
+
+**Preserving the code opens no way back in, and that is structural rather than
+promised.** A reference code is a **locator** (R62.5, R132): the one surface that
+takes one resolves a beneficiary `WHERE deleted_at IS NULL`, and a closed account
+is by definition soft-deleted — so quoting the code of a closed account gets the
+same uniform refusal as a code that never existed. It is also never reissued:
+`allocateReferenceCode` counts rows regardless of `deleted_at`, so the value stays
+taken and no future beneficiary receives it.
+
+**Three security-sensitive cases were checked and already hold, and are now
+asserted rather than assumed.** A **pending self-managed claim** approved after
+closure fails closed (`BENEFICIARY_INELIGIBLE`), so a closed account cannot
+acquire a login through a stale claim. A **guardian-only** closure touches no
+child record and does not make the guardian a beneficiary. And closing a
+**self-managed adult's** account does not hand her back to a former guardian —
+worth an explicit test because closure *deletes her `UserIdentity`*, which
+satisfies the very clause (*an account with no active login identity*) that ended
+the guardian's authority; what still refuses him is that the resolver requires a
+live student. It holds by a second clause rather than by the one expressing the
+intent, so it is pinned.
+
+**DOB is untouched, deliberately.** R131's map does not classify the birth date
+for Option A, and the current operation does not clear it. **No decision was made
+here** — the test asserts the existing behaviour so a future change is a
+deliberate one, and the unresolved classification is recorded rather than guessed.
+
+**The wording now distinguishes closure from deletion.** «حذف الحساب» became
+«إغلاق الحساب» on both surfaces, and the copy states that the educational record,
+the reference code and the consent records remain **for the association's own
+retention purpose**, that this is **not** a request to delete everything, and that
+full deletion is a separate request to the administration. Four guards assert the
+copy says the record remains, never promises total erasure, **claims no external
+legal mandate for the period**, and does not offer the unimplemented Option B.
+
+**Two pre-existing test defects surfaced and were fixed rather than hidden.** The
+R132 suite asserted `selfManagedClaim.count()` with **no predicate** — a global
+count that passed only while one file created claims; it is now scoped. And the
+new suite's fixture used a fixed reference-code sequence, which collides with any
+row an interrupted run left behind now that closure *keeps* the code — the unique
+index was doing its job and the fixture was wrong.
+
+**Tests: 13/13** new Option A invariants, **99/99** across the closure,
+self-managed-claim, family-link, auth and child-context suites. The correction was
+**proved against the defect**: restoring the old `referenceCode: null` fails
+exactly the preservation and idempotency tests, and nothing else.

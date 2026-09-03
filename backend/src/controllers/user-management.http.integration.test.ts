@@ -1702,7 +1702,6 @@ describe("R111 — deleting an account keeps the record", () => {
       after?.nickname,
       after?.publicDisplayName,
       after?.phone,
-      after?.referenceCode,
       after?.schoolingStage,
       after?.intendedBranchId,
       after?.intendedCategoryId,
@@ -1712,6 +1711,19 @@ describe("R111 — deleting an account keeps the record", () => {
       expect(value).toBeNull();
     }
     expect(after?.qrRef).not.toBe(before.qrRef);
+    /**
+     * **`reference_code` SURVIVES, and is the SAME value** (Revision 131).
+     *
+     * Option A closes the account and keeps the minimal educational archive;
+     * the code is what reconnects a former beneficiary with her own history for
+     * an attestation. It is **not regenerated** — a new value would identify
+     * nothing she or the association holds on paper.
+     *
+     * Asserted here, on the surviving row, deliberately: this used to be in the
+     * cleared list above, and the R111 ↔ R122 contradiction is exactly the kind
+     * a passing test can preserve for months.
+     */
+    expect(after?.referenceCode).toBe("BA-TEST2");
     /**
      * **The TD-10 search shadows no longer carry the original.**
      *

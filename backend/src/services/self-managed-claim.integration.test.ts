@@ -138,11 +138,15 @@ afterAll(async () => {
 
 describe('R132 — age is ELIGIBILITY and nothing else', () => {
   it('1 · a beneficiary under 18 cannot initiate — and is refused uniformly', async () => {
-    const { code } = await makeBeneficiary('قاصر', { birthDate: birthDateForAge(18, 1) });
+    const { id, code } = await makeBeneficiary('قاصر', { birthDate: birthDateForAge(18, 1) });
     await expect(
       requestSelfManagedClaim(prisma, { ...verified(), referenceCode: code }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND', details: { reason: 'CLAIM_NOT_AVAILABLE' } });
-    expect(await prisma.selfManagedClaim.count()).toBe(0);
+    // **Scoped to this suite's own beneficiary**, not a global count. Suites
+    // share one database, so `count()` with no predicate asserts something
+    // about every other suite's rows as well — and it passed only while this
+    // was the only file creating claims.
+    expect(await prisma.selfManagedClaim.count({ where: { beneficiaryId: id } })).toBe(0);
   });
 
   it('2 · EXACTLY 18 today may initiate — the boundary is the birthday itself', async () => {

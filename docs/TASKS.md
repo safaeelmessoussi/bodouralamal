@@ -1656,9 +1656,32 @@ was hiding behind it: the run went green on the first attempt.
             12-month application purge that touches the same rows. **A partial
             purge that claims data is gone while obvious copies remain is worse
             than none.** No purge job is to be written before then.
-      - [ ] **Option A does not yet keep `referenceCode`** — `deIdentifyAccount`
-            still clears it. That change is Option A implementation work, not
-            map work.
+      - [x] **DONE (2026-09-04) — Option A now keeps `referenceCode`.**
+            `deIdentifyAccount` no longer clears it, and `hadIdentitySurface`
+            stopped counting it in the same change: leaving it in that predicate
+            while the field is deliberately kept would have made an idempotent
+            job rotate `qr_ref` and write a second audit row on every retry.
+            Preserving it opens no way back in — the one surface that takes a
+            code resolves `WHERE deleted_at IS NULL` and a closed account is
+            soft-deleted — and it is never reissued, because
+            `allocateReferenceCode` counts rows regardless of `deleted_at`.
+            13 focused tests; proved against the defect. **Option B remains
+            unimplemented and the rest of the R131 map is untouched.**
+      - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
+            R131's map does not say whether `birth_date` belongs to the minimal
+            educational archive or to the account state Option A removes. The
+            closure does **not** touch it today and this work made no change
+            either way; the current behaviour is pinned by test so a future
+            change is deliberate. It is not authentication data, so clearing it
+            on that basis would be wrong — and retaining it needs a stated
+            purpose. **Owner decision required before any destructive change.**
+      - [ ] **OPEN — what happens when a former beneficiary legitimately
+            returns.** Option A keeps the reference code so her archive can be
+            found, but **no return workflow exists and none was created**: the
+            code authenticates nobody, a closed account cannot be claimed
+            (`deleted_at` excludes it), and there is no path from knowing a code
+            to an account. Whether a return is a fresh registration matched by
+            an administrator, or something else, is an Owner decision.
       - [ ] **LEGAL WORDING PENDING, NOT DRAFTED AUTONOMOUSLY.** The active
             `LegalConsentText` is **untouched**. R131 requires the privacy notice
             to state: the ten-year educational retention and its purposes; that

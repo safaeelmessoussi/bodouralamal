@@ -487,7 +487,12 @@ export async function deIdentifyAccount(
         user.nickname,
         user.publicDisplayName,
         user.phone,
-        user.referenceCode,
+        // **`referenceCode` is deliberately ABSENT here** (Revision 131). It is
+        // no longer cleared, so counting it would make this predicate
+        // permanently true — and every retry would then rotate `qr_ref` again
+        // and write a second `user.deidentify` row, turning an idempotent job
+        // into one that looks like repeated human decisions. The predicate must
+        // only name fields this operation actually clears.
         user.schoolingStage,
         user.intendedBranchId,
         user.intendedCategoryId,
@@ -508,7 +513,36 @@ export async function deIdentifyAccount(
         nickname: null,
         publicDisplayName: null,
         phone: null,
-        referenceCode: null,
+        /**
+         * **`referenceCode` SURVIVES — it is not cleared** (Revision 131,
+         * resolving the R111 ↔ R122 contradiction).
+         *
+         * R122 committed the association to answering *«كنت أدرس عندكم وأريد
+         * شهادة تثبت المستوى الذي وصلت إليه»* years later; R111 cleared every
+         * field that could match a returning person to her preserved record,
+         * including this one, and neither cited the other. The Owner's
+         * resolution: **Option A keeps the code**, as part of the protected
+         * minimal educational archive, because it is what reconnects a former
+         * beneficiary with her own history. **Option B deletes it** — and
+         * Option B is not implemented.
+         *
+         * **It is not anonymous.** The archive is pseudonymous, not anonymous,
+         * merely because the login is gone, and the code is protected as
+         * personal data.
+         *
+         * **It grants nothing** (R62.5, R132). It is a LOCATOR: it is not
+         * authentication, not proof of identity, not authorization and not
+         * account recovery. Two clauses already make that structural rather
+         * than a promise, and both are asserted by test — a self-managed claim
+         * resolves a beneficiary only `WHERE deleted_at IS NULL`, and a closed
+         * account is by definition soft-deleted, so quoting the code of a
+         * closed account finds nothing and answers the same uniform refusal as
+         * a code that never existed.
+         *
+         * **It is never reissued**: `allocateReferenceCode` counts rows
+         * regardless of `deleted_at`, so a preserved code stays taken and no
+         * future beneficiary can be given it.
+         */
         schoolingStage: null,
         intendedBranchId: null,
         intendedCategoryId: null,

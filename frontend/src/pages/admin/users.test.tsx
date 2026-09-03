@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Approval } from '../../adapters/approvals.js';
 import type { RoleAssignment, UserSummary } from '../../adapters/users.js';
 import { ACCOUNT_STATUSES, ROLES } from '../../adapters/users.js';
+import { t } from '../../i18n/index.js';
 import { ar } from '../../i18n/ar.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
@@ -244,5 +245,48 @@ describe('the staff registration workflow (Revision 49)', () => {
     // Approval must not read as a weaker path to authority than the Users
     // screen — and the message says the approval itself is still available.
     expect(ar.admin.approvals.roleForbidden).toBeTruthy();
+  });
+});
+
+/**
+ * **Option A is account CLOSURE, and the copy must not promise more** (R131).
+ *
+ * The one unacceptable outcome here is an interface that promises a deletion the
+ * system does not perform. Option B — deletion of the educational record itself —
+ * is a separate, Super-Admin-reviewed request and **is not implemented**, so no
+ * screen may offer it or imply that this action is it.
+ */
+describe('R131 — the account-closure wording', () => {
+  const copy = [
+    t('admin.users.deleteBody'),
+    t('admin.users.deleteBodyPermanent'),
+    t('profile.deleteLede'),
+    t('profile.deleteConfirm'),
+  ];
+
+  it('says the educational record REMAINS, on every surface that closes an account', () => {
+    for (const text of copy) {
+      expect(text, text.slice(0, 40)).toMatch(/تبقى محفوظ|يبقى سجلك/);
+    }
+  });
+
+  it('never promises that everything is deleted', () => {
+    for (const text of copy) {
+      expect(text, text.slice(0, 40)).not.toMatch(/حذف كل بياناتك نهائ|تُحذف كل/);
+    }
+  });
+
+  it('claims no external legal mandate for the retention period', () => {
+    // The ten years are the association's own purpose-based policy (R131); a
+    // screen citing CNDP or a law would be asserting something untrue.
+    for (const text of copy) {
+      expect(text).not.toMatch(/CNDP|القانون|قانون 09-08|إلزام قانوني/);
+    }
+  });
+
+  it('does not offer Option B, which is not implemented', () => {
+    for (const text of copy) {
+      expect(text).not.toMatch(/حذف كل البيانات القابلة للحذف/);
+    }
   });
 });
