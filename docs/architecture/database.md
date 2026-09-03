@@ -54,6 +54,7 @@ erDiagram
 ```
 
 Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
+`AcademicPeriod`,
 `EducationalContent`, `ConsumedToken`, `RateLimitCounter`, and `HijriMonthStart`.
 
 > The authoritative field-by-field definition is SRS §7. This page explains the parts that
@@ -334,12 +335,13 @@ the consent job's forced visibility changes.
 | `ConsumedToken (jti)` | **The onboarding-token replay guard.** A replay hits this violation, the transaction aborts, and the request fails — enforcement is mechanical, not aspirational |
 | `FamilyLink (student_id, parent_id)` **where not deleted** | A revoked link can be requested again later |
 | `AcademicYear` exactly one `is_current` | Partial unique index |
+| `AcademicPeriod (academic_year_id, sequence)` | One الفصل 1، one الفصل 2 per year — a second row for the same semester would make *which period is this enrolment in* ambiguous |
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
 | `NormalizedEmailLock.email` | One collision-free transaction boundary across pre-provisioned and completed identity ownership, including absent-row creation |
 | `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
 | `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable, database-enforced serialization target |
-| `Enrollment (student_id, level_id)` **where not deleted** | **Exactly one organisational group per enrolled level** (BR-21). Only expressible because `level_id` sits on the enrolment row — see below |
+| `Enrollment (student_id, level_id, academic_period_id)` **where not deleted** | **Exactly one live enrolment per Level per academic period** (BR-21, narrowed by R122). Only expressible because `level_id` sits on the enrolment row — see below. **The period is part of the key on purpose:** the same student enrols in the same Level again next semester, and the previous row is history that must survive |
 | `AdministrativeGroup (id, level_id)` | Redundant against the primary key **on purpose**: PostgreSQL requires a unique constraint on the referenced pair before `Enrollment` can declare its composite foreign key |
 | `StudentTeachingGroup` — at most one per `(student, subject, level)` **where not deleted** | At most one split-group per subject (BR-22). `subject` and `level` come from the teaching group, so this is a **functional** index over the join, hand-written |
 | `Session (schedule_id, date)` | What makes `session.materialize` idempotent — a second run creates no duplicate occurrence |
@@ -373,6 +375,11 @@ into exactly the kind of copy that the platform has been burned by before.
   nothing can resolve a roster for. Also `recurrence <> 'none'` — a non-recurring occurrence
   is an Event, not a schedule.
 - `AcademicYear.label` matches `^\d{4}-\d{4}$`.
+- `AcademicPeriod`: `sequence >= 1` and `end_date >= start_date`. **Overlap between two
+  periods of one year is refused in the service, not by the database** — an exclusion
+  constraint over a date range needs the `btree_gist` extension, and the platform's
+  deployment contract does not install extensions. The service check is the enforcement, and
+  this line records that it is the *only* one.
 - `HijriMonthStart`: month 1–12; year 1300–1600 (brackets any date this platform will render
   while rejecting a mistyped Gregorian year); **two months of one year may not share a start
   date, and month *n+1* must start after month *n*** — an out-of-order pair would make date
@@ -553,6 +560,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260902180000_versioned_legal_consent_text
 20260902200000_drop_student_social_profile
 20260902220000_drop_user_notes
+20260903090000_r122_academic_period_enrollment
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

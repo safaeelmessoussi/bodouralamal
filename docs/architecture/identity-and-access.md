@@ -384,7 +384,6 @@ operations. Each of these asserts against the database, **per request**, that th
 still `Active` and still holds the invoked role and scope:
 
 - Presigned URL minting
-- Any read of a student's social profile
 - Approval actions
 - Consent-gate overrides and staff-recorded consent
 - Pass/fail overrides
@@ -463,14 +462,11 @@ the enforcement mechanism.
 A few rows worth knowing without opening the table:
 
 - **Reference data** (branches, rooms, levels, categories, subjects, academic year,
-  settings, display order, the Hijri calendar) — **Super Admin writes**. Admin reads within
-  scope. **Teacher: no access at all** — they receive reference information through the
+  **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
+  writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
   operational APIs they are authorised to use (Revision 30).
 - **Branch event backfill** stays an **Admin** capability, because it is operational work
   (populating events when a branch activates), not reference management.
-- **Student social profile** — read *and* write for Super Admin, Admin in scope, and a
-  Teacher for their own assigned students. **Never parents, never students.** Both reads
-  and writes are audited.
 
 > [Technical design § TD-2](../reference/technical-design.md#td-2) ·
 > [Users and roles](../overview/users-and-roles.md)

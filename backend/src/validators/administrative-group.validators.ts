@@ -61,4 +61,7 @@ export const listAdministrativeGroupsQuerySchema = z.object({
  * the composite FK the only thing standing between a typo and a mis-filed
  * student, surfacing as an opaque constraint error rather than a decision.
  */
-export const enrolStudentSchema = z.object({ student_id: uuid }).strict();
+/** R122 — a roster placement names the semester it is for. */
+export const enrolStudentSchema = z
+  .object({ student_id: uuid, academic_period_id: uuid })
+  .strict();

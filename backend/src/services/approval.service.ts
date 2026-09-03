@@ -7,6 +7,7 @@ import { composeArabicName } from '../lib/person-name.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
+import { currentAcademicPeriod } from './academic-period.service.js';
 import * as users from '../repositories/user.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { revokeAllSessions } from './refresh-token.service.js';
@@ -914,8 +915,20 @@ export async function decide(
       for (const e of enrollments) {
         // One resolver for both shapes and both approval paths — the branching
         // lives in `enrolAtPlacement`, not in each caller (R66.5).
+        // R122 — an approval enrols somebody as a consequence of a decision
+        // taken TODAY, so the period is the one covering today rather than a
+        // value on the form. **Fails closed** when no period covers today: an
+        // enrolment with no period is the open-ended row R122 removes, and the
+        // Super Admin records the semester once.
         placedEnrollments.push(
-          await enrolAtPlacement(tx, actor, e.placement, e.userId, 'approval'),
+          await enrolAtPlacement(
+            tx,
+            actor,
+            e.placement,
+            e.userId,
+            'approval',
+            (await currentAcademicPeriod(tx)).id,
+          ),
         );
       }
 

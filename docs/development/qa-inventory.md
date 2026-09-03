@@ -128,13 +128,20 @@ under the table.
 | `verify-content-scope.sh` | 14 | NEW D — a مؤطِّرة's مكتبة المحتوى filters, and the admin reads still refused | 14/14 |
 | `verify-visibility-ui.sh` | 19 | NEW B §D — the visibility tier on the forms, and where each R50 scope lands | 19/19 |
 | `verify-scheduling-types.sh` | 10 | R110 — the scheduling-type catalogue on أنواع الجدولة and the الجدولة picker | 10/10 |
+| `verify-academic-periods.sh` | 4 | **R122** — الفصول الدراسية renders and creates a period end to end, جارٍ is read from the period's own dates, and the academic year is text on edit (rule AF). **The screen the required `academic_period_id` depends on**: without it, approval refuses every applicant | 4/4 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**508 checks across 22 harnesses, all green** (2026-08-20), plus
-`measure-page-header`'s nine width measurements — 23 scripts in
-`scripts/dev/browser/` and 23 rows here. Every row was run in one pass; none is
-carried forward. `verify-circles-reorder` failed once on keyboard-reorder timing
+**508 checks across 22 harnesses, all green in one pass on 2026-08-20**, plus
+`measure-page-header`'s nine width measurements — 23 scripts and 23 rows **as of
+that date**. Every row in that pass was run together; none was carried forward.
+
+**That total is a snapshot, not a running count**, and saying so is the fix for a
+sentence that claimed *23 scripts in `scripts/dev/browser/` and 23 rows here* in
+the present tense while the directory grew to more than twice that. Harnesses
+added since carry their own result in their row and are run when the slice that
+owns them is verified; re-running all of them is a release activity, not a
+per-slice one. `verify-circles-reorder` failed once on keyboard-reorder timing
 and passed 9/9 on re-run — recorded because a transient that is not written down
 is one somebody re-investigates.
 

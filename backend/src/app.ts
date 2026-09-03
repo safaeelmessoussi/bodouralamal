@@ -3,6 +3,7 @@ import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
+import * as academicPeriods from './controllers/academic-period.controller.js';
 import * as consentTexts from './controllers/legal-consent-text.controller.js';
 import * as settings from './controllers/setting.controller.js';
 import * as teachingProfile from './controllers/teaching-profile.controller.js';
@@ -557,6 +558,11 @@ export function createApp(
   // that needs either reads these rather than growing its own list.
   guarded.get('/admin/subjects', referenceData.subjects(prisma));
   guarded.get('/admin/academic-years', referenceData.academicYears(prisma));
+  // R122 — the semesters a year is made of. Read by any staff who may read
+  // reference data; written by a Super Admin, asserted in the service.
+  guarded.get('/admin/academic-periods', academicPeriods.list(prisma));
+  guarded.post('/admin/academic-periods', academicPeriods.create(prisma));
+  guarded.patch('/admin/academic-periods/:id', academicPeriods.update(prisma));
   // Which Subjects a Level teaches (§4.4b). The join that gates Teaching Groups
   // had no write path at all, so `LevelSubject` was permanently empty and every
   // teaching-group creation answered SUBJECT_NOT_IN_LEVEL.

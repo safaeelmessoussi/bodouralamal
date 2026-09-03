@@ -28,6 +28,11 @@ import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
+import {
+  listAcademicPeriods,
+  type AcademicPeriodRef,
+} from '../../adapters/academic-periods.js';
+import { Badge } from '../../components/ui/badge.js';
 import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { useSession } from '../../contexts/session.js';
@@ -259,6 +264,49 @@ export function EnrollmentsPage(): ReactNode {
             {r.enrolments.map((e) => (
               <li key={e.id}>
                 {levelLabel({ id: e.level_id, name: e.level_name, category_name: e.category_name })}
+              </li>
+            ))}
+          </ul>
+        ),
+    },
+    {
+      /**
+       * **R122 — which semester each placement is for, and whether it is
+       * running.**
+       *
+       * The column the page most needed: before it, every enrolment read as
+       * current, because a row was current until somebody deleted it. `جارٍ`
+       * and `منتهٍ` are the server's derived answer from the period's dates —
+       * the page computes neither, so it cannot disagree with the roster or
+       * with a future retention rule.
+       */
+      key: 'period',
+      header: t('admin.enrollments.periodColumn'),
+      cell: (r) =>
+        r.enrolments.length === 0 ? (
+          <span className="muted">—</span>
+        ) : (
+          <ul className="admin-list admin-list--plain">
+            {r.enrolments.map((e) => (
+              <li key={e.id}>
+                {e.academic_period_id === null ? (
+                  // Honest: written before R122, its semester was never
+                  // recorded and was deliberately not guessed.
+                  <span className="muted">{t('admin.enrollments.periodUnrecorded')}</span>
+                ) : (
+                  <>
+                    {e.academic_year_label}{' '}
+                    {t('admin.enrollments.semester').replace(
+                      '{n}',
+                      String(e.academic_period_sequence),
+                    )}{' '}
+                    <Badge tone={e.is_current_period ? 'ok' : 'neutral'}>
+                      {e.is_current_period
+                        ? t('admin.enrollments.currentBadge')
+                        : t('admin.enrollments.endedBadge')}
+                    </Badge>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -557,11 +605,40 @@ function EnrolDialog({
   const [eligibleLevels, setEligibleLevels] = useState<Level[] | null>(null);
   const [groupId, setGroupId] = useState('');
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  /**
+   * **R122 — which semester the placement is for.**
+   *
+   * Defaults to the period covering today, because that is what an
+   * administrator enrolling somebody now almost always means; she may choose
+   * another. The form refuses to submit without one: an enrolment with no
+   * period is the open-ended row R122 exists to remove.
+   */
+  const [periods, setPeriods] = useState<AcademicPeriodRef[]>([]);
+  const [periodId, setPeriodId] = useState('');
   /** The Level's circles, across its Subjects — offered, never required. */
   const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
   const [circleIds, setCircleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // R122 — the semesters, and a default of the one running today.
+  useEffect(() => {
+    let cancelled = false;
+    void listAcademicPeriods(token)
+      .then((rows) => {
+        if (cancelled) return;
+        setPeriods(rows);
+        setPeriodId((chosen) => chosen || (rows.find((p) => p.is_current)?.id ?? ''));
+      })
+      .catch(() => {
+        // A page-level condition, reported where the submit refuses (rule AH):
+        // an empty list means no semester has been recorded yet.
+        if (!cancelled) setPeriods([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   /**
    * **The branch is DERIVED, never asked for** (Owner, 2026-08-28).
@@ -736,6 +813,12 @@ function EnrolDialog({
       setNotice(t('admin.enrollments.branchUnknown'));
       return;
     }
+    // R122 — refused in words, never in silence (rule AH). With no period the
+    // enrolment could not end on its own, which is the defect this closes.
+    if (!periodId) {
+      setNotice(t('admin.enrollments.periodRequired'));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -746,6 +829,7 @@ function EnrolDialog({
           branch_id: derivedBranchId,
           // `null` is the placement, not the absence of one (R66).
           administrative_group_id: groupId === '' ? null : groupId,
+          academic_period_id: periodId,
         },
         token,
       );
@@ -836,6 +920,25 @@ function EnrolDialog({
             : t('admin.enrollments.levelsForStudent')}
         </p>
       ) : null}
+
+      {/* **R122 — the semester this placement is for.** Above the group
+          because it is the more consequential answer: it is what makes the
+          enrolment end on its own instead of running forever. */}
+      <SelectField
+        label={t('admin.enrollments.periodLabel')}
+        value={periodId}
+        onChange={setPeriodId}
+        required
+        options={periods.map((p) => ({
+          value: p.id,
+          label: `${p.academic_year_label} — ${t('admin.enrollments.semester').replace('{n}', String(p.sequence))}`,
+        }))}
+        hint={
+          periods.length === 0
+            ? t('admin.enrollments.periodNone')
+            : t('admin.enrollments.periodHint')
+        }
+      />
 
       <SelectField
         label={t('admin.nav.groups')}

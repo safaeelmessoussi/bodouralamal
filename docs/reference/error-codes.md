@@ -118,6 +118,9 @@ generic message for all of these is hiding the only useful part of the answer.**
 | `LAST_SUPER_ADMIN` | Suspend, or `PUT .../roles` | Appoint another Super Admin first. Revision 22's lockout recovery needs a VPS shell and is not a UI outcome |
 | `GENDER_RESTRICTION` | Enrolment, including at approval | The Level admits one sex (§4.4b); `details.required_sex` says which. **The student's own sex is never echoed** |
 | `ALREADY_ENROLLED_IN_LEVEL` | Enrolment | BR-21 — one group per Level. `current_administrative_group_id` is named, because the intent was probably a *move* |
+| `ALREADY_ENROLLED_IN_LEVEL` **within the academic period** | Enrolment | R122 narrows BR-21 to one live enrolment per Level **per period**, so the same refusal now says *this semester* rather than *ever* |
+| `ACADEMIC_PERIOD_OVERLAP` | Creating or editing an academic period | Two periods of one year may not cover the same day. `details` names the period already covering it. **Checked in the service, not by the database** — an exclusion constraint needs `btree_gist`, which this deployment does not install |
+| `NO_CURRENT_ACADEMIC_PERIOD` | Approving an applicant, deciding a child application | No period covers today, so the platform refuses to enrol rather than guess a semester. A Super Admin opens the period first (`POST /admin/academic-periods`). **Failing closed is the point:** a fabricated period would be indistinguishable, a year later, from one the association actually ran |
 | `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
 
 Two more travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a

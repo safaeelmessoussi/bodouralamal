@@ -408,6 +408,28 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **الفصول الدراسية** (R122) — the semesters an academic year is made of,
+     * and the reason an enrolment can say *which* year a beneficiary studied.
+     *
+     * **In الإدارة and Super Admin only**, because a period is curriculum
+     * reference data — the same class as the academic year it belongs to — and
+     * R61's section rule makes placement decide authority. Appended after the
+     * existing reference-data nodes rather than reshuffled into them, which is
+     * what R105 and OD-01 require of a new entry.
+     *
+     * **The seed creates no periods**, so this screen is not optional
+     * furniture: with none open, approval refuses every applicant. A required
+     * field with no screen behind it is this project's recurring defect
+     * (rule P), and this is where it would have landed next.
+     */
+    path: '/admin/academic-periods',
+    labelKey: 'admin.nav.academicPeriods',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
      * **شركاء بذور الأمل** (NEW N) — the names §5.1's landing section renders.
      *
      * In الإدارة and **Super Admin only**, which is OD-01's sub-decision: it

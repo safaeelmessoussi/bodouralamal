@@ -79,7 +79,13 @@ the same transaction as the state change and mandatory audit records. A retained
 cannot renew, and a later authorized account recovery would require a fresh authentication
 rather than reviving the old sessions.
 
-> SRS §4.1, §4.1b · TD-4.1, TD-4.2 · [Identity and access](../architecture/identity-and-access.md)
+**Every placement approval creates names the academic period that covers today**, and there
+must be one: with no period open the approval is refused rather than enrolling into an
+unrecorded semester. Opening the year's periods is therefore part of starting an academic
+year, alongside creating the year itself.
+
+> SRS §4.1, §4.1b, R122 · TD-4.1, TD-4.2 ·
+> [Identity and access](../architecture/identity-and-access.md)
 
 ### Platform Owner continuity
 

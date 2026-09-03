@@ -27,6 +27,13 @@ const createSchema = z
     level_id: z.string().uuid(),
     branch_id: z.string().uuid(),
     administrative_group_id: z.string().uuid().nullable().optional(),
+    /**
+     * **R122 — which semester this enrolment is for.** Required: an enrolment
+     * with no period is the open-ended row that made *is she enrolled right
+     * now* unanswerable, and the column is nullable only so rows written before
+     * this revision stay honest.
+     */
+    academic_period_id: z.string().uuid(),
   })
   .strict();
 
@@ -62,6 +69,7 @@ export function create(prisma: PrismaClient) {
       studentId: b.student_id,
       levelId: b.level_id,
       branchId: b.branch_id,
+      academicPeriodId: b.academic_period_id,
       ...(b.administrative_group_id === undefined
         ? {}
         : { administrativeGroupId: b.administrative_group_id }),

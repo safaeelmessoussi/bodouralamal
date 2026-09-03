@@ -1258,11 +1258,31 @@ model Enrollment {
   branchId String @map("branch_id") @db.Uuid
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
+  /// **Which semester this enrolment is FOR** (R122).
+  ///
+  /// **Required by the write boundary, nullable in the column**, and the two
+  /// are deliberately different. Every new enrolment names a period — that is
+  /// what makes *is she enrolled right now* answerable at all. Rows written
+  /// before this revision name none, and **no period was guessed for them**:
+  /// nothing in an old row says which semester it belonged to, and inventing
+  /// one would fabricate a fact about somebody's education. `NULL` reads as
+  /// *period not recorded*, honestly.
+  ///
+  /// `RESTRICT`: a period that enrolments name must stay resolvable, or the
+  /// attestation «في أي فصل كنت مسجّلة» loses its answer.
+  academicPeriodId String?         @map("academic_period_id") @db.Uuid
+  academicPeriod   AcademicPeriod? @relation(fields: [academicPeriodId], references: [id], onDelete: Restrict)
+
   enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
+  /// **`deleted_at` is REMOVAL, never the end of a semester** (R122). A period
+  /// ends by its own dates; a row is soft-deleted when it was a mistake or the
+  /// placement was withdrawn. Conflating them is what made an enrolment
+  /// «active forever».
   // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
+  @@index([academicPeriodId, deletedAt])
   @@index([administrativeGroupId, deletedAt])
   @@index([levelId, deletedAt])
   @@index([studentId, deletedAt])
@@ -2586,8 +2606,66 @@ model Grade {
 // Content & storage (§4.9)
 // ---------------------------------------------------------------------------
 
+/// **One academic period (semester) inside an academic year** (Owner,
+/// 2026-09-02; SRS Revision 122).
+///
+/// ## Why this exists
+///
+/// `Enrollment` carried no period at all, so a row was current until somebody
+/// soft-deleted it — «active forever» — and the association enrols **by
+/// semester**. Worse, the old uniqueness `(student_id, level_id)` made the
+/// association's ordinary case impossible: a beneficiary who enrols in Semester
+/// 1 of a Level and then in Semester 2 of the SAME Level was refused by the
+/// database.
+///
+/// ## What a period is, and what it is not
+///
+/// It is a **dated span an administrator records**, not a computed one. The
+/// dates are the association's own and are never inferred: nothing here assumes
+/// a September start, a January boundary or a Gregorian half-year.
+///
+/// **One set per academic year** (Owner decision): a period belongs to a year
+/// and to nothing else. It carries no Category and no Branch, because the
+/// association's semesters are the same across all three Categories. A future
+/// need to vary them adds a column; it does not restructure this table.
+///
+/// `sequence` is the ordinal — 1 is the first semester, 2 the second. The
+/// Arabic label is derived from it in the interface rather than stored, so a
+/// third period would need no schema change and no migration.
+model AcademicPeriod {
+  id             String       @id @default(uuid()) @db.Uuid
+  academicYearId String       @map("academic_year_id") @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  /// 1 = the first semester, 2 = the second. Unique within its year.
+  sequence Int
+
+  /// **The association's own dates.** `end_date` is INCLUSIVE — a period runs
+  /// to the end of that day, which is what «الفصل ينتهي يوم كذا» means to the
+  /// person recording it. Every derivation of *is this enrolment current* reads
+  /// these two columns and nothing else.
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+
+  /// TD-15 — two administrators correcting one period's dates must not clobber
+  /// each other; a wrong date silently changes who counts as enrolled.
+  version Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  enrollments Enrollment[]
+
+  @@unique([academicYearId, sequence])
+  @@index([startDate, endDate])
+  @@map("academic_period")
+}
+
 model AcademicYear {
   exams     Exam[]
+  /// R122 — the year's semesters. The year itself carries NO dates: they would
+  /// be a second, driftable copy of `min(start_date)`/`max(end_date)` here.
+  periods   AcademicPeriod[]
   id        String  @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
   label     String  @unique @db.VarChar(9)

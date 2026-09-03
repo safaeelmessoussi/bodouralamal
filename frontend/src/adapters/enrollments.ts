@@ -24,6 +24,18 @@ export interface EnrollmentRowView {
    *  independent of the group (§4.4c); it appears here only so
    *  مستفيدة → مستوى → مجموعة → مادة → حلقة is legible in one place. */
   circles: { subject_name: string; circle_name: string }[];
+  /**
+   * **R122 — which semester this enrolment is for, and whether it is running.**
+   *
+   * `is_current_period` is derived by the server from the period's dates, not
+   * stored: an enrolment stops being current when its semester ends, without
+   * anybody closing a row. `null` on rows written before the revision, whose
+   * period was never recorded and was deliberately not guessed.
+   */
+  academic_period_id: string | null;
+  academic_period_sequence: number | null;
+  academic_year_label: string | null;
+  is_current_period: boolean;
 }
 
 export async function listEnrollments(
@@ -50,6 +62,8 @@ export async function enrol(
     level_id: string;
     branch_id: string;
     administrative_group_id?: string | null;
+    /** R122 — required: an enrolment names the semester it is for. */
+    academic_period_id: string;
   },
   token: string | null,
 ): Promise<{ id: string }> {

@@ -2536,3 +2536,82 @@ if one appears it is a data reconciliation and an Owner decision, not a silent s
 
 **No legal conclusion** is drawn here about these names, about `User.sex`, about Quran progress
 or about the Google transfer. Those remain open compliance questions.
+
+## An enrolment belongs to a semester — SRS R122, 2026-09-03
+
+**The defect.** An `Enrollment` was treated as *current* for exactly one reason: nobody had
+soft-deleted it. That conflated two different facts. `deleted_at IS NULL` says *a human never
+ended this enrolment*; it says nothing about whether the semester it belonged to has finished.
+The unique index `(student_id, level_id)` among live rows made the conflation structural — the
+same student could never hold two live enrolments in one Level, so a second semester in the
+same Level could only be recorded by overwriting the first. The history a future attestation
+depends on («كنت أدرس عندكم وأريد شهادة تثبت المستوى الذي وصلت إليه») was being destroyed one
+year at a time, and nothing in the system said so.
+
+**The distinction the Owner named, and which the model now holds.** An *academic year* is a
+calendar span the association runs. A *studies year* — the pedagogical tier a student has
+reached — is a different concept, and one academic year can contain more than one of them for
+the same person. The Owner's case: enrol in الفصل 2 of the first studies year; at the start of
+the next academic year enrol in الفصل 1 of the **first** studies year *and* الفصل 1 of the
+**second**; then in الفصل 2 of that same academic year enrol in الفصل 2 of the second studies
+year. Four live rows for one student, two of them in the same academic year at different
+Levels, and none of them overwriting another.
+
+**No new entity for the studies year.** `Level` already **is** it: a Category orders its
+Levels by `display_order`, and progression is moving to the next. Inventing a `StudiesYear`
+would have created a second answer to *what level has she reached*, and the two would drift.
+The evidence for this is in the live data, not an assumption.
+
+**`AcademicPeriod` is new** — a semester inside an `AcademicYear`, `(year, sequence)` unique,
+with a start date and an **inclusive** end date, because «الفصل ينتهي يوم كذا» means through
+the end of that day. `Enrollment.academic_period_id` names one, and the live-row unique index
+becomes `(student_id, level_id, academic_period_id)`. BR-21 is unchanged in substance and
+narrowed in scope: one group per Level, **within a period**.
+
+**Currency is derived, never stored.** Whether an enrolment is running is read from its
+period's dates on every request. A stored status column was rejected: it would need a job to
+maintain, and a job that fails leaves a row lying about itself. `deleted_at` keeps its single
+meaning — *ended early by a person* — and the two states read differently on screen: an ended
+enrolment is gone from the list, a finished one is present and reads **منتهٍ**.
+
+**The migration fabricates nothing.** `academic_period_id` is nullable and **no historical row
+is backfilled**: the association's past semester boundaries are not recorded anywhere, and a
+guessed period would be indistinguishable a year later from one that actually ran. Existing
+rows read **غير مسجَّل**, which is the honest answer. The column is required at the *write*
+boundary instead, so nothing new can be created without one. The seed creates **no periods**
+either, for the same reason.
+
+**Approval fails closed.** Approving an applicant or a child application enrols into the period
+covering today; with none open the request is refused with `NO_CURRENT_ACADEMIC_PERIOD` rather
+than enrolling into an unrecorded semester. Opening the periods is now part of starting an
+academic year.
+
+**Overlap is refused in the service, not the database.** Two periods of one year may not cover
+the same day (`ACADEMIC_PERIOD_OVERLAP`). A PostgreSQL exclusion constraint over a date range
+needs the `btree_gist` extension and this deployment installs none, so the service check is the
+only enforcement — recorded in [Database](architecture/database.md) so nobody assumes a
+constraint is behind it.
+
+**Authorization matches its siblings.** Period writes are Super Admin through the same
+`scope.isSuperAdmin` check the rest of curriculum reference data uses. TD-12 freshness was
+tried first and removed: it is scoped to approvals, consent overrides, pass/fail overrides,
+user management and settings, and applying it to one reference-data write alone would have
+made it behave differently from every control beside it on the same screen.
+
+**The screen was built with the model, not after it.** `/admin/academic-periods` (الفصول
+الدراسية, الإدارة, Super Admin) lists every period, filters by year *optionally*, and creates
+and edits them. Shipping the required field without it would have been this project's
+recurring defect in its purest form — a capability with no reach — and the consequence would
+not have been cosmetic: with no period open, approval refuses every applicant. There is **no
+delete**: a semester that ran is a fact, enrolments point at it under `RESTRICT`, and a
+destructive action beside rows that must never take it is a trap rather than a feature.
+
+**Two test-fixture defects were found and fixed while threading the column through.** A shared
+fixture that swept its whole label band deleted a concurrently-running suite's period; and a
+random label from an 800-wide band collided inside a single file within one run. Both are
+recorded under [Testing](development/testing.md) — the fixes are ownership tracking and one
+year per test file with a counter, so uniqueness is structural rather than probabilistic.
+
+**Unrelated documentation drift fixed:** `identity-and-access.md` still described
+`StudentSocialProfile` reads as a permission row and as a TD-12 freshness surface, three
+revisions after R120 removed the table.

@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { provisionAcademicPeriod, releaseAcademicPeriods } from './academic-period.js';
 
 /**
  * A Level with one Administrative Group, for suites that must **approve**
@@ -24,6 +25,17 @@ export interface Placement {
   levelId: string;
   groupId: string;
   categoryId: string;
+  /**
+   * **R122 — a semester covering today**, so a suite whose subject is the
+   * decision machinery gets a valid enrolment without inventing a calendar.
+   *
+   * It must contain **today** rather than a fixed synthetic span, because the
+   * approval paths resolve the period covering *now* (`currentAcademicPeriod`)
+   * and fail closed without one. A suite testing the period model itself builds
+   * its own remote timeline instead — see
+   * `enrollment-period.integration.test.ts`.
+   */
+  academicPeriodId: string;
 }
 
 export async function provisionPlacement(
@@ -38,11 +50,19 @@ export async function provisionPlacement(
   const group = await prisma.administrativeGroup.create({
     data: { name: `${tag} المجموعة 1`, levelId: level.id, branchId: branch.id },
   });
+  /**
+   * R122 — one academic year and one period wide enough to contain today
+   * whenever the suite runs. **Not `is_current`**: exactly one academic year
+   * may carry that flag application-wide — see `provisionAcademicPeriod`.
+   */
+  const academicPeriodId = await provisionAcademicPeriod(prisma);
+
   return {
     branchId: branch.id,
     levelId: level.id,
     groupId: group.id,
     categoryId: category.id,
+    academicPeriodId,
   };
 }
 
@@ -74,6 +94,14 @@ export async function clearPlacement(prisma: PrismaClient, tag: string): Promise
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
+
+  /**
+   * R122 — the fixture's academic year and its period, after the enrolments
+   * that named them (`academic_period_id` is RESTRICT).
+   *
+   * The sweep itself is `releaseAcademicPeriods`.
+   */
+  await releaseAcademicPeriods(prisma);
 
   // R67 — a `ChildApplication` now names its OWN requested Category and Branch,
   // both `ON DELETE RESTRICT`. Before the revision only the applicant's `User`

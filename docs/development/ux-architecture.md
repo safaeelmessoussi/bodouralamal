@@ -457,7 +457,7 @@ join table.
 ## L · Enrolment
 
 ```
-Enrollment          = Student → Level → Branch        (the primary fact, R66)
+Enrollment          = Student → Level → Branch → AcademicPeriod   (R66, R122)
 AdministrativeGroup = an OPTIONAL subdivision of the Level
 TeachingGroup       = an INDEPENDENT placement under (Subject, Level)
 ```
@@ -467,6 +467,31 @@ enrolment is a placement, not a gap** — and it must be able to hold a circle s
 which is the [R66 NULL-relation bug class](../SRS-PROPOSAL-R66.md) guarded by
 `group-less-enrollment.test.ts`.
 
+### An enrolment belongs to a semester, and «جارٍ» is read from its dates
+
+An enrolment is **not** current merely because nobody ended it. R122 makes the
+academic period part of the row, and the screen says which: the enrolment table
+carries a **الفصل** column showing `{السنة} — الفصل {n}` with a **جارٍ / منتهٍ**
+badge, and the badge is computed from the period's start and inclusive end dates,
+never from `deleted_at`.
+
+`deleted_at` means one thing only — *a human ended this enrolment early*. A
+semester that simply finished leaves the row untouched, because that row is the
+answer to «كنت أدرس عندكم، أريد شهادة بالمستوى الذي وصلت إليه» years later. The
+two states are different facts and the screen shows them differently: an ended
+enrolment is gone from the list; a finished one is present and reads **منتهٍ**.
+
+The enrolment form therefore asks for **الفصل الدراسي** before the group, and
+defaults to the period covering today. It is a **required** field, not a filter —
+the platform refuses to record an enrolment that names no semester rather than
+assign one silently, since a guessed semester is indistinguishable a year later
+from one the association actually ran. Rows created before R122 show **غير
+مسجَّل**, which is the honest answer for a period nobody recorded.
+
+Rule [A](#a--data-first-pages) still governs the list itself: the enrolments appear
+immediately, and the period selector narrows what is *written*, never what is
+*shown*.
+
 **«إنهاء التسجيل» is a soft delete into Trash (R59)**, releasing that enrolment's
 circle seats and retaining grades, Quran logs and the audit trail. It is **never**
 a hard delete. The UI must distinguish it from *changing a placement*, and state
@@ -475,7 +500,8 @@ know it is recoverable, and from where.
 
 ### The identity of an enrolment is not editable
 
-`Student → Level → Branch` **is** the enrolment. Editing the Level or the Branch
+`Student → Level → Branch → الفصل` **is** the enrolment. Editing the Level, the
+Branch or the period
 does not move a student — it silently rewrites which fact the row records, and
 every grade, circle seat and exam scope hanging off it now belongs to a placement
 that never happened. So «تعديل التسجيل» edits the **optional** parts only: the
@@ -2318,6 +2344,9 @@ system's internals, break on every restyle, and catch nothing.
 | [`lib/staffing-period.test.ts`](../../frontend/src/lib/staffing-period.test.ts) | **BB** — the client mirror of `withinScheduleLife`: the Owner's 29-vs-30 غشت case, the anchor day accepted, overlap rather than containment, an untouched row never marked, and `''` behaving as ±∞ rather than as an empty string |
 | [`ui/empty-table.test.tsx`](../../frontend/src/components/ui/empty-table.test.tsx) | **BD** — an empty `DataTable` still renders `<table>` and both headers, keeps its sort buttons and `aria-sort`, spans every column with the message (actions column counted), still tells «nothing here» from «nothing matches», and does **not** show columns while loading or failed |
 | [`pages/admin/enrolment-save.test.ts`](../../frontend/src/pages/admin/enrolment-save.test.ts) | **BC/AH** — the enrolment dialog takes the row rather than an id it re-resolves, never derives the branch from a directory search, falls back through group → role → existing enrolment, gates حفظ only on the Level, and turns the service's own reasons into Arabic |
+| [`pages/admin/enrolment-period.test.ts`](../../frontend/src/pages/admin/enrolment-period.test.ts) | **R122** — the enrolment form asks for the semester, sends it, defaults to the current one, refuses to save without it, and the table's جارٍ / منتهٍ badge is read from the period rather than from `deleted_at`. Proved against the defect: deleting `academic_period_id` from the payload fails it |
+| [`services/enrollment-period.integration.test.ts`](../../backend/src/services/enrollment-period.integration.test.ts) | **R122** — the Owner's four-step progression against the database: الفصل 2 of the first year, then الفصل 1 of the first *and* second years in the next academic year, then الفصل 2 of the second. Four rows survive, an old-period enrolment is not current with `deleted_at IS NULL`, and the attestation history reconstructs exactly |
+| [`scripts/dev/browser/verify-academic-periods.sh`](../../scripts/dev/browser/verify-academic-periods.sh) | **R122/A/AF** — الفصول الدراسية in a real browser: the table renders with no year chosen, a period is created end to end and appears while the filter is still unset, جارٍ follows the dates, and the year is text with its reason on edit |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |
 | `teaching-candidates.http.integration.test.ts` | **AR** — the four appraisals, the containment rule, ranges never merged, *not declared* ≠ *unavailable*, `monthly` indeterminate, a schedule never conflicting with itself · **and both halves of R88.3**: four warnings do not block the assignment, and a flawless profile with no assignment reaches nothing |

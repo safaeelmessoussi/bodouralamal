@@ -224,6 +224,8 @@ export interface EnrollmentDto {
   /** R66 — `null` when the student is enrolled directly in a Level. */
   administrative_group_id: string | null;
   branch_id: string;
+  /** R122 — the semester; `null` only on a pre-revision row. */
+  academic_period_id: string | null;
   enrolled_at: string;
 }
 
@@ -233,6 +235,7 @@ export function enrollmentDto(row: {
   levelId: string;
   administrativeGroupId: string | null;
   branchId: string;
+  academicPeriodId: string | null;
   enrolledAt: Date;
 }): EnrollmentDto {
   return {
@@ -244,6 +247,9 @@ export function enrollmentDto(row: {
     // following the group, so a client had no way to ask it of a student in a
     // Level nobody had subdivided.
     branch_id: row.branchId,
+    // R122 — which semester. `null` only on a row written before the revision;
+    // every new enrolment names one, because the write boundary requires it.
+    academic_period_id: row.academicPeriodId,
     enrolled_at: row.enrolledAt.toISOString(),
   };
 }
@@ -2319,5 +2325,37 @@ export function publicConsentTextDto(row: {
     id: row.id,
     version_label: row.versionLabel,
     body_arabic: row.bodyArabic,
+  };
+}
+
+/**
+ * **One academic period** (R122).
+ *
+ * `is_current` is **derived from the dates, never stored** — a status column
+ * would be a second answer to a question `start_date`/`end_date` already
+ * settle, and it would go stale the day a semester ends with nobody logged in.
+ * The label the interface shows («الفصل الأول») is composed from `sequence` in
+ * `i18n`, so a third period needs no contract change.
+ */
+export function academicPeriodDto(row: {
+  id: string;
+  academicYearId: string;
+  academicYearLabel: string;
+  sequence: number;
+  startDate: Date;
+  endDate: Date;
+  isCurrent: boolean;
+  version: number;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    academic_year_id: row.academicYearId,
+    academic_year_label: row.academicYearLabel,
+    sequence: row.sequence,
+    // TD-11 calendar dates — never an instant.
+    start_date: row.startDate.toISOString().slice(0, 10),
+    end_date: row.endDate.toISOString().slice(0, 10),
+    is_current: row.isCurrent,
+    version: row.version,
   };
 }

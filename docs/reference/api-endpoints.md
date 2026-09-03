@@ -406,6 +406,8 @@ requires `subject_id` and `academic_year_id`, and nothing in TD-3 could list eit
 |---|---|---|
 | `GET` | `/admin/subjects` | `id`, `name`, `display_order`, `version` |
 | `GET` | `/admin/academic-years` | `id`, `label`, `is_current` |
+| `GET` `POST` | `/admin/academic-periods` | 👤 The semesters of a year — `id`, `academic_year_id`, `sequence`, `start_date`, `end_date`, `is_current`, `version`. `?academic_year_id=` narrows, and is **optional**: the list is the data the screen manages, never gated behind a selector. `is_current` is **derived from the dates** and is never stored |
+| `PATCH` | `/admin/academic-periods/{id}` | 👤 `sequence`, `start_date`, `end_date` with a TD-15 `version`. **`academic_year_id` is not accepted** — moving a period to another year would silently rewrite which year every enrolment naming it belongs to |
 | `GET` | `/admin/levels/{levelId}/subjects` | Which Subjects a Level teaches (§4.4b) |
 | `PUT` `DELETE` | `/admin/levels/{levelId}/subjects/{subjectId}` | 👤 Assign / remove. `PUT` is idempotent in effect; removal is refused while Teaching Groups exist |
 
@@ -434,7 +436,7 @@ authenticates; it does not authorise.
 | | Path | Notes |
 |---|---|---|
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
-| `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group** and **enqueues consent re-evaluation** per session. **No capacity check exists** |
+| `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group**, requires an `academic_period_id` (R122) and **enqueues consent re-evaluation** per session. **No capacity check exists** |
 | `DELETE` | `/admin/administrative-groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — grades, submissions and Quran logs survive. Subject-split seats for that Level go with it |
 | `PATCH` | `/admin/administrative-groups/order` | `{ within: levelId, ids }` — one Level's groups, within the caller's branch scope |
 | `PATCH` | `/admin/teaching-groups/order` | R78.1 — `{ within: { level_id, subject_id }, ids }`. **`within` is an object**: a circle's position is meaningful only among the circles splitting the same Subject at the same Level (§2.2), so neither half alone names the collection. Supersedes R76.7's exclusion |

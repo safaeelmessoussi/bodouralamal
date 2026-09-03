@@ -4619,7 +4619,7 @@
       },
       "post": {
         "summary": "Enrol a student into the group",
-        "description": "TD-3.12, §5.6. Body: `{ student_id }` — **strictly** that one key. **`level_id` is not accepted**: the service reads it from the group, because taking it from the caller would leave the composite FK as the only thing between a typo and a mis-filed student, surfacing as an opaque constraint error rather than a decision this service made. The response echoes `level_id` so the client learns which Level the student was thereby enrolled into. **`Level.gender_restriction` is enforced** (Revision 27) and a `null` `sex` is *not eligible* rather than a wildcard. **BR-21 — one group per Level — is refused with an explanation, not a raw constraint error:** enrolling into the same group again is `409 DUPLICATE`, and enrolling into a *different* group of a Level the student already belongs to is `409 STATE_CONFLICT` with `reason: ALREADY_ENROLLED_IN_LEVEL` naming `current_administrative_group_id`, which is exactly the information needed to decide whether to move them instead. **There is NO capacity check** (BR-23): none exists, `CAPACITY_FULL` is retired from the TD-3.8 catalogue, and the roster row lock went with the invariant it protected — a future capacity rule must bring the lock back rather than rely on a constraint alone. **Enqueues `consent.reevaluate` for each SESSION whose resolved audience now contains the student, in the same transaction** (§4.1a, TD-7, Revision 43): BR-2's subject is a session's audience, so the gate can never drift from the records.",
+        "description": "TD-3.12, §5.6. Body: `{ student_id, academic_period_id }` — **strictly** those two keys. **`academic_period_id` is required** (R122): an enrolment belongs to a semester, and a row that named none would be indistinguishable later from one that is still running — `deleted_at IS NULL` says a row was never ended, never that it is current. The period must exist; an unknown one is `404`. **`level_id` is not accepted**: the service reads it from the group, because taking it from the caller would leave the composite FK as the only thing between a typo and a mis-filed student, surfacing as an opaque constraint error rather than a decision this service made. The response echoes `level_id` so the client learns which Level the student was thereby enrolled into. **`Level.gender_restriction` is enforced** (Revision 27) and a `null` `sex` is *not eligible* rather than a wildcard. **BR-21 is now scoped to the period** (R122): the same student may hold a live enrolment in the same Level in a *different* semester, which is how a second-semester enrolment follows a first without overwriting it. Within one period it is unchanged, and refused with an explanation rather than a raw constraint error: enrolling into the same group again is `409 DUPLICATE`, and enrolling into a *different* group of a Level the student already belongs to is `409 STATE_CONFLICT` with `reason: ALREADY_ENROLLED_IN_LEVEL` naming `current_administrative_group_id`, which is exactly the information needed to decide whether to move them instead. **There is NO capacity check** (BR-23): none exists, `CAPACITY_FULL` is retired from the TD-3.8 catalogue, and the roster row lock went with the invariant it protected — a future capacity rule must bring the lock back rather than rely on a constraint alone. **Enqueues `consent.reevaluate` for each SESSION whose resolved audience now contains the student, in the same transaction** (§4.1a, TD-7, Revision 43): BR-2's subject is a session's audience, so the gate can never drift from the records.",
         "responses": {
           "201": {
             "description": "Enrolled; returns the enrolment including the Level it resolved to."
@@ -5931,6 +5931,187 @@
         }
       }
     },
+    "/admin/academic-periods": {
+      "get": {
+        "summary": "List academic periods",
+        "description": "**SRS Revision 122 — the semesters an academic year is made of.** An `Enrollment` names one, which is what makes *is this beneficiary enrolled right now* answerable at all: before this revision an enrolment carried only `enrolled_at` and `deleted_at`, so a row was current until somebody remembered to soft-delete it. **Read is reference data** — Admin or Super Admin (TD-2 R26/R30), the same gate `/admin/academic-years` applies to the year these belong to. Optional `?academic_year_id=` narrows to one year. Each row is `id`, `academic_year_id`, `academic_year_label`, `sequence`, `start_date`, `end_date`, `is_current`, `version`. **`is_current` is DERIVED from the dates and never stored**: a status column would be a second answer to a question `start_date`/`end_date` already settle, and it would go stale the day a semester ends with nobody logged in to update it. `sequence` is the ordinal — 1 is the first semester — and the Arabic label is composed from it in the interface, so a third period needs no contract change. **Dates are the association's own and are never computed**: nothing assumes a September start or a January boundary, and §15.1 seeds no periods, because inventing semester dates would fabricate a fact about the association's calendar.",
+        "responses": {
+          "200": {
+            "description": "Every period, most recent first."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record an academic period",
+        "description": "**SRS Revision 122. Super Admin only** (TD-2 R26 — a period belongs to an `AcademicYear`, which R26 lists among the reference data only a Super Admin writes), asserted in the service against live rows (TD-12). Body: `{ academic_year_id, sequence, start_date, end_date }`. `end_date` is **inclusive** — the period runs to the end of that day, which is what «الفصل ينتهي يوم كذا» means to the person recording it — so a single-day period is legitimate and the ordering check is `>=`. **One period per `(academic_year_id, sequence)`**, refused with `409 ACADEMIC_PERIOD_SEQUENCE_TAKEN` rather than a raw unique violation, because the ordinal is a number somebody typed and the screen must be able to name the field. **Two periods of one year may not overlap** (`409 ACADEMIC_PERIOD_OVERLAP`): the check lives in the service rather than the database because PostgreSQL can express it only with an exclusion constraint over a range type, which needs `btree_gist`, and this installation loads no extensions. Overlap matters because *which semester is it* must have one answer — an approval enrols into the period covering today. Audited as `academicperiod.create`.",
+        "responses": {
+          "201": {
+            "description": "The period."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed date, or an end before its start.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown academic year.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with ACADEMIC_PERIOD_SEQUENCE_TAKEN or ACADEMIC_PERIOD_OVERLAP.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/academic-periods/{id}": {
+      "patch": {
+        "summary": "Correct an academic period",
+        "description": "**SRS Revision 122. Super Admin only**, audited as `academicperiod.update`. Body: `{ sequence, start_date, end_date, version }`. **The academic year is NOT editable and `.strict()` refuses it** rather than dropping it: moving a period to another year would silently re-file every enrolment that names it under a different academic year, which is a re-creation and not an edit. **TD-15 optimistic locking** on `version` — these dates decide who counts as enrolled, so a stale write is `409 VERSION_CONFLICT` rather than a silent overwrite of another Super Admin's correction. The sequence and overlap rules of the create apply identically.",
+        "responses": {
+          "200": {
+            "description": "The corrected period."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with ACADEMIC_PERIOD_SEQUENCE_TAKEN or ACADEMIC_PERIOD_OVERLAP; VERSION_CONFLICT on a stale version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/levels/{levelId}/subjects": {
       "get": {
         "summary": "Which Subjects a Level teaches",
@@ -6882,7 +7063,7 @@
       },
       "post": {
         "summary": "Enrol a student at a Level",
-        "description": "§7 (R66). Body is { student_id, level_id, branch_id, administrative_group_id? }, **strictly** — an unknown key is refused rather than dropped, so a client is told rather than silently ignored. **administrative_group_id is optional and null is meaningful**: it enrols into the Level itself, the case R66 opened and the one the roster route under a Group cannot express. branch_id is required and is the single answer to *where is this student* (R66) — reaching it through the Group is exactly why the Group could not previously be optional. R27's gender rule applies: a NULL sex is **not** eligible for a restricted Level, because a restriction nothing can compare against is a restriction in name only.",
+        "description": "§7 (R66). Body is { student_id, level_id, branch_id, academic_period_id, administrative_group_id? }, **strictly** — an unknown key is refused rather than dropped, so a client is told rather than silently ignored. **administrative_group_id is optional and null is meaningful**: it enrols into the Level itself, the case R66 opened and the one the roster route under a Group cannot express. branch_id is required and is the single answer to *where is this student* (R66) — reaching it through the Group is exactly why the Group could not previously be optional. **academic_period_id is required (R122)** and names the semester the enrolment belongs to; the same student may hold one enrolment per Level *per period*, which is what makes a progression through the years readable afterwards. R27's gender rule applies: a NULL sex is **not** eligible for a restricted Level, because a restriction nothing can compare against is a restriction in name only.",
         "responses": {
           "201": {
             "description": "Created; answers the new enrolment id."
@@ -6928,7 +7109,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE — BR-21 makes (student, level) unique among live rows.",
+            "description": "Error envelope (TD-3.8). DUPLICATE — BR-21 makes (student, level, academic_period) unique among live rows (R122).",
             "content": {
               "application/json": {
                 "schema": {

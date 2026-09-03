@@ -17,6 +17,10 @@ import {
 import type { Actor } from "../policies/actor.js";
 import { createLevel, levelsWithoutGroups } from "./level.service.js";
 import {
+  provisionAcademicPeriod,
+  releaseAcademicPeriods,
+} from "../test-support/academic-period.js";
+import {
   enrolInLevel,
   enrolStudent,
   levelsForStudent,
@@ -43,6 +47,7 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = "[edu-org-test]";
 
+let academicPeriodId = '';
 let categoryId: string;
 let actorUserId: string;
 let amerchich: string;
@@ -185,6 +190,10 @@ beforeEach(async () => {
   await cleanup();
   const cat = await prisma.category.create({ data: { name: `${TAG} الكبار` } });
   categoryId = cat.id;
+  // R122 — every enrolment names a semester. This suite's subject is the
+  // educational MODEL, not the calendar, so it owns one wide period covering
+  // today and passes it everywhere.
+  academicPeriodId = await provisionAcademicPeriod(prisma);
   actorUserId = (
     await prisma.user.create({
       data: {
@@ -201,6 +210,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await cleanup();
+  // R122 — after `cleanup()`, which removed the enrolments naming them.
+  await releaseAcademicPeriods(prisma);
   await prisma.$disconnect();
 });
 
@@ -253,6 +264,7 @@ describe("R66 — a Level is created ALONE; a Group is a subdivision", () => {
         amerchich,
         pupil,
         "roster_edit",
+        academicPeriodId,
       ),
     );
     expect(row.administrativeGroupId).toBeNull();
@@ -276,6 +288,7 @@ describe("R66 — a Level is created ALONE; a Group is a subdivision", () => {
         amerchich,
         pupil,
         "roster_edit",
+        academicPeriodId,
       ),
     );
     await expect(
@@ -287,6 +300,7 @@ describe("R66 — a Level is created ALONE; a Group is a subdivision", () => {
           amerchich,
           pupil,
           "roster_edit",
+          academicPeriodId,
         ),
       ),
     ).rejects.toMatchObject({
@@ -320,10 +334,10 @@ describe("BR-21 — exactly one Administrative Group per enrolled Level", () => 
       branchId: amerchich,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     const err = await failure(() =>
-      enrolStudent(prisma, superAdmin(), second.id, s),
+      enrolStudent(prisma, superAdmin(), second.id, s, academicPeriodId),
     );
     expect(err.code).toBe("STATE_CONFLICT");
     expect(err.details?.["reason"]).toBe("ALREADY_ENROLLED_IN_LEVEL");
@@ -336,8 +350,8 @@ describe("BR-21 — exactly one Administrative Group per enrolled Level", () => 
     const two = await level("المستوى 2", amerchich);
     const s = await student("هدى");
 
-    await enrolStudent(prisma, superAdmin(), one.firstGroupId, s);
-    await enrolStudent(prisma, superAdmin(), two.firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), one.firstGroupId, s, academicPeriodId);
+    await enrolStudent(prisma, superAdmin(), two.firstGroupId, s, academicPeriodId);
 
     const levels = await levelsForStudent(prisma, s);
     expect(levels.map((l) => l.levelId).sort()).toEqual(
@@ -348,7 +362,7 @@ describe("BR-21 — exactly one Administrative Group per enrolled Level", () => 
   it("level membership is answered ONLY through the enrolment — never stored twice", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     const row = await prisma.enrollment.findFirstOrThrow({
       where: { studentId: s, deletedAt: null },
@@ -370,10 +384,10 @@ describe("BR-21 — exactly one Administrative Group per enrolled Level", () => 
   it("re-enrolment after leaving is allowed — the unique index spans live rows only", async () => {
     const { firstGroupId } = await level("المستوى 1", amerchich);
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await unenrolStudent(prisma, superAdmin(), firstGroupId, s);
     await expect(
-      enrolStudent(prisma, superAdmin(), firstGroupId, s),
+      enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId),
     ).resolves.toBeTruthy();
   });
 });
@@ -391,6 +405,7 @@ describe("BR-23 — capacity informs, it never refuses", () => {
         superAdmin(),
         firstGroupId,
         await student(`طالبة ${i}`),
+        academicPeriodId,
       );
     }
     const roster = await listGroupRoster(
@@ -410,7 +425,7 @@ describe("BR-23 — capacity informs, it never refuses", () => {
       codes.push(
         (
           await failure(() =>
-            enrolStudent(prisma, superAdmin(), firstGroupId, id),
+            enrolStudent(prisma, superAdmin(), firstGroupId, id, academicPeriodId),
           )
         ).code,
       );
@@ -432,7 +447,7 @@ describe("gender restriction pairs Level with User.sex (§4.4b, R27)", () => {
     const { firstGroupId } = await level("المستوى 1", amerchich, "girls_only");
     const boy = await student("عمر", "male");
     const err = await failure(() =>
-      enrolStudent(prisma, superAdmin(), firstGroupId, boy),
+      enrolStudent(prisma, superAdmin(), firstGroupId, boy, academicPeriodId),
     );
     expect(err.code).toBe("VALIDATION_FAILED");
     expect(err.details?.["reason"]).toBe("GENDER_RESTRICTION");
@@ -457,7 +472,7 @@ describe("gender restriction pairs Level with User.sex (§4.4b, R27)", () => {
     const { firstGroupId } = await level("المستوى 1", amerchich, "girls_only");
     const boy = await student("عمر", "male");
     const err = await failure(() =>
-      enrolStudent(prisma, superAdmin(), firstGroupId, boy),
+      enrolStudent(prisma, superAdmin(), firstGroupId, boy, academicPeriodId),
     );
     expect(Object.keys(err.details ?? {})).not.toContain("student_sex");
   });
@@ -470,6 +485,7 @@ describe("gender restriction pairs Level with User.sex (§4.4b, R27)", () => {
         superAdmin(),
         firstGroupId,
         await student("عمر", "male"),
+        academicPeriodId,
       ),
     ).resolves.toBeTruthy();
   });
@@ -484,7 +500,7 @@ describe("moving a student is one action (§5.6)", () => {
       branchId: amerchich,
     });
     const s = await student("هدى");
-    const original = await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    const original = await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     const moved = await moveStudent(
       prisma,
@@ -510,7 +526,7 @@ describe("moving a student is one action (§5.6)", () => {
     const one = await level("المستوى 1", amerchich);
     const two = await level("المستوى 2", amerchich);
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), one.firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), one.firstGroupId, s, academicPeriodId);
 
     const err = await failure(() =>
       moveStudent(prisma, superAdmin(), s, one.firstGroupId, two.firstGroupId),
@@ -533,7 +549,7 @@ describe("moving a student is one action (§5.6)", () => {
       name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await addMember(prisma, superAdmin(), tg.id, s);
 
     await moveStudent(prisma, superAdmin(), s, firstGroupId, second.id);
@@ -553,7 +569,7 @@ describe("moving a student is one action (§5.6)", () => {
       branchId: targa,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     const err = await failure(() =>
       moveStudent(prisma, admin([targa]), s, firstGroupId, atTarga.id),
@@ -573,7 +589,7 @@ describe("un-enrolment (TD-5)", () => {
       name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await addMember(prisma, superAdmin(), tg.id, s);
 
     await unenrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -604,7 +620,7 @@ describe("R66 — a Level MAY be left with no group", () => {
   it("a group holding students is refused, and NAMES the enrolments", async () => {
     const { levelId, firstGroupId } = await level("مستوى بمستفيدة", amerchich);
     const pupil = await student("مستفيدة تمنع الحذف");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, pupil);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, pupil, academicPeriodId);
 
     const e = await failure(() =>
       deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId),
@@ -682,7 +698,7 @@ describe("R66 — a Level MAY be left with no group", () => {
     // And the Level still admits students — directly.
     const pupil = await student("طالبة بعد الحذف");
     const row = await prisma.$transaction((tx) =>
-      enrolInLevel(tx, superAdmin(), levelId, amerchich, pupil, "roster_edit"),
+      enrolInLevel(tx, superAdmin(), levelId, amerchich, pupil, "roster_edit", academicPeriodId),
     );
     expect(row.administrativeGroupId).toBeNull();
   });
@@ -756,7 +772,7 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     await expect(
       addMember(prisma, admin([amerchich]), tg.id, s),
@@ -772,7 +788,7 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     // The scope referent is the branch the STUDENT is enrolled at.
     const err = await failure(() =>
@@ -828,7 +844,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       name: `${TAG} ترتيل وتجويد القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
 
     await addMember(prisma, superAdmin(), q1.id, s);
     // The uniqueness is per (student, SUBJECT, level) — this is the whole
@@ -852,7 +868,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       name: `${TAG} حفظ القرآن 2`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await addMember(prisma, superAdmin(), q1.id, s);
 
     const err = await failure(() => addMember(prisma, superAdmin(), q2.id, s));
@@ -871,8 +887,8 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
     });
     const placed = await student("هدى");
     const unplaced = await student("سارة");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, placed);
-    await enrolStudent(prisma, superAdmin(), firstGroupId, unplaced);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, placed, academicPeriodId);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, unplaced, academicPeriodId);
     const q1 = await prisma.teachingGroup.findFirstOrThrow({
       where: { subjectId: hifz },
     });
@@ -896,6 +912,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       superAdmin(),
       firstGroupId,
       await student("هدى"),
+        academicPeriodId,
     );
 
     const result = await listUnassignedStudents(
@@ -923,7 +940,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       name: `${TAG} حفظ القرآن 2`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await addMember(prisma, superAdmin(), q1.id, s);
     expect(
       (await listUnassignedStudents(prisma, superAdmin(), levelId, hifz))
@@ -954,7 +971,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, s);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
     await addMember(prisma, superAdmin(), q1.id, s);
 
     await removeMember(prisma, superAdmin(), q1.id, s);
@@ -981,8 +998,8 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
     });
     const here = await student("هدى");
     const there = await student("ليلى");
-    await enrolStudent(prisma, superAdmin(), firstGroupId, here);
-    await enrolStudent(prisma, superAdmin(), atTarga.id, there);
+    await enrolStudent(prisma, superAdmin(), firstGroupId, here, academicPeriodId);
+    await enrolStudent(prisma, superAdmin(), atTarga.id, there, academicPeriodId);
 
     const mine = await listUnassignedStudents(
       prisma,
@@ -1028,6 +1045,7 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
       studentId: pupil,
       levelId: created.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
     expect(row.administrativeGroupId).toBeNull();
     expect(row.branchId).toBe(amerchich);
@@ -1041,6 +1059,7 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
       studentId: pupil,
       levelId,
       branchId: amerchich,
+      academicPeriodId,
       administrativeGroupId: firstGroupId,
     });
     expect(row.administrativeGroupId).toBe(firstGroupId);
@@ -1056,6 +1075,7 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
         studentId: pupil,
         levelId: "ignored",
         branchId: amerchich,
+        academicPeriodId,
         administrativeGroupId: firstGroupId,
       }),
     );
@@ -1074,6 +1094,7 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
         studentId: pupil,
         levelId: created.level.id,
         branchId: amerchich,
+        academicPeriodId,
       }),
     );
     // §20 rule 17 — a branch out of scope is not discoverable.
@@ -1091,12 +1112,14 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
       studentId: pupil,
       levelId: created.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
     const e = await failure(() =>
       enrolAtLevel(prisma, superAdmin(), {
         studentId: pupil,
         levelId: created.level.id,
         branchId: amerchich,
+      academicPeriodId,
       }),
     );
     expect(e.code).toBe("STATE_CONFLICT");
@@ -1120,11 +1143,13 @@ describe("R74 — enrolling a مستفيدة at a placement", () => {
       studentId: pupil,
       levelId: a.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
     await enrolAtLevel(prisma, superAdmin(), {
       studentId: pupil,
       levelId: b.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
     expect(
       await prisma.enrollment.count({
@@ -1147,11 +1172,13 @@ describe("R74 — the enrolment list is the LEVEL view of the same rows", () => 
       studentId: here,
       levelId: created.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
     await enrolAtLevel(prisma, superAdmin(), {
       studentId: there,
       levelId: created.level.id,
       branchId: targa,
+      academicPeriodId,
     });
 
     const scoped = await listEnrollments(prisma, admin([amerchich]));
@@ -1174,6 +1201,7 @@ describe("R74 — the enrolment list is the LEVEL view of the same rows", () => 
       studentId: pupil,
       levelId,
       branchId: amerchich,
+      academicPeriodId,
       administrativeGroupId: firstGroupId,
     });
 
@@ -1205,6 +1233,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId,
       branchId: amerchich,
+      academicPeriodId,
     });
     expect(row.administrativeGroupId).toBeNull();
 
@@ -1244,6 +1273,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId: a.levelId,
       branchId: amerchich,
+      academicPeriodId,
     });
     const e = await failure(() =>
       updateEnrollmentPlacement(prisma, superAdmin(), row.id, {
@@ -1260,6 +1290,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId,
       branchId: targa,
+      academicPeriodId,
     });
     const e = await failure(() =>
       updateEnrollmentPlacement(prisma, admin([amerchich]), row.id, {
@@ -1280,6 +1311,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId: created.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
 
     await unenrolById(prisma, superAdmin(), row.id);
@@ -1314,6 +1346,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId,
       branchId: amerchich,
+      academicPeriodId,
       administrativeGroupId: firstGroupId,
     });
     await addMember(prisma, superAdmin(), circle.id, pupil);
@@ -1379,6 +1412,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       studentId: pupil,
       levelId,
       branchId: amerchich,
+      academicPeriodId,
       administrativeGroupId: firstGroupId,
     });
     await addMember(prisma, superAdmin(), circle.id, pupil);
@@ -1421,6 +1455,7 @@ describe("R66 — a GROUP-LESS student can be placed in a circle", () => {
       studentId: pupil,
       levelId: created.level.id,
       branchId: amerchich,
+      academicPeriodId,
     });
 
     await addMember(prisma, superAdmin(), circle.id, pupil);

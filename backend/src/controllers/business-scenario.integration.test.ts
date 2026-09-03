@@ -194,6 +194,11 @@ async function clear(): Promise<void> {
     where: { branch: { name: { startsWith: TAG } } },
   });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // The period first — `enrollment.academic_period_id` is RESTRICT, and the
+  // enrolments naming it went above with their Levels.
+  await prisma.academicPeriod.deleteMany({
+    where: { academicYear: { label: YEAR_LABEL } },
+  });
   await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
 
   const users = await prisma.user.findMany({
@@ -313,13 +318,27 @@ describe("the scenario, step by step — each step through the API a screen uses
     expect(group.status).toBe(201);
     groupId = createdId(group);
 
+    // R122 — an enrolment belongs to a semester, so the scenario opens one
+    // through the route the reference-data screen uses. Wide enough to contain
+    // today whenever the suite runs: it is the DATES that make a period the
+    // current one, and the seeded year already holds the `is_current` flag.
+    const thisYear = new Date().getUTCFullYear();
+    const period = await call("POST", "/admin/academic-periods", superAdmin, {
+      academic_year_id: academicYearId,
+      sequence: 1,
+      start_date: `${thisYear - 1}-01-01`,
+      end_date: `${thisYear + 1}-12-31`,
+    });
+    expect(period.status).toBe(201);
+    const academicPeriodId = createdId(period);
+
     for (const name of ["مستفيدة أولى", "مستفيدة ثانية"]) {
       const studentId = await person(name);
       const enrolled = await call(
         "POST",
         `/admin/administrative-groups/${groupId}/roster`,
         superAdmin,
-        { student_id: studentId },
+        { student_id: studentId, academic_period_id: academicPeriodId },
       );
       expect(enrolled.status, name).toBe(201);
       const token = bearer(studentId, [{ role: "student", branches: null }]);

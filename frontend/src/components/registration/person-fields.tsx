@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { NameFields } from './children.js';
-import { TextArea, TextField } from '../ui/field.js';
+import { TextField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 
 /**

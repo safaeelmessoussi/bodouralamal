@@ -636,6 +636,20 @@ Four lessons, all now enforced in code:
   those coordinates. A before/after database delta is unsafe too: a real user
   can finish registration during the sweep, and deleting that newly observed
   replay guard would make their spent token usable again.
+- **A shared fixture must never sweep a namespace it does not own.** R122's
+  `test-support/academic-period.ts` mints academic years into a far-future label
+  band, and its first teardown swept *the whole band*. Integration files run
+  concurrently against one database, so it deleted the period another file had
+  just created and not yet enrolled into — surfacing as a missing record in a
+  suite that had touched nothing. **The fix is to track what this file
+  provisioned**, and the band is now only asserted, as a backstop against a bug
+  in the helper ever reaching a seeded year.
+- **A random coordinate is not a unique one.** The same helper first minted a
+  year per call with a random label from an 800-wide band. A single suite
+  calling it from `beforeEach` collided inside one file — the birthday problem,
+  arriving immediately rather than eventually. It now mints **one year per test
+  file** and numbers the periods inside it with a counter, so uniqueness is
+  structural rather than probabilistic.
 - **Run platform-wide destructive repository proofs inside a rolled-back
   transaction.** The audit-purge suite uses a per-run marker and a fixed clock,
   then deliberately rolls back the purge. It can prove the production query

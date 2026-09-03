@@ -25,6 +25,7 @@ import { SettingsPage } from './settings.js';
 import { TeachingStructurePage } from './teaching-structure.js';
 import { TaxonomyPage } from './taxonomy.js';
 import { PartnersPage } from './partners.js';
+import { AcademicPeriodsPage } from './academic-periods.js';
 import { SchedulingTypesPage } from './scheduling-types.js';
 import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
@@ -69,6 +70,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/content',
   // R110 (NEW H) — the scheduling-type catalogue.
   '/admin/scheduling-types',
+  '/admin/academic-periods',
   // NEW N — the partners the landing page renders.
   '/admin/partners',
   '/admin/trash',
@@ -224,6 +226,10 @@ export function AdminRouter(): ReactNode {
     // data an administrator manages, not a constant in the client.
     case '/admin/scheduling-types':
       return <SchedulingTypesPage />;
+    // R122 — the semesters an enrolment belongs to. Seeded nowhere, so this is
+    // the only way one comes to exist.
+    case '/admin/academic-periods':
+      return <AcademicPeriodsPage />;
     case '/admin/partners':
       return <PartnersPage />;
     case '/admin/users':

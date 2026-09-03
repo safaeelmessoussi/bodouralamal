@@ -2080,3 +2080,23 @@ approved scope covers Partners only, so this is reported rather than taken.
 - [ ] Codex's four open Owner questions (audit identity email, exact storage-key
       wording, required free-text audit evidence, the R111 3-day purge job)
       remain open and were **not** touched by this batch.
+- [x] **R122 — an enrolment belongs to an academic period.** `AcademicPeriod`
+      added; `Enrollment.academic_period_id` nullable in the schema and
+      **required at the write boundary**; the live-row unique index becomes
+      `(student_id, level_id, academic_period_id)`, narrowing BR-21 to *within a
+      period*. Currency is derived from the period's dates — `deleted_at` keeps
+      its single meaning of *ended early by a person*. **No historical row is
+      backfilled and the seed creates no periods**: guessing a semester the
+      association never recorded would be indistinguishable from a real one a
+      year later. `Level` remains the studies year; no `StudiesYear` entity was
+      created.
+- [x] **الفصول الدراسية — the management screen** (`/admin/academic-periods`,
+      الإدارة, Super Admin). Built with the model rather than after it: the seed
+      creates no periods, so without it approval would have refused every
+      applicant with nothing an administrator could do. List · create · edit;
+      **no delete**, because a semester the association ran is a fact and
+      enrolments point at it under RESTRICT.
+- [ ] **Owner data task, not an engineering one:** the periods of the current
+      academic year must be entered on that screen. Until one covers today,
+      approval refuses with `NO_CURRENT_ACADEMIC_PERIOD` — which is the intended
+      behaviour, not a defect.

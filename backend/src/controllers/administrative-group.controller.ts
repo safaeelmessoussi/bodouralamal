@@ -117,6 +117,7 @@ export function enrol(prisma: PrismaClient) {
       requireActor(req),
       idParam(req, 'id'),
       body.student_id,
+      body.academic_period_id,
     );
     res.status(201).json(enrollmentDto(row));
   };

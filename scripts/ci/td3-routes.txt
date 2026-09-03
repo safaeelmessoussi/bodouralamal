@@ -192,6 +192,11 @@ DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R2
 #    drafted in docs/SRS-PROPOSAL-R46.md and awaits the Owner.
 GET /admin/subjects                           # TD-3 extension 2026-08-05; selector source for §5.6 schedule form
 GET /admin/academic-years                     # TD-3 extension 2026-08-05; selector source, carries is_current
+# R122 — an academic year is made of dated semesters, and an Enrollment names
+# one. Read is reference data (TD-2 R26/R30); writes are Super Admin only.
+GET /admin/academic-periods                   # §7 R122; the enrolment form's source, carries derived is_current
+POST /admin/academic-periods                  # §7 R122; Super Admin only, audited
+PATCH /admin/academic-periods/{id}            # §7 R122; Super Admin only, TD-15, the year is not editable
 GET /admin/levels/{levelId}/subjects          # TD-3 extension 2026-08-05; §4.4b — which Subjects a Level teaches
 PUT /admin/levels/{levelId}/subjects/{subjectId}     # TD-3 extension; Super Admin (R26, R43.3); idempotent
 DELETE /admin/levels/{levelId}/subjects/{subjectId}  # TD-3 extension; TD-5; refused while Teaching Groups exist

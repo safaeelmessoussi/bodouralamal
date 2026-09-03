@@ -10,6 +10,9 @@
 | **Branch** | فرع | A physical location running sessions. Carries an operational start date before which its calendar is greyed out |
 | **Category** | الفئة | One of three **generic educational stages**: Adult (الكبار), Teen (اليافعون), Child (الطفل). **Sex is never encoded in a category name** — it lives on the level |
 | **Level** | مستوى بالجمعية | An academic tier within a category. Numbering is **not uniform** across categories — no logic may assume every category has a level 0 |
+| **Academic year** | السنة الدراسية | A calendar span the association runs, labelled `YYYY-YYYY`. **It is not a pedagogical level.** One academic year can contain enrolments at two different Levels for the same student, and one Level can span more than one academic year |
+| **Academic period** | الفصل الدراسي | A semester inside an academic year, numbered from 1 and carrying a start and an inclusive end date. **An enrolment belongs to exactly one.** The period's dates — never `deleted_at` — decide whether an enrolment is *current* |
+| **Studies year** / progression year | سنة الدراسة | The pedagogical tier a student has reached. On this platform that concept **is** the Level: a Category orders its Levels by `display_order`, and progression is moving to the next one. There is no separate entity, and adding one would create a second answer to *what level is she at* |
 | **Group** | مجموعة | A cohort within a level with its own fixed weekly time, room, and instructor(s). **The scheduling unit** |
 | **Event** | حدث | A one-off or exception calendar item — holiday, activity, exam — layered on top of groups' fixed schedules |
 | **Round** | الدورة | A grading period, roughly a semester. Manually selected, not calendar-bound; a sorting label, not a restriction |

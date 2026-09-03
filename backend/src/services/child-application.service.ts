@@ -7,6 +7,7 @@ import { allocateReferenceCode } from '../lib/reference-code.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { currentAcademicPeriod } from './academic-period.service.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { ensureRoleAssignment } from './user.service.js';
 import {
@@ -402,12 +403,14 @@ export async function decideChildApplication(
     if (decision.placement) {
       // The same resolver `decide()` uses, so the two approval paths cannot
       // place students by different rules (R66.5).
+      // R122 — the period covering today; see the identical note in `decide()`.
       const enrollment = await enrolAtPlacement(
         tx,
         actor,
         decision.placement,
         childUserId,
         'approval',
+        (await currentAcademicPeriod(tx)).id,
       );
       if (created) {
         studentRoleGranted = await ensureRoleAssignment(tx, actor, childUserId, {

@@ -3,6 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import {
+  provisionAcademicPeriod,
+  releaseAcademicPeriods,
+} from "../test-support/academic-period.js";
 import { httpCall } from "../test-support/http-client.js";
 
 /** R66 — an enrolment carries its own branch, taken from the group so the
@@ -115,6 +119,7 @@ let branchA: string;
 let branchB: string;
 let levelId: string;
 let soloLevelId: string;
+let academicPeriod: string;
 
 async function clear(): Promise<void> {
   const groups = await prisma.administrativeGroup.findMany({
@@ -171,6 +176,7 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
+  academicPeriod = await provisionAcademicPeriod(prisma);
   // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
   // indistinguishable from a passing one. Health is served at the ORIGIN root
   // (TD-14), not under /api/v1.
@@ -243,6 +249,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await clear();
+  await releaseAcademicPeriods(prisma);
   await prisma.$disconnect();
 });
 
@@ -669,6 +676,10 @@ const ROSTER_KEYS = ["enrolled_at", "id", "name", "student_id"];
  * can ask *where is this student* of someone in a Level nobody has subdivided.
  */
 const ENROLMENT_KEYS = [
+  // R122 — the semester the enrolment belongs to. A client reading a roster has
+  // to be able to tell «مسجَّلة الآن» from «كانت مسجَّلة», and `deleted_at IS
+  // NULL` no longer answers that.
+  "academic_period_id",
   "administrative_group_id",
   "branch_id",
   "enrolled_at",
@@ -709,7 +720,7 @@ describe("the roster is a contract DTO too", () => {
       "POST",
       `/admin/administrative-groups/${group.body.id}/roster`,
       superAdmin,
-      { student_id: student },
+      { student_id: student, academic_period_id: academicPeriod },
     );
     expect(res.status).toBe(201);
     expect(Object.keys(res.body).sort()).toEqual(ENROLMENT_KEYS);
@@ -739,6 +750,7 @@ describe("the roster is a contract DTO too", () => {
       superAdmin,
       {
         student_id: student,
+        academic_period_id: academicPeriod,
       },
     );
 
@@ -810,6 +822,7 @@ describe("the roster is a contract DTO too", () => {
           superAdmin,
           {
             student_id: student,
+            academic_period_id: academicPeriod,
           },
         )
       ).status,
@@ -819,7 +832,7 @@ describe("the roster is a contract DTO too", () => {
       "POST",
       `/admin/administrative-groups/${first.body.id}/roster`,
       superAdmin,
-      { student_id: student },
+      { student_id: student, academic_period_id: academicPeriod },
     );
     expect(same.status).toBe(409);
     expect(same.body.error?.code).toBe("DUPLICATE");
@@ -828,7 +841,7 @@ describe("the roster is a contract DTO too", () => {
       "POST",
       `/admin/administrative-groups/${second.body.id}/roster`,
       superAdmin,
-      { student_id: student },
+      { student_id: student, academic_period_id: academicPeriod },
     );
     expect(other.status).toBe(409);
     expect(other.body.error?.code).toBe("STATE_CONFLICT");
@@ -860,6 +873,7 @@ describe("the roster is a contract DTO too", () => {
       superAdmin,
       {
         student_id: student,
+        academic_period_id: academicPeriod,
       },
     );
 

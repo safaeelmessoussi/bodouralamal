@@ -179,6 +179,13 @@ applicant *requested* at registration is a request and never the answer. A stude
 membership is **never recorded separately** from their group membership; the two cannot be
 allowed to disagree.
 
+**Scoped to the academic period by R122.** The rule holds *within one period*, not forever:
+a student who finishes الفصل 1 of a Level enrols again in الفصل 2, and next year in the Level
+above — and each of those is its own live row. The unique index is
+`(student_id, level_id, academic_period_id)` among rows with `deleted_at IS NULL`, and
+`deleted_at` says only *this enrolment was ended by a human*; whether one is **current** is
+read from the period's dates. See [Database](../architecture/database.md#uniqueness).
+
 *Enforced:* a unique constraint on (student, level), made possible by a composite foreign
 key that forces the enrolment's level to agree with its group's. **The database refuses a
 disagreeing row** — this is not a service-layer check.
@@ -256,7 +263,7 @@ finds by live name and creates only what is absent.
 | [BR-19](#br-19) | Ordering is intentional | Localization |
 | [BR-20](#br-20) | Seeded does not mean immutable | Content and data |
 | [BR-20](#br-20) | Global reach is a privilege | Content |
-| [BR-21](#br-21) | One organisational group per level | Scheduling |
+| [BR-21](#br-21) | One organisational group per level, **per academic period** | Scheduling |
 | [BR-22](#br-22) | Split is optional; unplaced is never silent | Scheduling |
 | [BR-23](#br-23) | Room capacity informs, never refuses | Scheduling |
 

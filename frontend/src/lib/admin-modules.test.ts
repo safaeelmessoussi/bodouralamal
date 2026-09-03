@@ -77,6 +77,13 @@ describe('the registry matches §14.1', () => {
          * hardcoded frontend constant with no screen at all.
          */
         '/admin/scheduling-types',
+        /**
+         * **R122 added `/admin/academic-periods`**, and it is recorded here for
+         * the same reason: the seed creates **no** periods, so without a screen
+         * the required `academic_period_id` would have made approval refuse
+         * every applicant with nothing an administrator could do about it.
+         */
+        '/admin/academic-periods',
         // الشركاء — §14.1 lists it in الإدارة (Revision 113).
         '/admin/partners',
         // R55 — §14.1's single "Categories & Subjects" node became two, on the
@@ -347,8 +354,9 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
   /**
    * الإدارة, top to bottom — the dependency chain, then the standalone nodes.
    *
-   * **R110 (NEW H) added `/admin/scheduling-types`, and this guard is RESTATED
-   * rather than relaxed.** R105 fixed the sequence and OD-01 says the menu is
+   * **R110 (NEW H) added `/admin/scheduling-types` and R122 added
+   * `/admin/academic-periods`; this guard is RESTATED each time rather than
+   * relaxed.** R105 fixed the sequence and OD-01 says the menu is
    * not rearranged silently, so the assertion still pins an exact order — it
    * pins the order that now includes a node the Owner asked for. The new entry
    * sits after the reference-data chain and before the platform nodes, because
@@ -362,6 +370,7 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/level-surahs', // مقرر الحفظ
     '/admin/branches', // الفروع والقاعات
     '/admin/scheduling-types', // أنواع الجدولة (R110)
+    '/admin/academic-periods', // الفصول الدراسية (R122)
     /**
      * الشركاء (NEW N) — beside the other catalogue it belongs with, and **before**
      * the platform-operations tail (سلة المحذوفات · التقويم الهجري · الإعدادات).

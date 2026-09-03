@@ -3,6 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueAccessToken } from '../lib/access-token.js';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import {
+  provisionAcademicPeriod,
+  releaseAcademicPeriods,
+} from '../test-support/academic-period.js';
 import { httpCall } from '../test-support/http-client.js';
 
 /**
@@ -55,6 +59,7 @@ let branchB: string;
 let groupA1: string;
 let groupA2: string;
 let enrolmentA: string;
+let academicPeriod: string;
 
 async function clear(): Promise<void> {
   const levels = await prisma.level.findMany({
@@ -127,11 +132,14 @@ beforeAll(async () => {
     })
   ).id;
 
+  academicPeriod = await provisionAcademicPeriod(prisma);
+
   const created = await call('POST', '/admin/enrollments', superAdmin, {
     student_id: student,
     level_id: levelA,
     branch_id: branchA,
     administrative_group_id: groupA1,
+    academic_period_id: academicPeriod,
   });
   expect(created.status).toBe(201);
   enrolmentA = String(created.body.id);
@@ -139,6 +147,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await clear();
+  await releaseAcademicPeriods(prisma);
   await prisma.$disconnect();
 });
 
@@ -210,6 +219,7 @@ describe('another Level is another enrolment, and they coexist', () => {
       student_id: student,
       level_id: levelB,
       branch_id: branchB,
+      academic_period_id: academicPeriod,
     });
     expect(created.status).toBe(201);
 
