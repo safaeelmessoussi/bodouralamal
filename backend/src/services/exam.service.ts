@@ -579,6 +579,55 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
   );
 
   await prisma.$transaction(async (tx) => {
+    /**
+     * **Student educational evidence forbids deletion** (Owner decision,
+     * 2026-09-03).
+     *
+     * `deleteExam` is a soft delete, so none of the six `Restrict` foreign keys
+     * pointing at `exam` ever fires: the row is updated, not removed. Every
+     * reader then filters `deleted_at IS NULL`, so one click withdrew the paper,
+     * the sitting, the mark and the attendance sheet together — and
+     * `readPublishedGrades` hides a soft-deleted exam's marks *deliberately*.
+     * That is right for a sitting that was cancelled and wrong for one that was
+     * delivered, and nothing in the code told the two apart.
+     *
+     * **A submission or a Grade is the line**, because either one means a
+     * student generated educational history against this assessment. State does
+     * not soften it: an `in_progress` submission is work somebody did, and a
+     * `draft` Grade is a mark somebody awarded. Neither table carries
+     * `deleted_at`, so a plain count is the whole question.
+     *
+     * **Publication alone does NOT block.** Publishing creates no student
+     * record; a published assessment nobody sat is still a plan. This is
+     * R118.1's rule for schedules — *a schedule nobody ever taught is a plan* —
+     * applied to the same shape of question.
+     *
+     * **Attendance alone does NOT block.** R123 makes attendance an independent
+     * fact about the *occurrence*, not educational achievement, and blocking on
+     * it would make a cancelled sitting undeletable because one person was
+     * marked present at it. Attendance rows survive the soft delete either way
+     * and keep protecting the row against a permanent purge.
+     *
+     * Asserted **inside** the transaction, where it is authoritative: a
+     * submission may be created between an optimistic pre-read and the write.
+     * It is also the first statement, so a refusal rolls back before the
+     * cancellation notification, the tombstones, the Trash snapshot and the
+     * audit row — a blocked delete must leave no trace suggesting one happened.
+     */
+    const [submissions, grades] = await Promise.all([
+      tx.studentExamSubmission.count({ where: { examId: id } }),
+      tx.grade.count({ where: { examId: id } }),
+    ]);
+    if (submissions > 0 || grades > 0) {
+      // Counts only. TD-14: no student name, id or answer reaches an error the
+      // Admin sees — the number is what makes the refusal actionable.
+      throw new AppError('STATE_CONFLICT', 'the assessment holds student work (R59, R124)', {
+        reason: 'STUDENT_EVIDENCE_EXISTS',
+        submissions,
+        grades,
+      });
+    }
+
     const row = await tx.exam.findUnique({ where: { id } });
     // **ONE timestamp for the whole deletion**, not one per statement.
     //

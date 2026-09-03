@@ -3201,3 +3201,71 @@ from the scoped list; on the other arms it stays the ordinary selector, because
 there the Level is not the audience — a group at her own branch inside a Level
 that spans two is perfectly legitimate, and withholding that Level would block a
 real case.
+
+## R126 — student educational evidence forbids deleting an assessment (2026-09-03)
+
+**Owner decision, taken from the read-only preflight of the same day.**
+`DELETE /exams/{id}` is a **soft** delete — an `UPDATE` — so not one of the six
+`RESTRICT` foreign keys pointing at `exam` ever fired, and nine materially
+different situations behaved identically: a bare draft, a published sitting
+nobody sat, a saved student draft, a final submission, a draft mark, a published
+mark, an attended sitting, a paper with questions, a paper with answers. All
+nine were tombstoned by one click, and every reader's `deleted_at IS NULL`
+filter then withdrew the paper, the marks and the register together.
+`readPublishedGrades` hides a withdrawn sitting's marks **deliberately** — *"the
+sitting was withdrawn (R59), and the mark went with it"* — which is right for a
+cancelled sitting and wrong for a delivered one, and nothing told the two apart.
+
+**The line is student educational evidence, and only that.** Any
+`StudentExamSubmission` in any state, or any `Grade` in any status, refuses the
+deletion; either alone is sufficient. State does not soften it — an
+`in_progress` submission is work somebody did and a `draft` Grade is a mark
+somebody awarded — and neither table carries `deleted_at`, so the question is a
+plain count. The refusal is a `STATE_CONFLICT` carrying
+`STUDENT_EVIDENCE_EXISTS` and **the two counts and nothing else**: a number makes
+it actionable where a name would put a beneficiary in an error message (TD-14).
+
+**Publication does not block, and attendance does not block.** Publishing
+creates no student record — a published paper nobody sat is still a plan, which
+is R118 clause (1)'s rule for schedules applied to the same shape of question.
+R123 makes attendance a fact about the **occurrence** rather than about
+achievement, and blocking on it would make a cancelled sitting undeletable
+because one person was marked present at it. Both directions are asserted: a
+guard that only ever refuses is as wrong as one that never does.
+
+**The guard is the transaction's first statement.** A refusal therefore rolls
+back before the cancellation notification, the staff tombstones, the `Exam`
+tombstone, the Trash snapshot and the audit row — a blocked delete must leave
+nothing behind suggesting one happened, and the suite asserts each of those five
+absences. It is asserted **inside** the transaction rather than on an optimistic
+pre-read, because a submission may arrive between the two.
+
+**No `cancelled` state was introduced and grade visibility was not touched.**
+Both were considered and both are separate decisions.
+
+**R59 clause (3)'s rationale is corrected, not rewritten.** It admitted `Exam`
+to the restorable set because *"its deletion cascades to exactly one child
+table, `ExamStaff`"* — true in July 2026, false since R123 attached `attendance`
+and R124 attached four more. §0 keeps the historical sentence, because erasing it
+would erase the fact that the premise expired; `docs/SRS-PROPOSAL-R126.md` states
+the current reasoning as its own clause. Restorability now holds for a
+**narrower row and a better reason**: the deletable class is exactly the exams
+carrying no student evidence, and for such a row the cascade really is
+`ExamStaff` alone. Questions and options may exist on a deletable exam, are not
+part of the cascade, and their `RESTRICT` keys are what stop a **permanent
+purge** — `purgeEntry` turns PostgreSQL's refusal into `DEPENDENTS_EXIST`, which
+is unchanged and is pinned by a test.
+
+**The screen names what holds the assessment.** «تعذّر الحذف» alone is true and
+unactionable — the administrator reads it and clicks the same button again — so
+the scheduling page now reads the typed reason and reports the counts, following
+the Trash screen's `DEPENDENTS_EXIST` precedent. The two placeholders are pinned
+by a contract test, because dropping one while editing the Arabic is neither a
+type error nor visible to a render test that never triggers a 409.
+
+**Tests: 14/14** in a new `exam-deletion.integration.test.ts` against a real
+schema, plus 14/14 on the scheduling contract guard. The suite is the audit the
+preflight asked for: both permissive cases, four blocking cases, both
+non-blocking dependents, the combined case, four authorization cases (including
+a Super Admin meeting the same refusal — evidence is not a permission) and the
+FK-safe purge.

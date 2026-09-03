@@ -489,8 +489,23 @@ export function SchedulingPage(): ReactNode {
       if (deleted.type === 'activity' || deleted.type === 'holiday') {
         setNotifying({ id: deleted.id, change: 'cancelled' });
       }
-    } catch {
-      setNotice(t('common.deleteFailed'));
+    } catch (error) {
+      /**
+       * **The refusal names what holds the assessment** (Owner decision,
+       * 2026-09-03). An exam carrying a student submission or a Grade is no
+       * longer deletable, and «تعذّر الحذف» alone is true and unactionable —
+       * the administrator reads it and clicks the same button again. The server
+       * reports the two counts, so the sentence can say what is there. Any
+       * other failure keeps the previous wording: less helpful, never wrong.
+       */
+      const details = error instanceof ApiError ? error.details : undefined;
+      setNotice(
+        details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS'
+          ? t('scheduling.deleteBlockedEvidence')
+              .replace('{submissions}', String(details['submissions'] ?? 0))
+              .replace('{grades}', String(details['grades'] ?? 0))
+          : t('common.deleteFailed'),
+      );
     } finally {
       setBusy(false);
     }

@@ -210,3 +210,40 @@ describe('a class row carries what an edit form must seed from', () => {
     expect(entireLevel.ids.groupId).toBeNull();
   });
 });
+
+/**
+ * **The blocked-deletion notice is built by substitution, so its placeholders
+ * are part of the contract** (Owner decision, 2026-09-03).
+ *
+ * The server refuses to delete an assessment carrying a submission or a Grade
+ * and returns the two counts. `confirmDelete` renders them with `.replace()`,
+ * which fails **silently and visibly**: drop a placeholder while editing the
+ * Arabic and the sentence loses the number, keep a typo and the page prints the
+ * literal token to a مؤطِّرة. Neither is a type error, and neither shows up in
+ * a render test that never triggers a 409.
+ */
+describe('the refusal that names what holds an assessment', () => {
+  const template = t('scheduling.deleteBlockedEvidence');
+
+  it('carries both counts as substitutable placeholders', () => {
+    expect(template).toContain('{submissions}');
+    expect(template).toContain('{grades}');
+  });
+
+  it('substitutes cleanly, leaving no token behind', () => {
+    const rendered = template.replace('{submissions}', '3').replace('{grades}', '2');
+    expect(rendered).not.toMatch(/\{[a-z_]+\}/);
+    expect(rendered).toContain('3');
+    expect(rendered).toContain('2');
+  });
+
+  it('says more than the generic failure it replaces', () => {
+    // If these ever collide the specific branch is pointless — which is the
+    // state this decision was taken to leave behind.
+    expect(template).not.toBe(t('common.deleteFailed'));
+  });
+
+  it('names no engineering reference on a screen a مؤطِّرة reads (UX rule M)', () => {
+    expect(template).not.toMatch(/§|BR-\d|TD-\d|R\d{2,}|STUDENT_EVIDENCE_EXISTS/);
+  });
+});

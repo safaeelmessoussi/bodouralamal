@@ -2181,13 +2181,21 @@ approved scope covers Partners only, so this is reported rather than taken.
       server-scoped per caller and staff-only; the builder composes the existing
       `SearchInput` and `SelectField` rather than a second generic picker. **The
       list is not the boundary** — every refusal is made again on the write.
-- [ ] **RECORDED, NOT FIXED — `DELETE /exams/{id}` does not refuse an exam that
-      has grades or submissions.** It soft-deletes with a `Trash` snapshot and
-      the FKs are `RESTRICT`, so **nothing is lost** and recovery exists; but a
-      paper with student answers disappears from every screen with no warning,
-      where deleting a Level is refused with `blocked_by` for exactly this kind
-      of reason. Adding a refusal **changes what an Admin may do**, so it is an
-      Owner decision rather than a defect fix. Predates R124.
+- [x] **DECIDED AND FIXED (Owner, 2026-09-03) — `DELETE /exams/{id}` now refuses
+      an assessment holding student educational evidence.** Any
+      `StudentExamSubmission` in any state, or any `Grade` in any status, is
+      sufficient: the refusal is a `STATE_CONFLICT` carrying
+      `STUDENT_EVIDENCE_EXISTS` and the two counts, and the scheduling screen
+      names what is there instead of «تعذّر الحذف». **Publication does not
+      block** — a published paper nobody sat is still a plan (R118.1's rule for
+      schedules) — and **attendance does not block**, because R123 makes it an
+      occurrence fact rather than achievement. No `cancelled` state was added
+      and grade visibility was not touched. The guard is the first statement in
+      the transaction, so a refusal rolls back before the cancellation
+      notification, the tombstones, the Trash snapshot and the audit row.
+      `docs/SRS-PROPOSAL-R126.md` carries the clauses and **awaits application
+      to `SRS.md`** — including the correction of R59 clause (3), whose
+      *"cascades to exactly one child table"* rationale R123 and R124 made false.
 - [ ] **RECORDED — `Exam.access_policy` is a column nothing reads.**
       `single_submission` vs `save_and_resume`: v1 gives every assessment
       save-and-resume, and no write boundary offers the setting (a guard pins
