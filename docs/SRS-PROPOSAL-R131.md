@@ -5,8 +5,7 @@
 **Two deletion requests, a ten-year educational retention policy, and the end of
 the R111 ↔ R122 contradiction.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`. POLICY AND ARCHITECTURE ONLY; NOT YET IMPLEMENTED.** The Owner's
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 131, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0 and §4.10a carry the policy. **It remains POLICY AND ARCHITECTURE ONLY — no destructive automation exists**, and §4.10a says so in its own status line. The Owner's
 instruction was explicit: ratify the policy first, and write no destructive
 automation until the cross-domain map is coherent. The map is
 [`docs/development/personal-data-map.md`](development/personal-data-map.md).

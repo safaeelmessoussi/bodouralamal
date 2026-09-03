@@ -5,8 +5,7 @@
 **A beneficiary claims her own account at 18. Google proves control of an
 identity; a Super Admin proves it is hers.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** Implemented, migrated, tested and browser-verified.
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 132, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0, §4.1, §4.3, §7, TD-1, TD-2, TD-3 and TD-8 carry the transition, the reference-code invariant and the post-transition authority rule. Implemented, migrated, tested and browser-verified.
 
 ---
 

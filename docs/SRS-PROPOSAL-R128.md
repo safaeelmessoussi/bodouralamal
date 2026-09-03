@@ -6,8 +6,7 @@
 revocation become one shape, and R118.3's special-case purge route is
 withdrawn.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** The behaviour is implemented, migrated and tested; the clauses below
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 128, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0, §4.3 and TD-1 carry the lifecycle; §0's historical Revision 118 paragraph is retained as the record of what was decided on 2026-09-02. The behaviour is implemented, migrated and tested; the clauses below
 are the exact text the Document Owner applies.
 
 ---

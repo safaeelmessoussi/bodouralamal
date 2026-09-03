@@ -1153,8 +1153,7 @@ was hiding behind it: the run went green on the first attempt.
       **After the transition a former guardian loses current authority** while
       the link row survives as evidence — derived from R62.9's own definition of
       a minor (*an account with no login identity*) rather than a second flag.
-      28 focused tests; `docs/SRS-PROPOSAL-R132.md` **awaits application to
-      `SRS.md`**.
+      28 focused tests; `docs/SRS-PROPOSAL-R132.md` is **APPLIED to `SRS.md`** (2026-09-03).
 - [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
 ### R65 — the personal section is role-independent (2026-08-11)
@@ -1395,7 +1394,7 @@ was hiding behind it: the run went green on the first attempt.
   **withdrawn**: they existed only because the row stayed live, and two competing deletion
   lifecycles for one entity is how a destructive verb reaches the wrong row. A generic Trash
   restore still cannot resurrect one into live authority (`CASCADE_RELATIONSHIPS`, proved by
-  test). `docs/SRS-PROPOSAL-R128.md` **awaits application to `SRS.md`**.
+  test). `docs/SRS-PROPOSAL-R128.md` is **APPLIED to `SRS.md`** (2026-09-03).
 - [ ] **OWNER DECISION REQUIRED — HISTORICAL REFERENCE RETENTION/PRESENTATION:** Branch/Room/
   Level/Subject/Category/AdministrativeGroup rows still referenced by retained schedules or
   Sessions remain FK-protected. Decide whether those tombstones stay visibly non-purgeable in Trash
@@ -2230,7 +2229,7 @@ approved scope covers Partners only, so this is reported rather than taken.
       projection keeps its wire name — the screen labels it «بريد Google», so it
       already reads as the login address — and the invariant is documented
       instead. `docs/development/account-and-membership.md`;
-      `docs/SRS-PROPOSAL-R129.md` **awaits application to `SRS.md`**.
+      `docs/SRS-PROPOSAL-R129.md` is **APPLIED to `SRS.md`** (2026-09-03).
 - [x] **RESOLVED by the Owner, 2026-09-03 — a platform account is not membership
       (R129).** A guardian authenticating to manage children is **guardian-only**:
       not a beneficiary, not a Student, not enrolled, not staff, not a member,
@@ -2316,8 +2315,8 @@ approved scope covers Partners only, so this is reported rather than taken.
       and grade visibility was not touched. The guard is the first statement in
       the transaction, so a refusal rolls back before the cancellation
       notification, the tombstones, the Trash snapshot and the audit row.
-      `docs/SRS-PROPOSAL-R126.md` carries the clauses and **awaits application
-      to `SRS.md`** — including the correction of R59 clause (3), whose
+      `docs/SRS-PROPOSAL-R126.md` carries the clauses and is **APPLIED to
+      `SRS.md`** (2026-09-03) — including the correction of R59 clause (3), whose
       *"cascades to exactly one child table"* rationale R123 and R124 made false.
 - [x] **DECIDED AND REMOVED (Owner, 2026-09-03) — `Exam.access_policy` and the
       `single_submission` policy are withdrawn.** Save-and-resume is the only
@@ -2330,4 +2329,4 @@ approved scope covers Partners only, so this is reported rather than taken.
       and against a fresh disposable one. `errors.test.ts` now pins
       `CAPACITY_FULL` and `SINGLE_SUBMISSION_FINAL` as retired **by name**.
       `docs/SRS-PROPOSAL-R127.md` lists the six current normative references to
-      withdraw and **awaits application to `SRS.md`**.
+      withdraw, and is **APPLIED to `SRS.md`** (2026-09-03).

@@ -3878,3 +3878,57 @@ association already holds. The claim panel is now the only thing that arm shows.
 **13/13 browser checks**, including that the Super Admin can find the claim (rule
 P, on the most takeover-sensitive decision the platform offers) and that the
 Google provider subject appears nowhere in the page's text or markup.
+
+## R126–R132 applied to the authoritative SRS (2026-09-03)
+
+**Specification reconciliation, on the Document Owner's instruction.** `SRS.md`
+is immutable to an implementing agent (§20 rule 20) and revisions are drafted as
+proposals for the Owner to apply; the Owner directed this application of the
+seven already-ratified decisions. **No product code changed.**
+
+**§0 gains seven revision entries** (126–132), newest first. Each states what was
+decided and what it supersedes; **no historical §0 paragraph was rewritten** —
+R58's, R59's and R118's stand as the record of what was decided when, with the
+corrections carried as the new revisions' own clauses, which is the convention
+R126 and R128 each specified.
+
+**Sections reconciled.** §4.1 gains the account-versus-membership model, the
+email semantics, the date-of-birth requirement, the self-managed claim and the
+reference-code invariant; §4.3 gains the rejection lifecycle and the
+post-transition authority rule; §4.6 gains the deletion rule and loses the access
+policy; §4.10 gains §4.10a (retention and the two deletion requests); §5, §7,
+§17, §18, TD-1, TD-2, TD-3 and TD-8 follow.
+
+**Contradictions found and closed.** The withdrawn assessment policy was still
+described in **seven** current normative places — §4.6, §5, §7, §17 twice, TD-3
+and a §18 acceptance criterion that named behaviour which never existed. Beyond
+the seven revisions, the sweep found **R124's manual-marking decision unapplied
+in five places**: TD-1's submission machine still transitioned
+`submitted → auto_graded (MCQ engine, immediate)`, and §5, §9, §17 and TD-3 still
+described MCQ auto-grading. These were reconciled to R124's own ratified text
+rather than decided afresh; the enum values are described honestly as retained
+but never written, because the marking engine is postponed rather than cancelled.
+
+**Three things deliberately stated rather than smoothed over.** §4.10a opens with
+a status line saying **no destructive automation exists** and that the deletion
+the platform performs is still R111's; §4.1 records that the `NOT NULL`
+contraction on the birth date **has not been performed** and cannot be until
+every live beneficiary carries a real date; and the ten-year retention is stated
+as **the association's own purpose-based policy**, explicitly not as a CNDP
+prescription — the only other CNDP reference in the document is §3's data
+residency claim, which is about residency and is untouched.
+
+**The reference-code invariant is now normative**: possessing, knowing or
+supplying one is not authentication, not proof of identity, not proof of
+Google-account ownership, not authorization, not entitlement to access or to a
+transition, and not sufficient evidence for an approval. It is a locator.
+
+**Proposal lifecycle.** All seven proposals move from *RATIFIED — awaiting
+application* to **APPLIED**, following the R109/R110/R123/R124 convention: the
+files are kept as the drafting record and `SRS.md` becomes authoritative. The
+handbook index and `TASKS.md` no longer claim any of them awaits application.
+
+**Not touched, deliberately:** `EMAIL_LOCK_KEY` (still blocked on its secret),
+the active `LegalConsentText`, `notification.subject_user_id`'s provisional
+classification, the adult-Category marker, and R59.4 — each recorded as open
+rather than decided here.

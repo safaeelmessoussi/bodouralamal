@@ -5,8 +5,7 @@
 **Student educational evidence forbids deleting an assessment. Publication does
 not, and attendance does not.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** The behaviour is implemented and tested; the clauses below are the
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 126, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0 and §4.6 carry the deletion rule and the correction of R59 clause (3); §0's historical R59 sentence is retained as the record of what was decided then. The behaviour is implemented and tested; the clauses below are the
 exact text the Document Owner applies. Until they are applied, `SRS.md` §0's
 R59 clause (3) states a rationale that R123 and R124 made false, and §4.6
 describes a deletion that is now refused in one named case.

@@ -5,8 +5,7 @@
 **A platform account is not association membership. A guardian's email is her
 own. A guardian who joins the association keeps her account.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** Audited, pinned by tests and documented; the clauses below are the
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 129, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0 and §4.1 carry the account-versus-membership model and the email semantics. Audited, pinned by tests and documented; the clauses below are the
 exact text the Document Owner applies. **This revision changes no schema, no
 route and no wire contract** — the model it states is the model the platform
 already implements, and what was missing was the statement, the tests and the

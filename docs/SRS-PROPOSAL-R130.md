@@ -5,8 +5,7 @@
 **Every beneficiary carries a full date of birth. Eighteen establishes
 eligibility for a self-managed account and triggers nothing.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** Implemented, migrated and tested; the clauses below are the exact
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 130, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0, §4.1 and §7 carry the requirement, the legacy position and the pending NOT NULL contraction. Implemented, migrated and tested; the clauses below are the exact
 text the Document Owner applies.
 
 ---

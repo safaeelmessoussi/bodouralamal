@@ -5,8 +5,7 @@
 **Save-and-resume is the only assessment response policy. `single_submission`,
 declared since the initial schema and never implemented, is withdrawn.**
 
-**Status: RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to
-`SRS.md`.** The removal is implemented, migrated and tested; the clauses below
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as SRS Revision 127, 2026-09-03.** Kept as the drafting record; **`SRS.md` is now authoritative**. §0, §4.6, §5, §7, §17, §18 and TD-3 no longer describe a second response policy; §0's historical Revision 58 paragraph is retained. The removal is implemented, migrated and tested; the clauses below
 are the exact text the Document Owner applies. Until they are applied, `SRS.md`
 describes a policy the platform no longer has a column for, and §17 continues to
 contradict R124.
