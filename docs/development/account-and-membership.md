@@ -154,68 +154,60 @@ automatic family-link revocation, no automatic identity binding, no role change
 — an account that changes hands while nobody is looking is one nobody decided to
 hand over. A guard asserts that no job source names the column.
 
-## The minor who becomes an adult
+## The minor who becomes an adult — BUILT (R132)
 
-**The direction is settled. The workflow is NOT built, and the reason is
-recorded here rather than improvised.**
+**The blocker recorded on 2026-09-03 is closed, and the refusal that created it
+still stands.** `PATCH /admin/users/{id}` still refuses `pre_provisioned_email`
+*because it authorises claiming an account*; R132 adds the one controlled path
+that refusal was protecting the absence of, not a general capability.
 
-### What the Owner has decided
+### Three facts, and none of them binds alone
 
-When a former minor needs her own login, a **verified Google identity is bound to
-her existing beneficiary `User`** — never a second account, so `Enrollment`,
-`Grade`, Quran progress, attendance and assessments stay on the one person.
-Eligibility is established from date of birth at 18 (R130) and **nothing happens
-automatically on a birthday**. Once the account is self-managed she exercises her
-own account and privacy rights, and a former guardian does not exercise them for
-her: a historical `FamilyLink` does not make anybody the owner of an adult's
-account.
+| | proves | binds? |
+|---|---|---|
+| **Google OAuth** (unchanged flow) | somebody controls *this* Google identity | **no** |
+| **Her reference code** | *which* beneficiary record is claimed | **no** — it grants nothing (R62.5), which is why quoting it is safe |
+| **Super Admin approval** | the association recognises her as that beneficiary | **yes** — and only this |
 
-### What already exists
+The first two produce a **pending claim**. The third binds the identity to the
+**existing** `User`, so her enrolments, grades, Quran progression, attendance,
+submissions and reference code stay on the one id. **No second account, ever.**
 
-The **binding mechanism** is complete and in daily use. §4.1b resolves a sign-in
-by verified email: an account carrying a `pre_provisioned_email` is found, the
-real Google subject is bound to it on first login, and no second row is created.
-That is exactly the shape this transition needs, and it does not need to be
-built.
+### The guardian is not part of it
 
-### The blocker, stated exactly
+She does not choose the address, type it as the authoritative identity, attest
+ownership, bind it, approve the transition or receive any credential — and her
+own address never becomes the beneficiary's. The beneficiary proves control
+herself; the association confirms who she is. That is exactly the blocker: the
+only party who could previously act for a minor was the party an anti-takeover
+control must guard against.
 
-**There is no operation that points an EXISTING account at an email address, and
-its absence is deliberate.**
+### Age is eligibility, never a trigger
 
-* `preProvision` **creates** a user; it cannot target an existing row.
-* `PATCH /admin/users/{id}` **refuses** `pre_provisioned_email` by name, and the
-  code says why: *"it authorises **claiming** an account (§7 R15)"*. The field is
-  refused rather than ignored precisely so that no edit form can hand one
-  person's account to somebody else.
+At 18 (R130) she may **ask**. Nothing happens on a birthday: no job, no binding,
+no authority change, no account creation. A guard asserts no job source names the
+birth-date column.
 
-So the missing piece is not a screen. It is the answer to one safeguarding
-question:
+### After the transition — authority ends, evidence does not
 
-> **Who attests that this Google address belongs to the young woman herself?**
+**A self-managed adult is not acted for.** The child-context resolver refuses a
+`FamilyLink` whose student holds an active login identity — **the same fact
+R62.9 already uses** to define a minor, read in one more place rather than
+duplicated into a flag that could disagree.
 
-The question is sharp because of who is available to ask. A minor has no login,
-so she cannot make the request through the platform; the only person who can act
-for her today is her **guardian** — and a guardian is exactly the party an
-anti-takeover control has to guard against. Letting a guardian nominate the
-address would let her bind a second account of her own to her daughter's record
-and inherit the whole educational history, which is the outcome the refusal above
-exists to prevent.
+**The link row survives.** It is historical relationship evidence; what ends is
+the current authority it conferred. A beneficiary who is 19 and never
+transitioned is still reached through her guardian, because nothing about her
+*account* changed — the rule turns on the login, not the age.
 
-Staff pre-provisioning does not have this problem: a Super Admin creating an
-account for a مؤطِّرة knows the address out of band, from the person, and the
-association can say who confirmed it. **The equivalent trusted channel for a
-former beneficiary has not been decided**, and choosing one is a safeguarding
-decision about how the association identifies people — not an engineering choice.
+### The refusals are mostly uniform, on purpose
 
-### What must NOT be done meanwhile
-
-Do not add a generic *set the pre-provisioned email on an existing account*
-capability to close the gap. It would reintroduce the exact claim path the
-refusal removes, for every account on the platform, in order to serve one
-workflow that has not been specified.
-
-**Recorded as an Owner decision in [`TASKS.md`](../TASKS.md).**
+Every condition about the **claimed person** — unknown code, under 18, no
+recorded date, already has a login, suspended, deleted, already claimed —
+collapses into one answer. Distinguishing them would report whether `BA-XXXXX`
+exists and whether that person is a minor. Only conditions about the caller's
+**own** Google identity are named, because those disclose nothing she does not
+control.
 
 ## The guards
 
@@ -228,6 +220,16 @@ workflow that has not been specified.
 | Her email reaches neither the child's identity nor the child's pre-provisioned address, and exactly one account claims it | same |
 | The upgrade attaches to the same `User`, and her `FamilyLink`s survive it | same |
 | A child has no login identity, so linking refuses an account that has one | `child-application.integration.test.ts` (`ACCOUNT_HAS_LOGIN`) |
+| Under 18 cannot initiate; exactly 18 can; the birthday itself binds nothing | `self-managed-claim.integration.test.ts` |
+| A verified Google identity alone binds nothing — it produces a pending claim | same |
+| Approval binds to the SAME user, creates no second user, and keeps her history | same |
+| An existing identity is never overwritten; an identity bound elsewhere is refused | same |
+| A replayed verification, a duplicate claim and a double approval are all refused | same |
+| An unknown reference code answers exactly as an ineligible one | same |
+| A guardian can neither decide a claim nor put her own identity on the daughter | same |
+| A former guardian loses authority once the account is self-managed — while the link row survives | same |
+| A 19-year-old who never transitioned still has her guardian (the control case) | same |
+| The audit carries no token, subject, address, reference code or birth date | same |
 | An adult beneficiary registration is refused without a date of birth, and a staff request is refused *with* one | `registration.integration.test.ts` |
 | Each child needs her own; siblings' dates are independent and preserved exactly | same |
 | Approval materialises the application's date onto the beneficiary | same |

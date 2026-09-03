@@ -551,6 +551,51 @@ const document = {
         },
       ),
     },
+    '/self-managed-claims': {
+      post: op(
+        'Claim your own account at 18 (تحويل الحساب إلى حساب مستقل)',
+        "**R132.** A former minor is a login-less `User` (R62.9) holding her whole educational history. At 18 she becomes ELIGIBLE to ask for her own login — **eligibility is all a date of birth ever confers** (R130): there is no birthday job, no automatic binding and no automatic authority change. **Public but gated by the signed onboarding token**, exactly as `POST /registrations` is: she has proven control of a Google identity through the ordinary OAuth+PKCE flow and holds no session, because issuing one would already BE the transition. The token carries the VERIFIED email and subject so no client can substitute another identity (§20 rule 9), and it is single-use — a replayed callback is `409 STATE_CONFLICT` / `TOKEN_ALREADY_USED`. Body: `{ reference_code }`, the value she already holds (`BA-7K4M2`), which **grants nothing on its own** (R62.5) and merely names WHICH record she claims. **Nothing is bound here.** Google proves control of a Google identity; it does not prove she is that beneficiary, so the result is a PENDING claim and a Super Admin performs the association-side identity match. **Refusals about the claimed person are uniform** (`404 CLAIM_NOT_AVAILABLE` for an unknown code, a non-beneficiary, a missing birth date, under-18, an account that already has a login, a suspended or deleted account, or one already claimed) — distinguishing them would report whether `BA-XXXXX` exists and whether that person is a minor, which §20 rule 17 keeps unobservable. Only conditions about **her own** Google identity are named, because those disclose nothing she does not control.",
+        {
+          '201': 'A pending claim was recorded. Nothing is bound and no account changed.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — a missing/forged/expired onboarding token, or a malformed reference code.`,
+          '404': `${ENVELOPE} NOT_FOUND with reason CLAIM_NOT_AVAILABLE — one uniform answer for every condition about the claimed person.`,
+          '409': `${ENVELOPE} STATE_CONFLICT with TOKEN_ALREADY_USED (replay), IDENTITY_ALREADY_BOUND (this Google account already signs in — she should simply sign in) or CLAIM_ALREADY_PENDING.`,
+        },
+      ),
+    },
+    '/admin/self-managed-claims': {
+      get: op(
+        'List pending self-managed-account claims',
+        '**R132 — Super Admin only** (R112: deciding who may hold a login is the same authority as every other account act), asserted in the service with TD-12 freshness. The projection is **only what decides the claim**: who is claimed, which record (`reference_code`), and which address will become the login. **The Google provider subject is never published** — it is a credential coordinate, not UI data — and the birth date is absent because it decided eligibility before the row existed and is not re-litigated here.',
+        { '200': 'Pending claims, oldest first.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN below Super Admin.` },
+      ),
+    },
+    '/admin/self-managed-claims/{id}/approve': {
+      post: op(
+        'Approve a claim and bind the identity',
+        "**R132 — the binding, and the only step that binds anything.** Super Admin only. Every precondition is re-read **inside** the transaction under the same `Email → User` locks the login path takes, because a claim may have waited days while the account, the address or another claim moved underneath it. **The identity is attached to the EXISTING `User`** — no second account is created, and that absence is the point: her enrolments, grades, Quran progress, attendance, submissions and `referenceCode` are already on that id. **An existing identity is never overwritten and never reassigned** (`ACCOUNT_HAS_LOGIN`), and both ownership channels plus `(provider, subject)` are re-checked (`EMAIL_ALREADY_CLAIMED`, `IDENTITY_ALREADY_BOUND`). A beneficiary who became ineligible, inactive or deleted meanwhile fails **closed** and by name (`BENEFICIARY_INELIGIBLE`), so an administrator learns the claim is stale rather than that the button is broken. After approval she exercises her own account rights and a former guardian's historical `FamilyLink` no longer confers authority over her.",
+        {
+          '200': 'Bound to the existing beneficiary.',
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN below Super Admin, or TD-12 freshness.`,
+          '404': `${ENVELOPE} NOT_FOUND for a claim that is not pending — decided, withdrawn or nonexistent answer alike (§20 rule 17).`,
+          '409': `${ENVELOPE} STATE_CONFLICT (BENEFICIARY_INELIGIBLE, ACCOUNT_HAS_LOGIN) or DUPLICATE (EMAIL_ALREADY_CLAIMED, IDENTITY_ALREADY_BOUND).`,
+        },
+      ),
+    },
+    '/admin/self-managed-claims/{id}/reject': {
+      post: op(
+        'Refuse a claim',
+        '**R132.** Super Admin only. A reason of 1–500 characters is required (TD-9): refusing somebody a login without recording why is not an auditable decision. The refusal follows **R128\'s shape** — recorded and then withdrawn from the live set — so the decision and its reason survive on the row and in the audit trail while the pending slot is released. She may ask again as a **NEW** claim with its own history; the old refusal is never reopened.',
+        {
+          '204': 'Refused and recorded. Nothing was bound.',
+          '400': `${ENVELOPE} VALIDATION_FAILED when the reason is missing or too long.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN below Super Admin.`,
+          '404': `${ENVELOPE} NOT_FOUND for a claim that is not pending.`,
+        },
+      ),
+    },
     '/family-links': {
       post: op('Link an existing child to a parent (staff-mediated)', '§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. **A previous REJECTION does not block a corrected request** (Owner, 2026-09-03): a rejected link is soft-deleted with its decision, its Trash snapshot and its audit row, so the TD-6 partial unique index — which covers non-deleted rows only — releases the pair. The corrected request is a NEW `Pending` row with its own id and its own history; the old refusal is never reopened, reused or overwritten. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.', { '201': 'Pending link created; awaits an approval decision.', '400': `${ENVELOPE} VALIDATION_FAILED for a bad id pair, or a user named as their own parent.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN (TD-12 freshness or TD-2 role).`, '404': `${ENVELOPE} NOT_FOUND when either party does not exist or is soft-deleted.`, '409': `${ENVELOPE} DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts.` }),
     },

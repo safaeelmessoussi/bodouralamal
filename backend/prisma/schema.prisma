@@ -146,6 +146,18 @@ enum ChildApplicationRejectionReason {
   @@map("child_application_rejection_reason")
 }
 
+/// R132 — the lifecycle of a beneficiary's request to manage her own account.
+/// `rejected` is terminal AND soft-deleted, exactly as a rejected FamilyLink is
+/// (R128): the decision and its reason survive, and the beneficiary is free to
+/// make a corrected request rather than being blocked for ever by a refusal.
+enum SelfManagedClaimStatus {
+  pending
+  approved
+  rejected
+
+  @@map("self_managed_claim_status")
+}
+
 enum FamilyLinkStatus {
   pending
   approved
@@ -611,15 +623,15 @@ model User {
   /// of truth for which name a person agreed to publish, and the wrong branch
   /// leaks a legal name. Distinct from `nickname`, which is an internal search
   /// convenience (TD-10).
-  publicDisplayName String? @map("public_display_name") @db.VarChar(120)
-  phone             String? @db.VarChar(20)
+  publicDisplayName String?   @map("public_display_name") @db.VarChar(120)
+  phone             String?   @db.VarChar(20)
   /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
   /// afterwards, because the registration exists before the User does.
   /// R80 — recorded at every creation, completed explicitly where missing, and
   /// required by the schema since `20260818220000_r80_sex_not_null`. A NULL has
   /// always meant *not eligible* for a restricted Level rather than
   /// *unknown-but-fine* (R27), which is why it could not stay optional.
-  sex               Sex     @map("sex")
+  sex               Sex       @map("sex")
   /// R130 — **the beneficiary's full date of birth**, a TD-11 calendar date and
   /// never an instant. Required at the write boundary for every beneficiary and
   /// NOT collected from a guardian-only adult or a staff request; nullable here
@@ -751,6 +763,9 @@ model User {
   childApplicationsAsChild   ChildApplication[] @relation("ChildApplicationChild")
   childApplicationsAsMatch   ChildApplication[] @relation("ChildApplicationMatch")
   childApplicationsAsDecider ChildApplication[] @relation("ChildApplicationDecider")
+  /// R132 — her own claim to manage her account, and the claims she decided.
+  selfManagedClaims          SelfManagedClaim[] @relation("SelfManagedClaimBeneficiary")
+  selfManagedClaimsDecided   SelfManagedClaim[] @relation("SelfManagedClaimDecider")
   /// R123 — presence, and presence somebody else recorded. Two relations
   /// because one person is both: a مؤطِّرة marks a roster and, if she also
   /// studies, is marked on one.
@@ -1985,6 +2000,53 @@ model FamilyLink {
 /// force at SUBMISSION**. `legal.consent_text_version` is a Super-Admin-editable
 /// setting: materialising with the current value would record that a parent
 /// consented to text they never saw, which §4.1a forbids.
+/// **R132 — a beneficiary's claim to manage her own account.**
+///
+/// A former minor is a login-less `User` (R62.9). At 18 she becomes ELIGIBLE to
+/// ask for her own login; eligibility is all a birth date ever confers. She
+/// proves control of a Google account through the ordinary OAuth flow, and names
+/// which beneficiary record she is by her own `referenceCode` — which grants
+/// nothing on its own (R62.5), and is exactly why it is safe to quote.
+///
+/// **Google verification and the reference code together still bind nothing.**
+/// They produce this row: a PENDING claim. A Super Admin performs the
+/// association-side identity match — the human recognition the association
+/// already does — and only that approval binds the identity to the existing
+/// `User`. No second account is ever created.
+model SelfManagedClaim {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The EXISTING beneficiary whose record is claimed. `Restrict`: a claim is
+  /// evidence about a person and must not vanish with a careless delete.
+  beneficiaryId String @map("beneficiary_id") @db.Uuid
+  beneficiary   User   @relation("SelfManagedClaimBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Restrict)
+
+  /// The VERIFIED identity, carried from the OAuth callback's onboarding token
+  /// so the client cannot substitute another at submission (§20 rule 9). The
+  /// subject is stored because binding must attach exactly the identity that was
+  /// proven — and it is never published to any surface.
+  provider          AuthProvider
+  providerSubjectId String       @map("provider_subject_id")
+  /// Lowercased before every write; a CHECK backstops it as on `UserIdentity`.
+  email             String
+
+  status SelfManagedClaimStatus @default(pending)
+
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedById    String?   @map("decided_by") @db.Uuid
+  decidedBy      User?     @relation("SelfManagedClaimDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decisionReason String?   @map("decision_reason") @db.VarChar(500)
+
+  /// R128's shape: a refusal is recorded and then withdrawn from the live set,
+  /// so it blocks no corrected request while its evidence survives.
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@index([status])
+  @@map("self_managed_claim")
+}
+
 model ChildApplication {
   id String @id @default(uuid()) @db.Uuid
 

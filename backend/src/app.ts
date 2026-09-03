@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
+import * as selfManagedClaims from './controllers/self-managed-claim.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as academicPeriods from './controllers/academic-period.controller.js';
 import * as consentTexts from './controllers/legal-consent-text.controller.js';
@@ -260,6 +261,10 @@ export function createApp(
   const api = express.Router();
   api.get('/auth/google', auth.startOAuth(config));
   api.get('/auth/google/callback', auth.oauthCallback(prisma, config));
+  // R132 — public but onboarding-token-gated, exactly like `POST /registrations`:
+  // she has proven control of a Google identity and holds no session, because
+  // issuing one would already be the transition this asks permission for.
+  api.post('/self-managed-claims', selfManagedClaims.request(prisma, config));
   api.post('/auth/refresh', auth.refresh(prisma, config));
   /**
    * **R99 — the recording provider reports completion here.**
@@ -336,6 +341,10 @@ export function createApp(
   // on the caller's identity; the roles it will accept come from live rows, not
   // from the presented token, so switching back out of a narrowed session works.
   guarded.post('/auth/switch-role', auth.switchRole(prisma, config));
+  // R132 — the decision half. Super Admin only, asserted in the service.
+  guarded.get('/admin/self-managed-claims', selfManagedClaims.listPending(prisma));
+  guarded.post('/admin/self-managed-claims/:id/approve', selfManagedClaims.approve(prisma));
+  guarded.post('/admin/self-managed-claims/:id/reject', selfManagedClaims.reject(prisma));
   // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service
   // re-asserts the caller's live status against the database per request.
   // Platform settings (TD-3.11, §5.6, Revision 42). Super Admin only, asserted

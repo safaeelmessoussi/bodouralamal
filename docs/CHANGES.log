@@ -3774,3 +3774,81 @@ is what makes a frontend change reach the harness.
 
 **verify-registration: 44/44** — the two dates in the two children's fieldsets,
 none in the guardian's, and the registration itself `201`.
+
+## R132 — a beneficiary claims her own account at 18 (2026-09-03)
+
+**The blocker recorded that morning is closed, and the refusal that created it
+still stands.** A former minor is a login-less `User` (R62.9) holding her whole
+educational history, and nothing could give her a login: no operation points an
+EXISTING account at an address, because `PATCH /admin/users/{id}` refuses
+`pre_provisioned_email` *"because it authorises claiming an account"*. That
+refusal is correct and is untouched — R132 adds the one controlled path whose
+absence it was protecting, not a general capability.
+
+**Three facts, and none of them binds alone.** Google OAuth — the ordinary flow,
+unchanged, PKCE and state protections intact — proves somebody controls *this*
+Google identity. Her **reference code** names *which* beneficiary is claimed, and
+grants nothing on its own (R62.5), which is exactly why it is safe to quote down
+a telephone and why quoting it cannot take anybody's account. A **Super Admin**
+then performs the association-side identity match, using the recognition the
+association already practises. **Only the third binds** — and no CIN, no
+identity-document scan and no invented automated identity proofing was
+introduced to eliminate the human step.
+
+**The guardian is excluded by construction, which was the whole blocker.** She
+cannot choose the address, type it as the authoritative identity, attest
+ownership, bind it, approve the transition or receive any credential, and her own
+address never becomes the beneficiary's. The beneficiary proves control herself.
+
+**Approval binds to the EXISTING `User`.** No second account, ever: enrolments,
+grades, Quran progression, attendance, submissions, the reference code and every
+relationship stay on the one id — asserted by counting users across the flow and
+by reading her enrolment back afterwards.
+
+**Age is eligibility and never a trigger.** R130's date decides whether she may
+*ask*; nothing happens on a birthday. Boundary-tested at exactly 18 and one day
+short, with a guard asserting no job source names the column.
+
+**Reuse rather than new machinery.** The OAuth callback, the single-use
+onboarding token carrying the VERIFIED email and subject (§20 rule 9), the
+`ConsumedToken` replay guard, the `Email → User` lock order, the audit
+conventions and the existing field primitives are all reused unchanged. The
+public entry point is a **fourth mode on `/register`**, not a fourth page.
+
+**The refusals are mostly uniform, on purpose.** Every condition about the
+claimed person — unknown code, under 18, no recorded date, already has a login,
+suspended, deleted, already claimed — answers identically, because distinguishing
+them would report whether `BA-XXXXX` exists and whether that person is a minor
+(§20 rule 17). Only conditions about the caller's **own** identity are named,
+since those disclose nothing she does not control.
+
+**At approval every precondition is re-read inside the transaction**, because a
+claim may have waited days. An existing identity is never overwritten and never
+reassigned; both ownership channels and `(provider, subject)` are re-checked; a
+beneficiary who became ineligible fails **closed and by name**, so an
+administrator learns the claim is stale rather than that the button is broken.
+
+**Rejection follows R128's shape** — recorded, then withdrawn from the live set —
+so a refusal never blocks the corrected request, and a retry is a NEW claim with
+its own history rather than the old one reopened.
+
+**Authority after the transition, without deleting history.** The child-context
+resolver now refuses a `FamilyLink` whose student holds an active login identity
+— **the same fact R62.9 already uses** to define a minor, read in one more place
+instead of duplicated into a flag that could disagree with it. The link row
+survives as relationship evidence; what ends is the current authority. The
+control case is tested too: a 19-year-old who never transitioned still has her
+guardian, because the rule turns on the **login**, not the age.
+
+**Privacy.** The audit carries ids only — no OAuth token, no PKCE verifier, no
+raw state, no Google subject, no address, no reference code, no birth date,
+asserted rather than assumed. The review surface publishes who is claimed, which
+record and which address becomes the login; the Google subject is absent from the
+contract itself, and the birth date is absent because it decided eligibility
+before the row existed.
+
+**Tests: 28/28** in a new suite covering every numbered requirement; plus 117/117
+across the family-link, registration, child-application and auth suites, and
+42/42 on child-context and Quran, which the middleware change touches. Frontend
+1013/1013, typecheck, lint and build clean. Fourteen CI guards green, fresh
+migration chain verified, OpenAPI reconciled at 166 paths.

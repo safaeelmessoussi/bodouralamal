@@ -55,6 +55,8 @@ const base = {
   allFramingBranches: false,
   framingBranchIds: [] as string[],
   dataProcessing: true,
+  // R132 — empty on every arm but `self_managed`, which validates it alone.
+  selfManagedCode: '',
   /* R119 — the id of the wording the form displayed; the payload carries it so
      the server can refuse a version that went out of force meanwhile. */
   consentTextId: 'ct-1',

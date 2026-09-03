@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { CheckboxField, SelectField } from '../components/ui/field.js';
+import { CheckboxField, SelectField, TextField } from '../components/ui/field.js';
 import { MultiSelectField } from '../components/ui/multi-select.js';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
@@ -29,6 +29,7 @@ import {
   type ChildForm,
 } from '../components/registration/children.js';
 import { PersonFields } from '../components/registration/person-fields.js';
+import { requestSelfManagedClaim } from '../adapters/self-managed-claims.js';
 import { t } from '../i18n/index.js';
 import { isRealPastDate } from '../lib/birth-date.js';
 import { ApiError } from '../lib/api.js';
@@ -81,7 +82,16 @@ export function Register(): ReactNode {
    * would have duplicated every name, consent and branch rule for an identical
    * form, and invented a flow the SRS does not describe.
    */
-  const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher'>('adult');
+  /**
+   * **R132 adds a fourth MODE, not a fourth page.** A former minor claiming the
+   * record she already has needs exactly the identity half this page already
+   * holds — the same OAuth callback and the same onboarding token — so the only
+   * new thing she supplies is her reference code.
+   */
+  const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher' | 'self_managed'>(
+    'adult',
+  );
+  const [selfManagedCode, setSelfManagedCode] = useState('');
   const kind: 'adult' | 'parent_child' = intent === 'parent_child' ? 'parent_child' : 'adult';
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
   /**
@@ -179,6 +189,7 @@ export function Register(): ReactNode {
     allFramingBranches,
     framingBranchIds,
     dataProcessing,
+    selfManagedCode,
   });
   const valid = Object.keys(localErrors).length === 0;
   // The server's verdict wins where the two disagree: it is the authority
@@ -194,6 +205,18 @@ export function Register(): ReactNode {
     setFailureId(null);
     setServerErrors({ fields: {}, unmapped: [] });
     try {
+      /**
+       * **R132 — a different verb, deliberately.** This arm creates no account
+       * and submits no registration: it records a claim on a record that
+       * already exists, which a Super Admin then decides. Folding it into
+       * `POST /registrations` would have made one endpoint mean two things.
+       */
+      if (intent === 'self_managed') {
+        await requestSelfManagedClaim(selfManagedCode.trim().toUpperCase(), token);
+        setDone(true);
+        return;
+      }
+
       await submitRegistration(
         buildPayload({
           intent,
@@ -316,9 +339,34 @@ export function Register(): ReactNode {
                 { value: 'adult', label: t('register.kindAdult') },
                 { value: 'parent_child', label: t('register.kindParentChild') },
                 { value: 'teacher', label: t('register.kindTeacher') },
+                { value: 'self_managed', label: t('register.kindSelfManaged') },
               ]}
               hint={t('register.kindHint')}
             />
+
+            {intent === 'self_managed' ? (
+              /**
+               * **R132 — said plainly, because the honest sentence is the whole
+               * point.** Verifying a Google account does NOT move her record;
+               * the administration reviews the request, and her educational
+               * history stays on the same account. A page implying instant
+               * transfer would promise something the server refuses to do.
+               */
+              <fieldset className="register-form__group">
+                <legend>{t('register.selfManagedLegend')}</legend>
+                <p className="state" role="status">
+                  {t('register.selfManagedNotice')}
+                </p>
+                <TextField
+                  label={t('register.selfManagedCode')}
+                  value={selfManagedCode}
+                  onChange={setSelfManagedCode}
+                  hint={t('register.selfManagedCodeHint')}
+                  required
+                  error={touched ? (errors['selfManagedCode'] ?? null) : null}
+                />
+              </fieldset>
+            ) : null}
 
             {intent === 'teacher' ? (
               // Said plainly rather than implied: submitting this asks for
@@ -713,9 +761,12 @@ export function explainFailure(error: unknown): string {
 /* ── Validation, mirroring TD-9 ───────────────────────────────────────────── */
 
 interface FormState {
-  /** The FORM's three options, not the wire's two `kind`s — a teacher applying
-   *  is an adult registering themselves (R49). */
-  intent: 'adult' | 'parent_child' | 'teacher';
+  /** The FORM's four options, not the wire's two `kind`s — a teacher applying
+   *  is an adult registering themselves (R49), and `self_managed` (R132) is not
+   *  a registration at all: it claims a record that already exists. */
+  intent: 'adult' | 'parent_child' | 'teacher' | 'self_managed';
+  /** R132 — the reference code she already holds. Empty on every other arm. */
+  selfManagedCode: string;
   applicant: PersonForm;
   children: ChildForm[];
   branchId: string | null;
@@ -759,6 +810,21 @@ export function validate(state: FormState): Record<string, string> {
   person(state.applicant, 'applicant');
   // The children's rules live with the children's fields (R65), so the two
   // flows validate identically by construction rather than by review.
+  /**
+   * **R132 — this arm validates the code and nothing else.** She is not
+   * registering: the record exists, the identity comes from the token, and
+   * asking her for a name or a branch would be asking her to restate what the
+   * association already holds. Returning early keeps every other rule below
+   * from firing against fields this mode does not render.
+   */
+  if (state.intent === 'self_managed') {
+    const code = state.selfManagedCode.trim().toUpperCase();
+    if (!/^BA-[0-9A-Z]{4,12}$/.test(code)) {
+      errors['selfManagedCode'] = t('register.errSelfManagedCode');
+    }
+    return errors;
+  }
+
   if (state.intent === 'parent_child') Object.assign(errors, validateChildren(state.children));
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place

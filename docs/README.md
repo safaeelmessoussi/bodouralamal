@@ -148,6 +148,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
+| [`SRS-PROPOSAL-R132.md`](SRS-PROPOSAL-R132.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A beneficiary claims her own account at 18: Google proves control of an identity, a Super Admin proves it is hers, and approval binds to the existing User | Document Owner only |
 | [`SRS-PROPOSAL-R131.md`](SRS-PROPOSAL-R131.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`. POLICY ONLY, NOT IMPLEMENTED.** Two deletion requests, ten-year educational retention, twelve-month application retention, Super Admin approval, guardian-only cleanup, and the resolution of R111 ↔ R122 | Document Owner only |
 | [`SRS-PROPOSAL-R130.md`](SRS-PROPOSAL-R130.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A full date of birth for every beneficiary, required at the write boundary and nullable for legacy rows; eighteen establishes eligibility and triggers nothing | Document Owner only |
 | [`SRS-PROPOSAL-R129.md`](SRS-PROPOSAL-R129.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A platform account is not association membership; a guardian's email is hers and never the child's login; a guardian who joins keeps her account. No schema or contract change | Document Owner only |

@@ -21,6 +21,12 @@ import { requireActor } from './authenticate.js';
  *      **AND** the header's child. Matching the child alone is a vulnerability
  *      (§20 rule 6), so the parent side of the row is part of the query, not an
  *      afterthought.
+ *   1b. **R132** — and the child must still BE a minor in §4.3's sense: an
+ *      account with no active login identity. A beneficiary who has completed
+ *      the self-managed transition answers her own requests, and a former
+ *      guardian holding a historical link is refused exactly as any other
+ *      non-holder is. The link is kept as evidence; it stops conferring
+ *      authority.
  *   2. Header absent + caller holds the `Student` role → the check is bypassed
  *      **entirely**: the acting student is the caller, verified against the JWT
  *      `sub`. An adult student never needs, and never sends, the header.
@@ -91,8 +97,30 @@ export async function resolveActingStudent(
         studentId: raw,
         status: 'approved',
         deletedAt: null,
-        // A link to a soft-deleted child is not a path to that child's data.
-        student: { deletedAt: null },
+        student: {
+          // A link to a soft-deleted child is not a path to that child's data.
+          deletedAt: null,
+          /**
+           * **R132 — a SELF-MANAGED adult is not acted for.**
+           *
+           * Once a beneficiary's own Google identity is bound to her account she
+           * exercises her own rights, and a former guardian does not continue to
+           * exercise them merely because a historical `FamilyLink` still exists.
+           *
+           * **The fact is derived, not stored**, and it is the one §4.3 already
+           * uses: R62.9 defines a minor as *an account with no login identity* —
+           * `ACCOUNT_HAS_LOGIN` refuses to link one for exactly this reason,
+           * because *an adult consents for themselves*. Reading the same fact
+           * here keeps one definition rather than adding a second flag that
+           * could disagree with it.
+           *
+           * **The link row is NOT deleted.** It is historical relationship
+           * evidence and stays; what changes is that it no longer confers
+           * CURRENT authority. Separating the two is what lets the history
+           * survive without the control surviving with it.
+           */
+          identities: { none: { isActive: true } },
+        },
       },
       select: { studentId: true },
     });

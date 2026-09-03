@@ -142,6 +142,25 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **طلبات الحساب المستقل — R132, Super Admin only.**
+     *
+     * A former minor at 18 asks to hold her own login. Deciding it is an
+     * ACCOUNT act, so it sits beside `المستخدمون` under the same authority
+     * (R112) rather than in the operational `طلبات الانضمام` queue an Admin
+     * reaches — approving one binds a credential to a person's record, which is
+     * the most takeover-sensitive decision the platform offers.
+     *
+     * As with every entry, this is reach and not enforcement: the service
+     * asserts Super Admin, so a typed URL still receives `403`.
+     */
+    path: '/admin/self-managed-claims',
+    labelKey: 'admin.nav.selfManagedClaims',
+    section: null,
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
      * **المؤطِّرات — the people who TEACH** (R88; renamed by R105).
      *
      * It was `إدارة المؤطِّرات`. The word *إدارة* named the screen's verb rather

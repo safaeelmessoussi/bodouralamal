@@ -112,6 +112,8 @@ describe('the registry matches §14.1', () => {
         // Revision 6 deferral was superseded.
         '/admin/trash',
         '/admin/users',
+        // R132 — طلبات الحساب المستقل, an ACCOUNT decision beside المستخدمون.
+        '/admin/self-managed-claims',
         '/superadmin/hijri-calendar',
         '/superadmin/settings',
       ].sort(),
@@ -349,6 +351,9 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin', // لوحة التحكم
     '/admin/approvals', // طلبات الانضمام
     '/admin/users', // المستخدمون
+    // R132 — immediately after المستخدمون, because it is the same authority
+    // acting on the same thing: who may hold a login for which record.
+    '/admin/self-managed-claims', // طلبات الحساب المستقل
     '/admin/teachers', // المؤطِّرات
     '/admin/enrollments', // المستفيدات
     '/admin/groups', // مجموعات المستويات
@@ -440,7 +445,14 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
      * is not operational work.
      */
     expect(dashboardCards(['admin']).map((m) => m.path)).toEqual(
-      [...MAIN_NAV_ORDER].filter((p) => p !== '/admin' && p !== '/admin/users'),
+      [...MAIN_NAV_ORDER].filter(
+        (p) =>
+          p !== '/admin' &&
+          p !== '/admin/users' &&
+          // R132 — Super-Admin-only for the same reason المستخدمون is: deciding
+          // who may hold a login is account administration, not operational work.
+          p !== '/admin/self-managed-claims',
+      ),
     );
   });
 });

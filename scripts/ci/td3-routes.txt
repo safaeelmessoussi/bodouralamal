@@ -32,6 +32,7 @@
 # ── Auth & identity (TD-3.1; refresh added by Revision 16 F1)
 GET /auth/google                              # TD-3.1, §4.1b step 1
 GET /auth/google/callback                     # TD-3.1, §4.1b steps 2-4
+POST /self-managed-claims                     # R132 — a beneficiary at 18 claims her own account; onboarding-token gated, binds nothing
 POST /auth/refresh                            # TD-3.1, TD-12
 POST /auth/switch-role                        # §2.1 (R60.3) — work as one of your own assigned roles; live rows decide
 POST /auth/logout                             # TD-3.1, TD-4.14
@@ -87,6 +88,9 @@ POST /admin/partners                          # R113; Super Admin only
 PATCH /admin/partners/{id}                    # R113; Super Admin only; TD-15
 DELETE /admin/partners/{id}                   # R113; Super Admin only; TD-5 soft delete (nothing references a Partner)
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
+GET /admin/self-managed-claims                # R132 — pending claims awaiting the association-side identity match; Super Admin
+POST /admin/self-managed-claims/{id}/approve  # R132 — binds the verified identity to the EXISTING beneficiary User; Super Admin
+POST /admin/self-managed-claims/{id}/reject   # R132 — recorded refusal, soft-deleted so a corrected request is possible; Super Admin
 
 # ── Calendar & events (TD-3.4)
 GET /calendar                                 # TD-3.4, §4.4
