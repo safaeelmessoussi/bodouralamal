@@ -1633,6 +1633,46 @@ was hiding behind it: the run went green on the first attempt.
   payload, trigger and singleton rule; until then manual `?permanent=true` is complete, while an
   untouched soft-deleted account remains identifiable past `purge_after`. Do not invent the
   missing TD-7 row in implementation.
+- [x] **R131 POLICY RATIFIED (Owner, 2026-09-03) — deletion and retention.**
+      *(Policy and architecture only; nothing is implemented and no behaviour
+      changed.)* Ten-year retention of identifiable educational history after
+      the **derived** last educational activity — the association's own
+      purpose-based policy, **never described as CNDP-prescribed**. Two distinct
+      requests: **Option A** account closure keeping the minimal educational
+      archive, and **Option B** full educational deletion, **Super Admin only**,
+      a request rather than a cascade, with the attestation warning stated
+      before confirmation and no preselected destructive option. For a minor the
+      request comes from a live approved guardian and still needs Super Admin
+      review; a self-managed adult exercises her own rights and a historical
+      link makes nobody her owner. Rejected and never-admitted applications:
+      **twelve months maximum**. The **R111 ↔ R122 contradiction is resolved** —
+      `referenceCode` survives Option A as protected pseudonymous data and is
+      deleted by Option B, never a back door into deleted history.
+      `docs/SRS-PROPOSAL-R131.md` and
+      [personal-data-map](development/personal-data-map.md).
+      - [ ] **IMPLEMENTATION BLOCKED BY DESIGN until the seven reconciliations in
+            the data map are closed** — `ChildApplication`'s copied identity
+            fields (now including R130's birth date), Trash snapshots, audit
+            detail, consent evidence, `NormalizedEmailLock`, backups, and the
+            12-month application purge that touches the same rows. **A partial
+            purge that claims data is gone while obvious copies remain is worse
+            than none.** No purge job is to be written before then.
+      - [ ] **Option A does not yet keep `referenceCode`** — `deIdentifyAccount`
+            still clears it. That change is Option A implementation work, not
+            map work.
+      - [ ] **LEGAL WORDING PENDING, NOT DRAFTED AUTONOMOUSLY.** The active
+            `LegalConsentText` is **untouched**. R131 requires the privacy notice
+            to state: the ten-year educational retention and its purposes; that
+            it is the association's own policy and not a CNDP-prescribed
+            duration; the Option A / Option B distinction; that the archive is
+            pseudonymous rather than anonymous; that Option B may end the
+            association's ability to issue an attestation; and that backups
+            expire rather than being erased on request. Drafting, review and
+            activation belong to the Document Owner.
+      - [ ] **BACKUP/RESTORE RECONCILIATION (operational).** Audit the existing
+            restic design and choose the smallest reliable mechanism that stops
+            a restore silently resurrecting deleted personal data. No backup
+            infrastructure is deployed by this work.
 - [ ] **OWNER / LEGAL DECISION REQUIRED — R111 normalized-email coordinate retention.**
   Classified **C (unresolved retention/specification boundary)** after the synthetic Staging
   finding. Permanent de-identification clears both ownership channels and a real regression proves

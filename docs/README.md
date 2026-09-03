@@ -120,6 +120,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [**Class delivery**](development/class-delivery.md) | **حضوري and عن بُعد — one inheritance mechanism, why an online occurrence has no room, and the three independent dimensions** |
 | [**Online-class provider**](development/online-class-provider.md) | The MVP media-provider decision and the two infrastructure findings that shape it — an implementation choice the delivery domain must survive |
 | [**Online classroom**](development/online-classroom.md) | **بذور الأمل authorizes; the provider executes** — who may enter a class عن بُعد, the derived room, the join window, the credential, and the one classroom every portal shares |
+| [**Personal data map**](development/personal-data-map.md) | **What a deletion request reaches** — the 42 relationships measured from the live schema, Option A vs Option B, the ten-year retention policy and what must be reconciled before any purge |
 | [**Account and membership**](development/account-and-membership.md) | **A platform account is not association membership** — the guardian-only model, what a guardian may reach, whose email is whose, and the guardian→beneficiary and minor→adult transitions |
 | [**Person identity**](development/person-identity.md) | **The QR and the two identifiers beside it — one per person, role-independent, and why it identifies but never authenticates** |
 | [**Quran progress**](development/quran-progress.md) | **One engine behind إدخال الحفظ and حفظي — what authorises an entry, why مراجعة never raises the percentage, why the log stores no Level** |
@@ -146,6 +147,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
+| [`SRS-PROPOSAL-R131.md`](SRS-PROPOSAL-R131.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`. POLICY ONLY, NOT IMPLEMENTED.** Two deletion requests, ten-year educational retention, twelve-month application retention, Super Admin approval, guardian-only cleanup, and the resolution of R111 ↔ R122 | Document Owner only |
 | [`SRS-PROPOSAL-R130.md`](SRS-PROPOSAL-R130.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A full date of birth for every beneficiary, required at the write boundary and nullable for legacy rows; eighteen establishes eligibility and triggers nothing | Document Owner only |
 | [`SRS-PROPOSAL-R129.md`](SRS-PROPOSAL-R129.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A platform account is not association membership; a guardian's email is hers and never the child's login; a guardian who joins keeps her account. No schema or contract change | Document Owner only |
 | [`SRS-PROPOSAL-R128.md`](SRS-PROPOSAL-R128.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A rejected family link is soft-deleted with its decision, so a corrected request is possible; supersedes R118.3's special-case purge route | Document Owner only |

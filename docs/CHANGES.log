@@ -3578,3 +3578,80 @@ association identifies people, not an engineering choice.
 pre-provisioned email on an existing account* capability to close the gap. It
 would reopen that claim path for every account on the platform in order to serve
 one workflow nobody has specified.
+
+## R131 — two deletion requests, ten-year retention, and the end of R111 ↔ R122 (2026-09-03)
+
+**Policy and architecture only. Nothing is implemented and no deletion behaviour
+changed.** The Owner's instruction was to ratify the policy first and write no
+destructive automation until the cross-domain map is coherent — so this is the
+map and the policy, and the purge job it would authorise is explicitly not
+written.
+
+**The map is measured, not remembered.** Re-enumerated from the live schema:
+**42 foreign keys reference `user.id`**, against R111's 35 — 34 of R111's survive
+(`student_social_profile` went with R120) and **8 were added since**, by R115,
+R116, R119, R123 and R125. Each of the eight is classified with its reason, and
+`docs/development/personal-data-map.md` **extends R111 §3 rather than restating
+it**: R111 owns the base classification, the new page owns the delta and the
+Option B column. The enumeration SQL is on the page, because the next person must
+re-run it rather than trust the number.
+
+**One judgment call, made by applying the Owner's own rule.**
+`notification.subject_user_id` is a message about her sitting in **somebody
+else's** inbox. R111 deletes `notification.user_id` because the person no longer
+has an inbox; this one is another person's record, and *do not guess when
+deletion would destroy another person's legitimate record* decides it —
+PRESERVE, rendering as «حساب محذوف». Narrowing it is the Owner's to make.
+
+**Ten years after the last educational activity, DERIVED.** A dedicated
+`last_activity_at` column would be a fact nobody updates consistently, and a
+retention clock driven by a stale column deletes the wrong records — so the
+boundary is the latest of the canonical facts the platform already keeps: the
+enrolment's `AcademicPeriod` end (R122), an attendance occurrence date (R123),
+the date of the exam a Grade is against, a submission's instant, a Quran entry.
+**It is the association's own purpose-based policy and is never to be described
+as prescribed or approved by the CNDP.** Quran progression is treated as
+educational history **for product purposes**, with no claim made about its legal
+classification.
+
+**Two requests that must never be presented as one.** Option A closes the
+account and keeps the minimal archive; Option B requests deletion of the
+educational record too, is **Super Admin only**, and is a request rather than a
+browser-side cascade. Option B's screen must warn **before** confirmation that
+the association may afterwards be unable to prove a previous level or issue an
+attestation; the destructive option is never preselected and Option A is never
+implied to destroy history. **Neither may promise "zero rows anywhere"** —
+narrowly necessary evidence survives under its own rules — and equally **no
+educational content may be kept under the pretext of audit** once full deletion
+is approved. TD-8 already records fields and ids rather than values, so the audit
+trail is not a hiding place.
+
+**The R111 ↔ R122 contradiction is resolved.** R122 promised a future
+attestation while R111 cleared every field that could match a returning person to
+her record — including `referenceCode` — and neither cited the other. The Owner's
+decision: **the code survives Option A** as protected pseudonymous data (the
+archive is *not* anonymous merely because the login is gone), **is deleted by
+Option B**, and **is never a back door** into history that Option B removed. Not
+yet implemented: `deIdentifyAccount` still clears it, and that is Option A work.
+
+**Guardian cleanup is one controlled operation, never a cascade.** When the last
+child-management purpose is deliberately removed, a guardian-only account is
+closed through the established machinery — but only after atomically verifying
+she is not a beneficiary, staff, an administrator, holder of another live link,
+of a pending application, or of any other current purpose. Removing one of
+several children leaves her; a rejected link (R128) beside a still-pending
+application leaves her.
+
+**Applications: twelve months, a maximum and not indefinite retention** — long
+enough to carry the decision and its reason through the academic cycle and to
+prevent an accidental re-acceptance within it.
+
+**Backups are described honestly.** A deletion reaches the live system;
+finite-lifetime encrypted backups may hold an older copy until they expire, and
+nothing may promise byte-level erasure from backups already written. A restore
+must not silently resurrect deleted data — recorded as operational work, with no
+infrastructure deployed.
+
+**The active `LegalConsentText` is untouched.** The six wording changes R131
+requires are enumerated in `TASKS.md` for the Document Owner to draft, review and
+activate.
