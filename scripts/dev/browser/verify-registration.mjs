@@ -141,6 +141,8 @@ check(
 check('الطفلة 1: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'مريم', 1)) === 'ok');
 check('الطفلة 1: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 1)) === 'ok');
 check('الطفلة 1: الجنس accepted', (await setSelect('الجنس*', 0, 1)) !== 'missing');
+
+check('الطفلة 1: تاريخ الميلاد accepted', (await setInput('تاريخ الميلاد*', '2015-06-02', 0)) === 'ok');
 check('الطفلة 1: المقر accepted', (await setSelect('المقر المطلوب', 0, 0)) !== 'missing');
 check('الطفلة 1: الفئة accepted', (await setSelect('الفئة*', 0, 0)) !== 'missing');
 const child1Branch = await selectedText('المقر المطلوب', 0);
@@ -160,6 +162,28 @@ check(
 check('الطفلة 2: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'سلمى', 2)) === 'ok');
 check('الطفلة 2: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 2)) === 'ok');
 check('الطفلة 2: الجنس accepted', (await setSelect('الجنس*', 0, 2)) !== 'missing');
+// A DIFFERENT date from her sister's: two children on one request are two
+// people, and a payload that collapsed them onto one would pass with equal ones.
+check('الطفلة 2: تاريخ الميلاد accepted', (await setInput('تاريخ الميلاد*', '2012-11-30', 1)) === 'ok');
+
+/**
+ * **R130 in a browser — the asymmetry IS the assertion.**
+ *
+ * Every child on a family request carries her own date of birth; the guardian
+ * carries none, because she is admitted to nothing (R129). With two children on
+ * the form the count must be exactly two — never three. Asserted here rather
+ * than earlier because the second fieldset does not exist until it is added.
+ *
+ * A source test cannot see this: the control is rendered behind a prop each
+ * caller decides, so the failure it guards against is a field appearing on the
+ * wrong person's fieldset.
+ */
+const birthDateLabels = await evaluate(`JSON.stringify([...document.querySelectorAll('.field')].filter((f) => (f.querySelector('label')?.textContent ?? '').trim().startsWith('تاريخ الميلاد')).map((f) => (f.closest('fieldset')?.querySelector('legend')?.textContent ?? '(no fieldset)').trim()))`);
+check(
+  'R130: one تاريخ الميلاد per CHILD, and none for the guardian',
+  JSON.parse(birthDateLabels).length === 2,
+  birthDateLabels,
+);
 const child2BranchValue = await setSelect('المقر المطلوب', 1, 1);
 const child2CategoryValue = await setSelect('الفئة*', 1, 1);
 check('الطفلة 2: المقر accepted', !['missing', 'no-option'].includes(child2BranchValue));

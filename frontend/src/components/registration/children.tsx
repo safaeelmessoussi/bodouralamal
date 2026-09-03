@@ -91,8 +91,6 @@ export function NameFields({
     lastNameFrench: string;
     nickname: string;
     sex: '' | 'female' | 'male';
-    /** R130 — present on both callers: a child and an adult beneficiary alike. */
-    birthDate: string;
   };
   onChange: (patch: Record<string, string>) => void;
   errors: Record<string, string>;
@@ -129,18 +127,6 @@ export function NameFields({
         ]}
         required
         error={errors[`${prefix}.sex`] ?? null}
-      />
-      {/* R130 — every child is a beneficiary, so each carries her own date.
-          Never inherited from a sibling: two children on one request are two
-          people. */}
-      <TextField
-        type="date"
-        label={t('register.birthDate')}
-        value={value.birthDate}
-        onChange={(next) => set({ birthDate: next })}
-        hint={t('register.birthDateHint')}
-        required
-        error={errors[`${prefix}.birthDate`] ?? null}
       />
       {/* Revision 41 — split like the Arabic pair. Optional as a PAIR. */}
       <TextField
@@ -195,6 +181,31 @@ export function ChildFields({
   return (
     <>
       <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
+
+      {/**
+        * **R130 — here, and NOT in `NameFields`** (browser-verified, 2026-09-03).
+        *
+        * `NameFields` is shared with the GUARDIAN through `PersonFields`, so a
+        * date of birth placed there is asked of a woman registering her
+        * daughter — which R129 says she must never be. The first draft did
+        * exactly that, and the `collectBirthDate` gate on `PersonFields` looked
+        * correct while being dead, because the field was arriving from the
+        * shared block regardless. Three date inputs rendered for two children.
+        *
+        * A source test could not see it: both callers compiled, both rendered,
+        * and only counting the controls on a real page showed the third.
+        *
+        * Each child carries her own, never a sibling's.
+        */}
+      <TextField
+        type="date"
+        label={t('register.birthDate')}
+        value={value.birthDate}
+        onChange={(next) => set({ birthDate: next })}
+        hint={t('register.birthDateHint')}
+        required
+        error={errors[`${prefix}.birthDate`] ?? null}
+      />
 
       {/* R62.7 — optional, and it INFORMS the placement decision rather than
           making it. The hint says so, because a parent who thinks this decides
