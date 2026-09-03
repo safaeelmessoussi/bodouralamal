@@ -1,0 +1,146 @@
+[Documentation](../README.md) › [Development](README.md) › **Account and membership**
+
+# A platform account is not association membership
+
+**One page for the distinction the platform kept implicitly in three services
+and never stated in one place.** It cites [`docs/SRS.md`](../SRS.md) §4.1, §4.3,
+BR-5 and Revisions 62, 79, 111 and 129 rather than restating them; where a rule
+below has an SRS home, the SRS wins.
+
+---
+
+## The rule
+
+**Having a technical platform account does not make a person a beneficiary, a
+Student, or a member of the association.**
+
+Fatima authenticates in order to register and manage Sara. She therefore needs
+the ordinary `User` + `UserIdentity` machinery — for authentication,
+authorization, consent and `FamilyLink`. That is *all* it means. In the business
+domain she is **guardian-only**.
+
+She is not automatically a beneficiary, a Student, enrolled, a مؤطِّرة, an
+Admin, a Super Admin, or an association member.
+
+**There is no `GuardianAccount` table and no second authentication
+architecture**, deliberately: the existing `User` + roles + relationships model
+expresses this exactly, and a parallel account type would fork authentication,
+consent, deletion and audit for one distinction that is already representable.
+
+## How the platform enforces it — three facts, one set
+
+The enforcement is not a flag somebody remembers to clear. It is that **three
+independent facts are all written from the same set: the people an approval
+actually enrols.**
+
+| Fact | Written where | For whom |
+|---|---|---|
+| `Enrollment` row | `approval.service.ts`, from `decision.placement` | the people being placed |
+| `User.isBeneficiary` (R79.3) | `approval.service.ts`, from `admitted` | the same set |
+| `student` role assignment | `approval.service.ts`, from the same set | the same set |
+
+`admitted` is derived as `[...new Set(enrollments.map(e => e.userId))]` — the set
+the approval *placed*, never a second derivation. R79.3 states the reason
+plainly: *"a second derivation would drift from the first, and the drift would be
+invisible until somebody could not be enrolled again."*
+
+**A guardian is not in that set**, because R62 makes `mustEnrol` empty for an
+applicant who arrived carrying child applications: the children are placed on
+their own decisions, and the guardian's access comes through the `FamilyLink`.
+So all three facts are absent for her, together, for one reason.
+
+## What a guardian-only account may reach
+
+Legitimate guardian and account functions only:
+
+* her children, and their applications;
+* her approved `FamilyLink`s;
+* guardian/account settings;
+* notifications and actions concerning her linked children.
+
+The dashboards enforce this by **resolving a child**, not by hiding a section: a
+parent's grades, Quran and account views send `X-Active-Child-ID` and read that
+child's record. There is no arm that shows a guardian *her own* marks, because
+there are none to show — and the server is the authority either way (UX rule O).
+
+She must not appear in a beneficiary, student or member list merely because she
+authenticated. `beneficiaries_only` filters on `isBeneficiary`, which is false
+for her.
+
+## Her email is hers — and it is the same address twice, not two columns
+
+**Superseding an earlier over-absolute reading** (Owner, 2026-09-03): the address
+on a guardian's authenticated identity **may also serve as that same guardian's
+operational contact address**. There is no requirement to duplicate it, and
+**`contact_email` must not be added merely to copy the same value** — a second
+column holding the same string is a second source of truth, and on this project
+every duplicated value has drifted.
+
+What it must never mean is *«Sara authenticates as fatima@example.com»*. The
+guardian's address is **never copied** into:
+
+* the child's `UserIdentity`;
+* the child's `preProvisionedEmail`;
+* `ChildApplication` as a "child email" — the model has no email column at all;
+* `FamilyLink` as duplicated contact data.
+
+A child created through the minor flow has **no email of any kind**, and R62.9
+makes that the *definition* of a minor: linking is restricted to accounts with no
+login identity, because *an adult consents for themselves*.
+
+When messaging eventually exists and something must reach a child's family, the
+destination is resolved by **finding the live approved guardian and reading her
+current address** — not by having stored a copy. There is no email, SMS or push
+provider today, and none is implemented here.
+
+### The generic `email` projection, and why it is not renamed
+
+`profile.service.ts` and `user.service.ts` both project
+`identities[0]?.email ?? preProvisionedEmail` as a field named plainly `email`.
+Audited 2026-09-03: **the screen that renders it labels it «بريد Google»**, so it
+already reads as the login address rather than as a contact coordinate. The wire
+name is therefore **kept** — renaming it would break clients to fix a label that
+is not wrong — and the invariant is recorded instead:
+
+> **`email` on a profile or directory row is the ACCOUNT'S AUTHENTICATION
+> ADDRESS.** It is the bound Google identity, falling back to the address the
+> account was pre-provisioned against. It is not a per-person contact field, it
+> is never another person's address, and it is never written by anything but
+> identity binding or pre-provisioning.
+
+## A guardian who later joins the association
+
+**She uses the same account. A second `User` is never created.**
+
+She submits the ordinary registration/application process, and on approval the
+beneficiary state attaches to the row she already has: an `Enrollment`, the
+`student` role and `isBeneficiary`. Her `FamilyLink`s stay intact, and her
+guardian history is the same person's history.
+
+**The mechanism already exists** and needed nothing added: all three facts are
+written against a `userId`, and none of them is created by registration. What
+does not exist yet is a *screen* for it — an existing guardian applying for
+herself — which is a separate piece of work and not a second membership system.
+
+## The minor who becomes an adult
+
+See [`docs/development/person-identity.md`](person-identity.md) for the
+identifiers, and SRS Revision 129 for the rule. In outline: when a former minor
+needs her own login, a **verified Google identity is bound to her existing
+beneficiary `User`** through a controlled approval — never a second account, so
+`Enrollment`, `Grade`, Quran progress, attendance and assessments stay on the one
+person. Eligibility is established from date of birth (18 years) and **nothing
+happens automatically on a birthday**.
+
+## The guards
+
+| Property | Guard |
+|---|---|
+| Approving a guardian admits her to nothing — no enrolment, no `isBeneficiary` | `registration.integration.test.ts` |
+| She holds no `student`, `teacher`, `admin` or `super_admin` role | same |
+| She does not appear in the beneficiaries list | same |
+| She carries no Grade, Attendance, submission, Quran log or teaching-group seat | same |
+| Her email reaches neither the child's identity nor the child's pre-provisioned address, and exactly one account claims it | same |
+| The upgrade attaches to the same `User`, and her `FamilyLink`s survive it | same |
+| A child has no login identity, so linking refuses an account that has one | `child-application.integration.test.ts` (`ACCOUNT_HAS_LOGIN`) |
+| One live account per email, across both ownership channels | `email-ownership.integration.test.ts` |

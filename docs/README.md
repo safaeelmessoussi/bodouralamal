@@ -120,6 +120,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [**Class delivery**](development/class-delivery.md) | **حضوري and عن بُعد — one inheritance mechanism, why an online occurrence has no room, and the three independent dimensions** |
 | [**Online-class provider**](development/online-class-provider.md) | The MVP media-provider decision and the two infrastructure findings that shape it — an implementation choice the delivery domain must survive |
 | [**Online classroom**](development/online-classroom.md) | **بذور الأمل authorizes; the provider executes** — who may enter a class عن بُعد, the derived room, the join window, the credential, and the one classroom every portal shares |
+| [**Account and membership**](development/account-and-membership.md) | **A platform account is not association membership** — the guardian-only model, what a guardian may reach, whose email is whose, and the guardian→beneficiary and minor→adult transitions |
 | [**Person identity**](development/person-identity.md) | **The QR and the two identifiers beside it — one per person, role-independent, and why it identifies but never authenticates** |
 | [**Quran progress**](development/quran-progress.md) | **One engine behind إدخال الحفظ and حفظي — what authorises an entry, why مراجعة never raises the percentage, why the log stores no Level** |
 | [Trash lifecycle audit](development/audit-2026-09-01-trash-lifecycle.md) | Remaining Trash/FK cases: implemented exact-child coverage, retained history, and the Owner decisions that still prevent broader cleanup |
@@ -145,6 +146,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | File | What it is | Mutable? |
 |---|---|---|
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
+| [`SRS-PROPOSAL-R129.md`](SRS-PROPOSAL-R129.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A platform account is not association membership; a guardian's email is hers and never the child's login; a guardian who joins keeps her account. No schema or contract change | Document Owner only |
 | [`SRS-PROPOSAL-R128.md`](SRS-PROPOSAL-R128.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** A rejected family link is soft-deleted with its decision, so a corrected request is possible; supersedes R118.3's special-case purge route | Document Owner only |
 | [`SRS-PROPOSAL-R127.md`](SRS-PROPOSAL-R127.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** Save-and-resume is the only assessment response policy; `exam.access_policy`, its enum and `SINGLE_SUBMISSION_FINAL` are withdrawn, resolving §17's contradiction with R124 | Document Owner only |
 | [`SRS-PROPOSAL-R126.md`](SRS-PROPOSAL-R126.md) | **RATIFIED by the Document Owner, 2026-09-03 — AWAITING APPLICATION to `SRS.md`.** Student educational evidence forbids deleting an assessment; publication and attendance do not. Also corrects R59 clause (3)'s stale one-child-table rationale | Document Owner only |

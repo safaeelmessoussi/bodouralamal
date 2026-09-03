@@ -247,6 +247,174 @@ async function withNoActiveConsentText<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+describe("a PLATFORM ACCOUNT is not ASSOCIATION MEMBERSHIP (Owner, 2026-09-03)", () => {
+  /**
+   * **The rule, stated so nobody has to infer it from behaviour.** Fatima
+   * authenticates in order to register and manage Sara. She therefore needs the
+   * ordinary `User` + `UserIdentity` machinery — for authentication,
+   * authorization, consent and `FamilyLink` — and that is *all* it means. In the
+   * business domain she is **guardian-only**: not a beneficiary, not a Student,
+   * not enrolled, not staff, not an association member.
+   *
+   * **This is already how the platform behaves**, through R62 and R79.3 rather
+   * than through anything added here: `mustEnrol` is empty for an applicant who
+   * arrived with child applications, `isBeneficiary` is written from the set the
+   * approval actually *enrols*, and the `student` role is granted from that same
+   * set. These tests **pin** that model, because it is stated in three services
+   * and nothing asserted it end to end — and the failure would be silent and
+   * severe: a guardian appearing in a beneficiary list, or handed a personal
+   * educational record she never had.
+   *
+   * The upgrade path is Owner-approved and deliberately NOT a second account:
+   * if Fatima later applies for herself, the beneficiary state attaches to
+   * **this same User**.
+   */
+  async function registerGuardianWithChild(): Promise<{
+    applicantId: string;
+    childApplicationIds: string[];
+  }> {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    return register(prisma, token, parentChild(), KEY);
+  }
+
+  async function approveApplicant(applicantId: string): Promise<void> {
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: "admin" } });
+    const admin = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} مسؤولة الاعتماد`, accountStatus: "active" },
+    });
+    await prisma.userBranchRole.create({
+      data: { userId: admin.id, roleId: role.id, branchId: null },
+    });
+    const { decide } = await import("./approval.service.js");
+    const { actorFor } = await import("../test-support/actor.js");
+    await decide(prisma, await actorFor(prisma, admin.id), applicantId, { approve: true });
+  }
+
+  it("approving a guardian activates her account and admits her to NOTHING", async () => {
+    const { applicantId } = await registerGuardianWithChild();
+    await approveApplicant(applicantId);
+
+    const guardian = await prisma.user.findUniqueOrThrow({ where: { id: applicantId } });
+    expect(guardian.accountStatus).toBe("active");
+    // R79.3 — the durable beneficiary fact is written from the set the approval
+    // ENROLS, and a guardian is not in it.
+    expect(guardian.isBeneficiary).toBe(false);
+    expect(await prisma.enrollment.count({ where: { studentId: applicantId } })).toBe(0);
+  });
+
+  it("she holds no student role — authentication is not admission", async () => {
+    const { applicantId } = await registerGuardianWithChild();
+    await approveApplicant(applicantId);
+
+    const roles = await prisma.userBranchRole.findMany({
+      where: { userId: applicantId, deletedAt: null },
+      select: { role: { select: { name: true } } },
+    });
+    const names = roles.map((r) => r.role.name);
+    expect(names).not.toContain("student");
+    expect(names).not.toContain("teacher");
+    expect(names).not.toContain("admin");
+    expect(names).not.toContain("super_admin");
+  });
+
+  it("she does NOT appear in the beneficiaries list", async () => {
+    const { applicantId } = await registerGuardianWithChild();
+    await approveApplicant(applicantId);
+
+    // The same filter every beneficiary-facing read uses (`beneficiaries_only`).
+    const listed = await prisma.user.count({
+      where: { id: applicantId, isBeneficiary: true, deletedAt: null },
+    });
+    expect(listed).toBe(0);
+  });
+
+  it("she carries no personal educational record of her own", async () => {
+    const { applicantId } = await registerGuardianWithChild();
+    await approveApplicant(applicantId);
+
+    // Nothing that would populate a beneficiary dashboard for HER. The parent
+    // dashboards resolve a CHILD through `X-Active-Child-ID`; there is no arm
+    // that shows a guardian her own marks, because there are none.
+    expect(await prisma.grade.count({ where: { studentId: applicantId } })).toBe(0);
+    expect(await prisma.attendance.count({ where: { studentId: applicantId } })).toBe(0);
+    expect(await prisma.studentExamSubmission.count({ where: { studentId: applicantId } })).toBe(0);
+    expect(await prisma.quranProgressLog.count({ where: { studentId: applicantId } })).toBe(0);
+    expect(await prisma.studentTeachingGroup.count({ where: { studentId: applicantId } })).toBe(0);
+  });
+
+  it("HER EMAIL IS HERS: it is never copied onto the child or the application", async () => {
+    /**
+     * Owner, 2026-09-03: a guardian's authenticated email MAY also serve as that
+     * same guardian's contact address — there is no second column to duplicate
+     * it into. What it must never mean is *«Sara authenticates as
+     * fatima@example.com»*. The child gets no identity and no address at all,
+     * and `ChildApplication` has no email column to put one in.
+     */
+    const { applicantId, childApplicationIds } = await registerGuardianWithChild();
+    const guardianEmail = (
+      await prisma.userIdentity.findFirstOrThrow({
+        where: { userId: applicantId },
+        select: { email: true },
+      })
+    ).email;
+
+    const childId = await approveFirstChild(childApplicationIds[0]!);
+    const child = await prisma.user.findUniqueOrThrow({ where: { id: childId } });
+
+    expect(child.preProvisionedEmail).toBeNull();
+    expect(await prisma.userIdentity.count({ where: { userId: childId } })).toBe(0);
+    // And the address is claimed by exactly ONE account — the guardian's.
+    const claimants = await prisma.userIdentity.findMany({
+      where: { email: guardianEmail },
+      select: { userId: true },
+    });
+    expect(claimants.map((c) => c.userId)).toEqual([applicantId]);
+    expect(
+      await prisma.user.count({ where: { preProvisionedEmail: guardianEmail } }),
+    ).toBe(0);
+  });
+
+  it("the guardian→beneficiary upgrade attaches to the SAME User, never a second one", async () => {
+    /**
+     * Owner, 2026-09-03: a guardian who later joins the association uses the
+     * ordinary registration/approval process on her existing account. The
+     * mechanism already exists — `isBeneficiary`, the `student` role and the
+     * `Enrollment` are all written against a `userId`, and none of them is
+     * created by registration — so admitting her is an approval acting on this
+     * row. Pinned here so a future implementation of the upgrade screen cannot
+     * quietly create a duplicate person instead.
+     */
+    const { applicantId, childApplicationIds } = await registerGuardianWithChild();
+    await approveApplicant(applicantId);
+    // R62 — the FamilyLink is created when the CHILD's application is decided,
+    // not at registration, so her guardian history begins here.
+    await approveFirstChild(childApplicationIds[0]!);
+
+    const { provisionPlacement } = await import("../test-support/placement.js");
+    const placement = await provisionPlacement(prisma, PLACEMENT_TAG);
+    await prisma.enrollment.create({
+      data: {
+        studentId: applicantId,
+        administrativeGroupId: placement.administrativeGroupId,
+        levelId: placement.levelId,
+        branchId: placement.branchId,
+      },
+    });
+    await prisma.user.update({ where: { id: applicantId }, data: { isBeneficiary: true } });
+
+    const upgraded = await prisma.user.findUniqueOrThrow({
+      where: { id: applicantId },
+      include: { parentLinks: true },
+    });
+    expect(upgraded.isBeneficiary).toBe(true);
+    // Her guardian history is intact — she is one person, before and after.
+    expect(upgraded.parentLinks.length).toBeGreaterThan(0);
+    expect(
+      await prisma.user.count({ where: { nameArabic: upgraded.nameArabic, deletedAt: null } }),
+    ).toBe(1);
+  });
+});
+
 describe("§7 Revision 40 — الاسم الشخصي / الاسم العائلي", () => {
   it("stores both parts AND composes name_arabic from them", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);

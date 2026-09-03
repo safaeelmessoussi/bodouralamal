@@ -3394,3 +3394,66 @@ rejected link; first-wins on a second decision; the restore refusal; an approval
 still leaving live authority with its own audit row; and the obsolete route
 absent from both the registry and the router. Plus 49/49 with the approval suite
 and 58/58 on child-application and registration.
+
+## R129 — a platform account is not association membership (2026-09-03)
+
+**Owner decision, and an audit that found the model already right and
+unstated.** Three services carried this distinction between them: R62 leaves
+`mustEnrol` empty for an applicant who arrived with child applications, R79.3
+writes `User.isBeneficiary` from `admitted` — which *is* the set the approval
+enrolled — and the `student` role is granted from that same set. A guardian is
+therefore excluded from all three **together, for one reason**. Good design,
+invisible: nothing asserted it end to end, and the failure would have been silent
+and severe — a guardian in a beneficiary list, or handed a personal educational
+record she never had.
+
+**No schema, route or wire contract changed.** What was missing was the
+statement, the tests and the name.
+
+**Guardian-only is now a named model.** Fatima authenticates in order to
+register and manage Sara; she needs the ordinary `User` + `UserIdentity`
+machinery for authentication, authorization, consent and `FamilyLink`, and that
+is all it means. **No `GuardianAccount` table and no second authentication
+architecture** — a parallel account type would fork authentication, consent,
+deletion and audit for a distinction the existing model already expresses.
+
+**Her email is hers, and an earlier over-absolute reading is superseded.** The
+address on a guardian's authenticated identity **may also serve as that same
+guardian's contact address**; `contact_email` must not be added merely to copy
+the same string, because a second column holding one value is a second source of
+truth and on this project every duplicate has drifted. What it must never mean is
+*«Sara authenticates as fatima@example.com»* — the address is never copied into
+the child's identity, the child's `preProvisionedEmail`, `ChildApplication` or
+`FamilyLink`. A child created through the minor flow has **no email at all**, and
+R62.9 makes that the definition of a minor. When messaging exists, a message
+concerning a child will resolve the **live approved guardian** and read her
+current address rather than a stored copy. There is still no email, SMS or push
+provider.
+
+**The generic `email` projection keeps its wire name.** `profile.service.ts` and
+`user.service.ts` both project `identities[0]?.email ?? preProvisionedEmail` as
+`email`, and the audit asked whether that reads as contact information: **the
+screen labels it «بريد Google»**, so it already reads as the login address.
+Renaming it would break clients to fix a label that is not wrong, so the
+invariant is documented instead — `email` is the account's **authentication**
+address, never a per-person contact field and never another person's.
+
+**A guardian who joins the association keeps her account.** She submits the
+ordinary process and the beneficiary state attaches to the row she already has;
+her `FamilyLink`s stay intact. The mechanism needed nothing added — all three
+facts are written against a `userId` and none is created by registration — so the
+gap is a *screen*, not a model, and that screen is separate work.
+
+**Tests: 38/38** on the registration suite, six of them new: approving a guardian
+admits her to nothing; she holds no student, teacher, admin or super-admin role;
+she is absent from the beneficiaries list; she carries no Grade, Attendance,
+submission, Quran log or teaching-group seat; her email reaches neither the
+child's identity nor the child's pre-provisioned address and exactly one account
+claims it; and the upgrade attaches to the same `User` with her family links
+surviving.
+
+**New page:** `docs/development/account-and-membership.md`, indexed from
+`docs/README.md`. `docs/SRS-PROPOSAL-R129.md` awaits application. Two stale
+`TASKS.md` items are closed, including one that recorded the *opposite* email
+model — *a minor signs in through her guardian's address* — which this decision
+supersedes.

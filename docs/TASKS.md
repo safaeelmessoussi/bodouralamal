@@ -2118,14 +2118,30 @@ approved scope covers Partners only, so this is reported rather than taken.
       else**. R80.3/R80.4 unchanged.
 - [x] **عطلة is a `holiday` structural kind**; محاضرة corrected to `class`;
       `نشاط` added. Corrected in place with ids preserved.
-- [ ] **OWNER-STATED MODEL CHANGE, not yet taken — minors and guardian emails.**
-      The Owner states every account has an email and a minor signs in through
-      their guardian's address. **§4.3 currently models a minor as a login-less
-      row** reached through an approved `FamilyLink`, and `User.email` is `null`
-      for them by design. Reconciling the two is a slice of its own: it touches
-      §4.3, the registration flow, `resolveActingStudent` and the child-context
-      middleware. This batch changed only the المستخدمون label, which no longer
-      presents «حساب بلا دخول» as a state.
+- [x] **RESOLVED by the Owner, 2026-09-03 — minors and guardian emails (R129).**
+      The earlier reading — *a minor signs in through her guardian's address* —
+      is **superseded**. The model stands as §4.3 already had it: a minor is a
+      **login-less row** reached through an approved `FamilyLink`, with no
+      identity and no address of any kind, and R62.9 makes exactly that the
+      definition. The guardian's authenticated email **may also be her own
+      contact address** — there is no second column and none is to be added —
+      but it is **never** copied into the child's identity, the child's
+      pre-provisioned address, `ChildApplication` or `FamilyLink`, and it never
+      means the child authenticates as her. A message concerning a child
+      resolves the **live approved guardian** and reads her current address;
+      there is still no email, SMS or push provider. The generic `email`
+      projection keeps its wire name — the screen labels it «بريد Google», so it
+      already reads as the login address — and the invariant is documented
+      instead. `docs/development/account-and-membership.md`;
+      `docs/SRS-PROPOSAL-R129.md` **awaits application to `SRS.md`**.
+- [x] **RESOLVED by the Owner, 2026-09-03 — a platform account is not membership
+      (R129).** A guardian authenticating to manage children is **guardian-only**:
+      not a beneficiary, not a Student, not enrolled, not staff, not a member,
+      and absent from every beneficiary list. This is what the platform already
+      did — R62 leaves `mustEnrol` empty for her and R79.3 writes
+      `isBeneficiary` from the set the approval *enrols* — but nothing asserted
+      it end to end. Now pinned by six tests. A guardian who later joins uses
+      the **same** `User`; no second account and no second membership system.
 - [ ] Codex's four open Owner questions (audit identity email, exact storage-key
       wording, required free-text audit evidence, the R111 3-day purge job)
       remain open and were **not** touched by this batch.
