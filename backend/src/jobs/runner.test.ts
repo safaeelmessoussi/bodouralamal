@@ -80,8 +80,10 @@ describe('job runner startup readiness', () => {
     expect(registered).toEqual([
       QUEUES.tokenPurge,
       QUEUES.rateLimitPurge,
-      // §4.10a's twelve-month application clock (Owner, 2026-09-04) — a real
-      // worker, so it is part of readiness like every other one.
+      // BR-15's ninety days (R59.4, closed by the Owner 2026-09-04) and
+      // §4.10a's twelve-month application clock — real workers, so both are
+      // part of readiness like every other one.
+      QUEUES.trashRetentionPurge,
       QUEUES.applicationRetentionPurge,
       QUEUES.auditPurge,
       QUEUES.consentReevaluate,
@@ -190,11 +192,12 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      // Ten since the application-retention worker joined (2026-09-04). The
+      // Eleven since the trash- and application-retention workers joined
+      // (2026-09-04). The
       // number is asserted rather than derived deliberately: readiness claiming
       // "all workers up" while counting a shorter catalogue is exactly the
       // failure this test exists for.
-      expected_workers: 10,
+      expected_workers: 11,
       registered_workers: 2,
       active_workers: 2,
     });

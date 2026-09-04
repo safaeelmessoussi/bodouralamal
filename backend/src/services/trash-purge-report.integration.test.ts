@@ -13,10 +13,10 @@ import * as module from './trash-purge-report.service.js';
 /**
  * **BR-15's ninety days, measured but not executed** (SRS §4.10, Revision 59.4).
  *
- * R59.4 is an OPEN Owner question: `content.quarantine-purge` was never built
- * and `startJobRunner` deliberately does not schedule it. The property under
- * test is therefore twofold — that the measurement is correct, and that the
- * module remains incapable of acting on it.
+ * R59.4 was an open Owner question and is now answered (2026-09-04):
+ * enforcement lives in `trash.service.ts`. The property under test is therefore
+ * twofold — that the measurement is correct, and that THIS module remains
+ * incapable of acting on it, so there is exactly one destructive path.
  *
  * **Every assertion is scoped to rows this suite created.** The report is
  * global by nature, so asserting on totals would make the test depend on what
@@ -138,16 +138,19 @@ describe('storage-backed entities are separated, because they are a different au
   });
 });
 
-describe('R59.4 is open, so the module cannot act', () => {
+describe('R59.4 is answered, and this module is still the reporter', () => {
   it('exports no destructive verb at all', () => {
-    // The guard exists for the defect it prevents: a reporter shipping beside
-    // its own executor invites someone to call the executor, and R59.4 has not
-    // authorised automatic destruction in production. If this ever fails,
-    // the question to ask is whether the Owner answered R59.4 — not whether
-    // the assertion is inconvenient.
+    /**
+     * **Still meaningful after the Owner authorised enforcement** (2026-09-04),
+     * and arguably more so. Destruction lives in `trash.service.ts`, where it
+     * reuses the manual purge's audited body; a reporter that grew its own
+     * destructive verb would offer a second, unaudited way to do the same thing
+     * and somebody would eventually call it.
+     */
     const destructive = Object.keys(module).filter((name) =>
       /purge|delete|destroy|remove|execute/i.test(name),
     );
+
 
     expect(destructive).toEqual([]);
   });

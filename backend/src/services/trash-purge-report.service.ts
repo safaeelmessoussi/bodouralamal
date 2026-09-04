@@ -4,19 +4,21 @@ import type { PrismaClient } from '../generated/prisma/client.js';
  * **What BR-15's ninety days would destroy, if anyone were authorised to run
  * it** (SRS §4.10, BR-15, Revision 59.4).
  *
- * ## The open question this exists to inform
+ * ## The question it informed, and what it is for now
  *
- * `Trash.purge_after` records the end of the ninety-day window, and the job
- * named as its enforcement — `content.quarantine-purge` — **was never built**.
- * `startJobRunner` deliberately does not schedule it, with the reason in the
- * code: automatic destruction in production is an Owner decision that has not
- * been taken. That is R59.4, and it is still open.
+ * `Trash.purge_after` recorded the end of the ninety-day window and nothing ever
+ * enforced it. This module was written to answer *«what would it actually
+ * delete»* before anyone authorised irreversible work — and **on 2026-09-04 the
+ * Owner authorised it**. Enforcement lives in `trash.service.ts`
+ * (`purgeExpiredEntries`, scheduled daily), because it reuses the manual
+ * purge's own body and a second implementation of *destroy this permanently* is
+ * the one that would eventually disagree with the first.
  *
- * **So this module computes and explains, and destroys nothing.** It is the
- * same phase-1 position as the ten-year educational clock and the twelve-month
- * application clock, adopted for the same reason — a number nobody has measured
- * is a poor basis for authorising irreversible work. The Owner asked *«what
- * would it actually delete»*; this answers that, and only that.
+ * **This module stayed read-only, deliberately.** It is now the diagnostic beside
+ * the executor: what is due, grouped by entity, and how much of it reaches
+ * object storage. A reporter that grew its own destructive verb would invite
+ * somebody to call it instead of the audited path — which is why the guard
+ * asserting it exports none is still here, and still means something.
  *
  * ## Why the storage split is the interesting half
  *

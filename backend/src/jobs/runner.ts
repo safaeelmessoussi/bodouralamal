@@ -22,6 +22,7 @@ import {
   retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
 import { purgeElapsedApplications } from '../services/application-retention.service.js';
+import { purgeExpiredEntries } from '../services/trash.service.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
   enqueue,
@@ -55,6 +56,12 @@ export const QUEUES = {
    * its own — the retention boundary is a calendar fact, not an event.
    */
   applicationRetentionPurge: 'application.retention-purge',
+  /**
+   * **BR-15's ninety days, enforced** (Owner 2026-09-04, closing R59.4). The
+   * eligibility rule and the destruction both live in `trash.service.ts`; this
+   * queue is the schedule and nothing else.
+   */
+  trashRetentionPurge: 'trash.retention-purge',
   /**
    * §4.1a: enqueued by every `ConsentRecord` change, roster change and upload.
    * Full current-state recompute for an occurrence's resolved audience. The
@@ -187,6 +194,19 @@ export function createWorkerCatalog(
           where: { windowStart: { lt: cutoff } },
         });
         log(QUEUES.rateLimitPurge, { counters: deleted.count });
+      },
+    },
+    {
+      // trash.retention-purge (BR-15, R59.4 closed by the Owner 2026-09-04).
+      // Reuses the manual purge's own body, so what an expiry destroys and what
+      // a Super Admin destroys cannot drift apart.
+      name: QUEUES.trashRetentionPurge,
+      handler: async () => {
+        const counts = await purgeExpiredEntries(prisma, new Date());
+        // COUNTS only (TD-14). `blocked` and `unsupported` staying non-zero for
+        // days is the signal worth watching: it means the window is expiring on
+        // records nothing can destroy.
+        log(QUEUES.trashRetentionPurge, { ...counts });
       },
     },
     {
@@ -450,9 +470,14 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
-    // R59.4: do NOT schedule content.quarantine-purge against `purge_after`
-    // until the Document Owner authorises automatic production destruction.
+    // **`content.quarantine-purge` is still not scheduled, and that is correct.**
+    // R59.4 is closed (Owner, 2026-09-04) but it authorised expiring the TRASH
+    // ENTRY, which `trash.retention-purge` above does — and that purge enqueues
+    // the object retirement with an exact coordinate. This queue destroys a
+    // named object; a schedule would give it no coordinate to act on.
+    
     readiness.ready();
   } catch (error) {
     readiness.failed();

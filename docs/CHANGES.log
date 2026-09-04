@@ -4227,6 +4227,58 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## BR-15's ninety days are enforced — R59.4 closed (2026-09-04)
+
+**Owner decision.** Expired Trash entries are purged automatically, without a
+Super Admin approving each one. The window had been recorded on
+`Trash.purge_after` since BR-15 and nothing ever enforced it.
+
+**The whole implementation is one function calling an existing one.** The manual
+`DELETE /admin/trash/{id}` already destroyed a record, its declared children, its
+tombstone and its audit row in one transaction, and already enqueued the storage
+retirement with an exact coordinate. So `purgeEntry` was split: the authority
+check stayed on top, the body became `purgeTrashEntry`, and the sweep calls that.
+**No second implementation of *destroy this permanently*** — which is the one
+that would eventually disagree with the first about what "destroy" includes,
+with both right about their own code.
+
+**It fails closed per entry, and the counts are the signal.** A record something
+still references (`DEPENDENTS_EXIST`), an entity with no purge plan
+(`NOT_YET_SUPPORTED`) and a tombstone whose record was restored (`NOT_DELETED`)
+are each left alone and counted — never destroyed by improvisation, and never
+allowed to abort the sweep, because one stuck entry must not freeze the policy.
+An unexpected error still propagates: a sweep that swallowed everything would
+report success while destroying nothing and TD-7's retry would never fire.
+
+**`content.quarantine-purge` remains unscheduled, and that is now the correct
+state rather than a deferral.** R59.4 authorised expiring the *entry*; the
+entry's purge enqueues the object retirement with an exact coordinate read from
+the authoritative row — not dug out of snapshot JSON, which would couple the job
+to the shape every model used to have. A schedule on that queue would give it no
+coordinate to act on. The object deletion is durable and retrying, and an
+already-missing object is a successful DELETE under S3 semantics, so the failure
+the Owner named — *«DB says gone, object silently remains forever»* — has no path.
+
+**The audit row says `system: true` and invents no actor.** R60.8: a row omits a
+capacity that does not exist, and the calendar is not a person. `system` makes
+that legible without a reader inferring it from a null column.
+
+### The test that could have destroyed the shared database
+
+`purgeExpiredEntries` acts on **every** expired entry, so running it at the real
+`now()` inside the shared integration database would have destroyed other suites'
+fixtures and seeded data. Every instant in the suite is therefore in the year
+2001 — safe because nothing on this platform ever writes a past `purge_after`
+(`deleteEntry` always sets `deleted_at + 90 days`), so a quarter-century-old
+instant selects exactly the back-dated rows and nothing else. The claim is
+**proved rather than assumed**: one test asserts the count of unrelated Trash is
+unchanged across a sweep. Measured before writing any of it — 51 entries, none
+expired, earliest 2026-11-25.
+
+The boundary is asserted a millisecond either side of due, because strictly-before
+is what the application clocks and the ten-year clock use, and two retention rules
+disagreeing by a day is a bug report waiting to be filed.
+
 ## Application retention is now enforced, on two settled clocks (2026-09-04)
 
 **Owner decisions.** A never-converted pending application runs twelve months

@@ -193,10 +193,29 @@ nothing else. Two properties are worth knowing before that question is answered:
   digging storage keys out of it would make the report depend on the historical
   shape of every model. The entity name is written at delete time and is stable.
 
-**The module is guarded against growing an executor.** A test asserts it exports
-no destructive verb, and that guard was proved by adding one and watching it
-fail. A reporter that ships beside its own executor invites someone to call the
-executor — and R59.4 has not authorised that.
+**R59.4 is now answered** (Owner, 2026-09-04): expired entries are purged
+automatically, without a Super Admin approving each one. Enforcement is
+`purgeExpiredEntries` in `trash.service.ts`, scheduled daily —
+**not** in this module, which stayed read-only and is now the diagnostic beside
+the executor. It reuses the manual purge's own body, so what an expiry destroys
+and what a Super Admin destroys cannot drift apart, and it **fails closed per
+entry**: a record something still references, an entity with no purge plan, or a
+tombstone whose record was restored is left alone and counted, never destroyed by
+improvisation and never allowed to abort the sweep.
+
+**`content.quarantine-purge` is still not scheduled, and that is correct.** R59.4
+authorised expiring the Trash *entry*; the entry's purge enqueues the object
+retirement with an **exact coordinate**, read from the authoritative row rather
+than dug out of snapshot JSON. A schedule on that queue would give it no
+coordinate to act on. The object deletion is therefore durable and retrying, and
+an already-missing object is a successful DELETE under S3 semantics — so the
+failure the Owner named, *«DB says gone, object silently remains forever»*, has
+no path.
+
+**The report is still guarded against growing an executor.** A test asserts it
+exports no destructive verb, proved by adding one and watching it fail. That
+matters more now, not less: with a real destructive path in existence, a second
+unaudited one is the thing somebody would call by mistake.
 
 ## Backups — what may honestly be claimed
 

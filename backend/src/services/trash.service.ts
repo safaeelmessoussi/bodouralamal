@@ -839,7 +839,26 @@ export async function purgeEntry(
   id: string,
 ): Promise<{ targetEntity: string; targetId: string; alreadyPurged: boolean }> {
   await assertFreshSuperAdmin(prisma, actor);
+  return purgeTrashEntry(prisma, actor, id);
+}
 
+/**
+ * The purge itself, with **no authority check and no opinion about who asked**.
+ *
+ * Two callers: the Super Admin action above, and BR-15's automatic ninety-day
+ * sweep below, which has no actor at all because the calendar is not a person.
+ * They share this body deliberately — a second implementation of *destroy this
+ * record permanently* is the one that would eventually disagree with the first
+ * about what "destroy" includes, and both would be right about their own code.
+ *
+ * `actor === null` means system-initiated: the audit row carries no actor, which
+ * R60.8 states is how a row omits a capacity that does not exist.
+ */
+async function purgeTrashEntry(
+  prisma: PrismaClient,
+  actor: Actor | null,
+  id: string,
+): Promise<{ targetEntity: string; targetId: string; alreadyPurged: boolean }> {
   const entry = await prisma.trash.findUnique({ where: { id } });
   if (!entry) throw new AppError('NOT_FOUND', 'no such trash entry');
 
@@ -882,12 +901,16 @@ export async function purgeEntry(
         await enqueueContentStorageRetirement(tx, entry.targetEntity, entry.targetId, entry.snapshot);
         await tx.trash.delete({ where: { id } });
         await audit.write(tx, {
-          actorUserId: actor.userId,
-          activeRole: actor.activeRole,
+          actorUserId: actor?.userId ?? null,
+          activeRole: actor?.activeRole,
           actionType: 'trash.permanent_delete',
           targetEntity: entry.targetEntity,
           targetId: entry.targetId,
-          detail: { already_purged: true, deleted_at: entry.deletedAt.toISOString() },
+          detail: {
+            already_purged: true,
+            deleted_at: entry.deletedAt.toISOString(),
+            system: actor === null,
+          },
         });
         return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: true };
       }
@@ -922,8 +945,8 @@ export async function purgeEntry(
       // from `PURGEABLE_ACTION_TYPES`, so the record of an irreversible act
       // outlives the audit-purge horizon.
       await audit.write(tx, {
-        actorUserId: actor.userId,
-        activeRole: actor.activeRole,
+        actorUserId: actor?.userId ?? null,
+        activeRole: actor?.activeRole,
         actionType: 'trash.permanent_delete',
         targetEntity: entry.targetEntity,
         targetId: entry.targetId,
@@ -931,6 +954,9 @@ export async function purgeEntry(
           already_purged: false,
           deleted_at: entry.deletedAt.toISOString(),
           deleted_by: entry.deletedById,
+          // The calendar did it, not a person — distinguishable in the trail
+          // without needing to know that `actor_user_id` happened to be null.
+          system: actor === null,
         },
       });
 
@@ -966,6 +992,92 @@ export async function purgeEntry(
     }
     throw error;
   }
+}
+
+/**
+ * **BR-15's ninety days, enforced automatically** (Owner decision, 2026-09-04 —
+ * closing Revision 59.4).
+ *
+ * R59.4 was the open question: `Trash.purge_after` recorded the end of the
+ * window and the job named as its enforcement was never built, so nothing ever
+ * expired. The Owner has now authorised the intended semantics — expired
+ * entries are permanently purged, without a Super Admin approving each one.
+ *
+ * ## What it does NOT do, and why each absence is deliberate
+ *
+ * * **No second purge implementation.** It calls `purgeTrashEntry`, the same
+ *   body the manual action uses, so the children destroyed, the storage
+ *   retirement enqueued and the audit row written are identical.
+ * * **No new lifecycle state.** An entry is due or it is not, decided by one
+ *   comparison against `purge_after`. Adding a `purging` state would create a
+ *   value that a crash could strand.
+ * * **No snapshot parsing for storage coordinates.** `enqueueContentStorageRetirement`
+ *   already reads the authoritative row, and the exact coordinate it enqueues is
+ *   what `content.quarantine-purge` deletes. Digging keys out of historical
+ *   JSON would couple this to the shape every model used to have.
+ * * **No broad deletion of anything.** Every delete is by primary key or by the
+ *   declared child foreign key of one record.
+ *
+ * ## It fails closed, per entry
+ *
+ * An entry that cannot be destroyed cleanly is **left alone and counted**, never
+ * skipped silently and never allowed to abort the sweep:
+ *
+ * * `DEPENDENTS_EXIST` — something still references the record. That is the
+ *   correct answer, not a failure; the row stays and will be retried tomorrow.
+ * * `NOT_YET_SUPPORTED` — the entity has no purge plan. Destroying it by
+ *   improvisation is exactly what the plan registry exists to prevent.
+ * * `NOT_DELETED` — somebody restored the record since; the tombstone is stale
+ *   and destroying a live record would be the worst possible outcome here.
+ *
+ * **An unexpected error propagates.** A sweep that swallowed everything would
+ * report success while destroying nothing, and TD-7's retry would never fire.
+ *
+ * ## Ordering, and what a crash leaves behind
+ *
+ * Per entry: the transaction destroys children, record and tombstone together
+ * and enqueues the storage retirement **inside** it, so a crash before commit
+ * leaves the entry exactly as it was and tomorrow's sweep retries it. The object
+ * deletion happens afterwards through TD-7's own retrying job, which is why the
+ * failure mode the Owner named — *DB says gone, object silently remains
+ * forever* — cannot arise: the job is durable and an already-missing object is
+ * a successful DELETE in S3 semantics rather than an error.
+ */
+export async function purgeExpiredEntries(
+  prisma: PrismaClient,
+  now: Date = new Date(),
+): Promise<{ purged: number; blocked: number; unsupported: number; stale: number }> {
+  const due = await prisma.trash.findMany({
+    // Strictly before: on the boundary instant the window has not elapsed. The
+    // same strictness as the two application clocks and the ten-year one.
+    where: { purgeAfter: { lt: now } },
+    select: { id: true },
+    orderBy: { purgeAfter: 'asc' },
+  });
+
+  const counts = { purged: 0, blocked: 0, unsupported: 0, stale: 0 };
+  for (const { id } of due) {
+    try {
+      await purgeTrashEntry(prisma, null, id);
+      counts.purged += 1;
+    } catch (error) {
+      const reason =
+        error instanceof AppError
+          ? ((error.details as { reason?: string } | undefined)?.reason ?? null)
+          : null;
+      if (reason === 'DEPENDENTS_EXIST') counts.blocked += 1;
+      else if (reason === 'NOT_DELETED') counts.stale += 1;
+      else if (error instanceof AppError && error.code === 'STATE_CONFLICT') {
+        counts.unsupported += 1;
+      } else if (error instanceof AppError && error.code === 'NOT_FOUND') {
+        // A concurrent manual purge won. Nothing to do and nothing wrong.
+        counts.purged += 1;
+      } else {
+        throw error;
+      }
+    }
+  }
+  return counts;
 }
 
 /**

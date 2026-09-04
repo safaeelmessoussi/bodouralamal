@@ -13,7 +13,12 @@ import {
 } from './reference-data.service.js';
 import { createSchedulingType, deleteSchedulingType } from './scheduling-type.service.js';
 import { deleteSubject } from './taxonomy.service.js';
-import { listTrash, purgeEntry, restoreEntry } from './trash.service.js';
+import {
+  listTrash,
+  purgeEntry,
+  purgeExpiredEntries,
+  restoreEntry,
+} from './trash.service.js';
 
 /**
  * Lifecycle closure for owned curriculum/reference rows (R59).
@@ -510,6 +515,141 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
     ).data;
     expect(all.some((r) => r.targetId === scheduleId)).toBe(true);
+  });
+});
+
+describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)", () => {
+  /**
+   * **Every instant here is in the year 2001, and that is a safety property.**
+   *
+   * `purgeExpiredEntries` acts on EVERY expired entry in the database, so a
+   * sweep run at the real `now()` inside a shared integration database would
+   * destroy other suites' fixtures and seeded data. Nothing on this platform
+   * ever writes a past `purge_after` — `deleteEntry` always sets
+   * `deleted_at + 90 days` — so an instant a quarter of a century ago selects
+   * exactly the rows this suite back-dated and nothing else. The «unrelated
+   * Trash survives» test below is what proves that claim rather than assuming
+   * it.
+   */
+  const LONG_AGO = new Date('2001-01-01T00:00:00.000Z');
+  const LATER = new Date('2001-06-01T00:00:00.000Z');
+
+  /** A purgeable leaf with a tombstone whose window is already long past. */
+  async function expiredLeaf(): Promise<{ trashId: string; linkId: string }> {
+    const { levelId } = await curriculum();
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 3);
+    await unassignSurahFromLevel(prisma, superAdmin(), levelId, 3);
+    const link = await prisma.levelSurah.findFirstOrThrow({ where: { levelId, surahId: 3 } });
+    const entry = await prisma.trash.findFirstOrThrow({ where: { targetId: link.id } });
+    await prisma.trash.update({ where: { id: entry.id }, data: { purgeAfter: LONG_AGO } });
+    return { trashId: entry.id, linkId: link.id };
+  }
+
+  it('destroys an entry whose window has passed, record and tombstone alike', async () => {
+    const { trashId, linkId } = await expiredLeaf();
+
+    const counts = await purgeExpiredEntries(prisma, LATER);
+
+    expect(counts.purged).toBeGreaterThanOrEqual(1);
+    expect(await prisma.levelSurah.count({ where: { id: linkId } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: trashId } })).toBe(0);
+  });
+
+  it('leaves an entry whose window has NOT passed — including on the boundary instant', async () => {
+    const { trashId } = await expiredLeaf();
+    await prisma.trash.update({ where: { id: trashId }, data: { purgeAfter: LATER } });
+
+    // One instant before due, and exactly due. Strictly-before is the same rule
+    // the application and ten-year clocks use; a boundary that differs by a day
+    // between two retention rules is a bug report waiting to be filed.
+    const before = new Date(LATER.getTime() - 1);
+    expect((await purgeExpiredEntries(prisma, before)).purged).toBe(0);
+    expect((await purgeExpiredEntries(prisma, LATER)).purged).toBe(0);
+    expect(await prisma.trash.count({ where: { id: trashId } })).toBe(1);
+
+    // And one millisecond after it IS due.
+    const after = new Date(LATER.getTime() + 1);
+    expect((await purgeExpiredEntries(prisma, after)).purged).toBeGreaterThanOrEqual(1);
+    expect(await prisma.trash.count({ where: { id: trashId } })).toBe(0);
+  });
+
+  it('touches NO unrelated Trash — this is the sweep it must not be', async () => {
+    const { trashId } = await expiredLeaf();
+    const others = await prisma.trash.count({ where: { id: { not: trashId } } });
+    expect(others).toBeGreaterThan(0);
+
+    await purgeExpiredEntries(prisma, LATER);
+
+    expect(await prisma.trash.count({ where: { id: { not: trashId } } })).toBe(others);
+  });
+
+  it('is idempotent — a second sweep finds nothing left to do', async () => {
+    await expiredLeaf();
+
+    const first = await purgeExpiredEntries(prisma, LATER);
+    const second = await purgeExpiredEntries(prisma, LATER);
+
+    expect(first.purged).toBeGreaterThanOrEqual(1);
+    expect(second.purged).toBe(0);
+  });
+
+  it('FAILS CLOSED on a stale tombstone — a restored record is never destroyed', async () => {
+    /**
+     * The worst outcome this job could have. Somebody restored the record since
+     * it was deleted, so the tombstone is stale; destroying it now would remove
+     * a record in active use with no deletion behind it.
+     */
+    const { trashId, linkId } = await expiredLeaf();
+    await prisma.levelSurah.update({ where: { id: linkId }, data: { deletedAt: null } });
+
+    const counts = await purgeExpiredEntries(prisma, LATER);
+
+    expect(counts.stale).toBe(1);
+    expect(counts.purged).toBe(0);
+    expect(await prisma.levelSurah.count({ where: { id: linkId } })).toBe(1);
+    expect(await prisma.trash.count({ where: { id: trashId } })).toBe(1);
+  });
+
+  it('FAILS CLOSED on an entity with no purge plan, and keeps sweeping', async () => {
+    /**
+     * Destroying an unplanned entity by improvisation is exactly what the plan
+     * registry exists to prevent — and one unsupported row must not stop the
+     * others being destroyed, or a single stuck entry freezes the whole policy.
+     */
+    const { trashId, linkId } = await expiredLeaf();
+    const orphan = await prisma.trash.create({
+      data: {
+        targetEntity: 'NoSuchEntityForThisTest',
+        targetId: linkId,
+        snapshot: {},
+        deletedAt: LONG_AGO,
+        purgeAfter: LONG_AGO,
+      },
+    });
+
+    const counts = await purgeExpiredEntries(prisma, LATER);
+
+    expect(counts.unsupported).toBe(1);
+    expect(counts.purged).toBeGreaterThanOrEqual(1);
+    expect(await prisma.trash.count({ where: { id: orphan.id } })).toBe(1);
+    expect(await prisma.trash.count({ where: { id: trashId } })).toBe(0);
+
+    await prisma.trash.delete({ where: { id: orphan.id } });
+  });
+
+  it('records the destruction as SYSTEM-initiated, with no actor invented', async () => {
+    const { linkId } = await expiredLeaf();
+
+    await purgeExpiredEntries(prisma, LATER);
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'trash.permanent_delete', targetId: linkId },
+    });
+    // R60.8: an audit row omits a capacity that does not exist. The calendar is
+    // not a person, so no actor is fabricated — and `system` makes that legible
+    // without a reader having to infer it from a null column.
+    expect(row.actorUserId).toBeNull();
+    expect(JSON.stringify(row.detail)).toContain('"system":true');
   });
 });
 
