@@ -4227,6 +4227,45 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The ten-year boundary is enforced — and it destroys the record, not the account (2026-09-04)
+
+**The distinction is the whole design.** §4.10a's clock is about *identifiable
+educational history*: retained ten years after the last educational activity, for
+continuity, former-beneficiary requests and attestations. When those purposes
+lapse the history goes and **the account does not**. A person whose studies ended
+a decade ago may be a مؤطِّرة today, and closing her account because her own
+education ended would be an obvious wrong. Closing an account is a deliberate act
+with its own authority; a calendar is not one of them.
+
+**One primitive, two policies.** `destroyEducationalRecord` was extracted from
+Option B's executor and both now call it — the Owner's instruction was explicit
+that reuse belongs where the data treatment is actually the same, and here it is
+identical. Only the reason differs: there she asked and a Super Admin approved,
+here nobody asked. A second implementation would be a second answer to *what
+counts as her educational record*, and the two would drift.
+
+**It deletes nothing for years**, the platform being months old — which is
+exactly the right moment to build it, because the behaviour is provable on
+fixtures with no live record anywhere near the boundary.
+
+Fail-closed per person, counted rather than aborting; audit is system-initiated
+with no actor invented, and carries the boundary and the fact that decided it —
+never a mark.
+
+### A guard scoped better rather than wider
+
+Extracting the primitive moved the tombstone-reading exception from
+`full-deletion-request.service.ts` to `erasure.ts` — a fifty-line module whose
+entire purpose is reading the tombstoned copies of what it destroys, instead of a
+whole service. That is a strictly tighter exemption than the one it replaced.
+
+### A test assertion that was expressed wrongly
+
+*«the audit contains no score»* was written as `not.toContain('15')` and failed on
+the `15` inside `2915-06-15`. Substring searches over serialized JSON are a poor
+way to say *nothing else is in here*; the assertion now enumerates the exact key
+set, which says it precisely and cannot be slipped past by a fourth key.
+
 ## Option B executes — the deletion is real now (2026-09-04)
 
 **The Owner's decisions closed every classification that was blocking it**, so

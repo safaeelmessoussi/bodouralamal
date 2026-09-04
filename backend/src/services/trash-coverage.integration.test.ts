@@ -345,16 +345,17 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
   "application-retention.service.ts":
     "measures retention OF applications, tombstoned or not — a soft-deleted row still holds the child's copied identity and is not entitled to a longer life for being in the Trash",
   /**
-   * **R131 Option B destroys the application whether it is tombstoned or not.**
+   * **An erasure reads TOMBSTONES ON PURPOSE — they are copies of what it must
+   * destroy.**
    *
-   * `ChildApplication` holds the child's names, sex and birth date
-   * independently of the `User` row, so an execution that read only live rows
-   * would leave her copied identity behind in a tombstone and report a full
-   * deletion that had not happened. The whole point of the read is to find rows
-   * a live-only query cannot see.
+   * Option B and the ten-year retention boundary both run through
+   * `erasure.ts`, and a live-only read there would be the defect rather than the
+   * safeguard: a withdrawn enrolment and a soft-deleted `ChildApplication` still
+   * hold her record and her copied identity, so skipping them would report a
+   * full deletion that had not happened. Every read is keyed on `student_id` or
+   * on an id belonging to the subject, so the absent filter widens nothing.
    */
-  "full-deletion-request.service.ts":
-    "Option B must destroy a copied identity that a tombstone would otherwise preserve",
+  "erasure.ts": "an erasure must find the tombstoned copies of what it is destroying",
 };
 
 describe("a soft-deleted row is excluded at the database boundary", () => {

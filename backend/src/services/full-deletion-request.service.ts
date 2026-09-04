@@ -5,6 +5,7 @@ import { assertFreshActive } from '../policies/freshness.policy.js';
 import { isSelfManaged } from '../policies/self-management.js';
 import * as audit from '../repositories/audit.repository.js';
 import { purgeUserAccount } from './account-deletion.service.js';
+import { destroyEducationalRecord } from './erasure.js';
 
 /**
  * **OPTION B — a request to delete the educational record itself** (SRS §4.10a,
@@ -297,91 +298,16 @@ export async function executeFullDeletion(
    * `deIdentifyAccount` documents for `User` and the application purge documents
    * for `ChildApplication`.
    */
+  /**
+   * **The educational record, through the shared erasure primitive.**
+   *
+   * The ten-year retention boundary destroys exactly the same rows for a
+   * different reason, so both call one function: the data treatment is
+   * identical even though the policies are not. What differs — who authorised
+   * it, what is stamped afterwards, what the audit says — stays here.
+   */
   await prisma.$transaction(async (tx) => {
-    /**
-     * **Every id is collected BEFORE anything is deleted**, because a tombstone
-     * is found by the id of the row it can restore and that id is unreachable
-     * once the row is gone. The first version of this collected only submission
-     * and application ids, and a `Trash` snapshot of a deleted enrolment
-     * survived the deletion — a restorable copy of exactly the record Option B
-     * had just destroyed. The test that caught it is the one asserting no Trash
-     * can restore any of it.
-     */
-    const byStudent = { studentId: subjectId } as const;
-    const [submissions, grades, attendance, quranLogs, surahProgress, groupLinks, enrolments] =
-      await Promise.all([
-        tx.studentExamSubmission.findMany({ where: byStudent, select: { id: true } }),
-        tx.grade.findMany({ where: byStudent, select: { id: true } }),
-        tx.attendance.findMany({ where: byStudent, select: { id: true } }),
-        tx.quranProgressLog.findMany({ where: byStudent, select: { id: true } }),
-        tx.studentSurahProgress.findMany({ where: byStudent, select: { id: true } }),
-        tx.studentTeachingGroup.findMany({ where: byStudent, select: { id: true } }),
-        tx.enrollment.findMany({ where: byStudent, select: { id: true } }),
-      ]);
-    const educationalIds = [
-      ...submissions,
-      ...grades,
-      ...attendance,
-      ...quranLogs,
-      ...surahProgress,
-      ...groupLinks,
-      ...enrolments,
-    ].map((r) => r.id);
-
-    const submissionIds = submissions.map((r) => r.id);
-    if (submissionIds.length > 0) {
-      // Answer options cascade from answers; answers are Restrict on the
-      // submission, so they go first.
-      await tx.studentExamAnswer.deleteMany({
-        where: { submissionId: { in: submissionIds } },
-      });
-    }
-    await tx.studentExamSubmission.deleteMany({ where: byStudent });
-
-    await tx.grade.deleteMany({ where: byStudent });
-    await tx.attendance.deleteMany({ where: byStudent });
-    await tx.quranProgressLog.deleteMany({ where: byStudent });
-    await tx.studentSurahProgress.deleteMany({ where: byStudent });
-    await tx.studentTeachingGroup.deleteMany({ where: byStudent });
-    await tx.enrollment.deleteMany({ where: byStudent });
-
-    /**
-     * **The application that carries her copied identity** (Owner Section 6).
-     *
-     * `ChildApplication` holds her names, sex and birth date **independently of
-     * the `User` row**, so a deletion that cleared the account and left the
-     * application intact would have deleted nothing. The whole row goes rather
-     * than being stripped: a husk with every identifying column nulled still
-     * carries a `consent_text_version` recording consent for a child whose
-     * record no longer exists — evidence with nothing left to evidence — and the
-     * decision itself survives in the audit trail, which has its own purpose and
-     * its own schedule.
-     *
-     * **Only applications ABOUT her.** `parent_id` rows are her guardian's
-     * applications concerning other children and are somebody else's record.
-     */
-    const applications = await tx.childApplication.findMany({
-      where: {
-        OR: [{ childUserId: subjectId }, { matchedExistingUserId: subjectId }],
-      },
-      select: { id: true },
-    });
-    const applicationIds = applications.map((a) => a.id);
-    if (applicationIds.length > 0) {
-      await tx.trash.deleteMany({
-        where: { targetEntity: 'ChildApplication', targetId: { in: applicationIds } },
-      });
-      await tx.childApplication.deleteMany({ where: { id: { in: applicationIds } } });
-    }
-
-    // Every tombstone naming a row this transaction destroyed. Keyed on the ids
-    // themselves rather than on entity names, so nothing belonging to anybody
-    // else can be caught by it.
-    const destroyed = [...educationalIds, ...applicationIds];
-    if (destroyed.length > 0) {
-      await tx.trash.deleteMany({ where: { targetId: { in: destroyed } } });
-    }
-    await tx.trash.deleteMany({ where: { targetId: subjectId } });
+    await destroyEducationalRecord(tx, subjectId);
   });
 
   /**

@@ -149,6 +149,27 @@ canonical educational facts the platform already records:
 statement about *how the platform treats it* and **not** a claim about its legal
 classification, which stays explicitly open in this inventory.
 
+### The ten-year purge destroys the RECORD, not the account (2026-09-04)
+
+**The distinction the design turns on.** §4.10a's clock is about *identifiable
+educational history* — retained ten years after the last educational activity,
+for continuity, former-beneficiary requests and attestations. When those purposes
+lapse the history goes; **the account does not**. A person whose studies ended a
+decade ago may be a مؤطِّرة today, and closing her account because her own
+education ended would be an obvious wrong. Closing an account is a deliberate act
+with its own authority — Option A, Option B, guardian-only cleanup — and a
+calendar is not one of them.
+
+It runs `destroyEducationalRecord`, **the same function Option B runs**. The data
+treatment is identical and only the reason differs: there she asked and a Super
+Admin approved; here nobody asked and the calendar arrived. A second
+implementation would be a second answer to *what counts as her educational
+record*, and the two would drift.
+
+**In practice it deletes nothing for years** — the platform is months old — which
+is precisely the right moment to build it, because the behaviour can be proved on
+fixtures with no live record anywhere near the boundary.
+
 ## Before any destructive automation
 
 **No purge job is to be written until the following are reconciled**, because a
@@ -411,6 +432,8 @@ it was written:
   `referenceCode`, per the Owner's decision.
 * **Option B EXECUTES** (Owner, 2026-09-04). Approval destroys in the same call
   and returns `executed: true` only once it has committed — see below.
-* **The retention clocks are computed** — ten-year and twelve-month — and both
-  are **read-only reports**. Nothing on this page deletes anything today.
+* **All three retention clocks now EXECUTE** — ten-year educational,
+  twelve-month application, ninety-day Trash — each scheduled daily, each
+  failing closed per subject, and the first two sharing Option B's own erasure
+  primitive rather than reimplementing it.
 * **The consent wording is drafted, not applied.**

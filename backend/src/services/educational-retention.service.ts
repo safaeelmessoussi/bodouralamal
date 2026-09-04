@@ -1,4 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
+import * as audit from '../repositories/audit.repository.js';
+import { destroyEducationalRecord } from './erasure.js';
 
 /**
  * **When does a beneficiary's educational history stop being retained?**
@@ -191,4 +194,83 @@ export async function elapsedRetentionReport(
     if (report.elapsed) reports.push(report);
   }
   return reports;
+}
+
+/**
+ * **Destroys the educational record of everyone past ten years** (§4.10a; Owner
+ * decision, 2026-09-04 authorising execution).
+ *
+ * ## It destroys the RECORD, not the account — and that distinction is the
+ * whole design
+ *
+ * §4.10a's clock is about *identifiable educational history*: it is retained ten
+ * years after the last educational activity, for educational continuity, former-
+ * beneficiary requests and attestations. When those purposes lapse, **the
+ * history goes; the account does not**. A person whose studies ended a decade
+ * ago may well be a مؤطِّرة today, and closing her account because her own
+ * education ended would be an obvious wrong. Closing an account is a deliberate
+ * act with its own authority — Option A, Option B, guardian-only cleanup — and
+ * this is not one of them.
+ *
+ * ## One primitive, two policies
+ *
+ * `destroyEducationalRecord` is the same function Option B runs. The data
+ * treatment is identical; only the reason differs — there, she asked and a Super
+ * Admin approved, here nobody asked and the calendar arrived. A second
+ * implementation would be a second answer to *what counts as her educational
+ * record*, and the two would drift.
+ *
+ * ## Fail closed, per person
+ *
+ * One subject that cannot be erased is counted and skipped, never allowed to
+ * abort the sweep — a single stuck record must not freeze the whole policy — and
+ * an unexpected error still propagates, or a run that swallowed everything would
+ * report success while destroying nothing.
+ *
+ * **In practice this deletes nothing for years**, because the platform is months
+ * old and the boundary is ten years past the last activity. That is the correct
+ * time to build it: the behaviour can be proved on fixtures with no live record
+ * anywhere near the boundary.
+ */
+export async function purgeElapsedRetention(
+  prisma: PrismaClient,
+  now: Date = new Date(),
+): Promise<{ purged: number; failed: number }> {
+  const due = await elapsedRetentionReport(prisma, now);
+
+  let purged = 0;
+  let failed = 0;
+  for (const report of due) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await destroyEducationalRecord(tx, report.studentId);
+        await audit.write(tx, {
+          // System-initiated: the calendar decided, not a person (R60.8).
+          actorUserId: null,
+          actionType: 'retention.educational_purge',
+          targetEntity: 'User',
+          targetId: report.studentId,
+          /**
+           * **Ids and the boundary, never a value** (TD-8, TD-14). Which fact
+           * decided the clock is recorded because it is what makes the decision
+           * checkable; how many grades she had is not, because a count is itself
+           * a fact about her education.
+           */
+          detail: {
+            years: EDUCATIONAL_RETENTION_YEARS,
+            last_activity_kind: report.lastActivityKind,
+            retain_until: report.retainUntil?.toISOString() ?? null,
+          },
+        });
+      });
+      purged += 1;
+    } catch (error) {
+      if (error instanceof AppError) {
+        failed += 1;
+      } else {
+        throw error;
+      }
+    }
+  }
+  return { purged, failed };
 }

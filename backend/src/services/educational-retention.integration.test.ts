@@ -5,6 +5,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import {
   EDUCATIONAL_RETENTION_YEARS,
   elapsedRetentionReport,
+  purgeElapsedRetention,
   retentionFor,
 } from './educational-retention.service.js';
 
@@ -371,5 +372,133 @@ describe('the dry run reports and deletes nothing', () => {
     // The whole point of a dry run.
     expect(await prisma.grade.count()).toBe(before);
     expect(await prisma.user.count({ where: { id: elapsed } })).toBe(1);
+  });
+});
+
+describe('the ten-year boundary is enforced — the RECORD, never the account', () => {
+  /**
+   * **Every instant here is a fabricated far-future date**, exactly as the
+   * measurement tests above use, because the sweep acts on every beneficiary
+   * whose boundary has passed. The platform is months old, so no real record is
+   * anywhere near ten years; the fixtures put one there deliberately and the
+   * reference instant selects only them.
+   */
+  it('destroys the educational record once ten years have passed', async () => {
+    const her = await makeBeneficiary('منتهية المدة');
+    const exam = await makeExam('2905-06-15');
+    const grade = await prisma.grade.create({
+      data: {
+        examId: exam,
+        studentId: her,
+        score: 15,
+        status: 'published',
+        publishedAt: day('2905-06-20'),
+      },
+    });
+
+    const counts = await purgeElapsedRetention(prisma, day('2916-01-01'));
+
+    expect(counts.purged).toBeGreaterThanOrEqual(1);
+    expect(await prisma.grade.count({ where: { id: grade.id } })).toBe(0);
+  });
+
+  it('LEAVES THE ACCOUNT ALONE — she may be staff today', async () => {
+    /**
+     * The distinction the whole design turns on. §4.10a's clock is about
+     * *identifiable educational history*, not about the account: a person whose
+     * studies ended a decade ago may be a مؤطِّرة now, and closing her account
+     * because her own education ended would be an obvious wrong. Closing an
+     * account is a deliberate act with its own authority, and this is not one.
+     */
+    const her = await makeBeneficiary('صارت مؤطِّرة');
+    const exam = await makeExam('2905-06-15');
+    await prisma.grade.create({
+      data: {
+        examId: exam,
+        studentId: her,
+        score: 15,
+        status: 'published',
+        publishedAt: day('2905-06-20'),
+      },
+    });
+
+    await purgeElapsedRetention(prisma, day('2916-01-01'));
+
+    const account = await prisma.user.findUniqueOrThrow({ where: { id: her } });
+    expect(account.deletedAt).toBeNull();
+    expect(account.nameArabic).toContain(TAG);
+  });
+
+  it('leaves a beneficiary INSIDE the boundary completely untouched', async () => {
+    const her = await makeBeneficiary('داخل المدة');
+    const exam = await makeExam('2914-06-15');
+    const grade = await prisma.grade.create({
+      data: {
+        examId: exam,
+        studentId: her,
+        score: 15,
+        status: 'published',
+        publishedAt: day('2914-06-20'),
+      },
+    });
+
+    await purgeElapsedRetention(prisma, day('2916-01-01'));
+
+    expect(await prisma.grade.count({ where: { id: grade.id } })).toBe(1);
+  });
+
+  it('records the boundary that decided it, and no educational value', async () => {
+    const her = await makeBeneficiary('للسجل');
+    const exam = await makeExam('2905-06-15');
+    await prisma.grade.create({
+      data: {
+        examId: exam,
+        studentId: her,
+        score: 15,
+        status: 'published',
+        publishedAt: day('2905-06-20'),
+      },
+    });
+
+    await purgeElapsedRetention(prisma, day('2916-01-01'));
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'retention.educational_purge', targetId: her },
+    });
+    /**
+     * **The exact key set, not a substring search.** The first version asserted
+     * the detail did not contain `'15'` — her score — and failed on the `15` in
+     * `2915-06-15`. Substring assertions over serialized JSON are a poor way to
+     * express *«nothing else is in here»*; enumerating the keys says it exactly,
+     * and a fourth key appearing later cannot slip past.
+     */
+    expect(Object.keys(row.detail as object).sort()).toEqual([
+      'last_activity_kind',
+      'retain_until',
+      'years',
+    ]);
+    expect(row.actorUserId).toBeNull();
+  });
+
+  it('is idempotent — a second sweep finds no history left to destroy', async () => {
+    const her = await makeBeneficiary('مكرَّرة');
+    const exam = await makeExam('2905-06-15');
+    await prisma.grade.create({
+      data: {
+        examId: exam,
+        studentId: her,
+        score: 15,
+        status: 'published',
+        publishedAt: day('2905-06-20'),
+      },
+    });
+
+    const first = await purgeElapsedRetention(prisma, day('2916-01-01'));
+    const second = await purgeElapsedRetention(prisma, day('2916-01-01'));
+
+    expect(first.purged).toBeGreaterThanOrEqual(1);
+    // No history means no boundary, so she is no longer due — which is the
+    // durable form of "already done" rather than a flag somebody maintains.
+    expect(second.purged).toBe(0);
   });
 });
