@@ -37,7 +37,43 @@ def assemble(entry):
     return walk(entry)
 
 css = assemble(sys.argv[1])
-QUERY = "@media (min-width: 48rem)"
+
+def governing_query(css):
+    """**The breakpoint is derived, never hard-coded.**
+
+    This read `@media (min-width: 48rem)` as a literal. When the header's
+    breakpoint moved to 60rem — because at 48rem the full bar was revealed into
+    a viewport too narrow to hold it — the guard stopped recognising its own
+    query, treated the in-query rules as top-level, and reported that the
+    horizontal navigation renders on a narrow screen. The CSS was correct; the
+    guard was reading the wrong block.
+
+    The property being guarded is that exactly one navigation renders at any
+    width. Which width divides them is a design decision that may move again, so
+    it is now discovered: the governing query is the one whose own block styles
+    `.app-header__nav`.
+    """
+    for m in re.finditer(r"@media \(min-width:[^)]+\)", css):
+        start = css.find("{", m.end())
+        if start == -1:
+            continue
+        depth, i = 0, start
+        while i < len(css):
+            if css[i] == "{":
+                depth += 1
+            elif css[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if ".app-header__nav" in css[start:i]:
+            return m.group(0)
+    return None
+
+QUERY = governing_query(css)
+if QUERY is None:
+    print("FAIL: no @media (min-width: …) block styles .app-header__nav")
+    raise SystemExit(1)
 
 def display_rules(selector):
     """Every `display` declared for a selector, in source order, flagged with
@@ -100,5 +136,5 @@ if failures:
         print("  -", f)
     raise SystemExit(1)
 
-print("OK: the burger and the horizontal navigation are mutually exclusive at every width.")
+print(f"OK: exclusive at every width; the header switches at {QUERY}.")
 PY

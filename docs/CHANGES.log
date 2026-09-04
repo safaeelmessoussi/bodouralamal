@@ -5194,3 +5194,120 @@ that limit is stated rather than engineered around.
 are already recorded precisely in `TASKS.md`, and the **active text is
 untouched**. Drafting the wording itself would be inventing legal facts, so the
 inventory is the whole of the safe work here.
+
+## The admission-to-achievement journey, and the notice publication never sent (2026-09-04)
+
+**The Owner asked for one business flow to actually work**, end to end, through the
+real application: a مؤطِّرة applies, an adult مستفيدة applies, the Super Admin
+approves both, the مستفيدة is admitted to **two** Levels, an online assessment is
+set on one of them, both women are told, she answers it — saving, leaving,
+returning — and submits, the مؤطِّرة marks it and publishes the mark, and only
+then does the مستفيدة see it; then her memorisation is recorded and appears on
+her record.
+
+**It did not work, and the break was in the middle.** `publishAssessment` moved
+the state and wrote its audit row and **notified nobody at all** — not the
+مستفيدة whose paper it is, not the مؤطِّرة who will mark it. R116 clause 5 had
+wired the **physical** Exam lifecycle to the inbox; R124 then built the online
+assessment on the same `Exam` row with a lifecycle of its own, and publication —
+the one transition that makes a paper reachable — was never connected. This is
+the platform's most repeated defect shape: **a complete capability with no
+reach**, now its seventh instance.
+
+**2,246 integration tests were green throughout**, because each asked whether its
+own step worked and none asked whether publication *reaches* anybody. A
+composition question needs a composition test; that is the whole reason
+`journey.integration.test.ts` exists.
+
+### What the fix reuses rather than reinvents
+
+**The student audience is `examAudienceWhere`** — the *same* predicate `eligible()`
+uses to decide whether she may open the paper and `GET /me/assessments` filters
+on. R77.3's rule is that a notification list disagreeing with its own audience
+makes both unusable, so there is one predicate, not two that agree today. It also
+makes the two-enrolment case correct **structurally**: the query selects `User`
+rows, so a مستفيدة enrolled in LEVEL A *and* LEVEL B is one row and therefore one
+notice — no `distinct()`, no de-duplication step.
+
+**The staff audience asks the authority predicate itself.**
+`assertExamInTeacherScope` already answers *may this مؤطِّرة organise this paper*
+and `examScopeWhereForTeacher` answers *which papers are hers*; that pair's own
+docstring warns that two grammars of one question drift when written apart. So a
+third grammar was not written: the recipients are narrowed to the people staffing
+a live schedule that teaches the assessment's Level, **effective on its own date**
+(R91), and each is then confirmed by calling the assertion. Anyone it refuses is
+not told a paper exists that she cannot open (§20 rule 17).
+
+**`exam_scheduled` was deliberately NOT reused.** It is defined against the
+sitting's grade-sheet audience, while an assessment resolves one of R125's five
+target arms and carries no branch at all — `exam_online_has_no_room_check` forbids
+one. One value with two audience rules is exactly the drift above. Its rendered
+copy also names a clock time an online paper does not have. So
+`assessment_published` is a new enum value on the existing type, using the
+existing `exam_id` target, the existing CHECK, and the existing
+`(user_id, exam_id, type)` idempotency coordinate. **No second notification
+subsystem, no new table, no external channel.**
+
+### The Quran wording, corrected rather than implemented
+
+The brief said *«the Teacher creates a Quran memorization session»*. **The
+platform does not permit that, by design, and the authorization was not
+weakened.** There is no `POST /sessions` in TD-3 at all: an occurrence is a
+materialized row of a `RecurringCourseSchedule` (§4.4, TD-4.6c), and
+`assertCanManage` restricts schedule creation to Admin and Super Admin — the
+administration organises the teaching and the مؤطِّرة delivers it. The journey
+therefore asserts that boundary (a مؤطِّرة's `POST /admin/course-schedules` is
+refused) and runs the real flow: **the Super Admin opens the LEVEL-A Quran class,
+staffs the approved مؤطِّرة on it, the Session materializes, and she records the
+memorisation on her own students.**
+
+### Findings recorded but not changed
+
+* **`GET /admin/subjects` does not expose `tracks_quran_progress`.** That flag
+  decides who may record memorisation — it is what `quranSubjectId` reads — and no
+  screen built on that endpoint can show it. The journey resolves the canonical
+  subject from the row as setup and names the gap here.
+* **`GET /quran-students` answers `200` with an empty roster for a beneficiary**
+  rather than refusing, where `GET /assessments/targets` refuses one outright on
+  the stated reasoning that *an empty list is an answer and «you may not ask» is a
+  different one*. Safe either way — she reaches the مؤطِّرة branch and teaches
+  nobody — so the journey asserts the **disclosure** property and leaves the
+  contract to the Owner.
+* **The list envelope is genuinely not uniform** — a bare `data` array, a
+  paginated `data.data`, and the grade sheet's `data.rows` beside its `data.exam`.
+  `business-scenario` already records the same for the creation verbs.
+* **`QuranProgressLog` stores no `level_id`.** `POST /quran-logs` takes one, but
+  only to validate against that Level's curriculum; the row records the مستفيدة,
+  the surah and the range. A second enrolment therefore cannot mis-attribute a log
+  by construction.
+
+### The header guard was restated, not deleted
+
+`check-header-nav-exclusive.sh` hard-coded `@media (min-width: 48rem)`. When the
+header's breakpoint moved to 60rem in `62afe1a`, the guard stopped recognising its
+own query, read the in-query rules as top-level, and reported that the horizontal
+navigation renders on a narrow screen — the CSS was correct and the guard was
+reading the wrong block. The **property** is that exactly one navigation renders
+at any width; the breakpoint is a design decision that may move again, so it is
+now **derived**: the governing query is the one whose block styles
+`.app-header__nav`. Re-proved by reintroducing the original cascade defect and
+watching it fail.
+
+### The fixture is the journey, and it is always cleaned
+
+`verify-journey.sh` runs the suite with `JOURNEY_KEEP=1` (which skips only the
+`afterAll` cleanup), resolves ids through the read-only
+`backend/scripts/journey-fixture-ids.ts`, drives the screens, and re-runs the
+suite from a shell `trap` so nothing tagged survives **even when Chrome fails**.
+A `seed-journey-scenario.ts` was considered and rejected: it would be a second
+implementation of the same eleven steps, and an abandoned `[journey]` branch would
+reach the association's *public* homepage — a defect already shipped once.
+
+**One browser lesson is load-bearing:** the inbox lives behind the top bar's bell
+(R85 moved it off the student dashboard), so an unopened panel yields an empty
+string — which passes *«she was told nothing»* while proving nothing. Every
+negative check asserts the panel opened first.
+
+**Verified:** 66/66 journey assertions through the real routes and a real
+PostgreSQL; 14/14 browser checks on the real screens for both women and the
+LEVEL-B-only control.

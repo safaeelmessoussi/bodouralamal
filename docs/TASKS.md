@@ -952,6 +952,14 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **`verify-notifications`'s real scope stated**: it POSTs to `/notify`, so it proves the audience and not the flow. That gap is why it was green while manual use was not
 - [x] All 23 browser scripts green — **503 checks**
 
+### The admission-to-achievement journey (2026-09-04)
+- [x] **The whole business flow, through the real routes**: registration (مؤطِّرة + adult مستفيدة) → approval → two enrolments → online assessment on LEVEL A → publication → notices → save/resume/submit → marking → grade publication → memorisation. 66 assertions in `backend/src/controllers/journey.integration.test.ts`
+- [x] **The defect it existed to find**: `publishAssessment` notified nobody. Fixed with `assessment_published`, reusing `examAudienceWhere` for the audience and `assertExamInTeacherScope` for the staff — no second predicate, no second subsystem
+- [x] **Two enrolments prove targeting**: one notice, one roster row, one grade, and a LEVEL-B-only control who receives and reaches nothing
+- [x] **The Quran boundary held rather than bent**: a مؤطِّرة may not create a course schedule (§4.4, `assertCanManage`); the Super Admin organises it and she delivers it
+- [x] **Browser: 14/14** through the bell, the deep links, her marking surface and إدخال الحفظ — fixture cleaned from a `trap`
+- [ ] **Owner decisions, non-blocking**: expose `tracks_quran_progress` on `GET /admin/subjects`; decide whether `GET /quran-students` should refuse a beneficiary rather than answer an empty roster
+
 ### C-01 — Event cancellation notification (2026-08-21)
 - [x] The ordinary Event delete commits first; only an activity then offers the optional R82.5 notification decision. Decline sends no request. Classes/exams and Session R77/R83 behavior are unchanged
 - [x] `event_cancelled` reuses the existing route, adapter and Event audience resolver. The deleted Event's authoritative Trash scope and live Event staff freeze the audience without a schema, migration or second Event copy

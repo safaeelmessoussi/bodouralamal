@@ -661,6 +661,54 @@ Neither is visible from a service test (the service was correct) or from a unit
 test of the component (both rendered). What showed them was performing the
 journey and reading what a person actually sees.
 
+## One journey suite, reused by the browser phase (added 2026-09-04)
+
+`backend/src/controllers/journey.integration.test.ts` drives the whole
+admission-to-achievement chain through the real routes: two registrations, the
+Super Admin's approvals, two enrolments, an online assessment, its publication,
+the notices it writes, the sitting (save · resume · submit), marking,
+publication of the mark, and a memorisation entry — sixty-six assertions,
+against the containerised stack and a real PostgreSQL.
+
+It sits beside `business-scenario.integration.test.ts` rather than inside it:
+that file proves the **teaching** steps compose (taxonomy → scheduling →
+materialization → calendar), and this one proves the **admission-to-achievement**
+steps do. They share two entities and nothing else.
+
+**The browser phase reuses this fixture instead of seeding its own.**
+`scripts/dev/browser/verify-journey.sh` runs the suite with `JOURNEY_KEEP=1`,
+which skips only the `afterAll` cleanup, resolves the ids with the read-only
+`backend/scripts/journey-fixture-ids.ts`, drives the screens, and then re-runs
+the suite normally so nothing tagged survives. The alternative — a
+`seed-journey-scenario.ts` alongside the suite — would have been a second
+implementation of the same eleven steps, and on this project the copy that
+drifts still passes its own tests.
+
+Two consequences worth keeping:
+
+* **The cleanup runs from a shell `trap`, not at the end of the happy path.** An
+  abandoned `[journey]` branch would reach the association's *public* homepage,
+  which is the defect recorded in the section below.
+* **A negative browser check must prove the surface OPENED.** The inbox lives
+  behind the top bar's bell (R85 moved it off the student dashboard), so an
+  unopened panel yields an empty string — which passes *«she was told nothing»*
+  while proving nothing at all. `verify-journey.mjs` asserts the panel is
+  non-null before asserting what it does not contain.
+
+### What this journey found that 2,246 integration tests did not
+
+**Publishing an online assessment notified nobody.** R116 wired the *physical*
+Exam lifecycle to the inbox; R124 then built the online assessment on the same
+`Exam` row with a lifecycle of its own, and `publishAssessment` wrote a state
+change and an audit row and told no one. Every per-feature suite passed
+throughout, because each asked whether its own step worked and none asked
+whether publication **reaches** anybody.
+
+That is the same shape as the two defects below and the six «a complete
+capability with no reach» instances in `ux-architecture.md`. The lesson is not
+*write more unit tests*: it is that a **composition** question needs a
+composition test, and the cheapest one is the journey a real person takes.
+
 ## Integration residue reaches USER-FACING screens (found 2026-09-05)
 
 **The suites share one database with the running application, so a row a suite

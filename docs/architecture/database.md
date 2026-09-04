@@ -625,6 +625,20 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260902200000_drop_student_social_profile
 20260902220000_drop_user_notes
 20260903090000_r122_academic_period_enrollment
+20260903180000_r123_attendance
+20260904090000_r124_assessment_builder
+20260904100000_drop_exam_access_policy
+20260904110000_soft_delete_rejected_family_links
+20260904120000_r130_birth_date
+20260904130000_r132_self_managed_claim
+20260904140000_self_managed_authority_index
+20260904150000_r131_full_deletion_request
+20260904160000_full_deletion_executed_at
+20260904170000_account_return_request
+20260904190000_assessment_published_notification
+20260905100000_drop_account_return_request
+20260905110000_drop_full_deletion_request
+20260905120000_account_status_decided_at
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -797,5 +811,3 @@ Interactive transactions must finish well inside the statement timeout.
 
 **Next:** [API](api.md) · **Related:** [Backend](backend.md),
 [Performance and scale](performance-and-scale.md), [Runbooks](../operations/runbooks.md)
-20260903180000_r123_attendance
-20260904090000_r124_assessment_builder
