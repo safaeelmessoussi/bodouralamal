@@ -220,10 +220,105 @@ and a check that the replay ran. **No provider-specific pruning is designed
 here** — backups may hold historical bytes until they expire, and that limit is
 stated rather than engineered around.
 
+## The consent wording has fallen behind the decisions (2026-09-04)
+
+**Inventory, gap analysis and a DRAFT. Nothing here is applied.** The active
+wording is evidence: R119 makes it immutable once in force, and only the Owner
+authors and activates a version (SRS §2.3, R119 (8)). This section exists so the
+Owner can act on a prepared draft rather than a discovered surprise.
+
+### What is in force
+
+| `version_label` | Status | In force since |
+| --- | --- | --- |
+| `dev-unapproved-v1` | `superseded` | 2026-09-02 |
+| `نص-الموافقة-القانوني-إصدار-2026-09-02` | `active` | 2026-09-02 |
+
+**One active row, and the database enforces it** — the partial unique index over
+`status = 'active'`. Everything below concerns that row.
+
+### The four gaps, and why each one is a gap
+
+The active wording predates R130, R131 and R132. Three of the four are not merely
+missing information — they are statements the platform's behaviour has since
+overtaken.
+
+* **Retention periods.** The text says the periods *«سيتم تحديدها … بعد استكمال
+  إجراءات المطابقة»* — will be determined later. **They have been determined**:
+  ten years for identifiable educational history, twelve months for a rejected
+  application. A notice that defers a decision already taken understates what the
+  reader is agreeing to.
+* **Date of birth.** R130 makes a full date of birth required for every
+  beneficiary. The text lists *«معلومات الهوية والتواصل»* generically; a newly
+  mandatory identifier that decides a **rights transition** is named, not implied.
+* **Closure and deletion.** The rights paragraph offers the 09-08 trio — access,
+  rectification, opposition. The platform now offers two further requests, and a
+  notice that omits a right the product implements is the wrong way round.
+* **The adult transition.** The text says a minor is processed *through* the
+  guardian and stops there. R132 ends that authority on an approved claim, and a
+  guardian reading this notice is consenting to something that will later be
+  taken out of their hands.
+
+### The draft paragraphs
+
+**For the Owner to author, adapt and activate — not for me to install.** Each one
+states behaviour the platform actually has; none states a CNDP requirement, and
+the retention paragraph attributes the ten years to the association, which is
+whose decision it is (see *Retention — the association's own policy* above).
+
+**Replacing the retention paragraph:**
+
+> تحتفظ الجمعية بالمعطيات التعليمية التي تسمح بالتعرف على الشخص المعني لمدة عشر
+> (10) سنوات ابتداءً من آخر نشاط تعليمي مسجل له في المنصة، وهي مدة اعتمدتها
+> الجمعية بناءً على أغراضها الخاصة: ضمان استمرارية المسار التعليمي، والاستجابة
+> لطلبات المستفيدات والمستفيدين السابقين، وتسليم الشهادات التعليمية أو التحقق
+> منها. أما طلبات التسجيل التي لم تُقبل، فيتم الاحتفاظ بها لمدة اثني عشر (12)
+> شهراً ابتداءً من تاريخ قرار الرفض. ويبقى الاحتفاظ ببعض المعطيات لمدة أطول
+> ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو متطلبات إثبات العمليات.
+
+**Added to the data-categories paragraph:**
+
+> تشمل معطيات الهوية المطلوبة لكل مستفيدة أو مستفيد تاريخ الازدياد الكامل،
+> ويُستعمل لتحديد بلوغ سن الرشد وما يترتب عنه على مستوى تدبير الحساب، ولا يُستعمل
+> لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن.
+
+**Added to the rights paragraph:**
+
+> إضافة إلى ذلك، تتيح المنصة تقديم طلبين متمايزين: إغلاق الحساب على المنصة، حيث
+> تُحذف عناصر الهوية وتنتهي إمكانية الولوج مع الاحتفاظ بالحد الأدنى من الأرشيف
+> التعليمي؛ أو حذف المعطيات التعليمية بشكل كامل، ويُبَتّ في هذا الطلب الثاني من
+> طرف إدارة الجمعية قبل تنفيذه. ولا يشمل الحذف ما يفرض الاحتفاظ به التزام قانوني
+> أو تنظيمي، ولا أدلة الموافقة، ولا السجلات الأمنية الضرورية، وهي تخضع لمدد
+> احتفاظ خاصة بها.
+>
+> ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية، إذ تُحفظ هذه النسخ
+> لمدة محدودة ثم تنتهي صلاحيتها؛ وتضمن الجمعية ألا يُعاد إدراج المعطيات المحذوفة
+> عند أي عملية استرجاع.
+
+**Added to the paragraph on minors:**
+
+> وعند بلوغ المستفيدة أو المستفيد سن الثامنة عشرة، يمكنه أن يطلب تدبير حسابه
+> بنفسه، ويصبح ذلك نافذاً بعد مصادقة إدارة الجمعية. وابتداءً من تلك اللحظة تنتهي
+> صلاحية ولي الأمر في تدبير هذا الحساب ولا تُستعاد. ولا يتم هذا الانتقال بصورة
+> تلقائية بمجرد بلوغ هذا السن.
+
+### What activating it costs
+
+**Nothing is restamped.** R119 (6) is the rule: existing `ConsentRecord` rows keep
+the version they were written against, because they record what those people
+actually read. A new version applies to consents given **after** it takes effect,
+and the old wording stays readable forever as the evidence for the ones before.
+**Nobody is re-asked**, and no screen should imply they were.
+
 ## Status
 
-**This page is a MAP, not an implementation.** Nothing here deletes anything
-today. Option A remains R111's behaviour exactly — including clearing
-`referenceCode`, which the Owner's decision will change — and Option B does not
-exist. The map is the precondition the Owner set for destructive work, not the
-work itself.
+**This page is a MAP, and it is now partly implemented.** What has changed since
+it was written:
+
+* **Option A exists and is R131's behaviour, not R111's** — it **preserves**
+  `referenceCode`, per the Owner's decision.
+* **Option B's request and review control plane exists**; its **execution does
+  not**, and will not until the classification above settles every row.
+* **The retention clocks are computed** — ten-year and twelve-month — and both
+  are **read-only reports**. Nothing on this page deletes anything today.
+* **The consent wording is drafted, not applied.**

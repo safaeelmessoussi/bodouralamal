@@ -4227,6 +4227,72 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The consent wording has fallen behind three revisions — drafted, not applied (2026-09-04)
+
+**Inventory and draft only.** The active `LegalConsentText` is untouched: R119
+makes a wording immutable once in force, and §2.3 makes authoring and activating
+one an Owner compliance task. What I could do without trespassing on that is
+establish exactly what is out of date and prepare the replacement paragraphs.
+
+Two rows exist; one is `active` since 2026-09-02 and predates R130, R131 and
+R132. **Three of the four gaps are not omissions but statements the platform has
+since overtaken** — which is the reason this was worth doing now rather than at
+the next compliance pass. The wording promises that retention periods *«will be
+determined»* after conformity procedures; they have been determined, by the Owner,
+ten years and twelve months. It offers the 09-08 trio of rights while the product
+now implements two further requests. And it says a minor is processed through her
+guardian, full stop, while R132 ends that authority on an approved claim — so a
+guardian is currently consenting to an arrangement that will later be taken out
+of their hands without the notice ever having said so. The fourth is a plain
+addition: R130's date of birth, newly mandatory and the input to a rights
+transition, deserves naming rather than hiding inside *«معلومات الهوية»*.
+
+The draft paragraphs are in `docs/development/personal-data-map.md`. Each states
+behaviour the platform actually has. **None attributes anything to the CNDP**, and
+the retention paragraph says the association adopted the ten years, because the
+association did. The draft also carries the honest backup limit rather than
+promising immediate erasure, matching the restore-suppression design recorded the
+same day.
+
+**Activation costs nothing in evidence terms and the page says so**, because the
+question will be asked: R119 (6) keeps every existing `ConsentRecord` bound to the
+version its person actually read. A new wording applies going forward; nobody is
+re-asked.
+
+Also corrected while there: that page's own **Status** block still said Option A
+clears `referenceCode` and Option B does not exist. Both were true when it was
+written and neither is now.
+
+## Two test defects the broad sweep found, and one §19.2 ledger gap (2026-09-04)
+
+**Three failures, all mine, none of them flaky.**
+
+`educational-retention` minted a hard-coded academic year. The label is unique
+application-wide, so it collided with a concurrent suite and with anything an
+interrupted run had left — passing alone, failing under load, which is the exact
+shape that gets a real failure written off as flakiness. Per-run label now, and a
+teardown that deletes **that label** rather than the `29%` band it used to sweep,
+which would have taken a neighbour's rows with it. The shared
+`provisionAcademicPeriod` helper cannot serve here: its dates are relative to
+today and a ten-year boundary needs a historical period end.
+
+`trash-coverage` flagged five reads in the retention services. They are correct —
+retention measures when someone's history **ended**, so withdrawn enrolments and
+rejected applications are precisely the rows it must see. Registered with that
+reason, because the opposite reading computes a wrong retention date.
+
+The third was a **gap in R132's own work**: it registered `POST
+/self-managed-claims` and published it in the contract without recording which
+side of §19.2 the route falls on. The §19.2 sweep derives its list from the
+contract, so the route joined the endpoints a Pending session must be refused at
+— and it is not one. It is onboarding-token-gated and holds no session by design.
+Exempted **with an assertion attached**, since a bare `EXEMPT` entry is
+indistinguishable from a hole: a Pending bearer is sent at it and the claim count
+is asserted unchanged.
+
+**The HTTP suites were re-run against a rebuilt and force-recreated container**,
+verified to carry the four new routes before the result was believed. 211/211.
+
 ## Restore suppression — designed, and mostly already present (2026-09-04)
 
 **Documentation and design only. No infrastructure was touched.**
