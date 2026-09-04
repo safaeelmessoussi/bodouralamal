@@ -4227,6 +4227,23 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The §19.2 guard caught the new public route, one revision after the last one (2026-09-04)
+
+`POST /account-return-requests` is public and onboarding-token-gated — she holds
+no session by design, because the account she is asking about is **closed**, so
+there is nothing to hold one on. The §19.2 sweep derives its list from the
+contract, so a new public route joins the endpoints a Pending session must be
+refused at until somebody says which side it falls on.
+
+**It caught `/self-managed-claims` earlier today and mine an hour later**, which
+is the whole argument for the guard: the author of a public route does not
+remember to record its side, and the contract will not remind them. Exempted
+**with the assertion attached**, and the assertion is now parameterised over both
+routes rather than duplicated — a bare `EXEMPT` entry is indistinguishable from a
+hole, and the second copy of a check is where the two start to differ.
+
+Final backend integration sweep: **2317 passed, 0 failed**.
+
 ## Restore suppression is now a runbook step, and the consent draft is current (2026-09-04)
 
 **The one genuinely missing piece of restore suppression was operational, and it

@@ -164,6 +164,19 @@ const EXEMPT = new Set([
    * contract without ever recording which side of §19.2 it falls on.
    */
   "/self-managed-claims",
+  /**
+   * **Owner 2026-09-04 — the returning beneficiary's request, on the same
+   * footing as the claim above.** Onboarding-token-gated, and she holds no
+   * session by design: the account she is asking about is CLOSED, so there is
+   * nothing to hold one on.
+   *
+   * **The guard caught this one too**, one revision after it caught
+   * `/self-managed-claims` — which is the argument for the guard existing. A
+   * public route published in the contract joins the `403` sweep automatically,
+   * and the author has to say which side it falls on. The `it` below is what
+   * keeps the exemption from being a hole.
+   */
+  "/account-return-requests",
   // R119: the legal wording the registration form must display. **Anonymous by
   // necessity** — the form is reached before any account exists, so the notice
   // a person is legally entitled to read before agreeing cannot sit behind a
@@ -290,15 +303,18 @@ describe("§19.2 — a Pending session reaches no guarded endpoint", () => {
    * token, not a permission — and the point being proved is not the status
    * code but that **no claim exists afterwards**.
    */
-  it("the onboarding-gated exemption still reaches no state", async () => {
-    const before = await prisma.selfManagedClaim.count();
+  it.each([
+    ["/self-managed-claims", () => prisma.selfManagedClaim.count()],
+    ["/account-return-requests", () => prisma.accountReturnRequest.count()],
+  ])("the onboarding-gated exemption %s still reaches no state", async (path, count) => {
+    const before = await count();
 
-    const res = await call("POST", "/self-managed-claims", pendingToken, {});
+    const res = await call("POST", path, pendingToken, {});
 
     // Refused for want of the token the route actually runs on.
     expect(res.status).toBe(400);
     expect(res.body.data).toBeUndefined();
-    expect(await prisma.selfManagedClaim.count()).toBe(before);
+    expect(await count()).toBe(before);
   });
 });
 
