@@ -1702,6 +1702,28 @@ was hiding behind it: the run went green on the first attempt.
       audit from becoming a hiding place — the boundary between the two is not
       drawn. **A partial purge that claims completion is worse than none**, so
       execution stays unimplemented rather than partially correct.
+- [x] **DONE (2026-09-04) — the guardian-only cleanup GUARD.** R131's §4.3
+      clause was ratified but had **not been carried into `SRS.md`** by the
+      reconciliation pass; it is there now. `policies/guardian-purpose.ts`
+      answers *does this account still have a purpose?* across all seven §4.3
+      conditions plus two the platform gained since (a self-managed adult is
+      never a guardian-only account; an undecided full-deletion request preserves
+      both parties). The predicate is **inclusive by design**: a missed purpose
+      closes an account that should have lived, while a spurious one merely
+      leaves one alive. 11 tests, including §4.3's named case of a rejected link
+      beside a pending application.
+- [ ] **BLOCKED — which operation TRIGGERS guardian-only closure.** The guard is
+      built and **no trigger is wired**. §4.3 says the decision *belongs to the
+      deliberate deletion operation*, and three candidates are materially
+      different: **(a)** revoking the last approved link — soft, immediate, and
+      the most common event; **(b)** purging that link from Trash — genuinely
+      permanent, but a Super Admin housekeeping act that may happen long after;
+      **(c)** fully deleting the last child under Option B — not implemented.
+      Closing somebody's account is severe and irreversible in practice, so
+      attaching it to whichever operation somebody picked would be inventing
+      policy. **THE PRECISE DECISION NEEDED:** *which of (a), (b) or (c) — or
+      an explicit administrator action — closes a guardian-only account that the
+      guard reports as having no remaining purpose?*
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
       *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
       questions, answered from the code:** **(a) does a future attestation need

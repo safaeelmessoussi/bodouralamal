@@ -4106,3 +4106,35 @@ negation rather than the phrase.
 **Schema:** one new table with two enums and two indexes. **Tests: 14/14** new,
 38/38 across the closure, authority and request suites. OpenAPI at 170 paths,
 reconciled; TD-3 updated.
+
+## The guardian-only cleanup guard, and a gap in my own reconciliation (2026-09-04)
+
+**R131's §4.3 clause was ratified and never reached `SRS.md`.** The
+reconciliation pass carried §4.10a's retention and deletion clauses and missed
+the guardian-only one entirely. Corrected: §4.3 now states the rule, the seven
+atomic conditions, the load-bearing distinctions and the implementation status.
+
+**The guard is built; no trigger is wired.** `policies/guardian-purpose.ts`
+answers *does this account still have a reason to exist?* and returns **every**
+purpose it finds rather than the first — an operator reading it before an
+irreversible act needs the whole picture. Beyond §4.3's seven conditions it adds
+two the platform gained since: a **self-managed adult** is never a guardian-only
+account (she took it over deliberately; holding no links now is not a reason to
+take it back), and an **undecided full-deletion request** preserves both its
+subject and its requester, because closing either would decide it by removal.
+
+**The predicate is inclusive on purpose.** A missed purpose closes an account
+that should have lived; a spurious one merely leaves an account alive. Those are
+not symmetric, so the doubt runs one way.
+
+**What is NOT wired, and why that is the honest outcome.** §4.3 says the decision
+*belongs to the deliberate deletion operation* — and three candidates differ
+materially: revoking the last approved link (soft, immediate, common), purging
+that link from Trash (genuinely permanent, but housekeeping that may come much
+later), and fully deleting the last child under Option B (not implemented).
+Closing somebody's account is severe, so attaching it to whichever operation
+happened to be picked would be inventing policy. Recorded as a precise decision.
+
+**Tests: 11/11**, including §4.3's own named case — a rejected link beside a
+still-pending child application preserves the account — and the control that a
+report lists every purpose rather than stopping at the first.
