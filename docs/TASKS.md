@@ -1679,6 +1679,29 @@ was hiding behind it: the run went green on the first attempt.
       an adult who had taken it away (`ACCOUNT_SELF_MANAGED`). One additive
       index; no column, backfill or fabricated status. 11 policy tests + 126
       across the affected suites; proved against the defect.
+- [x] **DONE (2026-09-04) — Option B REQUEST/REVIEW control plane.**
+      `FullDeletionRequest` + four routes. A person may always ask about herself;
+      an adult may ask for a minor only while holding a **live approved
+      `FamilyLink`**; **a former guardian of a self-managed adult has no basis** —
+      a rule only expressible because authority is now the durable approved
+      claim. Refusals about somebody else are uniform. **Approval records a
+      decision and DELETES NOTHING** (`executed: false` on the wire and in the
+      audit). Refusal follows R128's shape. 14 tests; the queue and the audit
+      carry no educational fact.
+- [ ] **BLOCKED — Option B DESTRUCTIVE EXECUTION.** The control plane is built
+      and an approved request is a decision waiting to be carried out. Execution
+      needs every classification in §4.10a's map settled, and at least these are
+      not: **(a)** the birth date (below); **(b)**
+      `notification.subject_user_id`, which §4.10a marks provisional — a
+      notification in *another person's* inbox whose subject is the deleted
+      person must be de-identified rather than destroyed, and exactly what to
+      rewrite in its rendered content is undecided; **(c)** `ChildApplication`'s
+      copied identity fields, whose own 12-month rule has no settled reference
+      point; **(d)** Trash snapshots of rows that will be deleted; **(e)**
+      consent evidence, which §4.10a keeps under its own rule while forbidding
+      audit from becoming a hiding place — the boundary between the two is not
+      drawn. **A partial purge that claims completion is worse than none**, so
+      execution stays unimplemented rather than partially correct.
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
       *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
       questions, answered from the code:** **(a) does a future attestation need
