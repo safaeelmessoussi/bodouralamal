@@ -1294,12 +1294,18 @@ describe("account administration is Super Admin's, the directory is not", () => 
 /**
  * **Deleting an account, proved at the API boundary.**
  *
- * The property that matters most is not that the row goes — it is that **it does
- * not**, and that everything filed against it survives. R111 §2: twenty-six of
- * the thirty-five relationships referencing `"user"` must outlive the account,
- * so deletion is the de-identification of a row that continues to exist.
+ * R111's framing was *«deleting a login does not delete the institution's
+ * record»*, and the `User` row still survives de-identified for exactly that
+ * reason: relationships from other people's records, from consent evidence and
+ * from the audit trail point at it, and removing it would delete their data to
+ * delete hers.
+ *
+ * **What changed under R133** is everything hanging off it that was hers alone.
+ * Deletion used to preserve the educational archive; it now destroys it. So the
+ * property proved here is a boundary rather than a preservation: the row and the
+ * institution's own records survive, and her history does not.
  */
-describe("R111 — deleting an account keeps the record", () => {
+describe("R111/R133 — deleting an account keeps the ROW, not her history", () => {
   it("lets ANY authenticated user delete their own account", async () => {
     // Owner, 2026-08-28: Student, Teacher, Admin and Super Admin alike. A role
     // is never a reason to be unable to leave.
@@ -1651,11 +1657,17 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(days).toBe(7);
   });
 
-  it("permanent delete DE-IDENTIFIES and preserves — it removes no row", async () => {
+  it("permanent delete de-identifies the row, and destroys what is HERS alone", async () => {
     /**
-     * The assertion this whole design exists for. A safeguarding relationship
-     * is filed against the account; after a permanent delete the person is
-     * unidentifiable and the relationship still points at the same tombstone.
+     * **The two halves of R133's boundary, in one test.**
+     *
+     * It used to read *«de-identifies and PRESERVES — it removes no row»*, and
+     * that was the whole point while Option A kept the educational archive.
+     * Permanent deletion is destructive now, so what has to be proved is both
+     * sides at once: the person becomes unidentifiable **and** what was hers
+     * alone is destroyed, while the row itself, other people's records and the
+     * institution's own survive. A test proving only the erasure would pass just
+     * as well if deletion had become a cascade.
      */
     const victim = await makeUser("محذوفة نهائياً", "active", "female", false);
     const parent = await makeUser("ولي سجل محفوظ", "active", "female", false);
@@ -1806,8 +1818,18 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(
       await prisma.quranProgressLog.count({ where: { id: progress.id } }),
     ).toBe(0);
-    // Safeguarding/history survives and still points at the tombstone.
-    expect(await prisma.familyLink.count({ where: { id: familyLink.id } })).toBe(1);
+    /**
+     * **Her family link goes with her** (R133 §10) — inverted by decision. It
+     * used to survive and point at the tombstone, because Option A destroyed
+     * nothing. A `FamilyLink` exists to let a guardian act for a child; once one
+     * party is permanently deleted it has no purpose, and it is personal data
+     * about who her family is.
+     *
+     * **The other party is untouched**, which is the property that matters and
+     * is asserted directly in `account-closure.integration.test.ts`, in both
+     * directions.
+     */
+    expect(await prisma.familyLink.count({ where: { id: familyLink.id } })).toBe(0);
     // The recoverable snapshot held the original PII. It must disappear in the
     // same transaction as de-identification or the erasure is only cosmetic.
     expect(

@@ -4227,6 +4227,37 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The last two Option A assertions, inverted (2026-09-05)
+
+**Both encoded the same withdrawn rule**: that a `FamilyLink` survives permanent
+account deletion, because Option A destroyed nothing. R133 §10 removes a
+permanently-deleted person's family relationships — the link exists to let a
+guardian act for a child, and it has no purpose once one party is gone.
+
+`self-management.integration.test.ts` asserted the link survived *as evidence*.
+Inverting it is safe for a reason worth stating: with no link the guardian would
+be refused anyway, which is a **weaker** proof than *the authority refuses him* —
+and the very next test is the one that proves it is the authority, by clearing
+the tombstone so the account looks live again. The strong proof was never in the
+assertion that changed.
+
+`user-management.http.integration.test.ts` asserted the same thing under the
+heading *«permanent delete DE-IDENTIFIES and preserves — it removes no row»*. The
+test and its describe block are renamed as well as re-asserted, because the old
+names had become the opposite of what the code does: the `User` **row** still
+survives de-identified, and everything hanging off it that was hers alone does
+not. A test proving only the erasure would pass just as well if deletion had
+become a cascade, so it now proves both halves.
+
+### One unrelated failure, classified and not touched
+
+The full sweep surfaced a failure in `course-schedule.http.integration.test.ts` —
+a different test each time, passing cleanly on repeat runs in isolation. **It is
+outside this work's blast radius**: nothing in the R133 diff touches scheduling,
+sessions, rooms or materialisation, and the suite was last modified by R123. It
+is recorded here as a pre-existing intermittent failure rather than fixed by
+guesswork or hidden by a widened timeout.
+
 ## The consent draft and the map, reconciled to one story (2026-09-05)
 
 **The 2026-09-04 draft described a model that no longer exists** — two requests, a

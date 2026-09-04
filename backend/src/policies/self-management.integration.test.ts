@@ -272,12 +272,23 @@ describe('the authority SURVIVES what authentication does not', () => {
       resolveActingStudent(prisma, { userId: guardian, roles: ['parent'] }, adult),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
-    // 6 · and the link row survives as evidence — nothing was destroyed.
-    const link = await prisma.familyLink.findFirstOrThrow({
-      where: { parentId: guardian, studentId: adult },
-    });
-    expect(link.status).toBe('approved');
-    expect(link.deletedAt).toBeNull();
+    /**
+     * **6 · and the link is GONE with her** (R133 §10) — inverted by decision.
+     *
+     * It used to survive as evidence, because Option A destroyed nothing. R133
+     * deletes a permanently-deleted person's family relationships: the link
+     * exists to let a guardian act for a child, and it has no purpose once she
+     * is gone.
+     *
+     * **The refusal above is not weakened by this**, and that matters: with no
+     * link he would be refused anyway, which is a weaker proof than *the
+     * authority refuses him*. The next test is the one that proves it is the
+     * authority — it clears the tombstone so the account looks live again — and
+     * it is why this assertion can invert without losing the property.
+     */
+    expect(
+      await prisma.familyLink.count({ where: { parentId: guardian, studentId: adult } }),
+    ).toBe(0);
   });
 
   it('the authority is what refuses him — proved with the tombstone cleared', async () => {
