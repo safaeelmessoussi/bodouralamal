@@ -146,6 +146,24 @@ const EXEMPT = new Set([
   // §4.4 / §4.1b / TD-3.9: public by design.
   "/calendar",
   "/registrations",
+  /**
+   * **R132 — public but onboarding-token-gated, exactly like `/registrations`.**
+   *
+   * A bearer is not the mechanism here and `403` is not the answer: the caller
+   * has proven control of a Google identity and deliberately holds NO session,
+   * because issuing one would already be the transition she is asking
+   * permission for. The gate is a cryptographic `X-Onboarding-Token`, so a
+   * Pending session's bearer is simply ignored — it is not a weaker key, it is
+   * not a key at all.
+   *
+   * **The exemption is not a blind spot**: the `it` below sends a Pending
+   * bearer at this route and asserts it reaches no state. R132's own suite
+   * proves the token gate itself against forged, expired and replayed tokens.
+   *
+   * The guard caught this: R132 registered the route and published it in the
+   * contract without ever recording which side of §19.2 it falls on.
+   */
+  "/self-managed-claims",
   // R119: the legal wording the registration form must display. **Anonymous by
   // necessity** — the form is reached before any account exists, so the notice
   // a person is legally entitled to read before agreeing cannot sit behind a
@@ -261,6 +279,26 @@ describe("§19.2 — a Pending session reaches no guarded endpoint", () => {
     expect(res.body.error?.code).toBe("FORBIDDEN");
     // Nothing was read: no data travels alongside the refusal.
     expect(res.body.data).toBeUndefined();
+  });
+
+  /**
+   * **The exempted onboarding route still gives a Pending session nothing.**
+   *
+   * An entry in `EXEMPT` removes a route from the `403` sweep, so without this
+   * the exemption would be indistinguishable from a hole. The refusal is a
+   * `400` rather than a `403` because the missing thing is the onboarding
+   * token, not a permission — and the point being proved is not the status
+   * code but that **no claim exists afterwards**.
+   */
+  it("the onboarding-gated exemption still reaches no state", async () => {
+    const before = await prisma.selfManagedClaim.count();
+
+    const res = await call("POST", "/self-managed-claims", pendingToken, {});
+
+    // Refused for want of the token the route actually runs on.
+    expect(res.status).toBe(400);
+    expect(res.body.data).toBeUndefined();
+    expect(await prisma.selfManagedClaim.count()).toBe(before);
   });
 });
 
