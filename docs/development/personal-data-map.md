@@ -187,6 +187,39 @@ Two obligations follow:
 Neither is implemented. Auditing the existing restic design and choosing the
 mechanism is operational work, recorded in [`TASKS.md`](../TASKS.md).
 
+### The restore-suppression design (2026-09-04) — and most of it already exists
+
+A restore rolls the live database back to an earlier moment. Any deletion applied
+**after** that moment is undone by the restore, silently. The minimum coherent
+mechanism is therefore a **durable ledger of deletions that carries no deleted
+content**, so the deletions can be re-applied afterwards without the ledger
+itself becoming a copy of what was deleted.
+
+**The platform already keeps that ledger, and it was not built for this.**
+
+| what was deleted | the durable record | what it carries |
+|---|---|---|
+| an account (Option A) | `AuditLog` `user.deidentify` | target id, and the **field names** cleared — never their values |
+| a family link | `AuditLog` `familylink.reject` / `.revoke` | both party ids and a reason |
+| an approved full deletion (Option B) | `FullDeletionRequest` (`approved`) + `AuditLog` | subject id, decider, instant |
+
+Each names **which row** and **when**, and none holds the erased data — which is
+exactly the property that makes them safe to keep and sufficient to replay. Audit
+rows also survive on their own retention clock rather than the subject's, so they
+outlive the thing they describe.
+
+**The procedure, stated so it can be executed rather than invented under
+pressure:** after any restore, re-apply every deletion whose recorded instant is
+later than the restore point, in the order the ledger records them, before the
+system is returned to service. `deIdentifyAccount` is already idempotent by
+construction, so re-applying one that survived the restore is harmless.
+
+**What is genuinely missing is small and operational**: a runbook step that makes
+this replay part of the restore procedure rather than a thing somebody remembers,
+and a check that the replay ran. **No provider-specific pruning is designed
+here** — backups may hold historical bytes until they expire, and that limit is
+stated rather than engineered around.
+
 ## Status
 
 **This page is a MAP, not an implementation.** Nothing here deletes anything

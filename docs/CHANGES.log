@@ -4226,3 +4226,36 @@ a deleted person's name is frozen into other people's inboxes. The guard's
 failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
+
+## Restore suppression — designed, and mostly already present (2026-09-04)
+
+**Documentation and design only. No infrastructure was touched.**
+
+A restore rolls the live database back and **silently undoes every deletion
+applied since**. The minimum coherent defence is a durable ledger of deletions
+that carries **no deleted content**, so the deletions can be replayed without the
+ledger becoming a copy of what was deleted.
+
+**The platform already keeps that ledger, and it was not built for this.**
+`AuditLog`'s `user.deidentify` records the target id and the **field names**
+cleared — never their values; `familylink.reject`/`.revoke` record both parties
+and a reason; an approved `FullDeletionRequest` records subject, decider and
+instant. Each names *which row* and *when*, none holds the erased data — the
+property that makes them both safe to keep and sufficient to replay — and audit
+rows survive on their own retention clock rather than the subject's.
+
+**The procedure is now written down** rather than left to be invented under
+pressure: after a restore, re-apply every deletion recorded later than the
+restore point, in ledger order, before returning the system to service.
+`deIdentifyAccount` is idempotent by construction, so re-applying one that
+survived the restore is harmless.
+
+**What remains is small and operational**: make the replay a runbook step rather
+than something somebody remembers, and check that it ran. **No provider-specific
+pruning is designed** — backups may hold historical bytes until they expire, and
+that limit is stated rather than engineered around.
+
+**LegalConsentText inventory (§13):** the six wording requirements R131 identified
+are already recorded precisely in `TASKS.md`, and the **active text is
+untouched**. Drafting the wording itself would be inventing legal facts, so the
+inventory is the whole of the safe work here.

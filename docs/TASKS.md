@@ -1821,10 +1821,22 @@ was hiding behind it: the run went green on the first attempt.
             association's ability to issue an attestation; and that backups
             expire rather than being erased on request. Drafting, review and
             activation belong to the Document Owner.
-      - [ ] **BACKUP/RESTORE RECONCILIATION (operational).** Audit the existing
-            restic design and choose the smallest reliable mechanism that stops
-            a restore silently resurrecting deleted personal data. No backup
-            infrastructure is deployed by this work.
+      - [x] **DESIGNED (2026-09-04) — restore suppression, and most of it already
+            exists.** A restore undoes any deletion applied after its restore
+            point, silently. The minimum mechanism is a durable ledger of
+            deletions carrying **no deleted content** — and the platform already
+            keeps one: `AuditLog`'s `user.deidentify` (target id and the **field
+            names** cleared, never their values), `familylink.reject`/`.revoke`,
+            and an approved `FullDeletionRequest`. Each names which row and when,
+            none holds the erased data, and audit rows outlive their subject on
+            their own retention clock. The replay procedure is written down in
+            [personal-data-map](development/personal-data-map.md);
+            `deIdentifyAccount` is already idempotent, so re-applying a deletion
+            that survived the restore is harmless.
+      - [ ] **REMAINING (operational, small).** Make the replay a step in the
+            restore runbook rather than something somebody remembers, and add a
+            check that it ran. **No provider-specific backup pruning is designed
+            or deployed**, and none should be until hosting is settled.
 - [x] **DIRECTION SETTLED (Owner, 2026-09-03) — the normalized-email lock is to be
   keyed, not raw.** The design is ratified and complete in
   [email-lock-keying](development/email-lock-keying.md):
