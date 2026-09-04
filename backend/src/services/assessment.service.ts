@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { notifyAssessmentPublished } from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
@@ -769,13 +770,42 @@ export async function publishAssessment(
       where: { id: examId },
       data: { status: 'published', publishedAt: new Date() },
     });
+    /**
+     * **Publication is the moment it reaches people, so it is the moment they
+     * are told** — in this transaction, never after it. R116 clause 7's rule:
+     * no committed change may lose its notification obligation, and no row may
+     * announce a rolled-back one.
+     */
+    const told = await notifyAssessmentPublished(
+      tx,
+      examId,
+      {
+        targetKind: exam.targetKind,
+        levelId: exam.levelId,
+        branchId: exam.branchId,
+        administrativeGroupId: exam.administrativeGroupId,
+        sessionId: exam.sessionId,
+        teachingGroupId: exam.teachingGroupId,
+        studentId: exam.studentId,
+        subjectId: exam.subjectId,
+        date: exam.date,
+      },
+      actor.userId,
+    );
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
       actionType: 'assessment.publish',
       targetEntity: 'Exam',
       targetId: examId,
-      detail: { question_count: questions, target_kind: exam.targetKind },
+      detail: {
+        question_count: questions,
+        target_kind: exam.targetKind,
+        // TD-8/TD-14 — counts, never who. The audience is re-resolvable from
+        // the row; the names are nobody's business in an audit line.
+        notified_students: told.students,
+        notified_staff: told.staff,
+      },
     });
   });
 }

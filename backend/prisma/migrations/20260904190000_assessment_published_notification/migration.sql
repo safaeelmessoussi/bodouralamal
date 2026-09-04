@@ -1,0 +1,22 @@
+-- **The online assessment's publication had no notification at all.**
+--
+-- R116 clause 5 wired the *physical* Exam lifecycle to the inbox: creation
+-- writes `exam_teacher_assigned` to assigned staff and `exam_scheduled` to the
+-- sitting's grade-sheet audience. R124 then built the ONLINE assessment on the
+-- same `Exam` row with a lifecycle of its own — draft → published → closed —
+-- and publication, which is the moment a paper reaches people, notified nobody.
+--
+-- `exam_scheduled` is deliberately NOT reused. It is defined against the
+-- sitting's grade-sheet audience (a named Administrative Group, or the whole
+-- Level at the Exam's branch), while an assessment resolves one of R125's five
+-- target arms and carries no branch at all — `exam_online_has_no_room_check`
+-- forbids one. Reusing the type would give a single value two different
+-- audience rules, which is the drift `assertExamInTeacherScope`'s own docstring
+-- warns about. Its rendered wording also names a clock time an online paper
+-- does not have.
+--
+-- Enum addition only: the `exam_id` target, the CHECK requiring exactly one
+-- target, and the `(user_id, exam_id, type)` idempotency coordinate are all
+-- unchanged.
+
+ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'assessment_published';

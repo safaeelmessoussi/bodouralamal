@@ -3429,6 +3429,15 @@ enum NotificationType {
   /// R82 — a grade became visible to the student it is about (BR-8). Written at
   /// publication only, and idempotent across re-publication.
   grade_published
+  /// **An ONLINE assessment (R124) was published** — the moment the paper
+  /// becomes available, which for an online assessment is what `exam_scheduled`
+  /// is for a physical sitting. It is a separate value because the two resolve
+  /// DIFFERENT audiences: `exam_scheduled` addresses the sitting's grade-sheet
+  /// roster, while this one addresses R125's five-armed assessment target, and
+  /// one value with two audience rules is the drift this codebase keeps finding.
+  /// Recipients are the resolved audience plus the مؤطِّرات whose teaching
+  /// assignment reaches it, minus the actor (R78.3).
+  assessment_published
   /// R116 — actionable account and relationship changes. These target the
   /// affected User through `subject_user_id`; the recipient may be that person
   /// or an administrator who owns the pending decision.

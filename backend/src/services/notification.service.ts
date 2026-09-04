@@ -16,7 +16,10 @@ import {
   type AudienceSpec,
   type EventScopeRows,
   audienceForSession,
+  examAudienceWhere,
+  assertExamInTeacherScope,
 } from "../policies/roster-resolution.js";
+import { effectiveOn } from "../policies/effective-staffing.js";
 import * as users from "../repositories/user.repository.js";
 
 /**
@@ -129,7 +132,8 @@ export type NotificationKind =
   | "exam_rescheduled"
   | "exam_changed"
   | "exam_cancelled"
-  | "grade_published";
+  | "grade_published"
+  | "assessment_published";
 
 /**
  * One row, **exactly one of whose targets is present** (R82.1). The reader
@@ -1644,4 +1648,195 @@ export async function notifyExamCancelled(
     recipients,
     actorUserId,
   );
+}
+
+/* ── The ONLINE assessment (R124) ─────────────────────────────────────────── */
+
+/**
+ * What `notifyAssessmentPublished` needs to resolve its two audiences. It is
+ * the assessment row itself, not a re-derived summary of it, so nothing here
+ * can disagree with what the paper actually targets.
+ */
+export interface AssessmentNoticeSpec {
+  targetKind: string;
+  levelId: string;
+  branchId: string | null;
+  administrativeGroupId: string | null;
+  sessionId: string | null;
+  teachingGroupId: string | null;
+  studentId: string | null;
+  subjectId: string | null;
+  date: Date;
+}
+
+/**
+ * **The مؤطِّرات an online assessment concerns.**
+ *
+ * ## Why this is not a new scope rule
+ *
+ * `assertExamInTeacherScope` already answers *may this مؤطِّرة organise this
+ * paper*, and `examScopeWhereForTeacher` answers *which papers are hers*. Its
+ * docstring says why they live side by side: **two grammars of one question
+ * drift when they are written apart, and the drift is invisible.** A third
+ * grammar — *whose paper is this* — would be a third place to drift, so this
+ * does not write one. It narrows to a small candidate set and then asks **the
+ * assertion itself**, which makes agreement structural rather than intended.
+ *
+ * The candidates are the people staffing a live schedule that teaches this
+ * assessment's Level, **effective on the assessment's own date** (R91), which
+ * is the same date the assertion judges authority on. Anyone the assertion
+ * refuses is dropped, so a مؤطِّرة who staffs a group inside the Level but does
+ * not reach this target is not told about a paper she cannot open.
+ */
+async function assessmentStaffRecipients(
+  tx: Prisma.TransactionClient,
+  spec: AssessmentNoticeSpec,
+): Promise<string[]> {
+  const schedules = await tx.recurringCourseSchedule.findMany({
+    where: {
+      deletedAt: null,
+      OR: [
+        { levelId: spec.levelId },
+        { administrativeGroup: { levelId: spec.levelId } },
+        { teachingGroup: { levelId: spec.levelId } },
+      ],
+    },
+    select: {
+      staff: {
+        where: { deletedAt: null, ...effectiveOn(spec.date) },
+        select: { userId: true },
+      },
+    },
+  });
+  const candidates = [
+    ...new Set(schedules.flatMap((row) => row.staff.map((person) => person.userId))),
+  ];
+
+  const reaches: string[] = [];
+  for (const userId of candidates) {
+    try {
+      await assertExamInTeacherScope(
+        tx as unknown as PrismaClient,
+        userId,
+        {
+          // An online assessment carries neither branch nor room; the empty
+          // strings are the sentinel `assertExamInTeacherScope` already
+          // documents for exactly this case, and they widen the question to
+          // *do you teach anybody in this Level* rather than forcing an empty
+          // UUID through a cast.
+          branchId: spec.branchId ?? '',
+          levelId: spec.levelId,
+          subjectId: spec.subjectId ?? '',
+          administrativeGroupId: spec.administrativeGroupId,
+        },
+        spec.date,
+      );
+      reaches.push(userId);
+    } catch {
+      // Refused by the authority predicate — she may not open this paper, so
+      // she is not told it exists (§20 rule 17).
+    }
+  }
+  return reaches;
+}
+
+/**
+ * **`POST /assessments/{id}/publish` — the moment the paper reaches people.**
+ *
+ * ## The defect this closes
+ *
+ * R116 clause 5 wired the **physical** Exam lifecycle to the inbox and R124
+ * built the **online** assessment afterwards, on the same `Exam` row but with a
+ * lifecycle of its own. Publication — the one transition that makes a paper
+ * visible to anybody — wrote a state change and an audit row and told **nobody
+ * at all**. The notification capability was complete and had no reach into this
+ * transition, which is this platform's most repeated defect shape.
+ *
+ * ## The student audience is the SAME predicate that lists her papers
+ *
+ * `examAudienceWhere` is what `eligible()` uses to decide whether she may open
+ * this assessment and what `GET /me/assessments` filters on. Resolving
+ * recipients through it means the inbox cannot disagree with the list —
+ * R77.3's rule, that a notification list disagreeing with its own audience
+ * makes both unusable, applied to R125's five target arms.
+ *
+ * It also makes the two-enrolment case correct **structurally rather than by a
+ * de-duplication step**: the query selects `User` rows, so a مستفيدة enrolled in
+ * this Level and another one is one row and therefore one notice.
+ *
+ * ## Idempotent, like every other type
+ *
+ * The `(user_id, exam_id, type)` coordinate carries it: re-publishing a
+ * previously published paper is refused upstream by the state machine, and a
+ * retried transaction writes the same rows.
+ */
+export async function notifyAssessmentPublished(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  spec: AssessmentNoticeSpec,
+  actorUserId: string,
+): Promise<{ students: number; staff: number }> {
+  const where = await examAudienceWhere(tx, {
+    targetKind: spec.targetKind,
+    levelId: spec.levelId,
+    branchId: spec.branchId,
+    administrativeGroupId: spec.administrativeGroupId,
+    sessionId: spec.sessionId,
+    teachingGroupId: spec.teachingGroupId,
+    studentId: spec.studentId,
+    // R122 — resolved on the assessment's own date, exactly as `eligible` does.
+    on: spec.date,
+  });
+  const students =
+    where === null
+      ? []
+      : (
+          await tx.user.findMany({
+            // Written even though every arm already constrains it, so this read
+            // is safe on its own reading (the rule `eligible` states beside the
+            // identical call).
+            where: { AND: [where, { deletedAt: null }] },
+            select: { id: true },
+          })
+        ).map((row) => row.id);
+
+  const staff = await assessmentStaffRecipients(tx, spec);
+
+  // One deterministic lock acquisition for the whole obligation, as the exam
+  // path does: the two audiences overlap whenever a مؤطِّرة also studies.
+  await liveNotificationRecipients(
+    tx,
+    [...students, ...staff].filter((id) => id !== actorUserId),
+  );
+
+  await writeAssessmentNotice(tx, examId, [...students, ...staff], actorUserId);
+  return {
+    students: students.filter((id) => id !== actorUserId).length,
+    staff: staff.filter((id) => id !== actorUserId).length,
+  };
+}
+
+/** The insert half, shaped like `writeExamNotice` and sharing its rules: the
+ *  actor is never a recipient (R78.3), inactive accounts are dropped under the
+ *  lock, and the unique coordinate makes a retry silent. */
+async function writeAssessmentNotice(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  userIds: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  const recipients = await liveNotificationRecipients(
+    tx,
+    [...new Set(userIds)].filter((id) => id !== actorUserId),
+  );
+  if (recipients.length === 0) return 0;
+  const result = await tx.notification.createMany({
+    data: recipients.map((userId) => ({
+      userId,
+      examId,
+      type: 'assessment_published' as const,
+    })),
+    skipDuplicates: true,
+  });
+  return result.count;
 }
