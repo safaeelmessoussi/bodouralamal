@@ -1324,8 +1324,8 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(after?.deletedAt).not.toBeNull();
   });
 
-  it("files the account on a THREE-day window, leaving BR-15's ninety alone", async () => {
-    const id = await makeUser("نافذة ثلاثة أيام", "active", "female", false);
+  it("files the account on the platform's ONE seven-day window", async () => {
+    const id = await makeUser("نافذة سبعة أيام", "active", "female", false);
     await grant(id, "student", branchId);
     await call("DELETE", "/profile", bearer(id, [{ role: "student", branches: [branchId] }]));
 
@@ -1337,12 +1337,16 @@ describe("R111 — deleting an account keeps the record", () => {
     const days = Math.round(
       (row.purgeAfter.getTime() - row.deletedAt.getTime()) / 86_400_000,
     );
-    // Three, and NOT ninety. A second window for one entity type; merging the
-    // two would silently move one of them.
-    expect(days).toBe(3);
+    /**
+     * **Seven, like everything else** (Revision 133). This test used to assert
+     * three, and to say why the account window differed from BR-15's ninety.
+     * The Owner removed the distinction rather than the display it forced, so
+     * the assertion is restated: one number is the property now.
+     */
+    expect(days).toBe(7);
   });
 
-  it("can restore the SAME complete account during the three-day window", async () => {
+  it("can restore the SAME complete account during the seven-day window", async () => {
     const id = await makeUser("قابلة للاسترجاع", "active", "female", true);
     await grant(id, "student", branchId);
     const email = `restore-${id}@example.test`;
@@ -1630,7 +1634,7 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(after?.deletedAt).toBeNull();
   });
 
-  it("lets a Super Admin delete another account, on the SAME 3-day window", async () => {
+  it("lets a Super Admin delete another account, on the SAME seven-day window", async () => {
     const victim = await makeUser("محذوفة إدارياً", "active", "female", false);
     const res = await call("DELETE", `/admin/users/${victim}`, superAdmin);
     expect(res.status).toBe(204);
@@ -1642,7 +1646,9 @@ describe("R111 — deleting an account keeps the record", () => {
     const days = Math.round(
       ((row?.purgeAfter.getTime() ?? 0) - (row?.deletedAt.getTime() ?? 0)) / 86_400_000,
     );
-    expect(days).toBe(3);
+    // The SAME window as a self-deletion, and now the same as every other
+    // entity's (Revision 133).
+    expect(days).toBe(7);
   });
 
   it("permanent delete DE-IDENTIFIES and preserves — it removes no row", async () => {

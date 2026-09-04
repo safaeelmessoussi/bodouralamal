@@ -27,7 +27,7 @@ export interface TrashEntry {
   deleted_at: string;
   deleted_by_id: string | null;
   deleted_by_name: string | null;
-  /** BR-15: when the 90-day window purges it permanently. */
+  /** BR-15: when the seven-day window purges it permanently (R133). */
   purge_after: string;
   restorable: boolean;
   /** A stable code when `restorable` is false — the screen explains it. */

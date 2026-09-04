@@ -58,7 +58,7 @@ export const QUEUES = {
    */
   applicationRetentionPurge: 'application.retention-purge',
   /**
-   * **BR-15's ninety days, enforced** (Owner 2026-09-04, closing R59.4). The
+   * **BR-15's seven days, enforced** (Owner 2026-09-05, R133). The
    * eligibility rule and the destruction both live in `trash.service.ts`; this
    * queue is the schedule and nothing else.
    */

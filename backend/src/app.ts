@@ -502,7 +502,7 @@ export function createApp(
   guarded.post('/admin/users/:id/reactivate', users.reactivate(prisma));
   guarded.put('/admin/users/:id/roles', users.setRoles(prisma));
   guarded.post('/admin/platform-owner/transfer', users.transferOwner(prisma));
-  // R111 — Super Admin only, on the same 3-day window as a self-deletion.
+  // R111 — Super Admin only, on the same seven-day window as a self-deletion.
   // `?permanent=true` performs the de-identification now instead.
   guarded.delete('/admin/users/:id', users.remove(prisma));
   // R131 §4.3 (Owner, 2026-09-04) — an EXPLICIT decision, never a trigger. A

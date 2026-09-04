@@ -8,7 +8,7 @@ import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { revokeAllSessions } from './refresh-token.service.js';
-import { ACCOUNT_PURGE_WINDOW_DAYS, snapshot } from '../repositories/trash.repository.js';
+import { TRASH_WINDOW_DAYS, snapshot } from '../repositories/trash.repository.js';
 import { lockAndAssertNotPlatformOwner } from './platform-owner.service.js';
 
 /**
@@ -30,20 +30,21 @@ import { lockAndAssertNotPlatformOwner } from './platform-owner.service.js';
  * itself plus a small set of satellites: everything else keeps pointing at a row
  * that is still there and no longer identifies anybody.
  *
- * ## Two steps, two windows
+ * ## Two steps, ONE window (Revision 133)
  *
  * **Soft delete** marks the account `deleted`, revokes every live session and
- * files a Trash row on a **three-day** window. The person is locked out at once
- * — `assertFreshActive` refuses any status that is not `active` — and can be
- * restored for three days.
+ * files a Trash row on the platform's **single seven-day** window. The person is
+ * locked out at once — `assertFreshActive` refuses any status that is not
+ * `active` — and can be restored for a week.
  *
- * **Permanent delete** performs the de-identification now instead of after three
- * days. It is the same operation the window would eventually reach, not a
- * stronger one, and it never removes a row.
+ * **Permanent delete** performs the de-identification now instead of at the end
+ * of the week. It is the same operation the window would eventually reach, not a
+ * stronger one.
  *
- * BR-15's ninety-day Trash window is **untouched**. R111 adds a second, shorter
- * window for one entity type; the two answer different questions and merging
- * them would silently move one of them.
+ * There used to be two windows — ninety days for a record, three for an account
+ * — defended as answering different questions. The Owner's simplification
+ * removes the distinction: one number, one sentence to teach, one boundary to
+ * test.
  */
 
 /** Who may be asked to delete somebody else's account. */
@@ -310,7 +311,6 @@ async function softDelete(
       data: { deletedAt: now, deletedById: actor.userId },
     });
 
-    // **Three days, not ninety** — stated by the caller that owns the rule.
     await snapshot(
       tx,
       {
@@ -320,7 +320,6 @@ async function softDelete(
         deletedById: actor.userId,
       },
       now,
-      ACCOUNT_PURGE_WINDOW_DAYS,
     );
 
     await audit.write(tx, {
@@ -331,11 +330,11 @@ async function softDelete(
       targetId,
       // R106's precedent: the trail must distinguish an act somebody took on
       // themselves from one an administrator took on them.
-      detail: { self_service: selfService, purge_after_days: ACCOUNT_PURGE_WINDOW_DAYS },
+      detail: { self_service: selfService, purge_after_days: TRASH_WINDOW_DAYS },
     });
 
     // TD-4.15's mechanism, in the same transaction: the account is unreachable
-    // immediately, not when the purge runs three days later.
+    // immediately, not when the purge runs a week later.
     await revokeAllSessions(tx, {
       userId: targetId,
       // The enum already had this value — R111 needed no new one, and adding a
@@ -366,7 +365,7 @@ export async function deleteOwnAccount(
 
 /**
  * `DELETE /admin/users/{id}` — **Super Admin only** (Owner, 2026-08-28), on the
- * **same three-day window** as a self-deletion.
+ * **same seven-day window** as a self-deletion.
  *
  * One rule and one mechanism: the person is signed out immediately while the
  * account stays restorable, so a deletion clicked by mistake is recoverable —
@@ -690,7 +689,7 @@ export async function deIdentifyAccount(
  * check performed a moment earlier would be a check of a state that may no
  * longer hold. `softDelete`'s `precondition` is what makes them one operation.
  *
- * **No scheduling and no grace period** beyond the ordinary three-day window
+ * **No scheduling and no grace period** beyond the ordinary seven-day window
  * this reuses, and **no child record is touched**: the purposes are read, never
  * removed. An account with a purpose is refused, not emptied until it qualifies.
  */
@@ -753,7 +752,7 @@ export async function closeGuardianOnlyAccount(
 /**
  * `DELETE /admin/users/{id}?permanent=true` — **Super Admin only.**
  *
- * The de-identification the three-day window would eventually reach, performed
+ * The de-identification the seven-day window would eventually reach, performed
  * now. **Not a stronger operation**: it removes no row, and every preserved
  * relationship is preserved exactly as it would have been.
  *

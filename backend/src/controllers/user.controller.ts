@@ -290,7 +290,7 @@ export function transferOwner(prisma: PrismaClient) {
  * `DELETE /admin/users/{id}` — Super Admin only.
  *
  * `?permanent=true` performs R111's de-identification **now** instead of after
- * the three-day window. It is the same operation the window reaches, not a
+ * the seven-day window. It is the same operation the window reaches, not a
  * stronger one: no row is removed, and every preserved relationship survives.
  */
 export function remove(prisma: PrismaClient) {

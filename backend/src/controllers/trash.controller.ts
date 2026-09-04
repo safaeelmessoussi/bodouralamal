@@ -17,7 +17,7 @@ import { idParam, parse } from './parse.js';
  * **Permanent deletion is a Super Admin action** (Revision 59.1, which is the
  * *further revision* Revision 52 required before one could exist). It stays
  * restricted to the single role holding the platform's data authority, it is
- * audited indefinitely, and BR-15's ninety-day window remains the default path
+ * audited indefinitely, and BR-15's seven-day window remains the default path
  * for everything nobody acts on.
  *
  * **Authority is asserted in the service, not here and not in the client.** The

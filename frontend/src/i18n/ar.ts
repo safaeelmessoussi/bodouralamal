@@ -1794,7 +1794,7 @@ export const ar = {
       notDeleted: 'هذا السجل غير محذوف أصلًا.',
       restoreFailed: 'تعذّرت الاستعادة.',
       retentionNote:
-        'تبقى مهلة التسعين يومًا (BR-15) هي المسار الافتراضي؛ الحذف النهائي إجراء متاح للمشرفة العامة وحدها، ولا يمكن التراجع عنه.',
+        'تبقى مهلة السبعة أيام هي المسار الافتراضي؛ الحذف النهائي إجراء متاح للمشرفة العامة وحدها، ولا يمكن التراجع عنه.',
       entity: {
         Branch: 'فرع',
         Room: 'قاعة',
@@ -2476,7 +2476,7 @@ export const ar = {
       addressShort: 'العنوان قصير جداً (5 أحرف على الأقل).',
       startHint: 'قبل هذا التاريخ لا تظهر أنشطة المقر في الجدول.',
       deleteTitle: 'حذف المقر',
-      deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
+      deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال سبعة أيام.',
       // TD-5: deletion is prohibited while rooms or groups reference the branch.
       // **Superseded by the shared `BlockedNotice`** (NEW A): it guessed
       // «قاعات أو حلقات» while the real blockers were a group and a schedule,
@@ -2916,11 +2916,11 @@ export const ar = {
     chooseLevelFirst: 'اختاري المستوى أولًا',
     levelTeachesNothing: 'لا مواد مسندة إلى هذا المستوى',
     uploaded: 'تم رفع الملف.',
-    deleted: 'تم حذف المادة. يمكن استرجاعها من سلة المحذوفات خلال تسعين يومًا.',
+    deleted: 'تم حذف المادة. يمكن استرجاعها من سلة المحذوفات خلال سبعة أيام.',
     deleteFailed: 'تعذّر الحذف. يرجى إعادة المحاولة.',
     deleteTitle: 'حذف المادة',
     deleteBody:
-      'سيتم حذف «{title}» وحفظ نسخة منها في سلة المحذوفات مدة تسعين يومًا قبل الحذف النهائي.',
+      'سيتم حذف «{title}» وحفظ نسخة منها في سلة المحذوفات مدة سبعة أيام قبل الحذف النهائي.',
     col: {
       title: 'العنوان',
       kind: 'النوع',

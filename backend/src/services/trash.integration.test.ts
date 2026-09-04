@@ -11,7 +11,7 @@ import { listTrash, purgeEntry, restoreEntry } from "./trash.service.js";
  * The property that matters is **not** "a list came back" — it is that the
  * screen can never offer a restore that would lose relationship state. R111's
  * account soft delete is the deliberate safe exception: it removes none of the
- * links, enrolments, roles or identities during its three-day window.
+ * links, enrolments, roles or identities during its seven-day window.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);

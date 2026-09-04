@@ -142,7 +142,7 @@ export async function createLink(
  *   anything, and a soft-deleted one is already a `404` condition for the
  *   `X-Active-Child-ID` middleware — so it is refused twice over.
  * * **Not a second deletion lifecycle.** The row enters Trash exactly as a
- *   revoked one does, under BR-15's ninety days, and `PURGEABLE` already carries
+ *   revoked one does, under BR-15's seven days, and `PURGEABLE` already carries
  *   `FamilyLink`.
  *
  * ## Why it lives here and not at the call sites

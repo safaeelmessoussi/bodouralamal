@@ -137,12 +137,15 @@ describe("§4.3 Revision 16 — revoking an approved link", () => {
 
     const trash = await prisma.trash.findFirst({ where: { targetId: linkId } });
     expect(trash?.targetEntity).toBe("FamilyLink");
-    // BR-15 promises a **90-day** permanent-delete window, and the number is the
-    // promise — `toBeInstanceOf(Date)` alone would pass with a 9-day window, at
-    // which point records the runbook expects to find are already gone.
+    /**
+     * **BR-15 promises a SEVEN-day permanent-delete window** (Revision 133), and
+     * the number is the promise — `toBeInstanceOf(Date)` alone would pass with a
+     * one-day window, at which point records somebody expects to restore are
+     * already gone.
+     */
     const days = (trash!.purgeAfter.getTime() - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(89.9);
-    expect(days).toBeLessThan(90.1);
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
     // The snapshot must be substantive, not an empty object: it IS the recovery
     // story, since there is no restoration UI in the MVP (§4.10).
     expect(

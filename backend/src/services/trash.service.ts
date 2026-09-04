@@ -137,7 +137,7 @@ const RESTORABLE: Record<
    * R111 is the deliberate exception to the older User-cascade warning below.
    * Account soft deletion removes no relationship row: it stamps `deleted_at`,
    * revokes sessions and keeps identity, roles, family and educational history
-   * intact during the three-day window. Clearing the tombstone is therefore a
+   * intact during the seven-day window. Clearing the tombstone is therefore a
    * complete restoration; revoked credentials stay revoked and the person signs
    * in again. Permanent de-identification removes the Trash row transactionally,
    * so this path can never reconstruct an already-erased identity.
@@ -467,7 +467,7 @@ export interface TrashRow {
   deletedAt: Date;
   deletedById: string | null;
   deletedByName: string | null;
-  /** BR-15: when the 90-day window purges it permanently. */
+  /** BR-15: when the seven-day window purges it permanently. */
   purgeAfter: Date;
   /** Decided by the SERVER, per entity type. */
   restorable: boolean;
@@ -814,7 +814,7 @@ export async function restoreEntry(
  *
  * Revision 52 forbade it: *a manual "delete now" would bypass a retention rule
  * that exists for legal and safeguarding reasons*. Revision 59 supersedes that
- * for one reason — **"wait ninety days" is not an answer to a safeguarding
+ * for one reason — **"wait out the window" is not an answer to a safeguarding
  * erasure request**. What the retention rule protects against is *accidental and
  * unaccountable* destruction, and an audited, confirmed, Super-Admin-only action
  * is neither. BR-15's window is unchanged and remains the default path for
@@ -845,7 +845,7 @@ export async function purgeEntry(
 /**
  * The purge itself, with **no authority check and no opinion about who asked**.
  *
- * Two callers: the Super Admin action above, and BR-15's automatic ninety-day
+ * Two callers: the Super Admin action above, and BR-15's automatic seven-day
  * sweep below, which has no actor at all because the calendar is not a person.
  * They share this body deliberately — a second implementation of *destroy this
  * record permanently* is the one that would eventually disagree with the first
@@ -995,7 +995,7 @@ async function purgeTrashEntry(
 }
 
 /**
- * **BR-15's ninety days, enforced automatically** (Owner decision, 2026-09-04 —
+ * **BR-15's seven days, enforced automatically** (Owner decision, 2026-09-04 —
  * closing Revision 59.4).
  *
  * R59.4 was the open question: `Trash.purge_after` recorded the end of the

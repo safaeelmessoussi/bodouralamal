@@ -1930,7 +1930,7 @@ export interface TrashEntryDto {
   deleted_by_id: string | null;
   /** The staff-facing legal name, as everywhere in the back office. */
   deleted_by_name: string | null;
-  /** BR-15's 90-day window. */
+  /** BR-15's seven-day window. */
   purge_after: string;
   /**
    * **Decided by the server, per entity type.** A client cannot know which

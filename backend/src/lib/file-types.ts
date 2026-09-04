@@ -390,7 +390,7 @@ export function buildServerFinalizationKey(contentId: string): string {
   return `staging/server-finalization/${contentId}/${randomBytes(16).toString('hex')}`;
 }
 
-/** Where a soft-deleted object waits out BR-15's 90-day window (TD-9). */
+/** Where a soft-deleted object waits out BR-15's seven-day window (TD-9). */
 export function quarantineKeyFor(contentId: string, storageKey: string): string {
   return `quarantine/${contentId}/${storageKey.split('/').slice(2).join('/')}`;
 }

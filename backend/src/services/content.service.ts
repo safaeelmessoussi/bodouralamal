@@ -1017,7 +1017,7 @@ async function loadWritableContent(
  *
  * The old object is **copied to `quarantine/…` before the original is removed**,
  * so a failure between the two leaves a duplicate rather than nothing — BR-15's
- * 90-day window is a safeguarding guarantee, and losing a recording to a network
+ * recovery window is a safeguarding guarantee, and losing a recording to a network
  * blip is the one outcome it cannot tolerate.
  */
 async function replaceContentFile(
@@ -1195,7 +1195,7 @@ async function quarantineObject(
 /**
  * `DELETE /content/{id}` — soft delete, snapshot, quarantine (TD-5, BR-15).
  *
- * The object moves to `quarantine/…` and waits out BR-15's 90-day window, which
+ * The object moves to `quarantine/…` and waits out BR-15's seven-day window, which
  * `content.quarantine-purge` (TD-7) closes. **The file is not removed here**:
  * a deletion that destroyed the object immediately would make the Trash's
  * restore promise a lie for exactly the entity where the data is largest.

@@ -4,33 +4,31 @@ import type { Prisma } from '../generated/prisma/client.js';
  * `Trash` snapshots — BR-15, TD-4.8, §4.10.
  *
  * BR-15 makes two promises about every soft delete: a **restorable snapshot**
- * exists, and it survives a **90-day** permanent-delete window. Both were
- * previously re-stated at each delete site, which meant the window was
- * hand-computed in four places — and a single site drifting would break BR-15
- * silently, for one entity only, in a way no test of the other three would see.
+ * exists, and it survives a permanent-delete window. Both were previously
+ * re-stated at each delete site, which meant the window was hand-computed in
+ * four places — and a single site drifting would break BR-15 silently, for one
+ * entity only, in a way no test of the other three would see.
  *
- * The window lives here now, once. There is no MVP restoration UI (§4.10): the
- * runbook reads these rows, so what they contain is the whole recovery story.
+ * The window lives here, once.
  */
-
-/** BR-15: the permanent-delete window. */
-export const PURGE_WINDOW_DAYS = 90;
 
 /**
- * **R111's window for a deleted ACCOUNT — three days, and deliberately not the
- * same number.**
+ * **Seven days, for everything** (Owner decision, 2026-09-05 — Revision 133).
  *
- * A **second, shorter window for one entity type**, never a change to BR-15's.
- * The two answer different questions: ninety days is how long a deleted *record*
- * stays recoverable for the association, three is how long a person who deleted
- * their own account has to change their mind. Merging them would silently move
- * one of the two.
- *
- * Because they differ, **Trash must show which window a row is on** — a Super
- * Admin looking at a 3-day account beside a 90-day record cannot be left to
+ * There used to be two: ninety days for a record and three for an account. They
+ * were defended as answering different questions — how long the association may
+ * change its mind, versus how long a person may — and the cost of that was
+ * real: the Trash had to display **which window a row was on**, because a Super
+ * Admin looking at a three-day account beside a ninety-day record could not
  * infer it from the entity name.
+ *
+ * The Owner's simplification removes the distinction rather than the display.
+ * One number, one sentence to teach an administrator, one boundary to test:
+ * *deleted things come back within a week or not at all*. Anything a person or
+ * the association wants back is wanted within days; ninety days of recoverable
+ * personal data was retention nobody had asked for.
  */
-export const ACCOUNT_PURGE_WINDOW_DAYS = 3;
+export const TRASH_WINDOW_DAYS = 7;
 const MS_PER_DAY = 86_400_000;
 
 type Db = Pick<Prisma.TransactionClient, 'trash'>;
@@ -53,13 +51,6 @@ export async function snapshot(
   db: Db,
   entry: TrashEntry,
   now: Date = new Date(),
-  /**
-   * Days until permanent deletion. Defaults to BR-15's ninety, so every existing
-   * call site keeps exactly the window it had. **R111's account deletion passes
-   * three** — stated by the caller that owns the shorter rule rather than
-   * inferred here from the entity name, which would put one rule in two places.
-   */
-  purgeAfterDays: number = PURGE_WINDOW_DAYS,
 ): Promise<void> {
   await db.trash.create({
     data: {
@@ -67,7 +58,11 @@ export async function snapshot(
       targetId: entry.targetId,
       snapshot: entry.snapshot,
       deletedById: entry.deletedById,
-      purgeAfter: new Date(now.getTime() + purgeAfterDays * MS_PER_DAY),
+      // **No per-caller override.** There used to be one, so account deletion
+      // could pass its own shorter window; with a single window a parameter that
+      // every caller leaves at the default is just a way for one of them to
+      // disagree with the policy later.
+      purgeAfter: new Date(now.getTime() + TRASH_WINDOW_DAYS * MS_PER_DAY),
     },
   });
 }
