@@ -5,6 +5,18 @@
 
 readonly RESTIC_IMAGE='restic/restic@sha256:39d9072fb5651c80d75c7a811612eb60b4c06b32ffe87c2e9f3c7222e1797e76'
 
+# **How many monthly generations are kept** (Owner decision, 2026-09-05 — R133).
+#
+# One backup a month, at most two generations alive. The older one is pruned
+# **only after the new one has been written and verified**, so a failed or
+# unusable backup can never be the reason the last good one disappears.
+#
+# Two is deliberately small. It is enough to survive a corrupt latest generation
+# and no more: personal data deleted from the live system stays inside an older
+# encrypted generation until rotation expires it, so every extra generation is
+# extra retention of data somebody asked to have deleted.
+readonly BACKUP_KEEP_GENERATIONS=2
+
 backup_die() {
   printf 'backup: %s\n' "$1" >&2
   exit 1

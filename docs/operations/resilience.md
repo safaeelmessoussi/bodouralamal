@@ -45,41 +45,40 @@ An untested backup is a belief, not a backup. The restore drill is:
 - a **launch requirement**, before go-live, and
 - repeated **periodically** thereafter.
 
-### After ANY restore: replay the deletions (2026-09-04)
+### Rotation: monthly, at most two generations (Revision 133)
 
-**A restore silently resurrects deleted people.** It rolls the live database back
-to an earlier moment, and every deletion applied after that moment is undone —
-including a closed account, a withdrawn family link and an executed Option B.
-Nobody is told, because from the database's point of view nothing failed.
+**One backup a month, two generations alive.** The older one is pruned **only
+after the new one has been written and verified** — `restic check` runs first,
+and a failed backup or a failed check aborts before the prune, so a bad night can
+never be the reason the last good generation disappears. The ordering is guarded
+in `check-backup-tooling.sh`.
 
-**Before the system is returned to service**, re-apply every deletion whose
-recorded instant is later than the restore point, in the order the ledger records
-them:
+Two is deliberately small. It is enough to survive one corrupt latest generation
+and no more, because **every extra generation is extra retention of data somebody
+asked to have deleted**.
 
-| what was deleted | where the record is | how to re-apply |
-|---|---|---|
-| an account (Option A) | `AuditLog` `user.deidentify` | `DELETE /admin/users/{id}?permanent=true` |
-| a guardian-only closure | `AuditLog` `user.close_guardian_only` | the same, or the guardian-cleanup action |
-| a full deletion (Option B) | `FullDeletionRequest` where `executed_at` is set | approve the request again — execution is idempotent |
-| an expired application or Trash entry | `AuditLog` `childapplication.retention_purge` / `trash.permanent_delete` | let the daily purge run; both are calendar-driven and will find them again |
+### There is NO deletion replay — and what that honestly means
 
-**The ledger carries no deleted content** — target ids, field names and instants,
-never values — which is exactly what makes it safe to keep and sufficient to
-replay. Audit rows also live on their own retention clock rather than the
-subject's, so they outlive what they describe.
+A design existed for one between 2026-09-04 and 2026-09-05: after restoring an
+older backup, re-apply every deletion recorded since the restore point, so the
+restored system would not resurrect people who had left. **The Owner withdrew
+it.** It was a subsystem whose only purpose was to compensate for a restore that
+should be rare, and it added a ledger, a procedure and a place to be wrong.
 
-**Every one of these operations is idempotent**, so re-applying a deletion that
-survived the restore is harmless. That is what makes this a checklist step rather
-than a reconciliation exercise.
+The consequence is stated plainly rather than engineered around:
 
-**Record that the replay ran**, and how many deletions it covered, in the restore
-drill's own notes. A restore whose replay nobody can evidence has to be treated
-as one where it did not happen.
+* **A live deletion does not modify an existing backup.** Nothing is rewritten,
+  and no per-user pruning happens inside an archive that has already been taken.
+* **Personal data deleted from the live system may remain in an older encrypted
+  generation until rotation expires it** — at most two months, given one backup a
+  month and two generations kept.
+* **A restored backup represents the state at the instant it was taken.** It does
+  not remember later deletions, and nothing claims it does. If a restore into
+  production is ever actually performed, what to do about deletions made since is
+  an operational decision taken then, with the current product state in view.
 
-**Backups themselves are not pruned.** They may hold historical bytes until they
-expire on their own schedule; that limit is stated to data subjects rather than
-engineered around, and this replay is what stops a restore turning it into a
-resurrection.
+**This limit is told to the person before she confirms a deletion**, in her own
+language, on the confirmation itself — which is the honest place for it.
 
 ## Degraded operation
 

@@ -4227,6 +4227,48 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Backups rotate at two generations, and deletion replay is withdrawn (2026-09-05)
+
+**Revision 133.** One backup a month, at most two generations alive, and the
+older one pruned **only after the new one has been written and verified**.
+`restic check` runs first and `set -euo pipefail` means a failed backup or a
+failed check never reaches the prune, so a bad night cannot be the reason the
+last good generation disappears.
+
+**Two is deliberately small**: enough to survive one corrupt latest generation
+and no more, because every extra generation is extra retention of data somebody
+asked to have deleted. `forget` is scoped by host and tag — an unscoped call in a
+shared repository would discard somebody else's history.
+
+**The guard was inverted, not deleted.** `check-backup-tooling.sh` used to fail
+if any `forget`/`prune` existed at all — *«no destructive retention policy exists
+until the Owner sets one»* — which was exactly right while none was set. The
+Owner set one, so the property to protect is no longer absence: it is that the
+policy keeps exactly two generations and that the prune runs strictly **after**
+the repository check. Proved by moving the prune above the check and watching the
+guard fail.
+
+### Deletion replay is gone, and the limit is stated instead
+
+The replay design lasted a day: a ledger of deletions carrying no deleted
+content, re-applied after any restore so a restored system would not resurrect
+people who had left. It was a subsystem whose only purpose was to compensate for
+a restore that should be rare, and it added a ledger, a procedure and a place to
+be wrong.
+
+What replaces it is a sentence the association can actually keep: **a restored
+backup represents the state at the instant it was taken; it does not remember
+later deletions, and nothing claims it does.** A live deletion never modifies an
+existing backup, so deleted data may remain in an older encrypted generation
+until rotation expires it — **at most two months**. That limit is told to the
+person **on the deletion confirmation, in her own language, before she agrees**,
+which is the honest place for it rather than a runbook she will never read.
+
+**Deployment scheduling stays blocked**, deliberately: the monthly trigger and
+the repository destination depend on a hosting provider that has not been chosen,
+and inventing either would be fabricating infrastructure. Everything here is
+provider-independent.
+
 ## Option A, Option B and FullDeletionRequest are withdrawn (2026-09-05)
 
 **Revision 133.** Both halves were built on 2026-09-04 — the request/review

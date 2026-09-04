@@ -46,9 +46,27 @@ grep -Fq 'exec -T db pg_restore --username app --dbname bodour_logical_restore' 
 if grep -rnE --include='*.sh' 'docker\.sock|--privileged' "$backup_dir" | grep -q .; then
   fail 'backup tooling must not grant a container Docker-host authority'
 fi
-if grep -rnE --include='*.sh' '"\$RESTIC_IMAGE".*\b(forget|prune)\b' "$backup_dir" | grep -q .; then
-  fail 'no destructive retention policy exists until the Owner sets one'
-fi
+# ── Rotation: two generations, pruned only after a verified new backup ─────
+#
+# **This guard was inverted, not deleted** (R133). It used to fail if ANY
+# forget/prune existed at all — *«no destructive retention policy exists until
+# the Owner sets one»* — which was right while none was set. The Owner set one on
+# 2026-09-05, so the property to protect is no longer *absence*: it is that the
+# policy is exactly two generations and that the prune runs strictly AFTER the
+# repository check.
+#
+# The ordering is the safety property. Pruning before verification, or pruning
+# unconditionally, is how a bad night costs the association its last good backup.
+check_line="$(grep -nF '"$RESTIC_IMAGE" --repo "$restic_repository" check' "$create" | cut -d: -f1)"
+forget_line="$(grep -nF '"$RESTIC_IMAGE" --repo "$restic_repository" forget' "$create" | cut -d: -f1)"
+[[ -n "$check_line" && -n "$forget_line" && "$check_line" -lt "$forget_line" ]] ||
+  fail 'the repository check must succeed BEFORE the oldest generation is pruned'
+grep -Fq -- '--keep-last "$BACKUP_KEEP_GENERATIONS" --prune' "$create" ||
+  fail 'rotation must keep exactly the shared generation count, and reclaim the space'
+grep -Fq 'readonly BACKUP_KEEP_GENERATIONS=2' "$common" ||
+  fail 'R133 fixes the retained generations at two'
+grep -Fq -- '--host "$project" --tag bodour \' "$create" ||
+  fail 'forget must be scoped to this project, or it discards another history'
 
 "$create" --help >/dev/null
 "$restore" --help >/dev/null

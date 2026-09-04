@@ -269,40 +269,25 @@ Two obligations follow:
 Neither is implemented. Auditing the existing restic design and choosing the
 mechanism is operational work, recorded in [`TASKS.md`](../TASKS.md).
 
-### The restore-suppression design (2026-09-04) — and most of it already exists
+### Restore suppression is WITHDRAWN (Revision 133)
 
-A restore rolls the live database back to an earlier moment. Any deletion applied
-**after** that moment is undone by the restore, silently. The minimum coherent
-mechanism is therefore a **durable ledger of deletions that carries no deleted
-content**, so the deletions can be re-applied afterwards without the ledger
-itself becoming a copy of what was deleted.
+A design existed for one day: a durable ledger of deletions carrying no deleted
+content, replayed after any restore so the restored system would not resurrect
+people who had left. **The Owner removed it**, along with the runbook step that
+carried it.
 
-**The platform already keeps that ledger, and it was not built for this.**
+It was a subsystem whose only purpose was to compensate for a restore that should
+be rare, and it added a ledger, a procedure and a place to be wrong. What replaces
+it is a sentence the association can actually keep:
 
-| what was deleted | the durable record | what it carries |
-|---|---|---|
-| an account (Option A) | `AuditLog` `user.deidentify` | target id, and the **field names** cleared — never their values |
-| a family link | `AuditLog` `familylink.reject` / `.revoke` | both party ids and a reason |
-| an approved full deletion (Option B) | `FullDeletionRequest` (`approved`) + `AuditLog` | subject id, decider, instant |
+> **A restored backup represents the state at the instant it was taken.** It does
+> not remember later deletions, and nothing claims it does.
 
-Each names **which row** and **when**, and none holds the erased data — which is
-exactly the property that makes them safe to keep and sufficient to replay. Audit
-rows also survive on their own retention clock rather than the subject's, so they
-outlive the thing they describe.
-
-**The procedure, stated so it can be executed rather than invented under
-pressure:** after any restore, re-apply every deletion whose recorded instant is
-later than the restore point, in the order the ledger records them, before the
-system is returned to service. `deIdentifyAccount` is already idempotent by
-construction, so re-applying one that survived the restore is harmless.
-
-**That gap is now closed** (2026-09-04): the replay is a step in the restore
-drill — [`operations/resilience.md`](../operations/resilience.md) — with the
-ledger-to-operation mapping written out and a requirement to record that it ran,
-since a restore whose replay nobody can evidence must be treated as one where it
-did not happen. **No provider-specific pruning is designed
-here** — backups may hold historical bytes until they expire, and that limit is
-stated rather than engineered around.
+The privacy limit that follows is stated rather than engineered around — a live
+deletion never modifies an existing backup, so deleted data may remain in an
+older encrypted generation until rotation expires it, which is **at most two
+months** given one backup a month and two generations kept. **The person is told
+this on the confirmation, before she deletes anything.**
 
 ## The consent wording has fallen behind the decisions (2026-09-04)
 

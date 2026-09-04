@@ -225,4 +225,24 @@ restart_services
 "${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" check
 
 printf 'backup: recovery point %s complete and verified\n' "$recovery_point"
-printf 'backup: retention is intentionally unchanged; no forget/prune policy is configured\n'
+
+# ── Rotation: at most two generations, and ONLY after verification ──────────
+#
+# **Ordering is the whole safety property** (R133). `restic check` above has
+# already succeeded — and `set -euo pipefail` means a failed backup or a failed
+# check never reaches this line — so the oldest generation is discarded only
+# once a verified replacement exists. Pruning first, or pruning unconditionally,
+# is how a bad night costs the association its last good backup.
+#
+# **Scoped to this project's own snapshots** by host and tag. `forget` operates
+# on whatever the filter selects, so an unscoped call in a shared repository
+# would discard somebody else's history.
+#
+# `--prune` reclaims the space in the same pass; without it the data stays in the
+# repository and "at most two generations" would be true of the index only.
+"${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" forget \
+  --host "$project" --tag bodour \
+  --keep-last "$BACKUP_KEEP_GENERATIONS" --prune
+
+printf 'backup: rotation complete — at most %s generations retained\n' "$BACKUP_KEEP_GENERATIONS"
+printf 'backup: a live deletion does NOT modify an existing generation; deleted data may remain in the older one until it rotates out\n'
