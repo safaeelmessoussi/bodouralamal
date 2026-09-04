@@ -205,6 +205,13 @@ async function clear(): Promise<void> {
     // the record of what happened, so it never vanishes beneath a person. The
     // R79 suite creates one, so the teardown unwinds it first.
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+    // Quran logs are RESTRICT on BOTH `student_id` and `logged_by`, so the OR
+    // is required: the Option A boundary test files one against the beneficiary
+    // and logs it as the guardian, and clearing only one side leaves the other
+    // holding the row.
+    await prisma.quranProgressLog.deleteMany({
+      where: { OR: [{ studentId: { in: ids } }, { loggedById: { in: ids } }] },
+    });
     await prisma.familyLink.deleteMany({
       where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
     });
@@ -1666,9 +1673,29 @@ describe("R111 — deleting an account keeps the record", () => {
         intendedCategoryId: intendedCategory.id,
         requestedRole: "teacher",
         preProvisionedEmail: email,
+        // R130's date of birth, which the Owner has now placed on the ACCOUNT
+        // side of the Option A boundary rather than in the retained archive.
+        birthDate: new Date("2001-04-17T00:00:00.000Z"),
       },
     });
     await grant(victim, "student", branchId);
+    /**
+     * **One piece of genuine educational history**, so the test proves the
+     * boundary rather than only one side of it: Option A must take the account
+     * and leave the archive. A Quran log is the cheapest durable fact — it
+     * needs no academic period, level or exam behind it.
+     */
+    const surah = await prisma.quranSurah.findFirstOrThrow({});
+    const progress = await prisma.quranProgressLog.create({
+      data: {
+        studentId: victim,
+        surahId: surah.surahId,
+        startAyah: 1,
+        endAyah: 5,
+        category: "new_memorization",
+        loggedById: parent,
+      },
+    });
     await prisma.normalizedEmailLock.createMany({ data: [{ email }], skipDuplicates: true });
     await prisma.userIdentity.create({
       data: {
@@ -1707,6 +1734,18 @@ describe("R111 — deleting an account keeps the record", () => {
       after?.intendedCategoryId,
       after?.requestedRole,
       after?.preProvisionedEmail,
+      /**
+       * **`birth_date` is cleared** (Owner decision, 2026-09-04).
+       *
+       * R130 made it required for every beneficiary, which left open whether it
+       * belonged to the account or to the preserved archive. It belongs to the
+       * account: nothing in the archive reads one, and `reference_code` is
+       * already the locator that reconnects a returning person to her history.
+       * **Removed, never transformed** — no year-only truncation and no age
+       * snapshot, either of which would invent a new fact at the moment of
+       * erasure.
+       */
+      after?.birthDate,
     ]) {
       expect(value).toBeNull();
     }
@@ -1755,6 +1794,14 @@ describe("R111 — deleting an account keeps the record", () => {
       sex: "female",
     });
     expect(reclaimed.status).toBe(201);
+    /**
+     * **The educational archive survives** — the other half of the boundary.
+     * Option A is not Option B: the account is gone and the history it belongs
+     * to is not, which is the entire distinction between the two requests.
+     */
+    expect(
+      await prisma.quranProgressLog.count({ where: { id: progress.id } }),
+    ).toBe(1);
     // Safeguarding/history survives and still points at the tombstone.
     expect(await prisma.familyLink.count({ where: { id: familyLink.id } })).toBe(1);
     // The recoverable snapshot held the original PII. It must disappear in the

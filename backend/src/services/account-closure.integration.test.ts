@@ -268,6 +268,76 @@ describe('Option A — the account closes and the educational archive stays', ()
     expect(after.deletedAt).not.toBeNull();
   });
 
+  it('2b · the DATE OF BIRTH is cleared, while the archive it never fed survives', async () => {
+    /**
+     * **Owner decision, 2026-09-04.** R130 made a birth date required for every
+     * beneficiary, which left open whether it sat on the account or in the
+     * preserved archive. It sits on the account: nothing in the archive reads
+     * one, and `reference_code` is already the locator that reconnects a
+     * returning person to her history.
+     *
+     * The two halves are asserted TOGETHER deliberately — a test that only
+     * proved the erasure would pass just as well if Option A had become Option
+     * B, which is the one confusion this boundary cannot afford.
+     */
+    const p = await beneficiaryWithHistory();
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+    expect(before.birthDate).not.toBeNull();
+
+    await closeAccount(p.id);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+    // Removed, never transformed: no year-only value and no age snapshot, both
+    // of which would invent a new fact about her at the moment of erasure.
+    expect(after.birthDate).toBeNull();
+    expect(after.referenceCode).toBe(p.code);
+    expect(await prisma.enrollment.count({ where: { id: p.enrolmentId } })).toBe(1);
+    expect(await prisma.grade.count({ where: { id: p.gradeId } })).toBe(1);
+  });
+
+  it('2c · clearing the birth date does NOT make the closure repeat itself', async () => {
+    /**
+     * The predicate that decides whether de-identification did any work must
+     * name exactly the fields it clears. `birth_date` is now one of them, so it
+     * belongs there — and getting that wrong in either direction is invisible
+     * until a retry: an uncleared field listed there rotates `qr_ref` and writes
+     * a second audit row on every run, while a cleared field omitted makes real
+     * work look like a no-op.
+     */
+    const p = await beneficiaryWithHistory();
+    await closeAccount(p.id);
+    const first = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+    const audits = await prisma.auditLog.count({
+      where: { actionType: 'user.deidentify', targetId: p.id },
+    });
+
+    const actor = await actorFor(prisma, superAdmin);
+    await purgeUserAccount(prisma, actor, p.id);
+
+    const second = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+    expect(second.qrRef).toBe(first.qrRef);
+    expect(second.birthDate).toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: 'user.deidentify', targetId: p.id },
+      }),
+    ).toBe(audits);
+  });
+
+  it('2d · the audit names the FIELD and never the date', async () => {
+    const p = await beneficiaryWithHistory();
+    await closeAccount(p.id);
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'user.deidentify', targetId: p.id },
+    });
+    const detail = JSON.stringify(row.detail);
+    expect(detail).toContain('birth_date');
+    // TD-14: the row that records the erasure must not become the last copy.
+    expect(detail).not.toContain('2004');
+    expect(detail).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
   it('3 · the reference code grants NOTHING — quoting it opens no path back in', async () => {
     const p = await beneficiaryWithHistory();
     await closeAccount(p.id);
@@ -388,19 +458,32 @@ describe('Option A — the account closes and the educational archive stays', ()
     for (const secret of [p.email, p.subject, p.code, 'حساب محذوف']) {
       expect(serialized, secret).not.toContain(secret);
     }
-    // And no birth date, which the closure does not touch either way.
+    // And no birth date. The closure now CLEARS one (Owner, 2026-09-04), which
+    // makes this assertion sharper than it was when it merely reflected a field
+    // nothing touched: the row recording an erasure must never be the last copy
+    // of what was erased.
     expect(serialized).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
-  it('DOB is not touched by account closure — it is not authentication data', async () => {
-    // R131's map does not classify the birth date for Option A, so this asserts
-    // the CURRENT behaviour rather than deciding it: the closure leaves it, and
-    // no destructive change was made on an unsettled classification.
+  it('DOB IS cleared by account closure — the Owner classified it (2026-09-04)', async () => {
+    /**
+     * **This assertion was inverted, by decision rather than by drift.**
+     *
+     * It previously read *«DOB is not touched»*, and said so honestly: R131's
+     * map did not classify the birth date for Option A, so the test pinned the
+     * current behaviour rather than deciding an open question. The Owner has now
+     * decided — the birth date belongs to the account, not to the retained
+     * archive — so the property is restated here rather than deleted, and this
+     * note is why it changed.
+     */
     const p = await beneficiaryWithHistory();
     const before = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+    expect(before.birthDate).not.toBeNull();
+
     await closeAccount(p.id);
+
     const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
-    expect(after.birthDate?.toISOString()).toBe(before.birthDate?.toISOString());
+    expect(after.birthDate).toBeNull();
   });
 
   it('24 · Trash cannot restore the closed account', async () => {

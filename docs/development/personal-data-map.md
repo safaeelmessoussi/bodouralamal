@@ -68,6 +68,7 @@ The Owner's decision of 2026-09-03 splits one word into two:
 | **Planning data** (`teacher_availability`, capabilities, `framing_preference`) | removed | removed |
 | **Profile/account fields** | de-identified to «حساب محذوف» | de-identified |
 | **`referenceCode`** | **KEPT** — see below | **removed** |
+| **`birthDate`** *(R130)* | **CLEARED** *(Owner, 2026-09-04)* | cleared |
 | **Educational archive** (`enrollment`, `grade`, `student_exam_submission` + answers, `attendance`, `quran_progress_log`, `student_surah_progress`, `student_teaching_group`) | **KEPT** for the retention period | **removed** |
 | **Consent & safeguarding evidence** | kept under its own rule | kept under its own rule |
 | **Audit trail** | kept under its own rule | kept under its own rule — and it carries **no educational content** to begin with |
@@ -275,7 +276,7 @@ overtaken.
   application. A notice that defers a decision already taken understates what the
   reader is agreeing to.
 * **Date of birth.** R130 makes a full date of birth required for every
-  beneficiary. The text lists *«معلومات الهوية والتواصل»* generically; a newly
+  beneficiary, and Option A now clears it (Owner, 2026-09-04). The text lists *«معلومات الهوية والتواصل»* generically; a newly
   mandatory identifier that decides a **rights transition** is named, not implied.
 * **Closure and deletion.** The rights paragraph offers the 09-08 trio — access,
   rectification, opposition. The platform now offers two further requests, and a

@@ -4227,6 +4227,42 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The birth date is account data — Option A clears it (2026-09-04)
+
+**Owner decision, closing the last open Option A classification.** The audit
+that preceded it had already settled the engineering half: no retained
+educational record reads a birth date, nothing else depends on one, and nothing
+exposes it after closure. What remained was policy — must a future attestation
+name a date of birth? The Owner's answer is no, because `reference_code` is
+already the protected pseudonymous locator that reconnects a former beneficiary
+with her own history, so a birth date adds nothing the archive needs while being
+among the most identifying fields the row holds.
+
+**Removed, never transformed.** No year-only truncation and no age snapshot:
+each would invent a new fact about her at the exact moment of erasure, and
+R130's own rule is that a birth date is recorded or absent, never approximated.
+
+**`sex` still survives, and the asymmetry is the whole test.** §4.4b evaluates
+Level restrictions against it, so a preserved enrolment stops making sense
+without it. Nothing reads a date of birth. That is the criterion the structural
+list has always applied; the birth date simply fails it.
+
+**The field joins the idempotency predicate, and that is not bookkeeping.** The
+predicate deciding whether de-identification did any work must name exactly the
+fields it clears — a cleared field omitted makes real work look like a no-op,
+while an uncleared field listed there rotates `qr_ref` and writes a second audit
+row on every retry. Both failures are invisible until something runs twice, so
+there is a test for it.
+
+**One existing assertion was inverted, by decision rather than by drift.** It
+read *«DOB is not touched by account closure»* and said honestly that it pinned
+current behaviour because R131's map left the question open. It now asserts the
+opposite, with a note recording why it changed — the property was restated, not
+deleted.
+
+The audit names `birth_date` as a **field** and never a value, and a test asserts
+the detail carries no date-shaped string at all.
+
 ## One tickable choice — the rule that was documented and drifted anyway (2026-09-04)
 
 **Started as a stale backlog item and found a live one.** R55's sweep asked

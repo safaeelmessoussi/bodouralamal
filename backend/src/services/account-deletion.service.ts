@@ -369,7 +369,9 @@ export async function deleteUserAccount(
  *
  * * **`id`** — twenty-two relationships point at it;
  * * **`sex`** — §4.4b's Level restrictions are evaluated against it, so a
- *   preserved enrolment must still make sense;
+ *   preserved enrolment must still make sense. **`birth_date` is NOT in this
+ *   list and is cleared** (Owner, 2026-09-04): nothing in the archive reads
+ *   one, which is exactly the test this list applies;
  * * **`account_status`** — left as it was. `deleted_at` is TD-1's Deleted state
  *   (the schema says so at the enum), and a second field saying the same thing
  *   is a second field that can disagree;
@@ -452,6 +454,7 @@ export async function deIdentifyAccount(
         nickname: true,
         publicDisplayName: true,
         phone: true,
+        birthDate: true,
         referenceCode: true,
         schoolingStage: true,
         intendedBranchId: true,
@@ -487,6 +490,13 @@ export async function deIdentifyAccount(
         user.nickname,
         user.publicDisplayName,
         user.phone,
+        // **`birth_date` IS counted** (Owner decision, 2026-09-04), for the
+        // mirror of the reason `referenceCode` is not: this operation clears
+        // it, and the predicate must name exactly the fields it clears. A
+        // cleared field missing from here makes the retry look like a no-op
+        // when it was not; an uncleared field present here makes every retry
+        // look like fresh work.
+        user.birthDate,
         // **`referenceCode` is deliberately ABSENT here** (Revision 131). It is
         // no longer cleared, so counting it would make this predicate
         // permanently true — and every retry would then rotate `qr_ref` again
@@ -513,6 +523,27 @@ export async function deIdentifyAccount(
         nickname: null,
         publicDisplayName: null,
         phone: null,
+        /**
+         * **`birth_date` IS cleared** (Owner decision, 2026-09-04).
+         *
+         * R130 made it required for every beneficiary, which left open whether
+         * it belonged to the account or to the preserved educational archive.
+         * The Owner's answer is the account: **the retained archive does not
+         * technically depend on it**, and `referenceCode` is already the
+         * protected pseudonymous locator that reconnects a returning person
+         * with her history — a date of birth adds nothing the archive needs and
+         * is one of the most identifying fields the row holds.
+         *
+         * **Removed, never transformed.** No year-only truncation, no age
+         * snapshot, no derived band: each of those is a new fact about the
+         * person invented at the moment of erasure, and R130's own rule is that
+         * a birth date is recorded or absent, never approximated.
+         *
+         * Note the asymmetry with `sex`, which stays: §4.4b evaluates Level
+         * restrictions against it, so a preserved enrolment stops making sense
+         * without it. Nothing in the archive reads a birth date.
+         */
+        birthDate: null,
         /**
          * **`referenceCode` SURVIVES — it is not cleared** (Revision 131,
          * resolving the R111 ↔ R122 contradiction).
@@ -608,7 +639,8 @@ export async function deIdentifyAccount(
         targetId,
         // **Which fields, never their values** (§14, no PII in logs) — an audit row
         // recording what was cleared must not become the last copy of it.
-        detail: { cleared: ['name', 'contact', 'identity', 'planning_data'] },
+        // `birth_date` is named as a FIELD, never valued (Owner, 2026-09-04).
+        detail: { cleared: ['name', 'contact', 'identity', 'birth_date', 'planning_data'] },
       });
     }
   });

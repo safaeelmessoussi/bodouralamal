@@ -1760,27 +1760,22 @@ was hiding behind it: the run went green on the first attempt.
       is needed. **The conclusion depends on that shape**, so a guard asserts the
       table has no free-text column and says in its failure message to reopen the
       classification if one appears.
-- [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
-      *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
-      questions, answered from the code:** **(a) does a future attestation need
-      it?** *Not determined* — §4.10a lists *"the identity the attestation must
-      name"* without saying whether a birth date is part of that identity, which
-      is the whole question. **(b) does historical placement or progression need
-      it?** **No** — R130 states it informs placement and gates nothing, and no
-      retained educational record reads it. **(c) do other retained records
-      depend on it?** **No.** **(d) is it exposed after closure?** **No** — the
-      only read publishing it is the Super-Admin-only `/admin/users`, which
-      filters `deleted_at IS NULL`, and a closed account is soft-deleted.
-      **(e) could it be minimised without breaking a live purpose?**
-      **Technically yes** — its three consumers (registration write, R132
-      eligibility, Super Admin completion) all require a live account — but that
-      is an engineering observation, not a policy answer.
-      **THE PRECISE DECISION NEEDED:** *is a beneficiary's date of birth part of
-      the minimal identity retained under Option A so an educational attestation
-      can be issued years later, or is it account-operational data to be cleared
-      at closure?* Both are defensible and the platform must not choose. Current
-      behaviour — kept, untouched — is pinned by test so any change is
-      deliberate.
+- [x] **DECIDED AND IMPLEMENTED — the birth date's Option A classification.**
+      *(Owner decision 2026-09-04.)* **The birth date is ACCOUNT data and Option
+      A clears it.** The audit that preceded the decision had already established
+      the engineering half — no retained educational record reads a birth date,
+      nothing else depends on it, and nothing exposes it after closure — leaving
+      only the policy question of whether a future attestation must name one.
+      The Owner's answer: it need not, because `reference_code` is already the
+      protected pseudonymous locator that reconnects a returning person with her
+      history, so a birth date adds nothing the archive needs while being one of
+      the most identifying fields the row holds.
+      **Removed, never transformed** — no year-only truncation and no age
+      snapshot, each of which would invent a new fact at the moment of erasure.
+      `sex` still survives, and the asymmetry is the test this list applies:
+      §4.4b evaluates Level restrictions against it, so a preserved enrolment
+      stops making sense without it, while nothing reads a date of birth.
+      Audit names the field and never the value.
       - [ ] **OPEN — the return/reactivation workflow.** *(Audited 2026-09-04;
             deliberately NOT implemented.)* The **identity-proofing** half needs
             nothing new: R132's approved model — the claimant names the archived
