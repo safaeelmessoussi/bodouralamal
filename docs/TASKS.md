@@ -1667,7 +1667,19 @@ was hiding behind it: the run went green on the first attempt.
             `allocateReferenceCode` counts rows regardless of `deleted_at`.
             13 focused tests; proved against the defect. **Option B remains
             unimplemented and the rest of the R131 map is untouched.**
-      - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
+      - [x] **DONE (Owner, 2026-09-04) — self-managed authority is DURABLE.** R132 read
+      it as *an account with no active login identity*; Option A deletes
+      `UserIdentity`, so that reading broke the moment closure shipped — and held
+      only because the resolver separately requires a live student. Authority is
+      now derived from the **approved `SelfManagedClaim`**, which survives
+      identity removal, logout, closure and re-binding. `DOB ≥ 18` is eligibility
+      only; a credential is a mechanism only. Three paths corrected, including
+      the **linking write**, where a closed self-managed adult would otherwise
+      have been accepted as a linkable child and a guardian handed authority over
+      an adult who had taken it away (`ACCOUNT_SELF_MANAGED`). One additive
+      index; no column, backfill or fabricated status. 11 policy tests + 126
+      across the affected suites; proved against the defect.
+- [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
             R131's map does not say whether `birth_date` belongs to the minimal
             educational archive or to the account state Option A removes. The
             closure does **not** touch it today and this work made no change

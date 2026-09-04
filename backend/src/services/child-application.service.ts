@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { isSelfManaged, NOT_SELF_MANAGED } from '../policies/self-management.js';
 import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import { allocateReferenceCode } from '../lib/reference-code.js';
 import type { Actor } from '../policies/actor.js';
@@ -298,6 +299,22 @@ export async function decideChildApplication(
           reason: 'ACCOUNT_HAS_LOGIN',
         });
       }
+      /**
+       * **And she must not be a SELF-MANAGED adult** (Owner, 2026-09-04).
+       *
+       * The login check above is not enough, and this is the sharpest place it
+       * fails: **Option A deletes `UserIdentity`**, so a woman who completed the
+       * R132 transition and then closed her account has no login — and would be
+       * accepted here as a linkable child, **granting a guardian authority over
+       * an adult who had taken it away**. That is the worst outcome any path in
+       * this file can produce, and it is a `404`-adjacent state conflict rather
+       * than a silent success.
+       */
+      if (await isSelfManaged(tx, existing.id)) {
+        throw new AppError('STATE_CONFLICT', 'that account manages itself', {
+          reason: 'ACCOUNT_SELF_MANAGED',
+        });
+      }
       childUserId = existing.id;
     } else {
       const referenceCode = await allocateReferenceCode(
@@ -520,8 +537,16 @@ export async function proposeMatches(
       deletedAt: null,
       firstNameArabic: application.firstNameArabic,
       lastNameArabic: application.lastNameArabic,
-      // Minors only — a match must be an account with no login of its own.
-      // §4.3's structural test for a minor: no ACTIVE login of their own.
+      /**
+       * **Minors only — and "minor" is now the DURABLE fact** (Owner,
+       * 2026-09-04). This read *no active login of their own*, which Option A
+       * broke: closing a self-managed adult's account deletes her identity, and
+       * she would have reappeared here as a linkable child. An approved
+       * `SelfManagedClaim` says she manages herself whatever her login state.
+       */
+      ...NOT_SELF_MANAGED,
+      // Still required beside it: an account that has never transitioned but
+      // holds a login is an adult who consents for herself (R62.9).
       identities: { none: { isActive: true } },
     },
     select: {

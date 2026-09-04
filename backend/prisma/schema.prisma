@@ -2044,6 +2044,10 @@ model SelfManagedClaim {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@index([status])
+  /// The durable-authority lookup (Owner, 2026-09-04): *has this beneficiary
+  /// completed the transition?* runs on every child-scoped request through
+  /// `policies/self-management.ts`, so the pair it filters on is indexed.
+  @@index([beneficiaryId, status])
   @@map("self_managed_claim")
 }
 

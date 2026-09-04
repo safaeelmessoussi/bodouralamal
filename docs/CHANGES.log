@@ -3997,3 +3997,57 @@ index was doing its job and the fixture was wrong.
 self-managed-claim, family-link, auth and child-context suites. The correction was
 **proved against the defect**: restoring the old `referenceCode: null` fails
 exactly the preservation and idempotency tests, and nothing else.
+
+## Durable self-managed authority (2026-09-04)
+
+**Owner decision, and a latent security defect Option A had just created.**
+
+R132 expressed *"she manages her own account"* as **an account with no active
+login identity** — §4.3's structural test for a minor, reused so there would be
+one definition rather than two. The reasoning was right and **the fact was
+wrong**: Option A deliberately deletes `UserIdentity`, so from the moment account
+closure shipped, a self-managed adult who closed her account satisfied *"no
+active login"* again.
+
+**Nothing actually broke, and that is the uncomfortable part.** The child-context
+resolver separately requires a live student, and a closed account is
+soft-deleted, so the guardian stayed refused — by a clause that has nothing to do
+with authority. **Authority surviving by coincidence is authority that will not
+survive the next change.** The test that proves the fix therefore clears the
+tombstone, so only the durable fact can refuse him; run against the old rule,
+**that one test fails and no other does**, which is exactly the claim being made.
+
+**The model, now stated in three words each.** `DOB ≥ 18` → eligibility.
+Approved claim → durable authority. `UserIdentity` → authentication mechanism.
+Option A → removes authentication, removes no authority.
+
+**Derived, not stored.** An approved `SelfManagedClaim` *is* the durable fact:
+the row exists exactly when a Super Admin approved the transition, it is never
+soft-deleted (only a rejected claim is), and it carries the decider and the
+instant. A `User.self_managed_at` column beside it would be a second answer to
+one question — the failure R79.3 and R128 each name — and the two could disagree
+after a restore or a hand-written fix. **Legacy accounts are correct by
+construction**: no approved claim exists for anybody who never transitioned, and
+nothing consults age, role or credential.
+
+**Three paths read it, and the third was the dangerous one.** The child-context
+resolver and the child-linking candidate search both mis-read the fact; the
+**linking write boundary** did too, and there it *grants* authority — a closed
+self-managed adult has no login, so `ACCOUNT_HAS_LOGIN` would have let her be
+linked as a child, **giving a guardian authority over an adult who had taken it
+away**. Refused now as `ACCOUNT_SELF_MANAGED`.
+
+**Schema:** one additive index on `(beneficiary_id, status)`, because the
+derivation runs on every child-scoped request and the existing indexes cover
+`status` alone and PENDING rows only. No column, constraint, enum or row changed;
+nothing backfilled and no status fabricated.
+
+**Tests: 11/11** new policy invariants covering all ten required cases — plus the
+distinguishing test and a control proving the rule did not simply widen to refuse
+everybody — and **126/126** across the six suites that touch authority, closure,
+linking and family links.
+
+**Three test fixtures encoded the OLD definition** and were corrected rather than
+worked around: two suites built a "self-managed adult" by giving her a login,
+which is the very reading this decision retires, and two cleanups did not know
+about `SelfManagedClaim`'s two `Restrict` foreign keys.

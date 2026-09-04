@@ -119,6 +119,10 @@ async function clear(): Promise<void> {
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
   });
+  // R132 — both sides: `beneficiary_id` and `decided_by` are each Restrict.
+  await prisma.selfManagedClaim.deleteMany({
+    where: { OR: [{ beneficiaryId: { in: ids } }, { decidedById: { in: ids } }] },
+  });
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
@@ -701,6 +705,47 @@ describe("duplicate matching is proposed, never automatic (R62.3)", () => {
         matchExistingUserId: adult.id,
       }),
     ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+  });
+
+  it("refuses a SELF-MANAGED adult who has closed her account", async () => {
+    /**
+     * **The sharpest case, and the one the login check alone misses** (Owner,
+     * 2026-09-04). Option A deliberately deletes `UserIdentity`, so a woman who
+     * completed the R132 transition and then closed her account has **no
+     * login** — and the `ACCOUNT_HAS_LOGIN` refusal above would have let her be
+     * linked as a child, **granting a guardian authority over an adult who had
+     * taken it away**. Authority is now the durable approved claim, not the
+     * presence of a credential.
+     */
+    const adult = await makeUser("بالغة مستقلة");
+    await prisma.selfManagedClaim.create({
+      data: {
+        beneficiaryId: adult,
+        provider: "google",
+        providerSubjectId: `cl-sm-${Date.now()}`,
+        email: `cl-sm-${Date.now()}@example.com`,
+        status: "approved",
+        decidedAt: new Date(),
+      },
+    });
+    // No identity at all — exactly the state account closure leaves behind.
+    await prisma.userIdentity.deleteMany({ where: { userId: adult } });
+
+    const { applicationIds } = await submitTwo();
+    await expect(
+      decideChildApplication(prisma, await actorFor(prisma, adminId), applicationIds[0]!, {
+        approve: true,
+        ...place(),
+        matchExistingUserId: adult,
+      }),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      details: { reason: "ACCOUNT_SELF_MANAGED" },
+    });
+    // And no link was created behind the refusal.
+    expect(
+      await prisma.familyLink.count({ where: { studentId: adult, deletedAt: null } }),
+    ).toBe(0);
   });
 });
 

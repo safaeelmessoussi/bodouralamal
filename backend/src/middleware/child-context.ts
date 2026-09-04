@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { NOT_SELF_MANAGED } from '../policies/self-management.js';
 import { requireActor } from './authenticate.js';
 
 /**
@@ -101,25 +102,27 @@ export async function resolveActingStudent(
           // A link to a soft-deleted child is not a path to that child's data.
           deletedAt: null,
           /**
-           * **R132 — a SELF-MANAGED adult is not acted for.**
+           * **A SELF-MANAGED adult is not acted for** (R132, corrected by the
+           * Owner's durable-authority decision of 2026-09-04).
            *
-           * Once a beneficiary's own Google identity is bound to her account she
-           * exercises her own rights, and a former guardian does not continue to
-           * exercise them merely because a historical `FamilyLink` still exists.
+           * This read *"an account with no active login identity"* — §4.3's
+           * structural test for a minor, reused so there would be one
+           * definition. The reasoning was right and the fact was wrong:
+           * **Option A deliberately deletes `UserIdentity`**, so a self-managed
+           * adult who closed her account satisfied that test again and a former
+           * guardian's historical link would have come back to life. It did not,
+           * but only because the `deletedAt: null` clause above happened to hold
+           * — authority surviving by coincidence is authority that will not
+           * survive the next change.
            *
-           * **The fact is derived, not stored**, and it is the one §4.3 already
-           * uses: R62.9 defines a minor as *an account with no login identity* —
-           * `ACCOUNT_HAS_LOGIN` refuses to link one for exactly this reason,
-           * because *an adult consents for themselves*. Reading the same fact
-           * here keeps one definition rather than adding a second flag that
-           * could disagree with it.
+           * **Authority and authentication are now different facts.** An
+           * approved `SelfManagedClaim` is durable: it survives identity
+           * removal, logout, account closure and any later re-binding.
            *
            * **The link row is NOT deleted.** It is historical relationship
-           * evidence and stays; what changes is that it no longer confers
-           * CURRENT authority. Separating the two is what lets the history
-           * survive without the control surviving with it.
+           * evidence; what ends is the CURRENT authority it conferred.
            */
-          identities: { none: { isActive: true } },
+          ...NOT_SELF_MANAGED,
         },
       },
       select: { studentId: true },

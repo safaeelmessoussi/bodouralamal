@@ -136,7 +136,11 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   if (ids.length > 0) {
-    await prisma.selfManagedClaim.deleteMany({ where: { beneficiaryId: { in: ids } } });
+    // BOTH sides: `beneficiary_id` and `decided_by` are each Restrict, so a
+    // claim this suite's Super Admin decided pins her too.
+    await prisma.selfManagedClaim.deleteMany({
+      where: { OR: [{ beneficiaryId: { in: ids } }, { decidedById: { in: ids } }] },
+    });
     await prisma.grade.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.attendance.deleteMany({
       where: { OR: [{ studentId: { in: ids } }, { markedById: { in: ids } }] },
@@ -449,6 +453,20 @@ describe('Option A — a guardian-only account, and a self-managed adult', () =>
      * by a second clause rather than by the one that expresses the intent.
      */
     const adult = await makeUser('بالغة مستقلة', { beneficiary: true });
+    // **Self-managed is the approved CLAIM, not the identity** (Owner,
+    // 2026-09-04). This fixture used to give her a login and call that
+    // self-managed — the very reading Option A broke, since closure deletes it.
+    await prisma.selfManagedClaim.create({
+      data: {
+        beneficiaryId: adult.id,
+        provider: 'google',
+        providerSubjectId: `closure-sm-${Date.now()}`,
+        email: `closure-sm-${Date.now()}@example.com`,
+        status: 'approved',
+        decidedAt: new Date(),
+        decidedById: superAdmin,
+      },
+    });
     const guardian = await makeUser('ولي سابق');
     await prisma.familyLink.create({
       data: { parentId: guardian.id, studentId: adult.id, status: 'approved', decidedAt: new Date() },

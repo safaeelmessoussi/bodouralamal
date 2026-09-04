@@ -188,17 +188,42 @@ At 18 (R130) she may **ask**. Nothing happens on a birthday: no job, no binding,
 no authority change, no account creation. A guard asserts no job source names the
 birth-date column.
 
-### After the transition — authority ends, evidence does not
+### After the transition — authority is DURABLE, and evidence survives
 
-**A self-managed adult is not acted for.** The child-context resolver refuses a
-`FamilyLink` whose student holds an active login identity — **the same fact
-R62.9 already uses** to define a minor, read in one more place rather than
-duplicated into a flag that could disagree.
+**Authority and authentication are different facts** (Owner, 2026-09-04):
+
+```
+DOB ≥ 18             → eligibility only
+approved R132 claim  → DURABLE self-managed authority
+UserIdentity         → an authentication MECHANISM, nothing more
+Option A closure     → removes authentication, removes NO authority
+```
+
+The durable fact is **the approved claim itself** — `policies/self-management.ts`
+derives it — not a flag beside it, because a second column would be a second
+answer to one question. It survives identity removal, logout, session deletion,
+account closure and any later re-binding.
+
+**This corrects the original R132 reading.** That expressed the rule as *an
+account with no active login identity*, reusing §4.3's structural test for a
+minor so there would be one definition. The reasoning was right and the fact was
+wrong: **Option A deliberately deletes `UserIdentity`**, so a self-managed adult
+who closed her account satisfied that test again. Nothing broke — but only
+because the resolver separately requires a live student and a closed account is
+soft-deleted. **Authority that survives by coincidence will not survive the next
+change**, and the test that distinguishes the two clears the tombstone precisely
+so only the durable fact can refuse the guardian.
+
+**Three paths read it**, and the third is the sharpest: the child-context
+resolver, the candidate search for linking an existing child, and the **linking
+write itself** — where a closed self-managed adult has no login and would
+otherwise have been accepted as a linkable child, *granting a guardian authority
+over an adult who had taken it away* (`ACCOUNT_SELF_MANAGED`).
 
 **The link row survives.** It is historical relationship evidence; what ends is
-the current authority it conferred. A beneficiary who is 19 and never
-transitioned is still reached through her guardian, because nothing about her
-*account* changed — the rule turns on the login, not the age.
+the current authority. A beneficiary who is 19 and never transitioned is still
+reached through her guardian — the rule turns on the completed transition, never
+on the age and never on the credential.
 
 ### The refusals are mostly uniform, on purpose
 
