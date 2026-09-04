@@ -327,9 +327,11 @@ later than the restore point, in the order the ledger records them, before the
 system is returned to service. `deIdentifyAccount` is already idempotent by
 construction, so re-applying one that survived the restore is harmless.
 
-**What is genuinely missing is small and operational**: a runbook step that makes
-this replay part of the restore procedure rather than a thing somebody remembers,
-and a check that the replay ran. **No provider-specific pruning is designed
+**That gap is now closed** (2026-09-04): the replay is a step in the restore
+drill — [`operations/resilience.md`](../operations/resilience.md) — with the
+ledger-to-operation mapping written out and a requirement to record that it ran,
+since a restore whose replay nobody can evidence must be treated as one where it
+did not happen. **No provider-specific pruning is designed
 here** — backups may hold historical bytes until they expire, and that limit is
 stated rather than engineered around.
 
@@ -379,6 +381,12 @@ states behaviour the platform actually has; none states a CNDP requirement, and
 the retention paragraph attributes the ten years to the association, which is
 whose decision it is (see *Retention — the association's own policy* above).
 
+**Updated 2026-09-04**, where the Owner's decisions of that day made the draft
+factually stale rather than merely incomplete: the pending-application clock now
+has a stated reference point, the birth date is now **erased at closure** and the
+draft says so, and a returning former beneficiary now has a route the notice can
+honestly mention. Everything else stands as written.
+
 **Replacing the retention paragraph:**
 
 > تحتفظ الجمعية بالمعطيات التعليمية التي تسمح بالتعرف على الشخص المعني لمدة عشر
@@ -386,14 +394,17 @@ whose decision it is (see *Retention — the association's own policy* above).
 > الجمعية بناءً على أغراضها الخاصة: ضمان استمرارية المسار التعليمي، والاستجابة
 > لطلبات المستفيدات والمستفيدين السابقين، وتسليم الشهادات التعليمية أو التحقق
 > منها. أما طلبات التسجيل التي لم تُقبل، فيتم الاحتفاظ بها لمدة اثني عشر (12)
-> شهراً ابتداءً من تاريخ قرار الرفض. ويبقى الاحتفاظ ببعض المعطيات لمدة أطول
-> ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو متطلبات إثبات العمليات.
+> شهراً ابتداءً من تاريخ قرار الرفض، كما يُحتفظ بطلب التسجيل الذي لم يُبتّ فيه
+> مدة اثني عشر (12) شهراً ابتداءً من تاريخ تقديمه. ويبقى الاحتفاظ ببعض المعطيات
+> لمدة أطول ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو متطلبات إثبات
+> العمليات.
 
 **Added to the data-categories paragraph:**
 
 > تشمل معطيات الهوية المطلوبة لكل مستفيدة أو مستفيد تاريخ الازدياد الكامل،
 > ويُستعمل لتحديد بلوغ سن الرشد وما يترتب عنه على مستوى تدبير الحساب، ولا يُستعمل
-> لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن.
+> لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن. ويُحذف تاريخ
+> الازدياد عند إغلاق الحساب، إذ لا يحتاجه الأرشيف التعليمي المحتفظ به.
 
 **Added to the rights paragraph:**
 
@@ -407,6 +418,9 @@ whose decision it is (see *Retention — the association's own policy* above).
 > ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية، إذ تُحفظ هذه النسخ
 > لمدة محدودة ثم تنتهي صلاحيتها؛ وتضمن الجمعية ألا يُعاد إدراج المعطيات المحذوفة
 > عند أي عملية استرجاع.
+>
+> وإذا سبق لكِ إغلاق حسابك ورغبتِ في استعادته، يمكنكِ تقديم طلب بذلك؛ ولا يُفتح
+> الحساب إلا بعد تحقّق الإدارة من هويتك، ولا يُنشأ حساب جديد.
 
 **Added to the paragraph on minors:**
 

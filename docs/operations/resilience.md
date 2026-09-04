@@ -45,6 +45,42 @@ An untested backup is a belief, not a backup. The restore drill is:
 - a **launch requirement**, before go-live, and
 - repeated **periodically** thereafter.
 
+### After ANY restore: replay the deletions (2026-09-04)
+
+**A restore silently resurrects deleted people.** It rolls the live database back
+to an earlier moment, and every deletion applied after that moment is undone —
+including a closed account, a withdrawn family link and an executed Option B.
+Nobody is told, because from the database's point of view nothing failed.
+
+**Before the system is returned to service**, re-apply every deletion whose
+recorded instant is later than the restore point, in the order the ledger records
+them:
+
+| what was deleted | where the record is | how to re-apply |
+|---|---|---|
+| an account (Option A) | `AuditLog` `user.deidentify` | `DELETE /admin/users/{id}?permanent=true` |
+| a guardian-only closure | `AuditLog` `user.close_guardian_only` | the same, or the guardian-cleanup action |
+| a full deletion (Option B) | `FullDeletionRequest` where `executed_at` is set | approve the request again — execution is idempotent |
+| an expired application or Trash entry | `AuditLog` `childapplication.retention_purge` / `trash.permanent_delete` | let the daily purge run; both are calendar-driven and will find them again |
+
+**The ledger carries no deleted content** — target ids, field names and instants,
+never values — which is exactly what makes it safe to keep and sufficient to
+replay. Audit rows also live on their own retention clock rather than the
+subject's, so they outlive what they describe.
+
+**Every one of these operations is idempotent**, so re-applying a deletion that
+survived the restore is harmless. That is what makes this a checklist step rather
+than a reconciliation exercise.
+
+**Record that the replay ran**, and how many deletions it covered, in the restore
+drill's own notes. A restore whose replay nobody can evidence has to be treated
+as one where it did not happen.
+
+**Backups themselves are not pruned.** They may hold historical bytes until they
+expire on their own schedule; that limit is stated to data subjects rather than
+engineered around, and this replay is what stops a restore turning it into a
+resurrection.
+
 ## Degraded operation
 
 The system **never fabricates success.** A failed dependency yields `503` on the affected

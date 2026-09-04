@@ -4227,6 +4227,46 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Restore suppression is now a runbook step, and the consent draft is current (2026-09-04)
+
+**The one genuinely missing piece of restore suppression was operational, and it
+is closed.** A restore silently resurrects deleted people: it rolls the live
+database back, every deletion applied after that moment is undone, and nobody is
+told because from the database's point of view nothing failed. The ledger that
+makes the replay possible already existed — audit rows and `FullDeletionRequest`,
+each naming **which row and when and never the erased values** — so what was
+missing was a step in the restore drill rather than a mechanism.
+
+`operations/resilience.md` now carries the ledger-to-operation mapping, the rule
+that the replay happens **before the system returns to service**, and the
+requirement to record that it ran: a restore whose replay nobody can evidence has
+to be treated as one where it did not happen. Every operation involved is
+idempotent, which is what makes this a checklist step rather than a
+reconciliation exercise.
+
+**The consent draft was updated only where the day's decisions made it factually
+stale** — the pending-application clock now has a stated reference point, the
+birth date is erased at closure and the draft says so, and a returning former
+beneficiary has a route the notice can honestly mention. **The active
+`LegalConsentText` is untouched**, as it has been throughout.
+
+### What remains stale is in `docs/SRS.md`, and is the Owner's to change
+
+Five annotations, each overtaken by work the Owner authorised, and none touched:
+
+* the R131 summary and §4.10a both say the reference code is *«Not yet
+  implemented — `deIdentifyAccount` still clears it»*; Option A preserves it;
+* §4.10a says *«The request/review control plane is BUILT; destructive execution
+  is NOT»*; approval now executes;
+* the R131 summary says backups are *«Not implemented»*; the replay step exists;
+* the R131 summary still lists *«R59.4's quarantine question, which remains
+  open»*; it is answered and enforced.
+
+These are progress notes overtaken by approved work rather than normative
+disagreements — but the SRS is the Owner's, and a one-line correction by the
+Owner is cheaper than an agent deciding which of its sentences are merely
+factual.
+
 ## The returning beneficiary gets her account back (2026-09-04)
 
 **Owner decision.** She proves a Google identity, names her reference code, a
