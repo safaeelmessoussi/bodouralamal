@@ -4227,6 +4227,28 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The adult-Category marker — resolved, and the resolution is not to build it (2026-09-04)
+
+**Deterministically settled, so it was safe to close rather than defer.** The
+idea is a `Category`-level marker meaning *«this is the adult Category»*, so adult
+behaviour could be selected without consulting a birth date.
+
+**R130 removed the reason it existed**: every beneficiary now carries a date of
+birth, so the per-person answer exists and a Category flag would be a second
+answer to a question that already has a durable one. Worse, it would be wrong for
+precisely the person it matters for — placement is an administrative decision that
+age never gates (R62.7), so a seventeen-year-old may sit in المرأة and an adult in
+اليافعات, and the marker would call the first an adult and the second a minor.
+
+**The trap worth writing down is `Category.self_attendance_allowed`.** It looks
+exactly like an adult marker — R123 created it because nothing else distinguished
+an adult Category from a children's one — but its own definition says the
+*population* is what makes self-marking acceptable, not the class. It is read by
+attendance and scope options and by nothing else. Borrowing it would fuse a
+safeguarding permission with an identity fact, so relaxing either would silently
+relax the other. Recorded in the account handbook beside R132, with what to reach
+for instead.
+
 ## Privacy/retention contradiction sweep — one real one, and two for the Owner (2026-09-04)
 
 **Swept the mutable documentation for statements R130–R132 have overtaken.** Most

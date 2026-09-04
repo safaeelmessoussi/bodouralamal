@@ -154,6 +154,36 @@ automatic family-link revocation, no automatic identity binding, no role change
 — an account that changes hands while nobody is looking is one nobody decided to
 hand over. A guard asserts that no job source names the column.
 
+### The adult-Category marker that is deliberately NOT added (2026-09-04)
+
+**Adulthood is a fact about a person, and the platform now records it directly.**
+A recurring idea is a `Category`-level marker — *«المرأة is the adult Category»* —
+so that adult behaviour could be selected without consulting a birth date. It is
+resolved, and the resolution is not to add it.
+
+* **R130 removed the reason it existed.** The marker was attractive while there
+  was no per-person answer. There is one now, required for every beneficiary, and
+  a derived category flag would be a second answer to a question that already has
+  a durable one — the drift this handbook keeps warning about.
+* **It would be wrong for exactly the person it matters for.** Placement is an
+  administrative decision that age never gates (R62.7), so a seventeen-year-old
+  may sit in المرأة and an adult may sit in اليافعات. A Category marker would call
+  the first an adult and the second a minor — and the whole point of the fact is
+  deciding whether *this* person may claim her own account.
+* **`Category.self_attendance_allowed` must not be borrowed for it.** R123's
+  column looks like an adult marker and is not one: its own definition says the
+  *population* is what makes self-marking acceptable, not the class. It answers
+  *may a beneficiary of this Category mark her own presence*, and it is read by
+  attendance and by scope options — nothing else. Overloading it would make a
+  safeguarding permission and an identity fact one switch, so relaxing either
+  would silently relax the other.
+
+**What to do instead** when a screen seems to need *«is this an adult Category»*:
+it almost always needs *«is this beneficiary an adult»*, which is
+`lib/birth-date.ts` on `User.birth_date`. If it genuinely needs a property of the
+Category, that is a new attribute with its own name and its own meaning, and an
+Owner decision — not a reinterpretation of an existing column.
+
 ## The minor who becomes an adult — BUILT (R132)
 
 **The blocker recorded on 2026-09-03 is closed, and the refusal that created it
