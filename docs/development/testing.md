@@ -661,6 +661,39 @@ Neither is visible from a service test (the service was correct) or from a unit
 test of the component (both rendered). What showed them was performing the
 journey and reading what a person actually sees.
 
+## The scheduling suites race the materialisation job (found 2026-09-05)
+
+**A pre-existing intermittency, diagnosed but not fully fixed**, recorded here so
+the next person does not spend the afternoon I nearly did.
+
+`session.materialize` is a scheduled worker in the API container. It creates
+occurrences for whatever schedules exist in the shared development database —
+including the fixtures a suite has just created — and it does so **concurrently
+with the suite that owns them**. Two consequences, and they look like completely
+different bugs:
+
+* **Teardown failures.** An occurrence materialised between the session sweep
+  and the schedule delete makes `session_schedule_id_fkey` (`Restrict`) refuse
+  the delete, and the whole test FILE fails to load.
+  **Predicate-based deletes are not enough** — that was the first fix and it
+  failed again in a different suite, because the window is not inside the query,
+  it is *between* the sweep and the schedule delete. Both suites now **re-sweep
+  immediately before deleting the schedule and retry once**. One retry, not a
+  loop: a second failure means something genuinely still references the schedule
+  and must surface rather than be swallowed.
+* **Assertion failures.** A suite counting or listing occurrences can see one it
+  did not create. This is the residue: it shows up on a **different test each
+  run**, always in the scheduling area, and passes on repeat. It is not fixed.
+
+**The tell is that repeat runs are green and the failing test moves.** Before
+concluding that a scheduling change broke something, run the suite two or three
+times in isolation — a real regression fails the same test every time.
+
+**The proper fix is a slice of its own**: make those suites count only the
+occurrences they created, rather than everything attached to their schedule.
+Widening a timeout would not help, and disabling the worker in tests would remove
+the very production behaviour the materialisation suites exist to prove.
+
 ## A rebuilt frontend image is not a rebuilt container
 
 `docker compose up -d --build nginx` rebuilds `bodour-web:dev` and **may leave

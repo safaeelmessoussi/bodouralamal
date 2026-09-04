@@ -267,9 +267,33 @@ async function clear(): Promise<void> {
   await prisma.courseScheduleStaff.deleteMany({
     where: { scheduleId: { in: scheduleIds } },
   });
-  await prisma.recurringCourseSchedule.deleteMany({
-    where: { id: { in: scheduleIds } },
-  });
+  /**
+   * **Sweep by PREDICATE, not by the ids captured above** — the captured list is
+   * a read taken at one instant, and `session.materialize` can insert an
+   * occurrence for these schedules between that read and this delete. The
+   * schedule delete is `Restrict` on `session_schedule_id_fkey`, so a single row
+   * arriving in that window fails the whole teardown and takes the suite's file
+   * with it.
+   *
+   * That is exactly how it failed: intermittently, on a different test each
+   * time, and only when the materialisation job happened to run. A freshly
+   * materialised occurrence has no staff or content yet, so deleting it directly
+   * is safe.
+   */
+  // One retry, for the same reason `session.http.integration.test.ts` documents:
+  // the materialisation worker can insert an occurrence between the sweep and
+  // the schedule delete, and `Restrict` turns that into a failed teardown.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await prisma.session.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+    try {
+      await prisma.recurringCourseSchedule.deleteMany({
+        where: { id: { in: scheduleIds } },
+      });
+      break;
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
 
   const exams = await prisma.exam.findMany({
     where: { title: tagged },

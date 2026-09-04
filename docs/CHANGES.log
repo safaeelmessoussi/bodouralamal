@@ -4227,6 +4227,36 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The scheduling suites were racing the materialisation worker (2026-09-05)
+
+**Found during R133's final gates, and it is not R133's.** Three full sweeps
+produced three different failures — two assertion failures in
+`course-schedule.http.integration.test.ts`, then file-level teardown failures in
+`scheduling-visibility` and `session.http` — every one of them in the scheduling
+area, and every one green on repeat in isolation. Nothing in the R133 diff
+touches scheduling, sessions, rooms or materialisation.
+
+**The cause is a live worker.** `session.materialize` runs in the API container
+and creates occurrences for whatever schedules exist, including a suite's own
+fixtures, while that suite is running.
+
+**The first fix was wrong, and that is worth recording.** Sweeping sessions by
+predicate rather than by a captured id list looked like the answer — and the very
+next sweep failed the same way in a different file whose teardown was *already*
+predicate-based. **The window is not inside the query; it is between the sweep
+and the schedule delete**, which `session_schedule_id_fkey` (`Restrict`) turns
+into a failed teardown and a test file that cannot load. Both suites now re-sweep
+immediately before deleting the schedule and **retry once** — one retry, not a
+loop, because a second failure means something genuinely still references the
+schedule and must surface.
+
+**What is fixed and what is not.** The teardown failures are fixed and the full
+sweep is green. The *assertion* residue is not: a suite counting occurrences can
+still see one it did not create. That is a slice of its own — those suites should
+count only what they created — and it is recorded in `testing.md` with the tell
+that identifies it: **a real regression fails the same test every time, this one
+moves.**
+
 ## The last two Option A assertions, inverted (2026-09-05)
 
 **Both encoded the same withdrawn rule**: that a `FamilyLink` survives permanent

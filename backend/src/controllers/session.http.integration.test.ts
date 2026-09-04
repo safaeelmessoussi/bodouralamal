@@ -129,9 +129,28 @@ async function clear(): Promise<void> {
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
   }
-  await prisma.recurringCourseSchedule.deleteMany({
-    where: { id: { in: ids } },
-  });
+  /**
+   * **Re-sweep immediately before the schedule delete, and retry once.**
+   *
+   * `session.materialize` is a live worker in the API container and creates
+   * occurrences for whatever schedules exist — including these fixtures, while
+   * this teardown runs. Every delete above is already predicate-based, so the
+   * problem is not the query: it is the **window** between sweeping the sessions
+   * and deleting the schedule, which `session_schedule_id_fkey` (`Restrict`)
+   * turns into a failed teardown and a test FILE that cannot load.
+   *
+   * One retry, not a loop: a second failure means something genuinely still
+   * references the schedule, and that must surface rather than be swallowed.
+   */
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
+    try {
+      await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
+      break;
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
 
   const levels = await prisma.level.findMany({
     where: { name: { startsWith: TAG } },
