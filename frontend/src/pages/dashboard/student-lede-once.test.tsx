@@ -105,3 +105,47 @@ describe('§7 — the lede is rendered once', () => {
     expect(html).toContain(t('studentDashboard.title'));
   });
 });
+
+/**
+ * **Every student page renders inside the portal shell** (2026-09-05).
+ *
+ * `assessments.tsx` shipped without `StudentLayout`. It was the only one, and
+ * the cost was not cosmetic: the page had no header and no navigation, so a
+ * beneficiary who opened اختباراتي had **no way back to the rest of her
+ * portal** — and the route looked unfinished rather than empty.
+ *
+ * A source-level assertion rather than a render test, deliberately: each of
+ * these pages needs a different set of providers and a different API stubbed to
+ * render, and a guard that is expensive to extend is a guard the next page skips.
+ * The shell is a structural fact about the file, and that is what is checked.
+ */
+describe('§14.4 — every student portal page renders inside StudentLayout', () => {
+  const PAGES = import.meta.glob('./*.tsx', { eager: true, query: '?raw', import: 'default' }) as Record<
+    string,
+    string
+  >;
+
+  const portalPages = Object.entries(PAGES).filter(
+    ([path]) => !path.includes('.test.') && !path.includes('landing'),
+  );
+
+  it('finds the pages it is meant to be guarding', () => {
+    // Without this the loop below passes by matching nothing at all — the
+    // failure mode a glob-driven guard has and a hand-written list does not.
+    expect(portalPages.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('every one of them uses the shared shell', () => {
+    /**
+     * **`<StudentLayout`, not `StudentLayout`.** The first version matched the
+     * bare word and therefore matched the doc comment that explains why the
+     * shell is used — so the guard passed against a page whose JSX had been
+     * stripped back to a `<section>`. It was proved by doing exactly that, and
+     * this is the assertion that failed on the second attempt.
+     */
+    const bare = portalPages
+      .filter(([, source]) => !source.includes('<StudentLayout'))
+      .map(([path]) => path);
+    expect(bare, `student pages rendering outside the portal shell: ${bare.join(', ')}`).toEqual([]);
+  });
+});

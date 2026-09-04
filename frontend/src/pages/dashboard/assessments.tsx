@@ -12,6 +12,8 @@ import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { ChoiceField, TextArea, TextField } from '../../components/ui/field.js';
+import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
+import { StudentLayout } from '../../components/student/student-layout.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -44,14 +46,20 @@ export function StudentAssessmentsPage(): ReactNode {
   const { accessToken } = useSession();
   const [rows, setRows] = useState<StudentAssessment[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  /** Kept rather than discarded: `ErrorState` turns the actual failure into the
+   *  right sentence and the right next action — a 403 and a dropped connection
+   *  need different words. Throwing it away forces one generic line on both. */
+  const [failure, setFailure] = useState<unknown>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState('loading');
+    setFailure(null);
     try {
       setRows(await myAssessments(accessToken));
       setState('ready');
-    } catch {
+    } catch (error) {
+      setFailure(error);
       setState('error');
     }
   }, [accessToken]);
@@ -74,13 +82,23 @@ export function StudentAssessmentsPage(): ReactNode {
   }
 
   return (
-    <section>
-      <h1>{t('assessments.navStudent')}</h1>
-      <p>{t('assessments.studentLede')}</p>
-      {state === 'loading' ? <p className="hint">{t('common.loading')}</p> : null}
-      {state === 'error' ? <Feedback tone="warn">{t('assessments.loadFailed')}</Feedback> : null}
+    /**
+     * **Inside `StudentLayout`, like every one of her other screens.**
+     *
+     * It was the only student page that rendered a bare `<section>` with its own
+     * `<h1>`: no header, no navigation, no shell — a route that looked
+     * unfinished and, worse, gave her no way back to the rest of her portal.
+     * The title and lede are the layout's props, so they are not stated twice.
+     */
+    <StudentLayout title={t('assessments.navStudent')} lede={t('assessments.studentLede')}>
+      {state === 'loading' ? <LoadingState /> : null}
+      {state === 'error' ? (
+        <ErrorState error={failure} onRetry={() => void load()} />
+      ) : null}
       {state === 'ready' && rows.length === 0 ? (
-        <p className="hint">{t('assessments.emptyStudent')}</p>
+        // The shared empty state, so an empty list reads as a finished screen
+        // rather than as raw text on an unbuilt route.
+        <EmptyState />
       ) : null}
 
       <ul className="assessment-list">
@@ -105,7 +123,7 @@ export function StudentAssessmentsPage(): ReactNode {
           </li>
         ))}
       </ul>
-    </section>
+    </StudentLayout>
   );
 }
 
