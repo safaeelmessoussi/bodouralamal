@@ -256,3 +256,60 @@ export async function listAssessmentTargets(
     )
   ).data;
 }
+
+/** One row of the library — `GET /assessments`. */
+export interface AssessmentSummary {
+  id: string;
+  title: string;
+  status: AssessmentStatus;
+  date: string;
+  max_grade: string;
+  target_kind: TargetKind;
+  level_id: string;
+  level_name: string;
+  subject_id: string | null;
+  subject_name: string | null;
+  academic_year_label: string | null;
+  question_count: number;
+  submission_count: number;
+}
+
+export interface AssessmentListFilters {
+  status?: AssessmentStatus;
+  level_id?: string;
+  subject_id?: string;
+  academic_year_id?: string;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * **The library.** Every filter is optional and omitted keys are not sent —
+ * a blank search box must not become `?q=`, which the server would match
+ * literally and answer with an empty library (rule A's API half).
+ */
+export async function listAssessments(
+  filters: AssessmentListFilters,
+  token: string | null,
+): Promise<{ data: AssessmentSummary[]; meta: { total: number; page: number; page_size: number } }> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && String(value) !== '') {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return api<{ data: AssessmentSummary[]; meta: { total: number; page: number; page_size: number } }>(
+    `/assessments${query ? `?${query}` : ''}`,
+    { token },
+  );
+}
+
+/** «نسخ كمسودة» — the wording again, never the answers. Answers the new draft's id. */
+export async function copyAssessment(
+  examId: string,
+  token: string | null,
+): Promise<{ id: string }> {
+  return api<{ id: string }>(`/assessments/${examId}/copy`, { method: 'POST', body: {}, token });
+}

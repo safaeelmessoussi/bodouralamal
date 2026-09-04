@@ -1045,6 +1045,26 @@ export const ar = {
     lede: 'اختبارات تُبنى سؤالاً بسؤال وتُنشر لمستوى أو لحلقة أو لحصة أو لمستفيدة واحدة. التنقيط يدوي، والنقطة لا تظهر للمستفيدة حتى تُنشر.',
     studentLede: 'الاختبارات المتاحة لك. يمكنك الحفظ والعودة لاحقاً؛ الإرسال نهائي.',
     create: 'اختبار جديد',
+    // **The library** — the list that did not exist, so a paper an author
+    // created could not be found again.
+    libraryCaption: 'الاختبارات المُعدَّة',
+    searchLabel: 'ابحثي بعنوان الاختبار',
+    filterStatus: 'الحالة',
+    filterLevel: 'المستوى',
+    filterAll: 'الكل',
+    statusDraft: 'مسودة',
+    statusPublished: 'منشور',
+    statusClosed: 'مغلق',
+    colQuestions: 'الأسئلة',
+    colSubmissions: 'الإجابات',
+    colScale: 'النقطة على',
+    openPaper: 'فتح',
+    copyPaper: 'نسخ كمسودة',
+    copyConfirmTitle: 'نسخ الاختبار',
+    copyConfirmBody:
+      'ستُنشأ مسودة جديدة بالأسئلة نفسها. لن تُنقل إليها إجابات المستفيدات ولا نقطهن، ويبقى الاختبار الأصلي كما هو.',
+    copied: 'أُنشئت نسخة جديدة كمسودة.',
+    copyFailed: 'تعذّر نسخ الاختبار.',
     name: 'اسم الاختبار',
     description: 'الوصف / التعليمات',
     maxGrade: 'النقطة على',
@@ -1093,6 +1113,12 @@ export const ar = {
     frozen: 'أجابت مستفيدة واحدة على الأقل، فلم تعد الأسئلة قابلة للتعديل. هذا يحمي ما أجبن به.',
     noQuestions: 'لا يمكن نشر اختبار بلا أسئلة.',
     publishConfirm: 'سيصبح الاختبار متاحاً للمستفيدات المعنيات. هل تريدين نشره؟',
+    // **The author must know the size of the audience before she publishes.**
+    // Publishing to nobody used to look exactly like publishing to a class.
+    publishConfirmCount: 'سيصبح الاختبار متاحاً لـ{n} مستفيدة معنية. هل تريدين نشره؟',
+    publishConfirmNobody:
+      'لا توجد حالياً أي مستفيدة معنية بهذا الاختبار. تحقّقي من المستوى والجهة الموجَّه إليها والتاريخ. يمكنك نشره الآن — وستجده المستفيدات اللواتي يُسجَّلن لاحقاً — أو إبقاؤه مسودة.',
+    noAudience: 'لا توجد مستفيدات معنيات بهذا الاختبار حالياً.',
     closeConfirm: 'سيتوقف استقبال الإجابات. ما أُرسل يبقى محفوظاً ومقروءاً.',
     // The inbox.
     inbox: 'الإجابات',
@@ -1322,7 +1348,14 @@ export const ar = {
       physical: 'حضوري',
       online: 'عن بُعد',
       soon: 'قريباً',
-      onlineSoon: 'الامتحانات عن بُعد — قريباً. هذه الميزة قيد التخطيط ولم تُبنَ بعد.',
+      // **Superseded 2026-09-04.** This said «قريباً … ولم تُبنَ بعد», which
+      // stopped being true when R124 shipped the online paper: it is built,
+      // it reaches المستفيدات, it is answered, marked and returned. What is
+      // true is that it is not organised HERE — this screen arranges a room, a
+      // clock window and supervisors, and a paper has none of them.
+      onlineElsewhere:
+        'الاختبارات عن بُعد تُعدّ في «بناء الاختبارات»: تُكتب سؤالاً بسؤال، ثم تُنشر للمستفيدات المعنيات ويُجَبن عنها داخل المنصة. أما هذه الصفحة فتنظّم الامتحانات الحضورية: قاعة وتوقيت ومشرفات.',
+      onlineGoToBuilder: 'الذهاب إلى بناء الاختبارات',
       chooseBranchFirst: 'اختاري الفرع أولاً',
       // R81 — «النقطة القصوى» بدل أيّ سُلّم عام: لكل امتحان مجاله الخاص.
       // **R94 — نطاق الامتحان يأتي من حصة تُدرّسها.** سلسلة الفرع/المستوى/المادة

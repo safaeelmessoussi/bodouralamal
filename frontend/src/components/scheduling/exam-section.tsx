@@ -98,21 +98,31 @@ export function ExamSection({
         value={mode}
         onChange={(v) => onMode(v as ExamMode)}
         disabled={locked}
-        hint={mode === 'online' ? t('scheduling.exam.onlineSoon') : undefined}
         options={[
           { value: 'physical', label: t('scheduling.exam.physical') },
-          // Visible so the roadmap is legible exactly where somebody looks for
-          // it; the option is never selectable, and the server refuses it too.
-          { value: 'online', label: `${t('scheduling.exam.online')} — ${t('scheduling.exam.soon')}` },
+          /**
+           * **No «— قريباً» suffix any more, and no hint repeating the body.**
+           *
+           * The label promised a feature that has existed since R124: an online
+           * assessment is written, published, answered, marked and returned.
+           * What is true is that it is not arranged on THIS screen, which asks
+           * for a room, a clock window and supervisors. The section below says
+           * that once — the `hint` here said the same sentence a second time,
+           * three lines apart, which is how the same message came to be on
+           * screen twice (rule AH: one message per kind, in the place that kind
+           * belongs).
+           */
+          { value: 'online', label: t('scheduling.exam.online') },
         ]}
       />
 
-      {/* Nothing online is rendered, disabled or otherwise: an exam link, a
-          student audience, an open/close window and submission settings are a
-          shape nobody has decided yet, and showing them would promise it. */}
+      {/* **The place fields stay hidden for an online paper** — it has no room
+          and no clock window by construction — and instead of a refusal the
+          reader is told where the thing she is looking for actually lives. */}
       {mode === 'online' ? (
         <Feedback>
-          {t('scheduling.exam.onlineSoon')}
+          {t('scheduling.exam.onlineElsewhere')}{' '}
+          <a href="/admin/assessments">{t('scheduling.exam.onlineGoToBuilder')}</a>
         </Feedback>
       ) : (
         <>

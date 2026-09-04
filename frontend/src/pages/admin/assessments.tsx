@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   addQuestion,
   closeAssessment,
+  copyAssessment,
   createAssessment,
+  listAssessments,
   listAssessmentTargets,
   listSubmissions,
   publishAssessment,
@@ -12,6 +14,8 @@ import {
   removeQuestion,
   reorderQuestions,
   type AssessmentPaper,
+  type AssessmentStatus,
+  type AssessmentSummary,
   type JustificationRule,
   type QuestionKind,
   type SubmissionRow,
@@ -121,7 +125,7 @@ export function AssessmentsView({
   if (examId !== null) {
     return <OnePaper examId={examId} token={accessToken} canWrite={canWrite} layout={layout} />;
   }
-  return <NewPaper token={accessToken} canWrite={canWrite} layout={layout} />;
+  return <Library token={accessToken} canWrite={canWrite} layout={layout} />;
 }
 
 /** `/admin/assessments` — the builder in the back-office chrome. */
@@ -144,8 +148,28 @@ type PortalLayout = (props: {
   children: ReactNode;
 }) => ReactNode;
 
-/** The create form. Once it saves, the page moves to `?exam=` and the builder. */
-function NewPaper({
+/**
+ * **The library** — the papers that exist, and the way back to any of them.
+ *
+ * ## The defect this screen is
+ *
+ * This view used to be the create form and nothing else: a title, a hint and
+ * «اختبار جديد». An author built a paper, navigated away, and had **no route
+ * back to it** — every assessment endpoint addressed one paper by id and none
+ * answered *which papers exist*. `GET /exams` had even recorded the intention,
+ * excluding online papers with the note that they are *"listed by their own
+ * screen, `/admin/assessments`"*, and this was that screen. Nothing was lost;
+ * it was unreachable, which to the person who wrote the paper is the same thing.
+ *
+ * ## Why a table and not cards
+ *
+ * The reader's question is comparative — *which of these is still a draft, which
+ * has answers waiting* — and `DataTable` already carries the search/filter
+ * toolbar, the filtered-vs-empty distinction (§14.4), pagination, the error
+ * state and the row-action order (rule AC). A card grid would be a second list
+ * idiom for one screen.
+ */
+function Library({
   token,
   canWrite,
   layout,
@@ -158,6 +182,103 @@ function NewPaper({
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [rows, setRows] = useState<AssessmentSummary[]>([]);
+  const [status, setStatus] = useState<TableStatus>('loading');
+  const [failure, setFailure] = useState<unknown>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
+  const [copying, setCopying] = useState<AssessmentSummary | null>(null);
+
+  const filtered = query.trim() !== '' || stateFilter !== '' || levelFilter !== '';
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    setFailure(null);
+    try {
+      const result = await listAssessments(
+        {
+          page,
+          ...(query.trim() ? { q: query.trim() } : {}),
+          ...(stateFilter ? { status: stateFilter as AssessmentStatus } : {}),
+          ...(levelFilter ? { level_id: levelFilter } : {}),
+        },
+        token,
+      );
+      setRows(result.data);
+      setTotal(result.meta.total);
+      setStatus('ready');
+    } catch (error) {
+      setFailure(error);
+      setStatus('error');
+    }
+  }, [token, page, query, stateFilter, levelFilter]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const statusLabel = (row: AssessmentSummary): string =>
+    t(
+      row.status === 'draft'
+        ? 'assessments.statusDraft'
+        : row.status === 'published'
+          ? 'assessments.statusPublished'
+          : 'assessments.statusClosed',
+    );
+
+  const columns: Column<AssessmentSummary>[] = [
+    {
+      key: 'title',
+      header: t('assessments.name'),
+      cell: (row) => <a href={`?exam=${encodeURIComponent(row.id)}`}>{row.title}</a>,
+    },
+    {
+      key: 'status',
+      header: t('assessments.filterStatus'),
+      // **Never colour alone**: the badge carries the word, so the state is
+      // readable without perceiving the tone at all.
+      cell: (row) => (
+        <Badge tone={row.status === 'published' ? 'ok' : 'neutral'}>{statusLabel(row)}</Badge>
+      ),
+    },
+    {
+      key: 'level',
+      header: t('assessments.level'),
+      secondary: true,
+      cell: (row) => row.level_name,
+    },
+    {
+      key: 'subject',
+      header: t('assessments.subject'),
+      secondary: true,
+      cell: (row) => row.subject_name ?? '—',
+    },
+    { key: 'date', header: t('assessments.date'), secondary: true, cell: (row) => row.date },
+    {
+      key: 'questions',
+      header: t('assessments.colQuestions'),
+      numeric: true,
+      secondary: true,
+      cell: (row) => row.question_count,
+    },
+    {
+      key: 'submissions',
+      header: t('assessments.colSubmissions'),
+      numeric: true,
+      cell: (row) => row.submission_count,
+    },
+    {
+      key: 'scale',
+      header: t('assessments.colScale'),
+      numeric: true,
+      secondary: true,
+      cell: (row) => row.max_grade,
+    },
+  ];
+
   return layout({
     title: t('assessments.title'),
     actions: canWrite ? (
@@ -168,6 +289,93 @@ function NewPaper({
     children: (
       <>
         {notice ? <Feedback tone="warn">{notice}</Feedback> : null}
+        <DataTable
+          caption={t('assessments.libraryCaption')}
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.id}
+          status={status}
+          error={failure}
+          onRetry={() => void load()}
+          filtered={filtered}
+          onClearFilters={() => {
+            setQuery('');
+            setStateFilter('');
+            setLevelFilter('');
+            setPage(1);
+          }}
+          toolbar={
+            <>
+              <SearchInput
+                label={t('assessments.searchLabel')}
+                value={query}
+                onChange={(next) => {
+                  setQuery(next);
+                  setPage(1);
+                }}
+              />
+              <SelectField
+                label={t('assessments.filterStatus')}
+                value={stateFilter}
+                onChange={(next) => {
+                  setStateFilter(next);
+                  setPage(1);
+                }}
+                options={[
+                  { value: '', label: t('assessments.filterAll') },
+                  { value: 'draft', label: t('assessments.statusDraft') },
+                  { value: 'published', label: t('assessments.statusPublished') },
+                  { value: 'closed', label: t('assessments.statusClosed') },
+                ]}
+              />
+              <SelectField
+                label={t('assessments.filterLevel')}
+                value={levelFilter}
+                onChange={(next) => {
+                  setLevelFilter(next);
+                  setPage(1);
+                }}
+                options={[
+                  { value: '', label: t('assessments.filterAll') },
+                  ...scope.options.levelId,
+                ]}
+              />
+            </>
+          }
+          pagination={{ page, pageSize: 20, total, onPage: setPage }}
+          actions={
+            canWrite
+              ? [
+                  {
+                    label: t('assessments.openPaper'),
+                    onSelect: (row) => {
+                      window.location.href = `?exam=${encodeURIComponent(row.id)}`;
+                    },
+                  },
+                  { label: t('assessments.copyPaper'), onSelect: (row) => setCopying(row) },
+                ]
+              : []
+          }
+        />
+        {copying ? (
+          <ConfirmDialog
+            open
+            title={t('assessments.copyConfirmTitle')}
+            body={t('assessments.copyConfirmBody')}
+            confirmLabel={t('assessments.copyPaper')}
+            onCancel={() => setCopying(null)}
+            onConfirm={async () => {
+              const source = copying;
+              setCopying(null);
+              try {
+                const created = await copyAssessment(source.id, token);
+                window.location.href = `?exam=${encodeURIComponent(created.id)}`;
+              } catch {
+                setNotice(t('assessments.copyFailed'));
+              }
+            }}
+          />
+        ) : null}
         <p className="hint">{t('assessments.grading')}</p>
         {open ? (
           <CreateDialog
@@ -602,6 +810,17 @@ function OnePaper({
           <p className="hint">
             {t('assessments.eligible')}: {eligible}
           </p>
+          {/**
+            * **Said before publishing, not discovered after it.** A paper whose
+            * target resolves to nobody published exactly like one addressed to a
+            * class — same confirmation, same success. It is not refused, because
+            * a legitimate case exists: publish for a Level, then admit the
+            * students, and R122 resolves the audience on the paper's own date.
+            * So the author is told, and decides.
+            */}
+          {eligible === 0 && paper.status !== 'closed' ? (
+            <Feedback tone="warn">{t('assessments.noAudience')}</Feedback>
+          ) : null}
           <DataTable
             caption={t('assessments.inbox')}
             columns={columns}
@@ -645,7 +864,13 @@ function OnePaper({
       <ConfirmDialog
         open={confirm !== null}
         title={t(confirm === 'close' ? 'assessments.close' : 'assessments.publish')}
-        body={t(confirm === 'close' ? 'assessments.closeConfirm' : 'assessments.publishConfirm')}
+        body={
+          confirm === 'close'
+            ? t('assessments.closeConfirm')
+            : eligible === 0
+              ? t('assessments.publishConfirmNobody')
+              : t('assessments.publishConfirmCount').replace('{n}', String(eligible))
+        }
         confirmLabel={t(confirm === 'close' ? 'assessments.close' : 'assessments.publish')}
         busy={busy}
         onConfirm={() =>

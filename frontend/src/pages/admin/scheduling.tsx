@@ -1346,9 +1346,11 @@ export function SchedulingDialog({
       );
     if (outside) return t('admin.schedules.staffPeriodOutside');
     if (type === 'exam') {
-      // The mode is refused by the server too; saying so here is the courtesy,
-      // not the guarantee.
-      if (examMode === 'online') return t('scheduling.exam.onlineSoon');
+      // **Still refused on this route, and no longer for the old reason.**
+      // `POST /exams` answers ONLINE_NOT_AVAILABLE because an online paper is
+      // created at `POST /assessments`, not because the capability is missing.
+      // The message now says where it lives; the server refusal is unchanged.
+      if (examMode === 'online') return t('scheduling.exam.onlineElsewhere');
       // **R94 — she names a class, not a chain.** Without this the four
       // messages below would ask her for selectors she was never shown.
       if (!canAssignStaff && teachingContexts && examContextId === '') {
