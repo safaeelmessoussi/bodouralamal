@@ -661,6 +661,39 @@ Neither is visible from a service test (the service was correct) or from a unit
 test of the component (both rendered). What showed them was performing the
 journey and reading what a person actually sees.
 
+## Integration residue reaches USER-FACING screens (found 2026-09-05)
+
+**The suites share one database with the running application, so a row a suite
+forgets is a row the association's public homepage renders.** This was found by
+screenshotting the landing page during a design pass, not by any test.
+
+What was on `http://localhost/` — the public page, logged out:
+
+* **13 of 17 branches were fixtures** — `[content-test:<uuid>] فرع`,
+  `[http-childapp-test] مقر آخر`, each with its address, phone and opening hours
+  laid out exactly like a real one. The page was 4,536px tall on desktop and
+  6,891px on mobile, and almost all of it was test data.
+* **Three fixture academic years** — including one with 20 periods — appeared in
+  the year selector on «اختبار جديد», beside the single real one.
+
+### Why the existing sweeps missed it
+
+Each suite tags what it creates and deletes by that tag. The leak is in the
+**untagged children**: four `EducationalContent` rows titled «العنوان الصحيح» and
+«مع خاص** were attached to tagged branches, so a title-prefix sweep could never
+find them — and their `Restrict` foreign key then held the branch, which held the
+`UserBranchRole`, which held the user. **One untagged row pins an entire cluster.**
+
+### What to do about it
+
+* **Tag every row a fixture creates, including the ones nobody reads.** A title
+  that looks like production data is a row no sweep will ever match.
+* **Sweep by ownership, not by name, wherever the FK graph allows it** — delete
+  children by `parentId IN (…)` rather than by their own tag.
+* **Look at the product occasionally.** No assertion in 2,241 integration tests
+  noticed that the homepage was listing test fixtures, because none of them
+  renders the homepage. A screenshot did.
+
 ## The scheduling suites race the materialisation job (found 2026-09-05)
 
 **A pre-existing intermittency, diagnosed but not fully fixed**, recorded here so

@@ -135,8 +135,20 @@
 }
 
 /* Wide enough for the whole bar: full navigation, and NO burger. The two are
- * mutually exclusive by construction — one query flips both. */
-@media (min-width: 48rem) {
+ * mutually exclusive by construction — one query flips both.
+ *
+ * **60rem, not 48rem** (2026-09-05). At 48rem the query fired and revealed the
+ * full navigation plus the desktop action group into a viewport that could not
+ * hold them: the bar's natural width is ~950px on an authenticated page, so the
+ * document scrolled sideways — 930px of content in a 753px viewport — on EVERY
+ * signed-in screen at tablet width. It was found on `/teacher/schedules` and
+ * reproduced immediately on `/admin/branches`, which is how it was known to be
+ * the header rather than either page.
+ *
+ * The number is measured, not guessed: the widest bar observed was 948px, and
+ * 60rem (960px) clears it. Below that the burger menu is the intended fallback
+ * and was already working. */
+@media (min-width: 60rem) {
   .app-header__nav,
   .app-header__actions--desktop {
     display: flex;
