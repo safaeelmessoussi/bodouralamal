@@ -4,9 +4,15 @@
 
 **This page extends `SRS-PROPOSAL-R111.md` §3; it does not replace or restate
 it.** R111 classified all the relationships a `User` carried when it was written,
-**enumerated from the live database**, and that classification is the base for
-**Option A**. This page records two things R111 could not: the relationships
-added since, and the **Option B** column the Owner introduced on 2026-09-03.
+**enumerated from the live database**, and that classification is the base.
+
+**Read the columns below as historical** (Revision 133). They were written when
+deletion had two modes — Option A preserved the educational archive, Option B
+destroyed it — and the *«Option A»* column records what the preserving mode kept.
+There is **one** deletion now, and it does what the Option B column describes.
+The table is kept because the per-relationship reasoning in it is still the
+reasoning that decides what is hers and what is shared; only the two-mode framing
+is gone.
 
 Where R111 §3 and this page appear to disagree, R111 §3 is the base and the
 delta below is the amendment.
@@ -39,9 +45,9 @@ WHERE tc.constraint_type = 'FOREIGN KEY'
 ORDER BY 1, 2;
 ```
 
-## The eight added since R111, classified for Option A
+## The eight added since R111, classified for permanent deletion
 
-| relationship | added by | Option A | why |
+| relationship | added by | *(historical)* Option A | why |
 |---|---|---|---|
 | `attendance.student_id` | R123 | **PRESERVE** | the register is the institution's record of who was there |
 | `attendance.marked_by` | R123 | **PRESERVE** | *«who marked this»* is the accountability half; a register with no marker is not evidence |
@@ -57,67 +63,60 @@ applying the Owner's own rule — *do not guess when deletion would destroy anot
 person's legitimate record* — rather than by inventing a policy. If the Owner
 prefers it deleted, that is a narrowing decision and not a defect.
 
-## The two requests, and what separates them
+## ONE deletion, and what it removes (Revision 133)
 
-The Owner's decision of 2026-09-03 splits one word into two:
+**There is one request: «حذف الحساب».** R131's Option A / Option B distinction is
+withdrawn, along with `FullDeletionRequest`, its request/review routes and its
+screens. A person deletes her account; access stops at once; a Super Admin may
+restore it for seven days or destroy it earlier; otherwise it is permanently
+deleted at the boundary.
 
-| | **Option A — close my account** | **Option B — delete all my deletable data** |
-|---|---|---|
-| **What it means** | remove what exists to operate the online account; keep the minimal educational archive for the remaining retention period | remove personal **and** educational data that the platform is permitted and able to remove |
-| **Authentication** (`user_identity`, `refresh_*`, `rate_limit_counter`, login email) | removed | removed |
-| **Planning data** (`teacher_availability`, capabilities, `framing_preference`) | removed | removed |
-| **Profile/account fields** | de-identified to «حساب محذوف» | de-identified |
-| **`referenceCode`** | **removed** *(R133; ~~kept~~)* | removed |
-| **`birthDate`** *(R130)* | **cleared** | cleared |
-| **Educational archive** (`enrollment`, `grade`, `student_exam_submission` + answers, `attendance`, `quran_progress_log`, `student_surah_progress`, `student_teaching_group`) | **KEPT** for the retention period | **removed** |
-| **Consent & safeguarding evidence** | kept under its own rule | kept under its own rule |
-| **Audit trail** | kept under its own rule | kept under its own rule — and it carries **no educational content** to begin with |
-| **Approval** | the person, or a Super Admin | **Super Admin only** |
+### What permanent deletion removes
 
-### `referenceCode` — the contradiction the Owner resolved
+Everything whose **only purpose is that person** — her authentication identity,
+sessions and tokens, her profile, name, birth date, `reference_code`, her copied
+identity on a `ChildApplication`, her enrolments, grades, attendance, Quran
+progress, assessment submissions and answers, her group membership, and every
+`Trash` snapshot able to restore any of it.
 
-R122 promised a future attestation; R111 cleared every field that could match a
-returning person to her preserved record, **including `referenceCode`**. The two
-were irreconcilable and the Owner has now decided:
+`erasure.ts` is where that boundary is defined, and it is the **only** place. Every
+statement in it is keyed on `student_id` or on an id belonging to the subject.
 
-* **Under Option A the reference code SURVIVES**, as part of the protected
-  minimal educational archive, for the remainder of the retention period. It
-  exists to reconnect a former beneficiary with her own record.
-* **It is NOT anonymous.** It is personal/pseudonymous data and is protected as
-  such. The archive is not anonymous merely because the login identity is gone.
-* **Under Option B it is removed** with the identifiable educational archive.
-* **It must never be used as a back door** to reconstruct educational history
-  that Option B was approved to delete.
+### What it must never remove
 
-This supersedes the earlier instruction not to preserve it. **Not yet
-implemented** — `deIdentifyAccount` still clears it, and changing that is part of
-the Option A work, not of this map.
+**Shared institutional data is never deleted because one person referenced it.**
 
-### What Option B must NOT destroy
+| Deleted | Preserved |
+| --- | --- |
+| her `Grade` | the `Exam` several beneficiaries sat |
+| her `Attendance` row | the `Session` itself |
+| her submission and answers | the assessment definition |
+| her `Enrollment` | the `Level`, `Branch` and `AcademicPeriod` |
+| her copied `ChildApplication` identity | her guardian's applications about other children |
+| — | teacher-authored `EducationalContent` and every other person's records |
 
-Deletion is a request about **her** data, and some rows are two people's at once.
-
-* **A teacher-authored educational resource does not disappear** because a
-  beneficiary who read it asks for deletion. `EducationalContent` carries no
-  `user` foreign key at all, so this is structurally safe rather than a rule
-  somebody must remember.
-* **`quran_progress_log.logged_by` and `attendance.marked_by`** name the staff
-  member, not the beneficiary. When the *entry itself* is deleted under Option B
-  they go with it — that is inherent to deleting the entry — but neither is ever
-  a reason to touch another person's row.
-* **A Grade is authored by a teacher about a beneficiary.** Option B deletes it,
-  because it is her educational record; the teacher's authorship goes with the
-  row it lives on. This is a consequence of the request, not an oversight.
-* **Audit and consent rows are not a hiding place.** They survive under their own
-  retention rules, and TD-8 already records **fields and ids, never values**, so
-  no educational content is retained under the pretext of audit.
+**The `User` row itself survives, de-identified.** Forty-seven foreign keys point
+at it, several from other people's records and from consent and audit evidence;
+removing the row would delete their data to delete hers.
 
 ### What must not be promised
 
 **Do not promise "zero rows anywhere".** Narrowly necessary evidence survives:
-the deletion request itself, its completion, required security/audit facts, and
-consent/legal evidence under its own rule. A page that promises more than the
-system does is worse than one that explains the limit.
+the deletion's own audit trail and consent/legal evidence under its own rule.
+
+**And do not promise erasure from backups.** A live deletion does not modify an
+existing backup; an older encrypted generation may hold a previous copy until
+rotation expires it. That limit is stated to the person before she confirms,
+never engineered around.
+
+### The attestation consequence, stated plainly
+
+R122 once committed the association to answering *«كنت أدرس عندكم وأريد شهادة
+تثبت المستوى الذي وصلت إليه»* years later, and R131 kept an archive so it could.
+**R133 withdraws that promise for anyone who deletes her account**: the history
+is gone, an attestation based on it may be impossible, and the confirmation says
+so before she agrees. A beneficiary who has *not* deleted her account keeps her
+record for as long as the account exists.
 
 ## Retention — the association's own policy
 
@@ -170,7 +169,7 @@ readiness, its tests and its tombstone-reading exemption. What survives is
 `erasure.ts`, the primitive that decides **what counts as her own data** — now
 reached by permanent account deletion, which is its only caller.
 
-## Before any destructive automation## Before any destructive automation
+## Before any destructive automation
 
 **No purge job is to be written until the following are reconciled**, because a
 partial purge that claims data is gone while obvious copies remain is worse than
@@ -238,49 +237,19 @@ exports no destructive verb, proved by adding one and watching it fail. That
 matters more now, not less: with a real destructive path in existence, a second
 unaudited one is the thing somebody would call by mistake.
 
-## Option B, executed (2026-09-04)
+## Option B is withdrawn — SUPERSEDED (Revision 133)
 
-**Approval destroys.** It recorded a decision and deleted nothing for as long as
-the classifications above were open; the Owner settled them, and a request left
-approved-but-alive is a state in which the person has been told her data is gone
-while it is not, with nobody watching a queue for it. **One action, not two.**
+Option B was *«delete all my deletable data»*: a Super-Admin-reviewed request
+that destroyed the educational record, beside Option A which closed the account
+and kept it. **R133 makes ordinary permanent account deletion do exactly what
+Option B did**, so the distinction has no subject and the request queue has
+nothing to decide between.
 
-**What goes**, which is exactly §4.10a's list and nothing invented beside it:
-enrolment history, grades, Quran progression, attendance, assessment submissions
-and their answers, the copied identity on her `ChildApplication`, every `Trash`
-snapshot able to restore any of it, the `reference_code`, and the account itself
-— through Option A's own machinery rather than a second closure path.
-
-**What stays, and why each one:**
-
-| Kept | Because |
-| --- | --- |
-| The `User` row, de-identified | Twenty-two relationships point at it, and §4.10a promises no "zero rows anywhere" |
-| `ConsentRecord` | A type, a decision, an actor, a wording version, timestamps — **no name, no birth date, no contact**. Already the minimum; nothing left to strip |
-| The request and the audit trail | How the association can show what was asked and what was done |
-| `FamilyLink` | Two people's record, and **not in §4.10a's list** |
-| `Exam` rows targeted at her | Teacher-authored, not in the list, and R126 gives exams their own guard. Her grades and submissions go; the assessment does not |
-
-**The stamp is written last.** `executed_at` records the WORK, `status` records
-the DECISION, and conflating them is how a request ends up marked done while the
-data is still there. They are two commits, because the closure primitives own
-their own transactions — so a crash leaves `approved` with a null `executed_at`,
-which is visible, queryable, and repaired by approving again. Execution is
-idempotent, so the repeat is safe.
-
-**The bug worth recording**: the first version collected only submission and
-application ids when clearing tombstones, so a `Trash` snapshot of a deleted
-enrolment survived — a restorable copy of exactly the record Option B had just
-destroyed. **Every id is now collected before anything is deleted**, because a
-tombstone is found by the id of the row it restores and that id is unreachable
-once the row is gone.
-
-**One thing the Owner may want to look at.** An `Exam` row targeted at a single
-beneficiary survives with her `student_id` pointing at a de-identified row. That
-is right — the exam is a teacher's work — but its **title is free text**, so a
-teacher who typed a beneficiary's name into it has put personal data somewhere
-neither Option A nor Option B touches. §4.10a does not classify it and this
-implementation does not decide it.
+Removed: `FullDeletionRequest` and its table, four routes, the OpenAPI entries
+and TD-3 registrations, the profile request block, the adapter, the Arabic copy,
+and the `pending_full_deletion_request` account purpose. What survives is
+`erasure.ts` — Option B's own destruction primitive, now reached by the single
+deletion path.
 
 ## Backups — what may honestly be claimed
 

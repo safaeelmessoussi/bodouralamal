@@ -249,14 +249,20 @@ describe('the staff registration workflow (Revision 49)', () => {
 });
 
 /**
- * **Option A is account CLOSURE, and the copy must not promise more** (R131).
+ * **One deletion, and the copy must be honest about how destructive it is**
+ * (Revision 133).
  *
- * The one unacceptable outcome here is an interface that promises a deletion the
- * system does not perform. Option B — deletion of the educational record itself —
- * is a separate, Super-Admin-reviewed request and **is not implemented**, so no
- * screen may offer it or imply that this action is it.
+ * The unacceptable outcome has inverted. It used to be *an interface promising a
+ * deletion the system does not perform* — Option A closed an account and kept
+ * the educational archive, so the copy had to say the record REMAINS. R133 makes
+ * permanent deletion genuinely destructive, so the danger is now the opposite: a
+ * woman who deletes her account without realising her grades and progress go
+ * with it, and that an attestation may become impossible afterwards.
+ *
+ * These guards therefore assert the reverse of what they asserted yesterday, and
+ * that inversion is the point of keeping them rather than deleting them.
  */
-describe('R131 — the account-closure wording', () => {
+describe('R133 — the account-deletion wording', () => {
   const copy = [
     t('admin.users.deleteBody'),
     t('admin.users.deleteBodyPermanent'),
@@ -264,81 +270,52 @@ describe('R131 — the account-closure wording', () => {
     t('profile.deleteConfirm'),
   ];
 
-  it('says the educational record REMAINS, on every surface that closes an account', () => {
+  it('says the educational record IS deleted', () => {
     for (const text of copy) {
-      expect(text, text.slice(0, 40)).toMatch(/تبقى محفوظ|يبقى سجلك/);
+      expect(text, text.slice(0, 40)).toMatch(/سجلك التعليمي|سجلها التعليمي/);
     }
   });
 
-  it('never promises that everything is deleted', () => {
+  it('never promises that the record survives', () => {
+    // The exact reassurance the old model gave, pinned out so it cannot return.
     for (const text of copy) {
-      expect(text, text.slice(0, 40)).not.toMatch(/حذف كل بياناتك نهائ|تُحذف كل/);
+      expect(text, text.slice(0, 40)).not.toMatch(/تبقى محفوظ|يبقى سجلك/);
     }
   });
 
-  it('claims no external legal mandate for the retention period', () => {
-    // The ten years are the association's own purpose-based policy (R131); a
-    // screen citing CNDP or a law would be asserting something untrue.
-    for (const text of copy) {
-      expect(text).not.toMatch(/CNDP|القانون|قانون 09-08|إلزام قانوني/);
+  it('warns, before confirmation, that an attestation may become impossible', () => {
+    // Only where a person is actually confirming. A list row's body explains
+    // what the action does; the confirmations are what must carry the warning.
+    for (const text of [t('admin.users.deleteBodyPermanent'), t('profile.deleteConfirm')]) {
+      expect(text, text.slice(0, 40)).toMatch(/شهادة/);
     }
   });
 
-  it('does not offer Option B from the CLOSURE copy — they are different requests', () => {
-    for (const text of copy) {
-      expect(text).not.toMatch(/حذف كل البيانات القابلة للحذف/);
+  it('says what SURVIVES, so deletion does not read as a cascade', () => {
+    for (const text of [t('admin.users.deleteBody'), t('profile.deleteConfirm')]) {
+      expect(text, text.slice(0, 40)).toMatch(/يخصّ غيرك|يخصّ غيرها/);
     }
   });
-});
 
-/**
- * **Option B's copy must be honest in three specific ways** (R131 §4.10a).
- *
- * **Destructive execution now exists** (Owner, 2026-09-04), which moves the
- * unacceptable outcome rather than removing it. It was *a reader who believes
- * her record has been deleted when it has not*; it is now **a reader who does
- * not realise that approval destroys immediately**. So the wording must
- * separate the two moments — sending asks, approving executes — instead of
- * reassuring her that neither deletes anything, which is what it used to say
- * and what stopped being true.
- */
-describe('R131 Option B — the full-deletion request wording', () => {
-  const copy = [
-    t('profile.fullDeletionLede'),
-    t('profile.fullDeletionReview'),
-    t('profile.fullDeletionBackups'),
-  ].join(' ');
-
-  it('says it is a DIFFERENT request from account closure', () => {
-    expect(copy).toMatch(/مختلف عن إغلاق الحساب/);
+  it('names the seven days rather than an implementation term', () => {
+    for (const text of [t('admin.users.deleteBody'), t('profile.deleteLede')]) {
+      expect(text, text.slice(0, 40)).toMatch(/سبعة أيام/);
+    }
   });
 
-  it('warns that a future attestation may become impossible', () => {
-    expect(copy).toMatch(/يتعذّر|شهادة/);
+  it('exposes no internal vocabulary at all', () => {
+    // R133 §13: no Option A/B, no tombstone, no MinIO, no retention executor.
+    for (const text of copy) {
+      expect(text).not.toMatch(/الخيار أ|الخيار ب|Option|MinIO|tombstone|HMAC/i);
+    }
   });
 
-  it('separates SENDING from APPROVING — one asks, the other destroys', () => {
-    expect(copy).toMatch(/يُراجَع/);
-    // Sending is the harmless half...
-    expect(copy).toMatch(/إرسال الطلب لا يحذف شيئاً/);
-    // ...and approving is not, which the copy has to say in as many words.
-    expect(copy).toMatch(/تُنفّذ الحذف/);
-    expect(copy).toMatch(/لا يمكن التراجع/);
-  });
-
-  it('never tells her that approval is harmless — the sentence that stopped being true', () => {
-    // The old copy read «تسجيل الطلب أو الموافقة عليه لا يحذف شيئاً في حدّ ذاته».
-    // It was accurate while execution was unimplemented and became a false
-    // reassurance the moment it was not. Pinned so it cannot come back.
-    expect(copy).not.toMatch(/الموافقة عليه لا يحذف/);
-  });
-
-  it('mentions backups only to DENY immediate erasure, and claims no legal mandate', () => {
-    // A naive "must not contain «محو فوري»" fails on the sentence that exists to
-    // rule it out — the phrase appears inside its own negation. The property is
-    // that the promise is refused, so that is what is asserted.
-    expect(copy).toMatch(/النسخ الاحتياطية/);
-    expect(copy).toMatch(/لا يمكن الوعد بمحو فوري/);
-    expect(copy).not.toMatch(/CNDP|القانون يفرض|إلزام قانوني/);
+  it('claims no external legal mandate, and promises no instant backup erasure', () => {
+    for (const text of copy) {
+      expect(text).not.toMatch(/CNDP|القانون يفرض|إلزام قانوني/);
+    }
+    // Backups are mentioned only to deny immediacy, never to promise it.
+    expect(t('profile.deleteConfirm')).toMatch(/نسخة احتياطية/);
+    expect(t('profile.deleteConfirm')).not.toMatch(/محو فوري من كل مكان/);
   });
 });

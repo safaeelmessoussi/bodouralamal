@@ -34,8 +34,7 @@ export type AccountPurpose =
   | 'live_family_link'
   | 'pending_family_link'
   | 'pending_child_application'
-  | 'self_managed'
-  | 'pending_full_deletion_request';
+  | 'self_managed';
 
 export interface PurposeReport {
   /** Every reason found. Empty means the account has no remaining purpose. */
@@ -105,20 +104,6 @@ export async function accountPurposes(
     where: { beneficiaryId: userId, status: 'approved' },
   });
   if (selfManaged > 0) purposes.push('self_managed');
-
-  /**
-   * **An undecided full-deletion request needs its subject and its requester**
-   * (R131 §4.10a). Closing either while a Super Admin still owes a decision
-   * would decide it by removal.
-   */
-  const pendingRequest = await tx.fullDeletionRequest.count({
-    where: {
-      status: 'pending',
-      deletedAt: null,
-      OR: [{ subjectId: userId }, { requestedById: userId }],
-    },
-  });
-  if (pendingRequest > 0) purposes.push('pending_full_deletion_request');
 
   return { purposes, closable: purposes.length === 0 };
 }

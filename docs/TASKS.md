@@ -1680,26 +1680,16 @@ was hiding behind it: the run went green on the first attempt.
       an adult who had taken it away (`ACCOUNT_SELF_MANAGED`). One additive
       index; no column, backfill or fabricated status. 11 policy tests + 126
       across the affected suites; proved against the defect.
-- [x] **DONE (2026-09-04) — Option B REQUEST/REVIEW control plane.**
-      `FullDeletionRequest` + four routes. A person may always ask about herself;
-      an adult may ask for a minor only while holding a **live approved
-      `FamilyLink`**; **a former guardian of a self-managed adult has no basis** —
-      a rule only expressible because authority is now the durable approved
-      claim. Refusals about somebody else are uniform. **Approval records a
-      decision and DELETES NOTHING** (`executed: false` on the wire and in the
-      audit). Refusal follows R128's shape. 14 tests; the queue and the audit
-      carry no educational fact.
-- [x] **BUILT (Owner, 2026-09-04) — Option B DESTRUCTIVE EXECUTION.** Approval
-      now destroys in the same call and returns `executed: true` only once it has
-      committed. What goes is exactly §4.10a's list — enrolment history, grades,
-      Quran progression, attendance, assessment submissions and answers, the
-      copied identity on her `ChildApplication`, every `Trash` snapshot able to
-      restore any of it, the `reference_code`, and the account through Option A's
-      own machinery. What stays: the de-identified `User` row, minimal consent
-      evidence, the request, the audit trail, `FamilyLink` (two people's record,
-      not in the list) and teacher-authored `Exam` rows. `executed_at` records
-      the WORK where `status` records the DECISION, is stamped LAST, and makes a
-      crash between the two visible and repairable by approving again.
+- [x] **WITHDRAWN (Owner, 2026-09-05 — R133) — Option A / Option B and
+      `FullDeletionRequest`.** Both were built on 2026-09-04: the request/review
+      control plane, then destructive execution. R133 replaces the pair with
+      **one** concept — «حذف الحساب» — and makes ordinary permanent deletion do
+      what Option B did, so the distinction has no subject and the review queue
+      nothing to decide between. Removed: the model and its table, four routes,
+      the contract entries, the TD-3 registrations, the profile request block,
+      the adapter, the Arabic copy and the `pending_full_deletion_request`
+      account purpose. `erasure.ts` survives as the destruction primitive,
+      reached now by the single deletion path.
 - [x] **DONE (2026-09-04) — the guardian-only cleanup GUARD.** R131's §4.3
       clause was ratified but had **not been carried into `SRS.md`** by the
       reconciliation pass; it is there now. `policies/guardian-purpose.ts`

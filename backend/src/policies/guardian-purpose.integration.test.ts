@@ -44,11 +44,6 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   if (ids.length === 0) return;
-  await prisma.fullDeletionRequest.deleteMany({
-    where: {
-      OR: [{ subjectId: { in: ids } }, { requestedById: { in: ids } }, { decidedById: { in: ids } }],
-    },
-  });
   await prisma.selfManagedClaim.deleteMany({
     where: { OR: [{ beneficiaryId: { in: ids } }, { decidedById: { in: ids } }] },
   });
@@ -205,17 +200,6 @@ describe('every purpose PRESERVES the account', () => {
     const report = await purposes(adult);
     expect(report.purposes).toContain('self_managed');
     expect(report.closable).toBe(false);
-  });
-
-  it('an undecided full-deletion request preserves BOTH parties', async () => {
-    const guardian = await makeUser('ولية أمر');
-    const child = await makeUser('طفلة', true);
-    await prisma.fullDeletionRequest.create({
-      data: { subjectId: child, requestedById: guardian, basis: 'guardian', status: 'pending' },
-    });
-    // Closing either would decide the request by removal.
-    expect((await purposes(guardian)).purposes).toContain('pending_full_deletion_request');
-    expect((await purposes(child)).purposes).toContain('pending_full_deletion_request');
   });
 
   it('reports EVERY purpose, not the first one found', async () => {

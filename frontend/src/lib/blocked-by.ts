@@ -74,7 +74,6 @@ const LABELS: Record<string, string> = {
   pending_family_link: 'states.err.blockedBy.pendingFamilyLink',
   pending_child_application: 'states.err.blockedBy.pendingChildApplication',
   self_managed: 'states.err.blockedBy.selfManaged',
-  pending_full_deletion_request: 'states.err.blockedBy.pendingFullDeletionRequest',
 };
 
 /**

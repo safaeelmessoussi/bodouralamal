@@ -2,7 +2,6 @@ import express, { type Express, type Request, type Response } from 'express';
 import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
-import * as fullDeletionRequests from './controllers/full-deletion-request.controller.js';
 import * as selfManagedClaims from './controllers/self-managed-claim.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as academicPeriods from './controllers/academic-period.controller.js';
@@ -343,12 +342,6 @@ export function createApp(
   // from the presented token, so switching back out of a narrowed session works.
   guarded.post('/auth/switch-role', auth.switchRole(prisma, config));
   // R132 — the decision half. Super Admin only, asserted in the service.
-  // R131 Option B — the request/review control plane. Nothing here deletes.
-  guarded.post('/full-deletion-requests', fullDeletionRequests.create(prisma));
-  guarded.get('/admin/full-deletion-requests', fullDeletionRequests.listPending(prisma));
-  guarded.post('/admin/full-deletion-requests/:id/approve', fullDeletionRequests.approve(prisma));
-  guarded.post('/admin/full-deletion-requests/:id/reject', fullDeletionRequests.reject(prisma));
-
   guarded.get('/admin/self-managed-claims', selfManagedClaims.listPending(prisma));
   guarded.post('/admin/self-managed-claims/:id/approve', selfManagedClaims.approve(prisma));
   guarded.post('/admin/self-managed-claims/:id/reject', selfManagedClaims.reject(prisma));

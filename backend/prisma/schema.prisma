@@ -146,33 +146,6 @@ enum ChildApplicationRejectionReason {
   @@map("child_application_rejection_reason")
 }
 
-/// R132 — the lifecycle of a beneficiary's request to manage her own account.
-/// `rejected` is terminal AND soft-deleted, exactly as a rejected FamilyLink is
-/// (R128): the decision and its reason survive, and the beneficiary is free to
-/// make a corrected request rather than being blocked for ever by a refusal.
-/// R131 Option B — the lifecycle of a request to delete the educational record
-/// itself. `rejected` is terminal AND soft-deleted, exactly as R128's family
-/// link and R132's claim are: the refusal and its reason survive, and a later
-/// request is a NEW row rather than a reopening of this one.
-enum FullDeletionRequestStatus {
-  pending
-  approved
-  rejected
-
-  @@map("full_deletion_request_status")
-}
-
-/// Who was entitled to ask, recorded as evidence at the moment of asking.
-/// R131 gives exactly two bases and they are not interchangeable: a self-managed
-/// adult asks for herself, and a live approved guardian asks for a minor. A
-/// FORMER guardian of a self-managed adult has neither.
-enum FullDeletionRequesterBasis {
-  self
-  guardian
-
-  @@map("full_deletion_requester_basis")
-}
-
 enum SelfManagedClaimStatus {
   pending
   approved
@@ -789,11 +762,6 @@ model User {
   /// R132 — her own claim to manage her account, and the claims she decided.
   selfManagedClaims           SelfManagedClaim[]    @relation("SelfManagedClaimBeneficiary")
   selfManagedClaimsDecided    SelfManagedClaim[]    @relation("SelfManagedClaimDecider")
-  /// R131 Option B — full-deletion requests about her, made by her, or decided
-  /// by her.
-  fullDeletionRequests        FullDeletionRequest[] @relation("FullDeletionSubject")
-  fullDeletionRequestsMade    FullDeletionRequest[] @relation("FullDeletionRequester")
-  fullDeletionRequestsDecided FullDeletionRequest[] @relation("FullDeletionDecider")
   /// R123 — presence, and presence somebody else recorded. Two relations
   /// because one person is both: a مؤطِّرة marks a roster and, if she also
   /// studies, is marked on one.
@@ -2005,96 +1973,6 @@ model FamilyLink {
   /// R68 — the queue derives its items from this, so the lookup is indexed.
   @@index([identityReviewRaisedAt])
   @@map("family_link")
-}
-
-/// One row per consent decision. Consent is NEVER a boolean on the user row
-/// (§20 rule 2); absence of a record means NO consent (BR-1). History is
-/// preserved — revocation is a state change with its own actor and timestamp.
-/// R62 — one child in a parent's registration request.
-///
-/// ## Why the child `User` is not created here
-///
-/// Today's parent+child registration creates the child at submission, and that
-/// is exactly what forces approval to be all-or-nothing: a rejected child would
-/// otherwise leave an orphan account. Deferring creation to approval is what
-/// makes per-child decisions clean — and it means **a rejected child leaves no
-/// `User` row and no `FamilyLink` at all**, so partial approval cannot expose
-/// one. The safety property is structural rather than enforced.
-///
-/// ## Consent is captured here and materialised at approval
-///
-/// `ConsentRecord.student_id` cannot be written before the student exists, so
-/// the decisions travel on this row — including **the consent text version in
-/// force at SUBMISSION**. `legal.consent_text_version` is a Super-Admin-editable
-/// setting: materialising with the current value would record that a parent
-/// consented to text they never saw, which §4.1a forbids.
-/// **R132 — a beneficiary's claim to manage her own account.**
-///
-/// A former minor is a login-less `User` (R62.9). At 18 she becomes ELIGIBLE to
-/// ask for her own login; eligibility is all a birth date ever confers. She
-/// proves control of a Google account through the ordinary OAuth flow, and names
-/// which beneficiary record she is by her own `referenceCode` — which grants
-/// nothing on its own (R62.5), and is exactly why it is safe to quote.
-///
-/// **Google verification and the reference code together still bind nothing.**
-/// They produce this row: a PENDING claim. A Super Admin performs the
-/// association-side identity match — the human recognition the association
-/// already does — and only that approval binds the identity to the existing
-/// `User`. No second account is ever created.
-/// **R131 Option B — a request to delete the educational record itself.**
-///
-/// **This is not Option A.** Closure removes the account and keeps the minimal
-/// educational archive; this asks for the archive to go too, which may make a
-/// future attestation impossible. It is therefore a **request**, reviewed and
-/// approved by a Super Admin — never a cascade a browser can start.
-///
-/// **Approval does not delete anything today.** Destructive execution is a
-/// separate step, gated on the cross-domain classifications R131 leaves open,
-/// and is deliberately not implemented. An approved row records a decision that
-/// is waiting to be carried out, and every surface says so.
-model FullDeletionRequest {
-  id String @id @default(uuid()) @db.Uuid
-
-  /// **Whose data.** `Restrict`: the request is evidence about a person and must
-  /// not vanish with a careless delete.
-  subjectId String @map("subject_id") @db.Uuid
-  subject   User   @relation("FullDeletionSubject", fields: [subjectId], references: [id], onDelete: Restrict)
-
-  /// **Who asked, and on what basis** — recorded at the moment of asking,
-  /// because a relationship can change afterwards and the reviewer needs to know
-  /// what was true when the request was made.
-  requestedById String                     @map("requested_by") @db.Uuid
-  requestedBy   User                       @relation("FullDeletionRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-  basis         FullDeletionRequesterBasis
-
-  status FullDeletionRequestStatus @default(pending)
-
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
-  decidedById    String?   @map("decided_by") @db.Uuid
-  decidedBy      User?     @relation("FullDeletionDecider", fields: [decidedById], references: [id], onDelete: Restrict)
-  decisionReason String?   @map("decision_reason") @db.VarChar(500)
-
-  /// R128's shape: a refusal is recorded and then withdrawn from the live set,
-  /// so it blocks no later request while its evidence survives.
-  /// **When the destruction actually ran** (Owner, 2026-09-04).
-  ///
-  /// Approval and execution are separate facts, and conflating them is how a
-  /// request ends up marked done while the data is still there: `status` records
-  /// the DECISION, this records the WORK. A crash between the two leaves
-  /// `approved` with a null `executed_at`, which is visible, queryable and
-  /// fixed by running the approval again — execution is idempotent.
-  ///
-  /// **One column rather than a fourth status**, so the state machine does not
-  /// grow a value for "decided but not yet done" that a crash could strand.
-  executedAt DateTime? @map("executed_at") @db.Timestamptz(6)
-
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedById String?   @map("deleted_by") @db.Uuid
-
-  @@index([status])
-  @@index([subjectId, status])
-  @@map("full_deletion_request")
 }
 
 model SelfManagedClaim {

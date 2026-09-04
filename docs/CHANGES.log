@@ -4227,6 +4227,46 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Option A, Option B and FullDeletionRequest are withdrawn (2026-09-05)
+
+**Revision 133.** Both halves were built on 2026-09-04 — the request/review
+control plane, then destructive execution — and both are removed the next day,
+because R133 makes **ordinary permanent account deletion do exactly what Option B
+did**. The distinction has no subject any more, and the review queue nothing to
+decide between.
+
+**There is one concept: «حذف الحساب».** A person deletes her account; access
+stops at once; a Super Admin may restore it for seven days or destroy it earlier;
+otherwise it is permanently deleted at the boundary.
+
+Removed: the model and its table, four routes, the OpenAPI entries, the TD-3
+registrations, the profile request block, the adapter, the Arabic copy, and the
+`pending_full_deletion_request` account purpose. **`erasure.ts` survives** — it
+was Option B's own destruction primitive and is now reached by the single
+deletion path, which is exactly the reuse the Owner asked for rather than a
+second implementation.
+
+### The wording guards were inverted, and that is the point of keeping them
+
+`users.test.tsx` asserted that the copy **says the educational record REMAINS**,
+because Option A kept it and an interface promising more than the system did was
+the unacceptable outcome. R133 inverts the danger: it is now a woman who deletes
+her account without realising her grades and progress go with it. The guards
+assert the reverse today — that the record IS deleted, that the confirmations
+warn an attestation may become impossible, that the copy says **what survives**
+so deletion does not read as a cascade, that it names *seven days*, and that no
+internal vocabulary (Option A/B, tombstone, MinIO, HMAC) reaches a screen.
+
+**The profile lost its second block and its `userId` prop.** The section took an
+id while Option B's request named its subject on the wire; ordinary deletion
+takes none — `DELETE /profile` acts on the JWT `sub`, so there is nowhere for a
+client to name somebody else.
+
+**The table was verified empty before the drop**, local development only, and
+nothing was converted: there is no destination for a request to choose between
+two modes that no longer exist. Forward-only migration; the two that created and
+extended the table are untouched.
+
 ## Permanent account deletion is genuinely destructive now (2026-09-05)
 
 **Revision 133's central change.** Until today a permanent deletion
