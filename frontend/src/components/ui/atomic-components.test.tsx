@@ -241,6 +241,52 @@ describe('one Button', () => {
    */
 });
 
+describe('one tickable choice', () => {
+  /**
+   * **`field.tsx` owns `field field--choice`, and it said so in a comment for
+   * weeks while four more copies appeared** (2026-09-04).
+   *
+   * `CheckboxField` was introduced to end three hand-written copies of this
+   * markup, and its own documentation named the rule. Nothing enforced it, so
+   * `scheduling-form`, `recurrence-editor`, `assessments` and `schedule-sessions`
+   * each grew their own — and they were not identical: only some associated the
+   * label, only some carried a hint, and the two radio sites had no shared
+   * implementation to reach for at all because the component covered booleans
+   * only. `ChoiceField` covers both, and this is what keeps it that way.
+   *
+   * **A documented comment is not a guard.** That is the reusable lesson here:
+   * the rule was written down in the right place and drifted anyway.
+   */
+  const ALLOWED = new Set([
+    'components/ui/field.tsx',
+    /**
+     * **The one remaining exception, and it is a layout question, not an
+     * oversight.** `schedule-sessions.tsx` renders its hint INSIDE the label,
+     * beside a `<strong>`, where every other choice field renders it after.
+     * Converting it would move a hint on a live screen, and this project does
+     * not assert a layout property it has not measured in a browser. The markup
+     * is unchanged and correct; unifying it needs a measurement, not a rewrite.
+     */
+    'pages/admin/schedule-sessions.tsx',
+  ]);
+
+  const HAND_ROLLED = /className=(["'{])[^"'}]*field--choice/;
+
+  it('nothing hand-writes a choice field', () => {
+    const offenders = FILES.filter(
+      (f) => !ALLOWED.has(f.path) && HAND_ROLLED.test(stripComments(f.text)),
+    ).map((f) => f.path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the shared component still renders the platform class', () => {
+    // Without this the guard above passes by the class disappearing entirely,
+    // which would break every one of these controls' appearance at once.
+    const field = FILES.find((f) => f.path === 'components/ui/field.tsx');
+    expect(field?.text).toContain('field field--choice');
+  });
+});
+
 describe('one add/create convention', () => {
   /**
    * **The `＋` belongs to `variant="add"` and to nothing else.**

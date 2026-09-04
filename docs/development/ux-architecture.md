@@ -1868,6 +1868,29 @@ it is the same defect wearing the fix**: `verify-calendar-filters.mjs` chooses a
 branch in the list, switches to the grid, and asserts the **grid's own request**
 carries `branch_id`.
 
+## AM · One tickable choice — checkbox and radio are one component
+
+`field.tsx` owns `field field--choice`. A screen that needs a tick reaches for
+`CheckboxField` (a boolean) or `ChoiceField` (which also does radios, where
+`name` is required by the type because a radio without a group is not exclusive
+with anything). **Never hand-write the label/input pair** — that is rule C on the
+smallest control the platform has.
+
+The defect (2026-09-04): `CheckboxField` was created to end three hand-written
+copies, **and its own documentation said so** — then four more appeared. They
+were not identical: some associated the label, some did not; some carried a
+hint, some dropped it; and the two radio sites had nothing to reach for at all,
+because the component covered booleans only. **A rule written in the right place,
+in the right words, drifted anyway** — which is the general lesson, not a fact
+about checkboxes. Nothing enforced it.
+
+One exception is allowed and named in the guard: `schedule-sessions.tsx` renders
+its hint *inside* the label beside a `<strong>`. Converting it would move a hint
+on a live screen, and **a layout property is measured in a browser, not asserted
+from markup** — so it keeps its own copy until someone measures it.
+
+Canonical: [`field.tsx`](../../frontend/src/components/ui/field.tsx)
+
 ## AZ · One error experience, and expected responses are not errors
 
 **Owner decision, 2026-08-26.** A failure a person meets is a designed state, not a leftover.
@@ -2422,7 +2445,7 @@ system's internals, break on every restyle, and catch nothing.
 
 | Guard | What it pins |
 |---|---|
-| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** · **AL — one calendar filter state, read from the URL in one place** |
+| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** · **AL — one calendar filter state, read from the URL in one place** · **AM — one tickable choice, and that the shared component still renders the platform class** |
 | [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
 | [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **both R105 menu orders, pinned literally** · the الإدارة curriculum order · **the dashboard cards ARE the menu** (asserted against `dashboardCards`, not a copy) · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |

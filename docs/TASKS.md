@@ -1419,7 +1419,8 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `SchedulingForm` shell with composable type sections — **cashed by R58**: Exams became a third section with nothing in the shell moving
 - [x] `/admin/schedules/{id}/sessions` unchanged, keeping R50's three scopes
 - [ ] **`RoomDto` publishes no `capacity`** — BR-23 makes it informational and enforced nowhere, so the form's capacity hint renders nothing. Publishing it is a small contract change, recorded rather than taken unilaterally
-- [ ] Sweep `approvals`, `levels` and `users` for hand-rolled filter rows (unchanged from R55)
+- [x] Sweep `approvals`, `levels` and `users` for hand-rolled filter rows (unchanged from R55) — **verified clean 2026-09-04**: all three use `DataTable`'s toolbar with `SearchInput`/`SelectField`/`BranchSelector` and contain no raw `<select>`/`<input>`. The sweep found a different rule-C drift instead — four hand-written `field field--choice` copies — now owned by `ChoiceField` and guarded (rule AM)
+- [ ] **`schedule-sessions.tsx` keeps its own choice markup** — it renders the hint *inside* the label beside a `<strong>`, so converting it moves a hint on a live screen. Needs a browser measurement, not a rewrite; named as the one exception in the rule AM guard
 
 ### R55 cross-cutting (2026-08-06)
 - [x] **Every selector is dependent** (§14.4, R55) — one module (`hooks/use-scope-options.ts`) owns the graph; screens declare which fields they need and never how they relate

@@ -11,7 +11,7 @@ import {
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { TextArea, TextField } from '../../components/ui/field.js';
+import { ChoiceField, TextArea, TextField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -259,19 +259,26 @@ function Paper({
                 <ul className="assessment-options">
                   {q.options.map((option) => (
                     <li key={option.id}>
-                      <label className="field field--choice">
-                        <input
-                          // `radio` for one choice and `checkbox` for many — the
-                          // control itself says how many answers are allowed,
-                          // which is the rule the server enforces anyway.
-                          type={q.kind === 'single_choice' ? 'radio' : 'checkbox'}
+                      {/* `radio` for one choice and `checkbox` for many — the
+                          control itself says how many answers are allowed,
+                          which is the rule the server enforces anyway. */}
+                      {q.kind === 'single_choice' ? (
+                        <ChoiceField
+                          type="radio"
                           name={q.id}
+                          label={option.label}
                           checked={value.optionIds.includes(option.id)}
                           disabled={sent}
                           onChange={() => toggle(q, option.id)}
                         />
-                        <span>{option.label}</span>
-                      </label>
+                      ) : (
+                        <ChoiceField
+                          label={option.label}
+                          checked={value.optionIds.includes(option.id)}
+                          disabled={sent}
+                          onChange={() => toggle(q, option.id)}
+                        />
+                      )}
                     </li>
                   ))}
                 </ul>

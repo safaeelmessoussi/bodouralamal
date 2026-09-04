@@ -118,34 +118,37 @@ export function TextField({
 }
 
 /**
- * **A single boolean the person states about what they are entering** — the
- * checkbox as an atomic field (rule C), so a screen that needs one stops
- * hand-writing `<label className="field field--choice"><input type="checkbox">`.
- * That markup existed in three places before this component and is exactly what
- * the rule is about; the class it uses is the platform's own and is unchanged.
+ * **One tickable choice, checkbox or radio** — the choice control as an atomic
+ * field (rule C), so a screen that needs one stops hand-writing `<label
+ * className="field field--choice"><input>`. That markup existed in three places
+ * before `CheckboxField`, and **four more copies had appeared since**, which is
+ * why the shape is now owned here for radios too rather than only for booleans;
+ * the class it uses is the platform's own and is unchanged.
  *
  * The label WRAPS the control rather than pointing at it with `htmlFor`, which
- * is why this does not reuse `FieldShell`: a checkbox's label sits beside the box
+ * is why this does not reuse `FieldShell`: a tick's label sits beside the box
  * and reads as one target, where every other field's label sits above its
  * control. Forcing it through the shell would produce a label on its own line
  * above a lone box — the same markup, worse to use.
  *
+ * **`name` is what makes radios a group**, and it is required for `radio` by the
+ * type rather than optional: a radio without one is not mutually exclusive with
+ * anything, which is the entire reason a screen chose a radio. A checkbox does
+ * not take one, because a checkbox that is grouped is still independent.
+ *
  * The hint is `aria-describedby`-linked for the same reason `FieldShell` links
  * its own: a hint a screen reader never reaches is decoration.
  */
-export function CheckboxField({
-  label,
-  checked,
-  onChange,
-  hint = null,
-  disabled = false,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  hint?: string | null;
-  disabled?: boolean;
-}): ReactNode {
+export function ChoiceField(
+  props: {
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    hint?: string | null;
+    disabled?: boolean;
+  } & ({ type?: 'checkbox'; name?: never } | { type: 'radio'; name: string }),
+): ReactNode {
+  const { label, checked, onChange, hint = null, disabled = false } = props;
   const id = useId();
   const hintId = `${id}-hint`;
   return (
@@ -153,7 +156,8 @@ export function CheckboxField({
       <label className="field field--choice" htmlFor={id}>
         <input
           id={id}
-          type="checkbox"
+          type={props.type ?? 'checkbox'}
+          {...(props.type === 'radio' ? { name: props.name } : {})}
           checked={checked}
           disabled={disabled}
           aria-describedby={hint ? hintId : undefined}
@@ -170,6 +174,23 @@ export function CheckboxField({
       ) : null}
     </>
   );
+}
+
+/**
+ * **A single boolean the person states about what they are entering.**
+ *
+ * Kept as its own name rather than folded into `ChoiceField`, because *«is this
+ * ticked»* is what almost every caller means and `type="checkbox"` on each of
+ * them would be noise. It delegates, so there is still one markup.
+ */
+export function CheckboxField(props: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  hint?: string | null;
+  disabled?: boolean;
+}): ReactNode {
+  return <ChoiceField {...props} />;
 }
 
 /** Multiline free text. Used for anything **displayed verbatim and never

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { RecurrenceEditor, SchedulingTimes, type RecurrenceValue } from './recurrence-editor.js';
-import { SelectField, TextArea, TextField } from '../ui/field.js';
+import { CheckboxField, SelectField, TextArea, TextField } from '../ui/field.js';
 import { DateField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import { SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
@@ -220,10 +220,7 @@ export function SchedulingForm({
       ) : null}
 
       {showAllDay ? (
-        <label className="field field--choice">
-          <input type="checkbox" checked={allDay} onChange={(e) => onAllDay(e.target.checked)} />
-          <span>{t('scheduling.allDay')}</span>
-        </label>
+        <CheckboxField label={t('scheduling.allDay')} checked={allDay} onChange={onAllDay} />
       ) : null}
 
       {/* Wall-clock `HH:MM`, never a native time input (TD-11) — the one place

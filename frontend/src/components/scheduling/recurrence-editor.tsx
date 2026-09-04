@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { DateField, SelectField, TextField } from '../ui/field.js';
+import { CheckboxField, DateField, SelectField, TextField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -165,21 +165,21 @@ export function RecurrenceEditor({
           <legend className="field__label">{t('scheduling.weekdays')}</legend>
           <div className="field__choices">
             {WEEKDAYS.map((day) => (
-              <label key={day} className="field field--choice">
-                <input
-                  type="checkbox"
-                  checked={value.weekdays.includes(day)}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      weekdays: e.target.checked
-                        ? [...value.weekdays, day]
-                        : value.weekdays.filter((d) => d !== day),
-                    })
-                  }
-                />
-                <span>{t(`scheduling.weekday.${day}`)}</span>
-              </label>
+              // The `fieldset`/`legend` grouping stays here — it is this
+              // editor's structure. Only the tick itself is the shared atom.
+              <CheckboxField
+                key={day}
+                label={t(`scheduling.weekday.${day}`)}
+                checked={value.weekdays.includes(day)}
+                onChange={(ticked) =>
+                  onChange({
+                    ...value,
+                    weekdays: ticked
+                      ? [...value.weekdays, day]
+                      : value.weekdays.filter((d) => d !== day),
+                  })
+                }
+              />
             ))}
           </div>
           <p className="field__hint">{t('scheduling.weekdaysHint')}</p>

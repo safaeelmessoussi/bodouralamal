@@ -4227,6 +4227,42 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## One tickable choice — the rule that was documented and drifted anyway (2026-09-04)
+
+**Started as a stale backlog item and found a live one.** R55's sweep asked
+whether `approvals`, `levels` and `users` still hand-rolled filter rows. They do
+not — all three go through `DataTable`'s toolbar with `SearchInput`,
+`SelectField` and `BranchSelector`, and none contains a raw `<select>` or
+`<input>`. The item was done and never ticked; it is ticked now, with the
+evidence.
+
+**What the sweep turned up instead was four hand-written copies of
+`field field--choice`.** `CheckboxField` exists precisely to end that markup —
+its own documentation says it ended three copies and names the rule — and four
+more had appeared since in `scheduling-form`, `recurrence-editor`, `assessments`
+and `schedule-sessions`. They had already diverged: label association in some and
+not others, a hint in some and not others. Two of them were radios, which the
+component could not serve at all, so those authors had nowhere to go.
+
+`ChoiceField` now owns the markup for both. **`name` is required by the TYPE for
+radios**, not optional — a radio without a group is not exclusive with anything,
+which is the only reason a screen picks a radio. `CheckboxField` stays as a name,
+because *«is this ticked»* is what almost every caller means, and delegates.
+
+**Three sites converted with no visual change** (none passed a hint).
+`schedule-sessions` keeps its own copy and is named in the guard: it renders its
+hint *inside* the label beside a `<strong>`, and moving a hint on a live screen
+is a layout change this project measures in a browser rather than asserting from
+markup. That is remaining work with a stated reason, not an oversight.
+
+**The guard is the point of the whole exercise, and it was proved rather than
+assumed**: the old markup was pasted back into `scheduling-form`, exactly one
+test failed, and it was removed. A second assertion pins that `field.tsx` still
+renders the platform class, so the guard cannot pass by the class vanishing and
+silently breaking every one of these controls at once. **A rule stated in the
+right place, in the right words, still drifted** — that is the transferable
+lesson, and rule AM records it.
+
 ## R59.4 — the ninety-day window is now measured, and still not executed (2026-09-04)
 
 **Non-destructive preparation only, because R59.4 is an open Owner question.**
