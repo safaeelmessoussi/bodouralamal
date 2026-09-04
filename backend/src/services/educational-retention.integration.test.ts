@@ -28,6 +28,21 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = '[retention-test]';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+/**
+ * **A per-RUN academic-year label, not a fixed one.**
+ *
+ * `AcademicYear.label` is unique application-wide, so a hard-coded `2911-2912`
+ * collides with a concurrent suite or with anything an interrupted run of this
+ * one left behind — which is exactly how this test failed under full-suite load
+ * while passing alone. The shared `provisionAcademicPeriod` helper cannot serve
+ * here because its dates are relative to today and this suite needs a
+ * *historical* period end to assert the ten-year boundary, so the label is made
+ * unique the same way instead. The `28xx` band is distinct from the helper's own
+ * reserved band and from any seeded year.
+ */
+const RUN_YEAR = 2800 + Math.floor(Math.random() * 90);
+const YEAR_LABEL = `${RUN_YEAR}-${RUN_YEAR + 1}`;
 let counter = 0;
 let branchId = '';
 let levelId = '';
@@ -92,9 +107,12 @@ async function clear(): Promise<void> {
     where: { administrativeGroup: { name: { startsWith: TAG } } },
   });
   await prisma.administrativeGroup.deleteMany({ where: { name: { startsWith: TAG } } });
+  // This suite's OWN year, by exact label — never a band, which would sweep a
+  // concurrent suite's rows. Periods first: `academic_period_id` is Restrict.
   await prisma.academicPeriod.deleteMany({
-    where: { academicYear: { label: { startsWith: '29' } } },
+    where: { academicYear: { label: YEAR_LABEL } },
   });
+  await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -139,13 +157,13 @@ describe('the boundary is derived, and it says which fact decided it', () => {
 
   it('an enrolment with a period uses the PERIOD END', async () => {
     const her = await makeBeneficiary('بفترة');
-    const year = await prisma.academicYear.create({ data: { label: '2911-2912' } });
+    const year = await prisma.academicYear.create({ data: { label: YEAR_LABEL } });
     const period = await prisma.academicPeriod.create({
       data: {
         academicYearId: year.id,
         sequence: 1,
-        startDate: day('2911-09-01'),
-        endDate: day('2912-06-30'),
+        startDate: day(`${RUN_YEAR}-09-01`),
+        endDate: day(`${RUN_YEAR + 1}-06-30`),
       },
     });
     await prisma.enrollment.create({
@@ -158,10 +176,10 @@ describe('the boundary is derived, and it says which fact decided it', () => {
       },
     });
 
-    const report = await retentionFor(prisma, her, day('2913-01-01'));
+    const report = await retentionFor(prisma, her, day(`${RUN_YEAR + 2}-01-01`));
     expect(report.lastActivityKind).toBe('enrolment_period_end');
-    expect(report.lastActivityAt?.toISOString()).toBe(day('2912-06-30').toISOString());
-    expect(report.retainUntil?.toISOString()).toBe(day('2922-06-30').toISOString());
+    expect(report.lastActivityAt?.toISOString()).toBe(day(`${RUN_YEAR + 1}-06-30`).toISOString());
+    expect(report.retainUntil?.toISOString()).toBe(day(`${RUN_YEAR + 11}-06-30`).toISOString());
   });
 
   it('a LEGACY enrolment with no period falls back to the enrolment instant', async () => {
