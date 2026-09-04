@@ -1757,18 +1757,14 @@ describe("R111 — deleting an account keeps the record", () => {
     }
     expect(after?.qrRef).not.toBe(before.qrRef);
     /**
-     * **`reference_code` SURVIVES, and is the SAME value** (Revision 131).
+     * **`reference_code` is CLEARED** (Revision 133) — inverted by decision.
      *
-     * Option A closes the account and keeps the minimal educational archive;
-     * the code is what reconnects a former beneficiary with her own history for
-     * an attestation. It is **not regenerated** — a new value would identify
-     * nothing she or the association holds on paper.
-     *
-     * Asserted here, on the surviving row, deliberately: this used to be in the
-     * cleared list above, and the R111 ↔ R122 contradiction is exactly the kind
-     * a passing test can preserve for months.
+     * It survived under R131 as the locator that reconnected a former
+     * beneficiary with her preserved archive, so an attestation stayed possible.
+     * R133 removes the archive and withdraws the promise, and a locator for data
+     * that no longer exists is retained personal data with no purpose.
      */
-    expect(after?.referenceCode).toBe("BA-TEST2");
+    expect(after?.referenceCode).toBeNull();
     /**
      * **The TD-10 search shadows no longer carry the original.**
      *
@@ -1801,13 +1797,15 @@ describe("R111 — deleting an account keeps the record", () => {
     });
     expect(reclaimed.status).toBe(201);
     /**
-     * **The educational archive survives** — the other half of the boundary.
-     * Option A is not Option B: the account is gone and the history it belongs
-     * to is not, which is the entire distinction between the two requests.
+     * **Her own educational history goes with the account** (Revision 133).
+     *
+     * This asserted the opposite while Option A preserved an archive. There is
+     * no archive now: permanent deletion is genuinely destructive for data whose
+     * only purpose is the deleted person.
      */
     expect(
       await prisma.quranProgressLog.count({ where: { id: progress.id } }),
-    ).toBe(1);
+    ).toBe(0);
     // Safeguarding/history survives and still points at the tombstone.
     expect(await prisma.familyLink.count({ where: { id: familyLink.id } })).toBe(1);
     // The recoverable snapshot held the original PII. It must disappear in the

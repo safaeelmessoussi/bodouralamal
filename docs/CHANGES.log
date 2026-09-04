@@ -4227,6 +4227,59 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Permanent account deletion is genuinely destructive now (2026-09-05)
+
+**Revision 133's central change.** Until today a permanent deletion
+de-identified the account and **kept** her enrolments, grades, attendance, Quran
+progress and submissions — an archive preserved so a future attestation stayed
+possible. The Owner has withdrawn that promise: what is deleted is deleted, and
+the interface says so before anybody confirms.
+
+`deIdentifyAccount` now calls `destroyEducationalRecord` in its own transaction.
+**That primitive decides the boundary and is the only place that does**: every
+row it removes is keyed on `student_id` or on an id belonging to this person, so
+the Session she attended, the Exam she sat, the teacher's content, the Level, the
+Branch and every other person's records survive untouched. Deletion is decided
+per relationship, never by graph cascade.
+
+**`reference_code` is cleared again.** It survived under R131 as the locator that
+reconnected a former beneficiary with her preserved archive; with no archive it
+locates nothing, and a locator for data that no longer exists is retained
+personal data with no purpose. It is still never reissued —
+`allocateReferenceCode` counts rows regardless of `deleted_at`.
+
+**And it goes back into the idempotency predicate**, which has now been wrong in
+both directions across two revisions and is why that has its own test.
+`hadIdentitySurface` must name **exactly** the fields the operation clears: one it
+does not clear, listed, makes every retry rotate `qr_ref` and write a second
+audit row; one it does clear, omitted, makes real work look like a no-op. Both
+are invisible until something runs twice.
+
+### The ten-year clock is withdrawn, and the reasoning is the repository's own
+
+§4.10a gave it three stated purposes — **educational continuity,
+former-beneficiary requests and attestations**. R133 withdraws two outright:
+there is no attestation promise after deletion and no return path to serve a
+former beneficiary's request. The third is served by the account's own lifetime,
+which is the simpler rule: *beneficiary data lives while the account lives.*
+
+**It was never externally required**, and §4.10a says so in terms — *«the
+association's own purpose-based policy … not prescribed, reviewed or approved by
+the CNDP»* — so removing it costs no obligation and no document may claim
+otherwise. Gone: the service, its dry run, the daily job, its worker slot in
+readiness, its tests and its tombstone-reading exemption. `erasure.ts` survives
+as the primitive that defines *her own data*, now reached by permanent account
+deletion alone.
+
+### Four assertions inverted by decision, not by drift
+
+The closure suite existed to prove that the archive **survived** — one test was
+literally named *«this is not Option B»*. Each is restated with a note saying why
+it changed, and the central one now proves both halves of the new rule at once:
+her enrolment, grade and Quran progress are gone **and** the exam, level and
+branch are not. A test that only proved the destruction would pass just as well
+if the deletion had become a cascade.
+
 ## The account-return workflow is withdrawn, one day after it shipped (2026-09-05)
 
 **Revision 133.** It was built on 2026-09-04 and removed on 2026-09-05, and the

@@ -1727,13 +1727,16 @@ was hiding behind it: the run went green on the first attempt.
       Proved in a browser (`verify-guardian-cleanup.sh`, 19/19) with the database
       asserted afterwards: the spent guardian closed, the guarded one untouched,
       the child intact.
-- [x] **DONE (2026-09-04) — the ten-year retention COMPUTATION and dry run.**
-      `educational-retention.service.ts` derives the boundary from §4.10a's five
-      canonical facts, names which one decided it, and **deletes nothing**. No
-      history yields `null` rather than "elapsed"; soft-deleted rows still count
-      as history; a grade's date is the sitting's. 13 tests including the exact
-      boundary and an `updated_at` control. **Destructive purge remains gated on
-      the same open classifications as Option B execution.**
+- [x] **WITHDRAWN (Owner, 2026-09-05 — R133) — the ten-year educational
+      retention clock.** §4.10a gave it three purposes: educational continuity,
+      former-beneficiary requests and attestations. R133 withdraws two outright —
+      there is no attestation promise after deletion and no return path — and the
+      third is served by the account's own lifetime. **It was never externally
+      required**: §4.10a says in terms that it is the association's own policy and
+      not CNDP-prescribed, so removing it costs no obligation. The service, dry
+      run, daily job, readiness slot, tests and tombstone exemption are gone;
+      `erasure.ts` survives as the primitive that decides what counts as her own
+      data, now reached only by permanent account deletion.
 - [x] **DONE (2026-09-04) — the 12-month REJECTED-application eligibility.**
       `application-retention.service.ts` reports rejected child applications past
       twelve months from `decided_at`, the one reference point §4.10a makes

@@ -325,17 +325,6 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
   // than inserted, and an insert would be refused.
   "exam.service.ts": "revives tombstoned ExamStaff rows",
   /**
-   * **R131 §4.10a — a retention clock reads HISTORY, not the live roster.**
-   *
-   * The ten-year boundary is *ten years after the beneficiary's last educational
-   * activity*, and a **withdrawn** enrolment or a **removed** attendance mark
-   * still records that she was there. Filtering `deleted_at` here would shorten
-   * somebody's retention period on the strength of an administrative correction
-   * — which is precisely the accident §4.10a's derivation exists to avoid, and
-   * is asserted directly by `educational-retention.integration.test.ts`.
-   */
-  "educational-retention.service.ts": "retention counts withdrawn history, not the live roster",
-  /**
    * **R131 §4.10a — the twelve-month clock runs from the REJECTION.**
    *
    * A rejected `ChildApplication` is the row whose retention is being measured;

@@ -226,7 +226,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('Option A — the account closes and the educational archive stays', () => {
+describe('Account deletion — the account goes, and her own history with it (R133)', () => {
   async function beneficiaryWithHistory(): Promise<{
     id: string;
     code: string;
@@ -261,28 +261,29 @@ describe('Option A — the account closes and the educational archive stays', ()
     };
   }
 
-  it('1/2 · PRESERVES the reference code, and the SAME value — never regenerated', async () => {
+  it('1/2 · CLEARS the reference code — it now locates nothing (R133)', async () => {
+    /**
+     * **Inverted by decision, not by drift.** Under R131 the code survived as
+     * the protected pseudonymous locator that reconnected a former beneficiary
+     * with her preserved archive, so a future attestation stayed possible. R133
+     * removes the archive and withdraws the promise — a locator for data that no
+     * longer exists is retained personal data with no purpose.
+     */
     const p = await beneficiaryWithHistory();
     await closeAccount(p.id);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
-    expect(after.referenceCode).toBe(p.code);
-    // The tombstone is in place, so this is the code ON a closed account.
+    expect(after.referenceCode).toBeNull();
     expect(after.nameArabic).toBe('حساب محذوف');
     expect(after.deletedAt).not.toBeNull();
   });
 
-  it('2b · the DATE OF BIRTH is cleared, while the archive it never fed survives', async () => {
+  it('2b · the DATE OF BIRTH is cleared, and so is the history beside it', async () => {
     /**
-     * **Owner decision, 2026-09-04.** R130 made a birth date required for every
-     * beneficiary, which left open whether it sat on the account or in the
-     * preserved archive. It sits on the account: nothing in the archive reads
-     * one, and `reference_code` is already the locator that reconnects a
-     * returning person to her history.
-     *
-     * The two halves are asserted TOGETHER deliberately — a test that only
-     * proved the erasure would pass just as well if Option A had become Option
-     * B, which is the one confusion this boundary cannot afford.
+     * **Both halves are asserted together, and both now say «gone».** This test
+     * used to prove the boundary between an erased account and a preserved
+     * archive; R133 removes the boundary, so it proves instead that permanent
+     * deletion means what the word says.
      */
     const p = await beneficiaryWithHistory();
     const before = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
@@ -291,12 +292,11 @@ describe('Option A — the account closes and the educational archive stays', ()
     await closeAccount(p.id);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
-    // Removed, never transformed: no year-only value and no age snapshot, both
-    // of which would invent a new fact about her at the moment of erasure.
+    // Removed, never transformed: no year-only value and no age snapshot.
     expect(after.birthDate).toBeNull();
-    expect(after.referenceCode).toBe(p.code);
-    expect(await prisma.enrollment.count({ where: { id: p.enrolmentId } })).toBe(1);
-    expect(await prisma.grade.count({ where: { id: p.gradeId } })).toBe(1);
+    expect(after.referenceCode).toBeNull();
+    expect(await prisma.enrollment.count({ where: { id: p.enrolmentId } })).toBe(0);
+    expect(await prisma.grade.count({ where: { id: p.gradeId } })).toBe(0);
   });
 
   it('2c · clearing the birth date does NOT make the closure repeat itself', async () => {
@@ -386,15 +386,16 @@ describe('Option A — the account closes and the educational archive stays', ()
     expect(await prisma.refreshSession.count({ where: { userId: p.id } })).toBe(0);
   });
 
-  it('9 · repeating Option A is IDEMPOTENT — one audit fact, and the QR is not re-rotated', async () => {
+  it('9 · repeating a permanent deletion is IDEMPOTENT — one audit fact, one QR', async () => {
     /**
-     * **The trap the reference-code correction created, and closed.**
-     * `hadIdentitySurface` decides both whether `qr_ref` rotates and whether an
-     * audit row is written. It used to count `reference_code`; leaving it there
-     * while the field is deliberately KEPT would make the predicate permanently
-     * true, so every retry would rotate the QR again and write a second
-     * `user.deidentify` row — an idempotent job looking like repeated human
-     * decisions.
+     * **`hadIdentitySurface` must name exactly the fields this operation
+     * clears**, and the predicate has now been wrong in both directions across
+     * two revisions — which is why it has its own test. It decides whether
+     * `qr_ref` rotates and whether an audit row is written. A field it does NOT
+     * clear, listed there, makes the predicate permanently true, so every retry
+     * rotates the QR and writes a second `user.deidentify` row. A field it DOES
+     * clear, omitted, makes real work look like a no-op. Both are invisible
+     * until something runs twice.
      */
     const p = await beneficiaryWithHistory();
     await closeAccount(p.id);
@@ -404,7 +405,7 @@ describe('Option A — the account closes and the educational archive stays', ()
     const second = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
 
     expect(second.qrRef).toBe(first.qrRef);
-    expect(second.referenceCode).toBe(p.code);
+    expect(second.referenceCode).toBeNull();
     expect(
       await prisma.auditLog.count({
         where: { targetId: p.id, actionType: 'user.deidentify' },
@@ -412,7 +413,17 @@ describe('Option A — the account closes and the educational archive stays', ()
     ).toBe(1);
   });
 
-  it('10-13/21/22 · the educational archive SURVIVES — this is not Option B', async () => {
+  it('10-13/21/22 · her own educational history is DESTROYED, shared data is not', async () => {
+    /**
+     * **The heart of R133, and the assertion this suite exists for now.**
+     *
+     * It used to prove the opposite — that the archive survived, *«this is not
+     * Option B»*. The Owner withdrew the archive and the attestation promise
+     * with it, so what must be proved is that permanent deletion is genuinely
+     * destructive **and still bounded**: her enrolment, her grade and her Quran
+     * progress go, while the Level, the branch and the exam everybody else sat
+     * do not. Deletion is decided per relationship, never by graph cascade.
+     */
     const p = await beneficiaryWithHistory();
     const quran = await prisma.quranProgressLog.create({
       data: {
@@ -424,21 +435,27 @@ describe('Option A — the account closes and the educational archive stays', ()
         category: 'new_memorization',
       },
     });
+    const exam = await prisma.grade.findUniqueOrThrow({
+      where: { id: p.gradeId },
+      select: { examId: true },
+    });
 
     await closeAccount(p.id);
 
-    const after = await prisma.user.findUniqueOrThrow({
-      where: { id: p.id },
-      include: { levelEnrollments: true },
-    });
-    // Enrolment, and through it the Level and the branch context.
-    expect(after.levelEnrollments.map((e) => e.id)).toEqual([p.enrolmentId]);
-    expect(after.levelEnrollments[0]!.levelId).toBe(levelId);
-    expect(after.levelEnrollments[0]!.branchId).toBe(branchId);
-    // The published grade, and the progression evidence.
-    expect(await prisma.grade.count({ where: { id: p.gradeId } })).toBe(1);
-    expect(await prisma.quranProgressLog.count({ where: { id: quran.id } })).toBe(1);
-    // R79.7's durable fact about what this record WAS.
+    // Hers — gone.
+    expect(await prisma.enrollment.count({ where: { id: p.enrolmentId } })).toBe(0);
+    expect(await prisma.grade.count({ where: { id: p.gradeId } })).toBe(0);
+    expect(await prisma.quranProgressLog.count({ where: { id: quran.id } })).toBe(0);
+
+    // Shared — untouched. The exam is a teacher's work and the Level is the
+    // institution's; neither is hers to delete because she was assessed once.
+    expect(await prisma.exam.count({ where: { id: exam.examId } })).toBe(1);
+    expect(await prisma.level.count({ where: { id: levelId } })).toBe(1);
+    expect(await prisma.branch.count({ where: { id: branchId } })).toBe(1);
+
+    // R79.7's durable fact about what this record WAS survives the erasure —
+    // it identifies nobody and is what keeps the row's own history coherent.
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
     expect(after.isBeneficiary).toBe(true);
   });
 
@@ -503,7 +520,7 @@ describe('Option A — the account closes and the educational archive stays', ()
   });
 });
 
-describe('Option A — a guardian-only account, and a self-managed adult', () => {
+describe('Account deletion — a guardian-only account, and a self-managed adult', () => {
   it('15/16 · closing a GUARDIAN-only account touches no child record', async () => {
     const guardian = await makeUser('ولية أمر');
     const child = await makeUser('طفلة', { beneficiary: true, withIdentity: false });
@@ -728,7 +745,7 @@ describe('Guardian-only cleanup — an EXPLICIT decision, guarded (Owner 2026-09
   });
 });
 
-describe('Option A — a pending self-managed claim cannot resurrect a login', () => {
+describe('Account deletion — a pending self-managed claim cannot resurrect a login', () => {
   it('18/19 · approving a claim after closure fails CLOSED', async () => {
     const person = await makeUser('مستفيدة تطالب', { beneficiary: true, withIdentity: false });
     const fresh = identity();

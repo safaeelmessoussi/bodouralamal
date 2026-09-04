@@ -67,8 +67,8 @@ The Owner's decision of 2026-09-03 splits one word into two:
 | **Authentication** (`user_identity`, `refresh_*`, `rate_limit_counter`, login email) | removed | removed |
 | **Planning data** (`teacher_availability`, capabilities, `framing_preference`) | removed | removed |
 | **Profile/account fields** | de-identified to «حساب محذوف» | de-identified |
-| **`referenceCode`** | **KEPT** — see below | **removed** |
-| **`birthDate`** *(R130)* | **CLEARED** *(Owner, 2026-09-04)* | cleared |
+| **`referenceCode`** | **removed** *(R133; ~~kept~~)* | removed |
+| **`birthDate`** *(R130)* | **cleared** | cleared |
 | **Educational archive** (`enrollment`, `grade`, `student_exam_submission` + answers, `attendance`, `quran_progress_log`, `student_surah_progress`, `student_teaching_group`) | **KEPT** for the retention period | **removed** |
 | **Consent & safeguarding evidence** | kept under its own rule | kept under its own rule |
 | **Audit trail** | kept under its own rule | kept under its own rule — and it carries **no educational content** to begin with |
@@ -149,28 +149,28 @@ canonical educational facts the platform already records:
 statement about *how the platform treats it* and **not** a claim about its legal
 classification, which stays explicitly open in this inventory.
 
-### The ten-year purge destroys the RECORD, not the account (2026-09-04)
+### The ten-year clock is WITHDRAWN (Revision 133)
 
-**The distinction the design turns on.** §4.10a's clock is about *identifiable
-educational history* — retained ten years after the last educational activity,
-for continuity, former-beneficiary requests and attestations. When those purposes
-lapse the history goes; **the account does not**. A person whose studies ended a
-decade ago may be a مؤطِّرة today, and closing her account because her own
-education ended would be an obvious wrong. Closing an account is a deliberate act
-with its own authority — Option A, Option B, guardian-only cleanup — and a
-calendar is not one of them.
+It ran for one day. §4.10a gave it three stated purposes — **educational
+continuity, former-beneficiary requests and attestations** — and R133 withdraws
+two of them outright: there is no attestation promise after deletion and no
+return path to serve a former beneficiary's request. The third is served by the
+account's own lifetime, which is the simpler rule the Owner asked for:
 
-It runs `destroyEducationalRecord`, **the same function Option B runs**. The data
-treatment is identical and only the reason differs: there she asked and a Super
-Admin approved; here nobody asked and the calendar arrived. A second
-implementation would be a second answer to *what counts as her educational
-record*, and the two would drift.
+> **Beneficiary data lives while the account lives. Permanent account deletion
+> removes it.**
 
-**In practice it deletes nothing for years** — the platform is months old — which
-is precisely the right moment to build it, because the behaviour can be proved on
-fixtures with no live record anywhere near the boundary.
+**It was never externally required.** §4.10a says so in terms — *«the
+association's own purpose-based policy … not prescribed, reviewed or approved by
+the CNDP»* — so removing it costs no obligation, and no document may say
+otherwise.
 
-## Before any destructive automation
+Removed with it: the service, its dry run, the daily job, its worker slot in
+readiness, its tests and its tombstone-reading exemption. What survives is
+`erasure.ts`, the primitive that decides **what counts as her own data** — now
+reached by permanent account deletion, which is its only caller.
+
+## Before any destructive automation## Before any destructive automation
 
 **No purge job is to be written until the following are reconciled**, because a
 partial purge that claims data is gone while obvious copies remain is worse than

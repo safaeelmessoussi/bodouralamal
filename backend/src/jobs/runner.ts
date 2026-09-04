@@ -22,7 +22,6 @@ import {
   retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
 import { purgeElapsedApplications } from '../services/application-retention.service.js';
-import { purgeElapsedRetention } from '../services/educational-retention.service.js';
 import { purgeExpiredEntries } from '../services/trash.service.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
@@ -63,11 +62,6 @@ export const QUEUES = {
    * queue is the schedule and nothing else.
    */
   trashRetentionPurge: 'trash.retention-purge',
-  /**
-   * §4.10a's ten years (Owner 2026-09-04). Destroys the educational RECORD, not
-   * the account — a person whose studies ended a decade ago may be staff today.
-   */
-  educationalRetentionPurge: 'retention.educational-purge',
   /**
    * §4.1a: enqueued by every `ConsentRecord` change, roster change and upload.
    * Full current-state recompute for an occurrence's resolved audience. The
@@ -200,17 +194,6 @@ export function createWorkerCatalog(
           where: { windowStart: { lt: cutoff } },
         });
         log(QUEUES.rateLimitPurge, { counters: deleted.count });
-      },
-    },
-    {
-      // retention.educational-purge (§4.10a, Owner 2026-09-04). Shares Option
-      // B's own erasure primitive: same data treatment, different policy.
-      name: QUEUES.educationalRetentionPurge,
-      handler: async () => {
-        const counts = await purgeElapsedRetention(prisma, new Date());
-        // Counts only (TD-14). A `failed` that stays non-zero across days is
-        // the signal worth watching: a record the boundary cannot reach.
-        log(QUEUES.educationalRetentionPurge, { ...counts });
       },
     },
     {
@@ -488,7 +471,6 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.educationalRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
     // **`content.quarantine-purge` is still not scheduled, and that is correct.**
     // R59.4 is closed (Owner, 2026-09-04) but it authorised expiring the TRASH

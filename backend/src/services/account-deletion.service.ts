@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { accountPurposes } from '../policies/guardian-purpose.js';
+import { destroyEducationalRecord } from './erasure.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -516,12 +517,13 @@ export async function deIdentifyAccount(
         // when it was not; an uncleared field present here makes every retry
         // look like fresh work.
         user.birthDate,
-        // **`referenceCode` is deliberately ABSENT here** (Revision 131). It is
-        // no longer cleared, so counting it would make this predicate
-        // permanently true — and every retry would then rotate `qr_ref` again
-        // and write a second `user.deidentify` row, turning an idempotent job
-        // into one that looks like repeated human decisions. The predicate must
-        // only name fields this operation actually clears.
+        // **`referenceCode` is counted again** (Revision 133), because it is
+        // cleared again. The predicate must name exactly the fields this
+        // operation clears: one it does not clear makes every retry look like
+        // fresh work — rotating `qr_ref` and writing a second `user.deidentify`
+        // row — and one it does clear, omitted, makes real work look like a
+        // no-op. Both are invisible until something runs twice.
+        user.referenceCode,
         user.schoolingStage,
         user.intendedBranchId,
         user.intendedCategoryId,
@@ -543,56 +545,27 @@ export async function deIdentifyAccount(
         publicDisplayName: null,
         phone: null,
         /**
-         * **`birth_date` IS cleared** (Owner decision, 2026-09-04).
-         *
-         * R130 made it required for every beneficiary, which left open whether
-         * it belonged to the account or to the preserved educational archive.
-         * The Owner's answer is the account: **the retained archive does not
-         * technically depend on it**, and `referenceCode` is already the
-         * protected pseudonymous locator that reconnects a returning person
-         * with her history — a date of birth adds nothing the archive needs and
-         * is one of the most identifying fields the row holds.
-         *
-         * **Removed, never transformed.** No year-only truncation, no age
-         * snapshot, no derived band: each of those is a new fact about the
-         * person invented at the moment of erasure, and R130's own rule is that
-         * a birth date is recorded or absent, never approximated.
-         *
-         * Note the asymmetry with `sex`, which stays: §4.4b evaluates Level
-         * restrictions against it, so a preserved enrolment stops making sense
-         * without it. Nothing in the archive reads a birth date.
+         * **Removed, never transformed** (R130, R133). No year-only truncation,
+         * no age snapshot, no derived band: each is a new fact about the person
+         * invented at the moment of erasure, and R130's own rule is that a birth
+         * date is recorded or absent, never approximated.
          */
         birthDate: null,
         /**
-         * **`referenceCode` SURVIVES — it is not cleared** (Revision 131,
-         * resolving the R111 ↔ R122 contradiction).
+         * **`reference_code` IS cleared** (Revision 133).
          *
-         * R122 committed the association to answering *«كنت أدرس عندكم وأريد
-         * شهادة تثبت المستوى الذي وصلت إليه»* years later; R111 cleared every
-         * field that could match a returning person to her preserved record,
-         * including this one, and neither cited the other. The Owner's
-         * resolution: **Option A keeps the code**, as part of the protected
-         * minimal educational archive, because it is what reconnects a former
-         * beneficiary with her own history. **Option B deletes it** — and
-         * Option B is not implemented.
-         *
-         * **It is not anonymous.** The archive is pseudonymous, not anonymous,
-         * merely because the login is gone, and the code is protected as
-         * personal data.
-         *
-         * **It grants nothing** (R62.5, R132). It is a LOCATOR: it is not
-         * authentication, not proof of identity, not authorization and not
-         * account recovery. Two clauses already make that structural rather
-         * than a promise, and both are asserted by test — a self-managed claim
-         * resolves a beneficiary only `WHERE deleted_at IS NULL`, and a closed
-         * account is by definition soft-deleted, so quoting the code of a
-         * closed account finds nothing and answers the same uniform refusal as
-         * a code that never existed.
+         * It survived under R131, as the protected pseudonymous locator that
+         * reconnected a former beneficiary with her preserved archive so an
+         * attestation stayed possible. **R133 removes the archive and withdraws
+         * the promise**, so the code now locates nothing — and a surviving
+         * locator for data that no longer exists is retained personal data with
+         * no purpose, which is exactly what this operation is for.
          *
          * **It is never reissued**: `allocateReferenceCode` counts rows
-         * regardless of `deleted_at`, so a preserved code stays taken and no
-         * future beneficiary can be given it.
+         * regardless of `deleted_at`, so a cleared code is not handed to a
+         * future beneficiary either.
          */
+        referenceCode: null,
         schoolingStage: null,
         intendedBranchId: null,
         intendedCategoryId: null,
@@ -633,6 +606,24 @@ export async function deIdentifyAccount(
       await tx.notification.deleteMany({ where: { userId: targetId } }),
     ];
 
+    /**
+     * **Her own educational record goes with the account** (Revision 133).
+     *
+     * This is the change that makes permanent deletion mean what the word says.
+     * Until R133 the account was de-identified while enrolments, grades,
+     * attendance, Quran progress and submissions were kept — an archive
+     * preserved so a future attestation stayed possible. The Owner has withdrawn
+     * that promise: what is deleted is deleted, and the interface says so before
+     * anybody confirms.
+     *
+     * **`destroyEducationalRecord` decides the boundary**, and it is the only
+     * place that does. Everything it removes is keyed on `student_id` or on an
+     * id belonging to this person; **shared institutional data is never touched**
+     * — the Session she attended, the Exam she sat, the teacher's content and
+     * every other person's records survive, because they are not hers to delete.
+     */
+    await destroyEducationalRecord(tx, targetId);
+
     // The recoverable Trash snapshot necessarily contains the fields needed to
     // undo a soft delete. Once de-identification is final it must disappear in
     // the SAME transaction, or the supposedly-erased name, phone and email live
@@ -659,7 +650,18 @@ export async function deIdentifyAccount(
         // **Which fields, never their values** (§14, no PII in logs) — an audit row
         // recording what was cleared must not become the last copy of it.
         // `birth_date` is named as a FIELD, never valued (Owner, 2026-09-04).
-        detail: { cleared: ['name', 'contact', 'identity', 'birth_date', 'planning_data'] },
+        detail: {
+          cleared: [
+            'name',
+            'contact',
+            'identity',
+            'birth_date',
+            'reference_code',
+            'planning_data',
+            // R133 — her own educational record, destroyed with the account.
+            'educational_record',
+          ],
+        },
       });
     }
   });

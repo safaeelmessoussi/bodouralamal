@@ -83,7 +83,6 @@ describe('job runner startup readiness', () => {
       // BR-15's ninety days (R59.4, closed by the Owner 2026-09-04) and
       // §4.10a's twelve-month application clock — real workers, so both are
       // part of readiness like every other one.
-      QUEUES.educationalRetentionPurge,
       QUEUES.trashRetentionPurge,
       QUEUES.applicationRetentionPurge,
       QUEUES.auditPurge,
@@ -193,11 +192,11 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      // Twelve since the three retention workers joined (2026-09-04). The
+      // Eleven: the ten-year educational worker was withdrawn by R133. The
       // number is asserted rather than derived deliberately: readiness claiming
       // "all workers up" while counting a shorter catalogue is exactly the
       // failure this test exists for.
-      expected_workers: 12,
+      expected_workers: 11,
       registered_workers: 2,
       active_workers: 2,
     });
