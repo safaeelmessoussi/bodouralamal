@@ -24,6 +24,31 @@
   flex-direction: column;
   gap: 0.6rem;
 }
+/**
+ * **A section that ends a page rather than competing with it.**
+ *
+ * Account deletion was a `.card` like «بياناتي» — same surface, same border,
+ * same weight — so the most consequential thing on the page looked exactly like
+ * the least. Making it louder would be the wrong correction: a person visits
+ * حسابي to read her details, not to be warned. So this recedes instead. It sits
+ * on the page background rather than a raised surface, and carries a single
+ * hairline in the danger colour on its inline-start edge — the one place the
+ * eye lands last in an RTL column.
+ *
+ * The confirmation still carries the full explanation; this only has to be
+ * findable and unmistakable, not prominent.
+ */
+.card--quiet {
+  background: transparent;
+  border-color: transparent;
+  border-inline-start: 2px solid var(--color-danger);
+  /* No rounding: the hairline is an edge, not a container, and a corner radius
+     on one border reads as a card that failed to draw the other three. */
+  border-radius: var(--radius-xs);
+  padding-inline: clamp(1rem, 2vw, 1.25rem);
+  padding-block: clamp(1rem, 2.5vw, 1.5rem);
+}
+
 .card__icon {
   display: grid;
   place-items: center;

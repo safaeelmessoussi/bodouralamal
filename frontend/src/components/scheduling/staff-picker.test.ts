@@ -129,10 +129,36 @@ describe('the class section hand-writes nothing (rule C)', () => {
 
 describe('warnings inform; they never refuse', () => {
   it('renders every candidate — the picker filters nobody out on a warning', () => {
-    // The ONLY filter in the control is the lead's exclusion from her own
-    // assistant list, which exists because the server refuses that pair.
-    const filters = code(PICKER).match(/\.filter\(/g) ?? [];
-    expect(filters).toHaveLength(1);
+    /**
+     * **Restated 2026-09-05: the property is WHAT the filters key on, not how
+     * many there are.**
+     *
+     * This counted `.filter(` and required exactly one — a proxy for *«the only
+     * exclusion is the lead's»*. A second filter was then added for a different
+     * reason (promoting a selected assistant to lead must drop her from the
+     * assistants, or the form submits one person twice), and the count broke
+     * while the property it stood for held perfectly.
+     *
+     * So the assertion now says the thing itself: **every filter keys on
+     * identity, never on the appraisal.** R88.4 is explicit that a mismatch
+     * warns and never blocks, and a candidate removed from the list is a block
+     * wearing a hint.
+     */
+    // Whole LINES, not a bracket-matching regex: `.filter((x) => …` closes its
+    // first paren inside the parameter list, so a `[^)]*` match reads
+    // `.filter((x)` and asserts nothing about the predicate.
+    const filters = code(PICKER)
+      .split('\n')
+      .filter((line) => line.includes('.filter('));
+    expect(filters.length).toBeGreaterThan(0);
+    for (const line of filters) {
+      // **The property is the appraisal, not the variable name.** Both filters
+      // key on identity — one on `leadId`, one on the lead just chosen — and
+      // requiring the literal `leadId` was over-specification that failed on
+      // the second while the rule it stands for held.
+      expect(line, line).not.toMatch(/appraisal|warning|no_profile/);
+    }
+    // The lead's exclusion from her own assistant list, still exactly as stated.
     expect(code(PICKER)).toContain('.filter((x) => x.id !== leadId)');
   });
 

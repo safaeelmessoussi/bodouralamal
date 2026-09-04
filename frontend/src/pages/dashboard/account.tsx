@@ -7,6 +7,7 @@ import { useActiveChild } from '../../contexts/active-child.js';
 import { useSession } from '../../contexts/session.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
+import { ButtonLink } from '../../components/ui/button.js';
 import { UserQr } from '../../components/ui/user-qr.js';
 
 /**
@@ -117,6 +118,30 @@ export function StudentAccountPage(): ReactNode {
             ))}
           </ul>
         )}
+      </section>
+
+      {/**
+        * **The other half of حسابي, named and linked** (2026-09-05).
+        *
+        * A beneficiary has two account destinations: this framed one, which
+        * shows who the association has her as and where she is placed, and
+        * `/profile`, which holds the details she may change and the deletion of
+        * her account. Neither mentioned the other, so the editable half was
+        * reachable only from the header menu — rule P's defect on the one page
+        * a person visits *to manage her account*.
+        *
+        * A link rather than a merge: `/profile` is deliberately outside the
+        * portals (R65) because it is reachable whatever role you work as, and
+        * duplicating its controls here would be two places to change one name.
+        */}
+      <section className="card" aria-labelledby="account-personal">
+        <h2 id="account-personal">{t('student.account.personalTitle')}</h2>
+        <p className="muted">{t('student.account.personalLede')}</p>
+        <div className="register-form__actions">
+          <ButtonLink variant="secondary" href="/profile">
+            {t('student.account.personalAction')}
+          </ButtonLink>
+        </div>
       </section>
     </StudentLayout>
   );

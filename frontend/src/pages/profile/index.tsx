@@ -249,7 +249,16 @@ function DeleteAccountSection(): ReactNode {
   const [blocked, setBlocked] = useState<unknown>(null);
 
   return (
-    <section className="card" aria-labelledby="delete-account-heading">
+    /**
+     * **Findable and unmistakable, not prominent.**
+     *
+     * It was a `.card` like «بياناتي» — same surface, same border, same weight —
+     * so the page's most consequential action looked exactly like its least.
+     * Making it louder would be the wrong correction: a person opens حسابي to
+     * read her details, not to be warned. `card--quiet` recedes instead, and the
+     * confirmation carries the full explanation.
+     */
+    <section className="card card--quiet" aria-labelledby="delete-account-heading">
       <h2 id="delete-account-heading">{t('profile.deleteTitle')}</h2>
       <p className="muted">{t('profile.deleteLede')}</p>
       {blocked === null ? null : (
