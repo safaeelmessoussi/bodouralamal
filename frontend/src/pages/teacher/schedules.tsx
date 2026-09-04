@@ -165,21 +165,37 @@ export function TeacherSchedulesPage(): ReactNode {
         heading={t('teacher.myCalendar')}
       />
 
-      {/* The list below is Course Schedules — read-only (§14.1) — and is a
-          different question from the calendar above it: **the rules**, not the
-          occurrences they produce. It stays because it carries the roster
-          action, which nothing else offers her. The button above creates an
-          ACTIVITY, the one kind TD-2 grants. */}
-      <DataTable
-        caption={t('teacher.schedules.caption')}
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        status={status}
-        actions={actions}
-        onRetry={() => void load()}
-        pagination={{ page, pageSize: 25, total, onPage: setPage }}
-      />
+      {/**
+        * **Its own section, because in قائمة view it was the page's SECOND
+        * anonymous table** (2026-09-05).
+        *
+        * The calendar above answers *when am I teaching* and, in list view,
+        * renders its occurrences as a table inside a titled card. This one
+        * answers a different question — *what classes am I responsible for* —
+        * and had no card and no heading, so it arrived as a naked table
+        * immediately below a nearly identical one. Two tables, one label: the
+        * page looked duplicated rather than sectioned.
+        *
+        * **Both sections are real and neither is redundant.** The rules are not
+        * the occurrences they produce, and this list carries the roster action
+        * nothing else offers her. What was missing was the sentence that says
+        * so, which is why the fix is a heading and a lede rather than a deleted
+        * table.
+        */}
+      <section className="card" aria-labelledby="my-classes-heading">
+        <h2 id="my-classes-heading">{t('teacher.schedules.caption')}</h2>
+        <p className="lede">{t('teacher.schedules.listLede')}</p>
+        <DataTable
+          caption={t('teacher.schedules.caption')}
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          status={status}
+          actions={actions}
+          onRetry={() => void load()}
+          pagination={{ page, pageSize: 25, total, onPage: setPage }}
+        />
+      </section>
 
       <Dialog
         open={roster !== null}
