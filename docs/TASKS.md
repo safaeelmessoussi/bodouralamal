@@ -1713,18 +1713,23 @@ was hiding behind it: the run went green on the first attempt.
       closes an account that should have lived, while a spurious one merely
       leaves one alive. 11 tests, including §4.3's named case of a rejected link
       beside a pending application.
-- [ ] **BLOCKED — which operation TRIGGERS guardian-only closure.** The guard is
-      built and **no trigger is wired**. §4.3 says the decision *belongs to the
-      deliberate deletion operation*, and three candidates are materially
-      different: **(a)** revoking the last approved link — soft, immediate, and
-      the most common event; **(b)** purging that link from Trash — genuinely
-      permanent, but a Super Admin housekeeping act that may happen long after;
-      **(c)** fully deleting the last child under Option B — not implemented.
-      Closing somebody's account is severe and irreversible in practice, so
-      attaching it to whichever operation somebody picked would be inventing
-      policy. **THE PRECISE DECISION NEEDED:** *which of (a), (b) or (c) — or
-      an explicit administrator action — closes a guardian-only account that the
-      guard reports as having no remaining purpose?*
+- [x] **RESOLVED AND BUILT (Owner, 2026-09-04) — guardian-only closure is an
+      EXPLICIT SUPER ADMIN ACTION.** The three candidate triggers — revoking the
+      last approved link, purging it from Trash, fully deleting the last child —
+      are **none of them**. Closing an account is severe and irreversible in
+      practice, and attaching it to whichever operation somebody happened to pick
+      would be inventing policy. `POST /admin/users/{id}/close-guardian-only`,
+      Super Admin only, refuses with `ACCOUNT_HAS_PURPOSE` while any reason to
+      exist remains, and **names the purposes on `blocked_by`** so the refusal
+      says what to resolve first. **Not a second closure path**: it is the
+      ordinary soft delete plus de-identification with one extra refusal, and the
+      guard runs **under the deletion's own row lock** so a purpose created
+      concurrently cannot slip between the check and the act. No scheduling, no
+      grace period beyond the existing three-day window, and no child record is
+      touched — purposes are read, never removed to qualify.
+      Proved in a browser (`verify-guardian-cleanup.sh`, 19/19) with the database
+      asserted afterwards: the spent guardian closed, the guarded one untouched,
+      the child intact.
 - [x] **DONE (2026-09-04) — the ten-year retention COMPUTATION and dry run.**
       `educational-retention.service.ts` derives the boundary from §4.10a's five
       canonical facts, names which one decided it, and **deletes nothing**. No

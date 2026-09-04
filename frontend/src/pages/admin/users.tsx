@@ -11,6 +11,7 @@ import {
   suspendUser,
   transferPlatformOwnership,
   updateUser,
+  closeGuardianOnlyAccount,
   deleteUserAccount,
   type RoleAssignment,
   type UserProfileInput,
@@ -218,6 +219,8 @@ export function UsersPage(): ReactNode {
     },
   ];
 
+  const [closingGuardian, setClosingGuardian] = useState<UserSummary | null>(null);
+
   const actions: RowAction<UserSummary>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     {
@@ -272,6 +275,26 @@ export function UsersPage(): ReactNode {
         setPermanent(true);
         setDeleting(r);
       },
+      available: (r) => r.id !== me?.id && !r.is_platform_owner,
+    },
+    /**
+     * **R131 §4.3 — an explicit decision, never a trigger** (Owner,
+     * 2026-09-04). The platform does not close an account because the last link
+     * was revoked or the last child was deleted; somebody decides.
+     *
+     * **Offered on every eligible row rather than only where it will succeed.**
+     * That is the opposite of the `suspend`/`reactivate` rule above, and
+     * deliberately: eligibility here is *«no remaining purpose»*, which this
+     * list cannot see — it holds roles and status, not family links, pending
+     * applications or claims. A client-side guess would hide the action from
+     * accounts it would in fact close, and **the refusal is informative**: it
+     * names the purposes to resolve. Deciding it here would need the server's
+     * answer anyway (rule O — the server is the authority).
+     */
+    {
+      label: t('admin.users.closeGuardianOnly'),
+      danger: true,
+      onSelect: (r) => setClosingGuardian(r),
       available: (r) => r.id !== me?.id && !r.is_platform_owner,
     },
   ];
@@ -498,6 +521,39 @@ export function UsersPage(): ReactNode {
         onCancel={() => {
           setDeleting(null);
           setPermanent(false);
+          setBlocked(null);
+        }}
+      />
+
+      {/* The refusal carries the purposes that block the closure, so it is shown
+          in place through the same `BlockedNotice` the delete flow uses rather
+          than as a generic failure — what to resolve first IS the answer. */}
+      <ConfirmDialog
+        open={closingGuardian !== null}
+        {...(blocked === null
+          ? {}
+          : { blocked: <BlockedNotice error={blocked} item={t('admin.users.thisAccount')} /> })}
+        title={t('admin.users.closeGuardianOnlyTitle')}
+        body={t('admin.users.closeGuardianOnlyBody').replace(
+          '{name}',
+          closingGuardian?.name_arabic ?? '',
+        )}
+        confirmLabel={t('admin.users.closeGuardianOnly')}
+        danger
+        busy={busy}
+        onConfirm={() =>
+          void run(async () => {
+            setBlocked(null);
+            try {
+              await closeGuardianOnlyAccount(closingGuardian!.id, accessToken);
+            } catch (error) {
+              setBlocked(error);
+              throw error;
+            }
+          }, 'admin.users.closeGuardianOnlyDone')
+        }
+        onCancel={() => {
+          setClosingGuardian(null);
           setBlocked(null);
         }}
       />

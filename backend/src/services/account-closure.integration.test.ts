@@ -10,7 +10,11 @@ import {
   clearOwnedConsumedTokens,
   ownedOnboardingTokens,
 } from '../test-support/consumed-tokens.js';
-import { deleteUserAccount, purgeUserAccount } from './account-deletion.service.js';
+import {
+  closeGuardianOnlyAccount,
+  deleteUserAccount,
+  purgeUserAccount,
+} from './account-deletion.service.js';
 import {
   approveSelfManagedClaim,
   requestSelfManagedClaim,
@@ -567,6 +571,160 @@ describe('Option A — a guardian-only account, and a self-managed adult', () =>
     await expect(
       resolveActingStudent(prisma, { userId: guardian.id, roles: ['parent'] }, adult.id),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('Guardian-only cleanup — an EXPLICIT decision, guarded (Owner 2026-09-04)', () => {
+  const close = async (targetId: string): Promise<void> => {
+    const actor = await actorFor(prisma, superAdmin);
+    await closeGuardianOnlyAccount(prisma, actor, targetId);
+  };
+
+  /** A guardian whose only child link has been revoked — the closure case. */
+  async function spentGuardian(): Promise<string> {
+    const guardian = await makeUser('ولية أمر منتهية');
+    const child = await makeUser('طفلة سابقة', { beneficiary: true, withIdentity: false });
+    await prisma.familyLink.create({
+      data: {
+        parentId: guardian.id,
+        studentId: child.id,
+        status: 'rejected',
+        decidedAt: new Date(),
+        deletedAt: new Date(),
+      },
+    });
+    return guardian.id;
+  }
+
+  it('closes an account with no remaining purpose, through the ordinary machinery', async () => {
+    const guardian = await spentGuardian();
+
+    await close(guardian);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: guardian } });
+    // Not a second closure path: the same tombstone, the same de-identification.
+    expect(after.deletedAt).not.toBeNull();
+    expect(after.nameArabic).toBe('حساب محذوف');
+    expect(await prisma.userIdentity.count({ where: { userId: guardian } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: 'user.close_guardian_only', targetId: guardian },
+      }),
+    ).toBe(1);
+  });
+
+  it.each([
+    [
+      'a LIVE family link',
+      'live_family_link',
+      async (guardian: string) => {
+        const child = await makeUser('طفلة حالية', { beneficiary: true, withIdentity: false });
+        await prisma.familyLink.create({
+          data: { parentId: guardian, studentId: child.id, status: 'approved', decidedAt: new Date() },
+        });
+      },
+    ],
+    [
+      'a PENDING family link that still owes an answer',
+      'pending_family_link',
+      async (guardian: string) => {
+        const child = await makeUser('طفلة منتظرة', { beneficiary: true, withIdentity: false });
+        await prisma.familyLink.create({
+          data: { parentId: guardian, studentId: child.id, status: 'pending' },
+        });
+      },
+    ],
+    [
+      'being a beneficiary herself',
+      'beneficiary',
+      async (guardian: string) => {
+        await prisma.user.update({
+          where: { id: guardian },
+          data: { isBeneficiary: true },
+        });
+      },
+    ],
+  ])('REFUSES while the account has %s', async (_label, purpose, giveIt) => {
+    /**
+     * **The asymmetry is the safety property.** A missed purpose closes an
+     * account that should have lived; a spurious one merely leaves an account
+     * alive. So every one of these must refuse, and the refusal must SAY which
+     * purpose blocked it — a Super Admin already looking at the account needs to
+     * know what to resolve, and a uniform refusal here would be a dead end.
+     */
+    const guardian = await spentGuardian();
+    await giveIt(guardian);
+
+    await expect(close(guardian)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      // `blocked_by`, because that is the channel `BlockedNotice` reads — a
+      // bespoke shape here left the refusal with no reach at all, which the
+      // browser run caught and this assertion now pins.
+      details: {
+        reason: 'ACCOUNT_HAS_PURPOSE',
+        blocked_by: expect.objectContaining({ [purpose]: 1 }),
+      },
+    });
+
+    // Refused means UNTOUCHED — not half-closed, and no tombstone left behind.
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: guardian } });
+    expect(after.deletedAt).toBeNull();
+    expect(after.nameArabic).not.toBe('حساب محذوف');
+    expect(
+      await prisma.trash.count({ where: { targetEntity: 'User', targetId: guardian } }),
+    ).toBe(0);
+  });
+
+  it('touches NO child record — purposes are read, never removed to qualify', async () => {
+    const guardian = await makeUser('ولية أمر لا تمس طفلها');
+    const child = await makeUser('طفلة محمية', { beneficiary: true, withIdentity: false });
+    const link = await prisma.familyLink.create({
+      data: {
+        parentId: guardian.id,
+        studentId: child.id,
+        status: 'rejected',
+        decidedAt: new Date(),
+        deletedAt: new Date(),
+      },
+    });
+    const enrolment = await prisma.enrollment.create({
+      data: { studentId: child.id, administrativeGroupId: groupId, levelId, branchId },
+    });
+
+    await close(guardian.id);
+
+    const childAfter = await prisma.user.findUniqueOrThrow({ where: { id: child.id } });
+    expect(childAfter.deletedAt).toBeNull();
+    expect(childAfter.nameArabic).not.toBe('حساب محذوف');
+    expect(childAfter.referenceCode).toBe(child.code);
+    expect(childAfter.birthDate).not.toBeNull();
+    expect(await prisma.enrollment.count({ where: { id: enrolment.id } })).toBe(1);
+    // Even the spent link survives: R128 keeps a rejected link as the record of
+    // a decision, and closing the guardian is not a reason to erase it.
+    expect(await prisma.familyLink.count({ where: { id: link.id } })).toBe(1);
+  });
+
+  it('is idempotent — a repeat neither errors loudly nor writes a second decision', async () => {
+    const guardian = await spentGuardian();
+    await close(guardian);
+    const first = await prisma.user.findUniqueOrThrow({ where: { id: guardian } });
+
+    /**
+     * The second call meets an account that is already soft-deleted, so the
+     * ordinary soft delete refuses it — and that refusal is the CORRECT
+     * outcome, not a defect: the work is done. What must not happen is a second
+     * `close_guardian_only` decision in the audit, which would read as an
+     * administrator having judged the same account twice.
+     */
+    await expect(close(guardian)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    const second = await prisma.user.findUniqueOrThrow({ where: { id: guardian } });
+    expect(second.qrRef).toBe(first.qrRef);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: 'user.close_guardian_only', targetId: guardian },
+      }),
+    ).toBe(1);
   });
 });
 

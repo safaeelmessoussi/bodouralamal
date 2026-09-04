@@ -81,6 +81,7 @@ PUT /admin/users/{id}/roles                   # §5.6 "role/branch-scope assignm
 POST /admin/platform-owner/transfer           # R115; current Platform Owner only; atomic singleton transfer to active Global Super Admin
 DELETE /profile                               # R111; any authenticated user deletes their OWN account; no role gate
 DELETE /admin/users/{id}                      # R111/R112; Super Admin only; ?permanent=true de-identifies now
+POST /admin/users/{id}/close-guardian-only    # R131 §4.3 (Owner 2026-09-04); Super Admin only; refuses ACCOUNT_HAS_PURPOSE
 
 # ── Partners (NEW N / R113) — §5.1 landing section + Super-Admin catalogue
 GET /partners                                 # R113 §14.1/§5.1; PUBLIC; live+visible only; id and name

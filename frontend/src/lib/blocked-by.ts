@@ -58,6 +58,23 @@ const LABELS: Record<string, string> = {
   events: 'states.err.blockedBy.events',
   enrollments: 'states.err.blockedBy.enrollments',
   pending_requests: 'states.err.blockedBy.pendingRequests',
+  /**
+   * **R131 §4.3's account purposes, carried on the SAME channel** (2026-09-04).
+   *
+   * A remaining purpose is a dependency blocking a closure, so it is the same
+   * question this component already answers — *«what stops this, and what do I
+   * resolve first»*. Giving it a second shape would have meant a second notice
+   * component beside this one, and the guardian-cleanup refusal briefly HAD no
+   * reach at all because the service emitted its own `purposes` array that
+   * nothing here could read.
+   */
+  beneficiary: 'states.err.blockedBy.beneficiary',
+  staff_role: 'states.err.blockedBy.staffRole',
+  live_family_link: 'states.err.blockedBy.liveFamilyLink',
+  pending_family_link: 'states.err.blockedBy.pendingFamilyLink',
+  pending_child_application: 'states.err.blockedBy.pendingChildApplication',
+  self_managed: 'states.err.blockedBy.selfManaged',
+  pending_full_deletion_request: 'states.err.blockedBy.pendingFullDeletionRequest',
 };
 
 /**

@@ -264,6 +264,40 @@ exists and whether that person is a minor. Only conditions about the caller's
 **own** Google identity are named, because those disclose nothing she does not
 control.
 
+## Closing a guardian-only account — BUILT as an explicit action (2026-09-04)
+
+**`POST /admin/users/{id}/close-guardian-only`, Super Admin only.** §4.3 says a
+guardian-only account is closed once its last child-management purpose is
+deliberately removed and nothing else keeps it. *Which event* did that was the
+open question, and the Owner's answer is **none of them**: revoking the last
+approved link, a Trash row expiring, and fully deleting the last child are
+materially different events, and none of them is a request to close somebody's
+account. A person decides.
+
+**It is not a second closure path.** The operation is the ordinary soft delete
+plus de-identification with one extra refusal. That matters more than it looks:
+a parallel implementation of *closed* is the thing that eventually disagrees with
+the first about what closed means, and both would be right about their own code.
+
+**The guard runs under the deletion's own row lock.** `softDelete` takes a
+`precondition` evaluated after it locks the user and after it confirms the
+account is live. Every writer that could give this account a purpose contends on
+that same lock, so a check performed a moment earlier would be a check of a state
+that may no longer hold — and running it *before* the existence check made a
+repeat report *«still has a purpose»* carrying an empty list, which is both untrue
+and unactionable.
+
+**The refusal travels on `blocked_by`, not on a bespoke field.** A remaining
+purpose is a dependency blocking a deletion — the same question `BlockedNotice`
+answers on every other screen — so it arrives in that shape and inherits the
+translated labels and the guard that keeps them translated. It emitted its own
+`purposes` array first, and a browser run showed the cost: a refusal rendered as
+a generic failure, which is the dead end the design exists to avoid.
+
+**Nothing belonging to a child is touched.** Purposes are read; none is removed
+to make an account qualify. Even a rejected `FamilyLink` survives, because R128
+keeps it as the record of a decision.
+
 ## The guards
 
 | Property | Guard |

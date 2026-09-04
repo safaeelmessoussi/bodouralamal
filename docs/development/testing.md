@@ -677,10 +677,55 @@ curl -s http://127.0.0.1/ | grep -o '/assets/index-[^"]*\.js'   # served
 cd frontend && npx vite build                                    # local
 ```
 
-Two different hashes means the container is stale. `docker compose ... up -d
---force-recreate nginx` is what makes a frontend change reach the harness — and
-it is worth checking **before** concluding that a browser failure is a code
-defect.
+Two different hashes means the edge is stale.
+
+### What actually makes a frontend change reach the harness (corrected 2026-09-04)
+
+**In local development it is `npm run build`, not a Docker rebuild.**
+`docker-compose.dev.yml` bind-mounts `./frontend/dist` over
+`/usr/share/nginx/html`, so the running container serves the **host** directory
+and the image's own copy is never read. A `docker compose build nginx` therefore
+changes nothing a browser can see, and the advice this paragraph used to give —
+force-recreate the container — is right only for a release-shaped stack where
+the bundle is baked in. Locally:
+
+```
+cd frontend && npm run build     # this is the step that matters
+```
+
+**And never bring the edge up without the dev overlay.** `docker compose up -d
+--force-recreate nginx` — no `-f` flags — silently drops
+`docker-compose.dev.yml`, which is what mounts `nginx/dev/default.conf` (the
+localhost HTTP exception) and publishes port 80 on both loopbacks. The release
+config fails closed to HTTPS, no certificate exists locally, and **every browser
+harness on the machine then dies with `ECONNRESET` on port 443** — a failure that
+looks exactly like a broken test and is not. The recovery is one command:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps nginx
+```
+
+### The api container has no bind mount, and that is the slow one
+
+`api` is fully baked: no volume, so **every backend change needs a real image
+rebuild** before an HTTP or browser harness can observe it, and the TypeScript
+build inside Docker takes many minutes. Two consequences worth planning around:
+
+* **Batch backend edits before rebuilding.** A rebuild started mid-slice is
+  stale on arrival — it captures the source as of the moment it started, not as
+  of when it finishes.
+* **Verify the running revision, never the build log.** A build that succeeded
+  and a container that is running it are different facts:
+
+```
+docker exec bodour-api-1 sh -c 'grep -c "your-new-route" /app/dist/src/app.js'
+```
+
+This is not hypothetical bookkeeping: on 2026-09-04 a guardian-cleanup browser
+run reported **17 of 18 checks passing** against an API that answered `404
+<unmatched>` for the route under test, because the container predated it. The
+DB assertions in the harness footer are what caught it — which is why those exist
+and why a browser check should never be the only evidence for a write.
 
 Four lessons, all now enforced in code:
 

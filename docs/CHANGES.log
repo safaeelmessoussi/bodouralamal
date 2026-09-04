@@ -4227,6 +4227,68 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Guardian-only cleanup — an explicit decision, not a trigger (2026-09-04)
+
+**Owner decision.** The three candidate triggers — revoking the last approved
+link, purging it from Trash, fully deleting the last child — are **none of
+them**. Closing an account is severe and irreversible in practice, so attaching
+it to whichever operation somebody happened to pick would have been inventing
+policy. `POST /admin/users/{id}/close-guardian-only`, Super Admin only.
+
+**It is not a second closure path**, and that was the main design constraint. The
+operation is the ordinary soft delete plus de-identification with **one extra
+refusal** — a `precondition` threaded through `softDelete` — so there is no
+parallel implementation of *closed* to eventually disagree with the first.
+
+**The guard runs under the deletion's own row lock.** Every writer that could
+give the account a purpose contends on that lock, so a check performed a moment
+earlier would be a check of a state that may no longer hold. Placing it *before*
+the existence check was tried and was wrong: a repeat then reported *«still has a
+purpose»* carrying an EMPTY list, which is both untrue and unactionable.
+
+**The refusal travels on `blocked_by`.** A remaining purpose is a dependency
+blocking a deletion — exactly the question `BlockedNotice` answers everywhere
+else — so it inherits the translated labels and the label guard. It emitted a
+bespoke `purposes` array first, and the browser run showed what that costs: the
+refusal rendered as a generic failure, the dead end the design exists to prevent.
+
+**Nothing belonging to a child is touched**; purposes are read, never removed to
+make an account qualify. A rejected `FamilyLink` survives, because R128 keeps it
+as the record of a decision.
+
+### What the browser run found, and it was not the feature
+
+`verify-guardian-cleanup.sh` — 19/19 — but it took six rounds, and **five of the
+six failures were the harness or the environment, not the code**. Each is now
+written into the script or the handbook, because every one of them will happen
+again:
+
+* **A plain `docker compose up -d nginx` silently drops the dev overlay**, which
+  is what mounts the localhost HTTP exception. The release config fails closed to
+  HTTPS, no local certificate exists, and every browser harness on the machine
+  then dies with `ECONNRESET` on 443 — looking exactly like a broken test. I
+  caused it and then had to notice it.
+* **A Docker rebuild of `nginx` changes nothing locally.** `frontend/dist` is
+  bind-mounted over the html root, so `npm run build` is the step that matters.
+  `testing.md` said the opposite; it now says this.
+* **The api container has no bind mount**, so every backend change needs a real
+  image rebuild — and a rebuild started mid-slice is stale on arrival.
+* **17 of 18 checks passed against an API answering `404 <unmatched>`** for the
+  route under test. The footer's database assertions are what caught it, and one
+  loose check — matching any of «لا يمكن», «سبب», «ارتباط» — passed because the
+  dialog's own body contains «سبب». It now asserts the exact purpose label. **A
+  check that passes when the feature is absent is worse than no check.**
+* **`innerText` puts a tab inside a name**, because §14.2 renders it across
+  columns, so no whole-name match can ever succeed. The scenario accounts now
+  carry a single distinctive token, and the script prints the rows it actually
+  saw when the match fails — the diagnostic that ended two rounds of guessing.
+* **«The first open dialog» is not «the dialog I just opened».** The page mounts
+  several and more than one can be open; the confirm helper now searches every
+  open dialog. Before that, the row action and the dialog's confirm button —
+  which share a label, being one decision named once — made a global text match
+  re-open the dialog instead of confirming it. Every check passed and nothing was
+  closed, which is the worst shape a green test can have.
+
 ## The birth date is account data — Option A clears it (2026-09-04)
 
 **Owner decision, closing the last open Option A classification.** The audit
