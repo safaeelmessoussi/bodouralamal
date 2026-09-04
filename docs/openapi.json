@@ -2994,6 +2994,220 @@
         }
       }
     },
+    "/account-return-requests": {
+      "post": {
+        "summary": "Ask for an archived account back",
+        "description": "**Owner decision, 2026-09-04. PUBLIC but onboarding-token-gated**, exactly like `POST /self-managed-claims` and for the same reason: she has proven control of a Google identity and deliberately holds no session, because issuing one would already be the reactivation she is asking permission for. Requires `X-Onboarding-Token`. Body: `{ reference_code, first_name_arabic, last_name_arabic, phone? }`. **The property this exists to protect is one person, one record**: approval reactivates the SAME `User`, so no second beneficiary is created and her archive stays reachable — the duplicate-person outcome R62.4 already refuses for children. **`reference_code` LOCATES; it never authenticates**: possession grants nothing, and a code that never existed, one belonging to a live account, and one somebody else has already asked about all answer the same uniform `404` (§20 rule 17). The proof is the Google flow plus a Super Admin's verification. **Her CURRENT name is asked for and the erased one is not restored** — closure destroyed it, and inviting her to reconstruct it would defeat the closure. **Nothing is bound here**: the identity is recorded and held until a decision.",
+        "responses": {
+          "201": {
+            "description": "Recorded and awaiting review. The id and status only."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed token, code or name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND with RETURN_NOT_AVAILABLE — one answer for every reason the archive is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with TOKEN_ALREADY_USED, IDENTITY_ALREADY_BOUND or RETURN_ALREADY_PENDING.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/account-return-requests": {
+      "get": {
+        "summary": "The pending account-return queue",
+        "description": "**Super Admin only** (Owner, 2026-09-04), asserted in the service against live rows (TD-12). Returns the request id, the archived account it names, the name and phone **she supplies now**, and when she asked. **The Google provider subject is deliberately absent**, exactly as it is from the self-managed-claim queue: it is a credential coordinate, and an administrator verifies a person rather than a provider identifier.",
+        "responses": {
+          "200": {
+            "description": "The pending requests."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/account-return-requests/{id}/approve": {
+      "post": {
+        "summary": "Return an archived account to its person",
+        "description": "**Super Admin only** (Owner, 2026-09-04). No body. **Reactivates the EXISTING `User` and binds the new identity to it** — no user is created, which is the whole point: her enrolments, grades, Quran progress, attendance and reference code are already on that id. Every precondition is **re-read under a row lock rather than trusted from the request**: the account is still closed, still has no login, and the address and provider subject still belong to nobody — a login acquired while the request waited is `409 ACCOUNT_HAS_LOGIN`, because binding a second identity would either replace a credential or give one account two. **Her current name replaces nothing that survived**: Option A erased the old one and it is not restored, and **the birth date stays null** rather than being asked for again. **Former guardian authority is not restored**: approval records durable self-management, because `FamilyLink` rows survive closure and reopening an account without this would hand a former guardian authority over an adult who returned to manage her own affairs.",
+        "responses": {
+          "200": {
+            "description": "Reactivated and bound."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin, or TD-12 freshness.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a request that is not pending — decided, withdrawn or nonexistent answer alike.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with SUBJECT_INELIGIBLE or ACCOUNT_HAS_LOGIN, or DUPLICATE with EMAIL_ALREADY_CLAIMED or IDENTITY_ALREADY_BOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/account-return-requests/{id}/reject": {
+      "post": {
+        "summary": "Refuse an account-return request",
+        "description": "**Super Admin only** (Owner, 2026-09-04). Body: `{ reason }`, 1–500 characters (TD-9). **R128's shape for R128's reason**: a refusal that stays live would block the corrected request for ever, so the decision and its reason survive on the row and in the audit trail while the pending slot is released. She may ask again — as a NEW request with its own history, never by reopening this one.",
+        "responses": {
+          "204": {
+            "description": "Refused and withdrawn from the live set."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or over-long reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a request that is not pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/users/{id}/close-guardian-only": {
       "post": {
         "summary": "Close a guardian-only account",

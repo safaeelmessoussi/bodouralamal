@@ -82,6 +82,10 @@ POST /admin/platform-owner/transfer           # R115; current Platform Owner onl
 DELETE /profile                               # R111; any authenticated user deletes their OWN account; no role gate
 DELETE /admin/users/{id}                      # R111/R112; Super Admin only; ?permanent=true de-identifies now
 POST /admin/users/{id}/close-guardian-only    # R131 §4.3 (Owner 2026-09-04); Super Admin only; refuses ACCOUNT_HAS_PURPOSE
+POST /account-return-requests                 # Owner 2026-09-04; PUBLIC, onboarding-token-gated; a former beneficiary asks for her archived account back
+GET /admin/account-return-requests            # Owner 2026-09-04; Super Admin only; the pending return queue
+POST /admin/account-return-requests/{id}/approve # Owner 2026-09-04; Super Admin only; reactivates the SAME User and binds the identity
+POST /admin/account-return-requests/{id}/reject  # Owner 2026-09-04; Super Admin only; recorded then withdrawn (R128 shape)
 
 # ── Partners (NEW N / R113) — §5.1 landing section + Super-Admin catalogue
 GET /partners                                 # R113 §14.1/§5.1; PUBLIC; live+visible only; id and name

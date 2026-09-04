@@ -4227,6 +4227,70 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The returning beneficiary gets her account back (2026-09-04)
+
+**Owner decision.** She proves a Google identity, names her reference code, a
+Super Admin verifies she is that archived person, and **the SAME `User`** is
+reactivated with the identity bound to it. The property the whole feature exists
+for is *one person, one record*: a fresh registration would produce a duplicate
+person and an archive nobody could reach — the outcome R62.4 already refuses for
+children.
+
+### Why it is not a `SelfManagedClaim`
+
+R132's claim was the first candidate and **cannot carry this without being
+weakened twice**: it resolves a beneficiary `WHERE deleted_at IS NULL`, and a
+closed account is soft-deleted — a test asserts that a closed account's code
+grants nothing — and it requires a recorded date of birth to check the age of
+majority, which **Option A now clears**. Relaxing both would have made one queue
+mean two different things, one of which **reopens a closed account**: a
+materially heavier decision a reviewer would no longer be able to tell apart. The
+brief allowed a tiny dedicated state where one is genuinely safer, and this is
+that case. The two review screens sit beside each other rather than merging, for
+the same reason.
+
+**The reference code locates and never authenticates.** A code that never
+existed, one belonging to a live account, and one somebody else has already asked
+about all answer the same uniform `404`. The form's hint says so in as many
+words, because a person who believes the code is her password will treat it like
+one.
+
+**Nothing erased is restored.** She supplies current information; the old names
+and the birth date are gone and are not brought back, because inviting her to
+retype them would ask her to reconstruct exactly what the closure destroyed. The
+birth date stays null — this flow does not need one.
+
+**Former guardian authority is not restored**, and making that true in every case
+took a decision. Option A never deleted `FamilyLink` rows, so an account that
+closes and reopens still carries whatever links it had. Approval therefore
+records **durable self-management** — the fact the platform already uses for this
+exact question — rather than a second mechanism meaning the same thing. **This is
+an inference and is flagged as one** in the handbook and in the code: the Owner
+stated the requirement, not the mechanism, and `approveAccountReturn` is the
+single place to change if the intended answer is different.
+
+### What the browser found
+
+`verify-account-return.sh` — 21/21, with the database asserted afterwards:
+reopened, one identity bound, the code unchanged, no duplicate person, durable
+self-management recorded. It took two runs, and the first one found a real
+defect: **the success screen told her a registration had been received**. It
+branched on `self_managed` and fell through to the registration wording for
+everything else, so a woman asking for an archived record back would have been
+told her application was under consideration. Three outcomes now have three
+sentences.
+
+### Two small things worth recording
+
+The enum needed `@@map("account_return_status")`; without it Prisma looked for
+`public.AccountReturnStatus` while the migration had created the snake_case name,
+and every query failed at runtime with a type that does not exist — invisible to
+the type checker and to the migration guards.
+
+And the §14.1 navigation guards pin the Owner's exact sitemap order, so adding a
+destination fails four of them by design. They were updated with the new node in
+place, not loosened.
+
 ## The ten-year boundary is enforced — and it destroys the record, not the account (2026-09-04)
 
 **The distinction is the whole design.** §4.10a's clock is about *identifiable

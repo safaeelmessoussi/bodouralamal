@@ -1797,63 +1797,20 @@ was hiding behind it: the run went green on the first attempt.
       §4.4b evaluates Level restrictions against it, so a preserved enrolment
       stops making sense without it, while nothing reads a date of birth.
       Audit names the field and never the value.
-      - [ ] **OPEN — the return/reactivation workflow.** *(Audited 2026-09-04;
-            deliberately NOT implemented.)* The **identity-proofing** half needs
-            nothing new: R132's approved model — the claimant names the archived
-            record, proves control of a Google identity through the existing
-            OAuth+PKCE flow, and a Super Admin performs the association-side
-            match — transfers directly, and its enumeration-resistance,
-            replay-protection and no-duplicate-User guarantees come with it.
-            **What is NOT settled is whether a de-identified row may be
-            reactivated at all, and where the restored identity would come
-            from.** De-identification sets `name_arabic` to «حساب محذوف», nulls
-            every name part, and **deletes the User's Trash snapshot in the same
-            transaction** — deliberately, so the erased name does not live on in
-            JSONB. **Nothing in the platform holds her name afterwards.** So
-            reactivation cannot *restore* an identity; it can only *acquire* a
-            new one from the person or an administrator, and re-attach it to a
-            record the association deliberately stripped. That is new product
-            behaviour, not an application of an approved rule.
-            **THE PRECISE DECISIONS NEEDED:** *(1) may a de-identified account be
-            reopened at all, or is a return a fresh registration that an
-            administrator links to the retained archive?* *(2) if reopened, who
-            supplies the identity it lost, and what makes that supply
-            trustworthy?* Until both are answered, **no reactivation path
-            exists** — and the current state is safe by construction: a closed
-            account is soft-deleted, the claim lookup excludes it, and the
-            reference code authenticates nobody.
-      - [ ] **SUPERSEDED by the entry above — what happens when a former
-            beneficiary legitimately returns.** Option A keeps the reference code so her archive can be
-            found, but **no return workflow exists and none was created**: the
-            code authenticates nobody, a closed account cannot be claimed
-            (`deleted_at` excludes it), and there is no path from knowing a code
-            to an account. Whether a return is a fresh registration matched by
-            an administrator, or something else, is an Owner decision.
-      - [ ] **LEGAL WORDING PENDING, NOT DRAFTED AUTONOMOUSLY.** The active
-            `LegalConsentText` is **untouched**. R131 requires the privacy notice
-            to state: the ten-year educational retention and its purposes; that
-            it is the association's own policy and not a CNDP-prescribed
-            duration; the Option A / Option B distinction; that the archive is
-            pseudonymous rather than anonymous; that Option B may end the
-            association's ability to issue an attestation; and that backups
-            expire rather than being erased on request. Drafting, review and
-            activation belong to the Document Owner.
-      - [x] **DESIGNED (2026-09-04) — restore suppression, and most of it already
-            exists.** A restore undoes any deletion applied after its restore
-            point, silently. The minimum mechanism is a durable ledger of
-            deletions carrying **no deleted content** — and the platform already
-            keeps one: `AuditLog`'s `user.deidentify` (target id and the **field
-            names** cleared, never their values), `familylink.reject`/`.revoke`,
-            and an approved `FullDeletionRequest`. Each names which row and when,
-            none holds the erased data, and audit rows outlive their subject on
-            their own retention clock. The replay procedure is written down in
-            [personal-data-map](development/personal-data-map.md);
-            `deIdentifyAccount` is already idempotent, so re-applying a deletion
-            that survived the restore is harmless.
-      - [ ] **REMAINING (operational, small).** Make the replay a step in the
-            restore runbook rather than something somebody remembers, and add a
-            check that it ran. **No provider-specific backup pruning is designed
-            or deployed**, and none should be until hosting is settled.
+      - [x] **BUILT (Owner, 2026-09-04) — the return/reactivation workflow.**
+            `AccountReturnRequest`: she proves a Google identity, names her
+            reference code, a Super Admin verifies she is that archived person,
+            and the **SAME `User`** is reactivated with the identity bound to it.
+            **Not a `SelfManagedClaim`** — that resolves `WHERE deleted_at IS
+            NULL` and requires a birth date Option A now clears, so reusing it
+            would have weakened both and made one queue mean two things, one of
+            which reopens a closed account. The code **locates and never
+            authenticates**: every unavailable archive answers the same uniform
+            `404`. Nothing erased is restored; she supplies current information
+            and the birth date stays null. Approval records durable
+            self-management so a former guardian does not regain authority —
+            **an inference, flagged in the handbook**, since the Owner stated the
+            requirement and not the mechanism.
 - [x] **DIRECTION SETTLED (Owner, 2026-09-03) — the normalized-email lock is to be
   keyed, not raw.** The design is ratified and complete in
   [email-lock-keying](development/email-lock-keying.md):

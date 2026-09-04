@@ -29,6 +29,7 @@ import {
   type ChildForm,
 } from '../components/registration/children.js';
 import { PersonFields } from '../components/registration/person-fields.js';
+import { requestAccountReturn } from '../adapters/account-returns.js';
 import { requestSelfManagedClaim } from '../adapters/self-managed-claims.js';
 import { t } from '../i18n/index.js';
 import { isRealPastDate } from '../lib/birth-date.js';
@@ -88,10 +89,19 @@ export function Register(): ReactNode {
    * holds — the same OAuth callback and the same onboarding token — so the only
    * new thing she supplies is her reference code.
    */
-  const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher' | 'self_managed'>(
+  const [intent, setIntent] = useState<
+    'adult' | 'parent_child' | 'teacher' | 'self_managed' | 'account_return'
+  >(
     'adult',
   );
   const [selfManagedCode, setSelfManagedCode] = useState('');
+  // Owner 2026-09-04 — the returning former beneficiary. Separate state from the
+  // claim above because it is a separate request: that one transitions a LIVE
+  // account, this one reopens a CLOSED one.
+  const [returnCode, setReturnCode] = useState('');
+  const [returnFirstName, setReturnFirstName] = useState('');
+  const [returnLastName, setReturnLastName] = useState('');
+  const [returnPhone, setReturnPhone] = useState('');
   const kind: 'adult' | 'parent_child' = intent === 'parent_child' ? 'parent_child' : 'adult';
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
   /**
@@ -190,6 +200,9 @@ export function Register(): ReactNode {
     framingBranchIds,
     dataProcessing,
     selfManagedCode,
+    returnCode,
+    returnFirstName,
+    returnLastName,
   });
   const valid = Object.keys(localErrors).length === 0;
   // The server's verdict wins where the two disagree: it is the authority
@@ -213,6 +226,26 @@ export function Register(): ReactNode {
        */
       if (intent === 'self_managed') {
         await requestSelfManagedClaim(selfManagedCode.trim().toUpperCase(), token);
+        setDone(true);
+        return;
+      }
+
+      /**
+       * **A third verb, for the same reason as the second.** Reopening a closed
+       * record is neither a registration nor a claim on a live account, and one
+       * endpoint meaning three things is how a reviewer stops being able to see
+       * which decision she is taking.
+       */
+      if (intent === 'account_return') {
+        await requestAccountReturn(
+          {
+            referenceCode: returnCode.trim().toUpperCase(),
+            firstNameArabic: returnFirstName.trim(),
+            lastNameArabic: returnLastName.trim(),
+            ...(returnPhone.trim() ? { phone: returnPhone.trim() } : {}),
+          },
+          token,
+        );
         setDone(true);
         return;
       }
@@ -267,17 +300,29 @@ export function Register(): ReactNode {
             * She asked to be given her own login on a record that already
             * exists, and what she needs to read is that nothing has changed yet.
             */}
+          {/**
+            * **Three outcomes, three sentences.** The registration wording tells
+            * her an application was received and will be decided — true of a
+            * different thing for both of the other arms. The returning
+            * beneficiary in particular must not read that she registered: she
+            * asked for an existing record back, and a browser run caught this
+            * screen telling her otherwise.
+            */}
           <h1>
             {intent === 'self_managed'
               ? t('register.selfManagedLegend')
-              : t('register.submittedTitle')}
+              : intent === 'account_return'
+                ? t('register.returnLegend')
+                : t('register.submittedTitle')}
           </h1>
           <p>
             {intent === 'self_managed'
               ? t('register.selfManagedSent')
-              : t('register.submittedBody')}
+              : intent === 'account_return'
+                ? t('register.returnSent')
+                : t('register.submittedBody')}
           </p>
-          {intent === 'self_managed' ? null : (
+          {intent === 'self_managed' || intent === 'account_return' ? null : (
             <p className="muted">{t('register.submittedNext')}</p>
           )}
           <div className="auth-page__links">
@@ -357,6 +402,7 @@ export function Register(): ReactNode {
                 { value: 'parent_child', label: t('register.kindParentChild') },
                 { value: 'teacher', label: t('register.kindTeacher') },
                 { value: 'self_managed', label: t('register.kindSelfManaged') },
+                { value: 'account_return', label: t('register.kindReturn') },
               ]}
               hint={t('register.kindHint')}
             />
@@ -385,6 +431,52 @@ export function Register(): ReactNode {
               </fieldset>
             ) : null}
 
+            {intent === 'account_return' ? (
+              /**
+               * **Owner 2026-09-04 — the honest sentence again, for a different
+               * request.** No account is created: the same record comes back.
+               * The administration verifies who she is, and **the reference code
+               * is a lookup, not a proof** — the hint says so, because a person
+               * who believes the code is her password will treat it like one.
+               *
+               * Her CURRENT name is asked for. The old one was erased at closure
+               * and is not restored; inviting her to retype it would ask her to
+               * reconstruct exactly what the closure destroyed.
+               */
+              <fieldset className="register-form__group">
+                <legend>{t('register.returnLegend')}</legend>
+                <p className="state" role="status">
+                  {t('register.returnNotice')}
+                </p>
+                <TextField
+                  label={t('register.returnCode')}
+                  value={returnCode}
+                  onChange={setReturnCode}
+                  hint={t('register.returnCodeHint')}
+                  required
+                  error={touched ? (errors['returnCode'] ?? null) : null}
+                />
+                <TextField
+                  label={t('register.returnFirstName')}
+                  value={returnFirstName}
+                  onChange={setReturnFirstName}
+                  required
+                  error={touched ? (errors['returnName'] ?? null) : null}
+                />
+                <TextField
+                  label={t('register.returnLastName')}
+                  value={returnLastName}
+                  onChange={setReturnLastName}
+                  required
+                />
+                <TextField
+                  label={t('register.returnPhone')}
+                  value={returnPhone}
+                  onChange={setReturnPhone}
+                />
+              </fieldset>
+            ) : null}
+
             {intent === 'teacher' ? (
               // Said plainly rather than implied: submitting this asks for
               // something a person has to grant. An applicant who expects to be
@@ -403,7 +495,7 @@ export function Register(): ReactNode {
               * would ask her to restate what the platform already knows and
               * would imply the answers matter to a decision that ignores them.
               */}
-            {intent === 'self_managed' ? null : (
+            {intent === 'self_managed' || intent === 'account_return' ? null : (
               <>
             <fieldset className="register-form__group">
               <legend>{kind === 'adult' ? t('register.you') : t('register.parent')}</legend>
@@ -791,12 +883,18 @@ export function explainFailure(error: unknown): string {
 /* ── Validation, mirroring TD-9 ───────────────────────────────────────────── */
 
 interface FormState {
-  /** The FORM's four options, not the wire's two `kind`s — a teacher applying
-   *  is an adult registering themselves (R49), and `self_managed` (R132) is not
-   *  a registration at all: it claims a record that already exists. */
-  intent: 'adult' | 'parent_child' | 'teacher' | 'self_managed';
+  /** The FORM's five options, not the wire's two `kind`s — a teacher applying
+   *  is an adult registering themselves (R49); `self_managed` (R132) claims a
+   *  record that already exists; and `account_return` (Owner, 2026-09-04) asks
+   *  for a CLOSED one back. Only the first two are registrations. */
+  intent: 'adult' | 'parent_child' | 'teacher' | 'self_managed' | 'account_return';
   /** R132 — the reference code she already holds. Empty on every other arm. */
   selfManagedCode: string;
+  /** Owner 2026-09-04 — the returning beneficiary's code and CURRENT name.
+   *  Empty on every other arm. */
+  returnCode: string;
+  returnFirstName: string;
+  returnLastName: string;
   applicant: PersonForm;
   children: ChildForm[];
   branchId: string | null;
@@ -851,6 +949,24 @@ export function validate(state: FormState): Record<string, string> {
     const code = state.selfManagedCode.trim().toUpperCase();
     if (!/^BA-[0-9A-Z]{4,12}$/.test(code)) {
       errors['selfManagedCode'] = t('register.errSelfManagedCode');
+    }
+    return errors;
+  }
+
+  /**
+   * **The returning beneficiary validates two things and no more.** She is not
+   * registering: her branch, stage, consents and sex are already held by the
+   * association, and asking for them would imply they matter to a decision that
+   * ignores them. The code is shape-checked only — whether it names anything is
+   * the server's answer, and a uniform one.
+   */
+  if (state.intent === 'account_return') {
+    const code = state.returnCode.trim().toUpperCase();
+    if (!/^BA-[0-9A-Z]{4,12}$/.test(code)) {
+      errors['returnCode'] = t('register.errReturnCode');
+    }
+    if (!state.returnFirstName.trim() || !state.returnLastName.trim()) {
+      errors['returnName'] = t('register.errReturnName');
     }
     return errors;
   }

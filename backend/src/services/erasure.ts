@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma } from '../generated/prisma/client.js';
 
 /**
  * **The one destruction of a beneficiary's educational record** (SRS §4.10a).

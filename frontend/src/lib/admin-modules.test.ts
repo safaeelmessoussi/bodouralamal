@@ -114,6 +114,10 @@ describe('the registry matches §14.1', () => {
         '/admin/users',
         // R132 — طلبات الحساب المستقل, an ACCOUNT decision beside المستخدمون.
         '/admin/self-managed-claims',
+        // Owner 2026-09-04 — طلبات استعادة حساب, beside it and not merged into
+        // it: reopening a CLOSED account is a heavier decision than
+        // transitioning a live one.
+        '/admin/account-return-requests',
         '/superadmin/hijri-calendar',
         '/superadmin/settings',
       ].sort(),
@@ -354,6 +358,7 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     // R132 — immediately after المستخدمون, because it is the same authority
     // acting on the same thing: who may hold a login for which record.
     '/admin/self-managed-claims', // طلبات الحساب المستقل
+    '/admin/account-return-requests', // طلبات استعادة حساب (Owner, 2026-09-04)
     '/admin/teachers', // المؤطِّرات
     '/admin/enrollments', // المستفيدات
     '/admin/groups', // مجموعات المستويات
@@ -451,7 +456,9 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
           p !== '/admin/users' &&
           // R132 — Super-Admin-only for the same reason المستخدمون is: deciding
           // who may hold a login is account administration, not operational work.
-          p !== '/admin/self-managed-claims',
+          p !== '/admin/self-managed-claims' &&
+          // Same reason: reopening a closed account is account administration.
+          p !== '/admin/account-return-requests',
       ),
     );
   });

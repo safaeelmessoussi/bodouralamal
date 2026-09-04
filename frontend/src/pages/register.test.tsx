@@ -57,6 +57,11 @@ const base = {
   dataProcessing: true,
   // R132 — empty on every arm but `self_managed`, which validates it alone.
   selfManagedCode: '',
+  // Owner 2026-09-04 — the returning beneficiary's arm. Empty on every state
+  // this file builds, which is the point: those arms must be unaffected by it.
+  returnCode: '',
+  returnFirstName: '',
+  returnLastName: '',
   /* R119 — the id of the wording the form displayed; the payload carries it so
      the server can refuse a version that went out of force meanwhile. */
   consentTextId: 'ct-1',

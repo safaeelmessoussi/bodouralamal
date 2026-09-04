@@ -3,6 +3,7 @@ import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
 import * as fullDeletionRequests from './controllers/full-deletion-request.controller.js';
+import * as accountReturns from './controllers/account-return.controller.js';
 import * as selfManagedClaims from './controllers/self-managed-claim.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as academicPeriods from './controllers/academic-period.controller.js';
@@ -266,6 +267,11 @@ export function createApp(
   // she has proven control of a Google identity and holds no session, because
   // issuing one would already be the transition this asks permission for.
   api.post('/self-managed-claims', selfManagedClaims.request(prisma, config));
+  // Owner 2026-09-04 — a former beneficiary asks for her archived account back.
+  // Public but onboarding-token-gated for the same reason as the line above: she
+  // has proven a Google identity and holds no session, because issuing one would
+  // already be the reactivation she is asking permission for.
+  api.post('/account-return-requests', accountReturns.request(prisma, config));
   api.post('/auth/refresh', auth.refresh(prisma, config));
   /**
    * **R99 — the recording provider reports completion here.**
@@ -350,6 +356,9 @@ export function createApp(
   guarded.post('/admin/full-deletion-requests/:id/reject', fullDeletionRequests.reject(prisma));
 
   guarded.get('/admin/self-managed-claims', selfManagedClaims.listPending(prisma));
+  guarded.get('/admin/account-return-requests', accountReturns.listPending(prisma));
+  guarded.post('/admin/account-return-requests/:id/approve', accountReturns.approve(prisma));
+  guarded.post('/admin/account-return-requests/:id/reject', accountReturns.reject(prisma));
   guarded.post('/admin/self-managed-claims/:id/approve', selfManagedClaims.approve(prisma));
   guarded.post('/admin/self-managed-claims/:id/reject', selfManagedClaims.reject(prisma));
   // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service

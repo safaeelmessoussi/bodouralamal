@@ -298,6 +298,66 @@ a generic failure, which is the dead end the design exists to avoid.
 to make an account qualify. Even a rejected `FamilyLink` survives, because R128
 keeps it as the record of a decision.
 
+## The returning beneficiary — BUILT (Owner, 2026-09-04)
+
+```
+she proves a Google identity  →  names her reference code
+  →  a Super Admin verifies she is that archived person
+    →  the SAME User is reactivated and the identity bound to it
+```
+
+**One person, one record.** The whole feature exists to prevent a second
+beneficiary `User`: her enrolments, grades, Quran progress, attendance and
+reference code are on an id that already exists, and a fresh registration would
+produce a duplicate person and an archive nobody could reach — the outcome R62.4
+already refuses for children.
+
+### Why it is not a `SelfManagedClaim`
+
+R132's claim was the first candidate and **cannot carry this without being
+weakened twice**:
+
+* it resolves a beneficiary `WHERE deleted_at IS NULL`, and a closed account is
+  soft-deleted — a test asserts that a closed account's code grants nothing;
+* it requires a recorded date of birth to check the age of majority, and
+  **Option A now clears that**.
+
+Relaxing both would make one queue mean two different things, one of which
+**restores a closed account** — a materially heavier decision that a reviewer
+would no longer be able to tell apart. The Owner's brief allowed a tiny dedicated
+state where one is genuinely safer, and this is that case. The two review screens
+sit beside each other for the same reason.
+
+### The reference code locates; it never authenticates
+
+Possession grants nothing. A code that never existed, one belonging to a live
+account, and one somebody else has already asked about all answer the **same
+uniform `404`**, so nothing is learned from the difference. The proof of identity
+is the Google flow plus a person's verification — and the form's own hint says
+so, because someone who believes the code is her password will treat it like one.
+
+### Nothing erased is restored
+
+Option A removed her names, contact details and date of birth. She supplies
+**current** information, acquired anew; the old values are not brought back
+because they no longer exist, and inviting her to retype them would ask her to
+reconstruct exactly what the closure destroyed. **The birth date stays null** —
+this flow does not need one.
+
+### Former guardian authority is not restored
+
+Option A never deleted `FamilyLink` rows, so an account that closes and reopens
+still carries whatever links it had. Approval therefore **records durable
+self-management** — the fact the platform already uses for exactly this question
+— rather than a second mechanism meaning the same thing. Without it, reopening
+would hand a former guardian authority over an adult who returned to manage her
+own affairs.
+
+**This last point is an inference and is flagged as one.** The Owner stated the
+requirement and not the mechanism; if the intended answer is instead that a
+returning beneficiary's old links stand, `approveAccountReturn` is the single
+place to change.
+
 ## The guards
 
 | Property | Guard |
