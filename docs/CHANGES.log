@@ -4227,6 +4227,33 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Guardian-only cleanup is withdrawn as a separate concept (2026-09-05)
+
+**Revision 133.** The dedicated action — `POST /admin/users/{id}/close-guardian-only`,
+guarded by an account-purpose policy that refused while the account had any
+reason to exist — lasted one day. It only made sense while *closing a guardian*
+was different from *deleting an account*, and under R133 it is not: a Super Admin
+deletes the account like any other, recoverable for seven days.
+
+**The safeguarding property it was credited with was never its doing.**
+*«Deleting a guardian must not touch her child»* belongs to the erasure boundary
+— everything removed is keyed on the subject — so it survives the guard's removal
+untouched. It is now asserted directly against the ordinary deletion path, and
+**in both directions**: deleting the guardian leaves the child's account, code,
+birth date and enrolment intact, and deleting the child leaves the guardian's
+account intact. The old suite only ever tested one direction.
+
+Removed: the route, the service function, `guardian-purpose.ts` and its policy
+suite, `softDelete`'s `precondition` parameter (which had exactly one caller),
+the row action and its dialog, the Arabic copy, the six `blocked_by` purpose
+labels, and the browser harness.
+
+**Her family relationships go with her** (§10). A `FamilyLink` exists to let a
+guardian act for a child; when either party is permanently deleted it has no
+purpose left, and it is personal data about the deleted person — who her family
+is. **Only the link**: the other party keeps their account, enrolments, grades
+and history, which is exactly what the two new assertions prove.
+
 ## Backups rotate at two generations, and deletion replay is withdrawn (2026-09-05)
 
 **Revision 133.** One backup a month, at most two generations alive, and the

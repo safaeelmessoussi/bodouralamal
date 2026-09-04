@@ -489,10 +489,6 @@ export function createApp(
   // R111 — Super Admin only, on the same seven-day window as a self-deletion.
   // `?permanent=true` performs the de-identification now instead.
   guarded.delete('/admin/users/:id', users.remove(prisma));
-  // R131 §4.3 (Owner, 2026-09-04) — an EXPLICIT decision, never a trigger. A
-  // separate route because it carries a different precondition, not a different
-  // flag on the same one.
-  guarded.post('/admin/users/:id/close-guardian-only', users.closeGuardianOnly(prisma));
   // NEW N — Super Admin only (OD-01's sub-decision), asserted in the service.
   guarded.get('/admin/partners', partners.list(prisma));
   guarded.post('/admin/partners', partners.create(prisma));

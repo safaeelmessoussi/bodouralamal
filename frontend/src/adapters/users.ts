@@ -298,26 +298,6 @@ export async function createUser(
 }
 
 /**
- * `POST /admin/users/{id}/close-guardian-only` — **Super Admin only**
- * (R131 §4.3, Owner decision 2026-09-04).
- *
- * Closes an account whose only reason to exist was managing a child, once no
- * reason remains. **It is a decision, never a trigger**: the platform does not
- * close an account because the last link was revoked, because a Trash row
- * expired, or because the last child was deleted — those are materially
- * different events and none of them is a request to close somebody's account.
- *
- * Refuses with `409 ACCOUNT_HAS_PURPOSE` and **names the purposes that block
- * it**, which is what tells the administrator what to resolve first.
- */
-export async function closeGuardianOnlyAccount(
-  id: string,
-  token: string | null,
-): Promise<void> {
-  await api<void>(`/admin/users/${id}/close-guardian-only`, { method: 'POST', token });
-}
-
-/**
  * `DELETE /admin/users/{id}` — **Super Admin only** (R111/R112).
  *
  * `permanent` performs the de-identification now instead of after the three-day

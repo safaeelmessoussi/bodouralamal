@@ -18,7 +18,6 @@ import {
 import {
   deleteUserAccount,
   purgeUserAccount,
-  closeGuardianOnlyAccount,
 } from '../services/account-deletion.service.js';
 import { userDto } from './dto.js';
 import { idParam, parse } from './parse.js';
@@ -303,26 +302,6 @@ export function remove(prisma: PrismaClient) {
     } else {
       await deleteUserAccount(prisma, actor, id);
     }
-    res.status(204).end();
-  };
-}
-
-/**
- * `POST /admin/users/{id}/close-guardian-only` — **Super Admin only**
- * (Owner decision, 2026-09-04).
- *
- * **A separate route rather than another flag on `DELETE`**, because it is a
- * different decision with a different precondition: an administrator judging
- * that a guardian-only account has no remaining reason to exist. A third
- * meaning for `?permanent=` would hide that behind a query string.
- *
- * Refuses with `STATE_CONFLICT` / `ACCOUNT_HAS_PURPOSE` and **names the
- * purposes found**, which is what tells the administrator what to resolve
- * first.
- */
-export function closeGuardianOnly(prisma: PrismaClient) {
-  return async (req: Request, res: Response): Promise<void> => {
-    await closeGuardianOnlyAccount(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
   };
 }

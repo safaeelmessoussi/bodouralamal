@@ -264,66 +264,30 @@ exists and whether that person is a minor. Only conditions about the caller's
 **own** Google identity are named, because those disclose nothing she does not
 control.
 
-## Closing a guardian-only account — BUILT as an explicit action (2026-09-04)
+## Deleting a guardian account — WITHDRAWN as a separate concept (R133)
 
-**`POST /admin/users/{id}/close-guardian-only`, Super Admin only.** §4.3 says a
-guardian-only account is closed once its last child-management purpose is
-deliberately removed and nothing else keeps it. *Which event* did that was the
-open question, and the Owner's answer is **none of them**: revoking the last
-approved link, a Trash row expiring, and fully deleting the last child are
-materially different events, and none of them is a request to close somebody's
-account. A person decides.
+A dedicated action existed for one day: `POST /admin/users/{id}/close-guardian-only`,
+guarded by an account-purpose policy that refused while the account had any
+reason to exist. **Both are removed.**
 
-**It is not a second closure path.** The operation is the ordinary soft delete
-plus de-identification with one extra refusal. That matters more than it looks:
-a parallel implementation of *closed* is the thing that eventually disagrees with
-the first about what closed means, and both would be right about their own code.
+The concept only made sense while *closing a guardian* was different from
+*deleting an account*. Under R133 it is not: a Super Admin deletes the account
+like any other, it is recoverable for seven days, and permanent deletion removes
+what belongs solely to her.
 
-**The guard runs under the deletion's own row lock.** `softDelete` takes a
-`precondition` evaluated after it locks the user and after it confirms the
-account is live. Every writer that could give this account a purpose contends on
-that same lock, so a check performed a moment earlier would be a check of a state
-that may no longer hold — and running it *before* the existence check made a
-repeat report *«still has a purpose»* carrying an empty list, which is both untrue
-and unactionable.
+**The safeguarding property the guard was credited with was never its doing.**
+*«Deleting a guardian must not touch her child»* is a property of the erasure
+boundary — everything it removes is keyed on the subject — so it survives the
+guard's removal untouched, and is now asserted directly against the ordinary
+deletion path, in both directions.
 
-**The refusal travels on `blocked_by`, not on a bespoke field.** A remaining
-purpose is a dependency blocking a deletion — the same question `BlockedNotice`
-answers on every other screen — so it arrives in that shape and inherits the
-translated labels and the guard that keeps them translated. It emitted its own
-`purposes` array first, and a browser run showed the cost: a refusal rendered as
-a generic failure, which is the dead end the design exists to avoid.
+**Her family relationships go with her** (R133 §10). A `FamilyLink` exists to let
+a guardian act for a child; when either party is permanently deleted it has no
+purpose left, and it is personal data about the deleted person — who her family
+is. **Only the link**: the other party's account, enrolments, grades and history
+are untouched.
 
-**Nothing belonging to a child is touched.** Purposes are read; none is removed
-to make an account qualify. Even a rejected `FamilyLink` survives, because R128
-keeps it as the record of a decision.
-
-## There is no return after permanent deletion — WITHDRAWN (Revision 133)
-
-A workflow existed for this between 2026-09-04 and 2026-09-05: a former
-beneficiary whose account had been *closed* could ask for it back, a Super Admin
-verified her, and the same `User` was reactivated. **It has been removed**, and
-the reason is that the thing it reconnected her to no longer exists.
-
-It only ever made sense beside Option A, which closed an account while
-**preserving the educational archive**. R133 removes that archive: permanent
-account deletion now destroys the beneficiary's own history, so there is nothing
-to match against and no record to reopen.
-
-**The rule is now one sentence.** Within the seven-day window a Super Admin
-restores the account through the Trash, exactly as for any other deleted record.
-Afterwards there is no resurrection: a person who comes back **registers
-normally** and receives a new `User`, a new `reference_code` and a new history,
-with no linkage to what was deleted.
-
-**What was removed with it**: `AccountReturnRequest` and its table, the request
-and review routes, `/admin/account-return-requests` and its navigation entry, the
-fifth registration intent, the adapters, the Arabic copy, the browser harness and
-the rule that an approved return recorded durable self-management — that last one
-existed *only* to stop a former guardian regaining authority through the return
-path, and with no return path it has nothing to prevent.
-
-## The guards## The guards
+## The guards## The guards## The guards
 
 | Property | Guard |
 |---|---|

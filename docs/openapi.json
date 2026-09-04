@@ -2994,67 +2994,6 @@
         }
       }
     },
-    "/admin/users/{id}/close-guardian-only": {
-      "post": {
-        "summary": "Close a guardian-only account",
-        "description": "**R131 §4.3 — Super Admin only** (Owner decision, 2026-09-04). No body. §4.3 says a guardian-only account is closed once its last child-management purpose is deliberately removed and no other purpose remains; **which event triggers that was the open question, and the answer is none of them.** Revoking the last approved link, a Trash row expiring and fully deleting the last child are materially different events, and attaching an irreversible consequence to whichever one somebody happened to pick is how an account gets closed by accident. This is an **explicit decision**, taken by a person, and the guard refuses it while any reason to exist remains. **It is not a second closure path**: the operation is the ordinary soft delete plus de-identification with one extra refusal, so nothing can drift about what \"closed\" means. **The guard runs under the deletion's own row lock**, not before it — every writer that could give the account a purpose contends on that same lock, so a check performed a moment earlier would be a check of a state that may no longer hold. **No child record is touched and no purpose is removed to qualify**: purposes are read, and an account that has one is refused. The refusal **names the purposes found**, which is the one thing that tells the administrator what to resolve first — §20 rule 17's uniform refusal protects an outsider from learning a record exists, and this caller is already looking at it.",
-        "responses": {
-          "204": {
-            "description": "Closed and de-identified."
-          },
-          "401": {
-            "description": "Error envelope (TD-3.8).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT with ACCOUNT_HAS_PURPOSE, carrying the purposes that block it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/users/{id}/suspend": {
       "post": {
         "summary": "Suspend an account",

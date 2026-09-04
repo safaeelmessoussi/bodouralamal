@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
-import { accountPurposes } from '../policies/guardian-purpose.js';
 import { destroyEducationalRecord } from './erasure.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { AppError } from '../lib/errors.js';
@@ -248,17 +247,6 @@ async function softDelete(
   targetId: string,
   actor: { userId: string; activeRole?: string | null },
   selfService: boolean,
-  /**
-   * **An extra refusal, evaluated under the SAME row lock as the deletion.**
-   *
-   * The guardian-only closure needs to know that the account has no remaining
-   * purpose, and *knowing it a moment earlier is not the same thing*: between a
-   * separate check and this transaction, any staffing writer could give the
-   * account a purpose, and every one of them contends on exactly the lock taken
-   * below. Passing the check in here is what makes the two atomic, and it costs
-   * one optional parameter rather than a second closure path.
-   */
-  precondition?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockAndAssertNotPlatformOwner(tx, targetId);
@@ -282,14 +270,6 @@ async function softDelete(
       },
     });
     if (!user) throw new AppError('NOT_FOUND', 'no such account');
-    /**
-     * **After the existence check, deliberately.** Run before it, a repeat
-     * against an already-closed account reports *«still has a purpose»* carrying
-     * an EMPTY purpose list — the guard's own early return for a soft-deleted
-     * row — which is both untrue and unactionable. That the account is already
-     * gone is the more specific answer, and the one a caller can act on.
-     */
-    if (precondition) await precondition(tx);
 
     await assertNotLastActiveSuperAdmin(tx, targetId);
     await assertNoLiveResponsibilities(tx, targetId);
@@ -664,90 +644,6 @@ export async function deIdentifyAccount(
         },
       });
     }
-  });
-}
-
-/**
- * **Guardian-only cleanup** — `POST /admin/users/{id}/close-guardian-only`,
- * **Super Admin only** (Owner decision, 2026-09-04).
- *
- * §4.3 says a guardian-only account is closed through the established machinery
- * once its last child-management purpose is deliberately removed and no other
- * purpose remains. **Which event triggers that was the open question**, and the
- * Owner's answer for the MVP is: none of them. Revoking the last approved link,
- * a Trash row expiring and deleting the last child are materially different
- * events, and attaching an irreversible consequence to whichever one somebody
- * happened to pick is how an account gets closed by accident. It is an explicit
- * decision a Super Admin takes, and the guard refuses it if the account still
- * has any reason to exist.
- *
- * **No new closure path.** This is `purgeUserAccount` with one extra refusal —
- * the same soft delete, the same de-identification, the same audit, the same
- * idempotence. A second implementation of account closure is exactly the thing
- * that would eventually disagree with the first about what "closed" means.
- *
- * **The guard runs under the deletion's own row lock**, not before it. Every
- * writer that could give this account a purpose contends on that lock, so a
- * check performed a moment earlier would be a check of a state that may no
- * longer hold. `softDelete`'s `precondition` is what makes them one operation.
- *
- * **No scheduling and no grace period** beyond the ordinary seven-day window
- * this reuses, and **no child record is touched**: the purposes are read, never
- * removed. An account with a purpose is refused, not emptied until it qualifies.
- */
-export async function closeGuardianOnlyAccount(
-  prisma: PrismaClient,
-  caller: { userId: string; activeRole?: string | null },
-  targetId: string,
-): Promise<void> {
-  await assertFreshActive(
-    prisma,
-    caller.userId,
-    ACCOUNT_ADMIN_ROLES,
-    caller.activeRole ?? undefined,
-  );
-
-  await softDelete(prisma, targetId, caller, false, async (tx) => {
-    const report = await accountPurposes(tx, targetId);
-    if (!report.closable) {
-      /**
-       * **The purposes are named to the caller**, unlike most refusals on this
-       * platform. §20 rule 17's uniform-404 rule exists to stop an outsider
-       * learning whether a record exists; this caller is a Super Admin who is
-       * already looking at the account, and *«which purpose is stopping me»* is
-       * the only thing that tells them what to do next. Withholding it here
-       * would protect nobody and produce a dead end.
-       *
-       * **On `blocked_by`, which is the channel the UI already reads.** A
-       * remaining purpose IS a dependency blocking a deletion, which is exactly
-       * the question `BlockedNotice` answers everywhere else — so it arrives in
-       * that shape and gets the translated labels and the label guard for free.
-       * It emitted a bespoke `purposes` array first, and the browser run found
-       * what that costs: the refusal rendered as a generic failure, the dead end
-       * this comment exists to forbid. The counts are `1` because a purpose is a
-       * fact rather than a quantity; the label carries the meaning.
-       */
-      throw new AppError('STATE_CONFLICT', 'the account still has a purpose', {
-        reason: 'ACCOUNT_HAS_PURPOSE',
-        blocked_by: Object.fromEntries(report.purposes.map((p) => [p, 1])),
-      });
-    }
-  });
-
-  await deIdentifyAccount(prisma, caller, targetId);
-
-  await audit.write(prisma, {
-    actorUserId: caller.userId,
-    ...(caller.activeRole ? { activeRole: caller.activeRole } : {}),
-    // A distinct action because it is a distinct DECISION: an administrator
-    // judged that this account had no remaining reason to exist. The `user.delete`
-    // and `user.deidentify` rows beside it record the mechanism.
-    actionType: 'user.close_guardian_only',
-    targetEntity: 'User',
-    targetId,
-    // The refusal path is the one that names purposes, and it names them in the
-    // error. A success has none by definition, so there is nothing to record.
-    detail: { guard: 'no_remaining_purpose' },
   });
 }
 

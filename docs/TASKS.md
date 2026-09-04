@@ -1700,23 +1700,16 @@ was hiding behind it: the run went green on the first attempt.
       closes an account that should have lived, while a spurious one merely
       leaves one alive. 11 tests, including §4.3's named case of a rejected link
       beside a pending application.
-- [x] **RESOLVED AND BUILT (Owner, 2026-09-04) — guardian-only closure is an
-      EXPLICIT SUPER ADMIN ACTION.** The three candidate triggers — revoking the
-      last approved link, purging it from Trash, fully deleting the last child —
-      are **none of them**. Closing an account is severe and irreversible in
-      practice, and attaching it to whichever operation somebody happened to pick
-      would be inventing policy. `POST /admin/users/{id}/close-guardian-only`,
-      Super Admin only, refuses with `ACCOUNT_HAS_PURPOSE` while any reason to
-      exist remains, and **names the purposes on `blocked_by`** so the refusal
-      says what to resolve first. **Not a second closure path**: it is the
-      ordinary soft delete plus de-identification with one extra refusal, and the
-      guard runs **under the deletion's own row lock** so a purpose created
-      concurrently cannot slip between the check and the act. No scheduling, no
-      grace period beyond the existing three-day window, and no child record is
-      touched — purposes are read, never removed to qualify.
-      Proved in a browser (`verify-guardian-cleanup.sh`, 19/19) with the database
-      asserted afterwards: the spent guardian closed, the guarded one untouched,
-      the child intact.
+- [x] **WITHDRAWN (Owner, 2026-09-05 — R133) — guardian-only closure as a
+      separate concept.** The dedicated action and its account-purpose policy
+      lasted a day. They only made sense while *closing a guardian* differed from
+      *deleting an account*; under R133 it does not. The route, service, policy,
+      its tests, the row action, the copy and the browser harness are gone.
+      **The safeguarding property survives and was never the guard's doing** —
+      *deleting a guardian must not touch her child* belongs to the erasure
+      boundary, and is asserted directly against ordinary deletion in both
+      directions. Her `FamilyLink` rows go with her (§10); the other party keeps
+      everything.
 - [x] **WITHDRAWN (Owner, 2026-09-05 — R133) — the ten-year educational
       retention clock.** §4.10a gave it three purposes: educational continuity,
       former-beneficiary requests and attestations. R133 withdraws two outright —

@@ -90,10 +90,31 @@ export async function destroyEducationalRecord(
     await tx.childApplication.deleteMany({ where: { id: { in: applicationIds } } });
   }
 
+  /**
+   * **Her family relationships, on whichever side she stands** (R133 §10).
+   *
+   * A `FamilyLink` exists to let a guardian act for a child. When either party
+   * is permanently deleted the relationship has no purpose left, and it is
+   * personal data about the deleted person — who her family is.
+   *
+   * **Only the link.** The other party's account, enrolments, grades and history
+   * are untouched: deleting a guardian never deletes her child, and deleting a
+   * child never deletes her guardian. That is the whole of what §10 requires,
+   * and it is why this is keyed on the link rather than on either person.
+   */
+  const links = await tx.familyLink.findMany({
+    where: { OR: [{ parentId: subjectId }, { studentId: subjectId }] },
+    select: { id: true },
+  });
+  const linkIds = links.map((l) => l.id);
+  if (linkIds.length > 0) {
+    await tx.familyLink.deleteMany({ where: { id: { in: linkIds } } });
+  }
+
   // Every tombstone naming a row this transaction destroyed. Keyed on the ids
   // themselves rather than on entity names, so nothing belonging to anybody else
   // can be caught by it.
-  const destroyed = [...educationalIds, ...applicationIds];
+  const destroyed = [...educationalIds, ...applicationIds, ...linkIds];
   if (destroyed.length > 0) {
     await tx.trash.deleteMany({ where: { targetId: { in: destroyed } } });
   }
