@@ -886,6 +886,63 @@ export interface StudentPaper {
  * gives, because distinguishing them would leak that a paper exists (§20 rule
  * 17).
  */
+/**
+ * **The paper as its AUTHOR sees it** — `GET /assessments/{id}` (2026-09-05).
+ *
+ * ## Why this exists, and what was happening without it
+ *
+ * The builder had no read of its own, so it called `studentPaper` — the
+ * beneficiary's endpoint. That is a different audience with a different guard,
+ * and it failed in two ways at once:
+ *
+ * * `resolveActingStudent` sits in front of the student route, so a
+ *   **teacher-only** author (no `student` role, no child header) got
+ *   `400 VALIDATION_FAILED` — a request-shape error for a request whose shape
+ *   was fine;
+ * * the student read filters `status in ('published','closed')`, so a **draft**
+ *   — which is what a paper being written always is — answered `404`.
+ *
+ * The builder therefore could not open the very thing it exists to edit.
+ *
+ * ## The guard is `loadForAuthor`, unchanged
+ *
+ * The same one `addQuestion`, `publish` and `close` already use, so authorship
+ * is decided in one place. **Nothing is widened**: a paper outside her teaching
+ * scope answers `404` here exactly as it does there.
+ *
+ * ## No submission, deliberately
+ *
+ * An author reads responses through `/assessments/{id}/submissions`, which is
+ * scoped and paginated. Returning one here would put a student's answers on an
+ * endpoint whose subject is the paper.
+ */
+export async function authorPaper(
+  prisma: PrismaClient,
+  actor: Actor,
+  examId: string,
+): Promise<StudentPaper> {
+  const exam = await loadForAuthor(prisma, actor, examId);
+
+  const questions = await prisma.examQuestion.findMany({
+    where: { examId, deletedAt: null },
+    select: {
+      id: true,
+      displayOrder: true,
+      kind: true,
+      prompt: true,
+      justification: true,
+      options: {
+        where: { deletedAt: null },
+        select: { id: true, displayOrder: true, label: true },
+        orderBy: { displayOrder: 'asc' },
+      },
+    },
+    orderBy: { displayOrder: 'asc' },
+  });
+
+  return { exam, questions, submission: null };
+}
+
 export async function studentPaper(
   prisma: PrismaClient,
   actor: Actor,

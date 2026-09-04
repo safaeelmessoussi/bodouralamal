@@ -9055,6 +9055,57 @@
         }
       }
     },
+    "/assessments/{id}": {
+      "get": {
+        "summary": "Read a paper as its author",
+        "description": "**The paper as its AUTHOR sees it, drafts included.** Separate from `/assessments/{id}/paper` because the audiences differ, and the builder had no read of its own until this existed — it called the beneficiary's endpoint and failed twice over: `resolveActingStudent` guards that route, so a **teacher-only** author with no child header received `400 VALIDATION_FAILED` for a request whose shape was fine; and the student read filters `status in ('published','closed')`, so a **draft** — which every paper being written is — received `404`. The builder could not open the thing it exists to edit. **Authorisation is `loadForAuthor`, unchanged** — the same guard `POST /questions`, `/publish` and `/close` already use, so authorship is decided in one place and nothing is widened: a paper outside her teaching scope answers `404` here exactly as it does there. **No submission is returned**; an author reads responses through `/assessments/{id}/submissions`, and putting a student's answers on an endpoint whose subject is the paper would be a second, unscoped way to reach them.",
+        "responses": {
+          "200": {
+            "description": "The paper, with its questions and options in display order."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown paper or one outside the author's scope — the same answer for both.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/assessments/{id}/questions": {
       "post": {
         "summary": "Append a question",

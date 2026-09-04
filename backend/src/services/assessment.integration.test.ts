@@ -11,6 +11,7 @@ import {
 } from './grade.service.js';
 import {
   addQuestion,
+  authorPaper,
   assessmentsForStudent,
   closeAssessment,
   createAssessment,
@@ -1362,5 +1363,61 @@ describe('9, 11–14 · the target picker is scoped by the SERVER', () => {
     await expect(levelPaper(levelId, scopedAdmin())).rejects.toMatchObject({
       details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
     });
+  });
+});
+
+describe('the AUTHOR reads her own paper — including a draft (2026-09-05)', () => {
+  /**
+   * **The builder had no read of its own and borrowed the beneficiary's.**
+   *
+   * `GET /assessments/{id}/paper` sits behind `resolveActingStudent` and filters
+   * to `published | closed`. So the assessment builder — which is a مُؤطِّرة's
+   * screen showing a paper she is still writing — failed twice over: the child
+   * guard answered `400 VALIDATION_FAILED` for a teacher-only author, and the
+   * student read answered `404` for the draft she was editing.
+   *
+   * These assert the author path works for exactly those two cases, and that it
+   * widens nothing.
+   */
+  let draftId = '';
+
+  beforeAll(async () => {
+    /**
+     * **Targeted at a student she teaches**, because a whole-Level paper is
+     * refused for a مُؤطِّرة who does not staff the entire Level — the §4.4c scope
+     * rule, and not what this describe is about.
+     */
+    const created = await paperFor(alice, teacherActor());
+    draftId = created.id;
+    await addQuestion(prisma, teacherActor(), draftId, {
+      kind: 'short_text',
+      prompt: 'سؤال أول',
+    });
+  });
+
+  it('reads a DRAFT, which the student endpoint cannot return', async () => {
+    const paper = await authorPaper(prisma, teacherActor(), draftId);
+
+    expect(paper.exam.status).toBe('draft');
+    expect(paper.questions).toHaveLength(1);
+    expect(paper.questions[0]!.prompt).toBe('سؤال أول');
+
+    // The student read refuses the same paper, and that refusal is correct —
+    // a draft is not hers to see. The two audiences are genuinely different.
+    await expect(
+      studentPaper(prisma, student(alice), draftId, alice),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('returns NO submission — answers are read through their own scoped route', async () => {
+    // Putting a student's answers on an endpoint whose subject is the paper
+    // would be a second, unscoped way to reach them.
+    expect((await authorPaper(prisma, teacherActor(), draftId)).submission).toBeNull();
+  });
+
+  it('widens NOTHING — a paper outside her scope is still 404', async () => {
+    await expect(
+      authorPaper(prisma, actorOf(outsiderId, 'teacher'), draftId),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

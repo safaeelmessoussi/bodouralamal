@@ -171,8 +171,28 @@ export async function myAssessments(token: string | null): Promise<StudentAssess
   return (await api<{ data: StudentAssessment[] }>('/me/assessments', { token })).data;
 }
 
+/**
+ * **The beneficiary's own paper.** Behind `resolveActingStudent`, and limited to
+ * a published or closed assessment — a draft is not hers to see.
+ */
 export async function readPaper(examId: string, token: string | null): Promise<AssessmentPaper> {
   return api<AssessmentPaper>(`/assessments/${examId}/paper`, { token });
+}
+
+/**
+ * **The paper as its AUTHOR sees it**, drafts included.
+ *
+ * The builder used to call `readPaper`, which is a different audience's
+ * endpoint, and it failed twice: the child guard in front of that route answered
+ * `400` for a teacher-only author, and the student read filters to
+ * published/closed so a **draft** — which every paper being written is —
+ * answered `404`. The builder could not open the thing it exists to edit.
+ */
+export async function readAuthorPaper(
+  examId: string,
+  token: string | null,
+): Promise<AssessmentPaper> {
+  return api<AssessmentPaper>(`/assessments/${examId}`, { token });
 }
 
 type AnswerPayload = {

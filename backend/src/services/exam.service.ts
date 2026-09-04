@@ -272,6 +272,28 @@ export async function createPhysicalExam(
       select: { id: true },
     });
 
+    /**
+     * **One person, one position — refused by NAME, not by constraint.**
+     *
+     * `ExamStaff` is unique on `(exam_id, user_id)`, so a list naming the same
+     * مؤطِّرة twice — as the responsible one and again as an assistant — used to
+     * reach PostgreSQL and come back as `P2002`, which the error mapper turns
+     * into `DUPLICATE` and *«هذا العنصر موجود مسبقاً»*. That sentence is about
+     * the exam, and the exam was fine: one person had been given two positions.
+     *
+     * The constraint stays and is still the authority. This refuses the same
+     * thing one step earlier so the answer can say what is actually wrong.
+     */
+    const seen = new Set<string>();
+    for (const person of input.staff ?? []) {
+      if (seen.has(person.userId)) {
+        throw new AppError('VALIDATION_FAILED', 'one person holds one position on one exam', {
+          reason: 'EXAM_STAFF_DUPLICATE',
+        });
+      }
+      seen.add(person.userId);
+    }
+
     for (const person of input.staff ?? []) {
       await tx.examStaff.create({
         data: { examId: exam.id, userId: person.userId, position: person.position },
@@ -464,6 +486,22 @@ export async function updatePhysicalExam(
       // `sessionStaff` and `userBranchRole` reconcile the same way, and the
       // vocabulary is deliberately theirs rather than a third one.
       const existingStaff = await tx.examStaff.findMany({ where: { examId: id } });
+      /**
+       * **The same refusal as creation, and here it prevents a SILENT wrong
+       * answer rather than a crash.** A `Map` keyed on the person collapses a
+       * repeated name without complaining and keeps whichever position came
+       * last — so an edit naming somebody twice would quietly assign one of the
+       * two and report success. Refusing says which list to correct.
+       */
+      const repeated = new Set<string>();
+      for (const person of input.staff) {
+        if (repeated.has(person.userId)) {
+          throw new AppError('VALIDATION_FAILED', 'one person holds one position on one exam', {
+            reason: 'EXAM_STAFF_DUPLICATE',
+          });
+        }
+        repeated.add(person.userId);
+      }
       const wanted = new Map(input.staff.map((p) => [p.userId, p.position]));
 
       for (const row of existingStaff) {

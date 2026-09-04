@@ -352,3 +352,54 @@ describe('a row cannot be typed as a kind it is not', () => {
     });
   });
 });
+
+describe('one person holds one position on one exam (2026-09-05)', () => {
+  /**
+   * **The defect this pins, and why the message mattered more than the crash.**
+   *
+   * `ExamStaff` is unique on `(exam_id, user_id)`. A staff list naming the same
+   * مؤطِّرة twice — responsible, and again as an assistant — reached PostgreSQL
+   * as `P2002`, which the error mapper turns into `DUPLICATE` and the interface
+   * renders as *«هذا العنصر موجود مسبقاً»*. That sentence is about the exam, and
+   * the exam was fine: one person had been given two positions, and nothing on
+   * screen said so.
+   *
+   * The constraint is untouched and is still the authority. This refuses one
+   * step earlier so the answer can name the actual problem.
+   */
+  it('refuses a repeated person by NAME, not as a constraint violation', async () => {
+    const staffer = await prisma.user.findFirstOrThrow({
+      where: { nameArabic: { startsWith: TAG } },
+      select: { id: true },
+    });
+
+    await expect(
+      createPhysicalExam(prisma, superAdmin(), {
+        title: `${TAG} امتحان بمؤطِّرة مكرَّرة`,
+        maxGrade: 20,
+        date: WHEN,
+        startTime: new Date(Date.UTC(1970, 0, 1, 11, 0, 0)),
+        endTime: new Date(Date.UTC(1970, 0, 1, 12, 0, 0)),
+        levelId: typed.levelId,
+        subjectId: typed.subjectId,
+        academicYearId: (await prisma.academicYear.findFirstOrThrow({ select: { id: true } })).id,
+        branchId,
+        roomId,
+        schedulingTypeId: ids['اختبار']!,
+        staff: [
+          { userId: staffer.id, position: 'responsible' },
+          { userId: staffer.id, position: 'assistant' },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { reason: 'EXAM_STAFF_DUPLICATE' },
+    });
+
+    // And nothing was written: the refusal happens before the first insert, so
+    // there is no half-staffed exam to clean up.
+    expect(
+      await prisma.exam.count({ where: { title: `${TAG} امتحان بمؤطِّرة مكرَّرة` } }),
+    ).toBe(0);
+  });
+});

@@ -14,6 +14,7 @@ import {
   removeQuestion,
   reorderQuestions,
   saveResponses,
+  authorPaper,
   studentPaper,
   targetCandidates,
   updateQuestion,
@@ -178,6 +179,22 @@ export function myAssessments(prisma: PrismaClient) {
     const acting = await resolveActingStudent(prisma, actor, req.header('x-active-child-id'));
     const rows = await assessmentsForStudent(prisma, acting.studentId);
     res.json({ data: rows.map(studentAssessmentDto) });
+  };
+}
+
+/**
+ * `GET /assessments/{id}` — **the paper as its author sees it.**
+ *
+ * Separate from `/paper` because the audiences differ: that one is the
+ * beneficiary's, sits behind `resolveActingStudent`, and shows only a published
+ * or closed paper. A **teacher-only** author therefore got `400` from the child
+ * guard, and a **draft** — which every paper being written is — got `404`. The
+ * builder could not open what it exists to edit.
+ */
+export function authorRead(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const data = await authorPaper(prisma, requireActor(req), idParam(req, 'id'));
+    res.json(assessmentPaperDto(data));
   };
 }
 

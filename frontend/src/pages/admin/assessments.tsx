@@ -7,7 +7,7 @@ import {
   listAssessmentTargets,
   listSubmissions,
   publishAssessment,
-  readPaper,
+  readAuthorPaper,
   readSubmission,
   removeQuestion,
   reorderQuestions,
@@ -433,7 +433,7 @@ function OnePaper({
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      setPaper(await readPaper(examId, token));
+      setPaper(await readAuthorPaper(examId, token));
       const inbox = await listSubmissions(examId, token);
       setRows(inbox.data);
       setEligible(inbox.eligible_count);
