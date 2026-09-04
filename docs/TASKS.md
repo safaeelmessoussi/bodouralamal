@@ -1748,6 +1748,17 @@ was hiding behind it: the run went green on the first attempt.
       `account_status = 'rejected'`, not an application row — falls under this
       rule at all, since removing it is account deletion with its own model,
       window and authority.
+- [x] **RESOLVED BY AUDIT, not by decision (2026-09-04) — `notification.subject_user_id`.**
+      §4.10a kept it PRESERVE provisionally and warned that a surviving
+      notification must not become a covert store of deleted data. **In this
+      schema it cannot**: a `Notification` stores a type enum and foreign keys and
+      **no text at all**, and the title is composed at read time from the subject
+      relation — so de-identifying a person de-identifies every notification about
+      her automatically. The provisional classification is therefore safe as a
+      **consequence of the schema**, not as a policy guess, and no Owner decision
+      is needed. **The conclusion depends on that shape**, so a guard asserts the
+      table has no free-text column and says in its failure message to reopen the
+      classification if one appears.
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
       *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
       questions, answered from the code:** **(a) does a future attestation need

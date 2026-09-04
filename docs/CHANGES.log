@@ -4201,3 +4201,28 @@ elapsed), and that approved and pending applications are never reported.
 **Two domain CHECK constraints shaped the fixture** rather than being worked
 around: a decided application names its decider, and an approved one names the
 child it created.
+
+## `notification.subject_user_id` — resolved by audit, not by decision (2026-09-04)
+
+§4.10a kept this **PRESERVE** provisionally, on the right principle: a message in
+*Alice's* inbox whose subject is *Fatima* is **Alice's record**, and destroying
+it because Fatima was deleted would take one person's data with another's. It
+paired that with a warning — a surviving notification must not become a covert
+copy of what was deleted — and left the classification open.
+
+**The audit closes it without needing a decision.** A `Notification` row stores a
+`type` enum and foreign keys — session, event, exam, subject user — and **no text
+whatsoever**. The title a reader sees is composed **at read time** from the
+relation (`subjectUser: { select: { nameArabic: true } }`). So de-identifying a
+person de-identifies every notification about her **automatically**: the same row
+then resolves to «حساب محذوف», exactly like every other preserved relationship.
+The covert-store risk does not arise in this schema, and the provisional
+classification is safe as a **consequence of the schema** rather than a guess.
+
+**The conclusion depends on the schema keeping that shape**, so a guard asserts
+the table has no free-text column. The day somebody adds a `title`, `body` or
+`message` — a reasonable thing to want — the reasoning silently stops holding and
+a deleted person's name is frozen into other people's inboxes. The guard's
+failure message says exactly that and tells the reader to reopen the
+classification. **This preserves a property §4.10a already assumed; it decides
+nothing new.**
