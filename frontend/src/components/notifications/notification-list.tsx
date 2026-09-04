@@ -8,6 +8,7 @@ import {
 import { t } from '../../i18n/index.js';
 import { Button, ButtonLink } from '../ui/button.js';
 import { ErrorState } from '../states.js';
+import { useActiveRoleOrNull } from '../../contexts/active-role.js';
 
 /**
  * **What the platform has told this student** (§4.8 as narrowed by Revision 77).
@@ -76,12 +77,57 @@ const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
   exam_changed: 'notifications.examChanged',
   exam_cancelled: 'notifications.examCancelled',
   grade_published: 'notifications.gradePublished',
+  assessment_published: 'notifications.assessmentPublished',
 };
 
-/** Only notifications with an implemented, valid exact destination are links. */
-export function notificationHref(item: NotificationItem): string | null {
+/**
+ * Only notifications with an implemented, valid exact destination are links.
+ *
+ * **`activeRole` is read from the context, never passed by each caller.** An
+ * online assessment sends one notice to two audiences — the مستفيدة who will
+ * answer it and the مؤطِّرة who will mark it — and their screens are different
+ * pages. Threading a prop through every caller is precisely the *behaviour each
+ * caller must opt into* that this project has already shipped half-applied
+ * once; the active role is a fact the container already states, so the
+ * component reads it.
+ *
+ * A role that has no assessment page gets **no link** rather than a guessed one.
+ */
+export function notificationHref(
+  item: NotificationItem,
+  activeRole: string | null = null,
+): { href: string; label: string } | null {
   if (item.type === 'registration_review_required' && item.subject_user_id) {
-    return `/admin/approvals?review_user_id=${encodeURIComponent(item.subject_user_id)}`;
+    return {
+      href: `/admin/approvals?review_user_id=${encodeURIComponent(item.subject_user_id)}`,
+      label: t('notifications.review'),
+    };
+  }
+  if (item.type === 'assessment_published' && item.exam_id) {
+    if (activeRole === 'student') {
+      return {
+        href: '/dashboard/student/assessments',
+        label: t('notifications.openAssessment'),
+      };
+    }
+    /**
+     * **`?exam=` is the parameter these pages actually read** — `admin/index`
+     * and `teacher/index` both call `params.get('exam')`. Rule AB: a deep link
+     * must be consumed by the page it points at, and a plausible-looking name
+     * nothing parses is the `?content_id=` defect that shipped for months.
+     */
+    if (activeRole === 'teacher') {
+      return {
+        href: `/teacher/assessments?exam=${encodeURIComponent(item.exam_id)}`,
+        label: t('notifications.openAssessment'),
+      };
+    }
+    if (activeRole === 'admin' || activeRole === 'super_admin') {
+      return {
+        href: `/admin/assessments?exam=${encodeURIComponent(item.exam_id)}`,
+        label: t('notifications.openAssessment'),
+      };
+    }
   }
   return null;
 }
@@ -104,6 +150,10 @@ export function NotificationList({
   /** Told when a notice is marked read, so a badge elsewhere can re-count. */
   onChange?: () => void;
 }): ReactNode {
+  // `…OrNull` because this list is rendered standalone in tests and must not
+  // require the provider to exist; no provider reads as no role, which is the
+  // safe direction for a destination decision.
+  const activeRole = useActiveRoleOrNull()?.activeRole ?? null;
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -191,15 +241,14 @@ export function NotificationList({
                 {t('notifications.reason').replace('{reason}', item.reason)}
               </p>
             ) : null}
-            {notificationHref(item) ? (
-              <ButtonLink
-                variant="secondary"
-                className="row-action"
-                href={notificationHref(item)!}
-              >
-                {t('notifications.review')}
-              </ButtonLink>
-            ) : null}
+            {(() => {
+              const target = notificationHref(item, activeRole);
+              return target ? (
+                <ButtonLink variant="secondary" className="row-action" href={target.href}>
+                  {target.label}
+                </ButtonLink>
+              ) : null;
+            })()}
             {item.read_at === null ? (
               <Button
                 variant="secondary"

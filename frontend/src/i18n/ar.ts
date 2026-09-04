@@ -383,11 +383,16 @@ export const ar = {
     examRescheduled: 'تغيّر موعد امتحان «{subject}» إلى {date} على الساعة {time}.',
     examChanged: 'تغيّرت تفاصيل امتحان «{subject}» المبرمج يوم {date}.',
     examCancelled: 'أُلغي امتحان «{subject}» الذي كان يوم {date}.',
+    // R124's online paper. Deliberately carries NO {time}: an online
+    // assessment has no clock time, and «على الساعة» with nothing after it
+    // is how `examScheduled` would have rendered here.
+    assessmentPublished: 'أصبح اختبار «{subject}» متاحًا ({date}).',
     gradePublished: 'نُشرت نقطتك في «{subject}» ({date}).',
     theClass: 'الحصة',
     reason: 'السبب: {reason}',
     markRead: 'تم الاطّلاع',
     review: 'مراجعة الطلب',
+    openAssessment: 'فتح الاختبار',
   },
   // §4.9 as amended by R75 — the in-app recorder. The wording keeps the
   // phone-upload path visible everywhere the recorder is not available: it is

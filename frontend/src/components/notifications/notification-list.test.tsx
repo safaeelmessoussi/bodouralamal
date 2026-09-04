@@ -92,15 +92,52 @@ describe('R117 — actionable registration review', () => {
       session_id: null,
       subject_user_id: '11111111-1111-4111-8111-111111111111',
     });
-    expect(href).toBe(
+    // **Restated, not weakened** (2026-09-04): the helper now answers a
+    // destination AND the label for it, because one notice type reaches two
+    // audiences whose pages differ. The property under test is unchanged — the
+    // exact applicant, on a real admin route.
+    expect(href!.href).toBe(
       '/admin/approvals?review_user_id=11111111-1111-4111-8111-111111111111',
     );
-    expect(resolveRoute(new URL(href!, 'https://example.test').pathname)).toBe('admin');
+    expect(resolveRoute(new URL(href!.href, 'https://example.test').pathname)).toBe('admin');
   });
 
   it('does not invent a destination when the exact target is absent', () => {
     expect(notificationHref({ ...CANCELLED, type: 'registration_review_required' })).toBeNull();
     expect(notificationHref(GRADE)).toBeNull();
+  });
+});
+
+describe('the online assessment notice reaches two audiences, so it has two destinations', () => {
+  const PUBLISHED: NotificationItem = {
+    ...GRADE,
+    type: 'assessment_published',
+    exam_id: '22222222-2222-4222-8222-222222222222',
+  };
+
+  it('sends the مستفيدة to her own assessments page', () => {
+    const target = notificationHref(PUBLISHED, 'student');
+    expect(target!.href).toBe('/dashboard/student/assessments');
+    expect(resolveRoute(new URL(target!.href, 'https://example.test').pathname)).not.toBe('public');
+  });
+
+  it('sends staff to the paper itself, on the parameter their page PARSES', () => {
+    // Rule AB — `?exam=` is what `admin/index` and `teacher/index` read. A
+    // deep link naming anything else would render the list and silently drop
+    // the id, which is how `?content_id=` survived for months.
+    for (const [role, expected] of [
+      ['teacher', '/teacher/assessments?exam=22222222-2222-4222-8222-222222222222'],
+      ['admin', '/admin/assessments?exam=22222222-2222-4222-8222-222222222222'],
+      ['super_admin', '/admin/assessments?exam=22222222-2222-4222-8222-222222222222'],
+    ] as const) {
+      expect(notificationHref(PUBLISHED, role)!.href, role).toBe(expected);
+    }
+  });
+
+  it('invents nothing for a role with no assessment page, or with no exam id', () => {
+    expect(notificationHref(PUBLISHED, 'parent')).toBeNull();
+    expect(notificationHref(PUBLISHED, null)).toBeNull();
+    expect(notificationHref({ ...PUBLISHED, exam_id: null }, 'student')).toBeNull();
   });
 });
 
@@ -207,6 +244,7 @@ describe('R82/R83 — a notice of any kind reads as itself', () => {
     exam_changed: 'notifications.examChanged',
     exam_cancelled: 'notifications.examCancelled',
     grade_published: 'notifications.gradePublished',
+    assessment_published: 'notifications.assessmentPublished',
   };
 
   it('every type resolves to copy, not to its own key', () => {

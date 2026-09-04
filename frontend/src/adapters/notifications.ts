@@ -42,7 +42,8 @@ export type NotificationType =
   | 'exam_rescheduled'
   | 'exam_changed'
   | 'exam_cancelled'
-  | 'grade_published';
+  | 'grade_published'
+  | 'assessment_published';
 
 export interface NotificationItem {
   id: string;
