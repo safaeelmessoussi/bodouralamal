@@ -1680,15 +1680,53 @@ was hiding behind it: the run went green on the first attempt.
       index; no column, backfill or fabricated status. 11 policy tests + 126
       across the affected suites; proved against the defect.
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
-            R131's map does not say whether `birth_date` belongs to the minimal
-            educational archive or to the account state Option A removes. The
-            closure does **not** touch it today and this work made no change
-            either way; the current behaviour is pinned by test so a future
-            change is deliberate. It is not authentication data, so clearing it
-            on that basis would be wrong — and retaining it needs a stated
-            purpose. **Owner decision required before any destructive change.**
-      - [ ] **OPEN — what happens when a former beneficiary legitimately
-            returns.** Option A keeps the reference code so her archive can be
+      *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
+      questions, answered from the code:** **(a) does a future attestation need
+      it?** *Not determined* — §4.10a lists *"the identity the attestation must
+      name"* without saying whether a birth date is part of that identity, which
+      is the whole question. **(b) does historical placement or progression need
+      it?** **No** — R130 states it informs placement and gates nothing, and no
+      retained educational record reads it. **(c) do other retained records
+      depend on it?** **No.** **(d) is it exposed after closure?** **No** — the
+      only read publishing it is the Super-Admin-only `/admin/users`, which
+      filters `deleted_at IS NULL`, and a closed account is soft-deleted.
+      **(e) could it be minimised without breaking a live purpose?**
+      **Technically yes** — its three consumers (registration write, R132
+      eligibility, Super Admin completion) all require a live account — but that
+      is an engineering observation, not a policy answer.
+      **THE PRECISE DECISION NEEDED:** *is a beneficiary's date of birth part of
+      the minimal identity retained under Option A so an educational attestation
+      can be issued years later, or is it account-operational data to be cleared
+      at closure?* Both are defensible and the platform must not choose. Current
+      behaviour — kept, untouched — is pinned by test so any change is
+      deliberate.
+      - [ ] **OPEN — the return/reactivation workflow.** *(Audited 2026-09-04;
+            deliberately NOT implemented.)* The **identity-proofing** half needs
+            nothing new: R132's approved model — the claimant names the archived
+            record, proves control of a Google identity through the existing
+            OAuth+PKCE flow, and a Super Admin performs the association-side
+            match — transfers directly, and its enumeration-resistance,
+            replay-protection and no-duplicate-User guarantees come with it.
+            **What is NOT settled is whether a de-identified row may be
+            reactivated at all, and where the restored identity would come
+            from.** De-identification sets `name_arabic` to «حساب محذوف», nulls
+            every name part, and **deletes the User's Trash snapshot in the same
+            transaction** — deliberately, so the erased name does not live on in
+            JSONB. **Nothing in the platform holds her name afterwards.** So
+            reactivation cannot *restore* an identity; it can only *acquire* a
+            new one from the person or an administrator, and re-attach it to a
+            record the association deliberately stripped. That is new product
+            behaviour, not an application of an approved rule.
+            **THE PRECISE DECISIONS NEEDED:** *(1) may a de-identified account be
+            reopened at all, or is a return a fresh registration that an
+            administrator links to the retained archive?* *(2) if reopened, who
+            supplies the identity it lost, and what makes that supply
+            trustworthy?* Until both are answered, **no reactivation path
+            exists** — and the current state is safe by construction: a closed
+            account is soft-deleted, the claim lookup excludes it, and the
+            reference code authenticates nobody.
+      - [ ] **SUPERSEDED by the entry above — what happens when a former
+            beneficiary legitimately returns.** Option A keeps the reference code so her archive can be
             found, but **no return workflow exists and none was created**: the
             code authenticates nobody, a closed account cannot be claimed
             (`deleted_at` excludes it), and there is no path from knowing a code
