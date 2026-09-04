@@ -161,23 +161,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
-     * **طلبات استعادة حساب** (Owner, 2026-09-04) — beside the self-managed
-     * queue and NOT merged into it. That one transitions a live account to its
-     * adult; this one reopens a CLOSED account, which is a materially different
-     * and heavier decision, and one queue carrying both would be a queue in
-     * which a reviewer cannot see which she is taking.
-     *
-     * As with every entry, this is reach and not enforcement: the service
-     * asserts Super Admin, so a typed URL still receives `403`.
-     */
-    path: '/admin/account-return-requests',
-    labelKey: 'admin.nav.accountReturns',
-    section: null,
-    roles: SUPER_ONLY,
-    status: 'ready',
-  },
-  {
-    /**
      * **المؤطِّرات — the people who TEACH** (R88; renamed by R105).
      *
      * It was `إدارة المؤطِّرات`. The word *إدارة* named the screen's verb rather

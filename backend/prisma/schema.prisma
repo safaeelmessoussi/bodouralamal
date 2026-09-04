@@ -173,16 +173,6 @@ enum FullDeletionRequesterBasis {
   @@map("full_deletion_requester_basis")
 }
 
-/// **A returning former beneficiary's request to have her archived account back**
-/// (Owner decision, 2026-09-04).
-enum AccountReturnStatus {
-  pending
-  approved
-  rejected
-
-  @@map("account_return_status")
-}
-
 enum SelfManagedClaimStatus {
   pending
   approved
@@ -799,11 +789,6 @@ model User {
   /// R132 — her own claim to manage her account, and the claims she decided.
   selfManagedClaims           SelfManagedClaim[]    @relation("SelfManagedClaimBeneficiary")
   selfManagedClaimsDecided    SelfManagedClaim[]    @relation("SelfManagedClaimDecider")
-  /// Owner 2026-09-04 — requests to have this archived account back, and the
-  /// ones she decided.
-  accountReturnRequests AccountReturnRequest[] @relation("AccountReturnSubject")
-  accountReturnsDecided AccountReturnRequest[] @relation("AccountReturnDecider")
-
   /// R131 Option B — full-deletion requests about her, made by her, or decided
   /// by her.
   fullDeletionRequests        FullDeletionRequest[] @relation("FullDeletionSubject")
@@ -2110,67 +2095,6 @@ model FullDeletionRequest {
   @@index([status])
   @@index([subjectId, status])
   @@map("full_deletion_request")
-}
-
-/// **A former beneficiary who closed her account asks for it back** (Owner
-/// decision, 2026-09-04).
-///
-/// ## Why this is not a `SelfManagedClaim`
-///
-/// R132's claim is the closest existing machinery and was the first candidate,
-/// but it cannot carry this without being weakened in two places that exist for
-/// real reasons. It resolves a beneficiary `WHERE deleted_at IS NULL` — a closed
-/// account is soft-deleted, and a test asserts that quoting a closed account's
-/// reference code grants nothing — and it requires a recorded date of birth to
-/// check the age of majority, which **Option A now clears**. Relaxing both would
-/// have made one queue mean two different things, one of which restores a closed
-/// account. A tiny dedicated state was the Owner's stated alternative and is the
-/// safer one.
-///
-/// ## What it holds and what it does not
-///
-/// The Google identity is **recorded, never bound**, until a Super Admin
-/// approves — binding it first would be the transition being asked permission
-/// for. The identity fields are the ones she supplies **now**: the old ones were
-/// erased and are not restored, because they no longer exist and inventing them
-/// would be fabricating history.
-///
-/// **`reference_code` locates; it never authenticates.** It selects the
-/// candidate archive and nothing more — the proof is the Google identity plus a
-/// Super Admin's verification that this person is that record. Every refusal is
-/// the same uniform `NOT_FOUND`, so possession of a code reveals nothing.
-model AccountReturnRequest {
-  id String @id @default(uuid()) @db.Uuid
-
-  /// The archived account, resolved from the reference code by the SERVER. A
-  /// client never names a user id here.
-  subjectId String @map("subject_id") @db.Uuid
-  subject   User   @relation("AccountReturnSubject", fields: [subjectId], references: [id], onDelete: Restrict)
-
-  /// The identity she proved control of, held until a decision.
-  provider          AuthProvider
-  providerSubjectId String       @map("provider_subject_id")
-  email             String
-
-  /// Her CURRENT identity, acquired anew rather than restored.
-  firstNameArabic String  @map("first_name_arabic") @db.VarChar(60)
-  lastNameArabic  String  @map("last_name_arabic") @db.VarChar(60)
-  phone           String? @db.VarChar(30)
-
-  status AccountReturnStatus @default(pending)
-
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
-  decidedById    String?   @map("decided_by") @db.Uuid
-  decidedBy      User?     @relation("AccountReturnDecider", fields: [decidedById], references: [id], onDelete: Restrict)
-  decisionReason String?   @map("decision_reason") @db.VarChar(500)
-
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedById String?   @map("deleted_by") @db.Uuid
-
-  @@index([status])
-  @@index([subjectId, status])
-  @@map("account_return_request")
 }
 
 model SelfManagedClaim {

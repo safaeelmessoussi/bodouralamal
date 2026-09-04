@@ -4227,6 +4227,37 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The account-return workflow is withdrawn, one day after it shipped (2026-09-05)
+
+**Revision 133.** It was built on 2026-09-04 and removed on 2026-09-05, and the
+reason is not that it was wrong — it is that **the thing it reconnected people to
+no longer exists**. It only ever made sense beside Option A, which closed an
+account while preserving the educational archive. R133 removes that archive:
+permanent account deletion now destroys the beneficiary's own history, so there
+is nothing to match against and no record to reopen.
+
+**The rule is one sentence now.** Within the seven-day window a Super Admin
+restores the account through the Trash, like any other deleted record. Afterwards
+a person who comes back **registers normally** and receives a new `User`, a new
+`reference_code` and a new history.
+
+Removed: `AccountReturnRequest` and its table, four routes, the OpenAPI entries,
+the TD-3 registrations, `/admin/account-return-requests` and its navigation node,
+the fifth registration intent and its validation arm, the adapter, the Arabic
+copy, the browser harness, and the §19.2 exemption — which returns to a single
+case rather than staying parameterised over a route that is gone.
+
+**And the rule that an approved return recorded durable self-management went with
+it.** It existed *only* to stop a former guardian regaining authority through the
+return path; with no return path it has nothing to prevent, and keeping it would
+have been a mechanism whose reason a future reader could not find.
+
+**The table was verified empty before the drop** — local development only, and
+nothing was converted, because there is no destination for it under the new model
+and inventing one would be fabricating a record. The migration is forward-only:
+the one that created the table stays exactly as it was, since a history that
+changes retroactively cannot be replayed.
+
 ## The §19.2 guard caught the new public route, one revision after the last one (2026-09-04)
 
 `POST /account-return-requests` is public and onboarding-token-gated — she holds

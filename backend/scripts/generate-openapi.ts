@@ -528,51 +528,6 @@ const document = {
       ),
       patch: op('Edit a user\'s own fields', '§5.6 `/admin/users` *"edit"*, §14.2, TD-15 optimistic locking. Body: `{ version, name_arabic?, name_french?, nickname?, phone? }` — **strictly** those keys. **`account_status` is refused, not ignored**: suspension carries TD-4.15\'s obligation to revoke every live `RefreshToken` **in the same transaction**, so a client that set the field here and received `200` would believe access had been withdrawn while a 30-day credential was still live. It is the same reasoning that makes `PATCH /sessions/{id}` refuse `status`. **`pre_provisioned_email` is refused** because it authorises *claiming* an account (§7 R15) — editing it after the fact would hand a half-registered person\'s account to someone else — and **`public_display_name`** because §20 rule 21 resolves the published identity server-side, and a back-office form is exactly where a second answer to *which name did this person publish* would appear. **A user outside a branch Admin\'s §4.2 R25 visibility answers `404`, never `403`** (§20 rule 17): saying *exists, but not yours* is itself the disclosure that rule prevents. TD-12 freshness applies — user-management mutations re-read the caller\'s live status and role on every request. The **TD-10 search shadow columns are maintained by a database trigger**, never by this handler; a second normalization would drift from the one the indexes were built with and make search find some rows and not others. The audit row records **which fields changed, not their values** — a name and a phone number are personal data, and TD-8\'s record must not become a second copy of them. **`birth_date` (R130) is accepted here and is COMPLETION, never correction**: it exists because 25 beneficiaries predate the requirement and no date was invented for them, so an authorised Super Admin records the real one on the surface that already exists. A change to a date already recorded is refused by name (`BIRTH_DATE_ALREADY_RECORDED`) — it decides minor/adult status and self-management eligibility, so it is its own decision. The response publishes `birth_date` on this Super-Admin-only read and **nowhere else**: not on `/admin/directory`, not on any beneficiary list, and never with a derived age beside it.', { '200': 'The updated user, in the list\'s own shape.', '400': `${ENVELOPE} VALIDATION_FAILED — a missing version, or a refused key such as account_status.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN for a caller who is neither admin nor super_admin, or whose own account is no longer active.`, '404': `${ENVELOPE} NOT_FOUND for an unknown user or one outside the caller's visibility.`, '409': `${ENVELOPE} VERSION_CONFLICT.` }),
     },
-    '/account-return-requests': {
-      post: op(
-        'Ask for an archived account back',
-        "**Owner decision, 2026-09-04. PUBLIC but onboarding-token-gated**, exactly like `POST /self-managed-claims` and for the same reason: she has proven control of a Google identity and deliberately holds no session, because issuing one would already be the reactivation she is asking permission for. Requires `X-Onboarding-Token`. Body: `{ reference_code, first_name_arabic, last_name_arabic, phone? }`. **The property this exists to protect is one person, one record**: approval reactivates the SAME `User`, so no second beneficiary is created and her archive stays reachable — the duplicate-person outcome R62.4 already refuses for children. **`reference_code` LOCATES; it never authenticates**: possession grants nothing, and a code that never existed, one belonging to a live account, and one somebody else has already asked about all answer the same uniform `404` (§20 rule 17). The proof is the Google flow plus a Super Admin's verification. **Her CURRENT name is asked for and the erased one is not restored** — closure destroyed it, and inviting her to reconstruct it would defeat the closure. **Nothing is bound here**: the identity is recorded and held until a decision.",
-        {
-          '201': 'Recorded and awaiting review. The id and status only.',
-          '400': `${ENVELOPE} VALIDATION_FAILED — a missing or malformed token, code or name.`,
-          '404': `${ENVELOPE} NOT_FOUND with RETURN_NOT_AVAILABLE — one answer for every reason the archive is unavailable.`,
-          '409': `${ENVELOPE} STATE_CONFLICT with TOKEN_ALREADY_USED, IDENTITY_ALREADY_BOUND or RETURN_ALREADY_PENDING.`,
-        },
-      ),
-    },
-    '/admin/account-return-requests': {
-      get: op(
-        'The pending account-return queue',
-        '**Super Admin only** (Owner, 2026-09-04), asserted in the service against live rows (TD-12). Returns the request id, the archived account it names, the name and phone **she supplies now**, and when she asked. **The Google provider subject is deliberately absent**, exactly as it is from the self-managed-claim queue: it is a credential coordinate, and an administrator verifies a person rather than a provider identifier.',
-        { '200': 'The pending requests.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN below Super Admin.` },
-      ),
-    },
-    '/admin/account-return-requests/{id}/approve': {
-      post: op(
-        'Return an archived account to its person',
-        "**Super Admin only** (Owner, 2026-09-04). No body. **Reactivates the EXISTING `User` and binds the new identity to it** — no user is created, which is the whole point: her enrolments, grades, Quran progress, attendance and reference code are already on that id. Every precondition is **re-read under a row lock rather than trusted from the request**: the account is still closed, still has no login, and the address and provider subject still belong to nobody — a login acquired while the request waited is `409 ACCOUNT_HAS_LOGIN`, because binding a second identity would either replace a credential or give one account two. **Her current name replaces nothing that survived**: Option A erased the old one and it is not restored, and **the birth date stays null** rather than being asked for again. **Former guardian authority is not restored**: approval records durable self-management, because `FamilyLink` rows survive closure and reopening an account without this would hand a former guardian authority over an adult who returned to manage her own affairs.",
-        {
-          '200': 'Reactivated and bound.',
-          '401': ENVELOPE,
-          '403': `${ENVELOPE} FORBIDDEN below Super Admin, or TD-12 freshness.`,
-          '404': `${ENVELOPE} NOT_FOUND for a request that is not pending — decided, withdrawn or nonexistent answer alike.`,
-          '409': `${ENVELOPE} STATE_CONFLICT with SUBJECT_INELIGIBLE or ACCOUNT_HAS_LOGIN, or DUPLICATE with EMAIL_ALREADY_CLAIMED or IDENTITY_ALREADY_BOUND.`,
-        },
-      ),
-    },
-    '/admin/account-return-requests/{id}/reject': {
-      post: op(
-        'Refuse an account-return request',
-        "**Super Admin only** (Owner, 2026-09-04). Body: `{ reason }`, 1–500 characters (TD-9). **R128's shape for R128's reason**: a refusal that stays live would block the corrected request for ever, so the decision and its reason survive on the row and in the audit trail while the pending slot is released. She may ask again — as a NEW request with its own history, never by reopening this one.",
-        {
-          '204': 'Refused and withdrawn from the live set.',
-          '400': `${ENVELOPE} VALIDATION_FAILED — a missing or over-long reason.`,
-          '401': ENVELOPE,
-          '403': `${ENVELOPE} FORBIDDEN below Super Admin.`,
-          '404': `${ENVELOPE} NOT_FOUND for a request that is not pending.`,
-        },
-      ),
-    },
     '/admin/users/{id}/close-guardian-only': {
       post: op(
         'Close a guardian-only account',

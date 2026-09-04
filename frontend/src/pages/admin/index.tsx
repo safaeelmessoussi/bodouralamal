@@ -8,7 +8,6 @@ import { Button, ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
-import { AccountReturnsPage } from './account-returns.js';
 import { SelfManagedClaimsPage } from './self-managed-claims.js';
 import { BranchesPage } from './branches.js';
 import { ContentPage } from '../content.js';
@@ -58,7 +57,6 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/branches',
   '/admin/approvals',
   '/admin/self-managed-claims',
-  '/admin/account-return-requests',
   '/admin/schedules',
   '/admin/groups',
   '/admin/levels',
@@ -215,10 +213,6 @@ export function AdminRouter(): ReactNode {
     // operational queue: approving one binds a credential to a person's record.
     case '/admin/self-managed-claims':
       return <SelfManagedClaimsPage />;
-    // Owner 2026-09-04 — reopening a CLOSED account, which is a heavier
-    // decision than the transition above and therefore its own destination.
-    case '/admin/account-return-requests':
-      return <AccountReturnsPage />;
     // R56 — one screen for everything that appears on the calendar.
     case '/admin/schedules':
       return <SchedulingPage />;

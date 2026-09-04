@@ -1797,20 +1797,14 @@ was hiding behind it: the run went green on the first attempt.
       §4.4b evaluates Level restrictions against it, so a preserved enrolment
       stops making sense without it, while nothing reads a date of birth.
       Audit names the field and never the value.
-      - [x] **BUILT (Owner, 2026-09-04) — the return/reactivation workflow.**
-            `AccountReturnRequest`: she proves a Google identity, names her
-            reference code, a Super Admin verifies she is that archived person,
-            and the **SAME `User`** is reactivated with the identity bound to it.
-            **Not a `SelfManagedClaim`** — that resolves `WHERE deleted_at IS
-            NULL` and requires a birth date Option A now clears, so reusing it
-            would have weakened both and made one queue mean two things, one of
-            which reopens a closed account. The code **locates and never
-            authenticates**: every unavailable archive answers the same uniform
-            `404`. Nothing erased is restored; she supplies current information
-            and the birth date stays null. Approval records durable
-            self-management so a former guardian does not regain authority —
-            **an inference, flagged in the handbook**, since the Owner stated the
-            requirement and not the mechanism.
+      - [x] **WITHDRAWN (Owner, 2026-09-05 — R133) — the return/reactivation
+            workflow.** Built on 2026-09-04 and removed the next day, because the
+            archive it reconnected people to no longer exists: permanent account
+            deletion now destroys the beneficiary's own history. Within seven
+            days a Super Admin restores the account through the Trash; afterwards
+            a returning person **registers normally** and gets a new record.
+            `AccountReturnRequest`, its table, routes, screen, navigation entry,
+            registration intent, copy and browser harness are all gone.
 - [x] **DIRECTION SETTLED (Owner, 2026-09-03) — the normalized-email lock is to be
   keyed, not raw.** The design is ratified and complete in
   [email-lock-keying](development/email-lock-keying.md):
