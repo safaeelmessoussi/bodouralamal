@@ -1,4 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import {
+  sweepAbandonedFixtures,
+} from '../test-support/abandoned-fixtures.js';
 import { Readable } from "node:stream";
 
 import {
@@ -190,6 +193,17 @@ function twoPartyBarrier(): () => Promise<void> {
  * is recorded in `development/testing.md`.)
  */
 async function clear(): Promise<void> {
+  /**
+   * **First, whatever an earlier run abandoned.**
+   *
+   * This suite's tag is run-unique, so its own cleanup can never reach rows
+   * left by a process that died before `afterAll` — and those rows reached the
+   * real Level selector on «اختبار جديد». The sweep is bounded by age, which
+   * keeps the isolation the run-unique tag exists for: a row older than two
+   * hours cannot belong to a run that is still going.
+   */
+  await sweepAbandonedFixtures(prisma, TAG.slice(0, TAG.indexOf(':') + 1));
+
   const ids = (
     await prisma.user.findMany({
       where: { nameArabic: { startsWith: TAG } },
