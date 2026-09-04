@@ -4227,6 +4227,43 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## The consent draft and the map, reconciled to one story (2026-09-05)
+
+**The 2026-09-04 draft described a model that no longer exists** — two requests, a
+ten-year archive, and a route back to a closed account — so those paragraphs are
+**replaced rather than patched**. What replaces them is shorter, which is the
+point: educational data lives while the account lives; deletion takes it; a
+return after permanent deletion is a new registration; backups rotate at two
+generations and an older one may still hold a previous copy. **The active
+`LegalConsentText` is untouched**, as it has been throughout.
+
+**`personal-data-map.md` now tells one story.** Three sections were kept but
+framed as historical rather than deleted, because each holds something a future
+reader needs and nothing else does:
+
+* **the ten-year policy** — and, crucially, that it was *never externally
+  required*, which is the answer to *«may it come back?»*;
+* **the R111 classification table** — its per-relationship reasoning still
+  decides what is hers and what is shared; only the two-mode framing is gone;
+* **the pre-automation checklist** — every item now answered, and the lesson kept:
+  **the copies that mattered were never in the obvious place.** The application's
+  copied identity and the restorable snapshot would each have made a "complete"
+  deletion a lie, and neither is on the `User` row.
+
+### The browser harness for the new model
+
+`verify-account-deletion.sh` — 20/20 — reads the confirmation a woman actually
+sees and checks the three withdrawn workflows left no dead UI. It is **read-only**:
+it opens the dialog and reads it, because the destructive behaviour belongs in
+the integration suites where the rows are owned and cleaned up.
+
+Two of its checks failed first and neither was a product defect. One used the
+wrong Arabic word for *restore*. The other was a sequencing trap worth recording:
+**asserting that a page is ABSENT costs the full navigation timeout**, and doing
+that mid-run pushed the two checks after it past their own budget, reporting the
+users screen as broken when it loads perfectly well. Absence is now checked last,
+where nothing follows it.
+
 ## Rejected registrations get a clock, and a legacy exception that stays silent (2026-09-05)
 
 **The blocker was a missing rejection instant, and the smallest correct fix was

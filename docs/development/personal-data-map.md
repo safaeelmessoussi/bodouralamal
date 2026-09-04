@@ -118,35 +118,25 @@ is gone, an attestation based on it may be impossible, and the confirmation says
 so before she agrees. A beneficiary who has *not* deleted her account keeps her
 record for as long as the account exists.
 
-## Retention — the association's own policy
+## Retention — the association's own policy *(HISTORICAL)*
 
-**Default: identifiable educational history is retained for TEN YEARS after the
-beneficiary's last educational activity.**
+**Everything in this section is superseded** by the subsection below. It is kept
+because it records what the ten-year policy was, what it was for, and — the part
+that still matters — that it was **never externally required**. A future reader
+asking *«why did the ten years go, and may they come back?»* needs that, and it
+is nowhere else.
 
-This is **Bodour Al Amal's own purpose-based retention policy**, adopted by the
-Owner on 2026-09-03. It is **not** a duration prescribed, reviewed or approved by
-the CNDP, and no document may describe it as such. Its purposes are historical
-educational continuity, answering former-beneficiary requests, and issuing or
-verifying educational attestations.
-
-### "Last educational activity", defined from canonical facts
-
-**Derived, never a maintained timestamp.** A dedicated `last_activity_at` column
-would be a fact nobody updates consistently, and a retention clock driven by a
-stale column deletes the wrong records. The boundary is the **latest** of the
-canonical educational facts the platform already records:
-
-| fact | coordinate |
-|---|---|
-| enrolment | its `AcademicPeriod`'s end date (R122), falling back to `enrolled_at` where a legacy row has no period |
-| attendance | `attendance.occurrence_date` (R123) |
-| grade | the `exam.date` it is against (R81/R124) |
-| assessment submission | `student_exam_submission.submitted_at`, else `started_at` |
-| Quran progression | `quran_progress_log`'s own date |
-
-**Quran progress is educational history for product purposes.** That is a
-statement about *how the platform treats it* and **not** a claim about its legal
-classification, which stays explicitly open in this inventory.
+> **Default: identifiable educational history is retained for TEN YEARS after the
+> beneficiary's last educational activity.** Bodour Al Amal's own purpose-based
+> retention policy, adopted 2026-09-03. **Not** prescribed, reviewed or approved
+> by the CNDP, and no document may describe it as such. Its purposes: historical
+> educational continuity, answering former-beneficiary requests, and issuing or
+> verifying educational attestations.
+>
+> *«Last educational activity»* was **derived** from canonical durable facts — an
+> enrolment's period end, an attendance date, an exam date, a submission, a
+> Quran log — never from a maintained `last_activity_at` column, because a clock
+> nobody updates consistently deletes the wrong records.
 
 ### The ten-year clock is WITHDRAWN (Revision 133)
 
@@ -169,30 +159,29 @@ readiness, its tests and its tombstone-reading exemption. What survives is
 `erasure.ts`, the primitive that decides **what counts as her own data** — now
 reached by permanent account deletion, which is its only caller.
 
-## Before any destructive automation
+## Before any destructive automation *(the list, and how it closed)*
 
-**No purge job is to be written until the following are reconciled**, because a
-partial purge that claims data is gone while obvious copies remain is worse than
-no purge at all:
+This list was the Owner's precondition for writing any purge, because **a partial
+purge that claims data is gone while obvious copies remain is worse than no purge
+at all**. Every item is now answered, and the answers are what the erasure
+boundary is made of:
 
-1. **`ChildApplication` copied identity fields.** The application holds the
-   child's names, sex and (R130) birth date independently of the `User`. A
-   deletion that clears the `User` and leaves the application intact has deleted
-   nothing.
-2. **Trash snapshots.** A snapshot is a JSON copy of a row, written precisely so
-   the row can come back. Deleting the row and keeping the snapshot is a copy.
-3. **Audit detail.** Already minimised to fields and ids (TD-8, TD-14) — verify,
-   do not assume.
-4. **Consent evidence**, which has its own retention rule and its own purpose.
-5. **`NormalizedEmailLock`**, which retains the raw lowercased address with no
-   owner — see the separate design record.
-6. **Backups.** See below.
-7. ~~**The 12-month application-retention rule**, whose purge touches the same
-   `ChildApplication` rows.~~ **Built and enforced** (2026-09-04): rejected from
-   `decided_at`, never-converted pending from `created_at`, the whole row deleted
-   with its Trash snapshot in one transaction, scheduled daily.
+| the copy that had to be found | how it is handled |
+| --- | --- |
+| `ChildApplication`'s copied identity — names, sex, birth date, held independently of the `User` | the whole row is destroyed with the account |
+| `Trash` snapshots — a JSON copy written precisely so the row can come back | every snapshot naming a destroyed row goes in the same transaction |
+| audit detail | minimised to fields and ids by TD-8/TD-14, and asserted, not assumed |
+| consent evidence | kept under its own rule, and it carries no name, birth date or contact |
+| `NormalizedEmailLock` | still holds a raw lowercased address with no owner — **the one item still open**, and blocked on `EMAIL_LOCK_KEY` |
+| backups | stated honestly rather than engineered around; see below |
+| the twelve-month application rule | built, and it touches the same rows |
 
-### R59.4 — BR-15's ninety days, measured (2026-09-04)
+**The lesson worth keeping**: the copies that mattered were never in the obvious
+place. Two of them — the application's copied identity and the restorable
+snapshot — would each have made a "complete" deletion a lie, and neither is on
+the `User` row.
+
+### R59.4 — the window, measured before it was enforced (2026-09-04)
 
 **A third read-only clock, beside the ten-year and twelve-month ones.**
 `Trash.purge_after` records the end of BR-15's ninety-day window, and the job
@@ -289,7 +278,7 @@ older encrypted generation until rotation expires it, which is **at most two
 months** given one backup a month and two generations kept. **The person is told
 this on the confirmation, before she deletes anything.**
 
-## The consent wording has fallen behind the decisions (2026-09-04)
+## The consent wording has fallen behind the decisions
 
 **Inventory, gap analysis and a DRAFT. Nothing here is applied.** The active
 wording is evidence: R119 makes it immutable once in force, and only the Owner
@@ -306,75 +295,66 @@ Owner can act on a prepared draft rather than a discovered surprise.
 **One active row, and the database enforces it** — the partial unique index over
 `status = 'active'`. Everything below concerns that row.
 
-### The four gaps, and why each one is a gap
+### What is out of date in the active wording
 
-The active wording predates R130, R131 and R132. Three of the four are not merely
-missing information — they are statements the platform's behaviour has since
-overtaken.
+The active wording predates R130, R132 and R133. Four things it says or omits:
 
-* **Retention periods.** The text says the periods *«سيتم تحديدها … بعد استكمال
-  إجراءات المطابقة»* — will be determined later. **They have been determined**:
-  ten years for identifiable educational history, twelve months for a rejected
-  application. A notice that defers a decision already taken understates what the
-  reader is agreeing to.
-* **Date of birth.** R130 makes a full date of birth required for every
-  beneficiary, and Option A now clears it (Owner, 2026-09-04). The text lists *«معلومات الهوية والتواصل»* generically; a newly
-  mandatory identifier that decides a **rights transition** is named, not implied.
-* **Closure and deletion.** The rights paragraph offers the 09-08 trio — access,
-  rectification, opposition. The platform now offers two further requests, and a
-  notice that omits a right the product implements is the wrong way round.
-* **The adult transition.** The text says a minor is processed *through* the
-  guardian and stops there. R132 ends that authority on an approved claim, and a
-  guardian reading this notice is consenting to something that will later be
-  taken out of their hands.
+* **Retention periods.** It defers them — *«سيتم تحديدها … بعد استكمال إجراءات
+  المطابقة»* — and they are decided: educational data lives while the account
+  lives, twelve months for applications.
+* **Date of birth.** R130 makes it required for every beneficiary and R133
+  deletes it with the account; the text names neither.
+* **Deletion.** It offers the 09-08 trio — access, rectification, opposition —
+  and the platform now implements a deletion the notice does not mention, whose
+  consequences (history gone, attestation possibly impossible) a person should
+  read *before* she uses it.
+* **Backups.** The notice is silent, and the honest limit is that a deleted
+  person's data may remain in an older encrypted generation for up to two
+  months.
 
 ### The draft paragraphs
 
 **For the Owner to author, adapt and activate — not for me to install.** Each one
-states behaviour the platform actually has; none states a CNDP requirement, and
-the retention paragraph attributes the ten years to the association, which is
-whose decision it is (see *Retention — the association's own policy* above).
+states behaviour the platform actually has; **none states a CNDP requirement**,
+and none describes the seven days or the backup rotation as anything other than
+the association's own choices.
 
-**Updated 2026-09-04**, where the Owner's decisions of that day made the draft
-factually stale rather than merely incomplete: the pending-application clock now
-has a stated reference point, the birth date is now **erased at closure** and the
-draft says so, and a returning former beneficiary now has a route the notice can
-honestly mention. Everything else stands as written.
+**Rewritten 2026-09-05 for Revision 133.** The 2026-09-04 draft described a model
+that no longer exists — two requests, a ten-year archive, and a route back to a
+closed account — so those paragraphs are replaced rather than patched. What
+replaces them is shorter, which is the point.
 
 **Replacing the retention paragraph:**
 
-> تحتفظ الجمعية بالمعطيات التعليمية التي تسمح بالتعرف على الشخص المعني لمدة عشر
-> (10) سنوات ابتداءً من آخر نشاط تعليمي مسجل له في المنصة، وهي مدة اعتمدتها
-> الجمعية بناءً على أغراضها الخاصة: ضمان استمرارية المسار التعليمي، والاستجابة
-> لطلبات المستفيدات والمستفيدين السابقين، وتسليم الشهادات التعليمية أو التحقق
-> منها. أما طلبات التسجيل التي لم تُقبل، فيتم الاحتفاظ بها لمدة اثني عشر (12)
-> شهراً ابتداءً من تاريخ قرار الرفض، كما يُحتفظ بطلب التسجيل الذي لم يُبتّ فيه
-> مدة اثني عشر (12) شهراً ابتداءً من تاريخ تقديمه. ويبقى الاحتفاظ ببعض المعطيات
-> لمدة أطول ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو متطلبات إثبات
-> العمليات.
+> تحتفظ الجمعية بالمعطيات التعليمية الخاصة بالمستفيدة ما دام حسابها قائماً. وعند
+> حذف الحساب نهائياً تُحذف معه هذه المعطيات. أما طلبات التسجيل، فيتم الاحتفاظ
+> بالطلب المرفوض مدة اثني عشر (12) شهراً ابتداءً من تاريخ قرار الرفض، وبالطلب
+> الذي لم يُبتّ فيه مدة اثني عشر (12) شهراً ابتداءً من تاريخ تقديمه. ويبقى
+> الاحتفاظ ببعض المعطيات لمدة أطول ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو
+> متطلبات إثبات العمليات. وهذه المدد سياسة اعتمدتها الجمعية لأغراضها الخاصة.
 
 **Added to the data-categories paragraph:**
 
 > تشمل معطيات الهوية المطلوبة لكل مستفيدة أو مستفيد تاريخ الازدياد الكامل،
 > ويُستعمل لتحديد بلوغ سن الرشد وما يترتب عنه على مستوى تدبير الحساب، ولا يُستعمل
 > لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن. ويُحذف تاريخ
-> الازدياد عند إغلاق الحساب، إذ لا يحتاجه الأرشيف التعليمي المحتفظ به.
+> الازدياد عند حذف الحساب.
 
-**Added to the rights paragraph:**
+**Replacing the rights paragraph's deletion clause:**
 
-> إضافة إلى ذلك، تتيح المنصة تقديم طلبين متمايزين: إغلاق الحساب على المنصة، حيث
-> تُحذف عناصر الهوية وتنتهي إمكانية الولوج مع الاحتفاظ بالحد الأدنى من الأرشيف
-> التعليمي؛ أو حذف المعطيات التعليمية بشكل كامل، ويُبَتّ في هذا الطلب الثاني من
-> طرف إدارة الجمعية قبل تنفيذه. ولا يشمل الحذف ما يفرض الاحتفاظ به التزام قانوني
-> أو تنظيمي، ولا أدلة الموافقة، ولا السجلات الأمنية الضرورية، وهي تخضع لمدد
-> احتفاظ خاصة بها.
+> يمكنكِ حذف حسابك. ينقطع الدخول فوراً، ويبقى الحساب قابلاً للاسترجاع عبر
+> الإدارة مدة سبعة (7) أيام؛ وبعدها يُحذف نهائياً هو والمعطيات التعليمية الخاصة
+> بكِ. وقد يتعذّر بعد ذلك إثبات المستوى الذي وصلتِ إليه أو إصدار شهادة لكِ. ولا
+> يشمل الحذف ما يفرض الاحتفاظ به التزام قانوني أو تنظيمي، ولا أدلة الموافقة، ولا
+> السجلات الأمنية الضرورية، وهي تخضع لمدد احتفاظ خاصة بها. كما لا يشمل ما لا
+> يخصّك وحدك، كالحصص والاختبارات والمحتوى التعليمي وسجلات الأشخاص الآخرين.
 >
-> ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية، إذ تُحفظ هذه النسخ
-> لمدة محدودة ثم تنتهي صلاحيتها؛ وتضمن الجمعية ألا يُعاد إدراج المعطيات المحذوفة
-> عند أي عملية استرجاع.
+> ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية: تُؤخذ نسخة احتياطية
+> مشفّرة كل شهر ويُحتفظ بنسختين على الأكثر، فقد تبقى نسخة سابقة من معطياتك داخل
+> النسخة الأقدم إلى أن يحين دورها في الحذف.
 >
-> وإذا سبق لكِ إغلاق حسابك ورغبتِ في استعادته، يمكنكِ تقديم طلب بذلك؛ ولا يُفتح
-> الحساب إلا بعد تحقّق الإدارة من هويتك، ولا يُنشأ حساب جديد.
+> وإذا رغبتِ في العودة إلى الجمعية بعد الحذف النهائي، فذلك تسجيل جديد يُنشئ سجلاً
+> جديداً؛ ولا يمكن استرجاع السجل المحذوف.
 
 **Added to the paragraph on minors:**
 
@@ -393,15 +373,21 @@ and the old wording stays readable forever as the evidence for the ones before.
 
 ## Status
 
-**This page is a MAP, and it is now partly implemented.** What has changed since
-it was written:
+**One deletion lifecycle, and this page describes it** (Revision 133):
 
-* **Option A exists and is R131's behaviour, not R111's** — it **preserves**
-  `referenceCode`, per the Owner's decision.
-* **Option B EXECUTES** (Owner, 2026-09-04). Approval destroys in the same call
-  and returns `executed: true` only once it has committed — see below.
-* **All three retention clocks now EXECUTE** — ten-year educational,
-  twelve-month application, ninety-day Trash — each scheduled daily, each
-  failing closed per subject, and the first two sharing Option B's own erasure
-  primitive rather than reimplementing it.
-* **The consent wording is drafted, not applied.**
+* **DELETE → seven-day Trash → restore, or permanent deletion.** One window for
+  every entity, accounts included.
+* **Permanent account deletion destroys what is hers alone** — profile, birth
+  date, `reference_code`, authentication, enrolments, grades, attendance, Quran
+  progress, submissions, group membership, her copied application identity, her
+  family links, and every snapshot able to restore them. `erasure.ts` is the one
+  place that boundary is defined.
+* **Shared institutional data survives**, always: the Session, the Exam, the
+  Level, the Branch, teacher-authored content and every other person's records.
+* **No Option A, no Option B, no account-return queue, no ten-year archive, no
+  deletion replay.** Each was real and each is withdrawn; the history is in
+  `CHANGES.log`, and nothing above is normative any more.
+* **A future attestation is not guaranteed after deletion**, and the person is
+  told so before she confirms.
+* **Backups rotate monthly at two generations**, so deleted data may persist in
+  the older one until it rotates out — stated, never engineered around.
