@@ -4138,3 +4138,39 @@ happened to be picked would be inventing policy. Recorded as a precise decision.
 **Tests: 11/11**, including §4.3's own named case — a rejected link beside a
 still-pending child application preserves the account — and the control that a
 report lists every purpose rather than stopping at the first.
+
+## Ten-year educational retention — the deterministic computation (2026-09-04)
+
+**Phase 1 only: it computes and explains. It deletes nothing and schedules
+nothing.** §4.10a forbids destructive automation until its open classifications
+are settled, and several are not — so the deterministic half exists on its own,
+which is also the half worth arguing with before anything acts on it.
+
+**The boundary is derived from the five canonical facts §4.10a names**, and
+**`updated_at` appears nowhere**: a clock driven by it would retain records for a
+decade after somebody fixed a typo. The enrolment contributes its
+`AcademicPeriod`'s end, falling back to the enrolment instant for a legacy row
+with no period — R122 left those deliberately, and guessing a semester the
+association never recorded would be indistinguishable from a real one.
+
+**Every answer names the fact that decided it.** A retention report an operator
+cannot check is one they must trust, so `lastActivityKind` accompanies every
+date.
+
+**Three judgments worth stating**, each asserted:
+* **No educational history at all yields no retention period** — `null`, never
+  "retain until now". A guardian-only account has no educational clock, and
+  reporting one would invite a purge the policy never authorised.
+* **Soft-deleted rows still count.** A withdrawn enrolment still records that she
+  was there; counting only live rows would shorten the period on the strength of
+  an administrative correction.
+* **A grade's date is the SITTING's, not the marking's.** The activity is the
+  exam she sat; a mark entered late does not extend her history.
+
+**The ten years are the association's own purpose-based policy** and are
+described as such in the module, the tests and this entry — **not** as a
+CNDP-prescribed duration and not as a requirement of Moroccan law.
+
+**Tests: 13/13**, including the exact boundary (the day itself has *not*
+elapsed), one day either side, an inactive account with recent activity, and the
+`updated_at` control that touches a row and asserts the answer does not move.

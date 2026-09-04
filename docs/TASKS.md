@@ -1724,6 +1724,13 @@ was hiding behind it: the run went green on the first attempt.
       policy. **THE PRECISE DECISION NEEDED:** *which of (a), (b) or (c) — or
       an explicit administrator action — closes a guardian-only account that the
       guard reports as having no remaining purpose?*
+- [x] **DONE (2026-09-04) — the ten-year retention COMPUTATION and dry run.**
+      `educational-retention.service.ts` derives the boundary from §4.10a's five
+      canonical facts, names which one decided it, and **deletes nothing**. No
+      history yields `null` rather than "elapsed"; soft-deleted rows still count
+      as history; a grade's date is the sitting's. 13 tests including the exact
+      boundary and an `updated_at` control. **Destructive purge remains gated on
+      the same open classifications as Option B execution.**
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
       *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
       questions, answered from the code:** **(a) does a future attestation need
