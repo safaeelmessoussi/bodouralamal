@@ -342,7 +342,8 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
    * reading only live rows would make the report silently skip exactly the
    * applications it exists to find.
    */
-  "application-retention.service.ts": "measures retention OF rejected applications",
+  "application-retention.service.ts":
+    "measures retention OF applications, tombstoned or not — a soft-deleted row still holds the child's copied identity and is not entitled to a longer life for being in the Trash",
 };
 
 describe("a soft-deleted row is excluded at the database boundary", () => {

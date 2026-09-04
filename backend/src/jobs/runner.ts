@@ -21,6 +21,7 @@ import {
   reevaluateSessionConsent,
   retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
+import { purgeElapsedApplications } from '../services/application-retention.service.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
   enqueue,
@@ -47,6 +48,13 @@ export const QUEUES = {
   tokenPurge: 'token.purge',
   rateLimitPurge: 'ratelimit.purge',
   auditPurge: 'audit.purge',
+  /**
+   * §4.10a's twelve-month maximum for applications (Owner, 2026-09-04).
+   * Rejected from `decided_at`, never-converted pending from `created_at`.
+   * Scheduled beside the other daily purges rather than given a scheduler of
+   * its own — the retention boundary is a calendar fact, not an event.
+   */
+  applicationRetentionPurge: 'application.retention-purge',
   /**
    * §4.1a: enqueued by every `ConsentRecord` change, roster change and upload.
    * Full current-state recompute for an occurrence's resolved audience. The
@@ -179,6 +187,17 @@ export function createWorkerCatalog(
           where: { windowStart: { lt: cutoff } },
         });
         log(QUEUES.rateLimitPurge, { counters: deleted.count });
+      },
+    },
+    {
+      // application.retention-purge (§4.10a, Owner 2026-09-04): the eligibility
+      // rule lives in the service, so the job is the schedule and nothing else.
+      name: QUEUES.applicationRetentionPurge,
+      handler: async () => {
+        const { deleted } = await purgeElapsedApplications(prisma, new Date());
+        // A COUNT, never an id or a name (TD-14): the log line must not become
+        // a record of who was deleted.
+        log(QUEUES.applicationRetentionPurge, { applications: deleted });
       },
     },
     {
@@ -430,6 +449,7 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
     // R59.4: do NOT schedule content.quarantine-purge against `purge_after`
     // until the Document Owner authorises automatic production destruction.

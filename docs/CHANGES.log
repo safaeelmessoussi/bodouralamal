@@ -4227,6 +4227,61 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Application retention is now enforced, on two settled clocks (2026-09-04)
+
+**Owner decisions.** A never-converted pending application runs twelve months
+from **`created_at`**; a rejected one keeps `decided_at`. `created_at` was chosen
+over `consent_given_at` and, more importantly, over anything that moves —
+**`updated_at` would let an administrator postpone an expiry simply by opening a
+record**, which is a retention clock nobody controls.
+
+**The dry run became an executor, and the eligibility rule stayed in one
+function.** `purgeElapsedApplications` calls `elapsedApplications` rather than
+repeating its `WHERE`, so the thing that deletes and the thing that reports can
+never disagree about what is due — which is the disagreement that makes a purge
+frightening to run.
+
+**The whole row goes, not a stripped husk.** The Owner's simplicity principle
+prefers permanent deletion once an approved boundary is reached, and here the
+alternative is worse than merely complex: an application with every identifying
+column nulled still carries a `consent_text_version` recording that somebody
+consented on behalf of a child who never existed — an evidence shape with nothing
+left to evidence.
+
+**The Trash snapshot goes in the same transaction**, or the erasure is cosmetic:
+a snapshot is a JSON copy written so the row can come back, so keeping it would
+leave the child's name and birth date in JSONB and offer restoration of data
+whose retention had just expired. This is the identical trap `deIdentifyAccount`
+documents for `User`, and it is now stated in both places because they are far
+apart in the codebase.
+
+**Soft-deleted applications are included, deliberately.** Being in the Trash is
+not a reason to live longer than a row that never was. That makes this a
+tombstone-reading query, registered as such in `trash-coverage`.
+
+**No Trash row is written for the purge itself, and no new lifecycle state.** The
+decision survives in audit, which has its own independent purpose and schedule;
+the row names the application id, the clock that decided it and the boundary —
+never a name and never a birth date, asserted by a test that looks for the
+fixture's own name in the detail. The actor is `null`, because the calendar
+decided it and R60.8 says an audit row omits a capacity that does not exist.
+
+Scheduled daily beside the existing purges on the current pg-boss runner. No new
+scheduler: the retention boundary is a calendar fact, not an event.
+
+### Rejected-registration retention is blocked on one missing column
+
+The Owner decided the policy — twelve months after rejection for a `User` with
+`account_status = 'rejected'` — and it cannot be implemented as specified,
+because **there is no rejection timestamp**. The decision writes `account_status`
+and nothing else, `updated_at` is bumped by any later edit, and substituting it
+is exactly what the instruction forbids. The smallest correction is one nullable
+`user.account_status_decided_at`, written in the same transaction as the status
+change; the open half is what to do with rows that already carry `rejected`, for
+which **backfilling from `updated_at` would fabricate a rejection date**.
+`AuditLog` is not a substitute: `user.reject` rows are purged on their own
+schedule, so a clock reading them would silently stop working.
+
 ## Guardian-only cleanup — an explicit decision, not a trigger (2026-09-04)
 
 **Owner decision.** The three candidate triggers — revoking the last approved

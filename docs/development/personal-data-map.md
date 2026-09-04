@@ -167,8 +167,10 @@ no purge at all:
 5. **`NormalizedEmailLock`**, which retains the raw lowercased address with no
    owner — see the separate design record.
 6. **Backups.** See below.
-7. **The 12-month application-retention rule**, whose purge touches the same
-   `ChildApplication` rows.
+7. ~~**The 12-month application-retention rule**, whose purge touches the same
+   `ChildApplication` rows.~~ **Built and enforced** (2026-09-04): rejected from
+   `decided_at`, never-converted pending from `created_at`, the whole row deleted
+   with its Trash snapshot in one transaction, scheduled daily.
 
 ### R59.4 — BR-15's ninety days, measured (2026-09-04)
 

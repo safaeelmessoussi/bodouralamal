@@ -80,6 +80,9 @@ describe('job runner startup readiness', () => {
     expect(registered).toEqual([
       QUEUES.tokenPurge,
       QUEUES.rateLimitPurge,
+      // §4.10a's twelve-month application clock (Owner, 2026-09-04) — a real
+      // worker, so it is part of readiness like every other one.
+      QUEUES.applicationRetentionPurge,
       QUEUES.auditPurge,
       QUEUES.consentReevaluate,
       QUEUES.contentBucketMigrate,
@@ -187,7 +190,11 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      expected_workers: 9,
+      // Ten since the application-retention worker joined (2026-09-04). The
+      // number is asserted rather than derived deliberately: readiness claiming
+      // "all workers up" while counting a shorter catalogue is exactly the
+      // failure this test exists for.
+      expected_workers: 10,
       registered_workers: 2,
       active_workers: 2,
     });

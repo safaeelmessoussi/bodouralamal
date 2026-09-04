@@ -1743,17 +1743,36 @@ was hiding behind it: the run went green on the first attempt.
       precise. **A dry run: it deletes nothing**, and the rows it names still
       carry the child's copied identity fields — which is exactly why execution
       waits. 6 tests including the exact boundary.
-- [ ] **BLOCKED — the PENDING-application reference point.** §4.10a says a
-      never-converted pending application follows *"the same twelve-month maximum
-      **from its own reference point**"* and does not say what that point is.
-      `created_at` (when she asked) and `consent_given_at` (when she agreed) are
-      both defensible and give different answers. **THE PRECISE DECISION
-      NEEDED:** *from which instant does a never-decided application's twelve
-      months run?* Also unsettled, and deliberately out of scope here: whether a
-      **rejected registration** — which is a `User` row carrying
-      `account_status = 'rejected'`, not an application row — falls under this
-      rule at all, since removing it is account deletion with its own model,
-      window and authority.
+- [x] **RESOLVED AND ENFORCED (Owner, 2026-09-04) — the PENDING-application
+      reference point is `created_at`.** Twelve months from when she asked, and
+      **deliberately not `updated_at`**: an administrator opening a record would
+      otherwise postpone its expiry, which is a retention clock nobody controls.
+      Rejected applications keep `decided_at`. Both clocks now EXECUTE —
+      `purgeElapsedApplications`, scheduled daily beside the other purges — and
+      execution deletes the whole row rather than stripping it: a husk with every
+      identifying column nulled and a `consent_text_version` recording consent
+      for a child who never existed is an evidence shape with nothing left to
+      evidence. **The Trash snapshot goes in the same transaction**, or the
+      erasure is cosmetic. There is no renewal lifecycle; a family who still
+      wants a place submits a fresh application.
+- [ ] **BLOCKED ON SCHEMA — rejected-registration retention (12 months).** The
+      Owner has decided the policy: a `User` with `account_status = 'rejected'`
+      is retained for a maximum of twelve months after rejection. **It cannot be
+      implemented as specified, because `User` carries no rejection timestamp.**
+      The decision writes `account_status` and nothing else
+      (`approval.service.ts`); `updated_at` is bumped by any later edit and is
+      therefore not the rejection instant, and the Owner's own instruction
+      forbids silently substituting it.
+      **THE SMALLEST CORRECTION:** one nullable column,
+      `user.account_status_decided_at` (`timestamptz`), written in the same
+      transaction as the status change, never cleared, plus a backfill decision
+      for the rows that already carry `rejected` — and **backfilling from
+      `updated_at` is the one thing it must not do**, since that would fabricate
+      a rejection date. Leaving those rows `NULL` and excluding them from the
+      clock is honest; deciding between that and an Owner-supplied cutoff is the
+      remaining call. `AuditLog` is not the answer: `user.reject` rows are purged
+      on their own schedule, so a retention clock reading them would silently
+      stop working.
 - [x] **RESOLVED BY AUDIT, not by decision (2026-09-04) — `notification.subject_user_id`.**
       §4.10a kept it PRESERVE provisionally and warned that a surviving
       notification must not become a covert store of deleted data. **In this
