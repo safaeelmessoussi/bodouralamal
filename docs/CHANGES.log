@@ -4227,6 +4227,71 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Option B executes — the deletion is real now (2026-09-04)
+
+**The Owner's decisions closed every classification that was blocking it**, so
+approval destroys in the same call and returns `executed: true` only once the
+destruction has committed. **One action rather than two**, deliberately: a
+request left approved-but-alive is a state in which the person has been told her
+data is gone while it is not, and nobody is watching a queue for it.
+
+**The FK count is 47, not the 42 recorded when the map was written** — measured
+rather than trusted, as the brief required.
+
+**What goes is §4.10a's list and nothing invented beside it.** What stays is
+listed with a reason each, in the map: the de-identified `User` row, minimal
+consent evidence, the request, the audit trail, `FamilyLink` — two people's
+record and not in the list — and teacher-authored `Exam` rows, whose grades go
+while the assessment does not.
+
+**`executed_at` records the WORK; `status` records the DECISION.** One nullable
+column rather than a fourth status value, so the state machine gains nothing a
+crash could strand. It is stamped **last**, after everything else has committed,
+which is the whole defence against a partial deletion reported as a finished one
+— and the state a crash leaves, `approved` with a null stamp, is visible,
+queryable and repaired by approving again.
+
+### The bug my own test caught
+
+The first version collected only submission and application ids before clearing
+tombstones. A `Trash` snapshot of a deleted enrolment therefore survived — **a
+restorable copy of exactly the record Option B had just destroyed**, and a false
+offer to bring it back. Every id is now collected *before* anything is deleted,
+because a tombstone is found by the id of the row it restores and that id is
+unreachable once the row is gone. The test that found it is the one asserting
+nothing in the Trash can restore any of it.
+
+### Two assertions inverted by decision, and one sentence that had stopped being true
+
+`APPROVING RECORDS A DECISION AND DELETES NOTHING` and `approving twice is a
+conflict` both encoded the control-plane-only behaviour honestly. Both are
+restated with a note saying why they changed — a double-click must now be
+harmless rather than a conflict, since approving destroys.
+
+The Arabic copy said *«تسجيل الطلب أو الموافقة عليه لا يحذف شيئاً في حدّ ذاته»* —
+recording the request **or approving it** deletes nothing in itself. Accurate
+while execution was unimplemented and a **false reassurance** the moment it was
+not. It now separates the two moments: sending asks, approving executes and
+cannot be undone. A guard pins the old sentence so it cannot return.
+
+### A guard made more precise rather than looser
+
+`trash-coverage` flagged `trash.findMany` in the expiry sweep. `Trash` has a
+`deletedAt` column and is **not** soft-deletable: there it means *when the TARGET
+was deleted* — the tombstone's payload, not its own state — and a Trash row is
+never soft-deleted because deleting one is the permanent act. The first fix
+exempted `trash.service.ts` wholesale, which would have silenced every genuine
+read in the file that owns the Trash; the model is now excluded instead, and the
+guard was re-proved by adding an unfiltered `enrollment.count` to that same file
+and watching it fail.
+
+### One thing for the Owner
+
+An `Exam` targeted at a single beneficiary survives, correctly — it is a
+teacher's work and §4.10a does not list it. But its **title is free text**, so a
+teacher who typed a beneficiary's name into it has put personal data somewhere
+neither Option A nor Option B touches. Recorded, not decided.
+
 ## BR-15's ninety days are enforced — R59.4 closed (2026-09-04)
 
 **Owner decision.** Expired Trash entries are purged automatically, without a

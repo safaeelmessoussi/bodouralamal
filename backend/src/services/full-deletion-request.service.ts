@@ -4,6 +4,7 @@ import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { isSelfManaged } from '../policies/self-management.js';
 import * as audit from '../repositories/audit.repository.js';
+import { purgeUserAccount } from './account-deletion.service.js';
 
 /**
  * **OPTION B — a request to delete the educational record itself** (SRS §4.10a,
@@ -158,12 +159,27 @@ export async function approveFullDeletion(
   const actor = await assertFreshActive(prisma, caller.userId, DECIDER_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
+    /**
+     * **An already-approved but unexecuted request is accepted here, not
+     * refused** (Owner, 2026-09-04). Approving and destroying are two commits,
+     * so a crash between them leaves exactly that state — and the repair must be
+     * *do it again*, not a second route nobody would think to call. The decision
+     * fields are only written when there was a decision to take.
+     */
     const row = await tx.fullDeletionRequest.findFirst({
-      where: { id: requestId, status: 'pending', deletedAt: null },
-      select: { id: true, subjectId: true },
+      where: {
+        id: requestId,
+        deletedAt: null,
+        OR: [{ status: 'pending' }, { status: 'approved' }],
+      },
+      select: { id: true, subjectId: true, status: true },
     });
-    // Decided, withdrawn or nonexistent answer alike (§20 rule 17).
+    // Rejected, withdrawn or nonexistent answer alike (§20 rule 17 — one
+    // refusal, so nothing is learned from the difference).
     if (!row) throw new AppError('NOT_FOUND', 'no such pending request');
+    // Already decided: nothing to record. Execution below is idempotent, so a
+    // double-click and a retry after a crash both land somewhere harmless.
+    if (row.status === 'approved') return;
 
     /**
      * **A stale request fails closed** (§4.10a). If the subject was deleted
@@ -188,15 +204,231 @@ export async function approveFullDeletion(
       targetEntity: 'FullDeletionRequest',
       targetId: row.id,
       // Ids only, and one honest fact: approving did not delete anything.
+      // The decision, on its own. What the destruction did is `fulldeletion.execute`.
       detail: { subject_id: row.subjectId, executed: false },
     });
   });
+
+  /**
+   * **Approval is followed immediately by execution**, in the same call.
+   *
+   * One action rather than two, deliberately: a request left approved-but-alive
+   * is a state in which the person has been told her data is gone while it is
+   * not, and nobody is watching a queue for it. They remain two COMMITS, because
+   * the closure primitives own their own transactions — which is precisely why
+   * `executed_at` exists and why this function is safe to call again.
+   */
+  await executeFullDeletion(prisma, caller, requestId);
 }
 
 /**
  * Refuses a request — recorded, then withdrawn from the live set (R128's shape),
  * so it never blocks a later request while its evidence survives.
  */
+/**
+ * **Option B's destruction** (SRS §4.10a, Revision 131; Owner decisions
+ * 2026-09-04).
+ *
+ * §4.10a names exactly what goes: *"enrolment history, grades, Quran
+ * progression, attendance, assessment submissions and answers, the
+ * `reference_code` and the retained identity"*. This deletes that and nothing
+ * beyond it — the list is the specification's, not this function's.
+ *
+ * ## Only an approved request, and only once
+ *
+ * Execution is gated on `status = 'approved'` and is **idempotent**: a second
+ * run finds no educational rows, meets an already-de-identified account, and
+ * stamps nothing new. `executed_at` records the work rather than the decision,
+ * so a crash between approving and destroying is visible as
+ * *approved with no execution* and is repaired by running it again — never
+ * silently reported as complete.
+ *
+ * ## Order, and why the stamp is last
+ *
+ * Educational rows and their tombstones first, in foreign-key order, then the
+ * closure, then the reference code, then the stamp. **Nothing marks the request
+ * executed until everything before it has committed**, which is the whole
+ * defence against a partial deletion reported as a finished one.
+ *
+ * ## What deliberately SURVIVES, and why each one
+ *
+ * * **The `User` row**, de-identified. Twenty-two relationships point at it, and
+ *   §4.10a's own promise is that no "zero rows anywhere" is claimed.
+ * * **Consent evidence.** `ConsentRecord` holds a type, a decision, an actor, a
+ *   wording version and timestamps — **no name, no birth date, no contact
+ *   detail** — so it is already the minimum Section 8 asks for. It is not a
+ *   hidden copy of a profile and there is nothing in it left to strip.
+ * * **The deletion request and the audit trail**, which is how the association
+ *   can show what was asked and what was done.
+ * * **`FamilyLink`**, because §4.10a does not list it and it is two people's
+ *   record, not one's. It points at a row that no longer identifies anybody.
+ * * **`Exam` rows targeted at her.** A teacher-authored assessment is not in
+ *   §4.10a's list and R126 gives exams their own deletion-evidence guard. Her
+ *   grades and submissions for them go; the exam does not.
+ *
+ * ## What it must never do
+ *
+ * Touch another person's row. Every delete below is keyed on `student_id`, on an
+ * id belonging to this subject, or on a `Trash` entry naming one of them.
+ */
+export async function executeFullDeletion(
+  prisma: PrismaClient,
+  caller: Actor,
+  requestId: string,
+): Promise<{ executed: boolean }> {
+  const actor = await assertFreshActive(prisma, caller.userId, DECIDER_ROLES, caller.activeRole);
+
+  const row = await prisma.fullDeletionRequest.findFirst({
+    where: { id: requestId, status: 'approved', deletedAt: null },
+    select: { id: true, subjectId: true, executedAt: true },
+  });
+  if (!row) throw new AppError('NOT_FOUND', 'no such approved request');
+  // Already done. Answering successfully is correct — the caller asked for a
+  // state that holds — and re-running the deletes would be work with no subject.
+  if (row.executedAt !== null) return { executed: false };
+
+  const subjectId = row.subjectId;
+
+  /**
+   * **The educational record, in foreign-key order**, with each row's tombstone
+   * removed beside it. A `Trash` snapshot is a JSON copy written so a row can
+   * come back, so leaving one behind would keep the deleted grade in JSONB and
+   * offer to restore it — the erasure would be cosmetic. This is the same trap
+   * `deIdentifyAccount` documents for `User` and the application purge documents
+   * for `ChildApplication`.
+   */
+  await prisma.$transaction(async (tx) => {
+    /**
+     * **Every id is collected BEFORE anything is deleted**, because a tombstone
+     * is found by the id of the row it can restore and that id is unreachable
+     * once the row is gone. The first version of this collected only submission
+     * and application ids, and a `Trash` snapshot of a deleted enrolment
+     * survived the deletion — a restorable copy of exactly the record Option B
+     * had just destroyed. The test that caught it is the one asserting no Trash
+     * can restore any of it.
+     */
+    const byStudent = { studentId: subjectId } as const;
+    const [submissions, grades, attendance, quranLogs, surahProgress, groupLinks, enrolments] =
+      await Promise.all([
+        tx.studentExamSubmission.findMany({ where: byStudent, select: { id: true } }),
+        tx.grade.findMany({ where: byStudent, select: { id: true } }),
+        tx.attendance.findMany({ where: byStudent, select: { id: true } }),
+        tx.quranProgressLog.findMany({ where: byStudent, select: { id: true } }),
+        tx.studentSurahProgress.findMany({ where: byStudent, select: { id: true } }),
+        tx.studentTeachingGroup.findMany({ where: byStudent, select: { id: true } }),
+        tx.enrollment.findMany({ where: byStudent, select: { id: true } }),
+      ]);
+    const educationalIds = [
+      ...submissions,
+      ...grades,
+      ...attendance,
+      ...quranLogs,
+      ...surahProgress,
+      ...groupLinks,
+      ...enrolments,
+    ].map((r) => r.id);
+
+    const submissionIds = submissions.map((r) => r.id);
+    if (submissionIds.length > 0) {
+      // Answer options cascade from answers; answers are Restrict on the
+      // submission, so they go first.
+      await tx.studentExamAnswer.deleteMany({
+        where: { submissionId: { in: submissionIds } },
+      });
+    }
+    await tx.studentExamSubmission.deleteMany({ where: byStudent });
+
+    await tx.grade.deleteMany({ where: byStudent });
+    await tx.attendance.deleteMany({ where: byStudent });
+    await tx.quranProgressLog.deleteMany({ where: byStudent });
+    await tx.studentSurahProgress.deleteMany({ where: byStudent });
+    await tx.studentTeachingGroup.deleteMany({ where: byStudent });
+    await tx.enrollment.deleteMany({ where: byStudent });
+
+    /**
+     * **The application that carries her copied identity** (Owner Section 6).
+     *
+     * `ChildApplication` holds her names, sex and birth date **independently of
+     * the `User` row**, so a deletion that cleared the account and left the
+     * application intact would have deleted nothing. The whole row goes rather
+     * than being stripped: a husk with every identifying column nulled still
+     * carries a `consent_text_version` recording consent for a child whose
+     * record no longer exists — evidence with nothing left to evidence — and the
+     * decision itself survives in the audit trail, which has its own purpose and
+     * its own schedule.
+     *
+     * **Only applications ABOUT her.** `parent_id` rows are her guardian's
+     * applications concerning other children and are somebody else's record.
+     */
+    const applications = await tx.childApplication.findMany({
+      where: {
+        OR: [{ childUserId: subjectId }, { matchedExistingUserId: subjectId }],
+      },
+      select: { id: true },
+    });
+    const applicationIds = applications.map((a) => a.id);
+    if (applicationIds.length > 0) {
+      await tx.trash.deleteMany({
+        where: { targetEntity: 'ChildApplication', targetId: { in: applicationIds } },
+      });
+      await tx.childApplication.deleteMany({ where: { id: { in: applicationIds } } });
+    }
+
+    // Every tombstone naming a row this transaction destroyed. Keyed on the ids
+    // themselves rather than on entity names, so nothing belonging to anybody
+    // else can be caught by it.
+    const destroyed = [...educationalIds, ...applicationIds];
+    if (destroyed.length > 0) {
+      await tx.trash.deleteMany({ where: { targetId: { in: destroyed } } });
+    }
+    await tx.trash.deleteMany({ where: { targetId: subjectId } });
+  });
+
+  /**
+   * **The closure, through the existing machinery.** Option B is Option A plus
+   * the educational record, so it runs Option A rather than reimplementing it —
+   * identity, credentials, satellites, search shadows and the account's own
+   * tombstone all handled by the code that already owns them.
+   */
+  await purgeUserAccount(prisma, actor, subjectId);
+
+  await prisma.$transaction(async (tx) => {
+    /**
+     * **The reference code, which Option A keeps and Option B removes.**
+     *
+     * It is the locator that reconnects a former beneficiary with her history —
+     * and there is no longer a history to reconnect to. §4.10a is explicit that
+     * it must never become a hidden back door into what Option B deleted.
+     */
+    await tx.user.update({ where: { id: subjectId }, data: { referenceCode: null } });
+
+    await tx.fullDeletionRequest.update({
+      where: { id: row.id },
+      data: { executedAt: new Date() },
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      ...(actor.activeRole ? { activeRole: actor.activeRole } : {}),
+      actionType: 'fulldeletion.execute',
+      targetEntity: 'FullDeletionRequest',
+      targetId: row.id,
+      /**
+       * **Ids and categories, never values** (TD-8, TD-14). The row recording an
+       * erasure must not become the last copy of what was erased — no name, no
+       * birth date, no reference code, and no per-table counts either, since a
+       * count of grades is a fact about her education.
+       */
+      detail: {
+        subject_id: subjectId,
+        removed: ['educational_record', 'application_identity', 'reference_code', 'account'],
+      },
+    });
+  });
+
+  return { executed: true };
+}
+
 export async function rejectFullDeletion(
   prisma: PrismaClient,
   caller: Actor,

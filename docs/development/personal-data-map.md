@@ -217,6 +217,50 @@ exports no destructive verb, proved by adding one and watching it fail. That
 matters more now, not less: with a real destructive path in existence, a second
 unaudited one is the thing somebody would call by mistake.
 
+## Option B, executed (2026-09-04)
+
+**Approval destroys.** It recorded a decision and deleted nothing for as long as
+the classifications above were open; the Owner settled them, and a request left
+approved-but-alive is a state in which the person has been told her data is gone
+while it is not, with nobody watching a queue for it. **One action, not two.**
+
+**What goes**, which is exactly §4.10a's list and nothing invented beside it:
+enrolment history, grades, Quran progression, attendance, assessment submissions
+and their answers, the copied identity on her `ChildApplication`, every `Trash`
+snapshot able to restore any of it, the `reference_code`, and the account itself
+— through Option A's own machinery rather than a second closure path.
+
+**What stays, and why each one:**
+
+| Kept | Because |
+| --- | --- |
+| The `User` row, de-identified | Twenty-two relationships point at it, and §4.10a promises no "zero rows anywhere" |
+| `ConsentRecord` | A type, a decision, an actor, a wording version, timestamps — **no name, no birth date, no contact**. Already the minimum; nothing left to strip |
+| The request and the audit trail | How the association can show what was asked and what was done |
+| `FamilyLink` | Two people's record, and **not in §4.10a's list** |
+| `Exam` rows targeted at her | Teacher-authored, not in the list, and R126 gives exams their own guard. Her grades and submissions go; the assessment does not |
+
+**The stamp is written last.** `executed_at` records the WORK, `status` records
+the DECISION, and conflating them is how a request ends up marked done while the
+data is still there. They are two commits, because the closure primitives own
+their own transactions — so a crash leaves `approved` with a null `executed_at`,
+which is visible, queryable, and repaired by approving again. Execution is
+idempotent, so the repeat is safe.
+
+**The bug worth recording**: the first version collected only submission and
+application ids when clearing tombstones, so a `Trash` snapshot of a deleted
+enrolment survived — a restorable copy of exactly the record Option B had just
+destroyed. **Every id is now collected before anything is deleted**, because a
+tombstone is found by the id of the row it restores and that id is unreachable
+once the row is gone.
+
+**One thing the Owner may want to look at.** An `Exam` row targeted at a single
+beneficiary survives with her `student_id` pointing at a de-identified row. That
+is right — the exam is a teacher's work — but its **title is free text**, so a
+teacher who typed a beneficiary's name into it has put personal data somewhere
+neither Option A nor Option B touches. §4.10a does not classify it and this
+implementation does not decide it.
+
 ## Backups — what may honestly be claimed
 
 A deletion request removes data from the **live operational system**. Encrypted,
@@ -365,8 +409,8 @@ it was written:
 
 * **Option A exists and is R131's behaviour, not R111's** — it **preserves**
   `referenceCode`, per the Owner's decision.
-* **Option B's request and review control plane exists**; its **execution does
-  not**, and will not until the classification above settles every row.
+* **Option B EXECUTES** (Owner, 2026-09-04). Approval destroys in the same call
+  and returns `executed: true` only once it has committed — see below.
 * **The retention clocks are computed** — ten-year and twelve-month — and both
   are **read-only reports**. Nothing on this page deletes anything today.
 * **The consent wording is drafted, not applied.**

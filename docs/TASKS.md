@@ -1689,20 +1689,17 @@ was hiding behind it: the run went green on the first attempt.
       decision and DELETES NOTHING** (`executed: false` on the wire and in the
       audit). Refusal follows R128's shape. 14 tests; the queue and the audit
       carry no educational fact.
-- [ ] **BLOCKED — Option B DESTRUCTIVE EXECUTION.** The control plane is built
-      and an approved request is a decision waiting to be carried out. Execution
-      needs every classification in §4.10a's map settled, and at least these are
-      not: **(a)** the birth date (below); **(b)**
-      `notification.subject_user_id`, which §4.10a marks provisional — a
-      notification in *another person's* inbox whose subject is the deleted
-      person must be de-identified rather than destroyed, and exactly what to
-      rewrite in its rendered content is undecided; **(c)** `ChildApplication`'s
-      copied identity fields, whose own 12-month rule has no settled reference
-      point; **(d)** Trash snapshots of rows that will be deleted; **(e)**
-      consent evidence, which §4.10a keeps under its own rule while forbidding
-      audit from becoming a hiding place — the boundary between the two is not
-      drawn. **A partial purge that claims completion is worse than none**, so
-      execution stays unimplemented rather than partially correct.
+- [x] **BUILT (Owner, 2026-09-04) — Option B DESTRUCTIVE EXECUTION.** Approval
+      now destroys in the same call and returns `executed: true` only once it has
+      committed. What goes is exactly §4.10a's list — enrolment history, grades,
+      Quran progression, attendance, assessment submissions and answers, the
+      copied identity on her `ChildApplication`, every `Trash` snapshot able to
+      restore any of it, the `reference_code`, and the account through Option A's
+      own machinery. What stays: the de-identified `User` row, minimal consent
+      evidence, the request, the audit trail, `FamilyLink` (two people's record,
+      not in the list) and teacher-authored `Exam` rows. `executed_at` records
+      the WORK where `status` records the DECISION, is stamped LAST, and makes a
+      crash between the two visible and repairable by approving again.
 - [x] **DONE (2026-09-04) — the guardian-only cleanup GUARD.** R131's §4.3
       clause was ratified but had **not been carried into `SRS.md`** by the
       reconciliation pass; it is there now. `policies/guardian-purpose.ts`

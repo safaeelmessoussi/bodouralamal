@@ -587,12 +587,12 @@ const document = {
     '/admin/full-deletion-requests/{id}/approve': {
       post: op(
         'Approve a full-deletion request',
-        "**R131 §4.10a — Super Admin only. RECORDS A DECISION AND DELETES NOTHING.** Destructive execution is a separate step, gated on the cross-domain classifications §4.10a leaves open, and is not implemented; the response returns `executed: false` and the audit row records the same fact, so no reader can mistake an approval for a completed deletion. A **stale request fails closed** (`SUBJECT_UNAVAILABLE`) when the subject was deleted while the request waited, rather than deciding against a state nobody reviewed.",
+        "**R131 §4.10a — Super Admin only. APPROVING EXECUTES THE DELETION.** It recorded a decision and deleted nothing for as long as §4.10a's cross-domain classifications were open; the Owner settled them on 2026-09-04 and approval now destroys in the same call, returning `executed: true` only once the destruction has committed. **One action rather than two**, deliberately: a request left approved-but-alive is a state in which the person has been told her data is gone while it is not, with nobody watching a queue for it. **What goes** is exactly §4.10a's list — enrolment history, grades, Quran progression, attendance, assessment submissions and answers, the copied identity on her `ChildApplication`, every `Trash` snapshot able to restore any of it, the `reference_code`, and the account itself through Option A's own machinery. **What stays**: the de-identified `User` row, minimal consent evidence (a type, a decision, an actor, a wording version and timestamps — no name, no birth date), this request, the audit trail, `FamilyLink` (two people's record, and not in §4.10a's list) and teacher-authored `Exam` rows targeted at her, whose grades go while the assessment does not. **Idempotent**: approving again is harmless, and a crash between the decision and the destruction leaves `approved` with a null `executed_at`, repaired by approving again — the stamp is written LAST, after everything else has committed, so a partial deletion can never be reported as a finished one. **No promise is made about backups already written**: they hold an older copy until they expire, and restore suppression is what stops a restore resurrecting the record. A **stale request fails closed** (`SUBJECT_UNAVAILABLE`) when the subject was deleted while the request waited, rather than deciding against a state nobody reviewed.",
         {
-          '200': 'The decision was recorded. Nothing was deleted.',
+          '200': 'Approved and executed. `executed: true`.',
           '401': ENVELOPE,
           '403': `${ENVELOPE} FORBIDDEN below Super Admin, or TD-12 freshness.`,
-          '404': `${ENVELOPE} NOT_FOUND for a request that is not pending — decided, withdrawn or nonexistent answer alike.`,
+          '404': `${ENVELOPE} NOT_FOUND for a request that is rejected, withdrawn or nonexistent — answered alike, so nothing is learned from the difference.`,
           '409': `${ENVELOPE} STATE_CONFLICT with SUBJECT_UNAVAILABLE.`,
         },
       ),

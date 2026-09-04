@@ -294,11 +294,13 @@ describe('R131 — the account-closure wording', () => {
 /**
  * **Option B's copy must be honest in three specific ways** (R131 §4.10a).
  *
- * The control plane is implemented and **destructive execution is not**, so the
- * one unacceptable outcome is a reader who believes her educational record has
- * been deleted. The wording therefore has to say what it removes, that a review
- * follows, that nothing is deleted yet, and that backups expire rather than
- * being erased on request.
+ * **Destructive execution now exists** (Owner, 2026-09-04), which moves the
+ * unacceptable outcome rather than removing it. It was *a reader who believes
+ * her record has been deleted when it has not*; it is now **a reader who does
+ * not realise that approval destroys immediately**. So the wording must
+ * separate the two moments — sending asks, approving executes — instead of
+ * reassuring her that neither deletes anything, which is what it used to say
+ * and what stopped being true.
  */
 describe('R131 Option B — the full-deletion request wording', () => {
   const copy = [
@@ -315,9 +317,20 @@ describe('R131 Option B — the full-deletion request wording', () => {
     expect(copy).toMatch(/يتعذّر|شهادة/);
   });
 
-  it('says a review follows and that nothing is deleted yet', () => {
+  it('separates SENDING from APPROVING — one asks, the other destroys', () => {
     expect(copy).toMatch(/يُراجَع/);
-    expect(copy).toMatch(/لا يحذف شيئاً/);
+    // Sending is the harmless half...
+    expect(copy).toMatch(/إرسال الطلب لا يحذف شيئاً/);
+    // ...and approving is not, which the copy has to say in as many words.
+    expect(copy).toMatch(/تُنفّذ الحذف/);
+    expect(copy).toMatch(/لا يمكن التراجع/);
+  });
+
+  it('never tells her that approval is harmless — the sentence that stopped being true', () => {
+    // The old copy read «تسجيل الطلب أو الموافقة عليه لا يحذف شيئاً في حدّ ذاته».
+    // It was accurate while execution was unimplemented and became a false
+    // reassurance the moment it was not. Pinned so it cannot come back.
+    expect(copy).not.toMatch(/الموافقة عليه لا يحذف/);
   });
 
   it('mentions backups only to DENY immediate erasure, and claims no legal mandate', () => {

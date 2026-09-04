@@ -35,8 +35,9 @@ export function create(prisma: PrismaClient) {
     res.status(201).json({
       id: row.id,
       status: row.status,
-      // Said on the wire, not only in the interface: approving this request does
-      // not by itself delete anything, and no promise is made about backups.
+      // Said on the wire, not only in the interface: SUBMITTING a request
+      // deletes nothing. A Super Admin's approval is what executes it, and no
+      // promise is made about backups already written.
       executed: false,
     });
   };
@@ -61,9 +62,18 @@ export function listPending(prisma: PrismaClient) {
 export function approve(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await approveFullDeletion(prisma, requireActor(req), idParam(req, 'id'));
-    // `executed: false` is the contract's own statement that the decision is
-    // recorded and the deletion has not happened.
-    res.json({ approved: true, executed: false });
+    /**
+     * **`executed: true` now, and it is a claim the call has earned.**
+     *
+     * It said `false` for as long as Option B had a control plane and no
+     * destruction, which was the honest answer then. Approval now performs the
+     * deletion in the same call and only returns when it has committed, so the
+     * flag reports what happened rather than what was scheduled. **A partial
+     * deletion cannot reach here**: the request is stamped executed last, after
+     * everything else has committed, and a failure propagates as an error with
+     * the request left approved-but-unexecuted for a retry.
+     */
+    res.json({ approved: true, executed: true });
   };
 }
 

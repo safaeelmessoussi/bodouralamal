@@ -2077,6 +2077,18 @@ model FullDeletionRequest {
 
   /// R128's shape: a refusal is recorded and then withdrawn from the live set,
   /// so it blocks no later request while its evidence survives.
+  /// **When the destruction actually ran** (Owner, 2026-09-04).
+  ///
+  /// Approval and execution are separate facts, and conflating them is how a
+  /// request ends up marked done while the data is still there: `status` records
+  /// the DECISION, this records the WORK. A crash between the two leaves
+  /// `approved` with a null `executed_at`, which is visible, queryable and
+  /// fixed by running the approval again — execution is idempotent.
+  ///
+  /// **One column rather than a fourth status**, so the state machine does not
+  /// grow a value for "decided but not yet done" that a crash could strand.
+  executedAt DateTime? @map("executed_at") @db.Timestamptz(6)
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 

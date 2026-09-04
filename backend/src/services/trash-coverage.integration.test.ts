@@ -344,6 +344,17 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
    */
   "application-retention.service.ts":
     "measures retention OF applications, tombstoned or not — a soft-deleted row still holds the child's copied identity and is not entitled to a longer life for being in the Trash",
+  /**
+   * **R131 Option B destroys the application whether it is tombstoned or not.**
+   *
+   * `ChildApplication` holds the child's names, sex and birth date
+   * independently of the `User` row, so an execution that read only live rows
+   * would leave her copied identity behind in a tombstone and report a full
+   * deletion that had not happened. The whole point of the read is to find rows
+   * a live-only query cannot see.
+   */
+  "full-deletion-request.service.ts":
+    "Option B must destroy a copied identity that a tombstone would otherwise preserve",
 };
 
 describe("a soft-deleted row is excluded at the database boundary", () => {
@@ -352,10 +363,23 @@ describe("a soft-deleted row is excluded at the database boundary", () => {
       new URL("../../prisma/schema.prisma", import.meta.url),
       "utf8",
     );
+    /**
+     * **`Trash` has a `deletedAt` and is NOT soft-deletable**, which is the one
+     * case the shape test gets wrong.
+     *
+     * On every other model the column means *this row is withdrawn*. On `Trash`
+     * it is the tombstone's PAYLOAD — when the target was deleted — and a Trash
+     * row is never soft-deleted, because deleting one is the permanent act
+     * itself. Excluding the model is the precise fix; the alternative was
+     * exempting `trash.service.ts` wholesale, which would have silenced every
+     * genuine read in the file that owns the Trash.
+     */
+    const NOT_SOFT_DELETABLE = new Set(["trash"]);
     const softDeletable = new Set(
       [...schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)]
         .filter(([, , body]) => body!.includes("deletedAt"))
-        .map(([, name]) => name![0]!.toLowerCase() + name!.slice(1)),
+        .map(([, name]) => name![0]!.toLowerCase() + name!.slice(1))
+        .filter((name) => !NOT_SOFT_DELETABLE.has(name)),
     );
 
     const unfiltered: string[] = [];
