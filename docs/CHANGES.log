@@ -4051,3 +4051,58 @@ linking and family links.
 worked around: two suites built a "self-managed adult" by giving her a login,
 which is the very reading this decision retires, and two cleanups did not know
 about `SelfManagedClaim`'s two `Restrict` foreign keys.
+
+## R131 Option B — the request/review control plane (2026-09-04)
+
+**The control plane only. Nothing deletes, and every surface says so.**
+
+Option A closes the account and keeps the minimal educational archive. Option B
+asks for the archive itself to go, which **may make a future attestation
+impossible** — so §4.10a makes it a request a Super Admin reviews, never a
+cascade a browser can start. Destructive execution is a separate step, gated on
+the cross-domain classifications §4.10a leaves open, and is deliberately not
+implemented: **approval records a decision and deletes nothing**, and both the
+API response and the audit row carry `executed: false` so no reader can mistake
+one for the other. The suite asserts it the same way — after approval the
+enrolment is still there and the account is untouched.
+
+**The authority rule is why Section 2 had to come first.** §4.10a gives two
+bases: a person may always ask about herself, and an adult may ask for a minor
+only while holding a **live approved `FamilyLink`**. The prohibition — *a former
+guardian of a self-managed adult has no basis* — was **not expressible** while
+authority was read from the presence of a login identity, because Option A
+deletes it: a closed self-managed adult would have looked like a minor again and
+her former guardian could have asked for her educational record to be destroyed.
+The service reads `isSelfManaged`, and the test that proves it is the one where
+the link row survives and the request is still refused.
+
+**The basis is recorded, not re-derived.** A relationship can change while a
+request waits, and the reviewer needs to know what was true when it was made.
+
+**Refusals about somebody else are uniform.** A stranger, a revoked guardian, a
+pending link and an id that does not exist all answer `404` alike — whether
+another person manages her own account is not a fact this endpoint may disclose.
+
+**A table of its own, deliberately.** Reusing `SelfManagedClaim` or `FamilyLink`
+because their columns look similar would put two lifecycles in one table, which
+is how a destructive verb reaches the wrong row (R128). One live request per
+subject is asserted in the service rather than by a partial unique index: a
+refusal is soft-deleted precisely so she may ask again, and the constraint is
+about pending work rather than history.
+
+**The queue shows who and on what basis — and not the educational record.** A
+reviewer deciding whether it may be destroyed has no need to read it, and a queue
+that displayed it would be one more copy of the thing at issue. The audit carries
+ids and the basis; no name, no date, no educational fact.
+
+**Arabic copy states four things** and is guarded: this is a different request
+from account closure; it may make an attestation impossible; a review follows and
+**nothing is deleted yet**; and encrypted backups keep an older copy until they
+expire, so **immediate erasure everywhere cannot be promised**. One guard had to
+be rewritten during the work — a naive *"must not contain «محو فوري»"* matched
+the very sentence that exists to deny it, so the assertion now checks the
+negation rather than the phrase.
+
+**Schema:** one new table with two enums and two indexes. **Tests: 14/14** new,
+38/38 across the closure, authority and request suites. OpenAPI at 170 paths,
+reconciled; TD-3 updated.

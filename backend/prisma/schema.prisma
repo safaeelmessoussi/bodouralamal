@@ -150,6 +150,29 @@ enum ChildApplicationRejectionReason {
 /// `rejected` is terminal AND soft-deleted, exactly as a rejected FamilyLink is
 /// (R128): the decision and its reason survive, and the beneficiary is free to
 /// make a corrected request rather than being blocked for ever by a refusal.
+/// R131 Option B — the lifecycle of a request to delete the educational record
+/// itself. `rejected` is terminal AND soft-deleted, exactly as R128's family
+/// link and R132's claim are: the refusal and its reason survive, and a later
+/// request is a NEW row rather than a reopening of this one.
+enum FullDeletionRequestStatus {
+  pending
+  approved
+  rejected
+
+  @@map("full_deletion_request_status")
+}
+
+/// Who was entitled to ask, recorded as evidence at the moment of asking.
+/// R131 gives exactly two bases and they are not interchangeable: a self-managed
+/// adult asks for herself, and a live approved guardian asks for a minor. A
+/// FORMER guardian of a self-managed adult has neither.
+enum FullDeletionRequesterBasis {
+  self
+  guardian
+
+  @@map("full_deletion_requester_basis")
+}
+
 enum SelfManagedClaimStatus {
   pending
   approved
@@ -759,20 +782,25 @@ model User {
   childLinks  FamilyLink[] @relation("FamilyLinkChild")
 
   /// R62 — child applications, in each of the four roles a User can play on one.
-  childApplicationsAsParent  ChildApplication[] @relation("ChildApplicationParent")
-  childApplicationsAsChild   ChildApplication[] @relation("ChildApplicationChild")
-  childApplicationsAsMatch   ChildApplication[] @relation("ChildApplicationMatch")
-  childApplicationsAsDecider ChildApplication[] @relation("ChildApplicationDecider")
+  childApplicationsAsParent   ChildApplication[]    @relation("ChildApplicationParent")
+  childApplicationsAsChild    ChildApplication[]    @relation("ChildApplicationChild")
+  childApplicationsAsMatch    ChildApplication[]    @relation("ChildApplicationMatch")
+  childApplicationsAsDecider  ChildApplication[]    @relation("ChildApplicationDecider")
   /// R132 — her own claim to manage her account, and the claims she decided.
-  selfManagedClaims          SelfManagedClaim[] @relation("SelfManagedClaimBeneficiary")
-  selfManagedClaimsDecided   SelfManagedClaim[] @relation("SelfManagedClaimDecider")
+  selfManagedClaims           SelfManagedClaim[]    @relation("SelfManagedClaimBeneficiary")
+  selfManagedClaimsDecided    SelfManagedClaim[]    @relation("SelfManagedClaimDecider")
+  /// R131 Option B — full-deletion requests about her, made by her, or decided
+  /// by her.
+  fullDeletionRequests        FullDeletionRequest[] @relation("FullDeletionSubject")
+  fullDeletionRequestsMade    FullDeletionRequest[] @relation("FullDeletionRequester")
+  fullDeletionRequestsDecided FullDeletionRequest[] @relation("FullDeletionDecider")
   /// R123 — presence, and presence somebody else recorded. Two relations
   /// because one person is both: a مؤطِّرة marks a roster and, if she also
   /// studies, is marked on one.
   /// R124 — assessments published to this beneficiary alone.
-  targetedExams              Exam[]             @relation("ExamTargetStudent")
-  attendance                 Attendance[]       @relation("AttendanceStudent")
-  attendanceMarked           Attendance[]       @relation("AttendanceMarkedBy")
+  targetedExams               Exam[]                @relation("ExamTargetStudent")
+  attendance                  Attendance[]          @relation("AttendanceStudent")
+  attendanceMarked            Attendance[]          @relation("AttendanceMarkedBy")
 
   quranLogs                  QuranProgressLog[]      @relation("QuranLogStudent")
   quranLogsAuthored          QuranProgressLog[]      @relation("QuranLogLoggedBy")
@@ -2013,6 +2041,50 @@ model FamilyLink {
 /// association-side identity match — the human recognition the association
 /// already does — and only that approval binds the identity to the existing
 /// `User`. No second account is ever created.
+/// **R131 Option B — a request to delete the educational record itself.**
+///
+/// **This is not Option A.** Closure removes the account and keeps the minimal
+/// educational archive; this asks for the archive to go too, which may make a
+/// future attestation impossible. It is therefore a **request**, reviewed and
+/// approved by a Super Admin — never a cascade a browser can start.
+///
+/// **Approval does not delete anything today.** Destructive execution is a
+/// separate step, gated on the cross-domain classifications R131 leaves open,
+/// and is deliberately not implemented. An approved row records a decision that
+/// is waiting to be carried out, and every surface says so.
+model FullDeletionRequest {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// **Whose data.** `Restrict`: the request is evidence about a person and must
+  /// not vanish with a careless delete.
+  subjectId String @map("subject_id") @db.Uuid
+  subject   User   @relation("FullDeletionSubject", fields: [subjectId], references: [id], onDelete: Restrict)
+
+  /// **Who asked, and on what basis** — recorded at the moment of asking,
+  /// because a relationship can change afterwards and the reviewer needs to know
+  /// what was true when the request was made.
+  requestedById String                     @map("requested_by") @db.Uuid
+  requestedBy   User                       @relation("FullDeletionRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  basis         FullDeletionRequesterBasis
+
+  status FullDeletionRequestStatus @default(pending)
+
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedById    String?   @map("decided_by") @db.Uuid
+  decidedBy      User?     @relation("FullDeletionDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decisionReason String?   @map("decision_reason") @db.VarChar(500)
+
+  /// R128's shape: a refusal is recorded and then withdrawn from the live set,
+  /// so it blocks no later request while its evidence survives.
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@index([status])
+  @@index([subjectId, status])
+  @@map("full_deletion_request")
+}
+
 model SelfManagedClaim {
   id String @id @default(uuid()) @db.Uuid
 

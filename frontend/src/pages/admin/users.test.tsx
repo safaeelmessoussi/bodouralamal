@@ -284,9 +284,48 @@ describe('R131 — the account-closure wording', () => {
     }
   });
 
-  it('does not offer Option B, which is not implemented', () => {
+  it('does not offer Option B from the CLOSURE copy — they are different requests', () => {
     for (const text of copy) {
       expect(text).not.toMatch(/حذف كل البيانات القابلة للحذف/);
     }
+  });
+});
+
+/**
+ * **Option B's copy must be honest in three specific ways** (R131 §4.10a).
+ *
+ * The control plane is implemented and **destructive execution is not**, so the
+ * one unacceptable outcome is a reader who believes her educational record has
+ * been deleted. The wording therefore has to say what it removes, that a review
+ * follows, that nothing is deleted yet, and that backups expire rather than
+ * being erased on request.
+ */
+describe('R131 Option B — the full-deletion request wording', () => {
+  const copy = [
+    t('profile.fullDeletionLede'),
+    t('profile.fullDeletionReview'),
+    t('profile.fullDeletionBackups'),
+  ].join(' ');
+
+  it('says it is a DIFFERENT request from account closure', () => {
+    expect(copy).toMatch(/مختلف عن إغلاق الحساب/);
+  });
+
+  it('warns that a future attestation may become impossible', () => {
+    expect(copy).toMatch(/يتعذّر|شهادة/);
+  });
+
+  it('says a review follows and that nothing is deleted yet', () => {
+    expect(copy).toMatch(/يُراجَع/);
+    expect(copy).toMatch(/لا يحذف شيئاً/);
+  });
+
+  it('mentions backups only to DENY immediate erasure, and claims no legal mandate', () => {
+    // A naive "must not contain «محو فوري»" fails on the sentence that exists to
+    // rule it out — the phrase appears inside its own negation. The property is
+    // that the promise is refused, so that is what is asserted.
+    expect(copy).toMatch(/النسخ الاحتياطية/);
+    expect(copy).toMatch(/لا يمكن الوعد بمحو فوري/);
+    expect(copy).not.toMatch(/CNDP|القانون يفرض|إلزام قانوني/);
   });
 });

@@ -551,6 +551,52 @@ const document = {
         },
       ),
     },
+    '/full-deletion-requests': {
+      post: op(
+        'Request deletion of the educational record (Option B)',
+        "**R131 §4.10a — Option B, and it is NOT Option A.** Account closure removes the account and keeps the minimal educational archive; this asks for the archive itself to be deleted, which **may make a future educational attestation impossible**. It is therefore a **request** a Super Admin reviews, never a cascade a browser can start. **Nothing is deleted by this endpoint, and approving it deletes nothing either**: destructive execution is a separate step, gated on the cross-domain classifications §4.10a leaves open, and is deliberately not implemented — the response says so with `executed: false`. **Neither this nor approval promises 'zero rows anywhere'**: narrowly necessary evidence survives under its own rules, and **immutable backups may hold an older copy until they expire**. Body: `{ subject_id }`. **Who may ask is decided from LIVE ROWS, never from the request**: a person may always ask about herself, and an adult may ask for a minor only while holding a **live approved `FamilyLink`** to her. A **former guardian of a self-managed adult has no basis** — refused with the same `404` as an unknown subject, because whether somebody else manages her own account is not a fact this endpoint may disclose (§20 rule 17). The basis is recorded on the row, because a relationship can change while a request waits and the reviewer needs to know what was true when it was made.",
+        {
+          '201': 'A pending request was recorded. Nothing was deleted.',
+          '400': `${ENVELOPE} VALIDATION_FAILED for a malformed subject id.`,
+          '401': ENVELOPE,
+          '404': `${ENVELOPE} NOT_FOUND for an unknown subject, or one the caller has no basis to ask about — one uniform answer.`,
+          '409': `${ENVELOPE} STATE_CONFLICT with REQUEST_ALREADY_PENDING.`,
+        },
+      ),
+    },
+    '/admin/full-deletion-requests': {
+      get: op(
+        'The full-deletion review queue',
+        '**R131 §4.10a — Super Admin only** (R112), asserted in the service with TD-12 freshness. The projection is **only what decides the request**: who is affected, who asked, and on what basis. **The educational record the request concerns is deliberately absent** — a reviewer deciding whether it may be destroyed has no need to read it, and a queue that displayed it would be one more copy of the thing at issue.',
+        { '200': 'Pending requests, oldest first.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN below Super Admin.` },
+      ),
+    },
+    '/admin/full-deletion-requests/{id}/approve': {
+      post: op(
+        'Approve a full-deletion request',
+        "**R131 §4.10a — Super Admin only. RECORDS A DECISION AND DELETES NOTHING.** Destructive execution is a separate step, gated on the cross-domain classifications §4.10a leaves open, and is not implemented; the response returns `executed: false` and the audit row records the same fact, so no reader can mistake an approval for a completed deletion. A **stale request fails closed** (`SUBJECT_UNAVAILABLE`) when the subject was deleted while the request waited, rather than deciding against a state nobody reviewed.",
+        {
+          '200': 'The decision was recorded. Nothing was deleted.',
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN below Super Admin, or TD-12 freshness.`,
+          '404': `${ENVELOPE} NOT_FOUND for a request that is not pending — decided, withdrawn or nonexistent answer alike.`,
+          '409': `${ENVELOPE} STATE_CONFLICT with SUBJECT_UNAVAILABLE.`,
+        },
+      ),
+    },
+    '/admin/full-deletion-requests/{id}/reject': {
+      post: op(
+        'Refuse a full-deletion request',
+        "**R131 §4.10a — Super Admin only.** A reason of 1–500 characters is required (TD-9). The refusal follows **R128's shape** — recorded and then withdrawn from the live set — so the decision and its reason survive while a later request remains possible as a **NEW** row; the old refusal is never reopened.",
+        {
+          '204': 'Refused and recorded. Nothing was deleted.',
+          '400': `${ENVELOPE} VALIDATION_FAILED when the reason is missing or too long.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN below Super Admin.`,
+          '404': `${ENVELOPE} NOT_FOUND for a request that is not pending.`,
+        },
+      ),
+    },
     '/self-managed-claims': {
       post: op(
         'Claim your own account at 18 (تحويل الحساب إلى حساب مستقل)',

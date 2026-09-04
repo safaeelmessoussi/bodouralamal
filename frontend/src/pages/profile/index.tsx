@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { fetchMyChildApplications, type MyChildApplication } from '../../adapters/child-applications.js';
+import { requestFullDeletion } from '../../adapters/full-deletion-requests.js';
 import {
   deleteOwnAccount,
   fetchOwnProfile,
@@ -15,6 +16,7 @@ import { ErrorState, LoadingState } from '../../components/states.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
+import { Feedback } from '../../components/ui/feedback.js';
 import { TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -89,7 +91,7 @@ export function ProfilePage(): ReactNode {
               <ProfileDetails profile={profile} onSaved={setProfile} />
               <PlacementSection profile={profile} />
               <ChildSection applications={applications} />
-              <DeleteAccountSection />
+              <DeleteAccountSection userId={profile.id} />
             </>
           )}
         </Container>
@@ -236,11 +238,12 @@ function ProfileDetails({
  * already knows how to read a `blocked_by` breakdown, so the person is told
  * *what to reassign* rather than merely *no*.
  */
-function DeleteAccountSection(): ReactNode {
+function DeleteAccountSection({ userId }: { userId: string }): ReactNode {
   const { accessToken } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<unknown>(null);
+  const [fullDeletionNotice, setFullDeletionNotice] = useState<string | null>(null);
 
   return (
     <section className="card" aria-labelledby="delete-account-heading">
@@ -252,6 +255,51 @@ function DeleteAccountSection(): ReactNode {
       <div className="register-form__actions">
         <Button variant="danger" onClick={() => setConfirming(true)}>
           {t('profile.deleteAction')}
+        </Button>
+      </div>
+
+      {/**
+        * **R131 Option B — a DIFFERENT request, said so plainly.**
+        *
+        * Closure keeps the educational archive; this asks for the archive
+        * itself. The one unacceptable outcome on this screen is a reader who
+        * cannot tell the two apart, so the second block states what it removes,
+        * that a future attestation may become impossible, that the
+        * administration reviews it, and that **neither asking nor approving
+        * deletes anything yet** — because destructive execution is not
+        * implemented and pretending otherwise would be a false promise.
+        */}
+      <hr />
+      <h3>{t('profile.fullDeletionTitle')}</h3>
+      <p className="muted">{t('profile.fullDeletionLede')}</p>
+      <p className="muted">{t('profile.fullDeletionReview')}</p>
+      <p className="muted">{t('profile.fullDeletionBackups')}</p>
+      {fullDeletionNotice === null ? null : <Feedback>{fullDeletionNotice}</Feedback>}
+      <div className="register-form__actions">
+        <Button
+          variant="secondary"
+          disabled={busy}
+          onClick={() => {
+            void (async () => {
+              setBusy(true);
+              setFullDeletionNotice(null);
+              try {
+                await requestFullDeletion(userId, accessToken);
+                setFullDeletionNotice(t('profile.fullDeletionSent'));
+              } catch (error) {
+                const details = error instanceof ApiError ? error.details : undefined;
+                setFullDeletionNotice(
+                  details?.['reason'] === 'REQUEST_ALREADY_PENDING'
+                    ? t('profile.fullDeletionPending')
+                    : t('profile.fullDeletionFailed'),
+                );
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        >
+          {t('profile.fullDeletionAction')}
         </Button>
       </div>
 
