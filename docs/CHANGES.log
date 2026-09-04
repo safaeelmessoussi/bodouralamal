@@ -4174,3 +4174,30 @@ CNDP-prescribed duration and not as a requirement of Moroccan law.
 **Tests: 13/13**, including the exact boundary (the day itself has *not*
 elapsed), one day either side, an inactive account with recent activity, and the
 `updated_at` control that touches a row and asserts the answer does not move.
+
+## Twelve-month application retention — the precise half (2026-09-04)
+
+**Rejected applications only, and the boundary is deliberate.** §4.10a makes one
+reference point precise — *"twelve months after rejection"*, which is
+`decided_at` — and leaves the other open: a never-converted **pending**
+application follows *"the same twelve-month maximum from its own reference
+point"*, without saying what that point is. `created_at` (when she asked) and
+`consent_given_at` (when she agreed) are both defensible and give different
+answers, so this module does not judge pending applications at all.
+
+**A rejected REGISTRATION is out of scope too**, and that is a distinction rather
+than an omission: it is a `User` row carrying `account_status = 'rejected'`, not
+an application row, and removing it is account deletion with its own model,
+window and authority. Folding it in would apply an application rule to an
+account.
+
+**A dry run, like the ten-year computation.** It reports and deletes nothing —
+and the rows it names still carry the child's copied identity fields, which is
+one of the very classifications §4.10a leaves open for Option B execution.
+
+**Tests: 6/6**, including the exact boundary (twelve months to the day has *not*
+elapsed), and that approved and pending applications are never reported.
+
+**Two domain CHECK constraints shaped the fixture** rather than being worked
+around: a decided application names its decider, and an approved one names the
+child it created.

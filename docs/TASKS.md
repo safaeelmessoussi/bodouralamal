@@ -1731,6 +1731,23 @@ was hiding behind it: the run went green on the first attempt.
       as history; a grade's date is the sitting's. 13 tests including the exact
       boundary and an `updated_at` control. **Destructive purge remains gated on
       the same open classifications as Option B execution.**
+- [x] **DONE (2026-09-04) — the 12-month REJECTED-application eligibility.**
+      `application-retention.service.ts` reports rejected child applications past
+      twelve months from `decided_at`, the one reference point §4.10a makes
+      precise. **A dry run: it deletes nothing**, and the rows it names still
+      carry the child's copied identity fields — which is exactly why execution
+      waits. 6 tests including the exact boundary.
+- [ ] **BLOCKED — the PENDING-application reference point.** §4.10a says a
+      never-converted pending application follows *"the same twelve-month maximum
+      **from its own reference point**"* and does not say what that point is.
+      `created_at` (when she asked) and `consent_given_at` (when she agreed) are
+      both defensible and give different answers. **THE PRECISE DECISION
+      NEEDED:** *from which instant does a never-decided application's twelve
+      months run?* Also unsettled, and deliberately out of scope here: whether a
+      **rejected registration** — which is a `User` row carrying
+      `account_status = 'rejected'`, not an application row — falls under this
+      rule at all, since removing it is account deletion with its own model,
+      window and authority.
 - [ ] **OPEN, NOT DECIDED — the birth date's Option A classification.**
       *(Audited 2026-09-04; behaviour deliberately unchanged.)* **The five audit
       questions, answered from the code:** **(a) does a future attestation need
