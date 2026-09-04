@@ -5311,3 +5311,87 @@ negative check asserts the panel opened first.
 **Verified:** 66/66 journey assertions through the real routes and a real
 PostgreSQL; 14/14 browser checks on the real screens for both women and the
 LEVEL-B-only control.
+
+## An exam you create must not disappear (2026-09-04)
+
+**The Document Owner created a real online exam, closed the page, came back, and
+found «اختبار جديد» and nothing else.** The paper was in the database —
+published, with its questions — and there was **no way to reach it**.
+
+**There was no list.** `POST /assessments` created a paper and every other route
+addressed one **by id**; nothing anywhere answered *which papers exist*. The
+intention had even been written down: `listExams` excludes online papers with the
+note that they are *"listed by their own screen, `/admin/assessments`"*, and that
+screen listed nothing. A complete capability with no reach — the eighth instance.
+
+`GET /assessments` is that list, scoped exactly as `GET /exams` is: a Super Admin
+sees every paper, a مؤطِّرة the papers her §4.4c staffing reaches, a branch-scoped
+Admin the papers whose **Level** reaches her branches — because a paper carries no
+branch of its own and `branch_id IN (…)` would have excluded every row.
+
+**Building it exposed a real defect in a shared policy.**
+`examScopeWhereForTeacher` pinned `branchId: s.branchId`, correct for a sitting
+and matching **no** online paper. A مؤطِّرة's library came back empty: the same
+empty-`200` shape that function exists to fix for sittings, one delivery mode
+over. `assertExamInTeacherScope` had always known this and drops the constraint
+on its `''` sentinel — the assertion half of the rule had it, the list half never
+grew it, which is precisely the drift their shared docstring warns about.
+
+### Reuse is a copy, and that is the design
+
+One `Exam(mode='online')` row is **both** the paper and the one occasion it was
+used — questions *and* target, date, submissions, marks. Splitting that into a
+template and its sittings needs a new entity and a migration for every table keyed
+on `exam_id`. **Copy-on-reuse needs none of it and gives the property that
+matters**: a September sitting cannot change because the paper is used again in
+December, because December is a **different row** with nothing shared to mutate.
+R124's freeze guards the other direction. Copied: the wording, the maximum, the
+target arm, every question and option. Never copied: submissions, answers, grades,
+notifications. The copy's date is **today**, so it addresses December's enrolments
+rather than September's.
+
+### Two more things the screen was saying that were not true
+
+**«الامتحانات عن بُعد — قريباً … ولم تُبنَ بعد»** — after R124 shipped them, and
+the admission-to-achievement journey proved the whole chain. It was also on screen
+**twice**, as the select's `hint` and as the section body three lines apart in one
+component. Replaced by what is true: this screen arranges a room, a clock window
+and supervisors; a paper is written in «بناء الاختبارات», with a link. The server
+still refuses `mode: online` on `POST /exams` and that is unchanged — the refusal
+was never about the capability being missing.
+
+**Publishing to nobody looked exactly like publishing to a class.** The
+confirmation said «سيصبح الاختبار متاحاً للمستفيدات المعنيات» whether that was
+thirty people or none. It now names the number, and when it is zero it says so
+and points at the three things that decide it. **Not refused**: publish for a
+Level and then admit the students is legitimate, and R122 resolves the audience on
+the paper's own date. The author is told, and decides.
+
+### The fixture leak, and why it could never clean itself
+
+The Owner also found `[content-test:…]` Categories and Levels **in the real Level
+selector**. Eight suites own their rows with a run-unique tag —
+`` `[content-test:${randomUUID()}]` `` — and delete by exactly that string. The
+reason is sound: two suites running at once must not delete each other's data.
+The cost was never written down. A run that dies before its `afterAll` leaves
+rows whose tag **no future run can ever match**; four abandoned runs from one
+minute on 2026-09-02 put four fake Categories, Levels and Subjects on a screen the
+association uses, and `[r82-test:]` had leaked a fifth cluster nobody had seen.
+
+**Age is the discriminator, because the original concern is concurrency.** A row
+older than two hours cannot belong to a run still going, so an aged sweep keeps
+the isolation the run-unique tag was bought for and drops the accumulation it was
+paying for. One shared sweeper, never a force-delete: a row a foreign key still
+holds is left standing and counted. Finding the residue proved the sweep
+incomplete twice — a `RecurringCourseSchedule` held a Level, then a `Room` held a
+Branch — which is the guard working rather than the guard being wrong.
+
+**Verified:** 72 assessment assertions including the library, the scope rule and
+reuse; 26/26 browser checks driving the real screens — create, navigate away,
+return, reopen, search, copy, and the original left untouched — plus the
+admission-to-achievement journey still 14/14 and 66/66.
+
+**Awaiting the Owner:** `docs/SRS-PROPOSAL-R134.md` drafts the ratification the
+Owner asked for — `assessment_published`, the paper-as-resource rule, copy-on-reuse
+and the zero-audience behaviour — in the normal style. `SRS.md` is immutable here,
+so the revision itself is the Owner's to apply.

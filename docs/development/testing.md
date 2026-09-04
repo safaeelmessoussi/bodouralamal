@@ -709,6 +709,79 @@ capability with no reach» instances in `ux-architecture.md`. The lesson is not
 *write more unit tests*: it is that a **composition** question needs a
 composition test, and the cheapest one is the journey a real person takes.
 
+## A run-unique tag is not a handle either (found 2026-09-04)
+
+The section below records fixtures reaching the public homepage because their
+titles carried no tag. This is the **opposite** failure, and it reached a screen
+the association uses to do real work.
+
+Eight suites own their rows with a per-run tag —
+`` const TAG = `[content-test:${randomUUID()}]` `` — and delete by exactly that
+string. The comment beside one of them gives the reason, and it is a good one:
+
+> a new process must never treat residue from an interrupted older process as its
+> fixture and delete it from the ambient DB
+
+What was never written down is the cost. **A run that dies before its `afterAll`
+leaves rows whose tag no future run can ever reproduce.** They are unreachable by
+construction and they accumulate — and when the fixture is taxonomy, they
+accumulate *in the selectors people use*. Four abandoned runs from one minute on
+2026-09-02 put four fake Categories, Levels and Subjects into the Level dropdown
+of «اختبار جديد», where the Document Owner found them while creating an actual
+exam. `[r82-test:]` had leaked a fifth cluster that nobody had noticed at all.
+
+### Age is the discriminator, because the concern was concurrency
+
+The original worry is entirely about two live runs colliding. **Age answers it
+without giving anything up**: no integration suite here takes hours, so a row
+older than `ABANDONED_AFTER_MS` cannot belong to a run that is still going.
+`src/test-support/abandoned-fixtures.ts` sweeps exactly those, keyed on the
+owning prefix — both conditions must hold, and it is never a truncate or a
+name-shaped guess.
+
+It **never force-deletes**. A row a foreign key still holds is left standing and
+counted, because entanglement is a fact to look at rather than to cascade
+through. That mattered immediately: chasing the residue proved the sweep
+incomplete twice — a `RecurringCourseSchedule` held a Level after everything else
+had gone, then a `Room` held a Branch after that. Both were found by the guard
+failing, which is the guard doing its job.
+
+### The guard repairs as well as reports
+
+`abandoned-fixtures.integration.test.ts` sweeps and *then* asserts nothing aged
+survives. A guard that only reported would leave the rows sitting on the screen it
+exists to protect. Its second case pins the other half — **a fresh row of the same
+shape must survive** — because a sweep that took those would break every parallel
+run, which is the property the run-unique tag was bought for in the first place.
+
+Adding a suite that uses a run-unique tag means adding its prefix to
+`RUN_UNIQUE_FIXTURE_PREFIXES`; the guard then covers it.
+
+## What the assessment library found that the journey could not
+
+The admission-to-achievement journey was green, and the product was still
+incoherent: a paper an author created could not be found again, because **no
+list endpoint existed**. Every route addressed one paper by id, so every test
+addressed one paper by id, and the question *which papers exist* was never asked
+by anything — code or test.
+
+The lesson is narrower than "test more". A journey proves that a **sequence**
+works. It cannot see a capability that is missing from the sequence entirely,
+because nothing in the sequence needs it. What found this was a person using the
+product, and what makes it stay found is a browser check that navigates **away**
+and back (`verify-assessment-library.sh`) — the one thing an API test never does.
+
+Two failures in writing that check are worth keeping:
+
+* **A negative assertion against a surface that did not render proves nothing.**
+  The first version loaded `/admin/scheduling`, which is not a route, got the
+  dashboard, and cheerfully passed *«it no longer says قريباً»* about a page that
+  never contained the words. Assert the surface arrived, then assert what is on it.
+* **Confirming an action that navigates tears down the execution context.** A
+  single `evaluate` that clicked «نسخ كمسودة» and then read the result returned
+  `undefined` and looked exactly like a missing button. Click in one evaluation,
+  read in the next.
+
 ## Integration residue reaches USER-FACING screens (found 2026-09-05)
 
 **The suites share one database with the running application, so a row a suite

@@ -952,6 +952,15 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **`verify-notifications`'s real scope stated**: it POSTs to `/notify`, so it proves the audience and not the flow. That gap is why it was green while manual use was not
 - [x] All 23 browser scripts green — **503 checks**
 
+### The assessment library, reuse, and the fixture leak (2026-09-04)
+- [x] **`GET /assessments` — the library that did not exist.** A created paper had no route back to it; drafts, published and closed papers now all list, scoped exactly as `GET /exams` is
+- [x] **`examScopeWhereForTeacher` pinned a branch an online paper never has** — a مؤطِّرة's library was empty. The assertion half knew; the list half had not grown the rule
+- [x] **`POST /assessments/{id}/copy`** — the wording again, never the answers. Historical integrity from copy-on-reuse rather than a versioning scheme
+- [x] **Zero audience is stated before publication**, not refused: publishing then admitting students is legitimate (R122)
+- [x] **«عن بُعد — قريباً» retired** — untrue since R124, and rendered twice from one component
+- [x] **The run-unique fixture tag leak**, swept by age with a shared sweeper and a guard that repairs as well as reports
+- [ ] **OWNER — ratify `docs/SRS-PROPOSAL-R134.md`** as SRS Revision 134: `assessment_published`, the paper-as-resource rule, copy-on-reuse, zero-audience. `SRS.md` is immutable to the implementer, so the revision itself is the Owner's to apply
+
 ### The admission-to-achievement journey (2026-09-04)
 - [x] **The whole business flow, through the real routes**: registration (مؤطِّرة + adult مستفيدة) → approval → two enrolments → online assessment on LEVEL A → publication → notices → save/resume/submit → marking → grade publication → memorisation. 66 assertions in `backend/src/controllers/journey.integration.test.ts`
 - [x] **The defect it existed to find**: `publishAssessment` notified nobody. Fixed with `assessment_published`, reusing `examAudienceWhere` for the audience and `assertExamInTeacherScope` for the staff — no second predicate, no second subsystem
