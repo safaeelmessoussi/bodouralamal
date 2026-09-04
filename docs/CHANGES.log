@@ -4227,6 +4227,37 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Privacy/retention contradiction sweep — one real one, and two for the Owner (2026-09-04)
+
+**Swept the mutable documentation for statements R130–R132 have overtaken.** Most
+of it held: no page misattributes the ten years to the CNDP, and the account
+handbook's Option A description is accurate.
+
+**The compliance register was stale, and one row was more than stale.** Its
+processing-purpose matrix still carried `[CONFIRM]` retention for purposes the
+Owner has since decided — *«Academic year + archive»*, *«Academic record — long»*
+— against R131's ten years from last educational activity, and *«Life + statutory
+period»* against R131's twelve months for a rejected application. Those are now
+filled in, citing the personal-data map rather than restating the reasoning, and
+the ten years are again attributed to the association rather than to anyone else.
+
+**Row 3 was the one worth the sweep.** It read *«Until majority or unlink»*,
+which says guardian authority lapses by itself on an eighteenth birthday. It does
+not and must not: R132 makes the transition an approved **claim**. A birthday that
+silently revoked a guardian's access would strand a beneficiary who had asked for
+nothing — the register was describing a behaviour the platform is specifically
+built not to have. Open question 5, which asked what must happen at majority, is
+struck through with the answer and with the narrower part of it that is still
+genuinely open.
+
+**Two stale annotations remain in `docs/SRS.md`, and I have not touched them.**
+Both say the reference code is *«Not yet implemented — R111's de-identification
+still clears it»* (in the R131 summary and again in §4.10a). Option A now
+preserves it, exactly as R131 (7) requires, so these are progress notes overtaken
+by Owner-approved work rather than a normative disagreement — but the SRS is the
+Owner's, and a one-line correction by the Owner is cheaper than an agent deciding
+which of its sentences are merely factual.
+
 ## The consent wording has fallen behind three revisions — drafted, not applied (2026-09-04)
 
 **Inventory and draft only.** The active `LegalConsentText` is untouched: R119

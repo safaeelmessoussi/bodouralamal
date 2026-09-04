@@ -318,17 +318,30 @@ audiences and retention. **[INFER]** — this structure is my proposal.
 | # | Purpose | Data categories | Lawful basis **[CONFIRM]** | Retention **[CONFIRM]** |
 |---|---|---|---|---|
 | 1 | **Account & authentication** | Identity, Google subject, tokens | Contract / consent | Life of account |
-| 2 | **Registration & membership** | Names, sex, phone, branch, application status | Contract / consent | Life + statutory period |
-| 3 | **Parent–child relationship** | `FamilyLink`, guardian identity | Legal representation of a minor | Until majority or unlink |
-| 4 | **Educational administration** | Level, group, subject, schedule | Contract | Academic year + archive |
-| 5 | **Attendance** *(new)* | Presence per session | Contract | Academic year |
-| 6 | **Assessment** | Grades, exam submissions | Contract | Academic record — long |
-| 7 | **Quran progress** | Surah/ayah coverage | Contract | Academic record |
+| 2 | **Registration & membership** | Names, sex, **date of birth** (R130), phone, branch, application status | Contract / consent | Life of membership; **a REJECTED application: 12 months** *(R131)* |
+| 3 | **Parent–child relationship** | `FamilyLink`, guardian identity | Legal representation of a minor | Until the link is withdrawn **or an approved self-managed claim ends it** *(R132)* — **not** automatically at majority |
+| 4 | **Educational administration** | Level, group, subject, schedule | Contract | **10 years after last educational activity** *(R131)* |
+| 5 | **Attendance** *(new)* | Presence per session | Contract | **10 years after last educational activity** *(R131)* |
+| 6 | **Assessment** | Grades, exam submissions | Contract | **10 years after last educational activity** *(R131)* |
+| 7 | **Quran progress** | Surah/ayah coverage | Contract | **10 years after last educational activity** *(R131)* |
 | 8 | **Communication** *(none built)* | Contact details, preferences | Consent | Until withdrawn |
 | 9 | **Safeguarding** | Social profile, emergency contact | **[CONFIRM] — likely the most constrained** | Strictly limited |
 | 10 | **Security & audit** | Actor, action, timestamp, no values | Legal obligation / legitimate interest | 12 months, security events longer |
 | 11 | **File & document management** | Uploads, metadata | Contract / consent | Until deletion + 90 days |
 | 12 | **Platform operation** | Technical logs | Legitimate interest | Short |
+
+**The Retention column is no longer entirely `[CONFIRM]` (updated 2026-09-04).**
+R131 settled purposes 2 and 4–7 and R132 settled purpose 3. **The ten years are
+the association's own purpose-based policy and are not CNDP-prescribed**; the
+reasoning, the definition of *last educational activity* and the computation live
+in [the personal-data map](../development/personal-data-map.md) and are not
+restated here. The remaining `[CONFIRM]`s are genuinely open.
+
+**Row 3 was the one worth catching.** *«Until majority or unlink»* implied that
+guardian authority lapses by itself on an eighteenth birthday. It does not, and
+must not: the transition is an **approved claim**, never an automatic one, and a
+birthday that silently revoked a guardian's access would strand a beneficiary who
+had asked for nothing.
 
 **[INFER] Purpose 9 (safeguarding) should be declared separately and narrowly.**
 Bundling minors' health and family circumstances into "educational
@@ -349,8 +362,13 @@ administration" would understate what is held.
    the destination as adequate? **[SRS] §2.2 mandates Moroccan hosting for
    personal data; authentication is the one flow that structurally leaves.**
 4. Are **audio recordings of minors** ordinary personal data or something more?
-5. What retention periods are **required or permitted** for a minor's
-   educational record, and what must happen at majority?
+5. ~~What retention periods are **required or permitted** for a minor's
+   educational record, and what must happen at majority?~~ **Answered by the
+   Owner** (R131, R132): ten years from last educational activity, and at
+   majority nothing happens by itself — she may *claim* her account. The
+   question that remains is the narrower one it contained: whether any
+   **externally required** minimum or maximum overrides the association's own
+   period.
 6. Do parents have a **right to rectification/erasure** over a child's record
    that the platform must implement as a feature?
 7. Must the **privacy notice** be provided in Arabic, and must consent be
