@@ -245,7 +245,14 @@ function tombstoneSnapshot(user: {
 async function softDelete(
   prisma: PrismaClient,
   targetId: string,
-  actor: { userId: string; activeRole?: string | null },
+  /**
+   * **`userId: null` means the calendar did it, not a person** (R133 §14). The
+   * rejected-registration clock has no actor and must not borrow one: R60.8 says
+   * an audit row omits a capacity that does not exist, and every column this
+   * writes into — `user.deleted_by`, `trash.deleted_by`, `audit_log.actor_user_id`
+   * — is nullable precisely so a system-initiated act can be recorded honestly.
+   */
+  actor: { userId: string | null; activeRole?: string | null },
   selfService: boolean,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
@@ -359,6 +366,25 @@ export async function deleteUserAccount(
 ): Promise<void> {
   await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole ?? undefined);
   await softDelete(prisma, targetId, caller, false);
+}
+
+/**
+ * **A deletion the calendar decided** (R133 §14).
+ *
+ * The rejected-registration clock has no actor and must not borrow one. It runs
+ * the ordinary soft delete — same tombstone, same seven-day window, same session
+ * revocation — with `null` where a person would be, so the trail says plainly
+ * that nobody took this decision.
+ *
+ * **No role assertion, deliberately**, and that is safe because there is no
+ * caller to authorise: this is not reachable from a route, only from the
+ * scheduled sweep whose eligibility rule is the authority.
+ */
+export async function deleteUserAccountSystem(
+  prisma: PrismaClient,
+  targetId: string,
+): Promise<void> {
+  await softDelete(prisma, targetId, { userId: null }, false);
 }
 
 /**

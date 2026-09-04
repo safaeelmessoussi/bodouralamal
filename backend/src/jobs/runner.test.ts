@@ -85,6 +85,7 @@ describe('job runner startup readiness', () => {
       // part of readiness like every other one.
       QUEUES.trashRetentionPurge,
       QUEUES.applicationRetentionPurge,
+      QUEUES.rejectedRegistrationPurge,
       QUEUES.auditPurge,
       QUEUES.consentReevaluate,
       QUEUES.contentBucketMigrate,
@@ -192,11 +193,12 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      // Eleven: the ten-year educational worker was withdrawn by R133. The
+      // Twelve: the ten-year worker left with R133, the rejected-registration
+      // clock joined. The
       // number is asserted rather than derived deliberately: readiness claiming
       // "all workers up" while counting a shorter catalogue is exactly the
       // failure this test exists for.
-      expected_workers: 11,
+      expected_workers: 12,
       registered_workers: 2,
       active_workers: 2,
     });

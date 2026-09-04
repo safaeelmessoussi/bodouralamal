@@ -15,6 +15,12 @@
 --
 -- **Verified empty before dropping** on the only database this may touch, local
 -- development.
+-- contract-phase: TD-6b — a CONTRACT-phase drop with no expand and no migrate
+-- phase, because there is nothing to expand into. Option A and Option B were two
+-- ways of deleting an account; R133 leaves one, so a request that exists solely
+-- to choose between them has no successor shape. The table was verified empty on
+-- local development before the drop, and no Staging or Production database is
+-- touched by this repository's tooling.
 DROP TABLE IF EXISTS "full_deletion_request";
 DROP TYPE IF EXISTS "full_deletion_request_status";
 DROP TYPE IF EXISTS "full_deletion_requester_basis";

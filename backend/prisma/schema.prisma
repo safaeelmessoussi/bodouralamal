@@ -566,6 +566,20 @@ model User {
 
   accountStatus AccountStatus @default(pending) @map("account_status")
 
+  /// **When an administrator last DECIDED this account's status** (R133 §14).
+  ///
+  /// `updated_at` is not that instant — any later edit moves it — so a retention
+  /// clock reading it would measure the wrong thing, and inferring a rejection
+  /// date from it would be fabricating history. This column is written by the
+  /// four operations that decide a status: approval, rejection, suspension and
+  /// reactivation.
+  ///
+  /// **NULL is a legacy fact, not a gap.** Accounts decided before this column
+  /// existed have no trustworthy instant, and none is invented for them; the
+  /// rejected-registration clock therefore skips them by construction rather
+  /// than guessing.
+  accountStatusDecidedAt DateTime? @map("account_status_decided_at") @db.Timestamptz(6)
+
   // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL
   // (TD-6a) so ordering is correct without per-query COLLATE (BR-19).
   /// Revision 40 — SERVER-COMPOSED from `firstNameArabic` + `lastNameArabic`.

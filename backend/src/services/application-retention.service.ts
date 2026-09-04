@@ -1,5 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
+import { deleteUserAccountSystem } from './account-deletion.service.js';
 
 /**
  * **How long a refused application is kept** (SRS §4.10a, Revision 131).
@@ -32,11 +34,10 @@ import * as audit from '../repositories/audit.repository.js';
  * extension machinery to avoid re-typing a form would be exactly the recoverable
  * complexity the Owner's simplicity principle rules out.
  *
- * **A rejected REGISTRATION is a person, not an application row.** It lives on
- * `User.account_status`, and removing it is account deletion with its own model,
- * window and authority. Folding it in here would apply an application rule to an
- * account — and it is separately blocked, because `User` carries no rejection
- * timestamp to measure from.
+ * **A rejected REGISTRATION is a person, not an application row**, so it is
+ * measured here and executed through the account's own machinery — see
+ * `elapsedRejectedRegistrations` below. Folding it into the application delete
+ * would apply an application rule to an account.
  */
 
 /** §4.10a's maximum. Not a legal citation — the association's own policy. */
@@ -182,4 +183,91 @@ export async function purgeElapsedApplications(
 
     return { deleted: result.count };
   });
+}
+
+
+/**
+ * **Rejected registrations past twelve months** (Owner, R133 §14).
+ *
+ * A rejected registration is a `User` with `account_status = 'rejected'`, and
+ * nobody ever presses Delete on one — which is why it needs a bounded clock at
+ * all, exactly like an application nobody decided.
+ *
+ * ## The timestamp, and the legacy rows it deliberately skips
+ *
+ * It measures from `account_status_decided_at`, written by the four operations
+ * that decide a status. **`updated_at` is not that instant** — any later edit
+ * moves it — so a clock reading it would measure the wrong thing and inferring a
+ * rejection date from it would fabricate history.
+ *
+ * **Rows decided before that column existed carry NULL and are skipped by
+ * construction.** That is the legacy exception, and it is silence rather than a
+ * guess: there is no trustworthy instant for them, and inventing one to make the
+ * sweep tidy would be the exact fabrication this design refuses. They remain for
+ * an administrator to delete deliberately, like any other account.
+ */
+export async function elapsedRejectedRegistrations(
+  prisma: PrismaClient,
+  now: Date = new Date(),
+): Promise<{ userId: string; rejectedAt: Date; retainUntil: Date }[]> {
+  const rows = await prisma.user.findMany({
+    where: {
+      accountStatus: 'rejected',
+      deletedAt: null,
+      // NULL is the legacy exception: skipped, never guessed at.
+      accountStatusDecidedAt: { not: null },
+    },
+    select: { id: true, accountStatusDecidedAt: true },
+    orderBy: { accountStatusDecidedAt: 'asc' },
+  });
+
+  return rows
+    .map((row) => {
+      const rejectedAt = row.accountStatusDecidedAt!;
+      return {
+        userId: row.id,
+        rejectedAt,
+        retainUntil: addMonths(rejectedAt, APPLICATION_RETENTION_MONTHS),
+      };
+    })
+    // Strictly after, like every other clock on this platform.
+    .filter((r) => now.getTime() > r.retainUntil.getTime());
+}
+
+/**
+ * **Deletes every rejected registration past twelve months** (R133 §14).
+ *
+ * It **soft-deletes through the account's own lifecycle** rather than removing
+ * rows itself: the account enters the seven-day Trash and the ordinary purge
+ * takes it from there. One deletion path, and a Super Admin who spots a mistake
+ * still has a week — which matters more here than anywhere, because nobody
+ * chose this deletion and nobody is watching for it.
+ *
+ * **System-initiated**: no actor is borrowed, so `deleted_by` and the audit row
+ * carry `null` (R60.8).
+ *
+ * Idempotent: a second run finds the same rows already soft-deleted and
+ * `softDelete` refuses them as absent, which is counted rather than raised.
+ */
+export async function purgeElapsedRejectedRegistrations(
+  prisma: PrismaClient,
+  now: Date = new Date(),
+): Promise<{ deleted: number; skipped: number }> {
+  const due = await elapsedRejectedRegistrations(prisma, now);
+
+  let deleted = 0;
+  let skipped = 0;
+  for (const row of due) {
+    try {
+      await deleteUserAccountSystem(prisma, row.userId);
+      deleted += 1;
+    } catch (error) {
+      // A live responsibility, the last Super Admin, an account already gone —
+      // each is a correct refusal, counted and left alone rather than allowed to
+      // abort the sweep. An unexpected error still propagates.
+      if (error instanceof AppError) skipped += 1;
+      else throw error;
+    }
+  }
+  return { deleted, skipped };
 }

@@ -779,7 +779,13 @@ export async function decide(
       // TD-1: Pending → Active | Rejected. The guard on `accountStatus` in the
       // WHERE above is what makes a double-approval first-wins (TD-15.3): the
       // second caller finds nothing pending and gets STATE_CONFLICT below.
-      await tx.user.update({ where: { id: applicant.id }, data: { accountStatus: nextStatus } });
+      // R133 §14 — the instant the decision was taken, recorded because
+      // `updated_at` is not it and a retention clock reading `updated_at` would
+      // measure the wrong thing.
+      await tx.user.update({
+        where: { id: applicant.id },
+        data: { accountStatus: nextStatus, accountStatusDecidedAt: new Date() },
+      });
 
       for (const link of applicant.parentLinks) {
         // Child activation + link decision, atomic with the parent (TD-4.2).
@@ -789,7 +795,7 @@ export async function decide(
         if (!decision.approve) await users.lockUser(tx, link.studentId);
         const childTransition = await tx.user.updateMany({
           where: { id: link.studentId, accountStatus: 'pending', deletedAt: null },
-          data: { accountStatus: nextStatus },
+          data: { accountStatus: nextStatus, accountStatusDecidedAt: new Date() },
         });
         if (!decision.approve && childTransition.count === 1) {
           rejectedUserIds.add(link.studentId);

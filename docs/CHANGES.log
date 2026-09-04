@@ -4227,6 +4227,35 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## Rejected registrations get a clock, and a legacy exception that stays silent (2026-09-05)
+
+**The blocker was a missing rejection instant, and the smallest correct fix was
+the one already recorded**: one nullable `user.account_status_decided_at`,
+written by the four operations that decide a status — approval, rejection,
+suspension, reactivation. `updated_at` is not that instant, because any later
+edit moves it; a clock reading it would measure the wrong thing, and inferring a
+rejection date from it would fabricate history for a real person.
+
+Twelve months from the recorded decision, and it **deletes through the account's
+own lifecycle**: soft delete into the seven-day window, then the ordinary purge.
+One deletion path, and a week in which a Super Admin can undo a sweep **nobody
+asked for and nobody is watching** — which matters more here than anywhere else.
+
+**System-initiated, with no actor borrowed.** `softDelete` now accepts
+`userId: null`, so `deleted_by` and the audit row say plainly that the calendar
+decided this (R60.8). Every column involved was already nullable for exactly that
+case; only the type said otherwise.
+
+**The legacy exception is silence, not a guess.** Rows rejected before the column
+existed carry NULL and are skipped by construction, left for an administrator to
+delete deliberately. That is asserted by its own test, because *«skipped»* and
+*«forgotten»* look identical until somebody writes the assertion.
+
+**TD-6b caught both drop migrations**, correctly: a `DROP TABLE` with no
+`contract-phase:` justification. Both now carry one, and both say the same thing
+— a CONTRACT-phase drop with no expand and no migrate phase, because there is no
+successor shape to migrate into.
+
 ## Guardian-only cleanup is withdrawn as a separate concept (2026-09-05)
 
 **Revision 133.** The dedicated action — `POST /admin/users/{id}/close-guardian-only`,

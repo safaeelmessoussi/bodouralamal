@@ -21,7 +21,10 @@ import {
   reevaluateSessionConsent,
   retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
-import { purgeElapsedApplications } from '../services/application-retention.service.js';
+import {
+  purgeElapsedApplications,
+  purgeElapsedRejectedRegistrations,
+} from '../services/application-retention.service.js';
 import { purgeExpiredEntries } from '../services/trash.service.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
@@ -56,6 +59,12 @@ export const QUEUES = {
    * its own — the retention boundary is a calendar fact, not an event.
    */
   applicationRetentionPurge: 'application.retention-purge',
+  /**
+   * R133 §14 — a rejected registration nobody ever presses Delete on. Twelve
+   * months from the recorded decision; rows decided before that column existed
+   * carry no instant and are skipped rather than guessed at.
+   */
+  rejectedRegistrationPurge: 'registration.rejected-purge',
   /**
    * **BR-15's seven days, enforced** (Owner 2026-09-05, R133). The
    * eligibility rule and the destruction both live in `trash.service.ts`; this
@@ -218,6 +227,19 @@ export function createWorkerCatalog(
         // A COUNT, never an id or a name (TD-14): the log line must not become
         // a record of who was deleted.
         log(QUEUES.applicationRetentionPurge, { applications: deleted });
+      },
+    },
+    {
+      // registration.rejected-purge (R133 §14). It soft-deletes through the
+      // account's own lifecycle, so the ordinary seven-day window and the
+      // ordinary purge do the rest — one deletion path, and a week in which a
+      // Super Admin can undo a sweep nobody asked for.
+      name: QUEUES.rejectedRegistrationPurge,
+      handler: async () => {
+        const counts = await purgeElapsedRejectedRegistrations(prisma, new Date());
+        // Counts only (TD-14). `skipped` staying non-zero is the signal worth
+        // watching: an account the clock reaches but cannot delete.
+        log(QUEUES.rejectedRegistrationPurge, { ...counts });
       },
     },
     {
@@ -470,6 +492,7 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.rejectedRegistrationPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
     // **`content.quarantine-purge` is still not scheduled, and that is correct.**

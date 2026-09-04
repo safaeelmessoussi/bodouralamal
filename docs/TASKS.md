@@ -1738,24 +1738,21 @@ was hiding behind it: the run went green on the first attempt.
       evidence. **The Trash snapshot goes in the same transaction**, or the
       erasure is cosmetic. There is no renewal lifecycle; a family who still
       wants a place submits a fresh application.
-- [ ] **BLOCKED ON SCHEMA — rejected-registration retention (12 months).** The
-      Owner has decided the policy: a `User` with `account_status = 'rejected'`
-      is retained for a maximum of twelve months after rejection. **It cannot be
-      implemented as specified, because `User` carries no rejection timestamp.**
-      The decision writes `account_status` and nothing else
-      (`approval.service.ts`); `updated_at` is bumped by any later edit and is
-      therefore not the rejection instant, and the Owner's own instruction
-      forbids silently substituting it.
-      **THE SMALLEST CORRECTION:** one nullable column,
-      `user.account_status_decided_at` (`timestamptz`), written in the same
-      transaction as the status change, never cleared, plus a backfill decision
-      for the rows that already carry `rejected` — and **backfilling from
-      `updated_at` is the one thing it must not do**, since that would fabricate
-      a rejection date. Leaving those rows `NULL` and excluding them from the
-      clock is honest; deciding between that and an Owner-supplied cutoff is the
-      remaining call. `AuditLog` is not the answer: `user.reject` rows are purged
-      on their own schedule, so a retention clock reading them would silently
-      stop working.
+- [x] **BUILT (Owner, 2026-09-05 — R133 §14) — rejected-registration
+      retention.** The blocker was a missing rejection instant, and the smallest
+      correct fix was the one recorded: one nullable
+      `user.account_status_decided_at`, written by the four operations that
+      decide a status — approval, rejection, suspension, reactivation.
+      **`updated_at` is not that instant** and reading it would measure the wrong
+      thing. Twelve months from the recorded decision, and it **deletes through
+      the account's own lifecycle** — soft delete into the seven-day window, then
+      the ordinary purge — so there is one deletion path and a week in which a
+      Super Admin can undo a sweep nobody asked for. System-initiated: no actor
+      is borrowed, `deleted_by` is null.
+      **The legacy exception is silence, not a guess**: rows decided before the
+      column existed carry NULL, are skipped by construction, and are left for an
+      administrator to delete deliberately. Backfilling from `updated_at` would
+      fabricate a rejection date for a real person.
 - [x] **RESOLVED BY AUDIT, not by decision (2026-09-04) — `notification.subject_user_id`.**
       §4.10a kept it PRESERVE provisionally and warned that a surviving
       notification must not become a covert store of deleted data. **In this

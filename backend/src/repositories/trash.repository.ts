@@ -39,7 +39,9 @@ export interface TrashEntry {
   /** The row as it stood before deletion. Serialised by the caller, which knows
    *  which of its fields are Dates that must survive the round-trip. */
   snapshot: object;
-  deletedById: string;
+  /** `null` when the calendar did it rather than a person — the column is
+   *  nullable precisely so a system-initiated deletion is recorded honestly. */
+  deletedById: string | null;
 }
 
 /**

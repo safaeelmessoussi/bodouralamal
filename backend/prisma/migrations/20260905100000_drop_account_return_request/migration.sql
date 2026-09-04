@@ -14,5 +14,10 @@
 -- **Verified empty before dropping** on the only database this may touch — local
 -- development. Nothing is converted or preserved: there is no destination for it
 -- under the new model, and inventing one would be fabricating a record.
+-- contract-phase: TD-6b — a CONTRACT-phase drop with no expand and no migrate
+-- phase. The account-return request reconnected a person to the educational
+-- archive Option A preserved; R133 destroys that archive at permanent deletion,
+-- so there is nothing to reconnect to and no successor shape to migrate into.
+-- Verified empty on local development before the drop.
 DROP TABLE IF EXISTS "account_return_request";
 DROP TYPE IF EXISTS "account_return_status";

@@ -7,7 +7,9 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import {
   APPLICATION_RETENTION_MONTHS,
   elapsedApplications,
+  elapsedRejectedRegistrations,
   purgeElapsedApplications,
+  purgeElapsedRejectedRegistrations,
 } from './application-retention.service.js';
 
 /**
@@ -33,6 +35,8 @@ let parentId = '';
  * are the only ownership handle that survives the thing under test.
  */
 const created: string[] = [];
+/** Rejected-registration accounts this suite minted, for ownership-scoped teardown. */
+const rejectedIds: string[] = [];
 
 async function application(
   status: 'pending' | 'rejected' | 'approved',
@@ -95,6 +99,14 @@ async function clear(): Promise<void> {
     });
     await prisma.childApplication.deleteMany({ where: { id: { in: created } } });
     created.length = 0;
+  }
+  if (rejectedIds.length > 0) {
+    await prisma.auditLog.deleteMany({ where: { targetId: { in: rejectedIds } } });
+    await prisma.trash.deleteMany({ where: { targetId: { in: rejectedIds } } });
+    await prisma.refreshToken.deleteMany({ where: { userId: { in: rejectedIds } } });
+    await prisma.refreshSession.deleteMany({ where: { userId: { in: rejectedIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: rejectedIds } } });
+    rejectedIds.length = 0;
   }
   await prisma.childApplication.deleteMany({
     where: { firstNameArabic: { startsWith: TAG } },
@@ -319,5 +331,116 @@ describe('the boundary is ENFORCED, and enforcement is truthful', () => {
 
   it('the policy constant is twelve months', () => {
     expect(APPLICATION_RETENTION_MONTHS).toBe(12);
+  });
+});
+
+describe('rejected registrations — twelve months, and the legacy rows it will not guess', () => {
+  /**
+   * A rejected registration is a `User`, not an application row, and **nobody
+   * ever presses Delete on one** — which is why it needs a bounded clock at all.
+   */
+  async function rejected(decidedAt: Date | null): Promise<string> {
+    counter += 1;
+    const u = await prisma.user.create({
+      data: {
+        sex: 'female',
+        nameArabic: `${TAG} مرفوضة ${counter}`,
+        accountStatus: 'rejected',
+        ...(decidedAt ? { accountStatusDecidedAt: decidedAt } : {}),
+      },
+    });
+    rejectedIds.push(u.id);
+    return u.id;
+  }
+
+  it('measures from the recorded DECISION, not from updated_at', async () => {
+    const id = await rejected(day('2910-01-15'));
+    // A later edit moves `updated_at` and must not move the clock — which is
+    // the entire reason this column exists.
+    await prisma.user.update({ where: { id }, data: { nickname: 'مُحدَّثة' } });
+
+    const mine = (await elapsedRejectedRegistrations(prisma, day('2911-06-01'))).find(
+      (r) => r.userId === id,
+    );
+
+    expect(mine).toBeDefined();
+    expect(mine!.retainUntil.toISOString()).toBe(day('2911-01-15').toISOString());
+  });
+
+  it('uses the same strict boundary as every other clock', async () => {
+    const id = await rejected(day('2910-01-15'));
+
+    expect(
+      (await elapsedRejectedRegistrations(prisma, day('2911-01-15'))).map((r) => r.userId),
+    ).not.toContain(id);
+    expect(
+      (await elapsedRejectedRegistrations(prisma, day('2911-01-16'))).map((r) => r.userId),
+    ).toContain(id);
+  });
+
+  it('SKIPS a legacy row with no recorded decision, rather than guessing', async () => {
+    /**
+     * **The legacy exception, and it is silence rather than a guess.** Accounts
+     * rejected before the column existed have no trustworthy instant. Inferring
+     * one from `updated_at` would fabricate a rejection date for a real person,
+     * so they are skipped by construction and left for an administrator to
+     * delete deliberately.
+     */
+    const legacy = await rejected(null);
+
+    expect(
+      (await elapsedRejectedRegistrations(prisma, day('2999-01-01'))).map((r) => r.userId),
+    ).not.toContain(legacy);
+  });
+
+  it('deletes through the ACCOUNT lifecycle, with no actor invented', async () => {
+    const id = await rejected(day('2900-01-01'));
+
+    const { deleted } = await purgeElapsedRejectedRegistrations(prisma, day('2920-01-01'));
+
+    expect(deleted).toBeGreaterThanOrEqual(1);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id } });
+    // Soft-deleted into the ordinary seven-day window — not removed outright,
+    // so a Super Admin can still undo a sweep nobody asked for.
+    expect(after.deletedAt).not.toBeNull();
+    // The calendar decided it: no actor is borrowed (R60.8).
+    expect(after.deletedById).toBeNull();
+    const trash = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: 'User', targetId: id },
+    });
+    const days = Math.round(
+      (trash.purgeAfter.getTime() - trash.deletedAt.getTime()) / 86_400_000,
+    );
+    expect(days).toBe(7);
+  });
+
+  it('leaves an ACTIVE account alone, however old its decision', async () => {
+    counter += 1;
+    const live = await prisma.user.create({
+      data: {
+        sex: 'female',
+        nameArabic: `${TAG} نشطة ${counter}`,
+        accountStatus: 'active',
+        accountStatusDecidedAt: day('2900-01-01'),
+      },
+    });
+    rejectedIds.push(live.id);
+
+    await purgeElapsedRejectedRegistrations(prisma, day('2920-01-01'));
+
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: live.id } })).deletedAt,
+    ).toBeNull();
+  });
+
+  it('is idempotent — a second sweep finds them already gone', async () => {
+    await rejected(day('2900-01-01'));
+
+    const first = await purgeElapsedRejectedRegistrations(prisma, day('2920-01-01'));
+    const second = await purgeElapsedRejectedRegistrations(prisma, day('2920-01-01'));
+
+    expect(first.deleted).toBeGreaterThanOrEqual(1);
+    // Soft-deleted rows are excluded by the eligibility query itself.
+    expect(second.deleted).toBe(0);
   });
 });

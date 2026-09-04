@@ -847,7 +847,12 @@ export async function suspendUser(
 
     const written = await tx.user.updateMany({
       where: { id, version: expectedVersion, accountStatus: 'active', deletedAt: null },
-      data: { accountStatus: 'suspended', version: { increment: 1 } },
+      data: {
+        accountStatus: 'suspended',
+        // R133 §14 — a status decision, like approval and rejection.
+        accountStatusDecidedAt: new Date(),
+        version: { increment: 1 },
+      },
     });
     if (written.count === 0) {
       throw new AppError('VERSION_CONFLICT', 'this record changed since you loaded it');
@@ -898,7 +903,11 @@ export async function reactivateUser(
 
     const written = await tx.user.updateMany({
       where: { id, version: expectedVersion, accountStatus: 'suspended', deletedAt: null },
-      data: { accountStatus: 'active', version: { increment: 1 } },
+      data: {
+        accountStatus: 'active',
+        accountStatusDecidedAt: new Date(),
+        version: { increment: 1 },
+      },
     });
     if (written.count === 0) {
       throw new AppError('VERSION_CONFLICT', 'this record changed since you loaded it');
