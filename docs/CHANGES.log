@@ -4227,6 +4227,36 @@ failure message says exactly that and tells the reader to reopen the
 classification. **This preserves a property §4.10a already assumed; it decides
 nothing new.**
 
+## R59.4 — the ninety-day window is now measured, and still not executed (2026-09-04)
+
+**Non-destructive preparation only, because R59.4 is an open Owner question.**
+`Trash.purge_after` has always recorded the end of BR-15's ninety days, and the
+job named as its enforcement was never built — `startJobRunner` deliberately
+does not schedule `content.quarantine-purge`, with the reason in the code.
+`trash-purge-report.service.ts` answers *«what would it actually delete»* and
+stops there, the same phase-1 position as the ten-year and twelve-month clocks.
+
+**The storage half is reported separately from the rest, and that is the point.**
+Purging a `Trash` row removes a tombstone whose live record is already gone;
+purging the object a content snapshot points at destroys the only copy outside
+backups, because MinIO has no undelete. Presenting one total would invite a
+single yes to authorise both. `EducationalContent` is named in a small explicit
+list rather than detected — adding an entity to it is a claim about stored bytes
+and should be made by someone reading the model, not by a field name matching
+`/key/`.
+
+**`target_entity` classifies; the snapshot JSON is never read.** A snapshot's
+shape is whatever the row looked like when it was deleted, so extracting storage
+keys from it would couple this report to the historical shape of every model.
+
+**The module is guarded against growing an executor**, and the guard was proved
+rather than assumed: a `purgeElapsedTrash` export was added, exactly one test
+failed, and it was removed. A reporter shipping beside its own executor invites
+someone to call the executor — which is precisely what R59.4 has not authorised.
+Ten tests, all scoped to rows the suite creates: the totals are asserted as
+self-consistency rather than absolute numbers, so the suite does not depend on
+what else is in the database.
+
 ## The adult-Category marker — resolved, and the resolution is not to build it (2026-09-04)
 
 **Deterministically settled, so it was safe to close rather than defer.** The

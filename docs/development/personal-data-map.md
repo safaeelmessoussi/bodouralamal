@@ -169,6 +169,32 @@ no purge at all:
 7. **The 12-month application-retention rule**, whose purge touches the same
    `ChildApplication` rows.
 
+### R59.4 — BR-15's ninety days, measured (2026-09-04)
+
+**A third read-only clock, beside the ten-year and twelve-month ones.**
+`Trash.purge_after` records the end of BR-15's ninety-day window, and the job
+named as its enforcement — `content.quarantine-purge` — **was never built**;
+`startJobRunner` deliberately does not schedule it, with the reason in the code.
+That is R59.4, and it remains an open Owner question. Nothing here changes it.
+
+`trash-purge-report.service.ts` answers *«what would it actually delete»* and
+nothing else. Two properties are worth knowing before that question is answered:
+
+* **The storage half is the consequential one, and it is reported separately.**
+  Purging a `Trash` row removes a tombstone whose live record is already gone.
+  Purging the **object** a content snapshot points at destroys the only copy
+  outside backups — MinIO has no undelete. These are two authorisations, not one
+  total, and the Owner may reasonably grant one without the other.
+* **`target_entity` is the classifier, and the snapshot JSON is not read.** A
+  snapshot's shape follows whatever the row looked like when it was deleted, so
+  digging storage keys out of it would make the report depend on the historical
+  shape of every model. The entity name is written at delete time and is stable.
+
+**The module is guarded against growing an executor.** A test asserts it exports
+no destructive verb, and that guard was proved by adding one and watching it
+fail. A reporter that ships beside its own executor invites someone to call the
+executor — and R59.4 has not authorised that.
+
 ## Backups — what may honestly be claimed
 
 A deletion request removes data from the **live operational system**. Encrypted,
