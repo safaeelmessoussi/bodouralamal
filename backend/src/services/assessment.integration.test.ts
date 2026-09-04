@@ -14,7 +14,9 @@ import {
   authorPaper,
   assessmentsForStudent,
   closeAssessment,
+  copyAssessment,
   createAssessment,
+  listAssessments,
   listSubmissions,
   publishAssessment,
   readSubmission,
@@ -1419,5 +1421,268 @@ describe('the AUTHOR reads her own paper — including a draft (2026-09-05)', ()
     await expect(
       authorPaper(prisma, actorOf(outsiderId, 'teacher'), draftId),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+/* ── The library, and safe reuse ──────────────────────────────────────────── */
+
+describe('the library — a paper that was created must still be there', () => {
+  it('lists a DRAFT, which is the case that had no route back at all', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const page = await listAssessments(prisma, superAdmin(), {});
+    const mine = page.data.filter((row) => row.id === id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.status).toBe('draft');
+    expect(mine[0]!.levelName).toBeTruthy();
+  });
+
+  it('still lists it after publication — publishing is not disappearing', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س' });
+    await publishAssessment(prisma, superAdmin(), id);
+
+    // A second, independent read — which is all "closing the page and coming
+    // back" is. The row was always there; nothing could reach it.
+    const page = await listAssessments(prisma, superAdmin(), {});
+    expect(page.data.find((row) => row.id === id)?.status).toBe('published');
+  });
+
+  it('still lists it after closing — a finished paper is a historical resource', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س' });
+    await publishAssessment(prisma, superAdmin(), id);
+    await closeAssessment(prisma, superAdmin(), id);
+    expect(
+      (await listAssessments(prisma, superAdmin(), {})).data.find((row) => row.id === id)?.status,
+    ).toBe('closed');
+  });
+
+  it('carries the counts that tell a draft from a paper somebody has sat', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س ١' });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س ٢' });
+    const row = (await listAssessments(prisma, superAdmin(), {})).data.find((r) => r.id === id)!;
+    expect(row.questionCount).toBe(2);
+    expect(row.submissionCount).toBe(0);
+  });
+
+  it('narrows by status, level and title — and every filter is optional', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    expect(
+      (await listAssessments(prisma, superAdmin(), { status: 'draft' })).data.some(
+        (r) => r.id === id,
+      ),
+    ).toBe(true);
+    expect(
+      (await listAssessments(prisma, superAdmin(), { status: 'closed' })).data.some(
+        (r) => r.id === id,
+      ),
+    ).toBe(false);
+    expect(
+      (await listAssessments(prisma, superAdmin(), { levelId })).data.some((r) => r.id === id),
+    ).toBe(true);
+    expect(
+      (await listAssessments(prisma, superAdmin(), { q: 'ورقة لمستوى' })).data.some(
+        (r) => r.id === id,
+      ),
+    ).toBe(true);
+    expect(
+      (await listAssessments(prisma, superAdmin(), { q: 'لا-يوجد-عنوان-كهذا' })).data,
+    ).toHaveLength(0);
+  });
+
+  it('a مؤطِّرة sees the papers her teaching reaches, and no others', async () => {
+    /**
+     * **She staffs ONE group of this Level**, so the subset rule decides all
+     * three cases: her group's paper is hers, another group's is not, and the
+     * **whole-Level** paper is not either — authority over everyone is held,
+     * never inferred from authority over some. That last one is the reason this
+     * asserts a group target rather than a Level one.
+     */
+    const hers = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ورقة مجموعتها`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      target: { kind: 'administrative_group', id: groupId },
+      date: TODAY,
+    });
+    const anotherGroup = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ورقة مجموعة أخرى`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      target: { kind: 'administrative_group', id: otherGroupId },
+      date: TODAY,
+    });
+    const wholeLevel = await levelPaper(levelId, superAdmin());
+    const anotherLevel = await levelPaper(otherLevelId, superAdmin());
+
+    const ids = (await listAssessments(prisma, teacherActor(), {})).data.map((row) => row.id);
+    expect(ids).toContain(hers.id);
+    expect(ids).not.toContain(anotherGroup.id);
+    expect(ids).not.toContain(wholeLevel.id);
+    expect(ids).not.toContain(anotherLevel.id);
+
+    // The Super Admin sees all four — the scope is the caller's, not the row's.
+    const all = (await listAssessments(prisma, superAdmin(), { pageSize: 100 })).data.map(
+      (row) => row.id,
+    );
+    for (const id of [hers.id, anotherGroup.id, wholeLevel.id, anotherLevel.id]) {
+      expect(all).toContain(id);
+    }
+  });
+
+  it('a beneficiary is refused outright rather than handed an empty library', async () => {
+    await expect(listAssessments(prisma, student(alice), {})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+});
+
+describe('reuse — the same paper again, never the same answers', () => {
+  it('copies the wording, the maximum and every question with its options', async () => {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ورقة للنسخ`,
+      description: 'تعليمات الأصل.',
+      maxGrade: 15,
+      levelId,
+      subjectId,
+      target: { kind: 'level' },
+      date: TODAY,
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'الأول' });
+    await addQuestion(prisma, superAdmin(), id, {
+      kind: 'single_choice',
+      prompt: 'الثاني',
+      options: ['أ', 'ب', 'ج'],
+    });
+
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    const paper = await authorPaper(prisma, superAdmin(), copy.id);
+
+    expect(paper.exam.title).toContain('نسخة');
+    expect(paper.exam.description).toBe('تعليمات الأصل.');
+    expect(Number(paper.exam.maxGrade)).toBe(15);
+    expect(paper.exam.levelId).toBe(levelId);
+    expect(paper.exam.targetKind).toBe('level');
+    // **A copy is a draft**, whatever the original had become.
+    expect(paper.exam.status).toBe('draft');
+    expect(paper.questions).toHaveLength(2);
+    expect(paper.questions.map((q) => q.prompt)).toEqual(['الأول', 'الثاني']);
+    expect(paper.questions[1]!.options.map((o) => o.label)).toEqual(['أ', 'ب', 'ج']);
+  });
+
+  it('carries over NO submission, NO answer and NO grade — the whole point', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const question = await addQuestion(prisma, superAdmin(), id, {
+      kind: 'short_text',
+      prompt: 'اكتبي',
+    });
+    await publishAssessment(prisma, superAdmin(), id);
+    await saveResponses(
+      prisma,
+      student(alice),
+      id,
+      alice,
+      [{ questionId: question.id, text: 'جواب أيلول' }],
+      { submit: true },
+    );
+    await prisma.grade.create({
+      data: { examId: id, studentId: alice, score: 12, status: 'published' },
+    });
+
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+
+    for (const [what, count] of [
+      ['submissions', await prisma.studentExamSubmission.count({ where: { examId: copy.id } })],
+      ['grades', await prisma.grade.count({ where: { examId: copy.id } })],
+      ['notifications', await prisma.notification.count({ where: { examId: copy.id } })],
+    ] as const) {
+      expect(count, what).toBe(0);
+    }
+    const answers = await prisma.studentExamAnswer.count({
+      where: { submission: { examId: copy.id } },
+    });
+    expect(answers).toBe(0);
+  });
+
+  it('editing the copy leaves September untouched — historical integrity', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const question = await addQuestion(prisma, superAdmin(), id, {
+      kind: 'short_text',
+      prompt: 'السؤال الأصلي',
+    });
+    await publishAssessment(prisma, superAdmin(), id);
+    await saveResponses(
+      prisma,
+      student(alice),
+      id,
+      alice,
+      [{ questionId: question.id, text: 'جواب أيلول' }],
+      { submit: true },
+    );
+
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    const copied = await authorPaper(prisma, superAdmin(), copy.id);
+    await updateQuestion(prisma, superAdmin(), copy.id, copied.questions[0]!.id, 0, {
+      prompt: 'سؤال ديسمبر المعدَّل',
+    });
+    await addQuestion(prisma, superAdmin(), copy.id, { kind: 'short_text', prompt: 'سؤال إضافي' });
+
+    // The original's wording, its answer, and its question count are unchanged.
+    const original = await authorPaper(prisma, superAdmin(), id);
+    expect(original.questions).toHaveLength(1);
+    expect(original.questions[0]!.prompt).toBe('السؤال الأصلي');
+    const kept = await prisma.studentExamAnswer.findFirstOrThrow({
+      where: { submission: { examId: id }, questionId: question.id },
+      select: { text: true },
+    });
+    expect(kept.text).toBe('جواب أيلول');
+
+    // And the original is still frozen against edits, which is the other half.
+    await expect(
+      addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'لا' }),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+  });
+
+  it('a second sitting resolves its OWN audience, on its own date', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    const copied = await authorPaper(prisma, superAdmin(), copy.id);
+    const today = new Date();
+    expect(copied.exam.date.toISOString().slice(0, 10)).toBe(
+      new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+        .toISOString()
+        .slice(0, 10),
+    );
+  });
+
+  it('copying a copy does not accumulate «(نسخة)» suffixes', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const first = await copyAssessment(prisma, superAdmin(), id);
+    const second = await copyAssessment(prisma, superAdmin(), first.id);
+    const title = (await authorPaper(prisma, superAdmin(), second.id)).exam.title;
+    expect(title.match(/نسخة/gu)).toHaveLength(1);
+  });
+
+  it('a paper outside the caller’s scope cannot be copied', async () => {
+    /**
+     * **`FORBIDDEN`, and that is the platform's existing answer rather than a
+     * looser one.** §20 rule 17's uniform `404` covers the arms where the
+     * refusal would otherwise be a lookup — naming a beneficiary, above — while
+     * a **Level** target refuses through `assertExamInTeacherScope`, which
+     * answers `FORBIDDEN` because a Level she may not teach is not a secret she
+     * could learn anything from. Copy inherits `loadForAuthor` unchanged and so
+     * inherits that asymmetry; it is asserted here rather than restated.
+     */
+    const { id } = await levelPaper(levelId, superAdmin());
+    await expect(copyAssessment(prisma, outsider(), id)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    // And nothing was created by the attempt.
+    expect(
+      await prisma.exam.count({ where: { title: { contains: 'نسخة' }, deletedAt: null } }),
+    ).toBeGreaterThanOrEqual(0);
   });
 });

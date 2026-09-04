@@ -110,3 +110,25 @@ export const targetCandidatesSchema = z
     q: z.string().trim().max(120).optional(),
   })
   .strict();
+
+/**
+ * **`GET /assessments` — the library's query.**
+ *
+ * **Every parameter is optional**, which is rule A's API half: a management
+ * screen shows the data it manages the moment it opens, and a filter narrows
+ * what is visible rather than being the precondition for anything appearing.
+ * `.strict()` so a misspelled filter is refused rather than silently ignored,
+ * which would render as *«no results»* and read as an empty library.
+ */
+export const assessmentListSchema = z
+  .object({
+    status: z.enum(['draft', 'published', 'closed']).optional(),
+    level_id: z.uuid().optional(),
+    subject_id: z.uuid().optional(),
+    academic_year_id: z.uuid().optional(),
+    /** Title contains, case-insensitive. */
+    q: z.string().trim().max(120).optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    page_size: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();

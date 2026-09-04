@@ -8944,6 +8944,55 @@
       }
     },
     "/assessments": {
+      "get": {
+        "summary": "The assessment library",
+        "description": "**§4.6, R124/R125 — the papers this author may work with.** The list that did not exist: `POST /assessments` created a paper, every other route addressed one **by id**, and nothing answered *which papers exist*. An author who built a paper and navigated away had no route back to it — the row was there, complete and published, and simply unreachable. `GET /exams` had already recorded the intention, excluding `mode: 'online'` with the note that *papers are listed by their own screen*, and that screen listed nothing. **Nothing was lost and nothing was recovered**: this is a read. **Scope is `GET /exams`'s, reused rather than restated** — a Super Admin sees every paper, a branch-scoped Admin the papers whose **Level** reaches her branches (a paper carries no branch of its own, so `branch_id IN (…)` would exclude every row), and a مؤطِّرة the papers her §4.4c staffing reaches, through the same `examScopeWhereForTeacher` the sitting list uses. **Staff only**, refused outright for a beneficiary — she has `GET /me/assessments`, and enumerating the library is a different question. **Every filter is optional** (rule A): `?status=` `?level_id=` `?subject_id=` `?academic_year_id=` `?q=` (title contains) `?page=` `?page_size=`, `.strict()` so a misspelled filter is refused rather than silently rendering as an empty library. **Newest first**, unlike the soonest-first sitting list: a library is something you return to, and what you return to is what you were last working on. Each row carries its counts — `question_count` and `submission_count` — because those are what tell a draft from a paper somebody has already sat, and a request per row would be an N+1 on the overview itself.",
+        "responses": {
+          "200": {
+            "description": "A page of papers in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown or malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Create an assessment",
         "description": "**§4.6, R124 — a new paper, in `draft`.** This is `exam.mode = 'online'`, which R58 declared and then refused with `ONLINE_NOT_AVAILABLE` because — in that service's own words — *«physical carries a place and staff and no questions; online will carry questions and no place»*. **No second assessment entity was created**: one would fork `Grade`, which is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet, the student's results screen and the parent visibility rule. Body: `{ title, description?, max_grade, level_id, subject_id?, academic_year_id?, target, date? }`, **strictly**. `target` is one of `level` · `administrative_group` · `session` · `teaching_group` · `student`, with the id of whatever it names (absent only for `level`); `exam_target_check` refuses any disagreement between the arm and the columns. **`date` is refused on a `session` target and required on every other**: a quick test belongs to the occurrence's own day, and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122), so a paper with no date has no answerable audience. Authoring authority is the exam's own (TD-2 as split by R70.4) and is **not** widened: Super Admin, Admin in branch scope, Teacher within their own teaching. **R125 makes two rules explicit.** (1) **A Level target does not override branch authorization**: a Level spans branches, so a branch-scoped Admin may use a target only when **everybody it resolves to** is inside her branches — checked on the resolved audience rather than on the shape of the request, so naming the Level by its raw id changes nothing, and **re-checked at publish**, because the audience is resolved rather than stored and a Level may gain a branch between drafting and publishing. `403 FORBIDDEN` with `TARGET_OUTSIDE_BRANCH_SCOPE`, naming how many people escape. A Super Admin is unaffected. (2) **A مؤطِّرة may address an individual beneficiary who is within her own teaching**, answered by `studentsTaughtBy` — the canonical §4.4c derivation, reused rather than restated. The pre-R125 path asked whether she taught the student's **whole Level**, which the Owner has ruled too broad. A student outside her teaching answers `404`, indistinguishable from one who does not exist (§20 rule 17), so the refusal never becomes a lookup. Audited as `assessment.create` with ids and a kind — **never the title**, which is free text a person wrote.",
@@ -9418,6 +9467,57 @@
           },
           "409": {
             "description": "Error envelope (TD-3.8). STATE_CONFLICT — NO_QUESTIONS, or INVALID_TRANSITION when it is not a draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments/{id}/copy": {
+      "post": {
+        "summary": "Copy a paper as a new draft",
+        "description": "**§4.6, R124 — «نسخ كمسودة»: the same paper, used again.** One `Exam(mode='online')` row is **both** the paper and the one occasion it was used — it carries the questions *and* the target, the date, the submissions and the marks. Separating those into a template and its sittings would mean a new entity and a migration for every table keyed on `exam_id` (`Grade`, `StudentExamSubmission`, `Notification`, `Attendance`), plus a second answer to *which paper is this*. Copy-on-reuse needs none of it and gives the property that matters: **a September sitting cannot change because the paper is used again in December**, because December is a different row with nothing shared to mutate. R124's freeze guards the other direction — a paper with submissions cannot be edited at all — so both halves hold with no version-control scheme. **Copied**: title (suffixed «(نسخة)»), instructions, maximum, Level, Subject, target arm, and every question with its options and order. **Never copied**: `StudentExamSubmission`, `StudentExamAnswer`, `Grade`, `Notification`, attendance. The copy is a `draft` nobody has sat and nobody has been told about; publishing it is a separate act with its own audience resolution. **The copy's date is today, not the original's** — a paper reused in December resolves its audience in December (R122), and inheriting the old date would silently address the old enrolments. Authorisation is `loadForAuthor`, unchanged: a paper outside the caller's scope answers `404` here exactly as everywhere else, so this is not a way to read one.",
+        "responses": {
+          "201": {
+            "description": "Created; `{ id }` of the new draft."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown assessment or one out of scope.",
             "content": {
               "application/json": {
                 "schema": {

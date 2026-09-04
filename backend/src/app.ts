@@ -710,6 +710,7 @@ export function createApp(
    * `(exam_id, student_id)` and carries the scale, the draft/published split
    * and the student's results screen.
    */
+  guarded.get('/assessments', assessments.list(prisma));
   guarded.post('/assessments', assessments.create(prisma));
   // R125 — the picker's source. Registered BEFORE `/assessments/:id/...` would
   // matter only for a conflicting shape; it has none, and it is placed with the
@@ -724,6 +725,7 @@ export function createApp(
   guarded.delete('/assessments/:id/questions/:questionId', assessments.deleteQuestion(prisma));
   guarded.post('/assessments/:id/publish', assessments.publish(prisma));
   guarded.post('/assessments/:id/close', assessments.close(prisma));
+  guarded.post('/assessments/:id/copy', assessments.copy(prisma));
   guarded.get('/assessments/:id/submissions', assessments.submissions(prisma));
   guarded.get('/assessments/:id/submissions/:studentId', assessments.submission(prisma));
 

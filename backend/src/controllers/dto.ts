@@ -2652,3 +2652,43 @@ export function studentAssessmentDto(row: {
     grade_published: row.gradePublished,
   };
 }
+
+/**
+ * One row of the assessment library.
+ *
+ * The counts travel with the row because they are what tells a draft from a
+ * paper somebody has already sat — the two facts the list exists to
+ * distinguish, and a per-row request for each would be an N+1 on a screen whose
+ * whole purpose is the overview.
+ */
+export function assessmentListRowDto(row: {
+  id: string;
+  title: string;
+  status: string;
+  date: Date;
+  maxGrade: string;
+  targetKind: string;
+  levelId: string;
+  levelName: string;
+  subjectId: string | null;
+  subjectName: string | null;
+  academicYearLabel: string | null;
+  questionCount: number;
+  submissionCount: number;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    date: row.date.toISOString().slice(0, 10),
+    max_grade: row.maxGrade,
+    target_kind: row.targetKind,
+    level_id: row.levelId,
+    level_name: row.levelName,
+    subject_id: row.subjectId,
+    subject_name: row.subjectName,
+    academic_year_label: row.academicYearLabel,
+    question_count: row.questionCount,
+    submission_count: row.submissionCount,
+  };
+}

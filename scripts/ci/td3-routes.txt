@@ -171,6 +171,7 @@ DELETE /events/{id}/attendance/{studentId}    # §4.7 R123, TD-5
 # ── Assessment builder (§4.6, R124) ─────────────────────────────────────────
 # The ONLINE half of `Exam`, which R58 declared and refused. Grading is NOT
 # here: `/exams/{id}/grades` already grades this row.
+GET /assessments                              # §4.6 R124/R125; THE LIBRARY — the papers this author may work with; every filter optional (rule A)
 POST /assessments                             # §4.6 R124; a new paper, in draft
 GET /assessments/targets                      # §4.6 R125; what THIS author may address — server-scoped, staff only
 GET /assessments/{id}                         # the paper as its AUTHOR sees it, drafts included; `/paper` is the beneficiary's and cannot return one
@@ -180,6 +181,7 @@ PATCH /assessments/{id}/questions/{questionId} # §4.6 R124; wording, justificat
 DELETE /assessments/{id}/questions/{questionId} # §4.6 R124, TD-5; the order closes up
 POST /assessments/{id}/publish                # §4.6 R124; draft → published
 POST /assessments/{id}/close                  # §4.6 R124; published → closed
+POST /assessments/{id}/copy                   # §4.6 R124; «نسخ كمسودة» — the wording, never the answers or the marks
 GET /assessments/{id}/submissions             # §4.6 R124; who answered, and where their grade is
 GET /assessments/{id}/submissions/{studentId} # §4.6 R124; one submitted paper
 GET /me/assessments                           # §4.6 R124; what this beneficiary may open

@@ -7,7 +7,9 @@ import {
   addQuestion,
   assessmentsForStudent,
   closeAssessment,
+  copyAssessment,
   createAssessment,
+  listAssessments,
   listSubmissions,
   publishAssessment,
   readSubmission,
@@ -20,6 +22,7 @@ import {
   updateQuestion,
 } from '../services/assessment.service.js';
 import {
+  assessmentListSchema,
   createAssessmentSchema,
   targetCandidatesSchema,
   questionPatchSchema,
@@ -27,7 +30,13 @@ import {
   reorderQuestionsSchema,
   responsesSchema,
 } from '../validators/assessment.validators.js';
-import { assessmentPaperDto, assessmentSubmissionListDto, studentAssessmentDto } from './dto.js';
+import {
+  assessmentListRowDto,
+  assessmentPaperDto,
+  assessmentSubmissionListDto,
+  studentAssessmentDto,
+} from './dto.js';
+import { pageParamsFrom } from '../lib/pagination.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -40,6 +49,37 @@ import { idParam, parse } from './parse.js';
  * one table and one grade sheet; the write boundaries are not the same shape,
  * and one endpoint accepting either would be a schema with two disjoint halves.
  */
+
+/* ── The library ──────────────────────────────────────────────────────────── */
+
+/**
+ * `GET /assessments` — **the papers this author may work with.**
+ *
+ * Every filter is optional (rule A's API half): the library shows what it holds
+ * the moment it opens, and narrowing is something the reader chooses afterwards.
+ */
+export function list(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse(assessmentListSchema, req.query ?? {});
+    const result = await listAssessments(prisma, requireActor(req), {
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.level_id ? { levelId: q.level_id } : {}),
+      ...(q.subject_id ? { subjectId: q.subject_id } : {}),
+      ...(q.academic_year_id ? { academicYearId: q.academic_year_id } : {}),
+      ...(q.q ? { q: q.q } : {}),
+      ...pageParamsFrom(req.query as Record<string, unknown>),
+    });
+    res.json({ data: result.data.map(assessmentListRowDto), meta: result.meta });
+  };
+}
+
+/** `POST /assessments/{id}/copy` — «نسخ كمسودة». */
+export function copy(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const created = await copyAssessment(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(201).json({ id: created.id });
+  };
+}
 
 /* ── Authoring ────────────────────────────────────────────────────────────── */
 

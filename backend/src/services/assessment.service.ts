@@ -10,9 +10,12 @@ import * as trash from '../repositories/trash.repository.js';
 import {
   assertExamInTeacherScope,
   examAudienceWhere,
+  examScopeWhereForTeacher,
   studentsTaughtBy,
   teacherEventScope,
 } from '../policies/roster-resolution.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
+import type { SortParams } from '../lib/sorting.js';
 
 /**
  * **A simple online assessment — the paper, its audience, and the answers**
@@ -1733,4 +1736,298 @@ export async function targetCandidates(
     take: TAKE,
   });
   return students.map((s) => ({ id: s.id, label: s.nameArabic ?? '' }));
+}
+
+/* ── The library ──────────────────────────────────────────────────────────── */
+
+export interface AssessmentListRow {
+  id: string;
+  title: string;
+  status: string;
+  date: Date;
+  maxGrade: string;
+  targetKind: string;
+  levelId: string;
+  levelName: string;
+  subjectId: string | null;
+  subjectName: string | null;
+  academicYearLabel: string | null;
+  questionCount: number;
+  submissionCount: number;
+}
+
+export interface AssessmentListFilters extends PageParams, SortParams {
+  status?: 'draft' | 'published' | 'closed';
+  levelId?: string;
+  subjectId?: string;
+  academicYearId?: string;
+  q?: string;
+}
+
+/**
+ * **`GET /assessments` — the papers this author may work with** (R124/R125).
+ *
+ * ## The defect this closes
+ *
+ * There was no list. `POST /assessments` created a paper, every other route
+ * addressed one **by id**, and nothing anywhere answered *which papers exist*.
+ * An author who built a paper and navigated away had no route back to it: the
+ * row was in the database, complete and published, and simply could not be
+ * reached again. `listExams` had already recorded the intention — it excludes
+ * `mode: 'online'` with the note *"papers are listed by their own screen,
+ * `/admin/assessments`"* — and that screen listed nothing. The capability was
+ * complete and had no reach, which is this platform's most repeated defect.
+ *
+ * **Nothing was lost, and nothing needed recovering**: the rows were always
+ * there, which is why this is a read and not a repair.
+ *
+ * ## The scope is `listExams`'s, deliberately reused
+ *
+ * Two authorities, two paths — an Admin by branch, a مؤطِّرة through §4.4c —
+ * exactly as the sitting list resolves them, because *which of these are mine*
+ * is one question and papers are not a second answer to it. A مؤطِّرة sees the
+ * papers whose audience her staffing reaches; she does not see another
+ * مؤطِّرة's, and `assertMayAuthor` still guards every write she then attempts.
+ *
+ * **A paper carries no branch** (`exam_online_has_no_room_check`), so an Admin
+ * cannot be scoped by `branchId` the way a sitting is — `branch_id IN (…)`
+ * excludes NULL and would serve her an empty library. She is scoped by the
+ * branches of the **Levels** the papers address, which is the same question
+ * asked of the row that actually carries a branch.
+ */
+export async function listAssessments(
+  prisma: PrismaClient,
+  actor: Actor,
+  filters: AssessmentListFilters,
+): Promise<Page<AssessmentListRow>> {
+  // Staff only, on `targetCandidates`'s stated reasoning: a beneficiary has
+  // `GET /me/assessments`, and enumerating the library is not a smaller version
+  // of that question but a different one. Refused outright, because an empty
+  // list is an answer and *«you may not ask»* is a different one.
+  if (
+    !scope.isSuperAdmin(actor.roleScopes) &&
+    !scope.hasRole(actor.roleScopes, MANAGING_ROLE) &&
+    !scope.hasRole(actor.roleScopes, 'teacher')
+  ) {
+    throw new AppError('FORBIDDEN', 'listing assessments requires staff (TD-2)');
+  }
+
+  const scoped: Prisma.ExamWhereInput = scope.isSuperAdmin(actor.roleScopes)
+    ? {}
+    : scope.hasRole(actor.roleScopes, MANAGING_ROLE)
+      ? (() => {
+          const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+          return reachable === null
+            ? {}
+            : {
+                level: {
+                  OR: [
+                    { enrollments: { some: { deletedAt: null, branchId: { in: reachable } } } },
+                    {
+                      administrativeGroups: {
+                        some: { deletedAt: null, branchId: { in: reachable } },
+                      },
+                    },
+                  ],
+                },
+              };
+        })()
+      : await examScopeWhereForTeacher(prisma, actor.userId);
+
+  const search = filters.q?.trim();
+  const where: Prisma.ExamWhereInput = {
+    deletedAt: null,
+    // The library is the ONLINE half. A sitting is `GET /exams`, and one list
+    // showing both would be answering two questions in one table.
+    mode: 'online',
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.levelId ? { levelId: filters.levelId } : {}),
+    ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+    ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
+    ...(search ? { title: { contains: search, mode: 'insensitive' as const } } : {}),
+    // Last, so an explicit filter narrows a scoped caller and never widens one.
+    AND: [scoped],
+  };
+
+  const window = pageWindow(filters);
+  const [rows, total] = await Promise.all([
+    prisma.exam.findMany({
+      where,
+      skip: window.skip,
+      take: window.take,
+      // **Newest first, unlike the sitting list.** `GET /exams` is soonest-first
+      // because a sitting is something coming up; a library is something you
+      // return to, and what you return to is what you were last working on.
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        date: true,
+        maxGrade: true,
+        targetKind: true,
+        levelId: true,
+        subjectId: true,
+        level: { select: { name: true } },
+        subject: { select: { name: true } },
+        academicYear: { select: { label: true } },
+        _count: {
+          select: {
+            questions: { where: { deletedAt: null } },
+            submissions: true,
+          },
+        },
+      },
+    }),
+    prisma.exam.count({ where }),
+  ]);
+
+  return page(
+    rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      date: row.date,
+      maxGrade: row.maxGrade.toString(),
+      targetKind: row.targetKind,
+      levelId: row.levelId,
+      levelName: row.level.name,
+      subjectId: row.subjectId,
+      subjectName: row.subject?.name ?? null,
+      academicYearLabel: row.academicYear?.label ?? null,
+      questionCount: row._count.questions,
+      submissionCount: row._count.submissions,
+    })),
+    window,
+    total,
+  );
+}
+
+/* ── Reuse ────────────────────────────────────────────────────────────────── */
+
+/**
+ * **`POST /assessments/{id}/copy` — «نسخ كمسودة»: the same paper, used again.**
+ *
+ * ## Why a copy, and not a reusable template with many sittings
+ *
+ * One `Exam(mode = 'online')` row is **both** the paper and the one occasion it
+ * was used: it carries the questions *and* the target, the date, the
+ * submissions and the grades. Separating those into a template and its sittings
+ * would mean a new entity, a migration for every row that references
+ * `exam_id` — `Grade`, `StudentExamSubmission`, `Notification`, `Attendance` —
+ * and a second answer to *which paper is this*. Copy-on-reuse needs none of
+ * that and gives the property that actually matters.
+ *
+ * ## The property that matters
+ *
+ * **A September sitting must not change because the paper is used again in
+ * December.** With a copy it cannot, structurally: December is a different row,
+ * so editing it cannot reach September's questions, answers or marks — there is
+ * nothing shared to mutate. R124's freeze then guards the other direction (a
+ * paper with submissions cannot be edited at all), so both halves hold without
+ * a version-control scheme.
+ *
+ * ## What carries over, and what never does
+ *
+ * Copied: the wording — title, instructions, maximum, Level, Subject, target
+ * arm and the whole question list with its options and order.
+ *
+ * **Never copied: the answers and everything downstream of them** — no
+ * `StudentExamSubmission`, no `StudentExamAnswer`, no `Grade`, no
+ * `Notification`, no attendance. A reused paper starts as a `draft` that
+ * nobody has sat and nobody has been told about; publishing it is a separate,
+ * deliberate act with its own audience resolution.
+ *
+ * The copy's **date is today**, not the original's: a paper reused in December
+ * resolves its audience in December (R122), and inheriting September's date
+ * would silently address September's enrolments.
+ */
+export async function copyAssessment(
+  prisma: PrismaClient,
+  actor: Actor,
+  examId: string,
+): Promise<{ id: string }> {
+  const source = await loadForAuthor(prisma, actor, examId);
+
+  return prisma.$transaction(async (tx) => {
+    const questions = await tx.examQuestion.findMany({
+      where: { examId, deletedAt: null },
+      orderBy: { displayOrder: 'asc' },
+      select: {
+        kind: true,
+        prompt: true,
+        justification: true,
+        displayOrder: true,
+        options: {
+          where: { deletedAt: null },
+          orderBy: { displayOrder: 'asc' },
+          select: { label: true, displayOrder: true },
+        },
+      },
+    });
+
+    const today = new Date();
+    const created = await tx.exam.create({
+      data: {
+        title: copyTitle(source.title),
+        description: source.description,
+        mode: 'online',
+        status: 'draft',
+        maxGrade: source.maxGrade,
+        levelId: source.levelId,
+        subjectId: source.subjectId,
+        academicYearId: source.academicYearId,
+        targetKind: source.targetKind,
+        administrativeGroupId: source.administrativeGroupId,
+        sessionId: source.sessionId,
+        teachingGroupId: source.teachingGroupId,
+        studentId: source.studentId,
+        date: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())),
+      },
+      select: { id: true },
+    });
+
+    for (const question of questions) {
+      await tx.examQuestion.create({
+        data: {
+          examId: created.id,
+          kind: question.kind,
+          prompt: question.prompt,
+          justification: question.justification,
+          displayOrder: question.displayOrder,
+          options: {
+            create: question.options.map((option) => ({
+              label: option.label,
+              displayOrder: option.displayOrder,
+            })),
+          },
+        },
+      });
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'assessment.copy',
+      targetEntity: 'Exam',
+      targetId: created.id,
+      // The provenance, and the counts that make the copy checkable. No student
+      // appears here because no student is involved in a copy (TD-8, TD-14).
+      detail: { copied_from: examId, question_count: questions.length },
+    });
+
+    return created;
+  });
+}
+
+/**
+ * «نسخة» once, «نسخة 2» thereafter — and never past the column's 120.
+ *
+ * The suffix is trimmed off first so copying a copy does not accumulate them,
+ * which is what makes «نسخة 2» reachable at all.
+ */
+function copyTitle(original: string): string {
+  const base = original.replace(/\s*\(نسخة(?:\s+\d+)?\)$/u, '');
+  const marked = `${base} (نسخة)`;
+  return marked.length <= 120 ? marked : `${base.slice(0, 120 - ' (نسخة)'.length)} (نسخة)`;
 }

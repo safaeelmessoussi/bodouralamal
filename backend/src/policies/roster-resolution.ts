@@ -1168,11 +1168,33 @@ export async function examScopeWhereForTeacher(
           }
         : {};
 
+    /**
+     * **A sitting carries a branch and a Subject; a PAPER carries neither.**
+     *
+     * This clause was `branchId: s.branchId` outright, which is right for a
+     * sitting and excludes **every** online assessment: R124's paper has no
+     * branch by construction (`exam_online_has_no_room_check` forbids one) and
+     * an optional Subject, so an equality on either matched nothing. A مؤطِّرة's
+     * assessment library came back empty — the same empty-`200` shape this
+     * function was written to fix for sittings, one delivery mode over.
+     *
+     * `assertExamInTeacherScope` has always known this: it drops the branch and
+     * subject constraints on its `''` sentinel, *"does she teach anybody in this
+     * Level"*. That is the assertion half of the rule and this is the list half,
+     * which is the drift this pair's own docstring warns about. Written as two
+     * explicit arms so the sitting rule is **unchanged** rather than loosened:
+     * a physical exam must still match both.
+     */
     const base: Prisma.ExamWhereInput = {
-      branchId: s.branchId,
-      subjectId: s.subjectId,
       levelId,
       ...window,
+      OR: [
+        { mode: 'physical', branchId: s.branchId, subjectId: s.subjectId },
+        {
+          mode: 'online',
+          OR: [{ subjectId: s.subjectId }, { subjectId: null }],
+        },
+      ],
     };
 
     if (s.teachingMode === "entire_level") {
