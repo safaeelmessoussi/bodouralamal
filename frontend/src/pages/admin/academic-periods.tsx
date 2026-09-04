@@ -136,8 +136,27 @@ export function AcademicPeriodsPage(): ReactNode {
           : undefined;
       if (reason === 'ACADEMIC_PERIOD_OVERLAP') {
         setNotice(t('admin.academicPeriods.overlap'));
-      } else if (error instanceof ApiError && error.code === 'DUPLICATE') {
-        setNotice(t('admin.academicPeriods.duplicate'));
+      } else if (
+        /**
+         * **The sequence is taken — matched on the REASON, not the code.**
+         *
+         * The service raises `STATE_CONFLICT` with
+         * `ACADEMIC_PERIOD_SEQUENCE_TAKEN`, and this branch used to test
+         * `code === 'DUPLICATE'` only. So a taken sequence fell through to the
+         * generic 409 arm and told her *«تم تعديل هذا العنصر… يرجى تحديث
+         * الصفحة»* — a concurrency sentence for a domain fact — **and closed the
+         * dialog**, discarding everything she had typed for a conflict she fixes
+         * by changing one number.
+         *
+         * The dialog therefore stays open here, unlike the stale-version arm
+         * below where reloading genuinely is the remedy.
+         */
+        reason === 'ACADEMIC_PERIOD_SEQUENCE_TAKEN' ||
+        (error instanceof ApiError && error.code === 'DUPLICATE')
+      ) {
+        setNotice(
+          t('admin.academicPeriods.duplicate').replace('{sequence}', String(input.sequence)),
+        );
       } else if (error instanceof ApiError && error.status === 409) {
         setNotice(t('common.conflict'));
         setEditing(null);

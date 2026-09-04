@@ -119,6 +119,13 @@ const STAFFING_REFUSALS: Record<string, string> = {
   OVERLAPPING_MAIN_TEACHER: 'admin.schedules.overlappingMain',
   OVERLAPPING_ASSIGNMENT: 'admin.schedules.overlappingAssignment',
   STAFF_PERIOD_OUTSIDE_SCHEDULE: 'admin.schedules.staffPeriodOutside',
+  /**
+   * **One person, two positions.** It used to reach PostgreSQL as a unique
+   * violation on `(exam_id, user_id)` and come back as `DUPLICATE` — *«هذا
+   * العنصر موجود مسبقاً»*, a sentence about the exam for a fact about the staff
+   * list. The server names it now, so this can too.
+   */
+  EXAM_STAFF_DUPLICATE: 'admin.schedules.examStaffDuplicate',
 };
 
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;

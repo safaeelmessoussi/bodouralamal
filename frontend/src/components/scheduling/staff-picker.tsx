@@ -178,7 +178,27 @@ export function StaffPicker({
       <SelectField
         label={leadLabel}
         value={leadId}
-        onChange={onLead}
+        /**
+         * **Choosing a lead also removes her from the assistants.**
+         *
+         * The options list below filters the lead out, which hides her from the
+         * *menu* and does nothing about a selection already made. So picking
+         * somebody as an assistant and then promoting her to lead left her in
+         * both — and the form submitted the same person twice, which the server
+         * refuses as a unique-constraint violation and reports as *«هذا العنصر
+         * موجود مسبقاً»*: a sentence about the exam, for a fact about one
+         * person's two positions.
+         *
+         * Fixed here rather than in each caller, because every caller of this
+         * control had the same gap and the rule — one person, one position —
+         * belongs to the control that expresses it.
+         */
+        onChange={(id) => {
+          onLead(id);
+          if (id && assistantIds.includes(id)) {
+            onAssistants(assistantIds.filter((x) => x !== id));
+          }
+        }}
         disabled={disabled || leadLocked}
         options={[
           // A locked lead offers no empty choice: there is one answer, and
