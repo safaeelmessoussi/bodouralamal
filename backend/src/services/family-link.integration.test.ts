@@ -401,7 +401,9 @@ describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09
 
     // The same resolver every child-scoped endpoint uses. A rejected link is
     // refused twice over: by status and by the tombstone.
-    await expect(resolveActingStudent(prisma, parent, student)).rejects.toBeTruthy();
+    await expect(
+      resolveActingStudent(prisma, { userId: parent, roles: ["parent"] }, student),
+    ).rejects.toBeTruthy();
   });
 
   it("TD-5/BR-15: writes a Trash snapshot carrying the decision itself", async () => {
@@ -556,7 +558,9 @@ describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09
     const row = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
     expect(row.status).toBe("approved");
     expect(row.deletedAt).toBeNull();
-    await expect(resolveActingStudent(prisma, parent, student)).resolves.toBeTruthy();
+    await expect(
+      resolveActingStudent(prisma, { userId: parent, roles: ["parent"] }, student),
+    ).resolves.toBeTruthy();
     // And the approval writes its own audit row, from the same shared helper.
     expect(
       await prisma.auditLog.count({

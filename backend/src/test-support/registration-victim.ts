@@ -76,6 +76,7 @@ const input: RegistrationInput = {
       first_name_arabic: `${tag}`,
       last_name_arabic: `طفلة`,
       sex: 'female',
+      birth_date: new Date("2015-04-12T00:00:00Z"),
       consent_media_release: true,
       requested_branch_id: branchId,
       requested_category_id: categoryId,

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
@@ -575,12 +577,32 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
 
   it('touches NO unrelated Trash — this is the sweep it must not be', async () => {
     const { trashId } = await expiredLeaf();
-    const others = await prisma.trash.count({ where: { id: { not: trashId } } });
-    expect(others).toBeGreaterThan(0);
+    /**
+     * A self-created, never-expiring tombstone. The assertion below must hold
+     * regardless of what unrelated Trash happens to exist in the shared
+     * database at the moment this test runs — relying on ambient rows from
+     * other suites made this test order-dependent and it failed in CI's
+     * disposable stack, where no such row was guaranteed to exist yet.
+     */
+    const unrelated = await prisma.trash.create({
+      data: {
+        targetEntity: `${TAG}-unrelated`,
+        targetId: randomUUID(),
+        snapshot: {},
+        purgeAfter: new Date('2099-01-01T00:00:00.000Z'),
+      },
+    });
 
-    await purgeExpiredEntries(prisma, LATER);
+    try {
+      const others = await prisma.trash.count({ where: { id: { not: trashId } } });
+      expect(others).toBeGreaterThan(0);
 
-    expect(await prisma.trash.count({ where: { id: { not: trashId } } })).toBe(others);
+      await purgeExpiredEntries(prisma, LATER);
+
+      expect(await prisma.trash.count({ where: { id: { not: trashId } } })).toBe(others);
+    } finally {
+      await prisma.trash.delete({ where: { id: unrelated.id } }).catch(() => {});
+    }
   });
 
   it('is idempotent — a second sweep finds nothing left to do', async () => {

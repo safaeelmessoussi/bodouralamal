@@ -387,7 +387,7 @@ describe('one person holds one position on one exam (2026-09-05)', () => {
         roomId,
         schedulingTypeId: ids['اختبار']!,
         staff: [
-          { userId: staffer.id, position: 'responsible' },
+          { userId: staffer.id, position: 'supervisor' },
           { userId: staffer.id, position: 'assistant' },
         ],
       }),

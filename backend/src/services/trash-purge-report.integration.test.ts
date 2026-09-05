@@ -7,6 +7,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import {
   STORAGE_BACKED_ENTITIES,
   elapsedTrashWindows,
+  type TrashPurgeGroup,
 } from './trash-purge-report.service.js';
 import * as module from './trash-purge-report.service.js';
 
@@ -59,7 +60,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const groupFor = (report: { groups: { targetEntity: string }[] }, entity: string) =>
+const groupFor = (report: { groups: TrashPurgeGroup[] }, entity: string) =>
   report.groups.find((g) => g.targetEntity === entity);
 
 describe('the ninety-day window is measured, per entity', () => {

@@ -114,6 +114,8 @@ async function submitBundle(
           last_name_french: 'Bennani',
           nickname: 'مريم',
           sex: "female" as const,
+          // R130 — every child registration states her own date of birth.
+          birth_date: new Date("2015-04-12T00:00:00Z"),
           consent_media_release: true,
           // R67 — the branch and stage are the CHILD's now. `intoBranchId` is
           // what the branch-filter test varies, so it lands here rather than on
@@ -499,6 +501,7 @@ describe("§5.6 / TD-4.2 approval queue", () => {
             first_name_arabic: TAG,
             last_name_arabic: 'الأولى',
             sex: 'female',
+            birth_date: new Date("2015-04-12T00:00:00Z"),
             requested_branch_id: branchId,
             requested_category_id: placement.categoryId,
             consent_media_release: true,
@@ -507,6 +510,7 @@ describe("§5.6 / TD-4.2 approval queue", () => {
             first_name_arabic: TAG,
             last_name_arabic: 'الثانية',
             sex: 'female',
+            birth_date: new Date("2016-07-19T00:00:00Z"),
             requested_branch_id: otherBranchId,
             requested_category_id: otherCategory.id,
             consent_media_release: false,

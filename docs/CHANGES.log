@@ -5523,3 +5523,33 @@ explicit desktop width) rather than body substrings.
 **Unchanged, as instructed:** the self-managed-account age threshold (R130/
 R132) — still 18, not touched by this slice. R134, Staging and Production
 untouched.
+
+## CI has been red for ~40 commits since 2026-09-03; root-caused and fixed, test code only (2026-09-05)
+
+**`npm run typecheck` (`tsc -p tsconfig.typecheck.json`, what CI's Backend job
+actually runs) checks every `.test.ts` file; `tsc -p tsconfig.json` — what every
+session, including prior ones, had been running by hand — excludes them via
+`tsconfig.json`'s own `exclude`. Nobody had been running the real gate, which
+is why local "typecheck passed" kept being true while CI kept failing.**
+
+- Real `npm run typecheck` surfaced ~20 errors: 10 fixture sites across 5
+  integration-test files missing `birthDate`/`birth_date` (R130 requires it);
+  8 of those needed a `Date` object rather than a string because they call
+  `register()`/service functions directly, bypassing `registrationSchema`'s
+  Zod parse. Plus three unrelated drift bugs: `family-link.integration.test.ts`
+  passed a raw string where `resolveActingStudent` needs `{userId, roles}`;
+  `registration.integration.test.ts` referenced `placement.administrativeGroupId`
+  (real field is `groupId`); `scheduling-type-filter.integration.test.ts` used
+  `'responsible'`, an `EventStaff` value, where `ExamStaff.position` was needed;
+  `trash-purge-report.integration.test.ts`'s local helper was typed narrower
+  than the service's real return, dropping fields tests asserted on.
+- Separately, the Integration CI job's disposable-stack failure was a genuine
+  order-dependent flake in `trash-lifecycle.integration.test.ts` ("touches NO
+  unrelated Trash"): it asserted `other Trash rows > 0` relying on ambient rows
+  left by unrelated suites, which a fresh, isolated stack has no reason to
+  contain. Fixed by having the test create its own unrelated, never-expiring
+  tombstone rather than depending on incidental global state.
+- No production `src/` behavior changed anywhere in this pass — test code and
+  fixtures only.
+- Verified: `npm run typecheck`/`lint`/`test`/`build` clean; full backend
+  integration suite green (105 files, 2346 passed, 17 pre-existing skips).

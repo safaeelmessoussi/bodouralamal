@@ -75,6 +75,8 @@ const parentChild = (): Extract<
       first_name_arabic: `${TAG}`,
       last_name_arabic: `طفلة`,
       sex: "female" as const,
+      // R130 — every child registration states her own date of birth.
+      birth_date: new Date("2015-04-12T00:00:00Z"),
       consent_media_release: true,
       requested_branch_id: branchId,
       requested_category_id: categoryId,
@@ -604,7 +606,7 @@ describe("a PLATFORM ACCOUNT is not ASSOCIATION MEMBERSHIP (Owner, 2026-09-03)",
     await prisma.enrollment.create({
       data: {
         studentId: applicantId,
-        administrativeGroupId: placement.administrativeGroupId,
+        administrativeGroupId: placement.groupId,
         levelId: placement.levelId,
         branchId: placement.branchId,
       },
@@ -674,6 +676,7 @@ describe("§7 Revision 40 — الاسم الشخصي / الاسم العائل�
             first_name_arabic: `${TAG} سارة`,
             last_name_arabic: "بنعلي",
             sex: "female",
+            birth_date: new Date("2015-04-12T00:00:00Z"),
             consent_media_release: true,
             requested_branch_id: branchId,
             requested_category_id: categoryId,
@@ -1073,6 +1076,7 @@ describe("§4.1b step 5 Revision 27 — registration captures sex before the Use
             first_name_arabic: `${TAG}`,
             last_name_arabic: `ابن`,
             sex: "male",
+            birth_date: new Date("2014-09-30T00:00:00Z"),
             consent_media_release: true,
             requested_branch_id: branchId,
             requested_category_id: categoryId,

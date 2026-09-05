@@ -141,6 +141,7 @@ async function submitBundle(
           first_name_arabic: `${TAG}`,
           last_name_arabic: `طفلة`,
           sex: "female" as const,
+          birth_date: new Date("2015-04-12T00:00:00Z"),
           consent_media_release: true,
           // R67 — the branch and stage belong to the child now. `intoBranchId`
           // is what the branch-filter test varies.
