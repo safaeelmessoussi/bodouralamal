@@ -355,6 +355,14 @@ describe('one table', () => {
      * so it is exempt permanently rather than pending work.
      */
     'components/calendar/calendar-grid.tsx',
+    /** **The date picker's day grid, for the identical reason** — the same
+     *  month-is-tabular argument `calendar-grid.tsx` is exempt for, one level
+     *  down: a compact single-month picker rather than the full page calendar,
+     *  but the same weekday-columns/week-rows shape and the same screen-reader
+     *  benefit from a real `<table>`. Its month and year grids are plain lists
+     *  of buttons (no row/column meaning), so only this one file needs the
+     *  exemption, not the component's month/year views. */
+    'components/ui/date-picker.tsx',
   ]);
 
   it('nothing renders a table element outside the shared primitive', () => {
@@ -708,3 +716,52 @@ describe('unsaved form changes are protected by the shared dialog', () => {
  * file cannot read CSS (see the note under *one Button* above). They are asserted
  * where they can actually be read.
  */
+
+describe('one date picker', () => {
+  /**
+   * **`date-picker.tsx` is the ONLY place a date is entered on this platform**
+   * (Owner decision, 2026-09-05).
+   *
+   * Every native `<input type="date">` is retired — the last two were the
+   * registration form's DOB (`TextField type="date"`, delegating to a native
+   * control) and the Hijri calendar's own hand-rolled `<input type="date">`
+   * with no shared component underneath it at all, the second-implementation
+   * shape rule C exists to catch. Both now render `DatePicker`/`DateField`.
+   *
+   * **Why zero occurrences, not an allowlist of one.** `DatePicker` itself
+   * needs no native date input to render its own calendar — it is built from
+   * `<button>`s and a `<table>`, exactly like the rest of the design system —
+   * so the correct count everywhere, including its own file, is zero. An
+   * allowlist entry here would mean the component reintroduced the very
+   * control it exists to replace.
+   */
+  const NATIVE_DATE_INPUT = /type=(["'{])date\1/;
+
+  it('nothing renders a native type="date" input anywhere in the app', () => {
+    const offenders = FILES.filter((f) => NATIVE_DATE_INPUT.test(stripComments(f.text))).map(
+      (f) => f.path,
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * **The retired variant is gone from the type, not merely unused.**
+   *
+   * `TextField` accepted `type="date"` as a documented variant before this
+   * revision; a caller could still type it and get a real (if unwanted) native
+   * input past a source-text scan alone. Removing it from the union is what
+   * makes a reintroduction a compile error instead of a silent regression —
+   * the same reasoning `journey.integration.test.ts`'s sibling guards use
+   * elsewhere: a capability with no reach is a defect, and a capability that
+   * still TYPECHECKS is a capability with reach.
+   */
+  it('TextField no longer accepts type="date" in its own type', () => {
+    const FIELD = stripComments(RAW['/src/components/ui/field.tsx'] ?? '');
+    expect(FIELD).not.toMatch(/type\?:\s*'[^']*\bdate\b/);
+  });
+
+  it('DateField delegates to the shared DatePicker rather than a second calendar', () => {
+    const FIELD = stripComments(RAW['/src/components/ui/field.tsx'] ?? '');
+    expect(FIELD).toContain('<DatePicker');
+  });
+});

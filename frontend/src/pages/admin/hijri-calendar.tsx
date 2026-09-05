@@ -12,6 +12,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ErrorState } from '../../components/states.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
+import { DatePicker } from '../../components/ui/date-picker.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -276,12 +277,10 @@ export function MonthRow({
         <span className="admin-table__ordinal">{month.hijri_month}</span>
       </th>
       <td>
-        <input
-          type="date"
-          className="cal-filter__control"
+        <DatePicker
           value={value}
-          aria-label={`${t('admin.hijri.colStart')} — ${month.month_name_ar}`}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={setValue}
+          ariaLabel={`${t('admin.hijri.colStart')} — ${month.month_name_ar}`}
         />
       </td>
       <td className="admin-table__actions">

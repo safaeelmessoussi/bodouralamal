@@ -303,10 +303,6 @@ export const ar = {
     conflict: 'عدّل مستخدم آخر هذا السجل أثناء عملك. تم تحديث البيانات — يرجى المراجعة وإعادة المحاولة.',
     reasonHint: 'يُسجَّل هذا التبرير في سجل المراجعة (10 أحرف على الأقل).',
     reasonTooLong: 'التبرير طويل جداً ({max} حرف كحد أقصى).',
-    // R66 — the native date control renders its own placeholder in the
-    // BROWSER's locale, which we cannot change; the field states the order it
-    // expects instead, and echoes the chosen date in Arabic underneath.
-    dateFormatHint: 'التاريخ بصيغة: يوم/شهر/سنة',
     choose: 'اختر…',
     // Losing a half-filled form to a stray click is the defect these exist for
     // (2026-08-17). Phrased as a question about the FORM, not about the data:
@@ -534,6 +530,32 @@ export const ar = {
     ],
     // BR-17: the week starts Monday, everywhere.
     weekdaysShort: ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'],
+  },
+  /**
+   * **The platform's ONE date picker** (2026-09-05) — replacing every native
+   * `<input type="date">`. Reuses `calendar.months` and `calendar.weekdaysShort`
+   * rather than a second set of names, so the two can never disagree about what
+   * a month is called.
+   *
+   * **Names, not sentences.** The drill-down header ("اختيار الشهر" /
+   * "اختيار السنة") is an accessible-name PREFIX composed with the visible
+   * month/year at render time — the same "long name CONTAINS the short label"
+   * rule `calendar.navPrevious`/`navNext` already state, so voice control still
+   * matches the button by what it visibly says.
+   */
+  datePicker: {
+    // Shown inside the empty control — the Arabic answer to a native
+    // `type="date"` input's browser-locale `mm/dd/yyyy` placeholder.
+    placeholder: 'يوم / شهر / سنة',
+    previousMonth: 'الشهر السابق',
+    nextMonth: 'الشهر التالي',
+    previousYear: 'السنة السابقة',
+    nextYear: 'السنة التالية',
+    previousYears: 'السنوات السابقة',
+    nextYears: 'السنوات التالية',
+    chooseMonth: 'اختيار الشهر',
+    chooseYear: 'اختيار السنة',
+    today: 'اليوم',
   },
   // NEW N — «شركاؤنا». القسم لا يظهر أصلاً إن لم يكن هناك شريك ظاهر.
   /**

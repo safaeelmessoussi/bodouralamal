@@ -150,16 +150,22 @@ describe('MonthRow renders the contract’s field names', () => {
     expect(render(WIRE)).toMatch(/aria-label="[^"]*محرم[^"]*"/u);
   });
 
-  it('pre-fills the date input with the recorded start date', () => {
-    expect(render(WIRE)).toContain('value="2026-06-17"');
+  it('pre-fills the date picker with the recorded start date', () => {
+    // **Restated, not weakened** (2026-09-05): the native `value="…"` attribute
+    // this pinned is gone with the native `<input type="date">` it belonged to.
+    // The property is the same one — the recorded date is what the control
+    // shows — read from `DatePicker`'s own rendered text instead.
+    expect(render(WIRE)).toContain('17 يونيو 2026');
   });
 
-  it('renders an unannounced month as an empty input, never an invented date', () => {
+  it('renders an unannounced month with the picker’s empty placeholder, never an invented date', () => {
     // §20 rule 14 / Revision 32: where the official answer is not yet known the
-    // platform says nothing. A placeholder date here would look authoritative.
+    // platform says nothing. A placeholder DATE here would look authoritative;
+    // the picker's own format placeholder ("يوم / شهر / سنة") names no date at
+    // all, which is the property this pins.
     const html = render(blank(5));
-    expect(html).toContain('value=""');
-    expect(html).not.toMatch(/value="\d{4}-\d{2}-\d{2}"/u);
+    expect(html).toContain('date-picker__placeholder');
+    expect(html).not.toMatch(/\d{4}-\d{2}-\d{2}/u);
   });
 
   it('marks the tail month so the half-dark month is explainable', () => {

@@ -18,10 +18,15 @@
 /**
  * True when `value` is a real calendar date that is not in the future.
  *
- * The native `type="date"` control already produces `YYYY-MM-DD` and refuses
- * most nonsense, but a keyboard-entered or pasted value reaches here unchecked —
- * and `new Date('2010-02-31')` is the 3rd of March, **silently**, which is why
- * the components are read back rather than trusted.
+ * **The calendar-impossibility half is now belt-and-braces, not the whole
+ * reason this exists.** `DatePicker` (2026-09-05) only ever emits a value it
+ * built from a real, already-valid `Date` — it cannot produce `2010-02-31` the
+ * way a keyboard-typed or pasted string once could reach here unchecked. What
+ * the picker does NOT prevent is the future: nothing stops a person from
+ * paging the calendar forward and choosing tomorrow, so the future-date half of
+ * this check is the one still doing live work, and the calendar check stays as
+ * the cheap safety net for any value that did not come from the picker at all —
+ * a pre-filled draft, a value restored from storage.
  */
 export function isRealPastDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

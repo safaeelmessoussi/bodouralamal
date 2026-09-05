@@ -5395,3 +5395,70 @@ admission-to-achievement journey still 14/14 and 66/66.
 Owner asked for — `assessment_published`, the paper-as-resource rule, copy-on-reuse
 and the zero-audience behaviour — in the normal style. `SRS.md` is immutable here,
 so the revision itself is the Owner's to apply.
+
+## The one Arabic date picker, replacing every native `<input type="date">` (2026-09-05)
+
+**Every date on the platform is now chosen through one shared component, never
+typed through the browser's own control.** The native input was kept
+deliberately once — its docstring said replacing it "would cost the mobile
+keyboard and the keyboard/screen-reader behaviour that comes with it, a bad
+trade for a placeholder" — but it rendered its popup AND its `mm/dd/yyyy`
+placeholder in the **browser's** locale, which `lang`, `dir` and CSS could not
+touch. A platform that is Arabic everywhere else showed an English date shape
+at the one control a person uses to state her own birth date. That trade is
+retired by Owner decision; `frontend/src/components/ui/date-picker.tsx` pays
+for it properly instead of patching around it.
+
+**`DatePicker` is the bare control; `DateField` is `DatePicker` inside the
+existing `FieldShell`** — the same split `ChoiceField`/`CheckboxField` already
+uses, so every one of the ~10 existing `DateField` call sites needed zero
+changes. Two real second-implementations were found and folded in: the
+registration form's DOB (`TextField type="date"`, delegating to a native
+input) and the Hijri calendar's own hand-rolled `<input type="date">` with no
+shared component underneath it at all.
+
+**A day/month/year is chosen, never typed.** Building three synchronised text
+segments — auto-advance, backspace-to-previous, per-month day limits, pasting a
+whole date — is a second date parser this platform would then have to keep
+correct forever, for a control whose entire job is to make typing unnecessary.
+The header is one drill-down control instead: day view reads the month and
+year and opens the month grid; month view reads the year alone and opens the
+year grid, paged a dozen at a time. Reaching a birth year decades back is
+open → year-page-back → year → month → day, regardless of how far back —
+never a chain of "previous month".
+
+**Inline, not floating.** The calendar expands in normal document flow below
+the trigger, the same shape `SearchableSelect`/`MultiSelectField` already use
+for "a field with more underneath it," rather than an absolutely-positioned
+popover — this platform has never built floating-panel positioning/clipping
+logic, and an inline panel cannot be clipped by a dialog's `overflow-y: auto`
+body the way a floating one could.
+
+**The value is unchanged.** Selecting a day computes `YYYY-MM-DD` from local
+date parts through the same `toIsoDate` every other calendar surface uses
+(TD-11) — never `toISOString`, which is UTC and can shift the date near
+midnight. Native `min`/`max` become the same courtesy in the picker's own
+grid — a day/month/year outside range renders disabled — and remain what they
+always were: a courtesy, not validation; the caller's `error` and the server
+still do that job.
+
+**Guarded, not merely written once.** `atomic-components.test.tsx` now scans
+the whole source tree for a native `type="date"` and for the retired
+`TextField` variant in its own type signature (so a reintroduction is a
+compile error, not a silent regression) — the count everywhere, including the
+picker's own file, is zero, since it is built entirely from `<button>`s and one
+`<table>` (exempted on the same "a month is genuinely tabular data" reasoning
+`calendar-grid.tsx` already carries).
+
+**Verified:** 26 focused tests (pure date arithmetic — month/year-length
+clamping, Monday-first week starts, ISO parsing — plus the closed-control
+markup, `DateField`'s FieldShell wiring, and the disabled-range logic);
+24/24 browser checks across four real screens — the public registration DOB
+(mouse-driven year→month→day drill AND a fully keyboard-driven pass: tab,
+ArrowDown to open, ArrowRight to move the roving focus, Escape to close and
+return focus to the trigger), AcademicPeriod's start date (R122), the online
+assessment builder's exam date (R124), and a physical exam's scheduling date
+(R58) — plus a 390px mobile pass confirming neither the closed field nor the
+open panel scrolls the page sideways. All 31 CI guards, full frontend
+typecheck/lint/build. No backend file was touched, so the backend gates were
+not re-run for this slice.

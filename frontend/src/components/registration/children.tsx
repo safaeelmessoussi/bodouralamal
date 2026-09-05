@@ -4,7 +4,7 @@ import { LIMITS, type ChildInput } from '../../adapters/registrations.js';
 import { t } from '../../i18n/index.js';
 import { isRealPastDate } from '../../lib/birth-date.js';
 import { Button } from '../ui/button.js';
-import { SelectField, TextField } from '../ui/field.js';
+import { DateField, SelectField, TextField } from '../ui/field.js';
 
 /**
  * **The child section of a registration — one implementation, two entry
@@ -197,8 +197,7 @@ export function ChildFields({
         *
         * Each child carries her own, never a sibling's.
         */}
-      <TextField
-        type="date"
+      <DateField
         label={t('register.birthDate')}
         value={value.birthDate}
         onChange={(next) => set({ birthDate: next })}

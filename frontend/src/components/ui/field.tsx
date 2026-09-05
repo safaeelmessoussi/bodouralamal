@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 
+import { DatePicker } from './date-picker.js';
 import { t } from '../../i18n/index.js';
-import { formatDate } from '../../lib/format-date.js';
 
 /**
  * Form field primitives — **the platform's form infrastructure**, not this
@@ -85,18 +85,7 @@ interface BaseProps {
 export function TextField({
   type = 'text',
   ...props
-  /**
-   * **`date` is a documented variant, not a second component** (rule C).
-   *
-   * R130 needs a date of birth on the registration form and on the account
-   * edit. A native `type="date"` gives the platform's own calendar, keyboard
-   * entry and locale formatting for free, and the value it produces is already
-   * `YYYY-MM-DD` — exactly what the server's TD-11 boundary expects, with no
-   * parsing on either side. Hand-writing the input here would have been the
-   * fourth `<input>` outside this shell, which is the thing the rule exists to
-   * stop.
-   */
-}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url' | 'date' }): ReactNode {
+}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url' }): ReactNode {
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (
@@ -219,60 +208,39 @@ export function TextArea({ rows = 4, ...props }: BaseProps & { rows?: number }):
 /**
  * A local calendar date, `YYYY-MM-DD` — never an instant (TD-11).
  *
- * ## Why the empty control still reads `mm/dd/yyyy`, and what is done about it
+ * **`DatePicker` plus the shared `FieldShell`, and nothing else** — the native
+ * `<input type="date">` this used to keep is retired platform-wide (Owner
+ * decision, 2026-09-05): it rendered its placeholder and its own popup in the
+ * BROWSER's locale, which `lang`, `dir` and CSS could none of them touch, and a
+ * platform that is Arabic everywhere else showed an English date shape at the
+ * one control a person uses to state her own birth date. `date-picker.tsx`
+ * carries the full account of why a real Arabic calendar replaces it and what
+ * that trade costs and buys.
  *
- * **`<input type="date">` renders its placeholder and its value in the USER
- * AGENT's locale, not the document's.** `lang`, `dir` and CSS cannot change it;
- * only replacing the native control could, and that would cost the platform
- * picker, the mobile keyboard, and the keyboard and screen-reader behaviour that
- * comes with it — a bad trade for a placeholder.
- *
- * So the native control is kept and the parts we *do* control are made Arabic
- * and consistent:
- *
- * * **`lang="ar-MA"`** — honoured by some user agents, harmless in the rest;
- * * **a format hint** naming the order in words, so the field states what it
- *   expects rather than leaving the reader to infer it from `mm/dd/yyyy`;
- * * **the chosen date echoed in Arabic** beneath the control, from the same
- *   `formatDate` every table and card now uses — so the date a person reads is
- *   Arabic even while the picker's own chrome is the browser's.
- *
- * The stored and transmitted value is untouched: `YYYY-MM-DD`, exactly as TD-11
- * requires.
- */
-/**
- * **A date, optionally bounded** (`min`/`max` added 2026-08-29).
- *
- * The bounds are the native ones, so the browser's own picker greys out what
- * cannot be chosen — the cheapest possible *«not that one»*, before a click.
- * They are **not** validation: a native `min` is trivially bypassed and says
- * nothing about *why*, so a caller that sets them must still pass `error` and
- * the server must still refuse. Constrain, explain, and enforce — three jobs,
- * and this does only the first.
+ * **The bounds are no longer native.** A native `min`/`max` "greys out what
+ * cannot be chosen" in the browser's own picker; `DatePicker` does the identical
+ * job in its own grid — a day/month/year outside range is rendered disabled —
+ * and the reasoning is unchanged: this is a courtesy, not validation. A native
+ * `min` was always trivially bypassed and said nothing about *why*, so a caller
+ * that sets one must still pass `error` and the server must still refuse.
+ * Constrain, explain, and enforce stay three separate jobs; this still does
+ * only the first.
  */
 export function DateField(props: BaseProps & { min?: string; max?: string }): ReactNode {
   return (
-    <FieldShell {...props} hint={props.hint ?? t('common.dateFormatHint')}>
+    <FieldShell {...props}>
       {({ id, describedBy }) => (
-        <>
-          <input
-            id={id}
-            className="field__control"
-            type="date"
-            lang="ar-MA"
-            value={props.value}
-            {...(props.min ? { min: props.min } : {})}
-            {...(props.max ? { max: props.max } : {})}
-            required={props.required ?? false}
-            disabled={props.disabled ?? false}
-            aria-invalid={props.error ? true : undefined}
-            aria-describedby={describedBy}
-            onChange={(e) => props.onChange(e.target.value)}
-          />
-          {props.value ? (
-            <p className="field__hint field__hint--value">{formatDate(props.value)}</p>
-          ) : null}
-        </>
+        <DatePicker
+          id={id}
+          value={props.value}
+          onChange={props.onChange}
+          {...(props.min ? { min: props.min } : {})}
+          {...(props.max ? { max: props.max } : {})}
+          required={props.required ?? false}
+          disabled={props.disabled ?? false}
+          ariaInvalid={props.error ? true : undefined}
+          ariaDescribedBy={describedBy}
+        />
       )}
     </FieldShell>
   );

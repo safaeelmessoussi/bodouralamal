@@ -13,10 +13,14 @@ import { leadingBlanks, monthGrid, MONDAY_FIRST_DAY_INDEX } from './dates.js';
  * 0 for Sunday, so the *absence* of the offset is what a Sunday-first bug
  * looks like, and it looks like ordinary code.
  *
- * **Scope, stated honestly.** This covers the surfaces the application draws.
- * A native `<input type="date">` renders its popup from the BROWSER's locale,
- * which no page-level attribute can override — see `DateField`'s own docstring
- * on why the native control is kept.
+ * **The scope note this carried is now moot, not merely out of date.** It used
+ * to read *"a native `<input type=\"date\">` renders its popup from the
+ * BROWSER's locale, which no page-level attribute can override"* — true while
+ * the native control was kept deliberately (`DateField`'s old docstring gave
+ * the trade-off), false since 2026-09-05: `date-picker.tsx` replaced every one
+ * of them with the platform's own Monday-first grid, so this file's
+ * `leadingBlanks`/`monthGrid` now genuinely cover **every** calendar surface,
+ * with no exception left to state.
  */
 describe('the platform calendar starts on Monday', () => {
   it('offsets from Monday, not from Sunday', () => {

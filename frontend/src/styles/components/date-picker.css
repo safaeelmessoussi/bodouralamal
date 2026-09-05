@@ -1,0 +1,153 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── The date picker (2026-09-05) ─────────────────────────────────────────────
+ *
+ * Replaces every native `<input type="date">`. The trigger wears
+ * `.field__control` (from `forms.css`, loaded before this file) so it sizes and
+ * borders identically to every other field; this file adds only what a native
+ * input never needed — the placeholder/value text, and the panel underneath.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+.date-picker {
+  position: relative;
+  display: grid;
+}
+
+/* The trigger keeps `.btn`'s focus-visible ring and disabled cursor; only its
+   text alignment needs stating, because `.btn` centres a short label while a
+   field's value reads start-aligned like every other control's text. */
+.date-picker__trigger {
+  justify-content: start;
+  text-align: start;
+}
+.date-picker__placeholder {
+  color: var(--color-text-muted);
+}
+
+.date-picker__panel {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  /* Bounded to the field's own width, never wider — the one thing that keeps
+     this safe inside a narrow dialog column without any positioning logic at
+     all (see the component's own docstring on why it is inline, not floating). */
+  max-width: 100%;
+}
+
+.date-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.date-picker__head-title {
+  font-weight: 700;
+  /* Overrides `.btn`'s own padding — this is a heading a person can also click,
+     not a call to action, and the wide button padding made a one-word year
+     look like the panel's primary action rather than its title. */
+  padding-inline: var(--space-2);
+}
+
+/* ── The day grid — a real <table>, like the platform's own month calendar,
+   for the identical reason: a screen reader announces the weekday header with
+   every cell, which a <div> grid cannot do without rebuilding that by hand. */
+.date-picker__grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.date-picker__weekday {
+  padding-block-end: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.date-picker__cell {
+  padding: 2px;
+  text-align: center;
+}
+.date-picker__cell--blank {
+  padding: 0;
+}
+/* Overrides `.btn`'s label-sized padding with a compact square — a day is one
+   or two digits, not a phrase, and seven of these sit on one row. */
+.date-picker__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 2.25rem;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* Same cascade-order rule `.cal-day` states, and for the same reason: these
+   three share one specificity, so source order — not selector weight — decides
+   which wins, weakest to strongest. Reordering changes behaviour with no
+   declaration touched. */
+.date-picker__day.is-today {
+  background: color-mix(in srgb, var(--color-primary-soft) 30%, transparent);
+}
+.date-picker__day:hover {
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, transparent);
+}
+.date-picker__day.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-primary-emphasis);
+  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
+}
+.date-picker__day:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── The month and year grids — a bounded list of buttons, the same furniture
+   `multi-select__options`/`searchable-select__options` already use, arranged in
+   columns rather than wrapped rows because every label here is the same width. */
+.date-picker__months,
+.date-picker__years {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.date-picker__months {
+  grid-template-columns: repeat(3, 1fr);
+}
+.date-picker__years {
+  grid-template-columns: repeat(4, 1fr);
+}
+.date-picker__months .btn,
+.date-picker__years .btn {
+  width: 100%;
+  justify-content: center;
+  padding-inline: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+.date-picker__months .btn.is-selected,
+.date-picker__years .btn.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-primary-emphasis);
+  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
+}
+.date-picker__months .btn:disabled,
+.date-picker__years .btn:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Narrow phones (§14.7 tests at 360px): the day grid's `min-width: 2.25rem`
+   times seven columns plus the panel's own padding is what is measured against
+   360px, and it clears it; this only relaxes the head title's padding, which
+   otherwise crowds the prev/next buttons at the panel's narrowest width. */
+@media (max-width: 26rem) {
+  .date-picker__head-title {
+    padding-inline: var(--space-1);
+  }
+}

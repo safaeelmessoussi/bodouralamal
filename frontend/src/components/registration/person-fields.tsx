@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { NameFields } from './children.js';
-import { TextField } from '../ui/field.js';
+import { DateField, TextField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -90,8 +90,7 @@ export function PersonFields({
         required={phoneRequired}
       />
       {collectBirthDate ? (
-        <TextField
-          type="date"
+        <DateField
           label={t('register.birthDate')}
           value={value.birthDate}
           onChange={(next) => set({ birthDate: next })}
