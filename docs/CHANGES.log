@@ -5661,3 +5661,33 @@ test anonymizes the very column its own suite's cleanup query searches on.**
   files and 2346 tests passing, no new failures.
 - No production `src/` behavior changed — test cleanup logic only, across all
   three files.
+
+## A different class of isolation-guard failure: a row this suite doesn't own, left changed rather than left behind (2026-09-05)
+
+**Every leak fixed earlier today was a row count drifting. This one wasn't —
+`user` stayed at 9 both times; only the row *content* differed.**
+
+`platform-owner.http.integration.test.ts`'s "applies normal lifecycle rules to
+the former owner after transfer" test suspends, reactivates and re-transfers
+the **real seeded Platform Owner** (not a fixture it created) to prove the
+former owner is an ordinary Super Admin afterward. `restoreOriginalState()`
+put back only two hardcoded fields (`accountStatus`, `version`) captured at
+`beforeAll` — correct for the simpler tests, but this one's longer sequence
+apparently drifted some other column the two-field restore never knew to
+touch, and the all-table isolation guard correctly caught it as unrestored
+shared state on a row this suite does not own.
+
+Fixed by capturing the owner's **entire** scalar row once in `beforeAll` and
+restoring it whole in `restoreOriginalState()`, rather than continuing to
+name fields one at a time — the failure mode here is exactly "the next
+lifecycle change touches a field nobody added to the restore list" repeating.
+The one wrinkle: `firstNameSort`/`lastNameSort` are Postgres `GENERATED
+ALWAYS` columns (derived from `nameArabic`) — Postgres refuses any explicit
+value for them other than `DEFAULT`, so they're excluded from the restore
+payload; nothing in this suite touches `nameArabic`, so they stay correct on
+their own regardless.
+
+Verified: isolated before/after content digest (`md5` over every row) on the
+`user` table across just this file — identical, where it previously differed
+only in content, not count. All 12 of its own tests still pass. No production
+`src/` behavior changed.

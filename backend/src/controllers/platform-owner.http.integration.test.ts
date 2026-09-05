@@ -38,7 +38,13 @@ const token = (userId: string, role: string, branches: string[] | null = null) =
 
 let originalOwnerId: string;
 let originalOwnerVersion: number;
-let originalOwnerUserVersion: number;
+/** The former-owner lifecycle proof suspends, reactivates and re-transfers the
+ *  ORIGINAL owner — restoring only `accountStatus`/`version` left whichever
+ *  other column that sequence touched (e.g. `statusChangedAt`) undone, which
+ *  the all-table isolation guard rightly caught as a digest mismatch on a row
+ *  this suite does not own. Capturing the whole scalar row removes the need to
+ *  keep guessing which field a future lifecycle change might also touch. */
+let originalOwnerUserRow: Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>>;
 let originalOwnerNotification: {
   id: string;
   readAt: Date | null;
@@ -112,9 +118,15 @@ async function restoreOriginalState(): Promise<void> {
     where: { singletonKey: 'platform' },
     data: { version: originalOwnerVersion },
   });
+  // `firstNameSort`/`lastNameSort` are DB `GENERATED ALWAYS` columns — Postgres
+  // refuses any explicit value for them other than DEFAULT, so they cannot be
+  // part of a captured-row restore; nothing here writes `nameArabic` either, so
+  // they stay correct on their own.
+  const { id: _id, firstNameSort: _firstNameSort, lastNameSort: _lastNameSort, ...restorable } =
+    originalOwnerUserRow;
   await prisma.user.update({
     where: { id: originalOwnerId },
-    data: { accountStatus: 'active', version: originalOwnerUserVersion },
+    data: restorable,
   });
 }
 
@@ -176,9 +188,7 @@ beforeAll(async () => {
   });
   originalOwnerId = originalOwnership.ownerUserId;
   originalOwnerVersion = originalOwnership.version;
-  originalOwnerUserVersion = (
-    await prisma.user.findUniqueOrThrow({ where: { id: originalOwnerId }, select: { version: true } })
-  ).version;
+  originalOwnerUserRow = await prisma.user.findUniqueOrThrow({ where: { id: originalOwnerId } });
   originalOwnerNotification = await prisma.notification.findFirst({
     where: {
       userId: originalOwnerId,
