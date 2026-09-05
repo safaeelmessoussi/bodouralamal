@@ -79,6 +79,15 @@ let categoryId = '';
 let levelId = '';
 let groupId = '';
 
+/**
+ * Tracked separately from `nameArabic`: closure/purge — the feature under
+ * test — overwrites `nameArabic` to a fixed anonymized constant
+ * (`DELETED_ACCOUNT_NAME` in account-deletion.service.ts), so a row this suite
+ * closed becomes invisible to a `startsWith: TAG` lookup and would otherwise
+ * leak forever.
+ */
+const createdUserIds: string[] = [];
+
 async function makeUser(
   label: string,
   opts: { beneficiary?: boolean; code?: string; withIdentity?: boolean } = {},
@@ -95,6 +104,7 @@ async function makeUser(
       ...(code ? { referenceCode: code } : {}),
     },
   });
+  createdUserIds.push(user.id);
   let email: string | null = null;
   let subject: string | null = null;
   if (opts.withIdentity !== false) {
@@ -137,7 +147,25 @@ async function clear(): Promise<void> {
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
   });
-  const ids = users.map((u) => u.id);
+  // Merge with the tracked ids — closure/purge overwrites `nameArabic`, so a
+  // row this suite already closed no longer matches the tag lookup above.
+  const ids = [...new Set([...users.map((u) => u.id), ...createdUserIds])];
+  createdUserIds.length = 0;
+
+  // `selfmanaged.request` is logged with `actorUserId: null` — the requester
+  // is not signed in yet — so it survives the actorUserId/targetId-on-user
+  // delete below unless it is also caught by claim id.
+  const claims = await prisma.selfManagedClaim.findMany({
+    where: { OR: [{ beneficiaryId: { in: ids } }, { decidedById: { in: ids } }] },
+    select: { id: true },
+  });
+  const claimIds = claims.map((c) => c.id);
+  if (claimIds.length > 0) {
+    await prisma.auditLog.deleteMany({
+      where: { targetEntity: 'SelfManagedClaim', targetId: { in: claimIds } },
+    });
+  }
+
   if (ids.length > 0) {
     // BOTH sides: `beneficiary_id` and `decided_by` are each Restrict, so a
     // claim this suite's Super Admin decided pins her too.
@@ -195,6 +223,10 @@ async function clear(): Promise<void> {
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // `approveSelfManagedClaim` locks the claimed email (user.repository.ts's
+  // `lockNormalizedEmail`) before rebinding it — a row this suite's identities
+  // always leave behind, since nothing else in the approve flow removes it.
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'closure-' } } });
   await clearOwnedConsumedTokens(prisma, owned);
 }
 

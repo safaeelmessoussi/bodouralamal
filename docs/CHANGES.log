@@ -5553,3 +5553,33 @@ is why local "typecheck passed" kept being true while CI kept failing.**
   fixtures only.
 - Verified: `npm run typecheck`/`lint`/`test`/`build` clean; full backend
   integration suite green (105 files, 2346 passed, 17 pre-existing skips).
+
+## The isolation guard's real remaining Integration-job failure: two suites that permanently leak rows their own cleanup can't see (2026-09-05)
+
+**A green local run proved nothing here — every leaked table is one this
+suite's own dev database has been quietly accumulating for a long time; the
+disposable CI stack just has no prior garbage to hide it in.**
+
+- `self-managed-claim.integration.test.ts` and `account-closure.integration.test.ts`
+  both call `requestSelfManagedClaim`, whose `selfmanaged.request` audit row is
+  logged with `actorUserId: null` (the requester isn't signed in yet) — so
+  neither file's actor-scoped `auditLog.deleteMany` ever touched it. Fixed by
+  deleting by `targetEntity: 'SelfManagedClaim'` + the suite's own claim ids,
+  captured before the claims themselves are deleted.
+- Both files also call `approveSelfManagedClaim`, which locks the claimed email
+  via `lockNormalizedEmail` (`user.repository.ts`) — neither file ever deleted
+  the resulting `normalized_email_lock` row. Fixed by scoping a delete to each
+  file's own email prefix (`smc-`/`closure-`).
+- `account-closure.integration.test.ts` additionally tagged its users for
+  cleanup by a `nameArabic` prefix — but closing/purging an account (the
+  feature under test) overwrites `nameArabic` to a fixed anonymized constant,
+  so a closed row stopped matching its own cleanup query and leaked every run.
+  Fixed by tracking created ids directly (module-level array, pushed at
+  creation) instead of relying on a column the suite's own subject rewrites.
+- Confirmed by isolating each file (row counts before/after against the real
+  local DB): before the fix, `self-managed-claim` leaked ~23 audit_log + ~6
+  normalized_email_lock rows per run; `account-closure` leaked ~18 users + ~16
+  normalized_email_lock rows per run. After: zero net change on either file,
+  all 46 of their tests still pass, and re-running both against the
+  already-polluted local DB swept ~900 accumulated stale rows as a side effect.
+- No production `src/` behavior changed — test cleanup logic only.

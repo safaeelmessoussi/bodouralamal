@@ -116,6 +116,21 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+
+  // `selfmanaged.request` is logged with `actorUserId: null` — the requester
+  // is not signed in yet (see self-managed-claim.service.ts) — so it survives
+  // the actorUserId-scoped delete below unless it is also caught by claim id.
+  const claims = await prisma.selfManagedClaim.findMany({
+    where: { beneficiaryId: { in: ids } },
+    select: { id: true },
+  });
+  const claimIds = claims.map((c) => c.id);
+  if (claimIds.length > 0) {
+    await prisma.auditLog.deleteMany({
+      where: { targetEntity: 'SelfManagedClaim', targetId: { in: claimIds } },
+    });
+  }
+
   if (ids.length > 0) {
     await prisma.selfManagedClaim.deleteMany({ where: { beneficiaryId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
@@ -127,6 +142,10 @@ async function clear(): Promise<void> {
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  // `approveSelfManagedClaim` locks the claimed email (user.repository.ts's
+  // `lockNormalizedEmail`) before rebinding it — a row this suite's identities
+  // always leave behind, since nothing else in the approve flow removes it.
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'smc-' } } });
   await clearOwnedConsumedTokens(prisma, owned);
 }
 
