@@ -18,7 +18,12 @@ import {
   sealFlowState,
 } from '../lib/oauth.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { finalizeLoginSession, resolveLogin, switchActiveRole } from '../services/auth.service.js';
+import {
+  finalizeLoginSession,
+  resolveExistingSession,
+  resolveLogin,
+  switchActiveRole,
+} from '../services/auth.service.js';
 import {
   logout as logoutSession,
   REFRESH_TTL_MS,
@@ -58,9 +63,34 @@ function setRefreshCookie(res: Response, rawToken: string): void {
   );
 }
 
-/** `GET /auth/google` — begins the flow (§4.1b steps 1–2). */
-export function startOAuth(config: AppConfig) {
-  return (_req: Request, res: Response): void => {
+/**
+ * `GET /auth/google` — begins the flow (§4.1b steps 1–2).
+ *
+ * **An already-signed-in browser never reaches Google.** The refresh cookie
+ * is scoped to `/api/v1/auth` (see `REFRESH_COOKIE_PATH` above), so it
+ * arrives on this request exactly as it does on `/auth/refresh` — a plain
+ * top-level navigation cannot carry the in-memory access token, but the
+ * HttpOnly cookie is sent automatically, which is the one signal this
+ * endpoint has to go on. `resolveExistingSession` is the same check
+ * `POST /auth/refresh` performs; a live result redirects straight to the
+ * caller's own destination and a dead/absent cookie falls through to the
+ * ordinary flow below, unchanged.
+ */
+export function startOAuth(prisma: PrismaClient, config: AppConfig) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
+    if (presented) {
+      const route = await resolveExistingSession(prisma, {
+        presentedRaw: presented,
+        signingKey: config.JWT_SIGNING_KEY,
+      });
+      if (route.kind === 'redirect') {
+        if (route.rotatedRefresh) setRefreshCookie(res, route.rotatedRefresh.rawToken);
+        res.redirect(302, `${config.PUBLIC_BASE_URL}${route.destination}`);
+        return;
+      }
+    }
+
     const flow = createFlowState();
     // The verifier must survive the round trip to Google. It lives in a signed,
     // short-lived HttpOnly cookie scoped to this flow — transient flow state,

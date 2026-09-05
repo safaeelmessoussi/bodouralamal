@@ -203,10 +203,10 @@
     "/auth/google": {
       "get": {
         "summary": "Begin Google OAuth",
-        "description": "Redirects to Google with state + PKCE (§4.1b steps 1–2, TD-12).",
+        "description": "Redirects to Google with state + PKCE (§4.1b steps 1–2, TD-12) — unless the ambient `bodour_refresh` cookie is already a LIVE session (Owner, 2026-09-05), in which case Google is never contacted at all: the caller is redirected straight to her own role-home/`/pending-approval` destination, the same rotation `POST /auth/refresh` performs runs (so the cookie stays valid), and no flow-state cookie is minted. A top-level navigation carries no bearer token, so the refresh cookie — scoped to `/api/v1/auth` and therefore sent on this path too — is the only signal available; a stale, forged or absent one falls through to the ordinary anonymous flow unchanged.",
         "responses": {
           "302": {
-            "description": "Redirect to Google."
+            "description": "Redirect to Google, OR an internal redirect to an already-authenticated caller’s own destination."
           },
           "500": {
             "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",

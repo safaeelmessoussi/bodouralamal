@@ -259,7 +259,7 @@ export function createApp(
   const onlineClass = createOnlineClassProvider(config);
 
   const api = express.Router();
-  api.get('/auth/google', auth.startOAuth(config));
+  api.get('/auth/google', auth.startOAuth(prisma, config));
   api.get('/auth/google/callback', auth.oauthCallback(prisma, config));
   // R132 — public but onboarding-token-gated, exactly like `POST /registrations`:
   // she has proven control of a Google identity and holds no session, because

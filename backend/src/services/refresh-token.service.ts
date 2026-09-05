@@ -53,6 +53,13 @@ export type RefreshAccessOutcome =
   | Extract<RefreshOutcome, { kind: 'rejected' | 'reuse_detected' }>
   | {
       kind: 'rotated';
+      /** Whose session this is. Added so a caller resolving a redirect
+       *  destination (§4.1b step 4a) does not need a second cookie/JWT round
+       *  trip just to learn an id it was already computed one call earlier —
+       *  see `resolveExistingSession` in `auth.service.ts`. Additive; the
+       *  wire response (`POST /auth/refresh`) maps named fields, never
+       *  spreads this object, so existing callers are unaffected. */
+      userId: string;
       accessToken: string;
       accessExpiresAt: Date;
       activeRole: string | null;
@@ -61,6 +68,7 @@ export type RefreshAccessOutcome =
     }
   | {
       kind: 'grace';
+      userId: string;
       accessToken: string;
       accessExpiresAt: Date;
       activeRole: string | null;
@@ -376,6 +384,7 @@ export async function refreshAccessSession(
     if (outcome.kind === 'rotated') {
       return {
         kind: 'rotated',
+        userId: outcome.userId,
         accessToken: issued.token,
         accessExpiresAt: issued.expiresAt,
         activeRole,
@@ -385,6 +394,7 @@ export async function refreshAccessSession(
     }
     return {
       kind: 'grace',
+      userId: outcome.userId,
       accessToken: issued.token,
       accessExpiresAt: issued.expiresAt,
       activeRole,

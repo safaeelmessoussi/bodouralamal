@@ -1,12 +1,17 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { issueAccessToken, issueAccessTokenWithExpiryCap } from '../lib/access-token.js';
 import { AppError } from '../lib/errors.js';
+import { postLoginDestination } from '../lib/role-home.js';
 import { narrowToRole } from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import type { Db } from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import type { ResolvedAccount } from '../repositories/user.repository.js';
-import { issueNewSession, type IssuedRefreshToken } from './refresh-token.service.js';
+import {
+  issueNewSession,
+  refreshAccessSession,
+  type IssuedRefreshToken,
+} from './refresh-token.service.js';
 
 /**
  * Login resolution and routing (SRS §4.1b steps 3–4, TD-1, TD-4.10).
@@ -252,6 +257,80 @@ export async function finalizeLoginSession(
       refreshSession,
     };
   });
+}
+
+export type ExistingSessionRoute =
+  /** No live refresh session under the presented cookie — proceed with the
+   *  ordinary Google OAuth flow. */
+  | { kind: 'none' }
+  /** A live session already exists; send the browser straight to its
+   *  destination and never contact Google. */
+  | { kind: 'redirect'; destination: string; rotatedRefresh: { rawToken: string } | null };
+
+/**
+ * **`GET /auth/google` while already signed in never reaches Google.**
+ *
+ * A person who clicks or navigates to a login entry point with a live session
+ * cookie is not starting a new login — she already has one, and re-running
+ * OAuth would ask her to pick a Google account for an identity binding that is
+ * already settled, or worse, invite a SECOND identity to be bound. §4.1b's
+ * "role-based dashboard redirect" is what a completed login produces; this is
+ * that same redirect, reached without a Google round trip because the
+ * round trip already happened.
+ *
+ * **Reuses `refreshAccessSession` rather than a second validity check.** That
+ * function is the platform's one answer to *"is this refresh cookie live, and
+ * for whom"* — rotation, the grace window, and reuse detection all apply
+ * identically here, because a forged/stale/replayed cookie presented at the
+ * login DOOR is exactly as dangerous as one presented at the refresh endpoint,
+ * and a second implementation of that check is a second place for it to drift.
+ * `rejected`/`reuse_detected` both mean *no live session*, so the caller falls
+ * through to the ordinary anonymous OAuth flow — including the case where the
+ * detected replay revokes the whole chain: the visitor still reaches Google
+ * and can sign back in normally afterward.
+ *
+ * **The destination is read from LIVE rows, not the token** (the same
+ * discipline `switchActiveRole` states): `refreshAccessSession` only proves
+ * the account is `active` or `pending` (TD-1) and returns no more than that,
+ * so this makes one further read of the authoritative account to learn WHICH
+ * of the two, and its role scopes, before naming a path — a Pending caller
+ * goes to `/pending-approval`, exactly as a fresh callback login does, never
+ * to a dashboard she cannot use.
+ *
+ * **Mints no new OAuth/PKCE flow state and binds no identity.** The only
+ * possible mutation is the SAME refresh-token rotation `POST /auth/refresh`
+ * already performs on every ordinary page load; declining to forward a
+ * `rotated` outcome's new cookie would leave the browser holding a dead
+ * value, so the caller MUST set it exactly as `/auth/refresh` does.
+ */
+export async function resolveExistingSession(
+  prisma: PrismaClient,
+  params: { presentedRaw: string; signingKey: string },
+): Promise<ExistingSessionRoute> {
+  const outcome = await refreshAccessSession(prisma, {
+    presentedRaw: params.presentedRaw,
+    signingKey: params.signingKey,
+  });
+  if (outcome.kind === 'rejected' || outcome.kind === 'reuse_detected') {
+    return { kind: 'none' };
+  }
+
+  const account = await users.findAccountById(prisma, outcome.userId);
+  // Essentially unreachable — `refreshAccessSession` re-checked this account
+  // moments earlier inside its own transaction — but a caller with no account
+  // to route has no business being told it is signed in.
+  if (!account) return { kind: 'none' };
+
+  const destination =
+    account.user.accountStatus === 'pending'
+      ? '/pending-approval'
+      : postLoginDestination(account.roleScopes.map((scope) => scope.role));
+
+  return {
+    kind: 'redirect',
+    destination,
+    rotatedRefresh: outcome.kind === 'rotated' ? { rawToken: outcome.rawToken } : null,
+  };
 }
 
 export interface SwitchedRole {
