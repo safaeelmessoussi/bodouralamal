@@ -5583,3 +5583,42 @@ disposable CI stack just has no prior garbage to hide it in.**
   all 46 of their tests still pass, and re-running both against the
   already-polluted local DB swept ~900 accumulated stale rows as a side effect.
 - No production `src/` behavior changed — test cleanup logic only.
+
+## OPEN OBSERVATION (recorded, not fixed — needs root-cause before touching it): `consent-safeguarding.integration.test.ts` "locks a shared recording graph" is genuinely flaky (2026-09-05)
+
+**Pre-existing, untouched by this session's work** (last real edit `116c8fe`,
+long before today). Surfaced only because CI's disposable stack finally ran
+clean enough for it to be the sole remaining red job. Reproduced locally too:
+1 failure in 8 isolated re-runs, always the identical assertion —
+`outcomes.reduce(..., migrationsEnqueued) === 2`, expected `1`.
+
+- **Not a CI-vs-local artifact and not caused by a live pg-boss worker**: this
+  test never calls `runProductionJob` for `content.bucket-migrate`, so nothing
+  consumes the queue in the background during the test; ruled out by reading
+  `runProductionJob`'s implementation (it hand-picks and runs one job row on
+  demand, never a live consumer loop).
+- **Static analysis says the two concurrent `reevaluateSessionConsentOnce`
+  transactions should fully serialize**: both discover the identical merged
+  session graph (proven — the `discovered` assertion above the failing line
+  passes every time), both call `lockLiveSessions` on the same sorted id set
+  (blocking `SELECT … FOR UPDATE`, `consent-safeguarding.repository.ts`), and
+  both resolve to the same single shared `contentId`, so `lockEducationalContent`
+  should also serialize them on that row. Under that model the loser's
+  `enqueue()` (`jobs.repository.ts`) should see the winner's already-committed
+  `pgboss.job` row via its own `NOT EXISTS` check and skip inserting — which is
+  what happens 7 times out of 8.
+- **Not resolved by invention.** I could not pin down, with the confidence this
+  file's own stakes (B-01 consent safeguarding) warrant, why the 8th run
+  disagrees with that model — candidates include a subtlety in Prisma
+  interactive-transaction snapshot timing under `$queryRaw`, or the singleton
+  dedup's `state IN ('created','retry')` window interacting with something
+  other than a live worker. Two things this is NOT: a security hole (the
+  content-visibility flip — `recordingsForced` — was correct in every run,
+  including the failing one) or a lost migration (worst case is one harmless
+  redundant enqueue; the handler is explicitly documented as idempotent for
+  exactly this reason). It IS the test's own strict "exactly 1" assertion
+  disagreeing with what the locking demonstrably guarantees under real timing.
+- Left exactly as found: no production code and no test assertion changed.
+  Before either changes, this needs a deliberate root-cause session — loosening
+  the assertion without one risks silently accepting a real race; touching the
+  locking without one risks a privacy-critical regression on a hunch.
