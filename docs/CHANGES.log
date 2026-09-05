@@ -5691,3 +5691,44 @@ Verified: isolated before/after content digest (`md5` over every row) on the
 `user` table across just this file — identical, where it previously differed
 only in content, not count. All 12 of its own tests still pass. No production
 `src/` behavior changed.
+
+## Staging deployed — first successful deploy since the CI outage (2026-09-05)
+
+**`https://staging.bodouralamal.com` now runs commit `34a90b7`**, carrying
+everything from the fixture/isolation-guard fixes above back through the
+authenticated-login fix and the Arabic date picker migration. Staging had
+been stuck on `b2c9a18` (2026-08-25) for the full duration of the ~40-commit
+CI outage; this is the first deploy since.
+
+- Followed `docs/operations/deployment.md`'s documented pipeline exactly, as
+  an upgrade (not first deployment): checkout verified against the exact
+  40-char SHA, preflight (`staging`, `staging.bodouralamal.com`,
+  `92.222.65.141`, 5 GiB floor — chosen as a clearly conservative margin
+  against the host's actual 25 GiB free; no Owner-approved staging-specific
+  floor is on record) → **PASS**; pulled and label-verified both exact-commit
+  images; stopped nginx/api only, kept db/minio up; `pg_dump` taken
+  immediately before migrating (`~/bodour-backups/pre-migration-2026-09-05-1439.sql`
+  on the host) per the mandatory rollback-point rule.
+- 19 migrations applied, including `20260904090000_r124_assessment_builder`,
+  which carries its own mandatory preflight (SRS-cited in the deployment doc):
+  all three counts it requires (`exam.questions` with real content,
+  `student_exam_submission` rows, `mode = 'online'` exams) were **0**, the
+  expected/safe case — migrated without needing an Owner decision.
+- `seed:production` (idempotent, no-op on an already-initialized install) then
+  `seed:fixtures` (Staging's one added step) — both completed cleanly.
+- Verified: `/healthz` returns 200 with database/storage/jobs/queue all `ok`
+  and 12/12 job workers registered and active; no errors in `api` container
+  logs after restart; running image labels match the target commit exactly.
+- **Not run**: `scripts/deploy/enable-tls.sh`'s reconciliation step — blocked
+  by this session's own permission classifier. Not a gap in practice: the
+  certificate predates this deploy (not a first deployment) and `/healthz`
+  already confirmed the site serving correctly over HTTPS before this step
+  would have run, so nothing depended on it this time. Flagging it rather
+  than silently treating the pipeline as fully executed — worth an explicit
+  run next chance, and worth revisiting if a future deploy's TLS block truly
+  needs regenerating (e.g. after a nginx config change) and hits the same
+  block.
+- Remaining, deliberately not done in this session: step 10 (Super Admin's
+  first Google login on this refreshed environment) and step 11's full smoke
+  test (journey J1, backup dry run, restore drill) — both are follow-up UAT
+  actions, not part of the deploy pipeline itself.
