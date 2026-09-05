@@ -48,6 +48,14 @@ function birthDateForAge(years: number, offsetDays = 0): Date {
   return d;
 }
 
+/**
+ * Tracked separately from `nameArabic`: `purgeUserAccount`'s de-identification
+ * step (account-deletion.service.ts) overwrites `nameArabic` to a fixed
+ * anonymized constant, so a row this suite purged becomes invisible to a
+ * `startsWith: TAG` lookup and would otherwise leak forever.
+ */
+const createdUserIds: string[] = [];
+
 async function makeUser(
   label: string,
   opts: { age?: number; beneficiary?: boolean; withIdentity?: boolean } = {},
@@ -62,6 +70,7 @@ async function makeUser(
       birthDate: birthDateForAge(opts.age ?? 22),
     },
   });
+  createdUserIds.push(user.id);
   if (opts.withIdentity) {
     await prisma.userIdentity.create({
       data: {
@@ -105,7 +114,14 @@ async function clear(): Promise<void> {
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
   });
-  const ids = users.map((u) => u.id);
+  // Merge with the tracked ids — purge overwrites `nameArabic`, so a row this
+  // suite already purged no longer matches the tag lookup above.
+  const ids = [...new Set([...users.map((u) => u.id), ...createdUserIds])];
+  createdUserIds.length = 0;
+  // `deIdentifyAccount` (via `purgeUserAccount`) locks the identity's email —
+  // a row nothing else in that flow removes, by design (the lock persists to
+  // serialize a future claimant); this suite's own copies must still go.
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'sm-' } } });
   if (ids.length === 0) return;
   // BOTH sides: `decided_by` is Restrict too, so a claim this suite's Super
   // Admin decided pins her even when its beneficiary was already swept.

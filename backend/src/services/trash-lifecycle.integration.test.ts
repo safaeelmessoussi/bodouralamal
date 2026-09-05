@@ -536,6 +536,12 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
   const LONG_AGO = new Date('2001-01-01T00:00:00.000Z');
   const LATER = new Date('2001-06-01T00:00:00.000Z');
 
+  /** `purgeExpiredEntries` logs its `trash.permanent_delete` audit row with
+   *  `actorUserId: null` (R60.8 — no actor is fabricated for a system sweep),
+   *  so the outer `cleanup()`'s actorUserId-scoped delete never reaches it;
+   *  tracked here instead so it can be cleaned by target id. */
+  const purgedLeafIds: string[] = [];
+
   /** A purgeable leaf with a tombstone whose window is already long past. */
   async function expiredLeaf(): Promise<{ trashId: string; linkId: string }> {
     const { levelId } = await curriculum();
@@ -544,8 +550,17 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
     const link = await prisma.levelSurah.findFirstOrThrow({ where: { levelId, surahId: 3 } });
     const entry = await prisma.trash.findFirstOrThrow({ where: { targetId: link.id } });
     await prisma.trash.update({ where: { id: entry.id }, data: { purgeAfter: LONG_AGO } });
+    purgedLeafIds.push(link.id);
     return { trashId: entry.id, linkId: link.id };
   }
+
+  afterEach(async () => {
+    if (purgedLeafIds.length === 0) return;
+    await prisma.auditLog.deleteMany({
+      where: { targetEntity: 'LevelSurah', targetId: { in: purgedLeafIds } },
+    });
+    purgedLeafIds.length = 0;
+  });
 
   it('destroys an entry whose window has passed, record and tombstone alike', async () => {
     const { trashId, linkId } = await expiredLeaf();

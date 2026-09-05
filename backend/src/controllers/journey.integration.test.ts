@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { issueAccessToken } from '../lib/access-token.js';
-import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import {
+  clearOwnedConsumedTokens,
+  ownedOnboardingTokens,
+} from '../test-support/consumed-tokens.js';
 import { httpCall } from '../test-support/http-client.js';
 
 /**
@@ -47,6 +50,7 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 /** Every row this file creates carries it, and cleanup deletes by it alone. */
 const TAG = '[journey]';
 const YEAR_LABEL = '2094-2095';
+const owned = ownedOnboardingTokens();
 
 /** R130 — a real adult, and provably one: the assertion below recomputes the
  *  age from this date rather than trusting the constant. */
@@ -143,7 +147,7 @@ let counter = 0;
 function onboarding(): string {
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
-  return issueOnboardingToken(
+  return owned.issue(
     { email: `journey-${stamp}@example.invalid`, providerSubjectId: `journey-sub-${stamp}` },
     config.ONBOARDING_TOKEN_KEY,
   ).token;
@@ -287,6 +291,10 @@ async function clear(): Promise<void> {
     where: { academicYear: { label: YEAR_LABEL } },
   });
   await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
+  // Registration locks the applicant's email (user.repository.ts's
+  // `lockNormalizedEmail`) — nothing else in that flow removes the row.
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'journey-' } } });
+  await clearOwnedConsumedTokens(prisma, owned);
 }
 
 beforeAll(async () => {

@@ -5622,3 +5622,42 @@ clean enough for it to be the sole remaining red job. Reproduced locally too:
   Before either changes, this needs a deliberate root-cause session — loosening
   the assertion without one risks silently accepting a real race; touching the
   locking without one risks a privacy-critical regression on a hunch.
+
+## Three more of the same class of leak, found by bisecting the isolation guard's residual diff down to zero (2026-09-05)
+
+**Same shape each time: a row is created with no actor, or a feature under
+test anonymizes the very column its own suite's cleanup query searches on.**
+
+- `self-management.integration.test.ts` (`backend/src/policies/`) exercises
+  `purgeUserAccount` → `deIdentifyAccount`, which (a) overwrites `nameArabic`
+  — defeating the suite's `startsWith: TAG` cleanup lookup, same defect as
+  `account-closure.integration.test.ts` earlier today — and (b) locks the
+  purged identity's email (`lockNormalizedEmail`) with nothing in that flow
+  ever releasing the row. Fixed the same way: track created user ids directly
+  at creation time, and delete `normalized_email_lock` rows by this suite's
+  own email prefix.
+- `journey.integration.test.ts` issues onboarding tokens directly
+  (`issueOnboardingToken`) instead of through the project's
+  `ownedOnboardingTokens()`/`clearOwnedConsumedTokens` tracker, and never
+  cleaned the `normalized_email_lock` row registration takes on the
+  applicant's email either — so its two real `POST /registrations` calls
+  (teacher + student) leaked one `consumed_token` and one lock row each, every
+  run. Fixed by routing `onboarding()` through the existing tracker (the
+  pattern five other integration suites already use) and adding the missing
+  lock cleanup.
+- `trash-lifecycle.integration.test.ts`'s automatic-purge describe block
+  (`purgeExpiredEntries`) logs `trash.permanent_delete` with `actorUserId:
+  null` by design (R60.8 — no actor is fabricated for a system sweep), which
+  the file's actor-scoped `auditLog.deleteMany` can never reach; six of its
+  own tests each destroy one `LevelSurah` leaf this way. Fixed by tracking the
+  destroyed leaf ids as they're created and deleting the matching audit rows
+  by target id in a local `afterEach`, rather than widening the outer,
+  actor-scoped cleanup.
+- Verified with the same method as the rest of today's leak-hunting: isolate
+  each file, diff real row counts before/after against the local DB. Final
+  check — a full local integration-suite run — now shows **zero** net change
+  across every previously-leaking table (`user`, `audit_log`,
+  `normalized_email_lock`, `consumed_token`, `self_managed_claim`), all 105
+  files and 2346 tests passing, no new failures.
+- No production `src/` behavior changed — test cleanup logic only, across all
+  three files.
