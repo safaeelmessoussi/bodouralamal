@@ -5462,3 +5462,64 @@ assessment builder's exam date (R124), and a physical exam's scheduling date
 open panel scrolls the page sideways. All 31 CI guards, full frontend
 typecheck/lint/build. No backend file was touched, so the backend gates were
 not re-run for this slice.
+
+## An authenticated visitor never sees «تسجيل الدخول» again, in either sense (2026-09-05)
+
+**The label and the endpoint were two separate defects, and both were fixed —
+not by hiding a button.**
+
+**`GET /api/v1/auth/google` used to start a fresh Google round trip
+unconditionally, even for a browser already holding a live session.** A
+top-level navigation cannot carry the in-memory access token (TD-12 keeps it
+out of any cookie), so the ambient `bodour_refresh` cookie — scoped to
+`/api/v1/auth` and therefore sent on this path exactly as it is on
+`/auth/refresh` — is the only signal the endpoint has to go on. It is now
+checked first: `resolveExistingSession` (new, in `auth.service.ts`) reuses
+`refreshAccessSession` — the platform's one answer to *is this cookie live,
+and for whom* — rather than a second validity check that could drift from it,
+which also means a stale/forged/replayed cookie is refused by the exact same
+rotation/reuse-detection machinery and simply falls through to the ordinary
+anonymous flow, unchanged. A live result reads the account's CURRENT status
+and role scopes (never the token's stale claims — the same discipline
+`switchActiveRole` already states) and redirects straight to `/pending-approval`
+or the caller's role home; nothing is minted for Google, no flow-state/PKCE
+cookie is created, and no second identity is bound. `RefreshAccessOutcome`
+gained a `userId` field to make this possible — additive, so
+`POST /auth/refresh`'s wire response (which maps named fields, never spreads
+the object) is untouched.
+
+**The landing page's hero had its own, separate hard-coded «تسجيل الدخول»
+button, independent of the header sitting above it.** The header already
+switched to «لوحة التحكم» for a signed-in visitor (`ApplicationHeader` already
+read `useNavigation`/`useActiveRole`); the hero did not, so an authenticated
+visitor could see the header correctly announce her dashboard while the hero,
+one screen-length below it, still invited her to sign in. The old button would
+still have redirected her correctly once clicked, thanks to the endpoint fix
+above — this is the LABEL catching up to what the endpoint actually does. The
+hero now reads the identical canonical session state and renders
+`DashboardButton` (given a new optional `variant` prop so the hero's emphasis
+matches its old primary-styled CTA) or `SignInButton` — the same atoms the
+header already uses, never a second implementation.
+
+**Verified:** 10 new backend integration assertions against the real route —
+anonymous flow untouched (Google reached, flow-state cookie minted), a garbage
+cookie treated exactly like none, a super_admin/مؤطِّرة/Pending/no-role account
+each redirected to its correct destination, no flow-state cookie leaked for an
+authenticated caller, the SAME session rotated rather than a second one
+minted, no new identity or onboarding token created, and `POST /auth/refresh`
+proven unweakened afterward. 5 new frontend assertions pin the hero
+specifically. 10/10 browser checks on the real running app, including a REAL
+top-level navigation (not a `fetch` probe, which cannot distinguish an opaque
+same-origin redirect from an opaque cross-origin one) proving a teacher lands
+on `/teacher` and a Pending account lands on `/pending-approval`, never on a
+Google account chooser. Two of the browser checks were themselves debugged
+mid-flight: a body-text substring match on «تسجيل الدخول» is unreliable
+because that exact phrase also appears as ordinary "how it works" prose
+regardless of session state, and the header's own half of the fix is
+CSS-hidden below the 60rem breakpoint, so a verifier with no explicit viewport
+would silently never see it — both are now structural checks (element text,
+explicit desktop width) rather than body substrings.
+
+**Unchanged, as instructed:** the self-managed-account age threshold (R130/
+R132) — still 18, not touched by this slice. R134, Staging and Production
+untouched.

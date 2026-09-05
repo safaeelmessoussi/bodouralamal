@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 
 import { ApplicationHeader } from '../components/header/application-header.js';
+import { DashboardButton, SignInButton } from '../components/header/auth-buttons.js';
 import { BranchesSection } from '../components/branches-section.js';
 import { PartnersSection } from '../components/partners-section.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { Card, Step } from '../components/ui/card.js';
-import { ButtonLink } from '../components/ui/button.js';
 import { Container, Section } from '../components/ui/container.js';
+import { useActiveRole } from '../contexts/active-role.js';
+import { useNavigation } from '../hooks/use-navigation.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -92,8 +94,25 @@ export function Landing(): ReactNode {
  * The hero states who the association is and what it does, then offers the two
  * real entry points. Both are full page loads: §4.1b step 1 is a server
  * redirect to Google, so client navigation would never leave the origin.
+ *
+ * **A signed-in visitor never sees «تسجيل الدخول» here** (Owner, 2026-09-05).
+ * The check is the platform's own canonical session state — the same
+ * `useNavigation`/`useActiveRole` pair `ApplicationHeader` already reads for
+ * its Dashboard-vs-Sign-in switch — never a local flag this page invents, so
+ * the hero cannot disagree with the header sitting directly above it. The
+ * server-side fix at `GET /auth/google` means the OLD button would still have
+ * landed her on her dashboard if clicked; this is the label catching up to
+ * what the endpoint now actually does.
  */
-function Hero(): ReactNode {
+/** Exported for its own test — see `landing.test.tsx` — the same reasoning
+ *  `hijri-calendar.tsx` exports `MonthRow` for: the defect this guards against
+ *  (a stale CTA disagreeing with the header above it) lives in the rendered
+ *  hero specifically, and testing the whole page would drag in
+ *  `BranchesSection`/`PartnersSection`'s own data fetching for no reason. */
+export function Hero(): ReactNode {
+  const { isAuthenticated } = useNavigation();
+  const { activeRoles: roles } = useActiveRole();
+
   return (
     <section className="hero" aria-labelledby="hero-title">
       <Container>
@@ -104,9 +123,11 @@ function Hero(): ReactNode {
             </h1>
             <p className="hero__lede">{t('landing.heroLede')}</p>
             <div className="hero__actions">
-              <ButtonLink href="/api/v1/auth/google" variant="primary">
-                {t('landing.ctaLogin')}
-              </ButtonLink>
+              {isAuthenticated ? (
+                <DashboardButton roles={roles} variant="primary" />
+              ) : (
+                <SignInButton />
+              )}
             </div>
           </div>
 

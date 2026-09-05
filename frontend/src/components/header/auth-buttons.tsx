@@ -37,14 +37,21 @@ export function SignInButton({ block = false }: { block?: boolean }): ReactNode 
 export function DashboardButton({
   roles,
   block = false,
+  /** `secondary` beside the header's own `UserMenu`, where it is one of
+   *  several actions; `primary` where it stands alone as the page's main
+   *  call to action — the public landing page's hero replacing «تسجيل
+   *  الدخول» for a caller who is already signed in (rule C: a documented
+   *  variant, never a second dashboard button). */
+  variant = 'secondary',
 }: {
   roles: readonly string[];
   block?: boolean;
+  variant?: 'primary' | 'secondary';
 }): ReactNode {
   const href = roleHomePath(roles);
   if (!href) return null;
   return (
-    <ButtonLink href={href} variant="secondary" block={block}>
+    <ButtonLink href={href} variant={variant} block={block}>
       {t('nav.dashboard')}
     </ButtonLink>
   );
