@@ -5787,3 +5787,9 @@ CI outage; this is the first deploy since.
   or assertion was loosened for this unrelated timing failure.
 - No schema, migration, bucket policy or Nginx routing change was needed. No
   Staging or Production deployment/data operation was performed.
+- Hosted CI follow-up: run `34142715088` proved that the pinned Ubuntu runner
+  image includes Chrome/Chromium but not ffmpeg, so the newly mandatory browser
+  gate failed before building its disposable stack. The integration job now
+  installs ffmpeg explicitly, and the prerequisite check reports browser and
+  media-tool absence separately. This is CI provisioning only; the already
+  verified application behavior is unchanged.

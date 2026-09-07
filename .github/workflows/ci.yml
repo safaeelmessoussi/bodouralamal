@@ -185,6 +185,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: backend/package-lock.json
+      # The hosted Ubuntu image carries Chrome/Chromium but no ffmpeg. The
+      # required public-reader regression generates tiny synthetic audio/video
+      # fixtures, so install that explicit test dependency rather than letting
+      # the integration script silently skip the browser proof.
+      - name: Install browser media fixture dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
       - run: npm ci
         working-directory: backend
       # Integration tests execute from the host checkout while the API runs in

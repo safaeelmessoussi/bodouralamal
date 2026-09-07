@@ -44,8 +44,12 @@ export LOG_LEVEL='info'
 # once and pass the exact executable to the Node harness.
 browser_bin="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
 ffmpeg_bin="$(command -v ffmpeg || true)"
-if [[ -z "$browser_bin" || -z "$ffmpeg_bin" ]]; then
-  printf 'CI integration gate requires Chrome/Chromium and ffmpeg\n' >&2
+if [[ -z "$browser_bin" ]]; then
+  printf 'CI integration gate requires Chrome/Chromium\n' >&2
+  exit 1
+fi
+if [[ -z "$ffmpeg_bin" ]]; then
+  printf 'CI integration gate requires ffmpeg\n' >&2
   exit 1
 fi
 export BODOUR_PUBLIC_READER_BROWSER='1'
