@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
@@ -105,8 +105,6 @@ export function CalendarPage(): ReactNode {
   /** `calendar` is the public default: the month grid is what §5.1 links to. */
   const [view, setView] = useState<CalendarView>(() => viewFromUrl('calendar'));
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
-  /** Prefilling happens once per visit, not once per fetch — see the effect. */
-  const prefillApplied = useRef(false);
 
   const from = toIsoDate(startOfMonth(month));
   const to = toIsoDate(endOfMonth(month));
@@ -178,23 +176,10 @@ export function CalendarPage(): ReactNode {
         if (cancelled) return;
         setLoad({ kind: 'ready', occurrences: result.occurrences });
 
-        // TD-3.4 (R43): the server derives `prefilled_filters` from the live
-        // profile, and the caller may change any of them. **Applied once**, on
-        // the first response, and only to filters the reader has not already
-        // set — re-applying on every fetch would drag a filter back the moment
-        // someone cleared it, which is the opposite of "freely changeable".
-        //
-        // It is a suggestion, not a scope: the server does not narrow results by
-        // it, and neither does this.
-        if (!prefillApplied.current && result.prefilled) {
-          prefillApplied.current = true;
-          const p = result.prefilled;
-          // The server's prefilled filters seed the state only where the reader
-          // has chosen nothing — a choice already made is never overwritten.
-          if (p.branch_id && branchId === null) filters.set('branchId', p.branch_id);
-          if (p.category_id && categoryId === null) filters.set('categoryId', p.category_id);
-          if (p.level_id && levelId === null) filters.set('levelId', p.level_id);
-        }
+        // Owner correction (2026-09-07): logging in preserves this public
+        // calendar's chosen view. Applying profile suggestions here silently
+        // replaced 61 authorized occurrences with an unrelated empty branch.
+        // Filters change only through the URL/controls, never through auth.
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
       }
@@ -287,7 +272,6 @@ export function CalendarPage(): ReactNode {
             <CalendarHeader
               view={view}
               onView={setView}
-              mobileAgenda
               gregorianMonths={bootstrap?.gregorian_months ?? []}
               hijriMonths={bootstrap?.hijri.months ?? []}
               month={month}

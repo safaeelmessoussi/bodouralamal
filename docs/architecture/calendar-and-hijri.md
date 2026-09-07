@@ -45,21 +45,28 @@ content link or a grade — and reports what it skipped. Silently discarding a h
 is the failure this rule exists to prevent.
 
 The calendar renders a unified grid of both sessions and events, in one list. **It is
-public**: anonymous visitors get the same filter set as signed-in users, who additionally
-get those filters *prefilled* from their profile. Identical filters never means identical
-results — every result set stays visibility-filtered.
+public**: anonymous visitors get the same filter set as signed-in users.
+Identical filters never means identical results — every result set stays visibility-filtered.
+The Owner's 2026-09-07 correction requires login to preserve the chosen public calendar
+view. The API still returns profile suggestions, but this page no longer applies them
+automatically: on populated localhost that second request changed 61 authorized occurrences
+to zero by choosing an unrelated profile branch/level. URL filters and explicit controls
+remain freely changeable. This corrects the page's application of §4.4/TD-3.4 prefill;
+the Document Owner must reconcile that older automatic-prefill wording. No tier or scope
+predicate changes, and `GET /me/calendar` retains its personal meaning.
 
 The **calendar dialog is the only occurrence-detail surface** (Owner decision,
-2026-09-07). Grid chips, agenda/table titles and content back-links all open that
+2026-09-07). Grid chips, table titles and content back-links all open that
 same component; there is no dedicated Session page. Stable links carry kind, id
 and date to `/calendar`, and a refresh performs a focused, tier-scoped day read
 before opening. A stale, deleted or restricted coordinate is therefore an
 unavailable state, not a client-side reconstruction or existence leak.
 
-Below `48rem`, both public/personal calendar presentations intentionally become
-one chronological agenda; the seven-column month grid remains the desktop/tablet
-view. Administrative scheduling retains its phone view switch because its list
-contains recurring definitions and is not equivalent to the occurrence agenda.
+The month view remains a **seven-column grid at every width**. The Owner rejected the
+automatic phone agenda on 2026-09-07. Phone cells place Gregorian/right and Hijri/left
+on separate rows, retain readable type and full-width tappable occurrence chips, and
+truncate long titles. The canonical dialog holds complete details; no alternate page
+or duplicated agenda is rendered. The explicit list/grid switch remains available.
 
 > [`BR-17`](../reference/business-rules.md#br-17) ·
 > [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c

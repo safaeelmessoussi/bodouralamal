@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect, results } from './cdp.mjs';
+import { inspectMonthGrid } from './calendar-geometry.mjs';
 
 if (!process.env.BODOUR_INTEGRATION_API_IMAGE?.startsWith('bodour-integration-api:bodour-ci-integration-')) throw new Error('disposable stack required');
 const base = process.env.PUBLIC_BASE_URL;
@@ -34,6 +35,7 @@ try {
     window.fetch = async (input, init = {}) => {
       const response = await originalFetch(input, init);
       const headers = new Headers(init.headers || {});
+      if (headers.has('authorization')) window.__readerToken = headers.get('authorization');
       const call = {
         url: typeof input === 'string' ? input : input.url,
         status: response.status,
@@ -41,6 +43,11 @@ try {
       };
       if (call.url.includes('/download-url') && response.ok) {
         call.resultUrl = await response.clone().json().then((body) => body.url).catch(() => null);
+      }
+      if (call.url.includes('/calendar?') && response.ok) {
+        const body = await response.clone().json();
+        call.ids = body.data.map(o => o.id);
+        call.prefill = body.prefilled_filters;
       }
       window.__readerCalls.push(call);
       return response;
@@ -61,10 +68,6 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: value, height: 900, deviceScaleFactor: 1, mobile: false });
   }
   const overflow = () => evaluate('document.documentElement.scrollWidth <= innerWidth + 1');
-  const agendaDatesDoNotCollide = () => evaluate(`[...document.querySelectorAll('.occurrence-list__when')].every(row => {
-    const boxes = [...row.children].map(child => child.getBoundingClientRect());
-    return boxes.every((a, i) => boxes.slice(i + 1).every(b => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top));
-  })`);
   const dialogFits = () => evaluate(`(() => {
     const d = document.querySelector('dialog[open]'); if (!d) return false;
     const r = d.getBoundingClientRect(), b = d.querySelector('.dialog__close').getBoundingClientRect();
@@ -113,8 +116,11 @@ try {
     check(`${w}: canonical dialog is open`, await waitFor("!!document.querySelector('dialog[open] .details')"));
     check(`${w}: complete dialog fits`, await dialogFits());
     check(`${w}: calendar no document overflow`, await overflow());
-    check(`${w}: intentional agenda/grid presentation`, await evaluate(`(() => { const g = document.querySelector('.cal-grid'), a = document.querySelector('.cal-agenda'); return ${w < 768} ? getComputedStyle(g).display === 'none' && getComputedStyle(a).display !== 'none' : getComputedStyle(g).display !== 'none'; })()`));
-    if (w < 768) check(`${w}: Gregorian, Hijri and time labels do not collide`, await agendaDatesDoNotCollide());
+    const geometry = await evaluate(`(${inspectMonthGrid.toString()})()`);
+    for (const property of ['visible', 'sevenColumns', 'rtl', 'datesFit', 'datesReadable', 'populated', 'eventsFit']) {
+      check(`${w}: month grid ${property}`, geometry[property]);
+    }
+    if (w < 768) check(`${w}: occurrence targets remain tappable`, geometry.tappable);
   }
   check('calendar has no runtime errors', await evaluate('window.__readerErrors.length === 0'));
   await width(320);
@@ -124,7 +130,7 @@ try {
   await evaluate("document.querySelector('.cal-filter-toggle').click()");
   check('phone filters expand and remain within the document', await waitFor("getComputedStyle(document.querySelector('.cal-header__filters')).display !== 'none'") && await overflow());
   await evaluate("document.querySelector('.cal-filter-toggle').click()");
-  const occurrenceSelector = '.cal-agenda .occurrence-list__title button';
+  const occurrenceSelector = '.cal-grid .event-chip--interactive';
   const occurrenceReady = await waitFor(`!!document.querySelector(${JSON.stringify(occurrenceSelector)})`);
   check('calendar occurrence control is available', occurrenceReady);
   if (occurrenceReady) await evaluate(`document.querySelector(${JSON.stringify(occurrenceSelector)}).click()`);
@@ -137,6 +143,25 @@ try {
   check('old detail route no longer renders a Session page', !await evaluate("!!document.querySelector('.details')") && await evaluate("document.body.textContent.includes('غير موجودة')"));
   await open('/resources');
   check('private content denied anonymously', await evaluate(`fetch('/api/v1/content/${fixture.restrictedId}/download-url').then(r => r.status === 404)`));
+  const calendarPath = `/calendar?occurrence=session:${fixture.sessionId}&date=${fixture.date}`;
+  async function calendarState(role) {
+    await open(calendarPath);
+    const signedIn = role !== 'anonymous';
+    check(`${role}: calendar request at the real session tier`, await waitFor(`window.__readerCalls.some(c => c.url.includes('/calendar?') && c.authorized === ${signedIn} && c.status === 200)`));
+    // Wait for the post-refresh render and any erroneous profile-driven second
+    // request. Inspect BOTH its response and the grid, not just the first 200.
+    await pause(500);
+    const last = await evaluate(`window.__readerCalls.filter(c => c.url.includes('/calendar?') && c.authorized === ${signedIn}).at(-1)`);
+    check(`${role}: public occurrences retained`, fixture.calendar.publicIds.every(id => last?.ids.includes(id)));
+    check(`${role}: profile never changes chosen filters`, await evaluate("!new URLSearchParams(location.search).has('branch_id') && !new URLSearchParams(location.search).has('level_id')"));
+    check(`${role}: scoped private occurrence`, last?.ids.includes(fixture.calendar.privateId) === signedIn);
+    check(`${role}: outside-branch private tier`, last?.ids.includes(fixture.calendar.outsideId) === ['admin', 'student'].includes(role));
+    check(`${role}: hidden occurrence refused`, !last?.ids.includes(fixture.calendar.hiddenId));
+    if (role === 'admin') check('multi-role profile fixture supplies the empty-level suggestion', Boolean(last?.prefill?.level_id));
+    await evaluate("document.querySelector('dialog[open] .dialog__close')?.click()");
+    check(`${role}: populated grid after session settles`, await waitFor("document.querySelectorAll('.cal-grid .event-chip').length >= 2") && await overflow());
+  }
+  await calendarState('anonymous');
   for (const [role, cookie] of Object.entries(fixture.cookies)) {
     await send('Network.clearBrowserCookies');
     await send('Network.setCookie', { name: 'bodour_refresh', value: cookie, url: base, path: '/api/v1/auth', httpOnly: true });
@@ -160,6 +185,12 @@ try {
         const res = await fetch(url); return res.status === 200 && (await res.arrayBuffer()).byteLength > 100;
       })()`));
     }
+    if (!authorized) check('student: forged private mint remains denied', await evaluate(`fetch('/api/v1/content/${fixture.restrictedId}/download-url', {headers:{Authorization:window.__readerToken}}).then(r=>r.status===404)`));
+    await calendarState(role);
+    // Exercise the actual logout endpoint and browser navigation; never reuse
+    // the original cookie after rotation. This affects disposable users only.
+    await evaluate("fetch('/api/v1/auth/logout', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, credentials:'same-origin'})");
+    await calendarState('anonymous');
   }
   await send('Network.clearBrowserCookies');
   await open('/resources');

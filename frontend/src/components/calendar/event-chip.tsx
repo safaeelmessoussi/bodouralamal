@@ -93,6 +93,7 @@ export function EventChip({
     <button
       type="button"
       className={`${className} event-chip--interactive`}
+      aria-label={[announced, occurrence.title, online, occurrence.start_time, t('calendar.openDetails')].filter(Boolean).join(' — ')}
       onClick={(event) => {
         // The cell behind is itself a button; without this, opening an event
         // would also re-select the day underneath it.

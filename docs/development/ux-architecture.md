@@ -798,6 +798,12 @@ Canonical: `SessionContent` · `POST /sessions/{id}/content` ·
 `OccurrenceMaterials` in the calendar's canonical details dialog. The URL is an
 API coordinate, not a frontend route.
 
+**A responsive breakpoint must preserve the reader's chosen representation.** The Owner
+rejected automatically exchanging the phone month grid for an agenda (2026-09-07).
+Adapt the shared grid's cells and controls; keep seven weekday columns and use the canonical
+dialog for full details. The [calendar architecture](../architecture/calendar-and-hijri.md#scheduling-is-schedule-driven)
+records the date layout and the separate login/filter regression.
+
 ## AB · A deep link must be consumed by the page it points at
 
 A parameter nothing reads is worse than no link: it navigates, it looks

@@ -1,15 +1,43 @@
 # Tasks — بذور الأمل Platform
 
-## Canonical occurrence dialog, public readers and phone agenda — 2026-09-07
+## Calendar/media regression correction — 2026-09-07
 
-- [x] Removed the duplicate frontend Session detail page. Grid chips, agenda/table
+- [x] Removed automatic profile-derived narrowing from the public calendar. The
+  populated localhost returned 26 anonymous / 61 Owner-authorized occurrences;
+  applying profile defaults had caused a second, empty response. Explicit URL
+  filters remain reader-controlled and the server still resolves authorization.
+- [x] Restored the real seven-column month grid on phones; the Owner rejected the
+  previous automatic agenda. Corrected the measured 768 px date collision without
+  recreating the removed Session page or duplicating the canonical dialog.
+- [x] With explicit Owner approval, refreshed only the stale localhost API image.
+  The same public audio changed from mint `401` to `200`, real Range `206` and
+  successful anonymous playback. Private, hidden and consent-restricted items
+  remained `404`; no storage policy or authorization was broadened.
+- [x] Disposable browser proof: **193/193**, including all eight widths
+  (320/360/375/390/412/430/768/1280), real session transitions, populated cells,
+  exact dialog/deep links and media security. Full disposable integration:
+  **2,349 passed / 17 skipped**, with all-table isolation clean. Frontend:
+  **1,074** assertions; backend unit: **331**. Lint, exact typecheck and builds pass.
+  All 31 guard checks pass (OpenAPI currency via the same read-only generator
+  directly inside the sandbox); documentation links: **990/990**.
+- [x] The Owner manually verified the repaired populated localhost and confirmed
+  it works, satisfying the final local acceptance left pending when automatic
+  approval review exhausted its allowance. The unchanged implementation reuses
+  the green disposable/full-suite evidence; exact hosted CI is still required
+  for the repair commit. The later simplification milestone is not part of this batch.
+- [ ] Document Owner reconciliation: older SRS §4.4 / TD-3.4 profile-prefill
+  wording needs alignment with this explicit Owner correction; SRS was not edited.
+
+## Canonical occurrence dialog and public readers — 2026-09-07
+
+- [x] Removed the duplicate frontend Session detail page. Grid chips and table
   titles and Educational Library back-links now open the same complete calendar
   dialog; stable kind/id/date links survive refresh and fail closed when stale.
 - [x] Public library media is genuinely readable anonymously through the existing
   exact-coordinate storage boundary. Signed-in readers retain their server-granted
   tier; private/hidden content and private occurrence relationships remain gated.
-- [x] Phone calendars use the shared chronological agenda at 320–430 px while
-  desktop/tablet retain grid/table presentations. Administrative scheduling keeps
+- [x] The originally delivered automatic phone agenda is superseded by the
+  Owner-directed month-grid correction above. Administrative scheduling keeps
   its distinct definition/calendar choice; filters and dialogs remain usable.
 - [x] The disposable real-stack browser gate exercises real image, PDF, audio,
   video and download-only Office-document bytes, inline playback,

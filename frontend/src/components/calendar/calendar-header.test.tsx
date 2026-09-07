@@ -72,10 +72,9 @@ describe('CalendarHeader', () => {
     expect(html).toContain('صفر 1448');
   });
 
-  it('marks only genuinely equivalent phone views as one mobile agenda', () => {
-    expect(render({ ...base, mobileAgenda: true })).toContain(
-      'cal-header cal-header--mobile-agenda',
-    );
-    expect(render(base)).not.toContain('cal-header--mobile-agenda');
+  it('keeps the explicit view choice on a month calendar', () => {
+    const html = render(base);
+    expect(html).toContain('قائمة');
+    expect(html).toContain('تقويم');
   });
 });

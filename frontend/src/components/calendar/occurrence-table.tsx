@@ -6,7 +6,6 @@ import { Badge } from '../ui/badge.js';
 import { DataTable, type TableStatus } from '../ui/data-table.js';
 import { levelLabel } from '../scope/level-select.js';
 import { deliveryLabel, venueLabel } from '../scheduling/delivery.js';
-import { OccurrenceList } from './occurrence-list.js';
 
 /**
  * **قائمة, as a table, on every surface that lists occurrences** (rule AO).
@@ -167,17 +166,6 @@ export function OccurrenceTable({
   };
 
   return (
-    <>
-      {status === 'ready' && occurrences.length > 0 ? (
-        <div className="cal-agenda">
-          <OccurrenceList occurrences={occurrences} onOpen={onOpen} />
-        </div>
-      ) : null}
-      <div
-        className={
-          status === 'ready' && occurrences.length > 0 ? 'cal-occurrence-table' : undefined
-        }
-      >
         <DataTable
           caption={t('calendar.table.caption')}
           columns={columns.map((c) => all[c])}
@@ -188,7 +176,5 @@ export function OccurrenceTable({
           filtered={filtered}
           {...(onClearFilters ? { onClearFilters } : {})}
         />
-      </div>
-    </>
   );
 }

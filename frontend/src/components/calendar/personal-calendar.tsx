@@ -142,7 +142,6 @@ export function PersonalCalendar({
       <CalendarHeader
         view={view}
         onView={setView}
-        mobileAgenda
         gregorianMonths={bootstrap?.gregorian_months ?? []}
         hijriMonths={bootstrap?.hijri.months ?? []}
         month={month}

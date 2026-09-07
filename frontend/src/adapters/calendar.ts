@@ -159,10 +159,10 @@ export interface CalendarQuery {
    *
    * `GET /calendar` is public and `optionalAuthenticate`d: it returns the
    * **caller's visibility tier**, so an anonymous request and a signed-in one
-   * legitimately see different sets (§4.4). The public page passes nothing and
-   * gets the public tier, which is correct for it; the Student Dashboard passes
-   * the token, because a session restricted to the student's own Level is
-   * exactly what that screen is for.
+   * legitimately see different sets (§4.4). The public page passes the current
+   * token when signed in. Its chosen filters retain public occurrences and
+   * gain only the additional tier the server permits; personal calendars use
+   * their separate scoped read.
    */
   token?: string | null;
 }

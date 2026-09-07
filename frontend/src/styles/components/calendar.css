@@ -123,65 +123,15 @@
   gap: var(--space-3);
   align-items: end;
 }
-.cal-agenda,
 .cal-filter-toggle {
   display: none;
 }
-.cal-calendar-feedback {
-  display: block;
-}
 
-.occurrence-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: var(--space-3);
-}
-.occurrence-list__item {
-  min-inline-size: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
-  overflow-wrap: anywhere;
-}
-.occurrence-list__item p {
-  margin: 0;
-  max-width: none;
-}
-.occurrence-list__when {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  font-variant-numeric: tabular-nums;
-}
-.occurrence-list__title {
-  padding-block: var(--space-2);
-}
-.occurrence-list__title button {
-  text-align: start;
-  white-space: normal;
-}
-.occurrence-list__cancelled {
-  margin-inline-start: var(--space-2);
-}
-
-/* On a phone the title leads and month stepping follows. Public/personal
-   surfaces opt into hiding the presentation switch because both choices become
-   the same mobile agenda; administrative definitions remain distinct and keep
-   the switch. */
+/* The view choice remains explicit on every screen. A narrow viewport changes
+   the arrangement of controls, never the selected calendar representation. */
 @media (width < 48rem) {
-  .cal-grid,
-  .cal-occurrence-table {
-    display: none;
-  }
-  .cal-agenda,
   .cal-filter-toggle {
     display: block;
-  }
-  .cal-calendar-feedback {
-    display: none;
   }
   .cal-header__filters:not(.is-expanded) {
     display: none;
@@ -207,12 +157,6 @@
   }
   .cal-header__start .cal-segmented > button {
     flex: 1;
-  }
-  .cal-header--mobile-agenda .cal-header__start {
-    display: none;
-  }
-  .cal-header--mobile-agenda .cal-header__end {
-    grid-column: 1 / -1;
   }
   .cal-header__end .cal-segmented {
     display: flex;
@@ -734,6 +678,9 @@ tr:last-child .cal-cell {
   .cal-cell {
     height: 9rem;
   }
+  .cal-day__select {
+    gap: var(--space-1);
+  }
 }
 
 @media (max-width: 44rem) {
@@ -744,14 +691,27 @@ tr:last-child .cal-cell {
     height: 6.5rem;
   }
   .cal-day {
-    padding: var(--space-2);
+    padding: var(--space-1);
+    gap: var(--space-1);
   }
-  .event-chip__time {
+  .cal-grid__weekday {
+    padding: var(--space-2) 0;
+    letter-spacing: normal;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .event-chip__time,
+  .event-chip__delivery,
+  .event-chip__tag {
     display: none;
   }
-  /* The marker STAYS on a phone while the clock goes: *is this class online*
-     changes whether the reader has to travel, and the time is on the details
-     dialog one tap away. */
+  /* One full-width target per occurrence. The complete accessible label and
+     canonical dialog retain the time, delivery and kind. */
+  .event-chip {
+    min-height: var(--space-10);
+    padding: var(--space-1);
+    align-items: center;
+  }
   .cal-day__gregorian {
     font-size: var(--font-size-sm);
   }
@@ -759,13 +719,23 @@ tr:last-child .cal-cell {
     font-size: var(--font-size-xs);
   }
   .cal-day__select {
-    /* A tighter gap, but never zero: the two numbers must not touch. */
-    gap: var(--space-2);
+    /* Two rows preserve Gregorian/right and Hijri/left without squeezing two
+       two-digit numbers side-by-side into a forty-pixel cell. */
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 0;
     padding-block-end: var(--space-1);
   }
-  .cal-day.is-today .cal-day__gregorian {
-    min-width: 1.8rem;
-    height: 1.8rem;
+  .cal-day__gregorian,
+  .cal-day__hijri {
+    min-width: var(--space-6);
+    height: var(--space-6);
+  }
+  .cal-day__gregorian {
+    align-self: flex-end;
+  }
+  .cal-day__hijri {
+    align-self: flex-start;
   }
   /* On a phone the segmented groups span the width and share it equally: at
      360px three parts still sit side by side once the padding tightens, which

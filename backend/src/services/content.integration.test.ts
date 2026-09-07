@@ -1195,6 +1195,19 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     const student = await prisma.user.create({ data: { nameArabic: `${TAG} browser student`, sex: 'female', accountStatus: 'active' } });
     const studentRole = await prisma.role.findUniqueOrThrow({ where: { name: 'student' } });
     await prisma.userBranchRole.create({ data: { userId: student.id, roleId: studentRole.id, branchId } });
+    // Realistic multi-role/profile data: the Owner regression came from a
+    // legitimate enrollment in a branch with no matching occurrences. A bare
+    // admin fixture has no prefill, so it could never observe that failure.
+    const emptyLevel = await prisma.level.create({ data: {
+      name: `${TAG} empty profile level`, categoryId, genderRestriction: 'any',
+    } });
+    await prisma.enrollment.create({ data: {
+      studentId: adminId, levelId: emptyLevel.id, branchId: otherBranchId,
+    } });
+    const scoped = await createTeachingContext(prisma, `${TAG} scoped`, branchId);
+    const outside = await createTeachingContext(prisma, `${TAG} outside`, otherBranchId);
+    const publicOutside = await createTeachingContext(prisma, `${TAG} public outside`, otherBranchId);
+    await prisma.session.updateMany({ where: { id: { in: [scoped.sessionId, outside.sessionId] } }, data: { visibility: 'private' } });
     const cookies = {
       admin: (await issueNewSession(prisma, adminId)).rawToken,
       teacher: (await issueNewSession(prisma, teacherId)).rawToken,
@@ -1208,6 +1221,13 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
           levelId,
           sessionId,
           privateSessionId: privateContext.sessionId,
+          calendar: {
+            publicIds: [sessionId, publicOutside.sessionId],
+            privateId: scoped.sessionId,
+            outsideId: outside.sessionId,
+            hiddenId: privateContext.sessionId,
+            branchId,
+          },
           date: session.date.toISOString().slice(0, 10),
           restrictedId: restricted.id,
           cookies,

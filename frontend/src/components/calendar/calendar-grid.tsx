@@ -4,7 +4,6 @@ import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { monthGrid, toIsoDate } from '../../lib/dates.js';
 import { t, tList } from '../../i18n/index.js';
 import { CalendarDayCell } from './calendar-day-cell.js';
-import { OccurrenceList } from './occurrence-list.js';
 
 /**
  * The monthly grid — a real `<table>`, because a calendar month *is* tabular
@@ -46,31 +45,15 @@ export function CalendarGrid({
 
   return (
     <>
-      <div className="cal-agenda">
-        {status === 'loading' ? <p className="muted">{t('states.loading')}</p> : null}
-        {status === 'error' ? (
-          <>
-            <p className="muted">{t('calendar.error')}</p>
-            {onRetry ? (
-              <button type="button" className="link-button" onClick={onRetry}>
-                {t('states.offlineRetry')}
-              </button>
-            ) : null}
-          </>
-        ) : null}
-        {status === 'ready' ? (
-          <OccurrenceList
-            occurrences={[...byDate.values()].flat()}
-            onOpen={onOpenEvent}
-            emptyMessage={emptyMessage}
-          />
-        ) : null}
-      </div>
+      {status === 'loading' ? <p className="muted">{t('states.loading')}</p> : null}
       {status === 'error' ? (
-        <p className="muted cal-calendar-feedback">{t('calendar.error')}</p>
+        <p className="muted">
+          {t('calendar.error')}{' '}
+          {onRetry ? <button type="button" className="link-button" onClick={onRetry}>{t('states.offlineRetry')}</button> : null}
+        </p>
       ) : null}
       {status === 'ready' && byDate.size === 0 ? (
-        <p className="muted cal-calendar-feedback">{emptyMessage}</p>
+        <p className="muted">{emptyMessage}</p>
       ) : null}
       <table className="cal-grid" role="grid" aria-label={t('calendar.gridLabel')}>
         <thead>

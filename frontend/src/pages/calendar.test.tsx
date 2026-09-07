@@ -127,11 +127,9 @@ describe('the month grid renders', () => {
   });
 
   it('places the occurrence on its own day and nowhere else', () => {
-    // The component also carries the CSS-selected phone agenda. This assertion
-    // is specifically about the semantic month grid, so count inside its table.
-    const grid = html.slice(html.indexOf('<table'), html.indexOf('</table>') + 8);
-    expect(grid).toContain('حلقة تحفيظ');
-    expect(grid.split('حلقة تحفيظ').length - 1).toBe(1);
+    expect(html).toContain('حلقة تحفيظ');
+    expect(html.split('class="event-chip__title"').length - 1).toBe(1);
+    expect(html).toContain('class="event-chip__title">حلقة تحفيظ</span>');
   });
 
   it('marks today and the selection distinctly', () => {

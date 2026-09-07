@@ -5793,3 +5793,54 @@ CI outage; this is the first deploy since.
   installs ffmpeg explicitly, and the prerequisite check reports browser and
   media-tool absence separately. This is CI provisioning only; the already
   verified application behavior is unchanged.
+
+## Calendar/media regression correction (2026-09-07)
+
+- Preserved the focused repair on `develop` at
+  `6db6c9fb710a834bd98d67988c104e9ebcf2d6e9`; no reset, seed, cleanup or
+  unrelated redesign. Login no longer applies API profile suggestions as new
+  public-calendar filters. Populated localhost proved the actual cause: 26
+  anonymous occurrences, 61 Owner-authorized occurrences, then zero only after
+  automatic branch/Level narrowing. The repaired page retains 26/61 without
+  changing the chosen filters. Server tier/audience predicates are unchanged.
+- Restored one shared seven-column RTL month grid on phones, with separate
+  Gregorian/right and Hijri/left date rows and tappable truncated occurrence
+  chips. Full details stay in the canonical dialog and stable calendar links;
+  the removed Session page stays removed. A measured 768 px date collision was
+  corrected using the existing spacing token. No schema/API contract changed.
+- Found the local public-audio failure in the stale running API image, whose
+  compiled route still required authentication despite accepted source already
+  using optional authentication. With explicit Owner approval, rebuilt/recreated
+  only the localhost API. The same anonymous item then minted at 200, delivered
+  real audio Range bytes at 206 and played in fresh Chrome. Private, hidden and
+  consent-restricted items remained 404. No migration, seed, data cleanup,
+  storage-policy change or broader authority was introduced.
+- Strengthened the disposable browser proof with real refresh/logout transitions,
+  an empty-Level profile suggestion, role/branch/hidden discrimination, and
+  measured populated grid/date/target geometry. Final browser result: 193/193 at
+  320/360/375/390/412/430/768/1280 px, including the corrected 768 px collision,
+  canonical dialog/deep-link refresh and real media bytes/playback. Complete
+  disposable integration: 105 passed / 2 skipped files, 2,349 passed / 17 skipped
+  assertions, all-table isolation clean. Frontend: 94 files / 1,074 assertions;
+  backend unit: 38 files / 331 assertions. Both lint/exact typecheck/build pass.
+- Updated calendar/frontend/UX/testing guidance; preserved the SRS unchanged and
+  explicitly recorded Document Owner reconciliation of the older §4.4/TD-3.4
+  automatic-prefill wording with the Owner's correction. Review also corrected
+  a documentation paragraph that had split the browser-harness table.
+- The previous handoff stopped before commit: the final populated-localhost
+  recheck after the last spacing change was rejected before execution because
+  automatic approval review exhausted its usage allowance. The Owner subsequently
+  verified the repaired populated localhost manually and explicitly accepted
+  that result as satisfying the missing local check. Final review found the same
+  verified implementation, no new product defect and no accidental repository
+  artifact. The temporary `/tmp/bodour-local-reader-probe.mjs` remains outside
+  the commit; the imported `calendar-geometry.mjs` is retained regression coverage.
+  The OpenAPI currency wrapper separately hit the
+  sandbox's tsx IPC restriction; the same read-only generator passed when loaded
+  directly with Node inside the sandbox (168 paths / 217 operations). All 31
+  guard checks pass, including TD-3 (217/225, eight recorded pending endpoints,
+  zero undocumented), 990 documentation links and final diff validation.
+  Exact hosted CI remains the release gate for this repair commit; no expensive
+  unchanged local suite was repeated. The denied browser operation was not
+  retried or rerouted. Staging and Production were untouched; the protected baseline
+  remains `26e8a96b6f975e050d802f1851332216a424577b`.

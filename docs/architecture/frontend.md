@@ -497,6 +497,11 @@ Fixed with `useId`, which makes it structurally impossible rather than a rule to
 The lesson generalises: **a hardcoded id in a reusable component is a latent collision**, and
 it stays invisible until the component is used twice on one page.
 
+The shared grid's [responsive month design](calendar-and-hijri.md#scheduling-is-schedule-driven)
+also applies to personal and administrative calendars. Authentication changes the API tier,
+not the public page's chosen filters. Profile defaults must not silently replace the view
+while the refresh-cookie exchange completes; test that transition with a populated profile.
+
 ## The educational library, as a second worked example
 
 `/resources` (§5.2, §4.9) — two views of a drilling folder system: a level index grouped by
