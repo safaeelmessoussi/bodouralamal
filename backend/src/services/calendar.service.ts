@@ -1212,7 +1212,7 @@ export async function prefilledFilters(
   };
 }
 
-/* ── The §5.2 Session page (TD-3.4 `GET /calendar/sessions/{id}`) ────────── */
+/* ── Focused §5.2 Session details (`GET /calendar/sessions/{id}`) ───────── */
 
 /**
  * One linked item, in the shape TD-3.4 names:
@@ -1233,7 +1233,7 @@ export interface SessionPage {
   occurrence: Occurrence;
   /**
    * **No storage exists for this yet.** TD-3.4 names `notes` in the response and
-   * §5.2 lists them on the page, but §7 gives `Session` no notes column and
+   * §5.2 lists them in the detail surface, but §7 gives `Session` no notes column and
    * defines no note entity — `User.notes` is a different field on a different
    * model. Inventing a column would be a §7 schema decision, which is the
    * Document Owner's (the same class as the deferred `EducationalContent`
@@ -1269,13 +1269,13 @@ export interface SessionPage {
 }
 
 /**
- * The §5.2 Session page: the calendar occurrence, plus what is attached to it.
+ * Focused §5.2 Session data: the calendar occurrence plus what is attached.
  *
- * **Public, at the caller's tier.** The occurrence itself is public — §4.4
- * (Revision 43) made the timetable browsable by anonymous visitors — while the
- * attached content passes the §4.9 tiers through `visibleContentIds`, the *same*
- * rule the library list applies. That is the whole shape of §5.2's sentence: an
- * anonymous visitor sees a public session's existence and details, never its
+ * **Public at the caller's tier, not public by identity.** R109 gates the
+ * occurrence through the same Session predicate as the calendar; attached
+ * content separately passes §4.9 through `visibleContentIds`, the *same* rule
+ * the library list applies. An anonymous visitor can therefore see a public
+ * Session's details and public materials, never a restricted Session or its
  * private recordings.
  */
 /**
@@ -1293,13 +1293,13 @@ export interface SessionPage {
  * **No new relationship, no second join, no denormalised column.** The content
  * remains the source of truth; this is a projection of rows that already exist.
  *
- * ## Visibility: the content gates, the sessions do not
+ * ## Visibility: the content and Sessions gate independently
  *
  * The two are gated by different rules and conflating them would leak in one
  * direction or hide in the other:
  *
  * * **The content** passes `visibleContentIds` — §4.9's tiers, the same rule the
- *   library list and the session page apply. A caller who may not see the item
+ *   library list and focused Session read apply. A caller who may not see the item
  *   receives `404`, never an empty list: an empty list would confirm the id
  *   exists (§20 rule 17).
  * * **The sessions** pass R109's tier — `sessionTierWhere`, the same fragment

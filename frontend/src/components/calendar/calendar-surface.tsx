@@ -43,6 +43,7 @@ export function CalendarSurface({
   onToday,
   onNext,
   filters,
+  mobileAgenda = false,
   children,
 }: {
   view: CalendarView;
@@ -63,6 +64,7 @@ export function CalendarSurface({
   onNext: () => void;
   /** The filter row — rendered in EVERY view. See the note above. */
   filters: ReactNode;
+  mobileAgenda?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
@@ -70,6 +72,7 @@ export function CalendarSurface({
       <CalendarHeader
         view={view}
         onView={onView}
+        mobileAgenda={mobileAgenda}
         // **The month half is what `monthScoped` withholds**, and it withholds
         // it by passing no month at all: `CalendarHeader` already omits the
         // title and the stepping together when there is no month (R82's

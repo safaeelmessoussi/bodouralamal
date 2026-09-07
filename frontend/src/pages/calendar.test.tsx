@@ -127,8 +127,11 @@ describe('the month grid renders', () => {
   });
 
   it('places the occurrence on its own day and nowhere else', () => {
-    expect(html).toContain('حلقة تحفيظ');
-    expect(html.split('حلقة تحفيظ').length - 1).toBe(1);
+    // The component also carries the CSS-selected phone agenda. This assertion
+    // is specifically about the semantic month grid, so count inside its table.
+    const grid = html.slice(html.indexOf('<table'), html.indexOf('</table>') + 8);
+    expect(grid).toContain('حلقة تحفيظ');
+    expect(grid.split('حلقة تحفيظ').length - 1).toBe(1);
   });
 
   it('marks today and the selection distinctly', () => {
@@ -232,7 +235,10 @@ describe('a day cell carries both calendars', () => {
 
 describe('the public calendar preserves the authenticated visibility tier', () => {
   it('passes the current access token to the optional-auth calendar read', () => {
-    expect(CALENDAR_PAGE_SOURCE).toContain('const { accessToken } = useSession()');
+    expect(CALENDAR_PAGE_SOURCE).toContain(
+      'const { accessToken, status: sessionStatus } = useSession()',
+    );
+    expect(CALENDAR_PAGE_SOURCE).toContain('useOccurrenceLink(accessToken, sessionStatus)');
     expect(CALENDAR_PAGE_SOURCE).toMatch(/fetchOccurrences\(\{[\s\S]*?token: accessToken,/);
     expect(CALENDAR_PAGE_SOURCE).toContain('filters.value.type, accessToken]');
   });

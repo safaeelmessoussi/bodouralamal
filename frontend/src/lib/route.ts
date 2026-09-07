@@ -27,9 +27,6 @@ export type Route =
   | 'privacy'
   | 'terms'
   | 'calendar'
-  /** §5.2's Session page. A parameterised public path, so it is matched by
-   *  pattern rather than by the literal switch above. */
-  | 'session'
   | 'resources'
   | 'pending-approval'
   | 'account-deactivated'
@@ -97,13 +94,8 @@ export function resolveRoute(pathname: string): Route {
       return 'account-deactivated';
   }
 
-  // §5.2's Session page: `/calendar/sessions/{id}`. Checked before the admin
-  // registry because it is public and parameterised, and the literal switch
-  // above cannot express an id.
-  if (/^\/calendar\/sessions\/[^/]+$/.test(path)) return 'session';
 
-  // R98's classroom. Before the registries below, for the same reason the
-  // Session page is: it is parameterised and belongs to no portal — every role
+  // R98's classroom is parameterised and belongs to no portal: every role
   // enters the same room through the same URL.
   if (/^\/classroom\/[^/]+$/.test(path)) return 'classroom';
 

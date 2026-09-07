@@ -8,7 +8,6 @@ import { SessionProvider } from './contexts/session.js';
 import { resolveRoute } from './lib/route.js';
 import { AdminRouter } from './pages/admin/index.js';
 import { ClassroomPage } from './pages/classroom.js';
-import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentAssessmentsPage } from './pages/dashboard/assessments.js';
@@ -67,9 +66,6 @@ function App(): React.ReactNode {
     // would be a navigation node §14.1 does not list (§20 rule 16).
     case 'resources':
       return <ResourcesPage />;
-    case 'session':
-      // Public at the caller's tier, exactly like the grid it is opened from.
-      return <SessionPage />;
     case 'classroom':
       // R98 — one classroom for every portal. Inside `PendingGuard` like every
       // authenticated screen; the JOIN itself is authorised by the server, which

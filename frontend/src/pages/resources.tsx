@@ -43,13 +43,10 @@ import { t } from '../i18n/index.js';
  * note in the level view. That is a divergence, and it is reported rather than
  * silently resolved.
  *
- * **Real data since TD-3.13 landed.** `GET /library` backs the level view; the
- * index reads the public calendar bootstrap for the Level list. Two consequences
- * are visible on screen and are deliberate, both explained in
- * `adapters/content.ts`: **the index shows no per-level counts**, because the
- * endpoint publishes no aggregate and a count derived from page one would be a
- * claim rather than a placeholder; and **no item names a teacher**, because
- * `EducationalContent` records no uploader at all.
+ * **Real data since TD-3.13 landed.** `GET /library` backs both views. The index
+ * is derived from the complete bounded page set, so only Levels with visible
+ * content appear and their counts are real rather than inferred from page one.
+ * No item names a teacher because `EducationalContent` records no uploader.
  *
  * **Nothing here filters by visibility.** The server returns what this caller
  * may see — tiers, the BR-2 consent gate and the own-branch-first ordering are
@@ -95,13 +92,14 @@ function categoryRank(name: string): number {
 }
 
 function LibraryView(): ReactNode {
+  const { accessToken } = useSession();
   const [load, setLoad] = useState<Load<LevelSummary[]>>({ kind: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const rows = await fetchContentLevels();
+        const rows = await fetchContentLevels(accessToken);
         if (!cancelled) setLoad({ kind: 'ready', data: rows });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -110,7 +108,7 @@ function LibraryView(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accessToken]);
 
   /** Grouped by category, categories in the fixed order, levels in the order the
    *  server returned them (it owns `display_order`). */
@@ -159,9 +157,9 @@ function LibraryView(): ReactNode {
 /* ── Page 2 — one level ──────────────────────────────────────────────────── */
 
 function LevelView({ levelId }: { levelId: string }): ReactNode {
-  // The library is public, so both are legitimately null — they change only what
-  // the MINT is allowed to return (TD-12, §4.3), never what the listing shows.
-  const { accessToken } = useSession();
+  // Anonymous and authenticated readers share this surface. Both metadata and
+  // bytes are server-scoped; the mint additionally verifies live child context.
+  const { accessToken, status: sessionStatus } = useSession();
   const { activeChildId } = useActiveChild();
   const [load, setLoad] = useState<Load<LevelContent | null>>({ kind: 'loading' });
   const [filters, setFilters] = useState<ContentFilterState>(EMPTY_FILTERS);
@@ -191,7 +189,7 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const data = await fetchLevelContent(levelId);
+        const data = await fetchLevelContent(levelId, accessToken);
         if (!cancelled) setLoad({ kind: 'ready', data });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -200,7 +198,7 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [levelId]);
+  }, [levelId, accessToken]);
 
   const content = load.kind === 'ready' ? load.data : null;
 
@@ -208,8 +206,7 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
   // mount and never changes, so this cannot reopen a dialog the reader has shut.
   const [focusHandled, setFocusHandled] = useState(false);
   useEffect(() => {
-    if (focusHandled || focusId === null || content === null) return;
-    setFocusHandled(true);
+    if (focusHandled || focusId === null || content === null || sessionStatus === 'loading') return;
     // §5.2 groups a Level's shelf by academic year and then by branch, so the
     // item is two levels down — searched rather than assumed to be anywhere in
     // particular.
@@ -217,13 +214,14 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
       for (const branch of year.branches) {
         for (const item of branch.items) {
           if (item.id === focusId) {
+            setFocusHandled(true);
             setOpen(item);
             return;
           }
         }
       }
     }
-  }, [focusHandled, focusId, content]);
+  }, [focusHandled, focusId, content, sessionStatus]);
   const filtered = useMemo(
     () => (content ? applyFilters(content, filters) : null),
     [content, filters],

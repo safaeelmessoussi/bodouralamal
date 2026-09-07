@@ -774,10 +774,11 @@ mistake with duplication added.
 door to a room that does not exist; the *kind* decides what a calendar occurrence
 may show.
 
-**Surface it by linking to the page that owns it**, not by widening the calendar
-read: `GET /calendar` returns a month's chrome, and shipping every occurrence's
-materials would make every reader pay for data almost none of them opens. Rule P
-applied to reads — expose what exists, never render it twice.
+**Surface it in the canonical occurrence dialog**, not by widening the calendar
+read: `GET /calendar` returns a month of occurrences, and shipping every
+occurrence's materials would make every reader pay for data almost none of them
+opens. The dialog makes one focused tier-scoped Session read only when opened.
+There is deliberately no second Session detail page.
 
 **The relationship is navigable both ways, from one join.** `GET /library/{id}/sessions`
 reads `SessionContent` backwards so a library item can name the classes that use
@@ -787,15 +788,15 @@ relationship, no denormalised column**: it projects rows that already exist.
 **Two visibility rules, and conflating them leaks or hides.** The **content**
 gates through `visibleContentIds` (§4.9's tiers) — an item the caller may not see
 answers `404`, never an empty list, which would confirm the id exists (§20
-rule 17). The **sessions** do not gate: they are the public timetable R43 made
-browsable, returned through the very projection `GET /calendar` uses, so the read
-exposes nothing a caller could not get by opening the calendar.
+rule 17). The **sessions gate independently** through the R109 calendar tier, so
+publishing a shared material never publishes a hidden/private class that uses it.
 
 Canonical: `SessionContent` · `POST /sessions/{id}/content` ·
 `GET /library/{id}/sessions` ·
 [`SessionMaterialsDialog`](../../frontend/src/components/content/session-materials-dialog.tsx)
 (link existing · upload-and-link · unlink) · `/calendar/sessions/{id}` ·
-`OccurrenceMaterials` in the calendar's details dialog.
+`OccurrenceMaterials` in the calendar's canonical details dialog. The URL is an
+API coordinate, not a frontend route.
 
 ## AB · A deep link must be consumed by the page it points at
 
@@ -812,8 +813,8 @@ nothing had to be looked up.
 whether or not the parameter is present, and an id matching nothing opens nothing
 rather than emptying the page.
 
-**Guard the pair.** `session.test.tsx` asserts both the link the source emits and
-the parameter the destination reads — either alone can drift.
+**Guard the pair.** `occurrence-link.test.ts` asserts both the link the source
+emits and the address the calendar reads — either alone can drift.
 
 ## AC · One order for row actions
 
@@ -1412,7 +1413,7 @@ will be implemented twice.**
 
 The algorithm is now [`backend/src/lib/recording-name.ts`](../../backend/src/lib/recording-name.ts),
 and every surface receives a ready `suggested_recording_name` from an endpoint it
-already loads: the Session page for a class, the library list for a shelf.
+already loads: the focused Session read for a class, the library list for a shelf.
 **Neither the recorder nor its callers compose a name any more.**
 
 * **One namespace per Session.** The suffix is chosen from the titles already
@@ -1427,8 +1428,10 @@ already loads: the Session page for a class, the library list for a shelf.
 ### The extra page step is gone
 
 «فتح صفحة الحصة وموادها» made answering *what was recorded for this class* cost
-a navigation away from the calendar being read. The materials are in the popup;
-the Session page keeps its other uses and is no longer the route to that answer.
+a navigation away from the calendar being read. The materials and complete
+occurrence facts are now in one canonical dialog, and the obsolete frontend
+Session route has been removed. Library links carry kind, id and date to
+`/calendar`, whose focused authorized read opens the same dialog after refresh.
 
 ## AU · A dependent form asks in the order the domain depends
 

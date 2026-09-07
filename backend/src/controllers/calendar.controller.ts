@@ -132,7 +132,7 @@ export function read(prisma: PrismaClient) {
   };
 }
 
-/** The wire shape of one occurrence — shared by the grid and the Session page. */
+/** The wire shape of one occurrence — shared by the grid and focused read. */
 function occurrenceDto(o: Occurrence): Record<string, unknown> {
   return {
     kind: o.kind,
@@ -206,10 +206,10 @@ const contentDto = (c: SessionPageContent): Record<string, unknown> => ({
  * calendar because the **subject** of the question is the content: a reader is
  * looking at an item and asking where it is used.
  *
- * **The content gates and the sessions do not** — the item passes §4.9's tiers
- * (a caller who may not see it gets `404`, never an empty list, so the id is not
- * confirmed), while the occurrences are the public timetable R43 made browsable
- * and are returned through the very projection `GET /calendar` uses.
+ * **Both resources gate independently** — the item passes §4.9's tiers (a
+ * caller who may not see it gets `404`, never an empty list, so the id is not
+ * confirmed), and the occurrences pass R109's calendar tier through the same
+ * projection `GET /calendar` uses.
  */
 export function contentSessions(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
@@ -222,7 +222,7 @@ export function contentSessions(prisma: PrismaClient) {
 }
 
 /**
- * `GET /calendar/sessions/{id}` (TD-3.4) — the §5.2 Session page.
+ * `GET /calendar/sessions/{id}` (TD-3.4) — focused data for the canonical dialog.
  *
  * Public, at the caller's tier, and mounted beside `/calendar` for that reason.
  * An unknown session and one whose schedule is deleted answer the same `404`.

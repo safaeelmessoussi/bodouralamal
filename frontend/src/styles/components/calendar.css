@@ -123,14 +123,71 @@
   gap: var(--space-3);
   align-items: end;
 }
+.cal-agenda,
+.cal-filter-toggle {
+  display: none;
+}
+.cal-calendar-feedback {
+  display: block;
+}
 
-/* On a phone the three regions cannot share a line and stay usable, so the title
-   leads — it is the answer to *where am I* — and the two control groups share
-   the row below it. The regions keep their identity; only the arrangement
-   changes, which is what lets one component serve both. */
+.occurrence-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.occurrence-list__item {
+  min-inline-size: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  overflow-wrap: anywhere;
+}
+.occurrence-list__item p {
+  margin: 0;
+  max-width: none;
+}
+.occurrence-list__when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+.occurrence-list__title {
+  padding-block: var(--space-2);
+}
+.occurrence-list__title button {
+  text-align: start;
+  white-space: normal;
+}
+.occurrence-list__cancelled {
+  margin-inline-start: var(--space-2);
+}
+
+/* On a phone the title leads and month stepping follows. Public/personal
+   surfaces opt into hiding the presentation switch because both choices become
+   the same mobile agenda; administrative definitions remain distinct and keep
+   the switch. */
 @media (width < 48rem) {
+  .cal-grid,
+  .cal-occurrence-table {
+    display: none;
+  }
+  .cal-agenda,
+  .cal-filter-toggle {
+    display: block;
+  }
+  .cal-calendar-feedback {
+    display: none;
+  }
+  .cal-header__filters:not(.is-expanded) {
+    display: none;
+  }
   .cal-header__bar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     row-gap: var(--space-3);
   }
   .cal-header__centre {
@@ -139,9 +196,29 @@
   }
   .cal-header__start {
     grid-row: 2;
+    justify-self: stretch;
   }
   .cal-header__end {
     grid-row: 2;
+    justify-self: stretch;
+  }
+  .cal-header__start .cal-segmented {
+    display: flex;
+  }
+  .cal-header__start .cal-segmented > button {
+    flex: 1;
+  }
+  .cal-header--mobile-agenda .cal-header__start {
+    display: none;
+  }
+  .cal-header--mobile-agenda .cal-header__end {
+    grid-column: 1 / -1;
+  }
+  .cal-header__end .cal-segmented {
+    display: flex;
+  }
+  .cal-header__end .cal-segmented > button {
+    flex: 1;
   }
 }
 

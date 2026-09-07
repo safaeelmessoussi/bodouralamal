@@ -261,8 +261,9 @@ non-blank value.
 
 The bounded free-text fields that **do** have a stated purpose are untouched:
 `ChildApplication.internal_note` (R62.8), `FamilyLink.decision_reason`,
-`Session.cancellation_reason`. The `notes` key on the §5.2 Session page
-projection is a different field on a different entity and is unrelated.
+`Session.cancellation_reason`. The `notes` key on the focused §5.2 Session
+projection used by the calendar dialog is a different field on a different
+entity and is unrelated.
 
 ### No health, medical or social-case-file data
 

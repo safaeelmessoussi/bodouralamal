@@ -65,7 +65,7 @@ export function extensionFor(mimeType: string): string {
  * name. A rule one of its producers cannot reach is a rule implemented twice.
  *
  * The algorithm is now `backend/src/lib/recording-name.ts`, and both surfaces
- * receive a ready `suggested_recording_name` — the Session page for a class, the
+ * receive a ready `suggested_recording_name` — the focused Session read for a class, the
  * library list for a shelf. **The visible convention is unchanged**: the first is
  * the bare base name, then ` 2`, ` 3`; it is still only a suggestion, still
  * editable before saving, and still nothing reads it back.

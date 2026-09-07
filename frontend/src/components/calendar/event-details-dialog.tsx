@@ -1,14 +1,15 @@
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 
-import type { Occurrence, SessionPage } from '../../adapters/calendar.js';
+import type { Occurrence, SessionDetails } from '../../adapters/calendar.js';
 import {
-  fetchSessionPage,
+  fetchSessionDetails,
   OCCURRENCE_KIND_BADGE,
   OCCURRENCE_KIND_LABEL,
 } from '../../adapters/calendar.js';
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
-import { ButtonLink } from '../ui/button.js';
+import { Button, ButtonLink } from '../ui/button.js';
+import { levelLabel } from '../scope/level-select.js';
 import { Dialog } from '../ui/dialog.js';
 import { AttendancePanel } from './attendance-panel.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
@@ -96,7 +97,7 @@ export function EventDetailsDialog({
             <dt>{t('calendar.detailsKind')}</dt>
             <dd>
               <span className={`badge badge--${OCCURRENCE_KIND_BADGE[occurrence.kind]}`}>
-                {t(OCCURRENCE_KIND_LABEL[occurrence.kind])}
+                {occurrence.scheduling_type_name ?? t(OCCURRENCE_KIND_LABEL[occurrence.kind])}
               </span>
             </dd>
 
@@ -120,10 +121,19 @@ export function EventDetailsDialog({
             {occurrence.level_name ? (
               <>
                 <dt>{t('calendar.detailsLevel')}</dt>
-                <dd>{occurrence.level_name}</dd>
+                <dd>{levelLabel({ id: occurrence.level_id ?? '', name: occurrence.level_name, category_name: occurrence.category_name })}</dd>
               </>
             ) : null}
 
+            {occurrence.subject_name ? (
+              <><dt>{t('calendar.table.subject')}</dt><dd>{occurrence.subject_name}</dd></>
+            ) : null}
+            {occurrence.audience_label ? (
+              <><dt>{t('calendar.table.audience')}</dt><dd>{occurrence.audience_label}</dd></>
+            ) : null}
+            {occurrence.status === 'cancelled' ? (
+              <><dt>{t('calendar.detailsStatus')}</dt><dd role="status">{t('calendar.cancelled')}</dd></>
+            ) : null}
             {branch ? (
               <>
                 <dt>{t('calendar.detailsBranch')}</dt>
@@ -197,7 +207,7 @@ export function EventDetailsDialog({
             */}
           <AttendancePanel occurrence={occurrence} />
 
-          <OccurrenceMaterials occurrence={occurrence} />
+          <OccurrenceMaterials key={occurrence.id} occurrence={occurrence} />
         </>
       ) : null}
     </Dialog>
@@ -245,60 +255,10 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   );
 }
 
-/**
- * **The way from a class occurrence to its materials** (2026-08-17).
- *
- * ## What this replaced
- *
- * `EventResources`, a reserved area citing `EducationalContent.event_id` — a
- * foreign key **Revision 43 retired**: *"it expressed one relationship, in one
- * direction, to the wrong entity."* §7's deletion table states the consequence
- * outright: *"content no longer attaches to Events."* The seam promised a
- * relationship the model had deliberately removed, on exactly the question a
- * reader of this file comes here to ask — and a dormant seam for a deleted
- * relationship is an invitation to reinstate it by accident.
- *
- * **What R43 put in its place is `SessionContent`** — content referenced
- * many-to-many by a **Session**, the materialised occurrence of a Course
- * Schedule. That is where a class's materials and recordings live, and
- * `/calendar/sessions/{id}` already renders both.
- *
- * ## Why a link rather than the list itself
- *
- * The occurrence carries no content, and widening `GET /calendar` so every
- * occurrence ships its materials would make a month's read pay for data almost no
- * reader opens. The session page already exists, is already public-scoped, and is
- * already what the student dashboard links to — so this is a route into it rather
- * than a second rendering of it (rule P: expose, never duplicate).
- *
- * ## Only for a session
- *
- * An `activity` is an `Event`, and an Event has **no** content relationship
- * (R43); an exam has its own surfaces (§4.6). Offering this on either would be a
- * door to a room that does not exist, so the kind decides.
- *
- * **Whether an Event should regain a content relationship is an open Owner
- * decision** (2026-08-17). If it is taken, the list belongs here and the kind
- * check is what widens.
- */
-/**
- * **The Session's own content, in the popup** (R86).
- *
- * It rendered a link — «فتح صفحة الحصة وموادها» — so answering *what was
- * recorded for this class* cost a navigation away from the calendar somebody was
- * reading. The content is now shown where the question is asked.
- *
- * **A focused read when the popup opens**, not a wider calendar payload: a month
- * carries dozens of occurrences and almost none of them are opened, so attaching
- * every session's content to the grid's response would fetch far more than any
- * reader uses. `GET /calendar/sessions/{id}` already exists and already answers
- * **at the caller's tier** (TD-3.4) — an anonymous visitor sees a public
- * session's materials and never its private recordings, and a signed-in reader
- * sees what her own authorisation allows. Nothing about visibility is decided
- * here; this renders what the server returned (rule O).
- *
- * The link survives as a secondary action, because the Session page also carries
- * what a popup should not grow: the full description and the staffing.
+/** Focused SessionContent read at the caller's tier, only when opened.
+ * The month payload remains self-sufficient for occurrence facts; materials
+ * reuse the existing scoped API instead of widening every calendar response.
+ * Events have no content relationship. No separate detail page exists.
  */
 function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactNode {
   /**
@@ -312,14 +272,15 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
    * public tier expects (TD-3.4).
    */
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
-  const [page, setPage] = useState<SessionPage | null>(null);
+  const [page, setPage] = useState<SessionDetails | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (occurrence.kind !== 'session') return;
     let live = true;
     setState('loading');
-    fetchSessionPage(occurrence.id, accessToken)
+    fetchSessionDetails(occurrence.id, accessToken)
       .then((result) => {
         // The dialog can close before the read lands; writing state then would
         // be a warning and, worse, a render of the previous session's content.
@@ -334,7 +295,7 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
     return () => {
       live = false;
     };
-  }, [occurrence.id, occurrence.kind, accessToken]);
+  }, [occurrence.id, occurrence.kind, accessToken, attempt]);
 
   if (occurrence.kind !== 'session') return null;
 
@@ -348,7 +309,7 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
       </h3>
 
       {state === 'loading' ? <p className="muted">{t('notifications.loading')}</p> : null}
-      {state === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
+      {state === 'error' ? <><p className="muted">{t('calendar.error')}</p><Button onClick={() => setAttempt((n) => n + 1)}>{t('states.offlineRetry')}</Button></> : null}
 
       {/**
         * **Two sections, always both** (2026-08-20).
@@ -374,7 +335,7 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
                   {/* The existing library flow, which is where the download
                       permission and the presigned URL live (TD-3.5) — never a
                       second viewer. */}
-                  <a href={`/resources?content=${item.id}`}>{item.title}</a>
+                  <a href={`/resources?level=${item.level_id}&content=${item.id}`}>{item.title}</a>
                 </li>
               ))}
             </ul>
@@ -387,7 +348,7 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
             <ul className="details__list">
               {materials.map((item) => (
                 <li key={item.id}>
-                  <a href={`/resources?content=${item.id}`}>{item.title}</a>
+                  <a href={`/resources?level=${item.level_id}&content=${item.id}`}>{item.title}</a>
                 </li>
               ))}
             </ul>
@@ -395,13 +356,6 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
         </>
       ) : null}
 
-      {/**
-        * **No longer here** (2026-08-20). «فتح صفحة الحصة وموادها» was the way
-        * to answer *what was recorded for this class*, so inspecting materials
-        * cost a navigation away from the calendar being read. Both sections are
-        * above; the Session page keeps its other uses and is reachable from the
-        * library, but it is not the route to this answer any more.
-        */}
     </section>
   );
 }

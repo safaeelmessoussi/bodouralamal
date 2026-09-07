@@ -6,6 +6,7 @@ import { Badge } from '../ui/badge.js';
 import { DataTable, type TableStatus } from '../ui/data-table.js';
 import { levelLabel } from '../scope/level-select.js';
 import { deliveryLabel, venueLabel } from '../scheduling/delivery.js';
+import { OccurrenceList } from './occurrence-list.js';
 
 /**
  * **قائمة, as a table, on every surface that lists occurrences** (rule AO).
@@ -22,9 +23,9 @@ import { deliveryLabel, venueLabel } from '../scheduling/delivery.js';
  * already scoped, and a column omitted here is a column the server did not fill
  * anyway (rule O).
  *
- * **No row actions.** An occurrence list on these surfaces is something to read;
- * the back office keeps its own definitions table, with its actions, because it
- * is an operational screen and a different thing (rule AO's matrix).
+ * **No management row actions.** The title opens the one canonical dialog; the
+ * back office keeps its own definitions table, with edit/delete actions, because
+ * it is an operational screen and a different thing (rule AO's matrix).
  */
 export type OccurrenceColumn =
   | 'kind'
@@ -67,6 +68,7 @@ export function OccurrenceTable({
   onRetry,
   filtered = false,
   onClearFilters,
+  onOpen,
 }: {
   occurrences: Occurrence[];
   columns: readonly OccurrenceColumn[];
@@ -75,6 +77,7 @@ export function OccurrenceTable({
   /** Whether anything is narrowing — so the empty state can say *why*. */
   filtered?: boolean;
   onClearFilters?: () => void;
+  onOpen: (occurrence: Occurrence) => void;
 }): ReactNode {
   const all: Record<OccurrenceColumn, {
     key: string;
@@ -99,7 +102,15 @@ export function OccurrenceTable({
         <Badge tone={toneOf(o)}>{o.scheduling_type_name ?? t(`calendar.kind.${o.kind}`)}</Badge>
       ),
     },
-    title: { key: 'title', header: t('calendar.table.title'), cell: (o) => o.title },
+    title: {
+      key: 'title',
+      header: t('calendar.table.title'),
+      cell: (o) => (
+        <button type="button" className="link-button" onClick={() => onOpen(o)}>
+          {o.title}
+        </button>
+      ),
+    },
     date: { key: 'date', header: t('calendar.table.date'), cell: (o) => o.date, numeric: true },
     time: {
       key: 'time',
@@ -156,15 +167,28 @@ export function OccurrenceTable({
   };
 
   return (
-    <DataTable
-      caption={t('calendar.table.caption')}
-      columns={columns.map((c) => all[c])}
-      rows={occurrences}
-      rowKey={(o) => `${o.kind}:${o.id}:${o.date}`}
-      status={status}
-      {...(onRetry ? { onRetry } : {})}
-      filtered={filtered}
-      {...(onClearFilters ? { onClearFilters } : {})}
-    />
+    <>
+      {status === 'ready' && occurrences.length > 0 ? (
+        <div className="cal-agenda">
+          <OccurrenceList occurrences={occurrences} onOpen={onOpen} />
+        </div>
+      ) : null}
+      <div
+        className={
+          status === 'ready' && occurrences.length > 0 ? 'cal-occurrence-table' : undefined
+        }
+      >
+        <DataTable
+          caption={t('calendar.table.caption')}
+          columns={columns.map((c) => all[c])}
+          rows={occurrences}
+          rowKey={(o) => `${o.kind}:${o.id}:${o.date}`}
+          status={status}
+          {...(onRetry ? { onRetry } : {})}
+          filtered={filtered}
+          {...(onClearFilters ? { onClearFilters } : {})}
+        />
+      </div>
+    </>
   );
 }

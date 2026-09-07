@@ -20,12 +20,14 @@ import { venueLabel } from '../scheduling/delivery.js';
 export function OccurrenceList({
   occurrences,
   onOpen,
+  emptyMessage = t('calendar.monthEmpty'),
 }: {
   occurrences: Occurrence[];
-  onOpen?: (occurrence: Occurrence) => void;
+  onOpen: (occurrence: Occurrence) => void;
+  emptyMessage?: string;
 }): ReactNode {
   if (occurrences.length === 0) {
-    return <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>;
+    return <p className="muted cal-page__empty">{emptyMessage}</p>;
   }
 
   const ordered = [...occurrences].sort(
@@ -45,9 +47,10 @@ export function OccurrenceList({
           }
         >
           <p className="occurrence-list__when">
-            <span className="occurrence-list__date">{occurrence.date}</span>
+            <time className="occurrence-list__date" dateTime={occurrence.date} dir="ltr">{occurrence.date}</time>
+            {occurrence.hijri_date ? <span dir="ltr">{occurrence.hijri_date}</span> : null}
             {occurrence.start_time ? (
-              <span className="occurrence-list__time">
+              <span className="occurrence-list__time" dir="ltr">
                 {occurrence.start_time}
                 {occurrence.end_time ? ` – ${occurrence.end_time}` : ''}
               </span>
@@ -57,13 +60,9 @@ export function OccurrenceList({
           </p>
 
           <p className="occurrence-list__title">
-            {onOpen ? (
-              <button type="button" className="link-button" onClick={() => onOpen(occurrence)}>
-                {occurrence.title}
-              </button>
-            ) : (
-              occurrence.title
-            )}
+            <button type="button" className="link-button" onClick={() => onOpen(occurrence)}>
+              {occurrence.title}
+            </button>
             {/* Said as a WORD, never as a colour alone (§14.4) — and kept in the
                 list rather than removed, because *this class is off* is the
                 thing the reader most needs to see. */}
@@ -79,7 +78,11 @@ export function OccurrenceList({
               delivered عن بُعد is still a Targa class. What changes is the
               second half, which `venueLabel` answers. */}
           <p className="occurrence-list__where muted">
-            {[occurrence.branch_name, venueLabel(occurrence, { withMedia: true })]
+            {[
+              occurrence.scheduling_type_name ?? t(`calendar.kind.${occurrence.kind}`),
+              occurrence.branch_name,
+              venueLabel(occurrence, { withMedia: true }),
+            ]
               .filter(Boolean)
               .join(' · ')}
           </p>

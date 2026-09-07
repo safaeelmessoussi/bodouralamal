@@ -301,9 +301,9 @@ export function createApp(
   // tier. It therefore mounts BEFORE the guarded router, with optional
   // authentication, and the service resolves the tier from the live actor.
   api.get('/calendar', optionalAuthenticate(config), calendar.read(prisma));
-  // TD-3.4: the §5.2 Session page. Public at the caller's tier, exactly like the
-  // grid it is opened from — an anonymous visitor sees a public session's
-  // details, never its private recordings.
+  // TD-3.4: focused data for the canonical occurrence dialog. Public at the
+  // caller's tier, exactly like the grid it is opened from — an anonymous
+  // visitor sees a public session's details, never its private recordings.
   api.get('/calendar/sessions/:id', optionalAuthenticate(config), calendar.readSession(prisma));
 
   // TD-3.9 (Revision 35): the §5.1 landing-page branch list. Public and
@@ -325,10 +325,14 @@ export function createApp(
   // and never unlocks anything. An invalid token is ignored rather than refused,
   // so this endpoint never answers 401.
   api.get('/library', optionalAuthenticate(config), libraryCtl.list(prisma));
+  // Public files have the same anonymous reader as their library metadata.
+  // The service retains TD-12 freshness and child-context checks for private
+  // capabilities; Nginx independently gates every canonical public read.
+  api.get('/content/:id/download-url', optionalAuthenticate(config), contentCtl.downloadUrl(prisma, storage));
   // `SessionContent` read backwards: which class sessions reference this item
   // (2026-08-17). §4.9 says content is *referenced, never owned* — this is the
   // other half of that sentence, and it adds no relationship. Public at the
-  // caller's tier, like the library list and the session page beside it.
+  // caller's tier, like the library list and focused Session read beside it.
   api.get(
     '/library/:id/sessions',
     optionalAuthenticate(config),
@@ -785,7 +789,6 @@ export function createApp(
   guarded.delete('/content/:id', contentCtl.remove(prisma, storage));
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.
-  guarded.get('/content/:id/download-url', contentCtl.downloadUrl(prisma, storage));
 
   // TD-3.6 (R58) — exams as SCHEDULED SITTINGS. Only `physical` exists; the
   // online mode is refused with a coded reason rather than given an endpoint

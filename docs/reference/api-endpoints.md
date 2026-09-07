@@ -109,7 +109,7 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 | | Path | Returns |
 |---|---|---|
 | `GET` | `/calendar` | Occurrences at the caller's visibility tier. Public and optionally authenticated: the calendar client sends its access token when present; invalid/Pending/role-less callers receive public only. **Self-sufficient** — opening an event costs no further request. **Uncached** |
-| `GET` | `/calendar/sessions/{id}` | The §5.2 **Session page**: `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`. Public at the caller's tier — a public session's details, never its private recordings |
+| `GET` | `/calendar/sessions/{id}` | Focused data for the canonical calendar dialog: `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`. Public at the caller's tier — a public session's details, never its private recordings. This is not a frontend page route |
 | `GET` | `/calendar/bootstrap` | The calendar screen's reference data in one read. **Cached 5 min + strong ETag.** Reference data only — never operational data. `?category_id=` narrows **only** the Level list, server-side (§4.4); an unknown id yields an empty list rather than falling back to all |
 | `GET` | `/branches` | The landing-page branch directory: id, name, address, phone, email, opening hours, map link, display order. **Never** version, operational start date, or timestamps |
 
@@ -148,10 +148,15 @@ three Levels has no single "own Level", and picking one would open their calenda
 their own timetable while looking like it showed all of it. **Plural yields `null`, never
 *first*.**
 
-### The Session page
+### Focused Session details for the calendar dialog
 
 `GET /calendar/sessions/{id}` returns
 `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`.
+
+The frontend has no `/calendar/sessions/{id}` page. A stable occurrence link is
+`/calendar?occurrence=<kind>:<id>&date=YYYY-MM-DD`; the date is part of the
+coordinate for recurring Events, and the calendar re-reads that exact day at the
+caller's tier before opening its one shared dialog.
 
 **The `occurrence` is byte-identical to the grid's.** TD-3.4 says *the occurrence above,
 plus …*, so one `include` and one mapper serve both — two that agree today are two that drift,
@@ -677,7 +682,7 @@ is a race, not a constraint.
 | `POST` | `/uploads/{upload_id}/complete` | Phase two. Body `{ title, description? }` only |
 | `POST` | `/uploads/{upload_id}/abort` | Best-effort; deletes the object |
 | `DELETE` | `/content/{id}` | R53. Soft delete + Trash snapshot + quarantine |
-| `GET` | `/content/{id}/download-url` | Short-lived presigned GET after the §4.9 check |
+| `GET` | `/content/{id}/download-url` | Optional-auth short-lived GET: anonymous only for an exact live public coordinate; authenticated private access retains §4.9/TD-12 checks |
 
 **The file never passes through the API.** The browser PUTs straight to MinIO through the
 presigned URL, which is why the flow has two phases at all — the server sees the object only

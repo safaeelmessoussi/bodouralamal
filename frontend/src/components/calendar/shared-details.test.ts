@@ -64,9 +64,12 @@ describe('recordings and materials are two questions, answered separately', () =
   });
 });
 
-describe('the Session page is no longer the way in', () => {
+describe('the canonical dialog has no dedicated-page escape hatch', () => {
+  it('materials carry both the shelf and the selected item', () => {
+    expect(code(DIALOG)).toContain('/resources?level=${item.level_id}&content=${item.id}');
+  });
   it('offers no «فتح صفحة الحصة وموادها» from the dialog', () => {
-    expect(code(DIALOG)).not.toContain('detailsOpenSession');
+    expect('detailsOpenSession' in (ar.calendar as Record<string, unknown>)).toBe(false);
     expect(code(DIALOG)).not.toContain('/calendar/sessions/');
   });
 });

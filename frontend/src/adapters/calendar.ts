@@ -316,7 +316,7 @@ export async function fetchCalendarBootstrap(query: BootstrapQuery): Promise<Cal
   return body.data;
 }
 
-/* ── The §5.2 Session page (TD-3.4 `GET /calendar/sessions/{id}`) ────────── */
+/* ── Focused §5.2 Session details (`GET /calendar/sessions/{id}`) ───────── */
 
 /**
  * One item attached to a session — enough to open it **inside the Educational
@@ -331,7 +331,7 @@ export interface SessionContentRef {
   level_id: string;
 }
 
-export interface SessionPage {
+export interface SessionDetails {
   occurrence: Occurrence;
   /**
    * **Always `null` today, and the key is present on purpose.** TD-3.4 names it
@@ -360,18 +360,22 @@ export interface SessionPage {
  * not this call.
  */
 /**
- * The Session page (TD-3.4) — **public at the caller's TIER**, which is exactly
+ * Focused Session details (TD-3.4) — **public at the caller's TIER**, which is
+ * exactly
  * why the token is not optional in practice.
  *
  * Read anonymously, it returns the public tier and nothing else. A recording a
  * مؤطرة has just made is normally **private** (§4.9's consent gate and the
- * per-Category default), so a caller that omitted its token saw the session page
+ * per-Category default), so a caller that omitted its token saw the dialog data
  * without the very content it had just attached — the materials dialog did, and
  * a teacher's recording appeared to vanish the moment it was saved.
  *
  * Passing the token widens nothing: the server still resolves the tier from the
  * caller's own roles, and an anonymous read still sees only the public tier.
  */
-export async function fetchSessionPage(id: string, token?: string | null): Promise<SessionPage> {
-  return api<SessionPage>(`/calendar/sessions/${id}`, { token: token ?? null });
+export async function fetchSessionDetails(
+  id: string,
+  token?: string | null,
+): Promise<SessionDetails> {
+  return api<SessionDetails>(`/calendar/sessions/${id}`, { token: token ?? null });
 }

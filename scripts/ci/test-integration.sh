@@ -39,6 +39,19 @@ export TZ='Africa/Casablanca'
 export PORT='3000'
 export LOG_LEVEL='info'
 
+# The public-reader regression is a required production-path assertion, not an
+# optional local convenience. Resolve the repository's supported browser names
+# once and pass the exact executable to the Node harness.
+browser_bin="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+ffmpeg_bin="$(command -v ffmpeg || true)"
+if [[ -z "$browser_bin" || -z "$ffmpeg_bin" ]]; then
+  printf 'CI integration gate requires Chrome/Chromium and ffmpeg\n' >&2
+  exit 1
+fi
+export BODOUR_PUBLIC_READER_BROWSER='1'
+export BODOUR_BROWSER_BIN="$browser_bin"
+export BODOUR_FFMPEG_BIN="$ffmpeg_bin"
+
 compose=(
   docker compose
   --project-name "$project"

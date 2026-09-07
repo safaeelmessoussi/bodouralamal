@@ -1,5 +1,21 @@
 # Tasks — بذور الأمل Platform
 
+## Canonical occurrence dialog, public readers and phone agenda — 2026-09-07
+
+- [x] Removed the duplicate frontend Session detail page. Grid chips, agenda/table
+  titles and Educational Library back-links now open the same complete calendar
+  dialog; stable kind/id/date links survive refresh and fail closed when stale.
+- [x] Public library media is genuinely readable anonymously through the existing
+  exact-coordinate storage boundary. Signed-in readers retain their server-granted
+  tier; private/hidden content and private occurrence relationships remain gated.
+- [x] Phone calendars use the shared chronological agenda at 320–430 px while
+  desktop/tablet retain grid/table presentations. Administrative scheduling keeps
+  its distinct definition/calendar choice; filters and dialogs remain usable.
+- [x] The disposable real-stack browser gate exercises real image, PDF, audio,
+  video and download-only Office-document bytes, inline playback,
+  anonymous/private authorization, direct occurrence links,
+  obsolete-route absence, role-specific private access and horizontal-overflow widths.
+
 ## Controlled-UAT corrections — 2026-09-01
 
 - [x] Registration now accepts the real multi-child consent shape: one required

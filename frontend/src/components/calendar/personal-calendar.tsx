@@ -142,6 +142,7 @@ export function PersonalCalendar({
       <CalendarHeader
         view={view}
         onView={setView}
+        mobileAgenda
         gregorianMonths={bootstrap?.gregorian_months ?? []}
         hijriMonths={bootstrap?.hijri.months ?? []}
         month={month}
@@ -163,13 +164,6 @@ export function PersonalCalendar({
       />
 
       <div aria-live="polite" aria-busy={state === 'loading'}>
-        {state === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
-        {/* Nothing on the calendar is a real answer and says so, rather than
-            rendering an empty grid a reader has to interpret. */}
-        {state === 'ready' && occurrences.length === 0 ? (
-          <p className="muted">{t('calendar.mineEmpty')}</p>
-        ) : null}
-
         {view === 'calendar' ? (
           <CalendarGrid
             month={month}
@@ -179,12 +173,16 @@ export function PersonalCalendar({
             selected={openDay}
             onSelect={setOpenDay}
             onOpenEvent={setOpenEvent}
+            status={state}
+            emptyMessage={t('calendar.mineEmpty')}
+            onRetry={() => void load()}
           />
         ) : (
           /* **The same table the public and back-office lists use** (R84):
              قائمة is a table everywhere, and the two views of this surface show
              the same month's occurrences under the same filters. */
           <OccurrenceTable
+            onOpen={setOpenEvent}
             occurrences={occurrences}
             columns={columns}
             status={state === 'loading' ? 'loading' : state === 'error' ? 'error' : 'ready'}

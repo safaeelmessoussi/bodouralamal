@@ -1504,11 +1504,19 @@ export interface MintResult {
 export async function mintDownloadUrl(
   prisma: PrismaClient,
   clients: StorageClients,
-  actor: Actor,
+  actor: Actor | null,
   contentId: string,
   activeChildHeader: string | undefined,
 ): Promise<MintResult> {
-  const fresh = await assertFreshActive(
+  // Optional authentication follows the public-library contract: an anonymous
+  // reader, an invalid credential (ignored by the middleware), and a valid
+  // Pending session all receive only the public tier. A token that claims an
+  // Active account still takes the live TD-12 check below, so suspension or
+  // role removal wins immediately.
+  const publicOnly =
+    actor === null ||
+    (actor.accountStatus !== undefined && actor.accountStatus !== 'active');
+  const fresh = publicOnly ? null : await assertFreshActive(
     prisma,
     actor.userId,
     ['super_admin', 'admin', 'teacher', 'student', 'parent'],
@@ -1523,7 +1531,7 @@ export async function mintDownloadUrl(
   // linked to.
   let actingStudentId: string | undefined;
   const parentOnly =
-    fresh.roles.includes('parent') &&
+    fresh !== null && fresh.roles.includes('parent') &&
     !fresh.roles.includes('student') &&
     !fresh.roles.some((r) => (STAFF_ROLES as readonly string[]).includes(r));
   if (parentOnly) {
@@ -1537,7 +1545,7 @@ export async function mintDownloadUrl(
 
   const visible = await visibleContentIds(
     prisma,
-    {
+    fresh === null ? null : {
       userId: fresh.userId,
       roles: fresh.roles,
       roleScopes: fresh.roleScopes,
@@ -1552,7 +1560,17 @@ export async function mintDownloadUrl(
   }
 
   const row = await prisma.educationalContent.findFirst({
-    where: { id: contentId, deletedAt: null },
+    where: {
+      id: contentId,
+      deletedAt: null,
+      // Re-assert the anonymous tier on the coordinate read too: a concurrent
+      // visibility/placement change between these reads must never mint an
+      // anonymous PRIVATE capability. Public coordinates remain DB-gated at
+      // Nginx when the file itself is requested (including stale signed URLs).
+      ...(fresh === null ? {
+        visibility: 'public', consentForcedPrivate: false, storageBucket: 'public',
+      } : {}),
+    },
     select: { storageBucket: true, storageKey: true },
   });
   if (!row) throw new AppError('NOT_FOUND', 'no such content');

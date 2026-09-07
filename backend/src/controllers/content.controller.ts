@@ -152,7 +152,7 @@ export function downloadUrl(prisma: PrismaClient, clients: StorageClients) {
     const result = await content.mintDownloadUrl(
       prisma,
       clients,
-      requireActor(req),
+      req.actor ?? null,
       idParam(req, 'id'),
       req.header(ACTIVE_CHILD_HEADER) ?? undefined,
     );

@@ -319,6 +319,15 @@
   gap: var(--space-3);
   justify-content: end;
 }
+.preview,
+.preview__stage {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.preview__audio {
+  min-width: 0;
+  max-width: 100%;
+}
 
 
 /* ── Uploader (§4.9, §14.3) ──────────────────────────────────────────────── */

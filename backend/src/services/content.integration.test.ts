@@ -3,6 +3,9 @@ import {
   sweepAbandonedFixtures,
 } from '../test-support/abandoned-fixtures.js';
 import { Readable } from "node:stream";
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { issueNewSession } from './refresh-token.service.js';
 
 import {
   DeleteObjectCommand,
@@ -24,7 +27,7 @@ import {
 } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
-import { quarantineKeyFor, storageCoordinateId } from "../lib/file-types.js";
+import { buildStorageKey, quarantineKeyFor, storageCoordinateId } from "../lib/file-types.js";
 import {
   BUCKETS,
   statObjectStrict,
@@ -92,6 +95,8 @@ const settingKeysToClean = new Set<string>();
 
 /** Every content row this suite creates, so teardown never depends on a title. */
 const createdContentIds = new Set<string>();
+/** Browser-only official-calendar rows, recorded by exact id for safe teardown. */
+const createdHijriIds = new Set<string>();
 
 function trackObject(bucket: string, key: string): void {
   objectsToClean.set(`${bucket}\u0000${key}`, { bucket, key });
@@ -273,6 +278,10 @@ async function clear(): Promise<void> {
     });
     settingKeysToClean.clear();
   }
+  if (createdHijriIds.size > 0) {
+    await prisma.hijriMonthStart.deleteMany({ where: { id: { in: [...createdHijriIds] } } });
+    createdHijriIds.clear();
+  }
   await prisma.trash.deleteMany({
     where: { targetId: { in: contents.map((c) => c.id) } },
   });
@@ -310,6 +319,8 @@ async function clear(): Promise<void> {
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.refreshSession.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
@@ -1114,6 +1125,139 @@ describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
 });
 
 describe("the presigned GET mint (TD-3.5, TD-12)", () => {
+  it.skipIf(process.env['BODOUR_PUBLIC_READER_BROWSER'] !== '1')('real anonymous media, calendar links, mobile and role browser paths', async () => {
+    // This browser fixture is NEVER run against the shared Owner database.
+    expect(process.env['BODOUR_INTEGRATION_API_IMAGE']).toMatch(/^bodour-integration-api:bodour-ci-integration-/);
+    const ffmpeg = process.env['BODOUR_FFMPEG_BIN'];
+    expect(ffmpeg).toBeTruthy();
+    const video = execFileSync(ffmpeg!, ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x120:r=10', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', 'pipe:1'], { timeout: 30_000 });
+    const audio = execFileSync(ffmpeg!, ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=8000', '-t', '2', '-f', 'wav', 'pipe:1'], { timeout: 30_000 });
+    // A minimal genuine single-page PDF (not the magic-byte-only upload probe).
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    for (const [index, body] of [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>',
+    ].entries()) {
+      offsets.push(Buffer.byteLength(pdf));
+      pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+    }
+    const xref = Buffer.byteLength(pdf);
+    pdf += `xref\n0 4\n0000000000 65535 f \n${offsets.slice(1).map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    const items: Record<string, string> = {};
+    for (const [kind, mime, bytes] of [
+      ['image', 'image/png', readFileSync('../frontend/public/favicon-32.png')],
+      ['pdf', 'application/pdf', Buffer.from(pdf)],
+      ['audio', 'audio/wav', audio],
+      ['video', 'video/mp4', video],
+      // Office documents are intentionally download-only in the browser, but
+      // their public object still traverses the anonymous mint and the exact
+      // coordinate Nginx read gate used by every inline format.
+      ['document', 'application/msword', Buffer.concat([
+        Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+        randomBytes(512),
+      ])],
+    ] as const) {
+      const id = randomUUID();
+      const key = buildStorageKey(id, `browser.${mime.split('/')[1]}`);
+      trackObject('public', key);
+      await clients.internal.send(new PutObjectCommand({ Bucket: 'public', Key: key, Body: bytes, ContentType: mime }));
+      await prisma.educationalContent.create({ data: {
+        id, title: `${TAG} ${kind}`, description: 'مادة تعليمية تجريبية لا تتضمن بيانات شخصية',
+        levelId, subjectId, academicYearId, branchId, visibility: 'public',
+        storageBucket: 'public', storageKey: key, originalFilename: `browser.${kind}`, mimeType: mime, sizeBytes: bytes.length,
+      } });
+      createdContentIds.add(id);
+      items[kind] = id;
+    }
+    const restricted = await uploadPdf(admin(), 'restricted browser', { visibility: 'private' });
+    const session = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+    for (const [hijriMonth, gregorianStartDate] of [[1, '2026-09-01'], [2, '2026-10-01']] as const) {
+      const month = await prisma.hijriMonthStart.create({ data: {
+        hijriYear: 1560,
+        hijriMonth,
+        gregorianStartDate: new Date(`${gregorianStartDate}T00:00:00Z`),
+        status: 'published',
+        source: 'disposable-public-reader',
+      } });
+      createdHijriIds.add(month.id);
+    }
+    await prisma.sessionStaff.create({ data: { sessionId, userId: teacherId, position: 'teacher' } });
+    await prisma.sessionContent.create({ data: { sessionId, contentId: items['image']! } });
+    // Private material is visible to the teacher because it is used in the
+    // exact Session she staffs, not because the browser fixture grants a wider
+    // content role than production does.
+    await prisma.sessionContent.create({ data: { sessionId, contentId: restricted.id } });
+    const privateContext = await createTeachingContext(prisma, `${TAG} private`, branchId);
+    await prisma.session.update({ where: { id: privateContext.sessionId }, data: { visibility: 'hidden' } });
+    await prisma.sessionContent.create({ data: { sessionId: privateContext.sessionId, contentId: items['image']! } });
+    const student = await prisma.user.create({ data: { nameArabic: `${TAG} browser student`, sex: 'female', accountStatus: 'active' } });
+    const studentRole = await prisma.role.findUniqueOrThrow({ where: { name: 'student' } });
+    await prisma.userBranchRole.create({ data: { userId: student.id, roleId: studentRole.id, branchId } });
+    const cookies = {
+      admin: (await issueNewSession(prisma, adminId)).rawToken,
+      teacher: (await issueNewSession(prisma, teacherId)).rawToken,
+      student: (await issueNewSession(prisma, student.id)).rawToken,
+    };
+    try {
+      const output = execFileSync('node', ['../scripts/dev/browser/verify-public-reader.mjs'], {
+        timeout: 240_000,
+        env: { ...process.env, READER_FIXTURE: JSON.stringify({
+          items,
+          levelId,
+          sessionId,
+          privateSessionId: privateContext.sessionId,
+          date: session.date.toISOString().slice(0, 10),
+          restrictedId: restricted.id,
+          cookies,
+          expected: {
+            subject: `${TAG} مادة`,
+            audience: `${TAG} مجموعة`,
+            instructor: `${TAG} مؤطرة`,
+          },
+        }) },
+        encoding: 'utf8',
+      });
+      process.stdout.write(output);
+    } catch (error) {
+      // execFileSync buffers the browser's aggregate assertion report. Surface
+      // it on failure so CI identifies the precise responsive/security check
+      // instead of reporting only that the child process exited non-zero.
+      const failed = error as { stdout?: string | Buffer; stderr?: string | Buffer };
+      if (failed.stdout) process.stdout.write(failed.stdout);
+      if (failed.stderr) process.stderr.write(failed.stderr);
+      throw error;
+    }
+  }, 300_000);
+  it("serves public bytes anonymously through the actual HTTP route and Nginx gate", async () => {
+    const { id, bytes } = await uploadPdf(admin(), "public reader", { visibility: "public" });
+    const endpoint = `${config.PUBLIC_BASE_URL}/api/v1/content/${id}/download-url`;
+    const minted = await fetch(endpoint);
+    expect(minted.status).toBe(200);
+    expect(minted.headers.get('cache-control')).toBe('no-store');
+    const { url } = await minted.json() as { url: string };
+    const object = await fetch(url);
+    expect(object.status).toBe(200);
+    expect(Buffer.from(await object.arrayBuffer())).toEqual(bytes);
+    expect((await fetch(url, { method: 'HEAD' })).status).toBe(200);
+
+    // Revocation invalidates BOTH the mint and a URL already handed out.
+    await prisma.educationalContent.update({ where: { id }, data: { consentForcedPrivate: true } });
+    expect((await fetch(endpoint)).status).toBe(404);
+    expect((await fetch(url, { redirect: 'manual' })).status).not.toBe(200);
+  });
+
+  it("never anonymously mints private, hidden or deleted coordinates", async () => {
+    for (const visibility of ['private', 'hidden'] as const) {
+      const { id } = await uploadPdf(admin(), `private reader ${visibility}`, { visibility });
+      const response = await fetch(`${config.PUBLIC_BASE_URL}/api/v1/content/${id}/download-url`);
+      expect(response.status).toBe(404);
+    }
+    const { id } = await uploadPdf(admin(), 'deleted public', { visibility: 'public' });
+    await prisma.educationalContent.update({ where: { id }, data: { deletedAt: new Date() } });
+    expect((await fetch(`${config.PUBLIC_BASE_URL}/api/v1/content/${id}/download-url`)).status).toBe(404);
+  });
   it("mints a short-lived URL that actually serves the bytes", async () => {
     const { id, bytes } = await uploadPdf(admin(), "قابل للتنزيل");
     const minted = await mintDownloadUrl(

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 import type { GregorianMonthRef, HijriMonthRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
@@ -47,6 +47,7 @@ export function CalendarHeader({
   onToday,
   onNext,
   filters,
+  mobileAgenda = false,
 }: {
   view: CalendarView;
   onView: (view: CalendarView) => void;
@@ -75,9 +76,18 @@ export function CalendarHeader({
    * one, which would state that filters exist and are missing.
    */
   filters?: ReactNode;
+  /**
+   * Both public/personal views intentionally collapse to the same agenda on a
+   * phone, so their view switch would be a false choice. Administrative
+   * scheduling is different: its list contains definitions while its calendar
+   * contains occurrences, and must retain the switch at every width.
+   */
+  mobileAgenda?: boolean;
 }): ReactNode {
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
   return (
-    <div className="cal-header">
+    <div className={`cal-header${mobileAgenda ? ' cal-header--mobile-agenda' : ''}`}>
       <div className="cal-header__bar">
         {/* Source order IS the RTL visual order: first column reads right. */}
         <div className="cal-header__start">
@@ -111,9 +121,25 @@ export function CalendarHeader({
       </div>
 
       {filters ? (
-        <div className="cal-header__filters" role="group" aria-label={t('calendar.filtersLabel')}>
-          {filters}
-        </div>
+        <>
+          <button
+            type="button"
+            className="cal-filter-toggle link-button"
+            aria-expanded={filtersOpen}
+            aria-controls={filtersId}
+            onClick={() => setFiltersOpen((value) => !value)}
+          >
+            {t('calendar.filtersLabel')}
+          </button>
+          <div
+            id={filtersId}
+            className={`cal-header__filters${filtersOpen ? ' is-expanded' : ''}`}
+            role="group"
+            aria-label={t('calendar.filtersLabel')}
+          >
+            {filters}
+          </div>
+        </>
       ) : null}
     </div>
   );

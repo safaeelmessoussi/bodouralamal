@@ -71,4 +71,11 @@ describe('CalendarHeader', () => {
     expect(html).toContain('غشت 2026');
     expect(html).toContain('صفر 1448');
   });
+
+  it('marks only genuinely equivalent phone views as one mobile agenda', () => {
+    expect(render({ ...base, mobileAgenda: true })).toContain(
+      'cal-header cal-header--mobile-agenda',
+    );
+    expect(render(base)).not.toContain('cal-header--mobile-agenda');
+  });
 });

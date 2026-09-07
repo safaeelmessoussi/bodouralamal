@@ -26,6 +26,10 @@ import { SiteFooter } from '../components/site-footer.js';
 import { t } from '../i18n/index.js';
 import { addMonths, endOfMonth, startOfMonth, toIsoDate } from '../lib/dates.js';
 import { useSession } from '../contexts/session.js';
+import { useOccurrenceLink } from '../hooks/use-occurrence-link.js';
+import { readOccurrenceAddress } from '../lib/occurrence-link.js';
+import { Dialog } from '../components/ui/dialog.js';
+import { Button } from '../components/ui/button.js';
 
 /**
  * `/calendar` — the public monthly calendar (§5.1, §4.4, TD-3.4, TD-3.10).
@@ -34,10 +38,12 @@ import { useSession } from '../contexts/session.js';
  * are their own components, and **all** data comes from the adapters. Nothing
  * here holds an event, a branch or a date literal.
  *
- * **Exactly two requests per view, never a third** (Revision 36): the bootstrap
- * for the screen's chrome — Hijri days, month metadata, categories, levels,
- * branches — and `/calendar` for the occurrences. Opening a day or an event
- * costs nothing further, because each occurrence is self-sufficient.
+ * **Exactly two requests for the ordinary month view** (Revision 36): the
+ * bootstrap for the screen's chrome — Hijri days, month metadata, categories,
+ * levels, branches — and `/calendar` for the occurrences. A direct occurrence
+ * link additionally re-reads its exact day at the caller's tier, and an opened
+ * Session makes the existing focused materials read; neither widens the month
+ * payload for occurrences nobody opens.
  *
  * Anonymous visitors get the public tier and the tier widens automatically once
  * signed in. The page sends the current credential but makes no visibility
@@ -69,9 +75,13 @@ type Load =
 const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'type'] as const;
 
 export function CalendarPage(): ReactNode {
-  const { accessToken } = useSession();
+  const { accessToken, status: sessionStatus } = useSession();
   const today = useMemo(() => new Date(), []);
-  const [month, setMonth] = useState(() => startOfMonth(today));
+  const [month, setMonth] = useState(() => {
+    const target = readOccurrenceAddress(window.location.search);
+    return startOfMonth(target ? new Date(`${target.date}T00:00:00`) : today);
+  });
+  const linked = useOccurrenceLink(accessToken, sessionStatus);
   /**
    * **The same filter state the back office uses** (2026-08-19).
    *
@@ -277,6 +287,7 @@ export function CalendarPage(): ReactNode {
             <CalendarHeader
               view={view}
               onView={setView}
+              mobileAgenda
               gregorianMonths={bootstrap?.gregorian_months ?? []}
               hijriMonths={bootstrap?.hijri.months ?? []}
               month={month}
@@ -302,24 +313,18 @@ export function CalendarPage(): ReactNode {
             {/* Announced politely so a keyboard user hears the month reload
                 rather than watching a grid redraw in silence (§14.4). */}
             <div aria-live="polite" aria-busy={load.kind === 'loading'}>
-              {load.kind === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
-
               {view === 'calendar' ? (
-                <>
-                  <CalendarGrid
-                    month={month}
-                    byDate={byDate}
-                    hijriByDate={hijriByDate}
-                    today={today}
-                    selected={openDay}
-                    onSelect={setOpenDay}
-                    onOpenEvent={setOpenEvent}
-                  />
-
-                  {load.kind === 'ready' && occurrences.length === 0 ? (
-                    <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
-                  ) : null}
-                </>
+                <CalendarGrid
+                  month={month}
+                  byDate={byDate}
+                  hijriByDate={hijriByDate}
+                  today={today}
+                  selected={openDay}
+                  onSelect={setOpenDay}
+                  onOpenEvent={setOpenEvent}
+                  status={load.kind}
+                  onRetry={() => setMonth(new Date(month))}
+                />
               ) : (
                 /* **The same occurrences, as a table** (R84). No second fetch
                    and no second projection — the §4.4 tiers have already decided
@@ -332,6 +337,7 @@ export function CalendarPage(): ReactNode {
                    what is on and for whom, not who is teaching it or where in
                    the building. */
                 <OccurrenceTable
+                  onOpen={setOpenEvent}
                   occurrences={occurrences}
                   columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'branch']}
                   // `DataTable` derives *empty* from the rows themselves; the
@@ -357,10 +363,31 @@ export function CalendarPage(): ReactNode {
         onOpenEvent={setOpenEvent}
       />
       <EventDetailsDialog
-        occurrence={openEvent}
+        occurrence={linked.occurrence ?? openEvent}
         branchNames={branchNames}
-        onClose={() => setOpenEvent(null)}
+        onClose={() => {
+          setOpenEvent(null);
+          linked.close();
+        }}
       />
+      {['loading', 'unavailable', 'error'].includes(linked.status) ? (
+        // Unmount on `ready` rather than controlling this auxiliary dialog
+        // closed. Native `dialog.close()` emits `close`; keeping an inactive
+        // instance mounted would call `linked.close` during the loading → ready
+        // hand-off and erase the deep link just as its canonical dialog opens.
+        <Dialog open title={t('calendar.detailsTitle')} onClose={linked.close}>
+          <p role="status">
+            {linked.status === 'loading'
+              ? t('common.loading')
+              : linked.status === 'error'
+                ? t('calendar.error')
+                : t('calendar.occurrenceUnavailable')}
+          </p>
+          {linked.status === 'error' ? (
+            <Button onClick={linked.retry}>{t('states.offlineRetry')}</Button>
+          ) : null}
+        </Dialog>
+      ) : null}
       <SiteFooter />
     </>
   );

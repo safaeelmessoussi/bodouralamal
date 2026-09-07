@@ -202,6 +202,13 @@ const EXEMPT = new Set([
   // is what made the route discoverable — the guard widening on its own is the
   // behaviour that was wanted, and this is the first route it caught.
   "/library/{id}/sessions",
+  // §4.9 / TD-12: opening the bytes of a PUBLIC library item is the final
+  // public-library read, not a guarded mutation. A valid non-active account
+  // therefore receives exactly the anonymous tier; the endpoint's live
+  // coordinate check still refuses private, hidden, deleted and
+  // consent-restricted content. The positive assertion below keeps this from
+  // becoming an unproved hole in the guarded-surface sweep.
+  "/content/{id}/download-url",
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
   "/auth/google",
   "/auth/google/callback",
@@ -381,6 +388,22 @@ describe("TD-3.13 — the public library is an exception for the same reason", (
     // Signing in reorders and never unlocks (TD-3.13); a Pending account is not
     // active, so it gets neither the reorder nor anything extra.
     expect(asPending.body).toEqual(asAnonymous.body);
+  });
+});
+
+describe("§4.9 — public library bytes use the same optional-auth tier", () => {
+  it("serves a Pending account exactly as anonymous", async () => {
+    const path = "/content/00000000-0000-4000-8000-000000000000/download-url";
+    const asPending = await call("GET", path, pendingToken);
+    const asAnonymous = await call("GET", path);
+
+    // This coordinate does not exist, so both tiers fail closed. The important
+    // property here is identical public behavior rather than a 403 emitted by
+    // the guarded router before the content policy can run.
+    expect(asPending.status).toBe(404);
+    expect(asAnonymous.status).toBe(404);
+    expect(asPending.body.error?.code).toBe("NOT_FOUND");
+    expect(asPending.body.error?.code).toBe(asAnonymous.body.error?.code);
   });
 });
 

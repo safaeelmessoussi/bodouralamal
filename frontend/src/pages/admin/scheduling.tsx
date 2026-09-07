@@ -716,12 +716,14 @@ function CalendarView({
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
+  const [calendarStatus, setCalendarStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [openDay, setOpenDay] = useState<Date | null>(null);
   /** The occurrence whose details are open — the shared dialog, not a fork. */
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
 
   useEffect(() => {
+    setCalendarStatus('loading');
     const from = startOfMonth(month);
     const to = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0));
     // `GET /calendar` is public with optional authentication: the credential
@@ -740,8 +742,14 @@ function CalendarView({
       ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
       ...(filters.value.type ? { kind: filters.value.type } : {}),
     })
-      .then((r) => setOccurrences(r.occurrences))
-      .catch(() => setOccurrences([]));
+      .then((r) => {
+        setOccurrences(r.occurrences);
+        setCalendarStatus('ready');
+      })
+      .catch(() => {
+        setOccurrences([]);
+        setCalendarStatus('error');
+      });
     // **The Hijri overlay comes from the same bootstrap the public calendar
     // reads** (R31–32): recorded Ministry announcements, never a computation.
     // This view passed an empty map, so the back office was the one calendar in
@@ -800,6 +808,8 @@ function CalendarView({
         selected={openDay}
         onSelect={setOpenDay}
         onOpenEvent={setOpenEvent}
+        status={calendarStatus}
+        onRetry={() => setMonth((value) => new Date(value))}
       />
 
       <DayEventsDialog

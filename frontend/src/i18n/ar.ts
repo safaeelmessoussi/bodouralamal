@@ -417,6 +417,8 @@ export const ar = {
     },
   },
   calendar: {
+    occurrenceUnavailable: 'هذا الموعد غير متاح. ربما حُذف أو تغيّرت صلاحية الاطّلاع عليه.',
+    detailsStatus: 'الحالة',
     title: 'الجدول الزمني',
     lede: 'مواعيد الحلقات الأسبوعية والأنشطة والمناسبات في مقرات الجمعية.',
     branchLabel: 'الفرع',
@@ -495,9 +497,6 @@ export const ar = {
     detailsCategory: 'الفئة',
     detailsLevel: 'المستوى',
     detailsRecurrence: 'التكرار',
-    // The route from a class occurrence in the calendar to its own page, where
-    // R43's `SessionContent` materials and recordings live (2026-08-17).
-    detailsOpenSession: 'فتح صفحة الحصة وموادها',
     detailsInstructors: 'المؤطِّرات',
     detailsVisibility: 'مستوى الظهور',
     openDetails: 'عرض التفاصيل',

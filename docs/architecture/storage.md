@@ -153,12 +153,19 @@ their server-written SHA-256 before completing the row transition.
 
 | Operation | TTL | Notes |
 |---|---|---|
+| **GET** (public bucket) | 10 minutes | Minted anonymously only for a live public, non-consent-restricted public-bucket row; the public Nginx origin re-authorizes the exact current coordinate when the bytes are read |
 | **GET** (private bucket) | 10 minutes | Minted only after the permission check, **including child context** where the requester is a parent |
 | **PUT** (single-shot upload) | 1 hour | Initiated-but-never-completed uploads collected after 48 hours |
 
 Previews use **the same mint path** as downloads. There is no separate preview endpoint and
 no relaxed permission for thumbnails — an obvious-looking shortcut that would create a
 second, weaker access path to the same objects.
+
+`GET /content/{id}/download-url` is optionally authenticated. Anonymous callers
+receive only the same public tier as `GET /library`; an active authenticated
+caller is re-read through TD-12 and may receive the private tier already granted
+by §4.9. The library frontend sends its current token when one exists, so a link
+from a private Session does not accidentally downgrade the reader to anonymous.
 
 ### Signatures through the proxy
 

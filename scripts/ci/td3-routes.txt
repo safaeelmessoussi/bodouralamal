@@ -94,7 +94,7 @@ POST /admin/self-managed-claims/{id}/reject   # R132 — recorded refusal, soft-
 
 # ── Calendar & events (TD-3.4)
 GET /calendar                                 # TD-3.4, §4.4
-GET /calendar/sessions/{id}                   # TD-3.4 (R43), §5.2 Session page; PUBLIC at the caller's tier
+GET /calendar/sessions/{id}                   # TD-3.4 (R43), focused canonical-dialog data; PUBLIC at the caller's tier
 GET /events                                   # TD-3.4 (R56) — event DEFINITIONS, paginated
 POST /events                                  # TD-3.4, §4.4
 PATCH /events/{id}                            # TD-3.4, §4.4

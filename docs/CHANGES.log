@@ -5732,3 +5732,58 @@ CI outage; this is the first deploy since.
   first Google login on this refreshed environment) and step 11's full smoke
   test (journey J1, backup dry run, restore drill) — both are follow-up UAT
   actions, not part of the deploy pipeline itself.
+
+## One canonical occurrence dialog, real public readers and a phone agenda (2026-09-07)
+
+- Removed the duplicate frontend Session page and route. Calendar grid chips,
+  agenda/table titles and Educational Library back-links now use one stable
+  `/calendar?occurrence=<kind>:<id>&date=YYYY-MM-DD` coordinate and open the
+  shared complete occurrence dialog. Direct navigation and refresh perform a
+  focused, tier-scoped day read; malformed, stale, deleted or restricted
+  coordinates fail closed without reconstructing protected data client-side.
+- Completed the dialog projection without broadening the month feed: scheduling
+  type, qualified Level, Subject, audience, cancellation, branch/delivery/room,
+  staff, attendance/join controls, materials and recordings are composed from
+  the existing authorized occurrence and focused Session reads. Publishing a
+  content item does not publish a hidden Session; R109 still gates the reverse
+  relationship independently.
+- Made public Educational Library files genuinely usable while signed out by
+  mounting the existing mint route under optional authentication. Anonymous and
+  valid non-active callers receive only a live `public` +
+  `consent_forced_private = false` + public-bucket coordinate; active callers
+  retain the TD-12 live-account/role check and their existing §4.9 private tier.
+  Nginx still re-authorizes the exact current coordinate when bytes are read, so
+  an already-minted URL fails after replacement, deletion or consent restriction.
+  The frontend now forwards an access token when present instead of silently
+  downgrading an authorized reader to the anonymous tier.
+- Replaced the squeezed seven-column phone month with the shared chronological
+  agenda below `48rem`, while retaining desktop/tablet grids and the genuinely
+  distinct administrative definition-list switch. Filters collapse operably on
+  phones; long Arabic/dialog/media content wraps without document overflow.
+- Added a required disposable-stack Chrome regression to the integration gate.
+  A fresh cookieless profile reads and verifies real image, PDF, audio, video and
+  Office-document bytes through Nginx/MinIO, decodes or actually plays supported
+  media, checks private-role boundaries, reloads the canonical link, operates
+  filters/events, and checks 320/360/375/390/412/430/768/1280 px. Chrome and
+  ffmpeg are now mandatory for this gate rather than a silent local skip.
+- Review corrections caught before commit: the interrupted service initially
+  classified an Actor whose status field was omitted as anonymous, which would
+  have hidden authorized private content and bypassed the intended fresh-account
+  refusal; the final classification preserves internal Active-actor freshness.
+  A permanently mounted auxiliary dialog erased the deep link via its native
+  close event during loading, and Office content briefly rendered a blank idle
+  state; both were corrected. The Pending surface sweep was synchronized with
+  the new optional-auth mint and positively proves its tier equals anonymous.
+- Verification: backend lint/typecheck/build and 38 files / 331 unit assertions;
+  frontend lint/typecheck/build and 94 files / 1,074 assertions; focused frontend
+  5 files / 78 assertions; content real-stack 64/64; Pending surface 210/210;
+  browser 94/94; all 28 repository guards; OpenAPI current at 168 paths / 217
+  operations; TD-3 at 217/225 implemented with the same 8 recorded milestones;
+  documentation links 988/988; no-PII and diff checks green. The complete
+  disposable run reached 2,348 passing / 17 skipped assertions and only the
+  already-recorded B-01 shared-recording test race above failed: its production
+  worker completed the converged obligation before the direct test calls. The
+  unchanged B-01 file then passed 19/19 in isolation. No consent production code
+  or assertion was loosened for this unrelated timing failure.
+- No schema, migration, bucket policy or Nginx routing change was needed. No
+  Staging or Production deployment/data operation was performed.

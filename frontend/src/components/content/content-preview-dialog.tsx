@@ -7,6 +7,7 @@ import {
   type ContentItem,
 } from '../../adapters/content.js';
 import { formatDate } from '../../lib/format-date.js';
+import { occurrenceHref } from '../../lib/occurrence-link.js';
 import { t } from '../../i18n/index.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -123,11 +124,11 @@ export function ContentPreviewDialog({
               <p className="preview__placeholder">{t('content.previewUnavailable')}</p>
             ) : null}
 
-            {load.kind === 'ready' ? <PreviewSurface item={item} url={load.url} /> : null}
+            {load.kind === 'ready' ? <PreviewSurface key={load.url} item={item} url={load.url} onError={() => setLoad({ kind: 'error' })} /> : null}
 
             {/* Office files never render in place (§14.6), so the stage states
                 what will happen instead of showing an empty frame. */}
-            {!PREVIEWABLE.has(item.kind) && load.kind !== 'loading' ? (
+            {!PREVIEWABLE.has(item.kind) && (load.kind === 'idle' || load.kind === 'ready') ? (
               <p className="preview__placeholder">{t('content.previewDownloadOnly')}</p>
             ) : null}
           </div>
@@ -164,7 +165,7 @@ export function ContentPreviewDialog({
  * and so adding a kind is one branch here rather than a change to the dialog's
  * state machine.
  */
-function PreviewSurface({ item, url }: { item: ContentItem; url: string }): ReactNode {
+function PreviewSurface({ item, url, onError }: { item: ContentItem; url: string; onError: () => void }): ReactNode {
   switch (item.kind) {
     case 'pdf':
       // `title` is the accessible name of the frame; without it a screen reader
@@ -172,22 +173,22 @@ function PreviewSurface({ item, url }: { item: ContentItem; url: string }): Reac
       return <iframe className="preview__pdf" src={url} title={item.title} />;
     case 'video':
       return (
-        <video className="preview__video" controls preload="metadata">
-          <source src={url} type={item.mime_type} />
+        <video className="preview__video" controls preload="metadata" onError={onError}>
+          <source src={url} type={item.mime_type} onError={onError} />
           {t('content.previewUnsupported')}
         </video>
       );
     case 'audio':
       return (
-        <audio className="preview__audio" controls preload="metadata">
-          <source src={url} type={item.mime_type} />
+        <audio className="preview__audio" controls preload="metadata" onError={onError}>
+          <source src={url} type={item.mime_type} onError={onError} />
           {t('content.previewUnsupported')}
         </audio>
       );
     case 'image':
       // The title is the alt text: these are teaching materials, so the name is
       // the best description available without an author-supplied one.
-      return <img className="preview__image" src={url} alt={item.title} />;
+      return <img className="preview__image" src={url} alt={item.title} onError={onError} />;
     case 'document':
       return null;
   }
@@ -215,9 +216,8 @@ function PreviewSurface({ item, url }: { item: ContentItem; url: string }): Reac
  * — which is also the honest rendering of *"no session references this"*, the
  * `0` of 0..N and an ordinary state for a library item.
  *
- * **Each session links into the calendar's own page for it**, which is where its
- * materials, its recordings and its details already live (rule P — expose what
- * exists, never render it twice).
+ * **Each session links to the calendar URL**, where the scoped day read opens
+ * the canonical dialog. The date disambiguates recurring occurrences.
  */
 function UsedInSessions({
   item,
@@ -252,7 +252,7 @@ function UsedInSessions({
       <ul className="admin-list admin-list--plain">
         {sessions.map((occurrence) => (
           <li key={occurrence.id}>
-            <a href={`/calendar/sessions/${occurrence.id}`}>
+            <a href={occurrenceHref(occurrence)}>
               {/* Enough to identify the sitting without opening it: what it is,
                   when, and which curriculum it belongs to. The date is formatted
                   by the platform's one formatter (Arabic, TD-11). */}

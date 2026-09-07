@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { fetchSessionPage, type SessionContentRef } from '../../adapters/calendar.js';
+import { fetchSessionDetails, type SessionContentRef } from '../../adapters/calendar.js';
 import { linkSessionContent, unlinkSessionContent } from '../../adapters/sessions.js';
 import { t } from '../../i18n/index.js';
 import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
@@ -68,7 +68,7 @@ export function SessionMaterialsDialog({
   /**
    * **R75.6's default name, composed by the SERVER** (R99).
    *
-   * It arrives on the Session page beside the lists it is numbered against, so
+   * It arrives on the focused Session read beside the lists it is numbered against, so
    * the dialog never holds the rule and never needs the occurrence's title,
    * note and date to be threaded in from the calling screen — which is what the
    * removed `session` prop was for, and which four callers each had to get
@@ -80,11 +80,11 @@ export function SessionMaterialsDialog({
 
   const load = useCallback(async () => {
     if (!sessionId) return;
-    // **With the token.** The Session page is public at the CALLER'S TIER, so
+    // **With the token.** The focused Session read is public at the CALLER'S TIER, so
     // an anonymous read returns the public tier only — and a recording just made
     // is normally private. Without this the list a teacher was looking at could
     // never show the recording she had just saved.
-    const page = await fetchSessionPage(sessionId, token);
+    const page = await fetchSessionDetails(sessionId, token);
     setLinked(page.linked_content);
     setRecordings(page.recordings);
     setSuggestedName(page.suggested_recording_name);

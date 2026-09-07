@@ -1,4 +1,4 @@
-import { api } from '../lib/api.js';
+import { api, ApiError } from '../lib/api.js';
 import type { Occurrence } from './calendar.js';
 
 /**
@@ -134,7 +134,7 @@ export interface LevelContent {
  * calendar's levels, and the same reasoning applies: the server decides what
  * exists.
  */
-export async function fetchContentLevels(): Promise<LevelSummary[]> {
+export async function fetchContentLevels(token: string | null = null): Promise<LevelSummary[]> {
   // **Derived from the content itself, not from the curriculum.**
   //
   // This used to list every Level the calendar bootstrap publishes, so the index
@@ -148,7 +148,7 @@ export async function fetchContentLevels(): Promise<LevelSummary[]> {
   // the index, and the counts come with it rather than being approximated. The
   // server still decides what exists — the tier rules, the BR-2 consent gate
   // and the §5.2 ordering are all applied before this sees a row.
-  const rows = await fetchAllLibraryRows();
+  const rows = await fetchAllLibraryRows(token);
 
   const byLevel = new Map<string, LevelSummary & { years: Set<string> }>();
   for (const row of rows) {
@@ -192,13 +192,14 @@ export async function fetchContentLevels(): Promise<LevelSummary[]> {
  */
 const MAX_INDEX_PAGES = 10;
 
-async function fetchAllLibraryRows(): Promise<LibraryItemWire[]> {
+async function fetchAllLibraryRows(token: string | null): Promise<LibraryItemWire[]> {
   const rows: LibraryItemWire[] = [];
   let page = 1;
   let total = Infinity;
   while (rows.length < total && page <= MAX_INDEX_PAGES) {
     const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
       `/library?page=${String(page)}&page_size=${String(MAX_PAGE_SIZE)}`,
+      { token },
     );
     total = body.meta.total;
     rows.push(...body.data);
@@ -257,9 +258,10 @@ interface LibraryItemWire {
  * own branch → Global → other branches for a signed-in reader, and that decision
  * is the server's; re-sorting here would be a second implementation of it.
  */
-export async function fetchLevelContent(levelId: string): Promise<LevelContent | null> {
+export async function fetchLevelContent(levelId: string, token: string | null = null): Promise<LevelContent | null> {
   const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
     `/library?level_id=${encodeURIComponent(levelId)}&page_size=${MAX_PAGE_SIZE}`,
+    { token },
   );
   const rows = body.data;
   if (rows.length === 0) return null;
@@ -329,14 +331,15 @@ export async function fetchContentUrl(
       { ...(token ? { token } : {}), ...(activeChildId ? { activeChildId } : {}) },
     );
     return body.url;
-  } catch {
+  } catch (error) {
     // §4.9's tiers are applied server-side and out-of-scope content answers 404
     // rather than 403 (§20 rule 17), so a refusal here is indistinguishable from
     // a missing item **by design**. `null` is what the preview dialog already
     // renders as "not available", and the client must not try to say more —
     // guessing which of the two it was is exactly the existence leak the uniform
     // status exists to close.
-    return null;
+    if (error instanceof ApiError && [401, 403, 404].includes(error.status)) return null;
+    throw error;
   }
 }
 
@@ -349,10 +352,9 @@ export async function fetchContentUrl(
  * this is the other half of that sentence. **No new relationship**: it projects
  * rows the join already holds.
  *
- * **The content gates; the sessions do not.** An item the caller may not see
- * answers `404` (never an empty list, which would confirm the id exists), while
- * the occurrences returned are the public timetable R43 made browsable — in the
- * very shape `GET /calendar` returns.
+ * **Both resources gate independently (R109).** The content must be visible,
+ * and the returned Sessions separately pass the calendar tier. Publishing a
+ * file never publishes the private class that used it.
  */
 export async function fetchContentSessions(
   contentId: string,

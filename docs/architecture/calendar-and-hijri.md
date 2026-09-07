@@ -49,6 +49,18 @@ public**: anonymous visitors get the same filter set as signed-in users, who add
 get those filters *prefilled* from their profile. Identical filters never means identical
 results — every result set stays visibility-filtered.
 
+The **calendar dialog is the only occurrence-detail surface** (Owner decision,
+2026-09-07). Grid chips, agenda/table titles and content back-links all open that
+same component; there is no dedicated Session page. Stable links carry kind, id
+and date to `/calendar`, and a refresh performs a focused, tier-scoped day read
+before opening. A stale, deleted or restricted coordinate is therefore an
+unavailable state, not a client-side reconstruction or existence leak.
+
+Below `48rem`, both public/personal calendar presentations intentionally become
+one chronological agenda; the seven-column month grid remains the desktop/tablet
+view. Administrative scheduling retains its phone view switch because its list
+contains recurring definitions and is not equivalent to the occurrence agenda.
+
 > [`BR-17`](../reference/business-rules.md#br-17) ·
 > [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c
 
@@ -299,7 +311,7 @@ no `where` can compare a parent row's `date` against a related row's effective r
 ### Where the tier applies — and where it must not
 
 The tier gates **calendar and public occurrence reads**: `GET /calendar`, `GET /me/calendar`,
-the §5.2 session page, and the sessions a content item is used by. A caller who may not read
+the focused §5.2 Session read, and the Sessions a content item is used by. A caller who may not read
 an occurrence receives **`404`, never `403`** — a distinguishable refusal would confirm that
 the hidden class exists (§20 rule 17).
 
