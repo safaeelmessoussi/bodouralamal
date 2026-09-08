@@ -10,10 +10,16 @@
 - [x] Kept subprocess fixtures, integration snapshot tooling, live Session
   detail API, all declared dependencies, generated contracts and migrations.
   No equivalent test setup was proven redundant enough to consolidate safely.
-- [ ] Shorten the existing agent entry path and separate current guidance from
+- [x] Shorten the existing agent entry path and separate current guidance from
   historical lookup; preserve the unresolved calendar-prefill SRS wording below.
-- [ ] Final full local gates, behavior comparison, coherent commits, push and
-  exact hosted CI. No deployment or Owner-data mutation belongs to this milestone.
+- [x] Final local gates: backend 331 / frontend 1,074 assertions, both lint/exact
+  typecheck/build; disposable integration 2,349 passed / 17 skipped with clean
+  isolation and 193 browser assertions; all 31 guard checks and 1,013 doc links.
+  Built JS/CSS is byte-identical to the accepted baseline and localhost serves
+  those same bytes; root/calendar/resources/health reads return 200.
+- Exact hosted CI, including recovery and image publication, is the acceptance
+  gate for the two coherent commits. No deployment or Owner-data mutation belongs
+  to this milestone; no additional cleanup starts at handoff.
 
 ## Calendar/media regression correction — 2026-09-07
 

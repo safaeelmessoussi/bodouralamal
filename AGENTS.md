@@ -1,35 +1,21 @@
-# AI Agent Instructions (Codex/Cursor/Blackbox)
+# Agent entry — Codex / Cursor / Blackbox
 
-- Read `docs/CHANGES.log` to understand what was completed in the prior session.
-- Follow the guidelines in `/CLAUDE.md` (repository root). The source of truth is
-  `docs/SRS.md`; neither this file nor CLAUDE.md overrides it.
-- When writing database schema changes, remember PostgreSQL-specific CHECK
-  constraints and ICU collations are hand-written in `backend/prisma/migrations/`
-  SQL files (SRS TD-6a). Do not try to write them in `schema.prisma`.
+Read and follow [CLAUDE.md](CLAUDE.md), the existing shared guide (§16.3).
+Its repository map, authority pointers and verification links are the entry path;
+do not create a competing guide. Neither file overrides [docs/SRS.md](docs/SRS.md).
+
+- Read current `docs/TASKS.md` and recent `docs/CHANGES.log` entries before work;
+  search history only when relevant, rather than loading the whole ledger.
+- Before production code, read `docs/development/engineering-constitution.md`,
+  audit every principle, reuse existing solutions and report justified exceptions.
+- PostgreSQL CHECK constraints and ICU collations are hand-written in
+  `backend/prisma/migrations/` SQL, never Prisma schema syntax (TD-6a).
   Never run `prisma db push`.
-- When modifying backend routes, always use the unified error response format
-  defined in `docs/SRS.md` under section TD-3.8.
-- Log your output directly into the next empty row of `docs/CHANGES.log`.
-- **Before writing any production code, read
-  `docs/development/engineering-constitution.md`** and audit the feature against
-  every principle — generic-first components, atomic composition, tokens only,
-  no business logic in a client. Never duplicate a solution that can be
-  generalised. Verify compliance before declaring the feature complete, and
-  report any intentional exception with its justification.
-- **Documentation is part of Done (SRS §16.4 — binding).** Update the affected
-  pages in `docs/` (indexed by `docs/README.md`) in the **same commit** as the
-  code change; documentation drift is a defect. The handbook cites the SRS and
-  never restates it. Which page to update for which change is in
-  `docs/development/documentation-policy.md`. Verify with
-  `bash scripts/ci/check-doc-links.sh`.
-- **Implementation efficiency is a primary objective.** You choose the workflow,
-  not only the implementation: read only what the task requires, reuse
-  conclusions already established, verify at the cheapest level that could
-  observe the breakage, and finish one vertical slice before starting another.
-  It is measured in **completed slices, never tokens saved**, and it never buys
-  savings from correctness, architectural integrity, security, SRS compliance or
-  documentation. The policy is `docs/development/engineering-efficiency.md`.
-- **Report completion in the six fixed sections** (mandatory per SRS §16.3,
-  Revision 37.2) — user-visible changes, engineering highlights, documentation
-  updates, additional defects discovered, verification, remaining work. See
-  `docs/development/README.md` under *Reporting completion*.
+- Backend routes use the TD-3.8 unified error envelope.
+- Documentation is part of Done (§16.4): update affected docs in the same commit,
+  append output to `docs/CHANGES.log`, and run
+  `bash scripts/ci/check-doc-links.sh`. Documentation drift is a defect.
+- Follow the efficiency policy linked by CLAUDE.md: completed slices, focused
+  evidence first; never trade correctness, security or documentation for savings.
+- Report these six sections (§16.3): **user-visible changes · engineering highlights ·
+  documentation updates · additional defects discovered · verification · remaining work**.

@@ -306,9 +306,10 @@ required marking and focus behaviour.
 attribute away from an unlabelled control, and nobody notices until someone using a screen
 reader does.
 
-> **Status: not yet built.** §14.3's registry does not currently list form primitives. They
-> arrive with the first form — the first CRUD module — as *components*, not as a hand-rolled
-> `<input>` inside a page. Recorded in [TASKS.md](../TASKS.md).
+The implemented field primitives live in
+[`components/ui/field.tsx`](../../frontend/src/components/ui/field.tsx); forms compose them
+inside the shared `FormDialog`. The earlier pre-CRUD status is historical, not a reason
+to introduce a second set of form fields.
 
 ### 4.4 ⚖️ Navigation is the sitemap, exactly
 

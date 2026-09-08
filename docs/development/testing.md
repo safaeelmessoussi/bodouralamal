@@ -14,11 +14,11 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **320 backend tests · 913 frontend tests**. The repository also
-contains **92 backend integration files**; the dedicated workflow job now provisions their
-isolated real stack and database lifecycle rather than pointing them at Local Development.
+Exact test totals belong to each verified commit's [CHANGES entry](../CHANGES.log)
+and hosted run, not a second manually maintained inventory here. The integration job
+provisions an isolated real stack rather than pointing at Local Development.
 
-The backend total includes deterministic worker-readiness regression tests. They inject the
+The backend suite includes deterministic worker-readiness regression tests. They inject the
 clock and pg-boss live-worker view, so startup failure, incomplete registration, lost/stale
 workers, and the long-running-handler exception are covered without sleeps. Controller tests
 separately prove that a healthy database plus a present `pgboss` schema cannot make
@@ -61,19 +61,25 @@ legitimate SigV4 traffic cannot pass.
 
 ## Running them
 
+Run these from the repository root. Select focused tests while editing; run the full
+established gates once the section is coherent. Use bounded timeouts appropriate to
+the command; diagnose a stalled SQL/health check promptly instead of retrying blindly.
+
 ```bash
-# Unit — no stack required
-cd backend && npm run lint && npm run typecheck && npm test && npm run build
-cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+# Focused default tests — no stack required; paths relative to the package
+npm --prefix frontend test -- src/pages/calendar.test.tsx
+npm --prefix backend test -- src/lib/health.test.ts
+
+# Final package gates — no database/storage writes
+npm --prefix backend run lint && npm --prefix backend run typecheck && npm --prefix backend test && npm --prefix backend run build
+npm --prefix frontend run lint && npm --prefix frontend run typecheck && npm --prefix frontend test && npm --prefix frontend run build
 
 # Repository and contract guards — every scripts/ci/check-*.sh guard is represented in CI
-for g in scripts/ci/check-*.sh; do bash "$g"; done
+for g in scripts/ci/check-*.sh; do bash "$g" || exit; done
+bash scripts/ci/check-doc-links.sh
 
-# Integration — needs the stack up
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-bash scripts/dev/test-integration.sh
-
-# CI-equivalent integration — owns and destroys a uniquely named disposable stack
+# Focused integration, then full at final boundary — owns a disposable stack
+bash scripts/ci/test-integration.sh src/controllers/calendar.http.integration.test.ts
 bash scripts/ci/test-integration.sh
 
 # R115 authenticated browser acceptance — also owns and destroys its whole stack
@@ -90,6 +96,15 @@ BODOUR_RELEASE_TAG=<40-char-commit> bash scripts/deploy/preflight-host.sh \
 # Destructive only to uniquely named disposable volumes and a local encrypted repository
 bash scripts/backup/verify-backup-restore.sh
 ```
+
+The full disposable integration command includes the real public-reader browser
+gate (calendar auth transitions, month geometry, canonical dialog and media bytes).
+For other journeys, select the harness from the browser inventory below and inspect
+its fixture/teardown first. `scripts/dev/test-integration.sh` and many operator
+browser harnesses write to the configured development stack: they are **not** the
+safe default on an Owner-populated localhost. Use disposable infrastructure unless
+that environment's fixture writes are explicitly authorized. No command here
+authorizes a deployment or live-data cleanup.
 
 The Production bootstrap drill fills the gap the fixture-tier integration suite intentionally
 cannot cover. It builds the actual API/web images, resolves the Production Compose overlay with

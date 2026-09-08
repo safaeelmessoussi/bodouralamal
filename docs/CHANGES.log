@@ -1,6 +1,13 @@
 # Project Changes Ledger
 
 ## Active Status
+- CURRENT TASK: Repository simplification verified locally; exact hosted CI gates handoff. See the current section of `docs/TASKS.md`.
+- ACCEPTED BEHAVIOR: repair baseline `0e16489b8a7724e6ed2701fd249a6cdd82154a1a`, Owner-accepted localhost and green CI `34160961940`.
+- READ FIRST: current TASKS section and the latest ledger entries at the end of this file; search older entries only for task-specific provenance.
+- DEPLOYMENT: not authorized by this milestone; readiness decisions remain in `docs/operations/deployment-readiness.md`.
+
+## Historical status notes (preserved; not the current task)
+
 - CURRENT TASK: Production readiness — tracked by `docs/operations/deployment-readiness.md`
 - **AWAITING OWNER DECISION (2026-08-17, non-blocking — the work shipped):** two reads are implemented and **unlisted in TD-3** — `GET /admin/teaching-groups` (the flat circles read; TD-3.12 addresses the collection by `(Level, Subject)`, which cannot answer *what circles exist* without an N+1) and `GET /students/me/grades` (TD-3.3's preamble already names *grades* among the student-context reads, and `GET /students/me/quran` ships under that same clause **also unlisted**, so the registry already lags the M4 surface by four entries). Neither changes schema, authorization or any domain relationship. Both are set out in `docs/development/audit-2026-08-17-ux-architecture.md` §Z with a recommendation. Also recorded there: **`/admin/level-surahs` is not in §14.1** (M4c shipped it with "no SRS change").
 - COMPLETED TASKS: **M0 Bootstrap complete** — M0.1 monorepo skeleton (§16.1); M0.2 agent workspace files (§16.3); M0.3 version pins per §3.1a; M0.4 TD-13 `.env.example` + boot fail-fast validation; M0.5 CI skeleton with SRS guard checks (plus SRS Revisions 11–12 applied pre-M0)
@@ -5867,3 +5874,60 @@ CI outage; this is the first deploy since.
   pass (calendar/header, shared atomic guards, scheduling composition, dates,
   date picker and routing). Frontend architecture now distinguishes the removed
   list wrapper from the current form/dialog contract. No test assertion removed.
+
+## Simplification B — one targeted agent/documentation entry path (2026-09-08)
+
+- Kept the §16.3 mechanism: short `AGENTS.md` → shared `CLAUDE.md`, not a new
+  summary layer. The guide owns the repository/authority map and operational
+  checklist; the development index links to it instead of repeating ten rules.
+  Detailed constitution, efficiency, UX, security and documentation rules retain
+  their canonical homes and required reading. No SRS clause or policy changed.
+- Default entry: current TASKS section + latest CHANGES entries, SRS §20 and only
+  relevant clauses, required policies once per session, then the affected handbook
+  page (UI: relevant UX rules). Do not preload archives, old audits/proposals,
+  completed task sections or the whole ledger. Historical status notes remain
+  verbatim under a historical heading; a short current status points to the live
+  task. No historical entry, migration or ratified decision was removed.
+- Testing owns commands: root-relative package invocations, focused selectors,
+  fail-fast guard loop and disposable integration/browser entry points. Removed
+  stale duplicated test totals in favor of per-commit evidence. Shared-stack
+  scripts remain available but are explicitly not the default for Owner data.
+  Corrected the constitution's stale pre-CRUD field-primitives status by linking
+  the implementation, without changing the rule. No test/helper consolidation was
+  justified; no dependencies, lockfiles or generated artifacts changed.
+- Measurement method: tracked files; non-test `backend/src/*.ts` recursively;
+  non-test frontend TS/TSX/CSS; tests include `*.test.ts(x)`, test-support and
+  browser harnesses; docs include tracked Markdown/ledger files under `docs/`.
+  Baseline → final: tracked 1,165 → 1,164; backend 174 files / 55,542 lines unchanged;
+  frontend 247 / 54,336 → 246 / 54,108; tests 377 / 107,182 unchanged; dependencies
+  backend 12 runtime + 8 development, frontend 5 + 8, unchanged. Agent entry files
+  274 → 105 lines and 2,883 → 857 whitespace-delimited words (70% fewer words).
+  Docs: 126 files unchanged; 45,280 → 45,400 lines. Documentation grew
+  for the retained audit/evidence rather than erasing history to lower a metric.
+- Final local verification: backend lint/exact typecheck/build and 38 files / 331
+  tests; frontend lint/exact typecheck/build and 94 files / 1,074 tests; complete
+  disposable integration 105 passed / 2 skipped files, 2,349 passed / 17 skipped
+  assertions, all-table isolation clean; real-browser suite 193/193 unchanged.
+  All 31 guard properties pass, with OpenAPI currency invoked through the same
+  read-only generator via `node --import tsx` inside the sandbox (168 paths / 217
+  operations); TD-3 217/225, same eight pending, no undocumented endpoints;
+  documentation links 1,013/1,013 and diff validation pass.
+- Final review fixed two unused imports left by the inherited placeholder-page
+  deletion. One admin-screen dynamic-import test exceeded its unchanged 5-second
+  limit under concurrent builds; focused rerun passed 30/30, then the complete
+  frontend run passed after the disposable drill ended. No assertion or timeout
+  was weakened. A documentation guard's bounded invocation also expired under
+  load; its standalone run and all remaining guards passed. Existing pg query
+  deprecation and bundle-size warnings remain outside this cleanup.
+- Behavior proof: rebuilt JS SHA-256
+  `cf2c6e8d5a50f7b189d99ca01afff77a1ad7b0813b737332bec8b3c23c389ff3`
+  and CSS `8b553dbc05c138fcc31350735e9113abd33e3cfd8618ccc9e0208b7dd7477c2d`
+  exactly match the pre-cleanup accepted assets. Read-only localhost requests
+  serve those same hashes and return 200 for root/calendar/resources/health.
+  No additional authenticated local fixture run was needed: shipped runtime
+  bytes and backend are unchanged, while disposable browser auth/role/media
+  coverage passed. Owner data, Staging and Production were untouched.
+- The normal hosted pipeline remains mandatory for these exact commits,
+  including disposable Production-mode browser/restart/recovery and image
+  publication; no redundant local recovery drill was run for dead UI/docs changes.
+  Migration history, raw historical ledger/proposals and SRS remain unchanged.

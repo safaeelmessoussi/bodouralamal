@@ -42,26 +42,15 @@ process rather than the artefact.
 
 ## The working agreement, in short
 
-1. **Read [`CHANGES.log`](../CHANGES.log) and [`TASKS.md`](../TASKS.md) before starting.**
-   They are the fastest read on the current state.
-2. **Read the documentation covering the area you are about to change, and decide which
-   documents your task affects — *before* writing code**
-   ([why](documentation-policy.md#1-before-implementing)). It is how you find the decision
-   already recorded, the concept's existing home, and the honest size of the task.
-3. **Consult only the specification sections you are implementing.** It is cross-referenced
-   by `§`/`BR-x`/`TD-x` identifiers for exactly that purpose — do not read it end to end for
-   every task.
-4. **Never edit [`SRS.md`](../SRS.md).** It is immutable to contributors. If you believe it
-   is wrong, **stop and report**.
-5. **If the specification is silent, or two clauses conflict — stop and ask.** Do not invent
-   behaviour, and do not silently pick a reading.
-6. **Write the tests.** Especially the one that asserts the *security property*, not the code
-   path.
-7. **Update the documentation in the same commit** — every affected page, plus
-   cross-references and indexes. A feature is not Done without it.
-8. **Record what you built** in `CHANGES.log`; tick `TASKS.md`.
-9. **Regenerate the API contract** if you touched a route.
-10. **Run the guards**, then commit atomically to `develop`.
+The operational reading/workflow checklist lives in [CLAUDE.md](../../CLAUDE.md#start-here),
+shared by all coding agents through [AGENTS.md](../../AGENTS.md). It routes to the
+current task, recent ledger entries, relevant SRS clauses and authoritative handbook;
+this index is not a second instruction checklist. The detailed policies remain in
+their pages above, and [Testing](testing.md#running-them) owns runnable commands.
+
+Dated audits and proposals in the page list preserve their original findings.
+Consult them for provenance or an explicitly unresolved decision, not as a current
+implementation inventory; follow the current SRS and domain handbook first.
 
 **Done is defined once**, and it covers implementation, reuse, tests, design tokens,
 accessibility, responsiveness and record-keeping — not only "the code works".

@@ -5,6 +5,13 @@ Everything written about this platform, arranged so you can stop reading at the 
 New here? Start with the [project README](../README.md), then come back for whichever
 section below matches what you are about to do.
 
+For a focused coding task, use the existing [agent guide](../CLAUDE.md#start-here)
+and select the relevant page below; the reading tours are optional orientation,
+not a per-task checklist. Read recent [CHANGES](CHANGES.log) entries and the current
+[TASKS](TASKS.md) section. Search older ledger entries, dated audits, SRS proposals
+and [archived snapshots](archive/) only when the task needs that history. Their
+recorded statuses describe their time of writing, not today's product inventory.
+
 ---
 
 ## The two kinds of document in this repository
