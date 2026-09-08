@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ExamSection, ONLINE_EXAM_INITIAL, type ExamSectionProps } from './exam-section.js';
+import { EXAM_SOURCE_INITIAL, ExamSection, type ExamSectionProps } from './exam-section.js';
 import { ar } from '../../i18n/ar.js';
 
 /**
@@ -53,8 +53,8 @@ const props = {
   onAssistants: () => {},
   maxGrade: '20',
   onMaxGrade: () => {},
-  online: ONLINE_EXAM_INITIAL,
-  onOnlineChange: () => {},
+  source: EXAM_SOURCE_INITIAL,
+  onSourceChange: () => {},
 } as unknown as ExamSectionProps;
 
 const markup = (): string => renderToStaticMarkup(<ExamSection {...props} />);

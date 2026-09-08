@@ -2588,12 +2588,73 @@ approved scope covers Partners only, so this is reported rather than taken.
       skips); frontend lint/typecheck/build clean, 1,086 unit tests; OpenAPI
       regenerated and TD-3 conformance unchanged in shape; all
       `scripts/ci/check-*.sh` guards, doc-links and `git diff --check` pass.
-- [ ] **Deliberately deferred, named rather than dropped:** an authored-
-      physical-source picker in الجدولة (physical scheduling stays
-      content-free, as before R136); arrangement-editing UI for an
-      already-scheduled remote occurrence (no backend capability exists to
-      revise one short of scheduling again from a fresh copy — الجدولة's list
-      hides Edit for it instead of opening a form that cannot save); a live
-      browser/E2E walk of the new scheduling and calendar-availability flows
-      specifically (covered at the unit/integration/component level, not yet
-      separately walked in a real browser).
+- [x] **R136 frontend-completion pass**, closing an Owner browser walk's five
+      findings against the already-ratified R136 architecture (no backend
+      architecture change; one narrow new authorization primitive). **(1)**
+      بناء الاختبارات's «اختبار جديد» is now CONTENT-ONLY — اسم الاختبار/
+      الوصف/طريقة الأداء/النقطة على/المستوى/المادة/السنة الدراسية, no target
+      and no date at creation — `createAssessment`'s `target` became optional
+      and a new `assertMayAuthorLevel` (does she teach/administer ANYTHING in
+      this Level, not may she address THIS audience) authorizes the
+      content-only placeholder row; a real target is still resolved fresh,
+      never from this placeholder, whenever the content is scheduled. **(2)**
+      `?kind=exam&new=1` now reliably shows اختبار in الجدولة's own visible
+      «نوع العنصر» selector, not merely in the fields underneath — the
+      catalogue-backed `schedulingTypeId` is now seeded from the validated
+      query kind once the catalogue loads, guarded so a later deliberate pick
+      is never silently reverted. **(3)** Source-aware scheduler prefill
+      (`?source=&mode=`) re-fetches the paper through the same authorized
+      `readAuthorPaper` read بناء الاختبارات itself uses — never the URL
+      alone — prefilling only mode/level/subject/year/classification and
+      never an occurrence fact, failing safe (empty picker, no crash, no
+      exposure) on any mode mismatch or authorization/staleness failure.
+      **(4)** الجدولة's physical branch gains the deferred authored-source
+      picker: optional (`required={false}`, an explicit «بلا ورقة مُعدَّة»
+      choice, `onClear`), never required the way an online source is;
+      choosing one hides Level/Subject/Year/max grade (they travel with the
+      copy) while Branch/Room/date/time/staff/audience stay independently
+      set; the existing content-free physical path is unchanged and still
+      valid. **(5)** New/updated frontend unit and component tests cover all
+      of the above plus builder/exam-grades navigation and a regression guard
+      against the retired retarget-dialog path; a new backend regression
+      test proves the narrower authorization boundary (a teacher scoped only
+      to one administrative group may still create content-only, where the
+      old strict target-based check would have wrongly refused her).
+- [x] **Real-browser E2E acceptance of the frontend-completion pass**
+      (`scripts/dev/browser/verify-exam-scheduling.mjs`/`.sh`, disposable
+      `[asmguard]`-tagged fixtures, self-cleaning): Journey A (remote source
+      created through the content-only dialog → مسودة confirmed → content
+      added → «استخدام مرة أخرى» → lands on الجدولة already open with
+      اختبار/عن بُعد/the source prefilled and every occurrence-only field
+      still blank → completed and saved → the new occurrence's
+      `source_exam_id` confirmed one hop from the authored draft). Journey B
+      (نقاط الامتحانات's «＋ جدولة امتحان» → `?kind=exam&new=1` → اختبار
+      actually shown, not «حصة دراسية»). Journey C (an authored physical
+      draft: the paper picker is optional, selecting it hides Level/Subject/
+      Year/the maximum, Branch stays, save succeeds, `source_exam_id` and the
+      copied classification are both confirmed via the API, and no Student
+      submission row exists for the sitting). Journey D (the pre-existing
+      content-free physical path still saves with no `source_exam_id` — no
+      regression). Responsive/RTL spot-check at 1440/768/390px across all
+      three dialog contexts (بناء الاختبارات's create dialog, a fresh
+      `?kind=exam&new=1` open, a `?source=&mode=` prefilled open): no
+      horizontal page scroll introduced by opening the dialog, the dialog
+      fits its viewport, no label collides with its own control. **90/90
+      checks passed.** The walk itself found and fixed two real
+      frontend-only defects the unit/component suite could not see (both in
+      files this pass had already changed, confirmed against `git diff` at
+      the walk's start, no backend change involved): `PaperPicker` hard-coded
+      a `null` auth token, so typing into the paper search (remote or
+      physical, beyond whatever a URL prefill had separately resolved) always
+      got a `401` and returned nothing; and الجدولة's save validation
+      unconditionally required a typed اسم الاختبار even when an authored
+      source was chosen, though the adapter never sends `bare.title` in that
+      case (the server copies the source's own title) — both are now fixed
+      (`exam-section.tsx`'s `PaperPicker` takes a real `token` prop threaded
+      from `scheduling.tsx`; `validationError()` skips the title check when
+      `type === 'exam' && examSource.sourceId !== ''`).
+- [ ] **Deliberately deferred, named rather than dropped:** arrangement-editing
+      UI for an already-scheduled remote occurrence (no backend capability
+      exists to revise one short of scheduling again from a fresh copy —
+      الجدولة's list hides Edit for it instead of opening a form that cannot
+      save).

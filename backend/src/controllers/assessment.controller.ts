@@ -92,7 +92,9 @@ export function create(prisma: PrismaClient) {
       levelId: b.level_id,
       ...(b.subject_id === undefined ? {} : { subjectId: b.subject_id }),
       ...(b.academic_year_id === undefined ? {} : { academicYearId: b.academic_year_id }),
-      target: { kind: b.target.kind, ...(b.target.id === undefined ? {} : { id: b.target.id }) },
+      ...(b.target === undefined
+        ? {}
+        : { target: { kind: b.target.kind, ...(b.target.id === undefined ? {} : { id: b.target.id }) } }),
       ...(b.date === undefined ? {} : { date: b.date }),
       ...(b.mode === undefined ? {} : { mode: b.mode }),
     });

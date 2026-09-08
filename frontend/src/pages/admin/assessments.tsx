@@ -16,22 +16,15 @@ import {
   type JustificationRule,
   type QuestionKind,
   type SubmissionRow,
-  type TargetKind,
 } from '../../adapters/assessments.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
-import { TARGET_LABELS, TargetPicker } from '../../components/scheduling/target-picker.js';
+import { TARGET_LABELS } from '../../components/scheduling/target-picker.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type TableStatus } from '../../components/ui/data-table.js';
-import {
-  DateField,
-  SearchInput,
-  SelectField,
-  TextArea,
-  TextField,
-} from '../../components/ui/field.js';
+import { SearchInput, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -79,17 +72,6 @@ const JUSTIFICATION_LABELS: Record<JustificationRule, string> = {
 };
 
 const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId'] as const;
-/**
- * **Everything but the Level, for a `level` target.**
- *
- * R125 withholds a Level whose audience escapes a branch-scoped Admin's
- * branches — and the ordinary scope selector lists every Level, so leaving it in
- * charge would offer her one and refuse it at save. On the other arms the Level
- * is not the audience (a group at her own branch inside a Level that spans two
- * is perfectly legitimate), so it stays the ordinary selector there.
- */
-const SCOPE_FIELDS_WITHOUT_LEVEL = ['subjectId', 'academicYearId'] as const;
-
 /**
  * **The builder's body, without a frame** (R124).
  *
@@ -400,6 +382,24 @@ function Library({
   });
 }
 
+/**
+ * **بناء الاختبارات creates content, and only content** (R136, frontend-
+ * completion pass). WHO it is for and WHEN are الجدولة's decisions, made
+ * once, at scheduling — this dialog no longer asks for them.
+ *
+ * **The defect this closes.** Asking for «موجَّه إلى» and «التاريخ» here was
+ * the two-act flow R136 was ratified to retire, one screen over: an author
+ * committed to an audience before writing a single question, and the target
+ * she picked was never authoritative anyway — الجدولة always resolves a
+ * fresh one at scheduling (R136 clause 3). Removing the fields is not a
+ * simplification of the form; it is the form finally asking only the
+ * question بناء الاختبارات actually owns.
+ *
+ * **No `target`/`date` is sent.** `createAssessment` accepts both as
+ * optional now and stores a `level`-shaped placeholder nobody ever reads as
+ * a real commitment — see the backend's own `AssessmentInput.target`
+ * docstring.
+ */
 function CreateDialog({
   scope,
   token,
@@ -415,36 +415,15 @@ function CreateDialog({
   const [description, setDescription] = useState('');
   const [mode, setMode] = useState<'physical' | 'online'>('online');
   const [maxGrade, setMaxGrade] = useState('20');
-  const [targetKind, setTargetKind] = useState<TargetKind>('level');
-  const [targetId, setTargetId] = useState('');
-  const [date, setDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [touched, setTouched] = useState(false);
 
-  // A `session` target takes the occurrence's own date; asking for a second one
-  // would let the two disagree about which day the audience is resolved for.
-  const needsDate = targetKind !== 'session';
-  const needsId = targetKind !== 'level';
   const error =
-    title.trim() === '' || scope.value.levelId === ''
-      ? t('common.required')
-      : needsDate && date === ''
-        ? t('common.required')
-        : needsId && targetId.trim() === ''
-          ? t('common.required')
-          : null;
+    title.trim() === '' || scope.value.levelId === '' ? t('common.required') : null;
 
   const dirty = isDirty(
-    { title, description, mode, maxGrade, targetKind, targetId, date },
-    {
-      title: '',
-      description: '',
-      mode: 'online',
-      maxGrade: '20',
-      targetKind: 'level',
-      targetId: '',
-      date: '',
-    },
+    { title, description, mode, maxGrade },
+    { title: '', description: '', mode: 'online', maxGrade: '20' },
   );
 
   async function submit(): Promise<void> {
@@ -461,8 +440,6 @@ function CreateDialog({
           level_id: scope.value.levelId,
           ...(scope.value.subjectId ? { subject_id: scope.value.subjectId } : {}),
           ...(scope.value.academicYearId ? { academic_year_id: scope.value.academicYearId } : {}),
-          target: { kind: targetKind, ...(needsId ? { id: targetId.trim() } : {}) },
-          ...(needsDate ? { date } : {}),
         },
         token,
       );
@@ -510,56 +487,7 @@ function CreateDialog({
         ]}
       />
       <TextField label={t('assessments.maxGrade')} value={maxGrade} onChange={setMaxGrade} required />
-
-      {targetKind === 'level' ? (
-        <>
-          {/* The Level IS the audience here, so it comes from the scoped list
-              rather than from the full curriculum (R125). */}
-          <TargetPicker
-            kind="level"
-            levelId=""
-            value={scope.value.levelId}
-            onChange={(next) => scope.set('levelId', next)}
-            error={touched && scope.value.levelId === '' ? t('common.required') : null}
-          />
-          <ScopeSelectors scope={scope} fields={SCOPE_FIELDS_WITHOUT_LEVEL} mode="form" />
-        </>
-      ) : (
-        <ScopeSelectors scope={scope} fields={SCOPE_FIELDS} mode="form" />
-      )}
-
-      <SelectField
-        label={t('assessments.target')}
-        value={targetKind}
-        onChange={(v) => {
-          setTargetKind(v as TargetKind);
-          setTargetId('');
-        }}
-        options={(Object.keys(TARGET_LABELS) as TargetKind[]).map((k) => ({
-          value: k,
-          label: t(TARGET_LABELS[k]),
-        }))}
-      />
-      {needsId ? (
-        <TargetPicker
-          kind={targetKind}
-          levelId={scope.value.levelId}
-          value={targetId}
-          onChange={setTargetId}
-          error={touched && targetId.trim() === '' ? t('common.required') : null}
-        />
-      ) : null}
-
-      {needsDate ? (
-        <DateField
-          label={t('assessments.date')}
-          value={date}
-          onChange={setDate}
-          required
-          hint={t('assessments.dateHint')}
-          error={touched && date === '' ? t('common.required') : null}
-        />
-      ) : null}
+      <ScopeSelectors scope={scope} fields={SCOPE_FIELDS} mode="form" />
     </FormDialog>
   );
 }

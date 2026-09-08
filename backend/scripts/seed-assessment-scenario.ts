@@ -84,6 +84,10 @@ async function wipe(): Promise<void> {
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  // Room references Branch with `onDelete: Restrict` (same as
+  // seed-dev-scenario.ts's own wipe order) — cleaned before the branch it
+  // belongs to, or the branch delete below would fail against a live room.
+  await prisma.room.deleteMany({ where: { branch: { name: { startsWith: TAG } } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   const years = await prisma.academicYear.findMany({
     where: { label: YEAR_LABEL },
@@ -103,6 +107,11 @@ async function main(): Promise<void> {
   }
 
   const branch = await prisma.branch.create({ data: { name: `${TAG} فرع` } });
+  // **Added for the frontend-completion browser harness (R136)**: physical
+  // exam scheduling needs a real room, the way every other physical sitting
+  // does. Kept here rather than duplicated in a second fixture, on the same
+  // TAG discipline as everything else this script owns.
+  const room = await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId: branch.id } });
   const subject = await prisma.subject.create({ data: { name: `${TAG} مادة` } });
   const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
   const level = await prisma.level.create({
@@ -177,6 +186,8 @@ async function main(): Promise<void> {
     `${JSON.stringify({
       teacher: teacher.id,
       student: student.id,
+      branchId: branch.id,
+      roomId: room.id,
       levelId: level.id,
       subjectId: subject.id,
       academicYearId: year.id,

@@ -808,13 +808,18 @@ export async function saveSchedulingItem(
       );
       return NOT_AN_EVENT;
     }
-    // **Physical — the existing simple/grade-only workflow, unchanged**
-    // (R136 §19): an authored physical source is optional and this form does
-    // not yet offer one, so every physical sitting created here is `bare`,
-    // exactly as `createExam` always produced.
+    /**
+     * **Physical — both workflows** (R136, frontend-completion pass).
+     * `examSourceId` is set only when the reader chose an authored physical
+     * source; `bare` is sent only when she did not. The two are mutually
+     * exclusive, matching `scheduleExam`'s own either/or — sending both
+     * would leave `bare` silently ignored server-side, so it is simply never
+     * built when a source is present.
+     */
     await scheduleExam(
       {
         mode: 'physical',
+        ...(input.examSourceId ? { source_exam_id: input.examSourceId } : {}),
         target: {
           kind: input.examGroupId ? 'administrative_group' : 'level',
           ...(input.examGroupId ? { id: input.examGroupId } : {}),
@@ -830,14 +835,18 @@ export async function saveSchedulingItem(
           ? { scheduling_type_id: input.schedulingTypeId }
           : {}),
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
-        bare: {
-          title: input.title,
-          description: input.description,
-          max_grade: input.examMaxGrade!,
-          level_id: input.levelId!,
-          subject_id: input.subjectId!,
-          academic_year_id: input.academicYearId!,
-        },
+        ...(input.examSourceId
+          ? {}
+          : {
+              bare: {
+                title: input.title,
+                description: input.description,
+                max_grade: input.examMaxGrade!,
+                level_id: input.levelId!,
+                subject_id: input.subjectId!,
+                academic_year_id: input.academicYearId!,
+              },
+            }),
       },
       token,
     );

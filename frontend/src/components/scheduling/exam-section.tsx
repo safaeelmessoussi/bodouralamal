@@ -21,32 +21,39 @@ import { Feedback } from '../ui/feedback.js';
  * contributes a section and nothing in the form, the recurrence editor, the list
  * or the calendar moves.
  *
- * ## `نوع الامتحان` is the first question, and now both answers stay here
+ * ## `نوع الامتحان` is the first question, and both delivery modes stay here
  *
  * **R136 replaces the "عن بُعد يُبنى في بناء الاختبارات" pointer** with an
  * inline flow: pick an authored draft paper, its audience (R125's five
- * arms), and — remote only — when it opens to students. الجدولة's one حفظ
- * (`scheduleExam`, in `adapters/scheduling.ts`) assigns all of it and
- * schedules atomically; there is no separate "go build it, then come back
- * and publish" sequence any more.
+ * arms, remote only), and — remote only — when it opens to students.
+ * الجدولة's one حفظ (`scheduleExam`, in `adapters/scheduling.ts`) assigns
+ * all of it and schedules atomically; there is no separate "go build it,
+ * then come back and publish" sequence any more.
  *
- * **Physical keeps its existing simple/grade-only workflow, unchanged.** An
- * authored physical source is optional per R136 and this section does not
- * yet offer one — every physical sitting created here is content-free, the
- * room/clock-window/supervisors arrangement R58 always was.
+ * **Physical keeps BOTH its workflows** (R136, frontend-completion pass —
+ * ratified and completed here). An authored physical source is optional:
+ * omitted, the sitting stays exactly the content-free, grade-only
+ * arrangement R58 always was; chosen, الجدولة copies it into the occurrence
+ * exactly as a remote source is copied, and the source's own title,
+ * description, maximum, Level, Subject and Year travel with it — a physical
+ * sitting scheduled from authored content is not independently re-classified
+ * by this form. Copying questions onto a physical occurrence creates no
+ * Student-facing interactive submission lifecycle; a physical sitting is
+ * still marked the way §4.6 always marked one, from the paper as printed.
  *
  * ## The selectors are the shared dependent ones (R55)
  *
- * Branch → Level → Subject, with the room narrowed to the chosen branch and the
- * group to that Level at that branch. The server refuses every combination this
- * does not offer, so the form cannot express one it will be refused for.
+ * Branch → Room, independent of any source (a physical sitting always
+ * happens somewhere real); Level → Subject → Year come from the source when
+ * one is chosen, and from the ordinary curriculum chain otherwise.
  */
 export type ExamAvailabilityChoice = 'manual' | 'at_start' | 'offset_minutes' | 'custom';
 
-export interface OnlineExamState {
+export interface ExamSourceState {
   sourceId: string;
   sourceTitle: string;
   sourceLevelId: string;
+  /** Remote only — see the arm-by-arm reasoning on `ExamSection` itself. */
   targetKind: TargetKind;
   targetId: string;
   availabilityChoice: ExamAvailabilityChoice;
@@ -57,7 +64,7 @@ export interface OnlineExamState {
   customTime: string;
 }
 
-export const ONLINE_EXAM_INITIAL: OnlineExamState = {
+export const EXAM_SOURCE_INITIAL: ExamSourceState = {
   sourceId: '',
   sourceTitle: '',
   sourceLevelId: '',
@@ -72,6 +79,14 @@ export const ONLINE_EXAM_INITIAL: OnlineExamState = {
 export interface ExamSectionProps {
   mode: ExamMode;
   onMode: (next: ExamMode) => void;
+  /** **Found by real-browser verification** (`verify-exam-scheduling.mjs`,
+   *  frontend-completion pass): `PaperPicker`'s own search hard-coded a
+   *  `null` token, so `GET /assessments` — an authenticated, per-author-
+   *  scoped endpoint — answered `401` for every fresh search and the picker
+   *  showed nothing beyond whatever a `?source=&mode=` URL prefill had
+   *  already resolved through the unrelated `readAuthorPaper` call. Choosing
+   *  ANY paper by typing, remote or physical, was unreachable. */
+  token: string | null;
   scope: ScopeOptions;
   /** The identity fields are set at creation and refused on edit: each would
    *  change *what is examined, for whom, or where* while keeping the grades
@@ -93,15 +108,18 @@ export interface ExamSectionProps {
   onAssistants: (ids: string[]) => void;
   /** R81 — this exam's maximum grade, as typed. A string because the field is
    *  a text input: an empty one is *not yet answered*, which `0` is not.
-   *  Physical only — a remote occurrence's maximum is the authored source's
-   *  own, set once in بناء الاختبارات. */
+   *  Read only while an authored source (either mode) is chosen — the
+   *  maximum is then the source's own, copied with it. */
   maxGrade: string;
   onMaxGrade: (v: string) => void;
-  /** R136 — remote-only state: the authored source, its audience and its
-   *  availability. One object, not eight prop pairs, because the fields are
-   *  genuinely one cohesive group that only ever changes together. */
-  online: OnlineExamState;
-  onOnlineChange: (patch: Partial<OnlineExamState>) => void;
+  /** R136 — the authored source, its audience and its availability. One
+   *  object, not eight prop pairs, because the fields are genuinely one
+   *  cohesive group that only ever changes together. Shared by both
+   *  delivery modes; a physical source uses only `sourceId`/`sourceTitle`/
+   *  `sourceLevelId` and leaves the remote-only fields at their initial
+   *  values. */
+  source: ExamSourceState;
+  onSourceChange: (patch: Partial<ExamSourceState>) => void;
 }
 
 /** The staff array the API takes — one supervisor, any number of assistants. */
@@ -113,19 +131,32 @@ export function examStaffOf(supervisorId: string, assistantIds: string[]): ExamS
 }
 
 /**
- * **The remote paper selector** (R136) — search bounded to بناء الاختبارات's
- * own draft library, `mode: 'online'` only: a physical source has no
- * questions an occurrence would sit, and a paper already scheduled
- * (`status` past `draft`) is not offered again — the server's own
- * `SOURCE_ALREADY_SCHEDULED` refusal exists for exactly the id this list
- * never contains.
+ * **The authored paper selector** (R136) — search bounded to بناء
+ * الاختبارات's own draft library, scoped to the mode being scheduled: a
+ * physical sitting cannot copy a remote paper's questions into a room, and
+ * an online occurrence always needs authored content (R136 clause 11/14).
+ * A paper already scheduled (`status` past `draft`) is never offered again —
+ * the server's own `SOURCE_ALREADY_SCHEDULED` refusal exists for exactly
+ * the id this list never contains.
+ *
+ * **Optional for a physical sitting, required for a remote one** — `clear`
+ * offers the content-free physical path back once a source was chosen and
+ * then reconsidered; it renders only where clearing makes sense.
  */
 function PaperPicker({
+  mode,
+  token,
   value,
   onSelect,
+  onClear,
+  required,
 }: {
-  value: OnlineExamState;
+  mode: ExamMode;
+  token: string | null;
+  value: ExamSourceState;
   onSelect: (row: AssessmentSummary) => void;
+  onClear?: () => void;
+  required: boolean;
 }): ReactNode {
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<AssessmentSummary[]>([]);
@@ -134,7 +165,7 @@ function PaperPicker({
   useEffect(() => {
     let live = true;
     setState('loading');
-    void listAssessments({ mode: 'online', ...(query ? { q: query } : {}), page_size: 20 }, null)
+    void listAssessments({ mode, ...(query ? { q: query } : {}), page_size: 20 }, token)
       .then((result) => {
         if (!live) return;
         setOptions(result.data);
@@ -146,7 +177,7 @@ function PaperPicker({
     return () => {
       live = false;
     };
-  }, [query]);
+  }, [mode, query, token]);
 
   return (
     <>
@@ -155,17 +186,26 @@ function PaperPicker({
         label={t('scheduling.exam.paper')}
         value={value.sourceId}
         onChange={(id) => {
+          if (id === '') {
+            onClear?.();
+            return;
+          }
           const row = options.find((o) => o.id === id);
           if (row) onSelect(row);
         }}
-        required
+        required={required}
         hint={
           state === 'ready' && options.length === 0
             ? t('scheduling.exam.paperNone')
-            : t('scheduling.exam.paperHint')
+            : required
+              ? t('scheduling.exam.paperHint')
+              : t('scheduling.exam.paperHintOptional')
         }
         options={[
-          { value: '', label: t('common.choose') },
+          {
+            value: '',
+            label: required ? t('common.choose') : t('scheduling.exam.paperNoneOption'),
+          },
           ...(value.sourceId !== '' && !options.some((o) => o.id === value.sourceId)
             ? // The prefilled/currently-chosen paper may be outside this page's
               // 20 results (or off the current search term) — kept visible
@@ -182,6 +222,7 @@ function PaperPicker({
 export function ExamSection({
   mode,
   onMode,
+  token,
   scope,
   locked,
   hideScope = false,
@@ -197,11 +238,12 @@ export function ExamSection({
   onAssistants,
   maxGrade,
   onMaxGrade,
-  online,
-  onOnlineChange,
+  source,
+  onSourceChange,
 }: ExamSectionProps): ReactNode {
-  const needsTargetId = online.targetKind !== 'level';
-  const needsDate = online.targetKind !== 'session';
+  const needsTargetId = source.targetKind !== 'level';
+  const needsDate = source.targetKind !== 'session';
+  const hasSource = source.sourceId !== '';
 
   return (
     <>
@@ -227,9 +269,12 @@ export function ExamSection({
             <a href="/admin/assessments">{t('scheduling.exam.onlineGoToBuilder')}</a>
           </Feedback>
           <PaperPicker
-            value={online}
+            mode="online"
+            token={token}
+            required
+            value={source}
             onSelect={(row) =>
-              onOnlineChange({
+              onSourceChange({
                 sourceId: row.id,
                 sourceTitle: row.title,
                 sourceLevelId: row.level_id,
@@ -241,13 +286,13 @@ export function ExamSection({
               })
             }
           />
-          {online.sourceId !== '' ? (
+          {hasSource ? (
             <>
               <SelectField
                 label={t('assessments.target')}
-                value={online.targetKind}
+                value={source.targetKind}
                 onChange={(v) =>
-                  onOnlineChange({ targetKind: v as TargetKind, targetId: '' })
+                  onSourceChange({ targetKind: v as TargetKind, targetId: '' })
                 }
                 options={(Object.keys(TARGET_LABELS) as TargetKind[]).map((k) => ({
                   value: k,
@@ -256,10 +301,10 @@ export function ExamSection({
               />
               {needsTargetId ? (
                 <TargetPicker
-                  kind={online.targetKind}
-                  levelId={online.sourceLevelId}
-                  value={online.targetId}
-                  onChange={(id) => onOnlineChange({ targetId: id })}
+                  kind={source.targetKind}
+                  levelId={source.sourceLevelId}
+                  value={source.targetId}
+                  onChange={(id) => onSourceChange({ targetId: id })}
                   error={null}
                 />
               ) : null}
@@ -278,8 +323,8 @@ export function ExamSection({
               )}
               <SelectField
                 label={t('scheduling.exam.availability')}
-                value={online.availabilityChoice}
-                onChange={(v) => onOnlineChange({ availabilityChoice: v as ExamAvailabilityChoice })}
+                value={source.availabilityChoice}
+                onChange={(v) => onSourceChange({ availabilityChoice: v as ExamAvailabilityChoice })}
                 hint={t('scheduling.exam.availabilityHint')}
                 options={[
                   { value: 'manual', label: t('scheduling.exam.availabilityManual') },
@@ -288,11 +333,11 @@ export function ExamSection({
                   { value: 'custom', label: t('scheduling.exam.availabilityCustom') },
                 ]}
               />
-              {online.availabilityChoice === 'offset_minutes' ? (
+              {source.availabilityChoice === 'offset_minutes' ? (
                 <SelectField
                   label={t('scheduling.exam.offsetMinutes')}
-                  value={online.offsetMinutes}
-                  onChange={(v) => onOnlineChange({ offsetMinutes: v as '5' | '10' | '15' })}
+                  value={source.offsetMinutes}
+                  onChange={(v) => onSourceChange({ offsetMinutes: v as '5' | '10' | '15' })}
                   options={[
                     { value: '5', label: t('scheduling.exam.offset5') },
                     { value: '10', label: t('scheduling.exam.offset10') },
@@ -300,18 +345,18 @@ export function ExamSection({
                   ]}
                 />
               ) : null}
-              {online.availabilityChoice === 'custom' ? (
+              {source.availabilityChoice === 'custom' ? (
                 <>
                   <DateField
                     label={t('scheduling.exam.customDate')}
-                    value={online.customDate}
-                    onChange={(v) => onOnlineChange({ customDate: v })}
+                    value={source.customDate}
+                    onChange={(v) => onSourceChange({ customDate: v })}
                     required
                   />
                   <TextField
                     label={t('scheduling.exam.customTime')}
-                    value={online.customTime}
-                    onChange={(v) => onOnlineChange({ customTime: v })}
+                    value={source.customTime}
+                    onChange={(v) => onSourceChange({ customTime: v })}
                     hint={t('scheduling.timeHint')}
                     required
                   />
@@ -322,15 +367,68 @@ export function ExamSection({
         </>
       ) : (
         <>
+          {/**
+           * **R136 (frontend-completion pass) — an authored physical source
+           * is optional, and BOTH physical workflows stay real.** Chosen,
+           * its title/description/maximum/Level/Subject/Year travel to the
+           * occurrence with it (`scheduleExam`'s copy, unchanged from the
+           * remote path) — so those fields become the source's own, shown
+           * rather than re-asked, and only Branch/Room/staff/times/audience
+           * stay independently chosen here, exactly as they always were.
+           * Left empty, nothing changes from the sitting R58 always built.
+           */}
+          <PaperPicker
+            mode="physical"
+            token={token}
+            required={false}
+            value={source}
+            onSelect={(row) => {
+              onSourceChange({
+                sourceId: row.id,
+                sourceTitle: row.title,
+                sourceLevelId: row.level_id,
+              });
+              // The audience picker below is scoped by `scope.value.levelId`
+              // (unchanged mechanism); a chosen source's own Level is what
+              // that audience must now be drawn from.
+              scope.set('levelId', row.level_id);
+            }}
+            onClear={() => {
+              onSourceChange({ sourceId: '', sourceTitle: '', sourceLevelId: '' });
+              scope.set('levelId', '');
+            }}
+          />
+
+          {hasSource ? (
+            <p className="hint">
+              {t('scheduling.exam.sourceSummary')
+                .replace('{title}', source.sourceTitle)}
+            </p>
+          ) : null}
+
           {/* **Hidden when the caller named a class instead** (R94): the chain
               below reads `/admin/levels`, which answers 403 for a مؤطرة, so
-              rendering it for her would be four selectors that cannot fill. */}
+              rendering it for her would be four selectors that cannot fill.
+              **Level/Subject/Year are hidden once a source is chosen** — they
+              travel with the copied content and are no longer independently
+              set here (Branch is not: a physical sitting always needs a real
+              place, source or not). */}
           {hideScope ? null : (
             <ScopeSelectors
               scope={scope}
-              fields={['branchId', 'levelId', 'subjectId', 'academicYearId']}
+              fields={
+                hasSource
+                  ? ['branchId']
+                  : ['branchId', 'levelId', 'subjectId', 'academicYearId']
+              }
               mode="form"
-              locked={locked ? ['branchId', 'levelId', 'subjectId', 'academicYearId'] : []}
+              locked={
+                locked
+                  ? hasSource
+                    ? ['branchId']
+                    : ['branchId', 'levelId', 'subjectId', 'academicYearId']
+                  : []
+              }
             />
           )}
 
@@ -340,17 +438,21 @@ export function ExamSection({
               strand every score on the exam — and the server refuses a maximum
               below a mark already recorded rather than clamping anybody's
               result. Not locked with the identity fields: the maximum does not
-              change *what is examined, for whom, or where*. */}
-          <NumberField
-            label={t('scheduling.exam.maxGrade')}
-            hint={t('scheduling.exam.maxGradeHint')}
-            required
-            min={0.01}
-            max={9999.99}
-            step="0.01"
-            value={maxGrade}
-            onChange={onMaxGrade}
-          />
+              change *what is examined, for whom, or where*. **Hidden with a
+              source chosen** — the maximum is then the source's own paper's,
+              copied with it, not independently set here. */}
+          {hasSource ? null : (
+            <NumberField
+              label={t('scheduling.exam.maxGrade')}
+              hint={t('scheduling.exam.maxGradeHint')}
+              required
+              min={0.01}
+              max={9999.99}
+              step="0.01"
+              value={maxGrade}
+              onChange={onMaxGrade}
+            />
+          )}
 
           {/* **Optional, and its emptiness means something**: no group is the
               whole Level sitting together (R58), not a missing answer. */}

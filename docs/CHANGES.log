@@ -6145,3 +6145,134 @@ that cannot save); full end-to-end browser/E2E verification of the new
 scheduling and calendar-availability flows, which the unit/integration suites
 above cover at the service and component level but a live browser pass has
 not separately walked.
+
+## R136 frontend-completion pass — content-only exam creation, a reliable scheduler prefill, and the authored physical-paper picker (2026-09-08)
+
+**Why this pass exists.** SRS Revision 136 (previous entry, same day) landed
+the unified backend architecture and a rebuilt frontend, but named three
+things out of scope rather than silently dropped: an authored-physical-source
+picker in الجدولة, and a live browser/E2E walk of the new flows. Separately,
+the Document Owner did her own browser walk of the shipped frontend and found
+five real defects no unit/component test could see, because each is a
+cross-page or cross-load property: `?kind=exam&new=1` correctly set the
+scheduler's internal state but the VISIBLE «نوع العنصر» selector kept showing
+the catalogue's first row, «حصة دراسية»; بناء الاختبارات's create dialog still
+asked for a target and a date it no longer needed to (R136 already made those
+occurrence facts, resolved only at scheduling); the source-aware
+`?source=&mode=` prefill this pass adds needed the same not-yet-built
+authorization discipline; and the physical-paper picker itself was still
+unbuilt. This pass closes all of it, with no change to R136's ratified
+backend architecture beyond one narrow new authorization primitive.
+
+**(1) بناء الاختبارات's «اختبار جديد» is now content-only.** The dialog asks
+for اسم الاختبار / الوصف / طريقة الأداء / النقطة على / المستوى / المادة /
+السنة الدراسية and nothing else — no target, no date. `createAssessment`'s
+`target` parameter became optional; when omitted, a new, narrower
+`assertMayAuthorLevel(prisma, actor, levelId)` authorizes the write by asking
+*does she teach or administer ANYTHING in this Level* (an `Enrollment` count
+at her reachable branches for a branch-scoped Admin; `teacherEventScope(...)
+.levelIds` for a Teacher) rather than `assertMayAuthor`'s audience-specific
+*may she address THIS target*. The created row still needs a DB-valid target
+shape to satisfy `exam_target_check` — a `{kind: 'level'}` placeholder is
+written, authorized only through the narrow check above, and is never treated
+as a real audience commitment: `POST /exams/schedule` always resolves a fresh
+target of its own when the content is later scheduled, exactly as before.
+
+**(2) `?kind=exam&new=1` now reliably shows اختبار, not merely selects it
+internally.** الجدولة's visible «نوع العنصر» control reads the
+catalogue-backed `schedulingTypeId`, not the internal `type` state the query
+param was already seeding correctly — the two had silently diverged. A new
+effect seeds `schedulingTypeId` from the validated `?kind=` once the
+scheduling-type catalogue loads, guarded (`schedulingTypeId !== null`) so a
+reader who changes her mind afterward is never silently reverted.
+
+**(3) Source-aware scheduler prefill (`?source=&mode=`) is implemented.**
+Each paper's «استخدام مرة أخرى» action in بناء الاختبارات now carries
+`` `?kind=exam&new=1&source=<id>&mode=<online|physical>` `` to الجدولة as a
+pure client-side navigation. On arrival, الجدولة re-fetches the named paper
+through `readAuthorPaper` — the SAME authorized, server-backed read بناء
+الاختبارات itself uses — never trusting the URL's claim alone; only on a
+mode match does it prefill the source's mode/level/subject/year/
+classification. A mismatch, a fetch failure (deleted, inaccessible,
+unauthorized, stale) is caught and leaves the picker at its ordinary empty
+state: no crash, no error surfaced, no unauthorized metadata exposed. It
+never prefills an occurrence fact — date, start/end time, room, branch,
+availability — those remain the scheduling operator's own decision, every
+time.
+
+**(4) The deferred authored physical-paper picker is built.** `PaperPicker`
+now takes a `mode` (queries `listAssessments({mode, ...})`, never a
+mismatched delivery mode), a `required` boolean, and — physical only — an
+`onClear`. Physical: `required={false}`, an explicit «بلا ورقة مُعدَّة»
+choice, so the pre-existing content-free physical workflow is fully
+preserved. Choosing a physical source hides Level/Subject/Year and the
+maximum grade (they travel with the copied source instead, exactly as a
+remote source's already did) while Branch/Room/date/time/staff/audience stay
+independently set either way — a physical sitting always needs a real place,
+source or not. The backend's existing R136 `scheduleExam` physical branch
+(either `source_exam_id` naming a draft, or a `bare` object — never both) did
+not need to change; the frontend adapter now branches on whether a physical
+source was chosen to decide which it sends. Scheduling a physical occurrence
+from an authored source creates no Student-interactive submission lifecycle —
+a physical sitting is still marked from the paper as printed, exactly as
+§4.6 always described one.
+
+**(5) Real-browser E2E acceptance**
+(`scripts/dev/browser/verify-exam-scheduling.mjs`/`.sh`, new, following the
+established `verify-assessments.mjs`/`verify-schedule-edit.mjs` pattern —
+disposable `[asmguard]`-tagged fixtures via an extended
+`seed-assessment-scenario.ts`, self-cleaning). Four journeys, each walked in
+a real headless Chrome against the built frontend and a real backend: **A**
+— create a remote source through the content-only dialog, confirm مسودة, add
+a question, «استخدام مرة أخرى», confirm the browser lands on الجدولة already
+open with اختبار/عن بُعد/the source prefilled and every occurrence-only field
+still blank, complete and save, confirm the new occurrence's
+`source_exam_id` via the API. **B** — نقاط الامتحانات's «＋ جدولة امتحان»
+navigates to exactly `?kind=exam&new=1` and اختبار is actually shown. **C**
+— an authored physical draft: the picker is optional, selecting it hides
+Level/Subject/Year/the maximum, Branch stays, save succeeds, `source_exam_id`
+and the copied classification are confirmed via the API, and no Student
+submission row exists. **D** — the pre-existing content-free physical path
+still saves with no `source_exam_id`, confirming no regression. Responsive/
+RTL spot-check at 1440/768/390px across all three dialog contexts: no
+horizontal page scroll introduced by opening a dialog, the dialog fits its
+viewport, no field label collides with its own control. **90/90 checks
+passed.**
+
+**Two genuine frontend defects the browser walk found (and the unit suite
+could not), both in this pass's own new code, both fixed:** `PaperPicker`
+hard-coded a `null` auth token in its `listAssessments` search call, so
+typing to search for a paper — remote or physical, beyond whatever a URL
+prefill had separately resolved through `readAuthorPaper` — always answered
+`401` and returned nothing; `token` is now threaded through `ExamSection` from
+الجدولة. And الجدولة's save validation unconditionally required a typed اسم
+الاختبار even once an authored source was chosen, although the adapter never
+sends `bare.title` in that case (the server copies the source's own title) —
+`validationError()` now skips that check when an exam has a chosen source.
+
+**Verified:** backend lint/typecheck/build clean; 331 backend unit tests;
+2,364 backend integration tests across 105 files (17 pre-existing, unrelated
+skips) against a real disposable PostgreSQL/MinIO/pg-boss stack (+5 over the
+prior entry: new coverage for `assertMayAuthorLevel`'s branch-scoped-Admin
+and narrow-teacher-scope cases); frontend lint/typecheck/build clean; 1,107
+frontend unit/component tests. OpenAPI regenerated with no diff (168 paths /
+217 operations — the `target` field's new optionality does not change the
+documented schema shape) and TD-3 conformance unchanged in shape (217/225
+implemented, 8 pending, 0 undocumented). All `scripts/ci/check-*.sh` guards,
+the documentation-links guard and `git diff --check` pass. The real-browser
+walk above is the E2E evidence named as outstanding in the prior entry.
+`docs/SRS.md`'s Revision 136 entry (§0) is corrected in place — its clause
+(12) now records the completed physical-source picker and the query-prefill
+behavior rather than naming them out of scope, and a stray duplicate of an
+earlier draft of that same clause, found while doing so, is removed from
+Revision 122's own unrelated entry, where an earlier edit had accidentally
+overwritten the boundary before its genuine clause (13). `docs/TASKS.md` is
+updated to match — the physical-picker and browser-walk items move from
+deferred to done, with the same evidence.
+
+**Deliberately unchanged, and still correctly out of scope:**
+arrangement-editing UI for an already-scheduled remote occurrence — no
+backend capability exists to revise one short of scheduling again from a
+fresh copy, so الجدولة's list still hides Edit for it rather than opening a
+form that cannot save. No Staging or Production action was taken; every
+fixture this pass wrote was disposable, tagged, and confirmed cleaned.

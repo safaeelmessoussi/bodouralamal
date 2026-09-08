@@ -47,8 +47,8 @@ import type {
 import {
   ExamSection,
   examStaffOf,
-  ONLINE_EXAM_INITIAL,
-  type OnlineExamState,
+  EXAM_SOURCE_INITIAL,
+  type ExamSourceState,
 } from '../../components/scheduling/exam-section.js';
 import { readAuthorPaper } from '../../adapters/assessments.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
@@ -1049,36 +1049,14 @@ export function SchedulingDialog({
    *  form has no default to offer, because there is no platform scale left. */
   const [examMaxGrade, setExamMaxGrade] = useState('');
   /**
-   * **R136 — the remote authoring/audience/availability state.** Prefilled
-   * from `?source=` when بناء الاختبارات linked here; the paper's own Level
-   * is fetched fresh (never trusted from the URL) so the target picker below
-   * can scope to it immediately rather than waiting for a manual re-pick.
+   * **R136 — the authored-source/audience/availability state.** Prefilled
+   * from `?source=&mode=` when بناء الاختبارات linked here — see the effect
+   * beside `scope`'s own declaration below, which needs it in scope to seed
+   * the physical audience picker's Level the same way a manual pick does.
    */
-  const [onlineExam, setOnlineExam] = useState<OnlineExamState>(ONLINE_EXAM_INITIAL);
-  const onOnlineChange = (patch: Partial<OnlineExamState>): void =>
-    setOnlineExam((current) => ({ ...current, ...patch }));
-  useEffect(() => {
-    if (!initialExamSource || initialExamSource.mode !== 'online' || item) return;
-    let live = true;
-    void readAuthorPaper(initialExamSource.id, token)
-      .then((paper) => {
-        if (!live) return;
-        onOnlineChange({
-          sourceId: paper.id,
-          sourceTitle: paper.title,
-          sourceLevelId: paper.level_id,
-        });
-      })
-      .catch(() => {
-        // The prefill is a convenience; a paper that no longer exists or is
-        // out of scope simply leaves the picker empty for a fresh choice.
-      });
-    return () => {
-      live = false;
-    };
-    // Runs once, on the prefill this dialog opened with — not on every
-    // `token` refresh, which would refetch mid-edit for no reason.
-  }, []);
+  const [examSource, setExamSource] = useState<ExamSourceState>(EXAM_SOURCE_INITIAL);
+  const onSourceChange = (patch: Partial<ExamSourceState>): void =>
+    setExamSource((current) => ({ ...current, ...patch }));
   /** R94 — which of her classes this sitting belongs to. */
   const [examContextId, setExamContextId] = useState('');
   const [supervisorId, setSupervisorId] = useState(
@@ -1204,7 +1182,7 @@ export function SchedulingDialog({
     // below — a disagreeing baseline is what would report a fresh `?source=`
     // prefill as already dirty before the reader touched anything.
     examMode: item?.ids.examMode ?? initialExamSource?.mode ?? 'physical',
-    onlineExam: ONLINE_EXAM_INITIAL,
+    examSource: EXAM_SOURCE_INITIAL,
     supervisorId: item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
     responsibleId: item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
     // Mirrors the state initialiser exactly — a pristine baseline that
@@ -1237,7 +1215,7 @@ export function SchedulingDialog({
       staffing,
       assistantIds: [...assistantIds].sort(),
       examMode,
-      onlineExam,
+      examSource,
       supervisorId,
       responsibleId,
       visibility,
@@ -1249,6 +1227,57 @@ export function SchedulingDialog({
   );
 
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, defaultCurrentYear: true });
+
+  /**
+   * **`?source=&mode=` (R136, frontend-completion pass) — the source-aware
+   * scheduler prefill.** The query string is convenience only: the id is
+   * re-fetched through the SAME authorized, server-backed read
+   * `readAuthorPaper` the builder itself uses, never trusted as-is. A
+   * tampered, stale, wrong-mode or out-of-scope id simply fails the fetch —
+   * the `.catch` leaves the picker at its ordinary empty state rather than
+   * exposing anything about why, and the scheduler stays fully usable either
+   * way (rule O — the read is the authorization, not a client-side guess).
+   *
+   * **Only what is legitimately derived from the source is prefilled**:
+   * which paper, its Level (so the physical audience picker and the remote
+   * target picker both scope correctly, exactly as a manual pick would set
+   * them), and its title for display. Occurrence facts — date, start/end,
+   * room, branch, remote availability — are never silently invented here;
+   * `scope.set('levelId', ...)` mirrors `PaperPicker`'s own `onSelect` for
+   * the physical branch so the two paths (URL prefill, manual pick) cannot
+   * disagree about what choosing a source means.
+   *
+   * Runs once, on the prefill this dialog opened with, and never again —
+   * `item` (editing) and a later manual re-pick both bypass it entirely, so
+   * neither can be silently overwritten by a stale URL once the reader has
+   * moved on.
+   */
+  useEffect(() => {
+    if (!initialExamSource || item) return;
+    let live = true;
+    void readAuthorPaper(initialExamSource.id, token)
+      .then((paper) => {
+        if (!live) return;
+        if (paper.mode !== initialExamSource.mode) return;
+        onSourceChange({
+          sourceId: paper.id,
+          sourceTitle: paper.title,
+          sourceLevelId: paper.level_id,
+        });
+        if (initialExamSource.mode === 'physical') {
+          scope.set('levelId', paper.level_id);
+        }
+      })
+      .catch(() => {
+        // The prefill is a convenience; a paper that no longer exists, is out
+        // of the caller's scope, or answers with a different mode than the
+        // URL claimed simply leaves the picker at its ordinary empty state
+        // for a fresh, explicit choice.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   /**
    * **Seed the scope from the row being edited.**
@@ -1285,6 +1314,34 @@ export function SchedulingDialog({
       live = false;
     };
   }, [token]);
+
+  /**
+   * **`?kind=exam&new=1` must SELECT اختبار, not merely narrow `type` behind
+   * the scenes** (R136, frontend-completion pass — the defect an Owner
+   * browser walk found).
+   *
+   * `TypePicker`'s displayed value is `schedulingTypeId`, not `type` —
+   * `type` only decides which section renders. Before this effect, a fresh
+   * `?kind=exam` create left `schedulingTypeId` at its initial `null`, so
+   * the SELECT control matched nothing and the browser fell back to
+   * displaying its FIRST option — «حصة دراسية» in this catalogue's own
+   * order — while
+   * `type` (and therefore the exam-specific fields underneath) was already,
+   * correctly, `'exam'`. The picker and the form disagreed about what was
+   * selected.
+   *
+   * **Fires once the catalogue has loaded, on CREATE only, and only while
+   * nothing has been chosen yet** — `schedulingTypeId === null` in the
+   * dependency array's own guard means a later, deliberate pick (by this
+   * effect once, or by the reader afterward) is never overwritten; the URL
+   * prefill loses to the reader's own next click, exactly as `initialType`'s
+   * own docstring already promises for `type` itself.
+   */
+  useEffect(() => {
+    if (editing || initialType === undefined || schedulingTypeId !== null) return;
+    const row = catalogue.find((r) => r.structural_kind === initialType);
+    if (row) setSchedulingTypeId(row.id);
+  }, [editing, initialType, catalogue, schedulingTypeId]);
 
   useEffect(() => {
     if (item === null || seeded.current === item.id) return;
@@ -1388,8 +1445,23 @@ export function SchedulingDialog({
    * points at the next field rather than the last one.
    */
   function validationError(): string | null {
-    // R57 — required for every kind, so it is checked before anything specific.
-    if (title.trim() === '') return t('scheduling.invalid.title');
+    /**
+     * **R57 — required for every kind whose own title the write actually
+     * sends.** Found by the real-browser verification this frontend-
+     * completion pass exists to do (`verify-exam-scheduling.mjs`, journeys
+     * A and C): once an exam has an authored source — always true for
+     * `online`, optionally true for `physical` — `saveSchedulingItem`'s
+     * exam branch never sends `bare.title` at all (`scheduleExam` copies
+     * the title FROM the source; see `adapters/scheduling.ts`'s
+     * `...(input.examSourceId ? {} : { bare: { title: input.title, ... } })`).
+     * The shared «العنوان» field stays on screen for every kind (it is a
+     * bare physical sitting's own title otherwise), but demanding it be
+     * filled in first was refusing a save over a value the request was
+     * about to discard — every ?source=&mode= scheduler prefill and every
+     * manually-chosen physical source hit this and could not be saved.
+     */
+    const titleSuppliedBySource = type === 'exam' && examSource.sourceId !== '';
+    if (!titleSuppliedBySource && title.trim() === '') return t('scheduling.invalid.title');
     /**
      * **R110 — every schedulable item states which type it is** (Owner,
      * 2026-09-02; activities only before that).
@@ -1446,16 +1518,16 @@ export function SchedulingDialog({
        * would be a second answer to a question §4.4c already owns.
        */
       if (item) return null; // Editing a remote row never reaches this branch (Edit is hidden for it).
-      if (onlineExam.sourceId === '') return t('scheduling.exam.paperRequired');
-      if (onlineExam.targetKind !== 'level' && onlineExam.targetId === '') {
+      if (examSource.sourceId === '') return t('scheduling.exam.paperRequired');
+      if (examSource.targetKind !== 'level' && examSource.targetId === '') {
         return t('scheduling.invalid.target');
       }
-      if (onlineExam.targetKind !== 'session' && recurrence.startDate === '') {
+      if (examSource.targetKind !== 'session' && recurrence.startDate === '') {
         return t('scheduling.invalid.startDate');
       }
       if (
-        onlineExam.availabilityChoice === 'custom' &&
-        (onlineExam.customDate === '' || onlineExam.customTime === '')
+        examSource.availabilityChoice === 'custom' &&
+        (examSource.customDate === '' || examSource.customTime === '')
       ) {
         return t('scheduling.exam.customRequired');
       }
@@ -1464,27 +1536,34 @@ export function SchedulingDialog({
     if (type === 'exam') {
       // **R94 — she names a class, not a chain.** Without this the four
       // messages below would ask her for selectors she was never shown.
-      if (!canAssignStaff && teachingContexts && examContextId === '') {
+      // Meaningless once a source is chosen (below) — the class-of-hers
+      // question is about which Level/Subject/Year, and a source already
+      // answers that, so it is not asked twice.
+      if (examSource.sourceId === '' && !canAssignStaff && teachingContexts && examContextId === '') {
         return teachingContexts.length === 0
           ? t('scheduling.exam.noClassOfYours')
           : t('scheduling.invalid.forClass');
       }
       /**
-       * **These four are the Admin's chain, and only hers** (R94).
-       *
-       * A مؤطرة named one of her own classes above, which states all four — and
-       * `levelTeachesNothing` is computed from `listLevelSubjects`, another read
-       * that answers 403 for her. Asking her to fix a Level that "teaches
-       * nothing" would be the platform reporting its own blindness as her
-       * mistake.
+       * **These four are the Admin's chain, and only hers** (R94) — asked
+       * only without a source. **A source answers Level/Subject/Year on its
+       * own** (R136, frontend-completion pass): `scheduleExam` takes them
+       * from the copied content, never from this form's own scope fields,
+       * which is exactly why `PaperPicker`'s `onSelect` stops rendering them
+       * — asking a question the write path never reads would be a control
+       * leading nowhere.
        */
       const suppliedByClass = !canAssignStaff && teachingContexts !== undefined;
       if (!suppliedByClass) {
+        // Branch is always a real arrangement fact, source or not — a
+        // physical sitting still happens somewhere.
         if (scope.value.branchId === '') return t('scheduling.invalid.branch');
-        if (scope.value.levelId === '') return t('scheduling.invalid.level');
-        if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
-        if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
-        if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+        if (examSource.sourceId === '') {
+          if (scope.value.levelId === '') return t('scheduling.invalid.level');
+          if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+          if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
+          if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+        }
       }
       if (roomId === '') return t('scheduling.invalid.room');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
@@ -1602,20 +1681,20 @@ export function SchedulingDialog({
           examMode,
           ...(type === 'exam' && examMode === 'online'
             ? {
-                examSourceId: onlineExam.sourceId,
+                examSourceId: examSource.sourceId,
                 examTarget: {
-                  kind: onlineExam.targetKind,
-                  ...(onlineExam.targetKind === 'level' ? {} : { id: onlineExam.targetId }),
+                  kind: examSource.targetKind,
+                  ...(examSource.targetKind === 'level' ? {} : { id: examSource.targetId }),
                 },
                 examAvailability:
-                  onlineExam.availabilityChoice === 'manual'
+                  examSource.availabilityChoice === 'manual'
                     ? { policy: 'manual' as const }
-                    : onlineExam.availabilityChoice === 'at_start'
+                    : examSource.availabilityChoice === 'at_start'
                       ? { policy: 'at_start' as const }
-                      : onlineExam.availabilityChoice === 'offset_minutes'
+                      : examSource.availabilityChoice === 'offset_minutes'
                         ? {
                             policy: 'offset_minutes' as const,
-                            minutes: Number(onlineExam.offsetMinutes),
+                            minutes: Number(examSource.offsetMinutes),
                           }
                         : {
                             policy: 'custom' as const,
@@ -1627,10 +1706,18 @@ export function SchedulingDialog({
                             // `Date`'s native parsing rather than left for the
                             // server to interpret against a branch.
                             at: new Date(
-                              `${onlineExam.customDate}T${onlineExam.customTime}:00`,
+                              `${examSource.customDate}T${examSource.customTime}:00`,
                             ).toISOString(),
                           },
               }
+            : {}),
+          // R136 (frontend-completion pass) — a physical sitting may
+          // OPTIONALLY copy an authored source too; when one is chosen, its
+          // own title/description/maximum/Level/Subject/Year travel with it
+          // (`saveSchedulingItem`'s exam branch sends `source_exam_id`
+          // instead of `bare` once this is set — see the adapter).
+          ...(type === 'exam' && examMode === 'physical' && examSource.sourceId !== ''
+            ? { examSourceId: examSource.sourceId }
             : {}),
           // R71 — sent only when this caller may set it; the server refuses
           // otherwise, and sending it anyway would turn an ordinary save into
@@ -1831,6 +1918,7 @@ export function SchedulingDialog({
             <ExamSection
             mode={examMode}
             onMode={setExamMode}
+            token={token}
             scope={scope}
             locked={editing}
             rooms={rooms}
@@ -1843,8 +1931,8 @@ export function SchedulingDialog({
             onAssistants={setAssistantIds}
             maxGrade={examMaxGrade}
             onMaxGrade={setExamMaxGrade}
-            online={onlineExam}
-            onOnlineChange={onOnlineChange}
+            source={examSource}
+            onSourceChange={onSourceChange}
             // Her scope came from the class she named; showing the chain she
             // cannot populate would be four empty selectors.
             hideScope={!canAssignStaff && teachingContexts !== undefined}

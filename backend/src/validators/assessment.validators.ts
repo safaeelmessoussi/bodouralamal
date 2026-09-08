@@ -27,11 +27,18 @@ export const createAssessmentSchema = z
     level_id: z.uuid(),
     subject_id: z.uuid().nullable().optional(),
     academic_year_id: z.uuid().nullable().optional(),
-    target: assessmentTarget,
+    /**
+     * **Absent means content-only** (R136 frontend-completion pass) —
+     * بناء الاختبارات authors WHAT, never WHO; a real target is الجدولة's
+     * decision, made once, at scheduling. See `AssessmentInput.target`'s own
+     * comment for the authorization consequence.
+     */
+    target: assessmentTarget.optional(),
     /**
      * Refused on a `session` target: the occurrence's own date is the answer,
      * and accepting a second one would let the two disagree about which day the
-     * audience is resolved for.
+     * audience is resolved for. Also absent for content-only creation (no
+     * `target` at all), which defaults to today server-side.
      */
     date: calendarDate.optional(),
     /** R136 clause 2 — either delivery mode may be authored here now. Absent

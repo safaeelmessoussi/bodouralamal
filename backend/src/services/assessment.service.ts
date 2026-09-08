@@ -191,6 +191,66 @@ export async function assertMayAuthor(
 }
 
 /**
+ * **R136 (frontend-completion pass) — بناء الاختبارات is content-only, so
+ * creating a draft with no chosen audience must not be judged by a rule
+ * written for a REAL one.**
+ *
+ * `assertMayAuthor`'s `target.kind === 'level'` arm requires `entire_level`
+ * staffing — correct when a caller actually commits to addressing the whole
+ * Level, and wrong applied to a placeholder: a مؤطِّرة who staffs one
+ * Administrative Group could not create so much as a title and a question,
+ * because content-only creation had nothing to name but `level` and that
+ * name alone demanded an authority she was never asking for. The same gap
+ * existed for a branch-scoped Admin against `assertAudienceWithinBranchScope`
+ * whenever the placeholder Level spanned a branch she does not reach.
+ *
+ * **The question a content-only create actually asks is narrower**: not *may
+ * she address this audience* (there is none yet — الجدولة asks that, in
+ * full, the moment a real one is chosen, R125 unchanged) but *does she teach
+ * or administer anything in this Level at all*. `teacherEventScope`'s own
+ * `levelIds` — the same set `examScopeWhereForTeacher`'s list already reasons
+ * from — is exactly that question for a Teacher; `Enrollment` is the branch
+ * fact (§20 rule 22) for an Admin, asked of the Level rather than of a
+ * resolved audience.
+ *
+ * **Used only when `target` is omitted.** A caller that still supplies a
+ * real target on create — the API-level shape this replaces nothing of —
+ * keeps going through `assertMayAuthor` exactly as before.
+ */
+export async function assertMayAuthorLevel(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  actor: Actor,
+  levelId: string,
+): Promise<void> {
+  if (scope.isSuperAdmin(actor.roleScopes)) return;
+
+  if (scope.hasRole(actor.roleScopes, MANAGING_ROLE)) {
+    const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+    if (reachable === null) return;
+    const taught = await (prisma as PrismaClient).enrollment.count({
+      where: { levelId, deletedAt: null, branchId: { in: reachable } },
+    });
+    if (taught === 0) {
+      throw new AppError('FORBIDDEN', 'this level is outside your branches', {
+        reason: 'LEVEL_OUTSIDE_BRANCH_SCOPE',
+      });
+    }
+    return;
+  }
+
+  if (!scope.hasRole(actor.roleScopes, 'teacher')) {
+    throw new AppError('FORBIDDEN', 'authoring requires staff (TD-2)');
+  }
+
+  const reach = await teacherEventScope(prisma as PrismaClient, actor.userId);
+  if (!reach.levelIds.includes(levelId)) {
+    throw new AppError('FORBIDDEN', 'this level is outside your teaching scope', {
+      reason: 'LEVEL_OUT_OF_SCOPE',
+    });
+  }
+}
+
+/**
  * **R125 — a Level target does not override branch authorization.**
  *
  * A Level spans branches; an online paper carries none of its own, and the
@@ -388,8 +448,22 @@ export interface AssessmentInput {
   levelId: string;
   subjectId?: string | null;
   academicYearId?: string | null;
-  target: AssessmentTarget;
-  /** Absent on a `session` target, where the Session's own date is the answer. */
+  /**
+   * **Absent means content-only** (R136 frontend-completion pass) —
+   * بناء الاختبارات authors WHAT, never WHO or WHEN; a real target/audience
+   * is الجدولة's decision, made once, at scheduling. Omitting it stores a
+   * `level`-shaped placeholder (`exam_target_check`'s NOT NULL discriminator
+   * demands some value; it is never read as a real commitment — scheduling
+   * always resolves a fresh target of its own, R136 clause 3) and is
+   * authorized by the narrower `assertMayAuthorLevel` rather than the
+   * audience-specific `assertMayAuthor`. Still accepted when given, for the
+   * pre-existing API-level shape: an explicit target keeps going through the
+   * unchanged, stricter check.
+   */
+  target?: AssessmentTarget;
+  /** Absent on a `session` target, where the Session's own date is the
+   *  answer; absent as well whenever `target` itself is (content-only —
+   *  defaults to today, itself never a real commitment for the same reason). */
   date?: Date;
   /**
    * **R136 clause 2** — بناء الاختبارات authors content for either delivery
@@ -416,23 +490,45 @@ export async function createAssessment(
   input: AssessmentInput,
 ): Promise<{ id: string }> {
   return prisma.$transaction(async (tx) => {
-    const target = await resolveTarget(tx, input);
-    await assertMayAuthor(tx, actor, {
-      levelId: input.levelId,
-      subjectId: input.subjectId ?? null,
-      // A source — either mode — is sat nowhere yet; it carries no branch
-      // until scheduling assigns one (physical) or none at all (online, where
-      // `exam_online_has_no_room_check` refuses one outright).
-      branchId: null,
-      administrativeGroupId: target.administrativeGroupId,
-      studentId: target.studentId,
-      // R125 — the whole arm, so the branch rule can resolve the audience it is
-      // stated in terms of rather than guessing from which columns are set.
-      targetKind: input.target.kind,
-      sessionId: target.sessionId,
-      teachingGroupId: target.teachingGroupId,
-      date: target.date,
-    });
+    const targetKind = input.target?.kind ?? 'level';
+
+    let target: {
+      date: Date;
+      administrativeGroupId: string | null;
+      sessionId: string | null;
+      teachingGroupId: string | null;
+      studentId: string | null;
+    };
+    if (input.target) {
+      target = await resolveTarget(tx, { ...input, target: input.target });
+      await assertMayAuthor(tx, actor, {
+        levelId: input.levelId,
+        subjectId: input.subjectId ?? null,
+        // A source — either mode — is sat nowhere yet; it carries no branch
+        // until scheduling assigns one (physical) or none at all (online,
+        // where `exam_online_has_no_room_check` refuses one outright).
+        branchId: null,
+        administrativeGroupId: target.administrativeGroupId,
+        studentId: target.studentId,
+        // R125 — the whole arm, so the branch rule can resolve the audience it
+        // is stated in terms of rather than guessing from which columns are set.
+        targetKind,
+        sessionId: target.sessionId,
+        teachingGroupId: target.teachingGroupId,
+        date: target.date,
+      });
+    } else {
+      // Content-only: no real audience is being named, so no audience-shaped
+      // authorization question is asked of one. See `assertMayAuthorLevel`.
+      await assertMayAuthorLevel(tx, actor, input.levelId);
+      target = {
+        date: input.date ?? todayUTC(),
+        administrativeGroupId: null,
+        sessionId: null,
+        teachingGroupId: null,
+        studentId: null,
+      };
+    }
 
     const created = await tx.exam.create({
       data: {
@@ -445,7 +541,7 @@ export async function createAssessment(
         academicYearId: input.academicYearId ?? null,
         maxGrade: input.maxGrade,
         date: target.date,
-        targetKind: input.target.kind,
+        targetKind,
         administrativeGroupId: target.administrativeGroupId,
         sessionId: target.sessionId,
         teachingGroupId: target.teachingGroupId,
@@ -462,7 +558,7 @@ export async function createAssessment(
       targetId: created.id,
       // Ids and a kind. **Never the title**, which is free text a person wrote
       // (TD-14), and never a question or an answer anywhere in this module.
-      detail: { target_kind: input.target.kind, level_id: input.levelId },
+      detail: { target_kind: targetKind, level_id: input.levelId },
     });
     return created;
   });
@@ -471,7 +567,7 @@ export async function createAssessment(
 /** Every target arm validated once, and the date it implies resolved with it. */
 export async function resolveTarget(
   tx: Prisma.TransactionClient,
-  input: Pick<AssessmentInput, 'levelId' | 'target' | 'date'>,
+  input: Pick<AssessmentInput, 'levelId' | 'date'> & { target: AssessmentTarget },
 ): Promise<{
   date: Date;
   administrativeGroupId: string | null;

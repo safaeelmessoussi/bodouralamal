@@ -23,6 +23,7 @@ import {
   reorderQuestions,
   saveResponses,
   studentPaper,
+  todayUTC,
   targetCandidates,
   updateQuestion,
 } from './assessment.service.js';
@@ -122,7 +123,7 @@ async function person(name: string, beneficiary = false): Promise<string> {
  * many callers need a paper a student can already sit the instant it exists.
  */
 async function publishedPaper(
-  target: Parameters<typeof createAssessment>[2]['target'],
+  target: NonNullable<Parameters<typeof createAssessment>[2]['target']>,
   levelOverride = levelId,
 ): Promise<string> {
   const { id } = await createAssessment(prisma, superAdmin(), {
@@ -2045,5 +2046,117 @@ describe('R136 (Codex B1) — scheduling is atomic: a late failure leaves nothin
       // let one transaction's insert bleed into the other's row).
       expect(questions).toHaveLength(2);
     }
+  });
+});
+
+/**
+ * **R136 (frontend-completion pass) — بناء الاختبارات creates content only.**
+ *
+ * `target`/`date` are now optional on `POST /assessments`. Omitting both
+ * stores a `level`-shaped placeholder (never read as a real commitment —
+ * الجدولة always resolves a fresh target of its own) and is authorized by
+ * the new, narrower `assertMayAuthorLevel` rather than the audience-specific
+ * `assertMayAuthor` — the whole point being closed here: `assertMayAuthor`'s
+ * `level` arm demands `entire_level` staffing, which a content-only create
+ * has no business asking for since it names no real audience yet.
+ */
+describe('R136 (frontend-completion) — content-only creation, no target or date', () => {
+  it('creates a draft with a level-shaped placeholder and today’s date', async () => {
+    const before = todayUTC();
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} محتوى فقط`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      academicYearId,
+    });
+    const row = await prisma.exam.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe('draft');
+    expect(row.targetKind).toBe('level');
+    expect(row.administrativeGroupId).toBeNull();
+    expect(row.date.toISOString().slice(0, 10)).toBe(before.toISOString().slice(0, 10));
+  });
+
+  it('a مؤطِّرة who staffs only ONE group — never entire_level — may still author content', async () => {
+    /**
+     * **The regression this closes.** `teacherId`'s only staffing in this
+     * fixture is `teachingMode: 'administrative_group'` (never
+     * `entire_level`); before this fix, a content-only create defaulted to
+     * `target: { kind: 'level' }` and ran the FULL `assertMayAuthor`, whose
+     * `level` arm requires exactly the staffing she does not hold — refusing
+     * her a title and a question before she had named any audience at all.
+     */
+    await expect(
+      createAssessment(prisma, teacherActor(), {
+        title: `${TAG} محتوى مؤطرة`,
+        maxGrade: 20,
+        levelId,
+        subjectId,
+        academicYearId,
+      }),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+  });
+
+  it('a branch-scoped Admin is refused for a Level her branches never reach', async () => {
+    const elsewhereLevel = (
+      await prisma.level.create({
+        data: {
+          name: `${TAG} مستوى بعيد`,
+          categoryId: (
+            await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } })
+          ).categoryId,
+          genderRestriction: 'any',
+        },
+      })
+    ).id;
+    await prisma.enrollment.create({
+      data: {
+        studentId: carol,
+        levelId: elsewhereLevel,
+        branchId: otherBranchId,
+        academicPeriodId: currentPeriodId,
+      },
+    });
+    await expect(
+      createAssessment(prisma, scopedAdmin(), {
+        title: `${TAG} محتوى خارج النطاق`,
+        maxGrade: 20,
+        levelId: elsewhereLevel,
+        subjectId,
+        academicYearId,
+      }),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: { reason: 'LEVEL_OUTSIDE_BRANCH_SCOPE' },
+    });
+  });
+
+  it('a branch-scoped Admin may author content for a Level her branches DO reach', async () => {
+    await expect(
+      createAssessment(prisma, scopedAdmin(), {
+        title: `${TAG} محتوى داخل النطاق`,
+        maxGrade: 20,
+        levelId,
+        subjectId,
+        academicYearId,
+      }),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+  });
+
+  it('an explicit target still goes through the unchanged, stricter check', async () => {
+    // Unaffected by this pass: naming a real target still asks the real
+    // question, exactly as before — a مؤطِّرة with only group staffing still
+    // cannot claim the whole Level.
+    await expect(
+      createAssessment(prisma, teacherActor(), {
+        title: `${TAG} امتحان بجمهور محدد`,
+        maxGrade: 20,
+        levelId,
+        subjectId,
+        academicYearId,
+        target: { kind: 'level' },
+        date: TODAY,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

@@ -5,6 +5,7 @@ import studentPage from '../dashboard/assessments.tsx?raw';
 import adapter from '../../adapters/assessments.ts?raw';
 import teacherPage from '../teacher/assessments.tsx?raw';
 import targetPicker from '../../components/scheduling/target-picker.tsx?raw';
+import examSection from '../../components/scheduling/exam-section.tsx?raw';
 
 /**
  * **The assessment interface's rules, as opposed to its styling** (SRS §4.6,
@@ -90,10 +91,18 @@ describe('R124 — the whole sequence, and the occurrence’s own date', () => {
     expect(builder).toContain('paper.questions.map((q) => q.id)');
   });
 
-  it('asks for no date on a session target', () => {
-    // A quick test belongs to the occurrence's day; a second date could
-    // disagree with it about which students were expected.
-    expect(builder).toContain("const needsDate = targetKind !== 'session';");
+  it('asks for no date on a session target — now الجدولة\'s question, not بناء الاختبارات\'s', () => {
+    /**
+     * **R136 (frontend-completion pass) — بناء الاختبارات no longer asks
+     * for a target or a date at all** (content-only creation); the rule
+     * this test originally pinned moved with the target/date fields
+     * themselves, to `exam-section.tsx`'s `needsDate`, asked once, at
+     * scheduling, for exactly the reason unchanged: a quick test belongs to
+     * the occurrence's day, and a second date could disagree with it about
+     * which students were expected.
+     */
+    expect(examSection).toContain("needsDate = source.targetKind !== 'session'");
+    expect(builder).not.toContain('needsDate');
   });
 });
 
@@ -137,7 +146,15 @@ describe('R125 — the picker offers what the server allows, and is not the boun
      */
     expect(targetPicker).toContain('listAssessmentTargets');
     expect(targetPicker).toContain('function TargetPicker');
-    expect(builder).toContain("TargetPicker } from '../../components/scheduling/target-picker.js'");
+    /**
+     * **R136 (frontend-completion pass) — بناء الاختبارات no longer imports
+     * `TargetPicker` at all** (only `TARGET_LABELS`, to render a draft's own
+     * stored classification): the picker's caller now is الجدولة, both
+     * modes, scoped by the chosen source's own Level — never a raw typed id.
+     */
+    expect(builder).toContain("TARGET_LABELS } from '../../components/scheduling/target-picker.js'");
+    expect(builder).not.toContain('TargetPicker');
+    expect(examSection).toContain("TARGET_LABELS, TargetPicker } from './target-picker.js'");
     // No raw id entry survives for a target.
     expect(targetPicker).not.toMatch(/label=\{t\('assessments\.targetPick'\)\}\s*\n\s*value=\{targetId\}\s*\n\s*onChange=\{setTargetId\}\s*\n\s*required\s*\n\s*error/);
   });
@@ -150,18 +167,23 @@ describe('R125 — the picker offers what the server allows, and is not the boun
     expect(targetPicker).toContain('<SelectField');
   });
 
-  it('scopes the LEVEL list too when the Level is itself the audience', () => {
+  it('R136 — بناء الاختبارات\'s own Level picker is the ordinary curriculum one, unscoped by any target', () => {
     /**
-     * **The gap this closes.** The ordinary scope selector lists every Level, so
-     * a branch-scoped Admin choosing a `level` target was offered one whose
-     * audience escapes her branches and refused at save — a control leading to a
-     * refusal she did nothing to earn. On the other arms the Level is not the
-     * audience (a group at her own branch inside a Level that spans two is
-     * legitimate), so it stays the ordinary selector there.
+     * **Superseded by content-only creation.** The scoped `TargetPicker
+     * kind="level"` this test originally pinned existed to keep a
+     * branch-scoped Admin from choosing a `level` TARGET whose audience
+     * escapes her branches — a question that no longer arises here, because
+     * creation names no target at all. `assertMayAuthorLevel` (backend) is
+     * the new, narrower authorization question a content-only create asks
+     * instead, and it is asked of whichever Level she picks from the
+     * ordinary chain, at save — not pre-filtered by this list, and not
+     * a target-shaped question in the first place (rule O still holds: an
+     * unauthorized pick is refused at write, exactly as everywhere else).
      */
-    expect(builder).toContain("targetKind === 'level' ? (");
-    expect(builder).toContain('SCOPE_FIELDS_WITHOUT_LEVEL');
-    expect(builder).toContain('kind="level"');
+    expect(builder).not.toContain('targetKind');
+    expect(builder).not.toContain('SCOPE_FIELDS_WITHOUT_LEVEL');
+    expect(builder).toContain("SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId']");
+    expect(builder).toContain('<ScopeSelectors scope={scope} fields={SCOPE_FIELDS} mode="form" />');
   });
 
   it('clears a selection the narrowed list no longer offers', () => {

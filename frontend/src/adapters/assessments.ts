@@ -90,7 +90,12 @@ export async function createAssessment(
     level_id: string;
     subject_id?: string | null;
     academic_year_id?: string | null;
-    target: { kind: TargetKind; id?: string };
+    /**
+     * **Absent means content-only** (R136 frontend-completion pass) —
+     * بناء الاختبارات authors WHAT, never WHO; a real target is الجدولة's
+     * decision, made once, at scheduling.
+     */
+    target?: { kind: TargetKind; id?: string };
     date?: string;
   },
   token: string | null,
