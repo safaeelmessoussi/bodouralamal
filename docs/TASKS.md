@@ -1031,7 +1031,13 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **Zero audience is stated before publication**, not refused: publishing then admitting students is legitimate (R122)
 - [x] **«عن بُعد — قريباً» retired** — untrue since R124, and rendered twice from one component
 - [x] **The run-unique fixture tag leak**, swept by age with a shared sweeper and a guard that repairs as well as reports
-- [ ] **OWNER — ratify `docs/SRS-PROPOSAL-R134.md`** as SRS Revision 134: `assessment_published`, the paper-as-resource rule, copy-on-reuse, zero-audience. `SRS.md` is immutable to the implementer, so the revision itself is the Owner's to apply
+- [x] **Ratified as SRS Revision 134** (2026-09-08, after Revision 135): `assessment_published`, the paper-as-resource rule, reviewable reuse, zero-audience
+
+### Reuse and copy stay one safe operation, and a copy's target/date became reviewable (2026-09-08, R134)
+- [x] **`Exam.source_exam_id`** (nullable, `ON DELETE SET NULL`) — provenance only, read for the library/detail's «نسخة من» / «استُخدمت N مرة»; never consulted for authorization, the freeze, targeting, grading, publication or deletion, and shares no mutable state
+- [x] **`PATCH /assessments/{id}/target`** — the gap the Owner's reconciliation surfaced: a copy's target/date were seeded from the source with no way to review or change them before publishing. Reuses `createAssessment`'s exact target resolver and validation; TD-15 versioned; draft-and-unfrozen only; refuses to change the Level
+- [x] **Two entry points, one backend operation**: «استخدام مرة أخرى» opens straight to that review; «إنشاء نسخة» opens the question editor first. Both call the identical `POST /assessments/{id}/copy`
+- [x] Backend: 11 new integration assertions (provenance exposure/invisibility/no-authority, retarget success/scope/version/transition/validation). Frontend: 5 new source-guard assertions; full suites green (backend 81/81 assessment + 66/66 journey; frontend 1079/1079)
 
 ### The admission-to-achievement journey (2026-09-04)
 - [x] **The whole business flow, through the real routes**: registration (مؤطِّرة + adult مستفيدة) → approval → two enrolments → online assessment on LEVEL A → publication → notices → save/resume/submit → marking → grade publication → memorisation. 66 assertions in `backend/src/controllers/journey.integration.test.ts`

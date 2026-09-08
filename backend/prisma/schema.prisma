@@ -2818,6 +2818,20 @@ model Exam {
   /// R124 — the paper, in order.
   questions ExamQuestion[]
 
+  /// **R134 — provenance only.** Set when this row was produced by
+  /// `POST /assessments/{id}/copy` («استخدام مرة أخرى» or «إنشاء نسخة» — the
+  /// same safe operation, two entry points). Answers *where did this paper's
+  /// wording come from*, and nothing else: it carries no authority over
+  /// authorization, the freeze, targeting, grading, publication or deletion,
+  /// and no mutable state is shared through it. `SetNull` rather than
+  /// `Restrict` — deleting the source paper must not block deleting, or be
+  /// blocked by, a sitting that merely started from its wording.
+  sourceExamId String? @map("source_exam_id") @db.Uuid
+  sourceExam   Exam?   @relation("ExamReuse", fields: [sourceExamId], references: [id], onDelete: SetNull)
+  /// The papers copied FROM this one — read-only lineage for the library/detail
+  /// screens («استُخدمت N مرة»). Never traversed for authorization or freeze.
+  reusedBy     Exam[]  @relation("ExamReuse")
+
   version Int @default(0)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -2832,6 +2846,8 @@ model Exam {
   notifications Notification[]
 
   @@index([levelId, date])
+  /// R134 — the library's «نسخة من» / «استُخدمت N مرة» lookups.
+  @@index([sourceExamId])
   /// R58 — a physical sitting is read by *when and where*: the calendar asks
   /// for a date window at a branch, and the scheduling list asks the same.
   @@index([branchId, date])

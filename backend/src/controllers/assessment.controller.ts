@@ -15,6 +15,7 @@ import {
   readSubmission,
   removeQuestion,
   reorderQuestions,
+  retargetAssessment,
   saveResponses,
   authorPaper,
   studentPaper,
@@ -24,6 +25,7 @@ import {
 import {
   assessmentListSchema,
   createAssessmentSchema,
+  retargetAssessmentSchema,
   targetCandidatesSchema,
   questionPatchSchema,
   questionSchema,
@@ -97,6 +99,22 @@ export function create(prisma: PrismaClient) {
       ...(b.date === undefined ? {} : { date: b.date }),
     });
     res.status(201).json({ id: created.id });
+  };
+}
+
+/**
+ * `PATCH /assessments/{id}/target` — «مراجعة الجمهور والتاريخ» (R134). A copy
+ * or a reuse starts with the source's target/date for convenience; this is
+ * where the author confirms or changes them before publishing this use.
+ */
+export function retarget(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const b = parse(retargetAssessmentSchema, req.body ?? {});
+    await retargetAssessment(prisma, requireActor(req), idParam(req, 'id'), b.version, {
+      target: { kind: b.target.kind, ...(b.target.id === undefined ? {} : { id: b.target.id }) },
+      ...(b.date === undefined ? {} : { date: b.date }),
+    });
+    res.status(204).end();
   };
 }
 

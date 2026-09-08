@@ -5,13 +5,22 @@
 **Publishing an online assessment tells the people it concerns — and the paper
 it is written on is a resource that stays.**
 
-**Status: AWAITING RATIFICATION.** The Document Owner instructed on 2026-09-04
-that the `assessment_published` notification be ratified rather than left as an
-unratified implementation gap, and that the exam/assessment product model be made
-coherent. The behaviour below is **implemented, migrated, tested and
-browser-verified**; `SRS.md` is immutable to the implementer, so the normative
-clauses are drafted here in the ratification style for the Owner to apply as
-SRS Revision 134.
+**Status: APPLIED — ratified by the Document Owner and applied to `SRS.md` as
+SRS Revision 134, 2026-09-08.** Kept as the drafting record; `SRS.md` is now
+authoritative. Ratified chronologically **after** Revision 135, whose number
+was assigned first while this proposal was still open under review — the
+numbering was preserved rather than renumbering either revision.
+
+**Clauses 11–12 below are superseded by SRS Revision 134's own text**, not by
+this note: the Document Owner held the ratification specifically on those two,
+requiring (a) that a copy's target/date be described as reviewable/confirmable
+before publication rather than "empty," since `PATCH /assessments/{id}/target`
+was added to make that review a real, separate act, and (b) that
+`source_exam_id`'s provenance-only semantics be stated explicitly — no effect
+on authorization, the freeze, targeting, grading, publication or deletion, and
+no shared mutable state. The applied SRS text is authoritative; this file is
+retained verbatim below for the record of what was originally drafted on
+2026-09-04, before that review.
 
 ---
 

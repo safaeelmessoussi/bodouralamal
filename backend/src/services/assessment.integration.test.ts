@@ -22,6 +22,7 @@ import {
   readSubmission,
   removeQuestion,
   reorderQuestions,
+  retargetAssessment,
   saveResponses,
   studentPaper,
   targetCandidates,
@@ -1684,5 +1685,140 @@ describe('reuse — the same paper again, never the same answers', () => {
     expect(
       await prisma.exam.count({ where: { title: { contains: 'نسخة' }, deletedAt: null } }),
     ).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('R134 — provenance is a fact about wording, and grants nothing', () => {
+  it('a copy records where it came from, and the library reports lineage both ways', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const first = await copyAssessment(prisma, superAdmin(), id);
+    const second = await copyAssessment(prisma, superAdmin(), id);
+
+    const rows = (
+      await listAssessments(prisma, superAdmin(), { q: 'ورقة لمستوى' })
+    ).data;
+    const originalRow = rows.find((r) => r.id === id)!;
+    const firstRow = rows.find((r) => r.id === first.id)!;
+
+    // The original has no source of its own, and knows how many times it was
+    // reused — two, from this one test alone.
+    expect(originalRow.sourceExamId).toBeNull();
+    expect(originalRow.reusedCount).toBeGreaterThanOrEqual(2);
+    // Each copy names the original, by id and by title, and has none of its own.
+    expect(firstRow.sourceExamId).toBe(id);
+    expect(firstRow.sourceExamTitle).toContain('ورقة لمستوى');
+    expect(firstRow.reusedCount).toBe(0);
+    void second;
+  });
+
+  it('is invisible to a student — never told a paper is a reuse', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const question = await addQuestion(prisma, superAdmin(), id, {
+      kind: 'short_text',
+      prompt: 'سؤال',
+    });
+    await publishAssessment(prisma, superAdmin(), id);
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    await addQuestion(prisma, superAdmin(), copy.id, { kind: 'short_text', prompt: 'سؤال آخر' });
+    await publishAssessment(prisma, superAdmin(), copy.id);
+
+    const paper = await studentPaper(prisma, student(alice), copy.id, alice);
+    expect(paper.exam).not.toHaveProperty('sourceExamId');
+    expect(paper.exam).not.toHaveProperty('sourceExam');
+    void question;
+  });
+
+  it('grants no authority — a caller outside scope cannot reach a copy through its source', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    // The outsider may reach neither the source nor the copy — provenance is
+    // not a second route into a paper her own scope already refuses.
+    await expect(authorPaper(prisma, outsider(), copy.id)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+});
+
+describe('R134 — reviewing the audience/date before publishing a reuse or a copy', () => {
+  it('changes the target and date on a draft, and the change is what publishes', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const copy = await copyAssessment(prisma, superAdmin(), id);
+    const before = await authorPaper(prisma, superAdmin(), copy.id);
+
+    await retargetAssessment(prisma, superAdmin(), copy.id, before.exam.version, {
+      target: { kind: 'administrative_group', id: otherGroupId },
+      date: TODAY,
+    });
+
+    const after = await authorPaper(prisma, superAdmin(), copy.id);
+    expect(after.exam.targetKind).toBe('administrative_group');
+    expect(after.exam.administrativeGroupId).toBe(otherGroupId);
+    // TD-15 — the row moved on.
+    expect(after.exam.version).toBe(before.exam.version + 1);
+  });
+
+  it('never changes the Level — the field is not in the input at all', async () => {
+    // Structural, not a runtime refusal: `retargetAssessment`'s own input type
+    // carries no `levelId`, so there is nowhere for one to arrive from — the
+    // same discipline `POST /assessments/{id}/copy` already applies to the
+    // questions themselves.
+    const { id } = await levelPaper(levelId, superAdmin());
+    const before = await authorPaper(prisma, superAdmin(), id);
+    await retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
+      target: { kind: 'level' },
+      date: TODAY,
+    });
+    const after = await authorPaper(prisma, superAdmin(), id);
+    expect(after.exam.levelId).toBe(levelId);
+  });
+
+  it('refuses once the paper is no longer a draft', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+    const before = await authorPaper(prisma, superAdmin(), id);
+    await publishAssessment(prisma, superAdmin(), id);
+
+    await expect(
+      retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
+        target: { kind: 'administrative_group', id: otherGroupId },
+        date: TODAY,
+      }),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'INVALID_TRANSITION' } });
+  });
+
+  it('refuses a stale version rather than silently overwriting', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const before = await authorPaper(prisma, superAdmin(), id);
+
+    await expect(
+      retargetAssessment(prisma, superAdmin(), id, before.exam.version + 1, {
+        target: { kind: 'administrative_group', id: otherGroupId },
+        date: TODAY,
+      }),
+    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('validates the target exactly as creation does — an unknown group is refused', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const before = await authorPaper(prisma, superAdmin(), id);
+
+    await expect(
+      retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
+        target: { kind: 'administrative_group', id: crypto.randomUUID() },
+        date: TODAY,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('refuses a caller outside the paper’s scope', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const before = await authorPaper(prisma, superAdmin(), id);
+
+    await expect(
+      retargetAssessment(prisma, outsider(), id, before.exam.version, {
+        target: { kind: 'level' },
+        date: TODAY,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

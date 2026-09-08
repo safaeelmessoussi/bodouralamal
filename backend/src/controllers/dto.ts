@@ -2491,10 +2491,17 @@ export interface AssessmentPaperDto {
   description: string | null;
   status: string;
   target_kind: string;
+  level_id: string;
   /** TD-11 calendar date — the day the paper belongs to, and the day its
    *  eligibility is resolved for (R122). */
   date: string;
   max_grade: string;
+  /** TD-15 — required by `PATCH /assessments/{id}/target`. */
+  version: number;
+  /** R134 — provenance only, present only on the author's own read. */
+  source_exam_id?: string | null;
+  source_exam_title?: string | null;
+  reused_count?: number;
   questions: {
     id: string;
     display_order: number;
@@ -2523,8 +2530,20 @@ export function assessmentPaperDto(row: {
     description: string | null;
     status: string;
     targetKind: string;
+    levelId: string;
     date: Date;
     maxGrade: { toString(): string };
+    /** TD-15 — required by `PATCH /assessments/{id}/target`. */
+    version: number;
+    /**
+     * R134 — provenance only, and present ONLY on the author's own read
+     * (`GET /assessments/{id}`, via `loadForAuthor`'s wider select).
+     * `studentPaper`/`readSubmission` never select these, so a beneficiary or
+     * a viewed submission is never told a paper is a reuse.
+     */
+    sourceExamId?: string | null;
+    sourceExam?: { title: string } | null;
+    _count?: { reusedBy: number };
   };
   questions: {
     id: string;
@@ -2551,8 +2570,17 @@ export function assessmentPaperDto(row: {
     description: row.exam.description,
     status: String(row.exam.status),
     target_kind: String(row.exam.targetKind),
+    level_id: row.exam.levelId,
     date: row.exam.date.toISOString().slice(0, 10),
     max_grade: row.exam.maxGrade.toString(),
+    version: row.exam.version,
+    ...(row.exam.sourceExamId === undefined
+      ? {}
+      : {
+          source_exam_id: row.exam.sourceExamId,
+          source_exam_title: row.exam.sourceExam?.title ?? null,
+          reused_count: row.exam._count?.reusedBy ?? 0,
+        }),
     questions: row.questions.map((q) => ({
       id: q.id,
       display_order: q.displayOrder,
@@ -2675,6 +2703,9 @@ export function assessmentListRowDto(row: {
   academicYearLabel: string | null;
   questionCount: number;
   submissionCount: number;
+  sourceExamId: string | null;
+  sourceExamTitle: string | null;
+  reusedCount: number;
 }): Record<string, unknown> {
   return {
     id: row.id,
@@ -2690,5 +2721,9 @@ export function assessmentListRowDto(row: {
     academic_year_label: row.academicYearLabel,
     question_count: row.questionCount,
     submission_count: row.submissionCount,
+    // R134 — provenance only; see the schema comment on `Exam.sourceExamId`.
+    source_exam_id: row.sourceExamId,
+    source_exam_title: row.sourceExamTitle,
+    reused_count: row.reusedCount,
   };
 }

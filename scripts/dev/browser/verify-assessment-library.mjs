@@ -305,6 +305,76 @@ check(
   original.slice(0, 500),
 );
 
+/**
+ * **R134 — «استخدام مرة أخرى» is the SAME safe copy, landing on the audience
+ * review instead of the question editor.** One backend operation, proved
+ * above; this proves the second entry point lands where it should and offers
+ * nothing the first one didn't already prove safe.
+ */
+await open(S.adminCookie11, '/admin/assessments');
+const reuseConfirmText = await evaluate(`(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const row = [...document.querySelectorAll('tbody tr')]
+    .find((tr) => tr.innerText.includes('اختبار الحفظ'));
+  if (!row) return 'row not found';
+  const action = [...row.querySelectorAll('button')]
+    .find((b) => b.textContent.includes('استخدام مرة أخرى'));
+  if (!action) return 'no reuse action';
+  action.click();
+  await wait(800);
+  const dialog = document.querySelector('dialog[open]');
+  return dialog ? dialog.innerText : 'no confirmation dialog';
+})()`);
+check(
+  '«استخدام مرة أخرى» is offered on the row, separately from «نسخ كمسودة»',
+  typeof reuseConfirmText === 'string' && reuseConfirmText.includes('استخدام مرة أخرى'),
+  String(reuseConfirmText),
+);
+
+await evaluate(`(() => {
+  const confirm = [...document.querySelectorAll('dialog[open] button')]
+    .find((b) => b.textContent.includes('استخدام مرة أخرى'));
+  if (confirm) confirm.click();
+  return true;
+})()`);
+await new Promise((r) => setTimeout(r, 3500));
+
+const reuseLandedOn = await evaluate('window.location.search');
+check(
+  'lands on a NEW draft, not the original',
+  new URLSearchParams(String(reuseLandedOn)).get('exam') !== S.examId,
+  String(reuseLandedOn),
+);
+
+const reviewDialog = await evaluate(
+  "(() => { const d = document.querySelector('dialog[open]'); return d ? d.innerText : 'no dialog'; })()",
+);
+check(
+  'the audience/date review dialog opens BY ITSELF — she is not sent to the question editor first',
+  typeof reviewDialog === 'string' && reviewDialog.includes('مراجعة الجمهور والتاريخ'),
+  String(reviewDialog).slice(0, 300),
+);
+check(
+  'the review flag is consumed — a reload of this URL would not reopen it',
+  !String(reuseLandedOn).includes('review'),
+  String(reuseLandedOn),
+);
+
+await evaluate(`(() => {
+  const cancel = [...document.querySelectorAll('dialog[open] button')]
+    .find((b) => b.textContent.trim() === 'إلغاء');
+  if (cancel) cancel.click();
+  return true;
+})()`);
+await new Promise((r) => setTimeout(r, 400));
+const afterReviewCancel = await text();
+check(
+  'the reused draft carries the questions and no answers, same as an edited copy',
+  (afterReviewCancel.includes('سورة الضحى') || afterReviewCancel.includes('عدد آيات'))
+    && !afterReviewCancel.includes('أُرسل في'),
+  afterReviewCancel.slice(0, 400),
+);
+
 /* ── Responsive: the library must be usable on a phone ────────────────────── */
 
 for (const [width, label] of [[390, 'mobile'], [1440, 'desktop']]) {

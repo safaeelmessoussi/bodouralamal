@@ -13,6 +13,7 @@ import {
   readSubmission,
   removeQuestion,
   reorderQuestions,
+  retargetAssessment,
   type AssessmentPaper,
   type AssessmentStatus,
   type AssessmentSummary,
@@ -190,7 +191,15 @@ function Library({
   const [query, setQuery] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
-  const [copying, setCopying] = useState<AssessmentSummary | null>(null);
+  /**
+   * **One safe operation, two entry points** (R134). `POST /assessments/{id}/copy`
+   * is identical either way — an independent draft, its own empty target,
+   * submissions, grades and notifications. Only where the author lands differs:
+   * «إنشاء نسخة» opens the builder to edit the wording; «استخدام مرة أخرى» opens
+   * the same builder with the audience/date review dialog already up, since
+   * nothing about the wording needs changing, only who it reaches and when.
+   */
+  const [copying, setCopying] = useState<{ row: AssessmentSummary; reuse: boolean } | null>(null);
 
   const filtered = query.trim() !== '' || stateFilter !== '' || levelFilter !== '';
 
@@ -352,7 +361,14 @@ function Library({
                       window.location.href = `?exam=${encodeURIComponent(row.id)}`;
                     },
                   },
-                  { label: t('assessments.copyPaper'), onSelect: (row) => setCopying(row) },
+                  {
+                    label: t('assessments.reusePaper'),
+                    onSelect: (row) => setCopying({ row, reuse: true }),
+                  },
+                  {
+                    label: t('assessments.copyPaper'),
+                    onSelect: (row) => setCopying({ row, reuse: false }),
+                  },
                 ]
               : []
           }
@@ -360,16 +376,18 @@ function Library({
         {copying ? (
           <ConfirmDialog
             open
-            title={t('assessments.copyConfirmTitle')}
-            body={t('assessments.copyConfirmBody')}
-            confirmLabel={t('assessments.copyPaper')}
+            title={t(copying.reuse ? 'assessments.reusePaper' : 'assessments.copyConfirmTitle')}
+            body={t(copying.reuse ? 'assessments.reuseConfirmBody' : 'assessments.copyConfirmBody')}
+            confirmLabel={t(copying.reuse ? 'assessments.reusePaper' : 'assessments.copyPaper')}
             onCancel={() => setCopying(null)}
             onConfirm={async () => {
-              const source = copying;
+              const { row, reuse } = copying;
               setCopying(null);
               try {
-                const created = await copyAssessment(source.id, token);
-                window.location.href = `?exam=${encodeURIComponent(created.id)}`;
+                const created = await copyAssessment(row.id, token);
+                window.location.href = reuse
+                  ? `?exam=${encodeURIComponent(created.id)}&review=1`
+                  : `?exam=${encodeURIComponent(created.id)}`;
               } catch {
                 setNotice(t('assessments.copyFailed'));
               }
@@ -616,6 +634,115 @@ function CreateDialog({
   );
 }
 
+/**
+ * **«مراجعة الجمهور والتاريخ»** (R134). A copy or a reuse starts with the
+ * source's target and today's date, for convenience — never assumed correct.
+ * This is where the author confirms them or picks fresh ones before
+ * publishing, through the identical picker `CreateDialog` uses: one target
+ * resolver, one place a UUID is validated, not a second one for edits.
+ *
+ * **The Level is fixed and not offered here.** The questions were written
+ * for it; changing it would be a second, unguarded way to do what
+ * `POST /assessments/{id}/copy` already does safely.
+ */
+function RetargetDialog({
+  examId,
+  levelId,
+  initialKind,
+  version,
+  token,
+  onCancel,
+  onSaved,
+}: {
+  examId: string;
+  levelId: string;
+  initialKind: TargetKind;
+  version: number;
+  token: string | null;
+  onCancel: () => void;
+  onSaved: () => void;
+}): ReactNode {
+  const [targetKind, setTargetKind] = useState<TargetKind>(initialKind);
+  const [targetId, setTargetId] = useState('');
+  const [date, setDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const needsDate = targetKind !== 'session';
+  const needsId = targetKind !== 'level';
+  const error =
+    (needsDate && date === '') || (needsId && targetId.trim() === '') ? t('common.required') : null;
+  const dirty = targetKind !== initialKind || targetId.trim() !== '' || date !== '';
+
+  async function submit(): Promise<void> {
+    setTouched(true);
+    if (error) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await retargetAssessment(
+        examId,
+        version,
+        {
+          target: { kind: targetKind, ...(needsId ? { id: targetId.trim() } : {}) },
+          ...(needsDate ? { date } : {}),
+        },
+        token,
+      );
+      onSaved();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FormDialog
+      open
+      onCancel={onCancel}
+      onSubmit={() => void submit()}
+      title={t('assessments.reviewTarget')}
+      busy={busy}
+      dirty={dirty}
+    >
+      {failed ? <Feedback tone="warn">{t('assessments.saveFailed')}</Feedback> : null}
+      <SelectField
+        label={t('assessments.target')}
+        value={targetKind}
+        onChange={(v) => {
+          setTargetKind(v as TargetKind);
+          setTargetId('');
+        }}
+        options={(Object.keys(TARGET_LABELS) as TargetKind[]).map((k) => ({
+          value: k,
+          label: t(TARGET_LABELS[k]),
+        }))}
+      />
+      {needsId ? (
+        <TargetPicker
+          kind={targetKind}
+          levelId={levelId}
+          value={targetId}
+          onChange={setTargetId}
+          error={touched && targetId.trim() === '' ? t('common.required') : null}
+        />
+      ) : null}
+      {needsDate ? (
+        <DateField
+          label={t('assessments.date')}
+          value={date}
+          onChange={setDate}
+          required
+          hint={t('assessments.dateHint')}
+          error={touched && date === '' ? t('common.required') : null}
+        />
+      ) : null}
+    </FormDialog>
+  );
+}
+
 /** The builder and the inbox for one paper. */
 function OnePaper({
   examId,
@@ -637,6 +764,7 @@ function OnePaper({
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<'publish' | 'close' | null>(null);
   const [viewing, setViewing] = useState<AssessmentPaper | null>(null);
+  const [retargeting, setRetargeting] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -654,6 +782,23 @@ function OnePaper({
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * **«استخدام مرة أخرى» lands here with the review dialog already open** —
+   * `?review=1`, set by the Library's reuse action. Nothing about the wording
+   * needs changing for a plain reuse, only who it reaches and when, so this
+   * skips straight past the question list rather than making her find the
+   * button. Consumed once: a later reload of the same URL must not reopen it.
+   */
+  useEffect(() => {
+    if (paper?.status !== 'draft') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('review') !== '1') return;
+    setRetargeting(true);
+    params.delete('review');
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+  }, [paper?.status]);
 
   /**
    * **The freeze, said once.** Once anybody has submitted, the paper is fixed;
@@ -723,6 +868,11 @@ function OnePaper({
     actions: (
         canWrite && paper ? (
           <>
+            {editable ? (
+              <Button variant="secondary" disabled={busy} onClick={() => setRetargeting(true)}>
+                {t('assessments.reviewTarget')}
+              </Button>
+            ) : null}
             {paper.status === 'draft' ? (
               <Button variant="primary" disabled={busy} onClick={() => setConfirm('publish')}>
                 {t('assessments.publish')}
@@ -750,6 +900,16 @@ function OnePaper({
             </Badge>{' '}
             <span className="muted">{t(TARGET_LABELS[paper.target_kind])}</span>
           </p>
+          {paper.source_exam_id ? (
+            <p className="hint">
+              {t('assessments.copiedFrom').replace('{title}', paper.source_exam_title ?? '')}
+            </p>
+          ) : null}
+          {paper.reused_count ? (
+            <p className="hint">
+              {t('assessments.reusedCount').replace('{n}', String(paper.reused_count))}
+            </p>
+          ) : null}
           {paper.description ? <p>{paper.description}</p> : null}
           {frozen ? <Feedback>{t('assessments.frozen')}</Feedback> : null}
 
@@ -860,6 +1020,21 @@ function OnePaper({
       ) : null}
 
       {viewing ? <SubmissionDialog paper={viewing} onClose={() => setViewing(null)} /> : null}
+
+      {retargeting && paper ? (
+        <RetargetDialog
+          examId={examId}
+          levelId={paper.level_id}
+          initialKind={paper.target_kind}
+          version={paper.version}
+          token={token}
+          onCancel={() => setRetargeting(false)}
+          onSaved={() => {
+            setRetargeting(false);
+            void load();
+          }}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={confirm !== null}

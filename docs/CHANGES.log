@@ -5954,3 +5954,83 @@ CI outage; this is the first deploy since.
   and SRS route declarations byte-for-byte with HEAD; both unchanged. Diff
   validation passes. Local application/browser/integration suites were not
   repeated for prose-only edits; the exact hosted pipeline remains the final gate.
+
+## Reuse and copy stay one safe operation — and a copy's audience/date became reviewable, not just inherited (SRS Revision 134, 2026-09-08)
+
+**The Owner declined to ratify R134 as drafted.** «إنشاء نسخة» and «استخدام
+مرة أخرى» name two real product intents — an editable adaptation, and a plain
+reuse with its own audience — and the drafted clauses 11–12 had quietly
+collapsed them into one, describing a copy's target as simply "empty" when it
+was actually inherited from the source with no way to review it. Held for a
+domain reconciliation before ratification, per the Owner's explicit
+instruction: inspect the real schema before deciding whether the two product
+concepts need two representations or one.
+
+**The reconciliation: one storage shape already serves both, correctly.**
+`Exam(mode='online')` was already, per row, fully independent in every
+relation that matters — its own questions, its own empty target, submissions,
+grades and notifications — because sitting-scoped facts are columns/relations
+on that one row and R124's freeze already keys off it. A Paper/Sitting schema
+split was evaluated on the actual model, not assumed: it would need a new
+entity and a migration for every table keyed on `exam_id`, and would force an
+unasked product question — does editing a shared "master" paper retroactively
+change sittings that already exist under it? — that was not this task's to
+invent. What the reconciliation found genuinely missing was narrower: (a) no
+way to trace which papers descend from which, and (b) no way to review a
+copy's inherited target/date before publishing, whether the entry was «نسخ
+كمسودة» or a plain reuse.
+
+**What shipped — two small, additive pieces, not a bigger model:**
+
+- `Exam.source_exam_id` (nullable self-FK, `ON DELETE SET NULL`,
+  `20260908090000_r134_exam_source_id`) — **provenance only**. Read for the
+  library/detail screens' «نسخة من» / «استُخدمت N مرة» and nothing else: not
+  consulted for authorization, the freeze, targeting, grading, publication or
+  deletion, and no mutable state is shared through it — the Owner's explicit
+  condition, stated as its own SRS clause (12) rather than left implicit.
+  Exposed only on the author's own read (`GET /assessments/{id}`, the library
+  row); `studentPaper`/`readSubmission` never select it, so a beneficiary is
+  never told a paper is a reuse.
+- `PATCH /assessments/{id}/target` — the real gap. A copy's target/date were
+  seeded from the source for convenience and had no route to change: the
+  builder showed the target as read-only text and there was no way to give a
+  December reuse a different audience than September's without reaching past
+  the API. Reuses `createAssessment`'s exact target resolver and validation
+  (§20 rule 22 — one resolver, not a second one for edits); TD-15 versioned;
+  refused once published or once anybody has submitted; **refuses to change
+  the Level at all** — structurally, the input type carries no `levelId` —
+  since the questions were written for it.
+- **Still one backend operation.** «استخدام مرة أخرى» and «إنشاء نسخة» both
+  call the identical `POST /assessments/{id}/copy`; only where the author
+  lands differs — the reuse entry point opens straight to the target/date
+  review, the copy entry point opens the question editor. Neither creates a
+  second write path, and both produce the same independent row.
+
+**Verified:** 11 new backend integration assertions (provenance exposed only
+to the author and invisible to a student; grants no authority through the
+link; retarget success, Level-immutability, scope/version/transition/
+target-validation refusals) plus the existing 10 reuse assertions, all green
+together with the 66-assertion admission-to-achievement journey (147/147). 5
+new frontend source-guard assertions pin the two-entry-point wiring, the
+`?review=1` auto-open-and-consume behaviour, and the Level exclusion. Full
+suites green: backend typecheck/lint/build, 81/81 assessment + 66/66 journey
+integration; frontend typecheck/lint/build, 94 files / 1,079 tests. OpenAPI
+regenerated (169 paths / 218 operations) and TD-3 conformance unchanged
+(218/226 implemented, 8 pending, 0 undocumented).
+
+**Two fixed, in the same file, unrelated to this change:** a pre-existing test
+("refuses once the paper is no longer a draft") published an assessment with
+no questions, tripping `NO_QUESTIONS` before reaching the transition check —
+fixed by adding a question first. The already-documented order-dependent
+`assessment.integration.test.ts` "library" flake (recorded earlier this
+session) surfaced twice more during this work under different test names in
+the same describe block; both confirmed passing in isolation, consistent with
+the existing finding — not a regression from this change.
+
+**`docs/SRS-PROPOSAL-R134.md`** is updated to APPLIED, records the exact
+clauses the Owner held (11–12) and why, and is kept verbatim below that note
+as the 2026-09-04 drafting record. Ratified **chronologically after Revision
+135**, whose number was assigned first while this proposal sat open under
+review; the numbering was preserved rather than renumbered, and R135's own
+text (unchanged) already recorded R134 as not-yet-ratified at the time it was
+written — both statements are true of their own moment.

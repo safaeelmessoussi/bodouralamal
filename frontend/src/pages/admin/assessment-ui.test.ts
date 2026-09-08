@@ -162,3 +162,38 @@ describe('R125 — the picker offers what the server allows, and is not the boun
     expect(builder).toContain("if (value !== '' && !rows.some((r) => r.id === value)) onChange('');");
   });
 });
+
+describe('R134 — reuse and copy are the same safe operation, two entry points', () => {
+  it('the library offers both, and both call the identical backend copy', () => {
+    expect(builder).toContain("t('assessments.reusePaper')");
+    expect(builder).toContain("t('assessments.copyPaper')");
+    // One call site, one operation — the distinction is where the caller lands
+    // afterward, not a second write path.
+    expect(builder).toMatch(/const created = await copyAssessment\(row\.id, token\)/);
+  });
+
+  it('only the reuse path adds the review flag to the redirect', () => {
+    expect(builder).toContain("`?exam=${encodeURIComponent(created.id)}&review=1`");
+    expect(builder).toContain("`?exam=${encodeURIComponent(created.id)}`");
+  });
+
+  it('the builder auto-opens the review dialog for ?review=1 and consumes it', () => {
+    // Consumed once: a later reload of the same URL must not reopen it, so the
+    // effect rewrites history rather than merely reading the flag.
+    expect(builder).toContain("params.get('review') !== '1'");
+    expect(builder).toContain('setRetargeting(true)');
+    expect(builder).toContain("window.history.replaceState");
+  });
+
+  it('the review dialog never offers to change the Level', () => {
+    // The questions were written for it; changing it here would be a second,
+    // unguarded way to do what POST /assessments/{id}/copy already does safely.
+    expect(builder).not.toMatch(/function RetargetDialog[\s\S]*?levelId:\s*setLevelId/);
+    expect(builder).toContain('function RetargetDialog');
+  });
+
+  it('shows lineage only when it exists, never a zero/empty badge', () => {
+    expect(builder).toContain('paper.source_exam_id ?');
+    expect(builder).toContain('paper.reused_count ?');
+  });
+});

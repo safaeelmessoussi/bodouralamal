@@ -9155,6 +9155,77 @@
         }
       }
     },
+    "/assessments/{id}/target": {
+      "patch": {
+        "summary": "Review the audience and date before publishing",
+        "description": "**§4.6, R134 — «مراجعة الجمهور والتاريخ».** `POST /assessments/{id}/copy` starts a reuse or a copy with the source's target and today's date, for convenience; this is where the author confirms or changes them before publishing THIS use. Body: `{ version, target, date? }`, the same `target`/`date` shape and validation `POST /assessments` applies — one target resolver, not a second one for edits (§20 rule 22). **The Level never changes here**: the questions were written for it, and R124's freeze already governs whether they may still change at all. Draft and unfrozen only (`INVALID_TRANSITION` / `ASSESSMENT_HAS_SUBMISSIONS`); TD-15 `version`. Authorisation is `loadForAuthor`, unchanged.",
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, TARGET_ID_REQUIRED, or DATE_REQUIRED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown paper, one out of scope, an unknown group, occurrence, teaching group or beneficiary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason INVALID_TRANSITION or ASSESSMENT_HAS_SUBMISSIONS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/assessments/{id}/questions": {
       "post": {
         "summary": "Append a question",

@@ -44,7 +44,7 @@ id() { node -e 'process.stdout.write(JSON.parse(process.env.JOURNEY_IDS)[process
 # cookie, so reusing one renders a logged-out shell (TD-4.13) — which on this
 # screen would read as "the library is empty", the exact defect under test.
 ADMIN_COOKIES=""
-for i in 1 2 3 4 5 6 7 8 9 10; do
+for i in 1 2 3 4 5 6 7 8 9 10 11; do
   ADMIN_COOKIES="$ADMIN_COOKIES $(bash scripts/dev/issue-dev-session.sh)"
 done
 
@@ -55,7 +55,7 @@ console.log(JSON.stringify({
   examId: s.examId,
   adminCookie: c[0], adminCookie2: c[1], adminCookie3: c[2], adminCookie4: c[3],
   adminCookie5: c[4], adminCookie6: c[5], adminCookie7: c[6], adminCookie8: c[7],
-  adminCookie9: c[8], adminCookie10: c[9],
+  adminCookie9: c[8], adminCookie10: c[9], adminCookie11: c[10],
 }));
 " $ADMIN_COOKIES)"
 

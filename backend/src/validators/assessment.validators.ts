@@ -42,6 +42,20 @@ export const createAssessmentSchema = z
   .strict();
 
 /**
+ * `PATCH /assessments/{id}/target` — **R134's audience/date review**, before a
+ * copy or a reuse is published. The Level is deliberately absent: the
+ * questions were written for it, and changing it here would be a second,
+ * unguarded way to do what `POST /assessments/{id}/copy` already does safely.
+ */
+export const retargetAssessmentSchema = z
+  .object({
+    version: z.coerce.number().int().min(0),
+    target: assessmentTarget,
+    date: calendarDate.optional(),
+  })
+  .strict();
+
+/**
  * **`kind` is chosen once, at creation.** Changing a `short_text` into a
  * `multiple_choice` would leave an answer that answers a different question, so
  * the patch schema below does not accept it — a new question is a new question.

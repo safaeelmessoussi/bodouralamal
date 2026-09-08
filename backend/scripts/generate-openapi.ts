@@ -869,6 +869,20 @@ const document = {
         },
       ),
     },
+    '/assessments/{id}/target': {
+      patch: op(
+        'Review the audience and date before publishing',
+        "**§4.6, R134 — «مراجعة الجمهور والتاريخ».** `POST /assessments/{id}/copy` starts a reuse or a copy with the source's target and today's date, for convenience; this is where the author confirms or changes them before publishing THIS use. Body: `{ version, target, date? }`, the same `target`/`date` shape and validation `POST /assessments` applies — one target resolver, not a second one for edits (§20 rule 22). **The Level never changes here**: the questions were written for it, and R124's freeze already governs whether they may still change at all. Draft and unfrozen only (`INVALID_TRANSITION` / `ASSESSMENT_HAS_SUBMISSIONS`); TD-15 `version`. Authorisation is `loadForAuthor`, unchanged.",
+        {
+          '204': 'Saved.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — a malformed body, TARGET_ID_REQUIRED, or DATE_REQUIRED.`,
+          '401': ENVELOPE,
+          '403': ENVELOPE,
+          '404': `${ENVELOPE} NOT_FOUND for an unknown paper, one out of scope, an unknown group, occurrence, teaching group or beneficiary.`,
+          '409': `${ENVELOPE} VERSION_CONFLICT, or STATE_CONFLICT with reason INVALID_TRANSITION or ASSESSMENT_HAS_SUBMISSIONS.`,
+        },
+      ),
+    },
     '/assessments/{id}/questions': {
       post: op('Append a question', '**§4.6, R124 — one question, appended.** Body: `{ kind, prompt, justification?, options? }`. Four kinds and no fifth: `short_text` · `long_text` · `single_choice` (UCQ) · `multiple_choice` (MCQ). **Appended, never inserted at a position** — a create that also chose one would be a second ordering mechanism beside the reorder route, and R76 settled that ordering is expressed as a whole sequence. **A choice question needs at least two options** (`OPTIONS_REQUIRED`) and a text question refuses them outright (`OPTIONS_NOT_ALLOWED`) rather than dropping them: a client sending options on a `short_text` has misunderstood something, and a `201` would confirm the misunderstanding. `justification` is `none` | `optional` | `required` and is **meaningful only on a choice question** — a text answer IS its own justification, and both the schema and `exam_question_justification_check` say so. **The paper freezes the moment somebody submits** (`ASSESSMENT_HAS_SUBMISSIONS`): adding, editing, removing or reordering after that would make an answer mean something the student never said. Audited with the kind and an option COUNT — never the prompt or a label (TD-14).', { '201': 'Created; `{ id }`.', '400': `${ENVELOPE} VALIDATION_FAILED — OPTIONS_REQUIRED, OPTIONS_NOT_ALLOWED or JUSTIFICATION_NOT_ALLOWED.`, '401': ENVELOPE, '403': ENVELOPE, '404': `${ENVELOPE} NOT_FOUND.`, '409': `${ENVELOPE} STATE_CONFLICT with reason ASSESSMENT_HAS_SUBMISSIONS.` }),
     },

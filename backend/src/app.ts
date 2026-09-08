@@ -723,6 +723,7 @@ export function createApp(
   // The paper as its AUTHOR sees it — including a draft, which `/paper` cannot
   // return and which is what a paper being written always is.
   guarded.get('/assessments/:id', assessments.authorRead(prisma));
+  guarded.patch('/assessments/:id/target', assessments.retarget(prisma));
   guarded.post('/assessments/:id/questions', assessments.addQuestionHandler(prisma));
   guarded.patch('/assessments/:id/questions/order', assessments.reorder(prisma));
   guarded.patch('/assessments/:id/questions/:questionId', assessments.patchQuestion(prisma));

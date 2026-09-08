@@ -223,15 +223,31 @@ const ASSESSMENT_SELECT = {
 
 type AssessmentRow = Prisma.ExamGetPayload<{ select: typeof ASSESSMENT_SELECT }>;
 
+/**
+ * **R134 — provenance only** (see the schema comment on `Exam.sourceExamId`):
+ * where a paper's wording came from, and how many later papers started from
+ * it. Selected only for the AUTHOR's own read (`loadForAuthor`) — never for
+ * `studentPaper`/`readSubmission`'s shared shape, so a beneficiary reading her
+ * own paper is never told it is a reuse.
+ */
+const AUTHOR_LINEAGE_SELECT = {
+  sourceExamId: true,
+  sourceExam: { select: { title: true } },
+  _count: { select: { reusedBy: true } },
+} as const;
+
+type AuthorAssessmentRow = AssessmentRow &
+  Prisma.ExamGetPayload<{ select: typeof AUTHOR_LINEAGE_SELECT }>;
+
 /** Out of scope answers `404`, never `403` (§20 rule 17). */
 async function loadForAuthor(
   prisma: PrismaClient,
   actor: Actor,
   id: string,
-): Promise<AssessmentRow> {
+): Promise<AuthorAssessmentRow> {
   const exam = await prisma.exam.findFirst({
     where: { id, deletedAt: null, mode: 'online' },
-    select: ASSESSMENT_SELECT,
+    select: { ...ASSESSMENT_SELECT, ...AUTHOR_LINEAGE_SELECT },
   });
   if (!exam) throw new AppError('NOT_FOUND', 'no such assessment');
   // `ASSESSMENT_SELECT` already carries the arm and the date, so the branch rule
@@ -355,7 +371,7 @@ export async function createAssessment(
 /** Every target arm validated once, and the date it implies resolved with it. */
 async function resolveTarget(
   tx: Prisma.TransactionClient,
-  input: AssessmentInput,
+  input: Pick<AssessmentInput, 'levelId' | 'target' | 'date'>,
 ): Promise<{
   date: Date;
   administrativeGroupId: string | null;
@@ -440,6 +456,77 @@ async function resolveTarget(
       return { date: requireDate(), ...none, studentId: id };
     }
   }
+}
+
+/**
+ * `PATCH /assessments/{id}/target` — **review the audience/date before
+ * publishing** (R134).
+ *
+ * A copy — «إنشاء نسخة» or «استخدام مرة أخرى», the same safe operation from
+ * two entry points — starts with the source's target and today's date, for
+ * convenience. Neither is fixed: the author confirms or changes them here,
+ * through the identical validation `createAssessment` applies (§20 rule 22 —
+ * one target resolver, not a second one for edits). Draft and unfrozen only,
+ * exactly like every other authoring write in this module; the Level itself
+ * never changes here, since the questions were written for it.
+ */
+export async function retargetAssessment(
+  prisma: PrismaClient,
+  actor: Actor,
+  examId: string,
+  expectedVersion: number,
+  input: { target: AssessmentTarget; date?: Date },
+): Promise<void> {
+  const exam = await loadForAuthor(prisma, actor, examId);
+  if (exam.status !== 'draft') {
+    throw new AppError('STATE_CONFLICT', 'only a draft’s audience may be reviewed', {
+      reason: 'INVALID_TRANSITION',
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await assertNotFrozen(tx, examId);
+    const target = await resolveTarget(tx, {
+      levelId: exam.levelId,
+      target: input.target,
+      ...(input.date === undefined ? {} : { date: input.date }),
+    });
+    await assertMayAuthor(tx, actor, {
+      levelId: exam.levelId,
+      subjectId: exam.subjectId,
+      branchId: null,
+      administrativeGroupId: target.administrativeGroupId,
+      studentId: target.studentId,
+      targetKind: input.target.kind,
+      sessionId: target.sessionId,
+      teachingGroupId: target.teachingGroupId,
+      date: target.date,
+    });
+
+    await updateWithVersion({
+      delegate: tx.exam,
+      id: examId,
+      expectedVersion,
+      requireNotDeleted: true,
+      data: {
+        targetKind: input.target.kind,
+        administrativeGroupId: target.administrativeGroupId,
+        sessionId: target.sessionId,
+        teachingGroupId: target.teachingGroupId,
+        studentId: target.studentId,
+        date: target.date,
+      },
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'assessment.retarget',
+      targetEntity: 'Exam',
+      targetId: examId,
+      detail: { target_kind: input.target.kind },
+    });
+  });
 }
 
 export interface QuestionInput {
@@ -949,11 +1036,15 @@ export interface StudentPaper {
  * scoped and paginated. Returning one here would put a student's answers on an
  * endpoint whose subject is the paper.
  */
+export interface AuthorPaper extends Omit<StudentPaper, 'exam'> {
+  exam: AuthorAssessmentRow;
+}
+
 export async function authorPaper(
   prisma: PrismaClient,
   actor: Actor,
   examId: string,
-): Promise<StudentPaper> {
+): Promise<AuthorPaper> {
   const exam = await loadForAuthor(prisma, actor, examId);
 
   const questions = await prisma.examQuestion.findMany({
@@ -1754,6 +1845,10 @@ export interface AssessmentListRow {
   academicYearLabel: string | null;
   questionCount: number;
   submissionCount: number;
+  /** R134 — provenance only; see the schema comment on `Exam.sourceExamId`. */
+  sourceExamId: string | null;
+  sourceExamTitle: string | null;
+  reusedCount: number;
 }
 
 export interface AssessmentListFilters extends PageParams, SortParams {
@@ -1871,10 +1966,16 @@ export async function listAssessments(
         level: { select: { name: true } },
         subject: { select: { name: true } },
         academicYear: { select: { label: true } },
+        // R134 — provenance only; staff-only by construction (this whole
+        // function refuses a non-staff caller above), so no separate guard
+        // against reaching a beneficiary is needed here.
+        sourceExamId: true,
+        sourceExam: { select: { title: true } },
         _count: {
           select: {
             questions: { where: { deletedAt: null } },
             submissions: true,
+            reusedBy: true,
           },
         },
       },
@@ -1897,6 +1998,9 @@ export async function listAssessments(
       academicYearLabel: row.academicYear?.label ?? null,
       questionCount: row._count.questions,
       submissionCount: row._count.submissions,
+      sourceExamId: row.sourceExamId,
+      sourceExamTitle: row.sourceExam?.title ?? null,
+      reusedCount: row._count.reusedBy,
     })),
     window,
     total,
@@ -1983,6 +2087,11 @@ export async function copyAssessment(
         teachingGroupId: source.teachingGroupId,
         studentId: source.studentId,
         date: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())),
+        // R134 — provenance only; see the schema comment on `sourceExamId`.
+        // The target/date above are copied for convenience and are exactly
+        // what `retargetAssessment` exists to let the author review and
+        // change before she publishes this use.
+        sourceExamId: examId,
       },
       select: { id: true },
     });

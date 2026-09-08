@@ -41,8 +41,15 @@ export interface AssessmentPaper {
   description: string | null;
   status: AssessmentStatus;
   target_kind: TargetKind;
+  level_id: string;
   date: string;
   max_grade: string;
+  /** TD-15 — required by `retargetAssessment`. */
+  version: number;
+  /** R134 — provenance only, present only on the author's own read. */
+  source_exam_id?: string | null;
+  source_exam_title?: string | null;
+  reused_count?: number;
   questions: AssessmentQuestion[];
   /** `null` when this person has not started. **Never another student's.** */
   submission: {
@@ -272,6 +279,10 @@ export interface AssessmentSummary {
   academic_year_label: string | null;
   question_count: number;
   submission_count: number;
+  /** R134 — provenance only; see the backend schema comment on `sourceExamId`. */
+  source_exam_id: string | null;
+  source_exam_title: string | null;
+  reused_count: number;
 }
 
 export interface AssessmentListFilters {
@@ -312,4 +323,22 @@ export async function copyAssessment(
   token: string | null,
 ): Promise<{ id: string }> {
   return api<{ id: string }>(`/assessments/${examId}/copy`, { method: 'POST', body: {}, token });
+}
+
+/**
+ * **«مراجعة الجمهور والتاريخ»** (R134) — a copy or a reuse starts with the
+ * source's target/date for convenience; this confirms or changes them before
+ * publishing this use. Draft and unfrozen only; the Level cannot change here.
+ */
+export async function retargetAssessment(
+  examId: string,
+  version: number,
+  input: { target: { kind: TargetKind; id?: string }; date?: string },
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/assessments/${examId}/target`, {
+    method: 'PATCH',
+    body: { ...input, version },
+    token,
+  });
 }
