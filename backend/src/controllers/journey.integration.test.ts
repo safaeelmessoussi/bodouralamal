@@ -772,14 +772,39 @@ describe('the journey · 7 · the Super Admin sets an ONLINE assessment on LEVEL
   });
 
   it('publishes it', async () => {
-    const res = await call('POST', `/assessments/${assessmentId}/publish`, superAdmin);
-    expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(204);
+    /**
+     * **R136 retires `POST /assessments/{id}/publish`** — الجدولة's one
+     * `POST /exams/schedule` now assigns the target/date and publishes in
+     * one atomic step, always onto an independent occurrence copied from
+     * the draft rather than the draft itself (clause 3). `assessmentId` is
+     * reassigned to that occurrence, so every later step in this journey —
+     * the paper the مستفيدة answers, the sheet the مؤطِّرة marks — keeps
+     * addressing the row a real submission and grade can actually land on.
+     */
+    const draftId = assessmentId;
+    const res = await call('POST', '/exams/schedule', superAdmin, {
+      mode: 'online',
+      source_exam_id: draftId,
+      target: { kind: 'level' },
+      date: EXAM_DATE,
+      availability: { policy: 'custom', at: '1970-01-01T00:00:00.000Z' },
+    });
+    expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(201);
+    const draftRow = await prisma.exam.findUniqueOrThrow({
+      where: { id: draftId },
+      select: { status: true },
+    });
+    // The draft source is copied, never retargeted or consumed.
+    expect(draftRow.status).toBe('draft');
+
+    assessmentId = createdId(res);
     const row = await prisma.exam.findUniqueOrThrow({
       where: { id: assessmentId },
-      select: { status: true, publishedAt: true },
+      select: { status: true, publishedAt: true, sourceExamId: true },
     });
     expect(row.status).toBe('published');
     expect(row.publishedAt).not.toBeNull();
+    expect(row.sourceExamId).toBe(draftId);
   });
 });
 
@@ -797,12 +822,12 @@ describe('the journey · 8 · publication tells the people it concerns', () => {
     const mine = await inbox(studentToken);
     // **The two-enrolment assertion, on the inbox.** She holds LEVEL A and
     // LEVEL B; a recipient set joined through enrolments delivers twice.
-    expect(mine.filter((r) => r['type'] === 'assessment_published')).toHaveLength(1);
+    expect(mine.filter((r) => r['type'] === 'exam_scheduled')).toHaveLength(1);
   });
 
   it('the مؤطِّرة who teaches LEVEL A is told', async () => {
     const hers = await inbox(teacherToken);
-    expect(hers.filter((r) => r['type'] === 'assessment_published')).toHaveLength(1);
+    expect(hers.filter((r) => r['type'] === 'exam_scheduled')).toHaveLength(1);
   });
 
   it('a LEVEL-B-only مستفيدة is told NOTHING — targeting is targeting', async () => {

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ExamSection, type ExamSectionProps } from './exam-section.js';
+import { ExamSection, ONLINE_EXAM_INITIAL, type ExamSectionProps } from './exam-section.js';
 import { ar } from '../../i18n/ar.js';
 
 /**
@@ -53,6 +53,8 @@ const props = {
   onAssistants: () => {},
   maxGrade: '20',
   onMaxGrade: () => {},
+  online: ONLINE_EXAM_INITIAL,
+  onOnlineChange: () => {},
 } as unknown as ExamSectionProps;
 
 const markup = (): string => renderToStaticMarkup(<ExamSection {...props} />);
@@ -67,9 +69,13 @@ describe('the online exam mode no longer promises an unbuilt feature', () => {
 
   it('says where an online paper is actually written, exactly once', () => {
     const html = markup();
-    // **Once.** It was the `hint` AND the body before, which is how one sentence
-    // came to be on screen twice.
-    expect(html.split('الاختبارات عن بُعد تُعدّ').length - 1).toBe(1);
+    /**
+     * **R136 — the pointer-only "go build it elsewhere" body is replaced by
+     * an inline scheduling flow**, so the sentence this guard originally
+     * pinned (`onlineElsewhere`) is retired as a write path; the builder
+     * link survives, once, alongside the new `onlineHint`.
+     */
+    expect(html.split(ar.scheduling.exam.onlineHint).length - 1).toBe(1);
     expect(html).toContain('/admin/assessments');
     expect(html).toContain(ar.scheduling.exam.onlineGoToBuilder);
   });

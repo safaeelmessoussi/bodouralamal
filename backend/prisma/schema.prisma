@@ -2796,6 +2796,15 @@ model Exam {
   publishedAt DateTime?  @map("published_at") @db.Timestamptz(6)
   closedAt    DateTime?  @map("closed_at") @db.Timestamptz(6)
 
+  /// **R136 — remote access, separate from `status`/publication.** `NULL` means
+  /// manually controlled and not yet opened; a timestamp means a student is
+  /// eligible once `now() >= available_from`. Set once by the scheduling
+  /// transaction (a policy computed at schedule time) or once by an explicit
+  /// staff "open now" act; never returned to `NULL` and never moved once set
+  /// (R136 — one-way). Physical-only rows never set it; enforcement reads it
+  /// only for `mode = 'online'`.
+  availableFrom DateTime? @map("available_from") @db.Timestamptz(6)
+
   /**
    * **R124 — which of the five audiences this is for.** Stored, never inferred
    * from which columns are null: `administrative_group_id IS NULL` meant *the

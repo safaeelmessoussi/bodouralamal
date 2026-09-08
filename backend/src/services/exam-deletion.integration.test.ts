@@ -325,9 +325,9 @@ describe('exam deletion — authorization is unchanged by the evidence guard', (
   });
 });
 
-describe('exam deletion — the permanent purge remains FK-safe', () => {
-  it('refuses to destroy a tombstoned exam whose questions still reference it', async () => {
-    const examId = await makeExam('حذف نهائي محجوب');
+describe('exam deletion — the permanent purge remains FK-safe (R136 Codex H2)', () => {
+  it('purges a tombstoned exam whose only children are its own questions', async () => {
+    const examId = await makeExam('حذف نهائي بلا دليل');
     await prisma.examQuestion.create({
       data: { examId, displayOrder: 1, kind: 'long_text', prompt: 'سؤال' },
     });
@@ -337,11 +337,52 @@ describe('exam deletion — the permanent purge remains FK-safe', () => {
       where: { targetEntity: 'Exam', targetId: examId },
       select: { id: true },
     });
-    // The soft delete is an UPDATE, so `Restrict` never fired. A purge is a
-    // DELETE, and PostgreSQL is the authority on what still points at the row.
+    /**
+     * **R136 Codex H2 — the purge plan owns `examQuestion` now.** It used to
+     * carry no children at all, so PostgreSQL's own `RESTRICT` on
+     * `exam_question.exam_id` refused every purge behind a tombstoned exam
+     * that had ever had a single question written on it — R133's lifecycle
+     * was structurally incomplete, not merely untested. A paper nobody
+     * answered is a plan, not evidence (the same line `deleteExam`'s own
+     * guard draws), so it is exactly what the completed lifecycle now lets
+     * through.
+     */
+    await purgeEntry(prisma, await actorFor(prisma, superAdminId), entry.id);
+    expect(await prisma.exam.count({ where: { id: examId } })).toBe(0);
+    expect(await prisma.examQuestion.count({ where: { examId } })).toBe(0);
+  });
+
+  it('refuses to purge an exam a student actually sat — recorded evidence outlives the tombstone', async () => {
+    const examId = await makeExam('حذف نهائي أمام دليل');
+    await prisma.studentExamSubmission.create({
+      data: { examId, studentId, state: 'submitted', submittedAt: new Date() },
+    });
+    // `deleteExam` itself refuses an exam WITH live evidence (R136 §21 tests
+    // this direction already), so the tombstone this purge test needs can
+    // only be reached with the guard bypassed — exactly the historical row
+    // R133 exists to protect: soft-deleted before the evidence guard existed,
+    // or restored and re-deleted by an operator with a reason of their own.
+    await prisma.exam.update({ where: { id: examId }, data: { deletedAt: new Date() } });
+    const entry = await prisma.trash.create({
+      data: {
+        targetEntity: 'Exam',
+        targetId: examId,
+        deletedById: adminAId,
+        snapshot: {},
+        purgeAfter: new Date(),
+      },
+      select: { id: true },
+    });
+
     await expect(
       purgeEntry(prisma, await actorFor(prisma, superAdminId), entry.id),
-    ).rejects.toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'DEPENDENTS_EXIST' } });
+    ).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'EXAM_HAS_RECORDED_EVIDENCE' },
+    });
+    // Refused, and provenance-safe: neither the exam nor the submission it
+    // guards was touched by the attempt.
     expect(await prisma.exam.count({ where: { id: examId } })).toBe(1);
+    expect(await prisma.studentExamSubmission.count({ where: { examId } })).toBe(1);
   });
 });

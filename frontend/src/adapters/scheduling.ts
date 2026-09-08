@@ -14,7 +14,14 @@ import {
   updateEvent,
   type EventInput,
 } from './events.js';
-import { createExam, deleteExam, listExams, updateExam, type Exam } from './exams.js';
+import {
+  deleteExam,
+  listExams,
+  scheduleExam,
+  updateExam,
+  type Exam,
+  type ExamAvailabilityPolicy,
+} from './exams.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
 import { STRUCTURAL_KIND_SPECS } from './scheduling-types.js';
 
@@ -159,6 +166,11 @@ export interface SchedulingIds {
    *  for kinds that have no delivery model (an Event, an Exam sitting). */
   deliveryMode: string | null;
   onlineMediaMode: string | null;
+  /** **R136 — physical or remote, for an exam row only** (`null` otherwise).
+   *  H1 widened the sitting list to include a scheduled remote occurrence
+   *  alongside a physical one; this is how a reader — and the edit dialog —
+   *  tells them apart before opening one. */
+  examMode?: 'physical' | 'online';
   /**
    * **The Level the item is for**, not merely the Level where it is the target.
    *
@@ -398,6 +410,10 @@ function fromExam(row: Exam): SchedulingItem {
       // model; `null` says so rather than defaulting it to in-person.
       deliveryMode: null,
       onlineMediaMode: null,
+      // R136 — H1 widened `GET /exams` to surface a remote occurrence
+      // alongside a physical one; this is how the list/edit dialog tells
+      // them apart, since neither `deliveryMode` nor anything else here does.
+      examMode: row.mode,
       levelId: row.level_id,
       groupId: row.administrative_group_id,
       // An exam is not a course schedule: §4.4c's teaching mode is a property
@@ -546,6 +562,22 @@ export interface SchedulingInput {
   /** R81 — the exam's own maximum grade. `null` only while the form is empty;
    *  the server requires it on create and refuses the request without it. */
   examMaxGrade?: number | null;
+  /** R136 — physical or remote, decided once on create and never editable
+   *  afterward (identity, not an arrangement). */
+  examMode?: 'physical' | 'online';
+  /** R136 — a بناء الاختبارات draft to copy into this occurrence. Required
+   *  for `examMode: 'online'`; optional for `physical`. */
+  examSourceId?: string;
+  /** R136 — the occurrence's audience, one of R125's five arms. Physical
+   *  keeps its existing simple group/level pair (`examGroupId`) instead;
+   *  this is read only for `examMode: 'online'`. */
+  examTarget?: {
+    kind: 'level' | 'administrative_group' | 'session' | 'teaching_group' | 'student';
+    id?: string;
+  };
+  /** R136 — Student access, separate from calendar publication. Remote only;
+   *  absent (or `examMode: 'physical'`) means no gate beyond `visibility`. */
+  examAvailability?: ExamAvailabilityPolicy;
 
   /** Class only (§4.4c). */
   subjectId?: string;
@@ -746,34 +778,66 @@ export async function saveSchedulingItem(
       );
       return NOT_AN_EVENT;
     }
-    await createExam(
+    /**
+     * **R136 — one atomic write, `POST /exams/schedule`, for either mode.**
+     * `createExam`/`POST /exams` is still the lower-level, content-free
+     * primitive (`updateExam`'s edit path above still uses it via
+     * `PATCH /exams/{id}`, unchanged — editing arrangements is not
+     * scheduling); this CREATE path now always goes through the unified
+     * write, which is also the only path that ever assigns a target/date and
+     * publishes, so an orphaned or half-scheduled row cannot result from a
+     * client retry between separate calls (Codex B1).
+     */
+    if (input.examMode === 'online') {
+      // **Remote — always FROM an authored بناء الاختبارات draft** (R136
+      // clause 11/14). The target is one of R125's five arms, chosen fresh
+      // here rather than inherited from the draft's own stored target.
+      await scheduleExam(
+        {
+          mode: 'online',
+          source_exam_id: input.examSourceId!,
+          target: input.examTarget!,
+          ...(input.examTarget?.kind === 'session' ? {} : { date: input.startDate }),
+          ...(input.schedulingTypeId !== undefined
+            ? { scheduling_type_id: input.schedulingTypeId }
+            : {}),
+          ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+          ...(input.examAvailability ? { availability: input.examAvailability } : {}),
+        },
+        token,
+      );
+      return NOT_AN_EVENT;
+    }
+    // **Physical — the existing simple/grade-only workflow, unchanged**
+    // (R136 §19): an authored physical source is optional and this form does
+    // not yet offer one, so every physical sitting created here is `bare`,
+    // exactly as `createExam` always produced.
+    await scheduleExam(
       {
-        // Sent explicitly: `online` must be refused by the SERVER with a coded
-        // reason, not silently prevented here, so a client learns which
-        // capability is missing rather than why a button did nothing.
         mode: 'physical',
-        title: input.title,
-        description: input.description,
+        target: {
+          kind: input.examGroupId ? 'administrative_group' : 'level',
+          ...(input.examGroupId ? { id: input.examGroupId } : {}),
+        },
         date: input.startDate,
         start_time: input.startTime ?? '',
         end_time: input.endTime ?? '',
-        level_id: input.levelId!,
-        subject_id: input.subjectId!,
-        academic_year_id: input.academicYearId!,
         branch_id: input.branchId!,
         room_id: input.roomId!,
-        administrative_group_id: input.examGroupId ?? null,
         ...(input.examStaff ? { staff: input.examStaff } : {}),
         // R110 (Owner, 2026-09-02) — the catalogue row this sitting is.
         ...(input.schedulingTypeId !== undefined
           ? { scheduling_type_id: input.schedulingTypeId }
           : {}),
-        // R123 — see the note on the edit path above.
-        ...(input.attendanceMarking !== undefined
-          ? { attendance_marking: input.attendanceMarking }
-          : {}),
-        max_grade: input.examMaxGrade!,
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        bare: {
+          title: input.title,
+          description: input.description,
+          max_grade: input.examMaxGrade!,
+          level_id: input.levelId!,
+          subject_id: input.subjectId!,
+          academic_year_id: input.academicYearId!,
+        },
       },
       token,
     );

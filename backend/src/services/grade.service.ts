@@ -5,9 +5,13 @@ import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { isValidScore, toNumber } from '../policies/grading.js';
 import { notifyGradePublished } from './notification.service.js';
+import { assertAudienceWithinBranchScope } from './assessment.service.js';
 import {
   assertExamInTeacherScope,
   examAudienceWhere,
+  staffsSession,
+  staffsTeachingGroup,
+  studentsTaughtBy,
 } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -89,6 +93,11 @@ export interface GradeSheet {
     branch_name: string | null;
     administrative_group_id: string | null;
     administrative_group_name: string | null;
+    /** R136 (H1) — an online occurrence may name any of R125's five arms;
+     *  `administrative_group_name` alone reads the other three as "the
+     *  whole Level". */
+    target_kind: string;
+    teaching_group_name: string | null;
     /** Derived, never stored (R70.5): recorded after the sitting it describes. */
     recorded_late: boolean;
   };
@@ -139,6 +148,10 @@ interface ExamForGrading {
   subject: { name: string } | null;
   branch: { name: string } | null;
   administrativeGroup: { name: string } | null;
+  // R136 (H1) — the sheet's own summary line named a `session`/
+  // `teaching_group`/`student` target as "the whole Level"; this is the
+  // fourth arm's own name.
+  teachingGroup: { name: string } | null;
   maxGrade: Prisma.Decimal;
 }
 
@@ -165,6 +178,7 @@ const EXAM_SELECT = {
   subject: { select: { name: true } },
   branch: { select: { name: true } },
   administrativeGroup: { select: { name: true } },
+  teachingGroup: { select: { name: true } },
 } as const;
 
 /**
@@ -211,11 +225,17 @@ async function loadForGrading(
   if (scope.isSuperAdmin(actor.roleScopes)) return sitting;
 
   if (scope.hasRole(actor.roleScopes, 'admin')) {
-    // An online assessment is sat nowhere, so there is no branch to assert
-    // against and the Level is the whole scope an Admin needs.
     if (sitting.branchId !== null) {
       scope.assertCanActOnBranch(actor.roleScopes, 'admin', sitting.branchId, 'no such exam');
     }
+    // **R136 (Codex B4).** A branchless online sitting used to return here
+    // unchecked — no branch to assert against was read as no assertion
+    // needed, letting a branch-scoped Admin grade an online exam whose
+    // audience never reaches her branches. `assertAudienceWithinBranchScope`
+    // is the same rule authoring already applies to the same five target
+    // arms (§4.4c): a branch-scoped Admin may act only when everybody the
+    // exam's audience resolves to is inside her branches.
+    await assertAudienceWithinBranchScope(prisma, actor, sitting);
     return sitting;
   }
 
@@ -223,12 +243,60 @@ async function loadForGrading(
     throw new AppError('FORBIDDEN', 'grading requires staff (TD-2)');
   }
 
-  await assertExamInTeacherScope(prisma, actor.userId, {
-    branchId: sitting.branchId ?? '',
-    levelId: sitting.levelId,
-    subjectId: sitting.subjectId ?? '',
-    administrativeGroupId: sitting.administrativeGroupId,
-  });
+  /**
+   * **R136 (Codex B5) — the grading picker asks the same per-arm question
+   * authoring does, not a fifth one of its own.**
+   *
+   * This used to go straight to `assertExamInTeacherScope`'s Level/named-
+   * administrative-group question for every target, which is the exact
+   * shape of hole B3 found in authoring one file over: a `student` or
+   * `session` target names neither, so a مؤطِّرة who staffs that exact
+   * occurrence — or teaches that exact beneficiary — but not the whole
+   * Level was wrongly refused the grade sheet for it, and a `teaching_group`
+   * target's `administrative_group_id IS NULL` (`exam_target_check`) made
+   * `assertExamInTeacherScope` refuse every مؤطِّرة outright. The three
+   * direct predicates are `assertMayAuthor`'s own — reused, not restated, so
+   * *may she grade this* and *may she author this* never drift onto two
+   * different answers for one exam.
+   */
+  if (sitting.targetKind === 'student' && sitting.studentId != null) {
+    const taught = await studentsTaughtBy(prisma, actor.userId);
+    const reaches = await prisma.user.count({
+      where: { AND: [taught, { id: sitting.studentId, deletedAt: null }] },
+    });
+    if (reaches === 0) throw new AppError('NOT_FOUND', 'no such exam');
+    return sitting;
+  }
+  if (sitting.targetKind === 'session' && sitting.sessionId != null) {
+    const staffs = await staffsSession(prisma, actor.userId, sitting.sessionId);
+    if (!staffs) throw new AppError('NOT_FOUND', 'no such exam');
+    return sitting;
+  }
+  if (sitting.targetKind === 'teaching_group' && sitting.teachingGroupId != null) {
+    const staffs = await staffsTeachingGroup(
+      prisma,
+      actor.userId,
+      sitting.teachingGroupId,
+      sitting.date,
+    );
+    if (!staffs) throw new AppError('NOT_FOUND', 'no such exam');
+    return sitting;
+  }
+
+  // **Judged on the sitting's own date (R91), not today's** — the same
+  // dated-staffing gap this arm carried in authoring (see
+  // `assertMayAuthor`'s identical fix, `assessment.service.ts`).
+  await assertExamInTeacherScope(
+    prisma,
+    actor.userId,
+    {
+      branchId: sitting.branchId ?? '',
+      levelId: sitting.levelId,
+      subjectId: sitting.subjectId ?? '',
+      administrativeGroupId: sitting.administrativeGroupId,
+    },
+    sitting.date,
+  );
   return sitting;
 }
 
@@ -341,6 +409,9 @@ export async function readGradeSheet(
       branch_name: exam.branch?.name ?? null,
       administrative_group_id: exam.administrativeGroupId,
       administrative_group_name: exam.administrativeGroup?.name ?? null,
+      // R136 (H1) — see the type's own comment above `EXAM_SELECT`.
+      target_kind: exam.targetKind,
+      teaching_group_name: exam.teachingGroup?.name ?? null,
       // Derived at read time and stored nowhere (R70.5): the sitting was
       // recorded after the day it took place.
       recorded_late: exam.createdAt.toISOString().slice(0, 10) > exam.date.toISOString().slice(0, 10),

@@ -223,6 +223,11 @@ beforeAll(async () => {
         endTime: AT_10,
         maxGrade: 20,
         visibility: tier,
+        // R136 (Codex H1) — the calendar now reads `status`, not `mode`, to
+        // tell a scheduled sitting from بناء الاختبارات's own draft content;
+        // a real physical sitting is always `published` from creation.
+        status: "published",
+        publishedAt: new Date(),
       },
     });
     await prisma.examStaff.create({

@@ -2111,6 +2111,16 @@ export interface ExamDto {
   administrative_group_id: string | null;
   administrative_group_name: string | null;
   /**
+   * **R136 (H1) — the unified grading list now carries the target arm.**
+   * Grading discovery widened to a scheduled occurrence of either delivery
+   * mode; an online occurrence may name any of R125's five arms, and
+   * `administrative_group_name` alone reads a `session`/`teaching_group`/
+   * `student` target as *"the whole Level"* — a real comprehension risk on
+   * a screen a مؤطِّرة is grading from.
+   */
+  target_kind: string;
+  teaching_group_name: string | null;
+  /**
    * R81 — **the exam's own maximum grade**, the number every score on it is out
    * of. There is no platform-wide scale to fall back to, so this travels with
    * the exam rather than being looked up: a client rendering `15 / 20` must not
@@ -2147,6 +2157,8 @@ export function examDto(row: {
   room?: { name: string } | null;
   administrativeGroupId: string | null;
   administrativeGroup?: { name: string } | null;
+  targetKind: string;
+  teachingGroup?: { name: string } | null;
   /** R110 (Owner, 2026-09-02) — which catalogue row this sitting is. */
   schedulingTypeId?: string | null;
   maxGrade: Prisma.Decimal;
@@ -2174,6 +2186,8 @@ export function examDto(row: {
     room_name: row.room?.name ?? null,
     administrative_group_id: row.administrativeGroupId,
     administrative_group_name: row.administrativeGroup?.name ?? null,
+    target_kind: String(row.targetKind),
+    teaching_group_name: row.teachingGroup?.name ?? null,
     max_grade: toNumber(row.maxGrade),
     visibility: String(row.visibility),
     staff: row.staff.map((s) => ({
@@ -2490,6 +2504,8 @@ export interface AssessmentPaperDto {
   title: string;
   description: string | null;
   status: string;
+  /** R136 clause 2 — بناء الاختبارات authors content for either delivery mode. */
+  mode: string;
   target_kind: string;
   level_id: string;
   /** TD-11 calendar date — the day the paper belongs to, and the day its
@@ -2529,11 +2545,14 @@ export function assessmentPaperDto(row: {
     title: string;
     description: string | null;
     status: string;
+    mode: string;
     targetKind: string;
     levelId: string;
     date: Date;
     maxGrade: { toString(): string };
-    /** TD-15 — required by `PATCH /assessments/{id}/target`. */
+    /** TD-15 — no longer written by a target/version route (R136 retired
+     *  `PATCH /assessments/{id}/target`); kept for optimistic-locking
+     *  consistency with every other versioned entity (TD-15.1). */
     version: number;
     /**
      * R134 — provenance only, and present ONLY on the author's own read
@@ -2569,6 +2588,7 @@ export function assessmentPaperDto(row: {
     title: row.exam.title,
     description: row.exam.description,
     status: String(row.exam.status),
+    mode: String(row.exam.mode),
     target_kind: String(row.exam.targetKind),
     level_id: row.exam.levelId,
     date: row.exam.date.toISOString().slice(0, 10),
@@ -2684,15 +2704,20 @@ export function studentAssessmentDto(row: {
 /**
  * One row of the assessment library.
  *
- * The counts travel with the row because they are what tells a draft from a
- * paper somebody has already sat — the two facts the list exists to
- * distinguish, and a per-row request for each would be an N+1 on a screen whose
- * whole purpose is the overview.
+ * **Every row is `status: 'draft'`** (R136 §2 — the list is hard-filtered to
+ * exactly that), so `status` travels for the client's own record rather than
+ * to distinguish rows here. `question_count`/`submission_count` still tell a
+ * fresh draft from one already reused and sat elsewhere — `submission_count`
+ * is always `0` for a draft itself (nothing is ever submitted against a
+ * source), and is carried for symmetry with the pre-R136 shape rather than
+ * meaning anything different. A per-row request for either would be an N+1
+ * on a screen whose whole purpose is the overview.
  */
 export function assessmentListRowDto(row: {
   id: string;
   title: string;
   status: string;
+  mode: string;
   date: Date;
   maxGrade: string;
   targetKind: string;
@@ -2711,6 +2736,7 @@ export function assessmentListRowDto(row: {
     id: row.id,
     title: row.title,
     status: row.status,
+    mode: row.mode,
     date: row.date.toISOString().slice(0, 10),
     max_grade: row.maxGrade,
     target_kind: row.targetKind,

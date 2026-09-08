@@ -56,7 +56,7 @@ const MANAGING_ROLE = 'admin';
 
 /** Whether the caller acts as staff rather than as a Teacher — the two take
  *  different scope paths below, and this is the one place that decides. */
-function isAdminish(actor: Actor): boolean {
+export function isAdminish(actor: Actor): boolean {
   return scope.isSuperAdmin(actor.roleScopes) || scope.hasRole(actor.roleScopes, MANAGING_ROLE);
 }
 
@@ -74,7 +74,7 @@ function isAdminish(actor: Actor): boolean {
  * caller already runs inside a transaction. `assertScope` below is the other
  * half, and neither is sufficient alone.
  */
-function assertCanManage(actor: Actor): void {
+export function assertCanManage(actor: Actor): void {
   if (!isAdminish(actor) && !scope.hasRole(actor.roleScopes, 'teacher')) {
     throw new AppError('FORBIDDEN', 'organising an exam requires staff (TD-2)');
   }
@@ -88,7 +88,7 @@ function assertCanManage(actor: Actor): void {
  * implementation of *what a member of staff may reach*. A second answer here
  * would be the drift §4.4c's own wording warns about.
  */
-async function assertScope(
+export async function assertScope(
   tx: Prisma.TransactionClient,
   actor: Actor,
   spec: { branchId: string; levelId: string; subjectId: string; administrativeGroupId: string | null },
@@ -150,7 +150,7 @@ export interface PhysicalExamInput {
  * splits and content all use. R55 exists precisely because that one rule was
  * enforced on two surfaces out of three, under two different names.
  */
-async function assertCoherent(
+export async function assertCoherent(
   tx: Prisma.TransactionClient,
   input: Pick<
     PhysicalExamInput,
@@ -728,6 +728,12 @@ const EXAM_INCLUDE = {
   branch: { select: { name: true } },
   room: { select: { name: true } },
   administrativeGroup: { select: { name: true } },
+  // R136 (H1) — the two target arms `administrativeGroup`/`level` never
+  // named: an online occurrence's own name for a `teaching_group` target.
+  // `session`/`student` are deliberately left unnamed here — the same
+  // privacy-conscious generic label the calendar gives them, decided once
+  // in `examDto`'s consumers rather than joined for here.
+  teachingGroup: { select: { name: true } },
   staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
 } satisfies Prisma.ExamInclude;
 
@@ -790,20 +796,32 @@ export async function listExams(
   const where: Prisma.ExamWhereInput = {
     deletedAt: null,
     /**
-     * **This route lists SITTINGS, and a paper is not one** (R124).
+     * **This route lists SITTINGS — a scheduled occurrence, physical or
+     * online — and a reusable paper is not one** (R124, restated by R136
+     * Codex H1).
      *
-     * Every row here is an arrangement — a branch, a room, a clock window — and
-     * الجدولة renders it as such. An online assessment has none of them by
-     * construction (`exam_online_has_no_room_check` forbids a branch), so it
-     * appeared as a sitting somebody had forgotten to finish, and editing it
-     * answered `ONLINE_NOT_AVAILABLE` — a refusal the reader did nothing to
-     * earn. Papers are listed by their own screen, `/admin/assessments`.
+     * It used to hard-filter `mode: 'physical'`, on the reasoning that an
+     * online row carries no branch/room/clock window and so is not an
+     * arrangement (`exam_online_has_no_room_check` forbids a branch). R136
+     * makes `status` the source/occurrence line instead: a `draft` row —
+     * physical or online — is بناء الاختبارات's own reusable content and is
+     * listed by `/admin/assessments`, never here; `published`/`closed` is an
+     * occurrence somebody actually sits, and نقاط الامتحانات and the
+     * teacher grading picker need the online ones exactly as much as the
+     * physical ones to grade them (H1). الجدولة still renders an online row
+     * without a branch/room — it was never one to begin with.
      *
-     * A branch-scoped Admin never saw them anyway, because `branch_id IN (…)`
-     * excludes NULL; the leak reached exactly the callers with no branch filter,
-     * which is the Super Admin and an all-branches Admin.
+     * A branch-scoped Admin never saw a `mode: 'online'` row anyway, because
+     * `branch_id IN (…)` excludes NULL; the leak this guarded against reached
+     * exactly the callers with no branch filter, which is the Super Admin and
+     * an all-branches Admin. `listExams`'s scope resolution is unchanged —
+     * an Admin's online rows are still bounded through `examScopeWhereForTeacher`
+     * / `assertAudienceWithinBranchScope`'s reasoning for a مؤطِّرة, and the
+     * caller-side branch/audience checks a grading read already applies
+     * (Codex B4) are what keep an online occurrence out of the wrong Admin's
+     * reach — not this filter.
      */
-    mode: 'physical',
+    status: { in: ['published', 'closed'] },
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.levelId ? { levelId: filters.levelId } : {}),
     ...(filters.from || filters.to

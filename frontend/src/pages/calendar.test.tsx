@@ -11,6 +11,7 @@ import { EventDetailsDialog } from '../components/calendar/event-details-dialog.
 import { CalendarNav } from '../components/calendar/calendar-nav.js';
 import { LevelSelector } from '../components/calendar/level-selector.js';
 import type { HijriDay, Occurrence, PrefilledFilters } from '../adapters/calendar.js';
+import { SessionContext } from '../contexts/session.js';
 import { tList } from '../i18n/index.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 import CALENDAR_PAGE_SOURCE from './calendar.tsx?raw';
@@ -61,6 +62,9 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   instructors: [],
   hijri_date: null,
   hijri_month_ar: null,
+  // R136 — Exam (online) only; every other kind (this fixture's default,
+  // `session`) carries `null`.
+  available_from: null,
   ...over,
 });
 
@@ -670,6 +674,93 @@ describe('event details', () => {
       <EventDetailsDialog occurrence={occurrence()} branchNames={new Map()} onClose={() => undefined} />,
     );
     expect(html).not.toContain('details__hijri');
+  });
+});
+
+/**
+ * **R136 clause 16/17 — a remote exam's Student-access gate, three states,
+ * shown on the same canonical dialog every other occurrence uses.**
+ *
+ * Calendar visibility (whether the row appears at all) and Student access
+ * (whether the paper can be opened) are asserted as INDEPENDENT here: none
+ * of these three fixtures ever hides the occurrence, only what is offered
+ * underneath it.
+ */
+describe('the dialog’s exam-availability action (R136)', () => {
+  const examOccurrence = (over: Partial<Occurrence> = {}): Occurrence =>
+    occurrence({
+      kind: 'exam',
+      delivery_mode: 'online',
+      title: 'اختبار الحفظ',
+      ...over,
+    });
+
+  it('manual opening, not yet opened: says so, offers no button', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={examOccurrence({ available_from: null })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('لم يُفتح هذا الاختبار بعد');
+    expect(html).not.toContain('بدء الاختبار');
+  });
+
+  it('a future opening instant: says WHEN, offers no button yet', () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={examOccurrence({ available_from: future })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('يُفتح هذا الاختبار في');
+    expect(html).not.toContain('بدء الاختبار');
+  });
+
+  it('past the opening instant, signed in: offers «بدء الاختبار» to the paper, by id', () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+      >
+        <EventDetailsDialog
+          occurrence={examOccurrence({ id: 'exam-1', available_from: past })}
+          branchNames={new Map()}
+          onClose={() => undefined}
+        />
+      </SessionContext.Provider>,
+    );
+    expect(html).toContain('بدء الاختبار');
+    expect(html).toContain('/dashboard/student/assessments?exam=exam-1');
+  });
+
+  it('past the opening instant, anonymous: offers no button — R98.30’s discipline reused', () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={examOccurrence({ available_from: past })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('بدء الاختبار');
+  });
+
+  it('a physical sitting carries no availability row at all', () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={examOccurrence({ delivery_mode: null, available_from: past })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('لم يُفتح هذا الاختبار بعد');
+    expect(html).not.toContain('يُفتح هذا الاختبار في');
+    expect(html).not.toContain('بدء الاختبار');
   });
 });
 

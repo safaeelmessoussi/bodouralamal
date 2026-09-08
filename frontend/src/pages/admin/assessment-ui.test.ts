@@ -4,6 +4,7 @@ import builder from './assessments.tsx?raw';
 import studentPage from '../dashboard/assessments.tsx?raw';
 import adapter from '../../adapters/assessments.ts?raw';
 import teacherPage from '../teacher/assessments.tsx?raw';
+import targetPicker from '../../components/scheduling/target-picker.tsx?raw';
 
 /**
  * **The assessment interface's rules, as opposed to its styling** (SRS §4.6,
@@ -127,19 +128,26 @@ describe('R125 — the picker offers what the server allows, and is not the boun
      * thing standing between an author and a target she may not address. The
      * list is now the server's answer to *what may I address*, and the write
      * refuses the same thing again (rule O).
+     *
+     * **R136 — moved to `components/scheduling/target-picker.tsx`**, shared by
+     * بناء الاختبارات (a draft's own target) and الجدولة (an occurrence's
+     * target at scheduling): a `components/scheduling/` consumer importing
+     * from a page would be backwards layering, so both now import the one
+     * definition from there instead of `assessments.tsx` restating it.
      */
-    expect(builder).toContain('listAssessmentTargets');
-    expect(builder).toContain('function TargetPicker');
+    expect(targetPicker).toContain('listAssessmentTargets');
+    expect(targetPicker).toContain('function TargetPicker');
+    expect(builder).toContain("TargetPicker } from '../../components/scheduling/target-picker.js'");
     // No raw id entry survives for a target.
-    expect(builder).not.toMatch(/label=\{t\('assessments\.targetPick'\)\}\s*\n\s*value=\{targetId\}\s*\n\s*onChange=\{setTargetId\}\s*\n\s*required\s*\n\s*error/);
+    expect(targetPicker).not.toMatch(/label=\{t\('assessments\.targetPick'\)\}\s*\n\s*value=\{targetId\}\s*\n\s*onChange=\{setTargetId\}\s*\n\s*required\s*\n\s*error/);
   });
 
   it('composes the shared primitives rather than a second picker', () => {
     // `SearchInput` + `SelectField` is the pair `attendance-panel` already uses
     // to add a beneficiary. A bespoke combobox would be a second generic picker
     // for the platform to keep in step (rule C).
-    expect(builder).toContain('<SearchInput');
-    expect(builder).toContain('<SelectField');
+    expect(targetPicker).toContain('<SearchInput');
+    expect(targetPicker).toContain('<SelectField');
   });
 
   it('scopes the LEVEL list too when the Level is itself the audience', () => {
@@ -159,41 +167,80 @@ describe('R125 — the picker offers what the server allows, and is not the boun
   it('clears a selection the narrowed list no longer offers', () => {
     // A stale id is what reaches the server as a target the author can no longer
     // see — refused there, but only after she has been shown it as chosen.
-    expect(builder).toContain("if (value !== '' && !rows.some((r) => r.id === value)) onChange('');");
+    expect(targetPicker).toContain(
+      "if (value !== '' && !rows.some((r) => r.id === value)) onChange('');",
+    );
   });
 });
 
-describe('R134 — reuse and copy are the same safe operation, two entry points', () => {
-  it('the library offers both, and both call the identical backend copy', () => {
+describe('R136 — «إنشاء نسخة» stays content-only; scheduling is one navigation to الجدولة', () => {
+  it('«إنشاء نسخة» calls the backend copy; «استخدام مرة أخرى» makes no request at all', () => {
+    // **The R134 shape — both buttons calling the identical `copyAssessment`
+    // — is retired.** الجدولة now assigns the target/date and schedules
+    // atomically in one حفظ (`POST /exams/schedule`), so a REUSE no longer
+    // needs its own copy first: it is a plain navigation, safely
+    // server-revalidated when الجدولة reads the source fresh.
     expect(builder).toContain("t('assessments.reusePaper')");
     expect(builder).toContain("t('assessments.copyPaper')");
-    // One call site, one operation — the distinction is where the caller lands
-    // afterward, not a second write path.
     expect(builder).toMatch(/const created = await copyAssessment\(row\.id, token\)/);
+    // The reuse action is a redirect built from the row, never a call into
+    // `copyAssessment` — the two buttons are no longer one operation.
+    expect(builder).toMatch(
+      /reusePaper[\s\S]{0,200}onSelect: \(row\) => \{\s*window\.location\.href = `\/admin\/schedules\?kind=exam&new=1&source=\$\{encodeURIComponent\(row\.id\)\}&mode=\$\{row\.mode\}`;/,
+    );
   });
 
-  it('only the reuse path adds the review flag to the redirect', () => {
-    expect(builder).toContain("`?exam=${encodeURIComponent(created.id)}&review=1`");
-    expect(builder).toContain("`?exam=${encodeURIComponent(created.id)}`");
+  it('retired: no RetargetDialog, no ?review=1 auto-open, no publish route', () => {
+    /**
+     * **R136 — the whole two-act "copy, then review target/date, then
+     * publish" flow is gone.** الجدولة's one `POST /exams/schedule` assigns
+     * the target/date and schedules atomically; there is no intermediate
+     * "retargeted draft" state left for a dialog to manage, and no separate
+     * publish call for a confirmation to trigger.
+     */
+    expect(builder).not.toContain('function RetargetDialog');
+    expect(builder).not.toContain("params.get('review')");
+    expect(builder).not.toContain('setRetargeting');
+    expect(builder).not.toContain('publishAssessment');
+    expect(builder).not.toContain('retargetAssessment');
+    expect(adapter).not.toContain('publishAssessment');
+    expect(adapter).not.toContain('retargetAssessment');
+    expect(adapter).not.toContain('/assessments/${examId}/publish');
+    // `/assessments/targets` (the target PICKER's own route) survives —
+    // only the retired per-paper `/assessments/{id}/target` write is gone.
+    expect(adapter).not.toContain('/assessments/${examId}/target');
   });
 
-  it('the builder auto-opens the review dialog for ?review=1 and consumes it', () => {
-    // Consumed once: a later reload of the same URL must not reopen it, so the
-    // effect rewrites history rather than merely reading the flag.
-    expect(builder).toContain("params.get('review') !== '1'");
-    expect(builder).toContain('setRetargeting(true)');
-    expect(builder).toContain("window.history.replaceState");
-  });
-
-  it('the review dialog never offers to change the Level', () => {
-    // The questions were written for it; changing it here would be a second,
-    // unguarded way to do what POST /assessments/{id}/copy already does safely.
-    expect(builder).not.toMatch(/function RetargetDialog[\s\S]*?levelId:\s*setLevelId/);
-    expect(builder).toContain('function RetargetDialog');
+  it('the header action navigates to الجدولة with the source and mode, never calls publish', () => {
+    expect(builder).toContain("t('assessments.scheduleAction')");
+    expect(builder).toMatch(
+      /\/admin\/schedules\?kind=exam&new=1&source=\$\{encodeURIComponent\(examId\)\}&mode=\$\{paper\.mode\}/,
+    );
   });
 
   it('shows lineage only when it exists, never a zero/empty badge', () => {
     expect(builder).toContain('paper.source_exam_id ?');
     expect(builder).toContain('paper.reused_count ?');
+  });
+});
+
+describe('R136 — بناء الاختبارات authors content for either delivery mode', () => {
+  it('lets the author choose mode on create, and sends it', () => {
+    expect(builder).toContain("useState<'physical' | 'online'>('online')");
+    expect(builder).toMatch(/createAssessment\(\s*\{\s*title: title\.trim\(\),\s*description: description\.trim\(\) \|\| null,\s*mode,/);
+  });
+
+  it('the library shows a مسودة badge — every row IS one, by construction (R136)', () => {
+    expect(builder).toContain("<Badge tone=\"neutral\">{t('assessments.statusDraft')}</Badge>");
+  });
+
+  it('no status filter dropdown remains — the server accepts none', () => {
+    // The column header (`assessments.filterStatus`, "الحالة") stays — every
+    // row's status is now trivially `draft`, so it is worth showing, just no
+    // longer worth filtering on. The FILTER control is what is retired.
+    expect(builder).not.toContain('stateFilter');
+    expect(builder).not.toContain('assessments.statusPublished');
+    expect(builder).not.toContain('assessments.statusClosed');
+    expect(adapter).not.toMatch(/interface AssessmentListFilters \{\s*status/);
   });
 });

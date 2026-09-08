@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listExams, type Exam } from '../../adapters/exams.js';
+import { copyAssessment } from '../../adapters/assessments.js';
+import { examAudienceLabel, listExams, type Exam } from '../../adapters/exams.js';
 import { GradeSheetView } from '../../components/grading/grade-sheet.js';
+import { Feedback } from '../../components/ui/feedback.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
 import {
@@ -16,11 +18,15 @@ import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 
 /**
- * `/teacher/exams` — **الامتحانات** (§14.1, §4.6, SRS Revision 70).
+ * `/teacher/exams` — **الامتحانات** (§14.1, §4.6, SRS Revision 70, unified by
+ * R136).
  *
  * Blocked until R70 with *"the exam-building and marking interfaces are not
- * available yet"*. R70 unblocks the marking half; the online paper builder stays
- * out (§4.6's `mode = online` is declared and refused).
+ * available yet"*. R70 unblocked the marking half; R124 built the online
+ * paper (authored on `/teacher/assessments`, one of her three roles); R136
+ * (Codex H1) widened `GET /exams` so this list surfaces a scheduled online
+ * occurrence exactly as it does a physical one — a مؤطِّرة's grading no
+ * longer has a mode this screen cannot reach.
  *
  * **The sheet is `GradeSheetView`, the very component `/admin/exam-grades`
  * renders.** R70.1 requires one implementation with two ways in, and a teacher
@@ -52,6 +58,10 @@ export function TeacherExamsPage(): ReactNode {
   const [status, setStatus] = useState<TableStatus>('loading');
   const [query, setQuery] = useState('');
   const [openExam, setOpenExam] = useState<Exam | null>(null);
+  /** «إنشاء نسخة في بناء الاختبارات» (R136) — see `exam-grades.tsx`'s
+   *  identical action for the full reasoning; this is the same call. */
+  const [copying, setCopying] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -76,8 +86,27 @@ export function TeacherExamsPage(): ReactNode {
         <p>
           <Button variant="secondary" onClick={() => setOpenExam(null)}>
             {t('teacher.exams.backToList')}
+          </Button>{' '}
+          <Button
+            variant="secondary"
+            disabled={copying}
+            onClick={() => {
+              setCopying(true);
+              setCopyFailed(false);
+              copyAssessment(openExam.id, accessToken)
+                .then(({ id }) => {
+                  window.location.href = `/teacher/assessments?exam=${encodeURIComponent(id)}`;
+                })
+                .catch(() => {
+                  setCopying(false);
+                  setCopyFailed(true);
+                });
+            }}
+          >
+            {t('admin.grades.reuseAsDraft')}
           </Button>
         </p>
+        {copyFailed ? <Feedback tone="warn">{t('admin.grades.reuseAsDraftFailed')}</Feedback> : null}
         <GradeSheetView examId={openExam.id} />
       </TeacherLayout>
     );
@@ -100,8 +129,20 @@ export function TeacherExamsPage(): ReactNode {
       key: 'audience',
       header: t('admin.grades.colAudience'),
       secondary: true,
-      // R58 — a named group, or the whole Level at the exam's branch.
-      cell: (e) => e.administrative_group_name ?? t('admin.grades.wholeLevel'),
+      // R136 (H1) — all five R125 arms; see `exam-grades.tsx`'s identical
+      // column for the full reasoning.
+      cell: (e) =>
+        examAudienceLabel(e, {
+          session: t('admin.grades.audienceSession'),
+          student: t('admin.grades.audienceStudent'),
+          wholeLevel: t('admin.grades.wholeLevel'),
+        }),
+    },
+    {
+      key: 'mode',
+      header: t('assessments.mode'),
+      secondary: true,
+      cell: (e) => t(e.mode === 'online' ? 'assessments.modeOnline' : 'assessments.modePhysical'),
     },
   ];
 

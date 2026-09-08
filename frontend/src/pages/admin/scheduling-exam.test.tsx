@@ -46,6 +46,10 @@ const WIRE: Exam = {
   room_name: 'قاعة 1',
   administrative_group_id: null,
   administrative_group_name: null,
+  // R136 (H1) — the target arm; a physical sitting is `level` or
+  // `administrative_group` only, but the type covers all five.
+  target_kind: 'level',
+  teaching_group_name: null,
   staff: [{ user_id: '00000000-0000-4000-8000-0000000000e7', position: 'supervisor' }],
   version: 0,
 };
@@ -75,6 +79,8 @@ describe('the adapter type matches the wire contract', () => {
       'start_time',
       'subject_id',
       'subject_name',
+      'target_kind',
+      'teaching_group_name',
       'title',
       'version',
       // R109 (§D) — the sitting's own tier, superseding §4.6's "no tier of its

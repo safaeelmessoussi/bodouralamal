@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { uuid, version } from './common.js';
+import { calendarDate, uuid, version } from './common.js';
 import { visibility } from './course-schedule.validators.js';
 
 /**
@@ -22,11 +22,6 @@ const wallClock = z
   // TD-11: a wall-clock value, never an instant. Parked on the epoch date so the
   // column stores a time and nothing about a timezone.
   .transform((v) => new Date(`1970-01-01T${v}:00Z`));
-
-const calendarDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
-  .transform((v) => new Date(`${v}T00:00:00Z`));
 
 /** One supervisor and any number of assistants — the shape `CourseScheduleStaff`
  *  already uses (§4.4c). */

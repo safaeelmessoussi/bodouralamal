@@ -1741,16 +1741,26 @@ async function assessmentStaffRecipients(
 }
 
 /**
- * **`POST /assessments/{id}/publish` — the moment the paper reaches people.**
+ * **R136 — scheduling a remote occurrence tells its concerned audience,
+ * as `exam_scheduled`, not `assessment_published`.**
  *
- * ## The defect this closes
+ * ## What this replaces
  *
- * R116 clause 5 wired the **physical** Exam lifecycle to the inbox and R124
- * built the **online** assessment afterwards, on the same `Exam` row but with a
- * lifecycle of its own. Publication — the one transition that makes a paper
- * visible to anybody — wrote a state change and an audit row and told **nobody
- * at all**. The notification capability was complete and had no reach into this
- * transition, which is this platform's most repeated defect shape.
+ * R134 wrote `assessment_published` the instant online content was frozen,
+ * with no relationship to whether a real, dated, audience-bearing occurrence
+ * existed — which R136's unified lifecycle makes actively misleading: content
+ * can be authored and frozen in بناء الاختبارات long before, or without ever,
+ * being scheduled. `assessment_published` is retired as a write path (R136 §19
+ * — the Owner's explicit instruction to remove the misleading trigger rather
+ * than invent a new meaning for it); the enum value stays defined, unwritten,
+ * for the historical rows R134 already produced (the same discipline Revision
+ * 119 applied to a retired consent-version setting: "left, unreadable and
+ * unwritable, as the record of what was last in force").
+ *
+ * `exam_scheduled` already exists for physical sittings (R116). This is its
+ * online counterpart, called once — inside the same atomic scheduling
+ * transaction (R136 clause 6) that just created the occurrence — never at
+ * content-authoring time.
  *
  * ## The student audience is the SAME predicate that lists her papers
  *
@@ -1766,11 +1776,10 @@ async function assessmentStaffRecipients(
  *
  * ## Idempotent, like every other type
  *
- * The `(user_id, exam_id, type)` coordinate carries it: re-publishing a
- * previously published paper is refused upstream by the state machine, and a
- * retried transaction writes the same rows.
+ * The `(user_id, exam_id, type)` coordinate carries it: a retried scheduling
+ * transaction writes the same rows.
  */
-export async function notifyAssessmentPublished(
+export async function notifyOnlineExamScheduled(
   tx: Prisma.TransactionClient,
   examId: string,
   spec: AssessmentNoticeSpec,
@@ -1802,24 +1811,40 @@ export async function notifyAssessmentPublished(
 
   const staff = await assessmentStaffRecipients(tx, spec);
 
-  // One deterministic lock acquisition for the whole obligation, as the exam
-  // path does: the two audiences overlap whenever a مؤطِّرة also studies.
-  await liveNotificationRecipients(
-    tx,
-    [...students, ...staff].filter((id) => id !== actorUserId),
+  /**
+   * **R136 (Codex M2) — the reported counts are what was actually written,
+   * not the candidate audience.** This used to return
+   * `students.filter(...).length`/`staff.filter(...).length` — the size of
+   * the resolved audience *before* `liveNotificationRecipients` drops an
+   * inactive/deleted account — while the real insert happened separately,
+   * inside `writeAssessmentNotice`, whose own accurate count was discarded at
+   * the call site below. A caller who read the audit row or the publish
+   * confirmation was told a bigger number than the count of people who could
+   * actually see anything in their inbox.
+   *
+   * One deterministic lock acquisition for the whole obligation (the exam path's
+   * same rule — the two audiences overlap whenever a مؤطِّرة also studies), its
+   * result now kept rather than discarded, so *live* — the only set anything is
+   * ever inserted for — is also what both counts are computed from.
+   */
+  const live = new Set(
+    await liveNotificationRecipients(
+      tx,
+      [...students, ...staff].filter((id) => id !== actorUserId),
+    ),
   );
 
-  await writeAssessmentNotice(tx, examId, [...students, ...staff], actorUserId);
+  await writeOnlineExamScheduledNotice(tx, examId, [...students, ...staff], actorUserId);
   return {
-    students: students.filter((id) => id !== actorUserId).length,
-    staff: staff.filter((id) => id !== actorUserId).length,
+    students: students.filter((id) => live.has(id)).length,
+    staff: staff.filter((id) => live.has(id)).length,
   };
 }
 
 /** The insert half, shaped like `writeExamNotice` and sharing its rules: the
  *  actor is never a recipient (R78.3), inactive accounts are dropped under the
  *  lock, and the unique coordinate makes a retry silent. */
-async function writeAssessmentNotice(
+async function writeOnlineExamScheduledNotice(
   tx: Prisma.TransactionClient,
   examId: string,
   userIds: readonly string[],
@@ -1834,7 +1859,10 @@ async function writeAssessmentNotice(
     data: recipients.map((userId) => ({
       userId,
       examId,
-      type: 'assessment_published' as const,
+      // R136 — was `assessment_published`; see the docstring on
+      // `notifyOnlineExamScheduled` above for why this now writes the same
+      // type physical sittings already use.
+      type: 'exam_scheduled' as const,
     })),
     skipDuplicates: true,
   });

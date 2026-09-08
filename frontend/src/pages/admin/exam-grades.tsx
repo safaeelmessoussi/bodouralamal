@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { listExams, type Exam } from '../../adapters/exams.js';
+import { copyAssessment } from '../../adapters/assessments.js';
+import { examAudienceLabel, listExams, type Exam } from '../../adapters/exams.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { GradeSheetView } from '../../components/grading/grade-sheet.js';
@@ -14,6 +15,7 @@ import {
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { SearchInput } from '../../components/ui/field.js';
+import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
@@ -74,6 +76,16 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
   /** **This exam's** maximum, reported by the sheet once one is open (R81).
    *  `null` until then: there is no platform default to stand in for it. */
   const [maxGrade, setMaxGrade] = useState<number | null>(null);
+  /**
+   * **«إنشاء نسخة في بناء الاختبارات»** (R136) — from a historical
+   * OCCURRENCE, a pure content operation: `copyAssessment` produces a fresh
+   * independent `draft` with no target, submissions, answers or grades
+   * carried over, then opens it in بناء الاختبارات. The identical call
+   * `POST /assessments/{id}/copy` already makes for a draft-to-draft copy —
+   * it works from any status, so نقاط الامتحانات needs no route of its own.
+   */
+  const [copying, setCopying] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -148,9 +160,21 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       key: 'audience',
       header: t('admin.grades.colAudience'),
       secondary: true,
-      // R58 — a named group, or the whole Level at the exam's branch. Saying
-      // which is what makes an empty sheet legible later.
-      cell: (e) => e.administrative_group_name ?? t('admin.grades.wholeLevel'),
+      // R136 (H1) — all five R125 arms, not only a named group or the whole
+      // Level: an online occurrence may target a session, a Teaching Group
+      // or one beneficiary too.
+      cell: (e) =>
+        examAudienceLabel(e, {
+          session: t('admin.grades.audienceSession'),
+          student: t('admin.grades.audienceStudent'),
+          wholeLevel: t('admin.grades.wholeLevel'),
+        }),
+    },
+    {
+      key: 'mode',
+      header: t('assessments.mode'),
+      secondary: true,
+      cell: (e) => t(e.mode === 'online' ? 'assessments.modeOnline' : 'assessments.modePhysical'),
     },
   ];
 
@@ -178,9 +202,29 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       }
       actions={
         current ? (
-          <Button variant="secondary" onClick={() => (window.location.href = '/admin/exam-grades')}>
-            {t('admin.grades.backToList')}
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => (window.location.href = '/admin/exam-grades')}>
+              {t('admin.grades.backToList')}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={copying}
+              onClick={() => {
+                setCopying(true);
+                setCopyFailed(false);
+                copyAssessment(current.id, accessToken)
+                  .then(({ id }) => {
+                    window.location.href = `/admin/assessments?exam=${encodeURIComponent(id)}`;
+                  })
+                  .catch(() => {
+                    setCopying(false);
+                    setCopyFailed(true);
+                  });
+              }}
+            >
+              {t('admin.grades.reuseAsDraft')}
+            </Button>
+          </>
         ) : (
           // A LINK, not a dialog: this page does not own exam creation. Rendered
           // through the shared add variant so it carries the platform's `＋`
@@ -192,7 +236,10 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       }
     >
       {current ? (
-        <GradeSheetView examId={current.id} onMaxGrade={setMaxGrade} />
+        <>
+          {copyFailed ? <Feedback tone="warn">{t('admin.grades.reuseAsDraftFailed')}</Feedback> : null}
+          <GradeSheetView examId={current.id} onMaxGrade={setMaxGrade} />
+        </>
       ) : examId !== null && status === 'ready' ? (
         // A deep link to an exam outside the caller's scope, or a stale
         // bookmark. Named rather than silently falling back to the list, which

@@ -160,6 +160,14 @@ async function makeExam(
       endTime: new Date("1970-01-01T10:00:00Z"),
       maxGrade: 20,
       round: 1,
+      // R136 (Codex H1) — `listExams` now reads `status`, not `mode`, to tell
+      // a scheduled sitting from بناء الاختبارات's own draft content; a real
+      // physical sitting (`createPhysicalExam`) is always `published` from
+      // creation, so this fixture states that explicitly rather than
+      // resting on the column's `draft` default, which no physical sitting
+      // this suite means to model is ever left at.
+      status: 'published',
+      publishedAt: new Date(),
       branchId: data.branchId,
       // `exam_physical_place_all_or_none_check` — a physical sitting states
       // branch AND room together or neither. Half a venue is not a venue.

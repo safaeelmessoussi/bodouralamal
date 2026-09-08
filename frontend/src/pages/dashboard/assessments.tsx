@@ -50,7 +50,14 @@ export function StudentAssessmentsPage(): ReactNode {
    *  right sentence and the right next action — a 403 and a dropped connection
    *  need different words. Throwing it away forces one generic line on both. */
   const [failure, setFailure] = useState<unknown>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  /**
+   * **R136 — «بدء الاختبار» on the calendar occurrence dialog deep-links
+   * here**, the same `?exam=` pattern بناء الاختبارات already uses. Read
+   * once, on mount: a later render must not reopen a paper she has closed.
+   */
+  const [openId, setOpenId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('exam'),
+  );
 
   const load = useCallback(async () => {
     setState('loading');

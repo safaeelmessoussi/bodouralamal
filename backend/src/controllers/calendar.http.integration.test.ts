@@ -401,6 +401,9 @@ const OCCURRENCE_KEYS = [
   "attendance_marking",
   "attendance_mode",
   "audience_label",
+  // R136 clause 16/17 — the Student-access gate, separate from `visibility`.
+  // See `Occurrence.availableFrom`'s own docstring.
+  "available_from",
   "branch_id",
   "branch_name",
   "category_id",

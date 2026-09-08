@@ -111,6 +111,16 @@ export interface Occurrence {
   /** The official Hijri overlay, or null when the month is not yet recorded. */
   hijri_date: string | null;
   hijri_month_ar: string | null;
+  /**
+   * **R136 — Exam (online) only: the Student-access gate, separate from
+   * calendar visibility.** ISO instant, or `null` when there is no gate
+   * beyond `visibility` (every non-exam kind, a physical sitting, or a
+   * remote one still on manual opening). Calendar presence and Student
+   * access are independent facts — an occurrence with a future
+   * `available_from` is still discoverable here; the details dialog is
+   * where the distinction is actually shown.
+   */
+  available_from: string | null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
-import { notifyAssessmentPublished } from './notification.service.js';
+import { notifyOnlineExamScheduled } from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
@@ -11,6 +11,8 @@ import {
   assertExamInTeacherScope,
   examAudienceWhere,
   examScopeWhereForTeacher,
+  staffsSession,
+  staffsTeachingGroup,
   studentsTaughtBy,
   teacherEventScope,
 } from '../policies/roster-resolution.js';
@@ -66,7 +68,7 @@ const MANAGING_ROLE = 'admin';
  * make one write assert against live rows while its siblings on the same screen
  * do not.
  */
-async function assertMayAuthor(
+export async function assertMayAuthor(
   prisma: PrismaClient | Prisma.TransactionClient,
   actor: Actor,
   exam: {
@@ -121,12 +123,71 @@ async function assertMayAuthor(
     return;
   }
 
-  await assertExamInTeacherScope(prisma as PrismaClient, actor.userId, {
-    branchId: exam.branchId ?? '',
-    levelId: exam.levelId,
-    subjectId: exam.subjectId ?? '',
-    administrativeGroupId: exam.administrativeGroupId,
-  });
+  /**
+   * **R136 (Codex B3) — «may this مؤطِّرة address THIS session», not «does she
+   * teach the whole Level».**
+   *
+   * A `session` target names no group either, so — exactly like the `student`
+   * arm above — it fell through to `assertExamInTeacherScope`'s null-group
+   * branch, which asks a materially different and much BROADER question: does
+   * she hold `entire_level` staffing anywhere in this Level. A مؤطِّرة who
+   * teaches the whole Level for one class could address a session she has
+   * never staffed; one who staffs only that exact session through an
+   * administrative-group-scoped schedule was wrongly refused. `staffsSession`
+   * is the canonical, R91-correct predicate already used by the online-join
+   * and recording paths — reused rather than restated.
+   */
+  if (exam.targetKind === 'session' && exam.sessionId != null) {
+    const staffs = await staffsSession(prisma as PrismaClient, actor.userId, exam.sessionId);
+    // §20 rule 17 — a session she may not address is indistinguishable from
+    // one that does not exist.
+    if (!staffs) throw new AppError('NOT_FOUND', 'no such occurrence');
+    return;
+  }
+
+  /**
+   * **R136 (Codex B5) — «may this مؤطِّرة address THIS Teaching Group»,
+   * dated, not «does she teach the whole Level».**
+   *
+   * `exam_target_check` forces `administrative_group_id IS NULL` on a
+   * `teaching_group` row, so the fall-through's
+   * `reachable.administrativeGroupIds.includes(spec.administrativeGroupId)`
+   * asked `includes(null)` — always false — and refused every مؤطِّرة for
+   * every Teaching-Group-targeted exam, staffed or not. `staffsTeachingGroup`
+   * is the direct, R91-dated predicate: she staffs the schedule naming this
+   * exact group, or holds `entire_level` staffing over its Level.
+   */
+  if (exam.targetKind === 'teaching_group' && exam.teachingGroupId != null) {
+    const staffs = await staffsTeachingGroup(
+      prisma as PrismaClient,
+      actor.userId,
+      exam.teachingGroupId,
+      exam.date,
+    );
+    if (!staffs) throw new AppError('NOT_FOUND', 'no such beneficiary group');
+    return;
+  }
+
+  // **R136 (Codex B5) — judged on the exam's own date, not today's.**
+  // `assertExamInTeacherScope`'s `on` parameter defaults to `new Date()`; the
+  // fall-through arm left it defaulted, so a مؤطِّرة whose staffing lapsed
+  // before this exam's date — or began after it — was checked against
+  // whoever staffs the schedule *today* instead. R91's whole point is that
+  // authority is judged at the exam's own instant; the `student`/`session`
+  // arms above already carry no such gap because they resolve straight
+  // through `studentsTaughtBy`/`staffsSession`, neither of which defaults a
+  // date away from the row being addressed.
+  await assertExamInTeacherScope(
+    prisma as PrismaClient,
+    actor.userId,
+    {
+      branchId: exam.branchId ?? '',
+      levelId: exam.levelId,
+      subjectId: exam.subjectId ?? '',
+      administrativeGroupId: exam.administrativeGroupId,
+    },
+    exam.date,
+  );
 }
 
 /**
@@ -149,7 +210,7 @@ async function assertMayAuthor(
  * student enrolled at two branches, one of them hers, is somebody she already
  * administers.
  */
-async function assertAudienceWithinBranchScope(
+export async function assertAudienceWithinBranchScope(
   prisma: PrismaClient | Prisma.TransactionClient,
   actor: Actor,
   exam: {
@@ -219,6 +280,8 @@ const ASSESSMENT_SELECT = {
   publishedAt: true,
   closedAt: true,
   version: true,
+  /** R136 clause 16/17 — the Student-access gate `eligible` checks below. */
+  availableFrom: true,
 } as const;
 
 type AssessmentRow = Prisma.ExamGetPayload<{ select: typeof ASSESSMENT_SELECT }>;
@@ -236,17 +299,25 @@ const AUTHOR_LINEAGE_SELECT = {
   _count: { select: { reusedBy: true } },
 } as const;
 
-type AuthorAssessmentRow = AssessmentRow &
+export type AuthorAssessmentRow = AssessmentRow &
   Prisma.ExamGetPayload<{ select: typeof AUTHOR_LINEAGE_SELECT }>;
 
 /** Out of scope answers `404`, never `403` (§20 rule 17). */
-async function loadForAuthor(
+/**
+ * **R136 clause 2 — mode-agnostic.** بناء الاختبارات authors content for
+ * either delivery mode now, through the same question-management routes;
+ * this used to filter `mode: 'online'`, which would have refused a physical
+ * source's own author. `GET /assessments/{id}/paper` and the student-facing
+ * reads stay online-only through their own, separate queries — this loader
+ * is authoring only and was never reachable by a student.
+ */
+export async function loadForAuthor(
   prisma: PrismaClient,
   actor: Actor,
   id: string,
 ): Promise<AuthorAssessmentRow> {
   const exam = await prisma.exam.findFirst({
-    where: { id, deletedAt: null, mode: 'online' },
+    where: { id, deletedAt: null },
     select: { ...ASSESSMENT_SELECT, ...AUTHOR_LINEAGE_SELECT },
   });
   if (!exam) throw new AppError('NOT_FOUND', 'no such assessment');
@@ -270,10 +341,28 @@ async function loadForAuthor(
  * A **draft in progress** is not a submission and does not freeze anything: she
  * has answered nothing anybody has read, and the author is still writing.
  */
+/**
+ * **R136 (Codex B2) — serializes a question edit against a concurrent first
+ * submission on the SAME exam.** `assertNotFrozen`'s count alone raced: two
+ * transactions could each read zero submissions before either committed, one
+ * changing a question's wording under an answer being submitted at that exact
+ * instant to the version she actually saw. `saveResponses` takes the same
+ * lock before its own submission-state read (below), so a question mutation
+ * and a first submission for one exam always serialize on this row rather
+ * than on timing. §16.2's sanctioned raw-SQL exception (row locks).
+ */
+export async function lockExamRow(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  examId: string,
+): Promise<void> {
+  await prisma.$queryRaw`SELECT "id" FROM "exam" WHERE "id" = ${examId}::uuid FOR UPDATE`;
+}
+
 async function assertNotFrozen(
   prisma: PrismaClient | Prisma.TransactionClient,
   examId: string,
 ): Promise<void> {
+  await lockExamRow(prisma, examId);
   const submitted = await prisma.studentExamSubmission.count({
     where: { examId, state: { not: 'in_progress' } },
   });
@@ -302,14 +391,24 @@ export interface AssessmentInput {
   target: AssessmentTarget;
   /** Absent on a `session` target, where the Session's own date is the answer. */
   date?: Date;
+  /**
+   * **R136 clause 2** — بناء الاختبارات authors content for either delivery
+   * mode now. Defaults to `online` (unchanged, backward compatible). A
+   * `physical` source carries no branch/room/staff at authoring time —
+   * those are occurrence facts, assigned only when الجدولة schedules it
+   * (R136 clause 8/12); `exam_physical_needs_room_check` already permits a
+   * `physical` row with all four place/time columns `NULL`.
+   */
+  mode?: 'physical' | 'online';
 }
 
 /**
- * `POST /assessments` — a new paper, in `draft`.
+ * `POST /assessments` — a new reusable content source, in `draft` (R124, R136
+ * clause 2).
  *
- * **Draft, always.** An assessment nobody has written questions for is not
- * something to publish, and starting anywhere else would mean a student could
- * open an empty paper.
+ * **Draft, always, whichever mode.** Content nobody has written questions for
+ * is not something to schedule, and starting anywhere else would mean a
+ * student could open an empty paper.
  */
 export async function createAssessment(
   prisma: PrismaClient,
@@ -321,8 +420,9 @@ export async function createAssessment(
     await assertMayAuthor(tx, actor, {
       levelId: input.levelId,
       subjectId: input.subjectId ?? null,
-      // An online paper is sat nowhere, so it carries no branch — the CHECK
-      // `exam_online_has_no_room_check` refuses one outright.
+      // A source — either mode — is sat nowhere yet; it carries no branch
+      // until scheduling assigns one (physical) or none at all (online, where
+      // `exam_online_has_no_room_check` refuses one outright).
       branchId: null,
       administrativeGroupId: target.administrativeGroupId,
       studentId: target.studentId,
@@ -338,7 +438,7 @@ export async function createAssessment(
       data: {
         title: input.title,
         description: input.description ?? null,
-        mode: 'online',
+        mode: input.mode ?? 'online',
         status: 'draft',
         levelId: input.levelId,
         subjectId: input.subjectId ?? null,
@@ -369,7 +469,7 @@ export async function createAssessment(
 }
 
 /** Every target arm validated once, and the date it implies resolved with it. */
-async function resolveTarget(
+export async function resolveTarget(
   tx: Prisma.TransactionClient,
   input: Pick<AssessmentInput, 'levelId' | 'target' | 'date'>,
 ): Promise<{
@@ -456,77 +556,6 @@ async function resolveTarget(
       return { date: requireDate(), ...none, studentId: id };
     }
   }
-}
-
-/**
- * `PATCH /assessments/{id}/target` — **review the audience/date before
- * publishing** (R134).
- *
- * A copy — «إنشاء نسخة» or «استخدام مرة أخرى», the same safe operation from
- * two entry points — starts with the source's target and today's date, for
- * convenience. Neither is fixed: the author confirms or changes them here,
- * through the identical validation `createAssessment` applies (§20 rule 22 —
- * one target resolver, not a second one for edits). Draft and unfrozen only,
- * exactly like every other authoring write in this module; the Level itself
- * never changes here, since the questions were written for it.
- */
-export async function retargetAssessment(
-  prisma: PrismaClient,
-  actor: Actor,
-  examId: string,
-  expectedVersion: number,
-  input: { target: AssessmentTarget; date?: Date },
-): Promise<void> {
-  const exam = await loadForAuthor(prisma, actor, examId);
-  if (exam.status !== 'draft') {
-    throw new AppError('STATE_CONFLICT', 'only a draft’s audience may be reviewed', {
-      reason: 'INVALID_TRANSITION',
-    });
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await assertNotFrozen(tx, examId);
-    const target = await resolveTarget(tx, {
-      levelId: exam.levelId,
-      target: input.target,
-      ...(input.date === undefined ? {} : { date: input.date }),
-    });
-    await assertMayAuthor(tx, actor, {
-      levelId: exam.levelId,
-      subjectId: exam.subjectId,
-      branchId: null,
-      administrativeGroupId: target.administrativeGroupId,
-      studentId: target.studentId,
-      targetKind: input.target.kind,
-      sessionId: target.sessionId,
-      teachingGroupId: target.teachingGroupId,
-      date: target.date,
-    });
-
-    await updateWithVersion({
-      delegate: tx.exam,
-      id: examId,
-      expectedVersion,
-      requireNotDeleted: true,
-      data: {
-        targetKind: input.target.kind,
-        administrativeGroupId: target.administrativeGroupId,
-        sessionId: target.sessionId,
-        teachingGroupId: target.teachingGroupId,
-        studentId: target.studentId,
-        date: target.date,
-      },
-    });
-
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'assessment.retarget',
-      targetEntity: 'Exam',
-      targetId: examId,
-      detail: { target_kind: input.target.kind },
-    });
-  });
 }
 
 export interface QuestionInput {
@@ -825,79 +854,82 @@ export async function reorderQuestions(
 /* ── Lifecycle ────────────────────────────────────────────────────────────── */
 
 /** `POST /assessments/{id}/publish` — draft → published. */
-export async function publishAssessment(
-  prisma: PrismaClient,
+/**
+ * **R136 — the core of publication, callable only from inside an existing
+ * transaction.** `POST /assessments/{id}/publish` is retired as a standalone
+ * route (R136 §19/§23): a reusable source is never itself published, so
+ * nothing legitimate calls this outside the atomic scheduling transaction
+ * (`exam-scheduling.service.ts`) that just created the occurrence being
+ * published. Kept as a distinct, exported function anyway — not inlined —
+ * because §16.2's transaction-boundary discipline is exactly what Codex B1
+ * asked to be provable rather than assumed: the caller passes the `tx` it is
+ * already inside, and everything here reads and writes within that one lock,
+ * never re-opening its own.
+ */
+export async function publishOccurrenceTx(
+  tx: Prisma.TransactionClient,
   actor: Actor,
-  examId: string,
-): Promise<void> {
-  const exam = await loadForAuthor(prisma, actor, examId);
-  if (exam.status !== 'draft') {
-    throw new AppError('STATE_CONFLICT', 'this assessment is not a draft', {
-      reason: 'INVALID_TRANSITION',
+  exam: {
+    id: string;
+    targetKind: string;
+    levelId: string;
+    branchId: string | null;
+    administrativeGroupId: string | null;
+    sessionId: string | null;
+    teachingGroupId: string | null;
+    studentId: string | null;
+    subjectId: string | null;
+    date: Date;
+  },
+): Promise<{ notifiedStudents: number; notifiedStaff: number; questionCount: number }> {
+  /**
+   * **Re-checked at publish, and that is the Owner's word — «author or
+   * publish»** (R125), inside the SAME transaction that assigned the target —
+   * never a second, later read of a row that could have moved on.
+   */
+  await assertAudienceWithinBranchScope(tx, actor, exam);
+
+  const questions = await tx.examQuestion.count({ where: { examId: exam.id, deletedAt: null } });
+  // **An empty paper is not publishable.** A student opening one would be
+  // shown a title and nothing to answer, and would have no way to tell that
+  // from a fault.
+  if (questions === 0) {
+    throw new AppError('STATE_CONFLICT', 'an assessment with no questions cannot be published', {
+      reason: 'NO_QUESTIONS',
     });
   }
-
-  await prisma.$transaction(async (tx) => {
-    /**
-     * **Re-checked at publish, and that is the Owner's word — «author or
-     * publish»** (R125). The audience is resolved, not stored, so a Level that
-     * was entirely at her branch when she drafted the paper may have gained a
-     * second branch since. Publishing is the moment it reaches people, so it is
-     * the moment the question has to be asked again.
-     */
-    await assertAudienceWithinBranchScope(tx, actor, { ...exam, date: exam.date });
-
-    const questions = await tx.examQuestion.count({ where: { examId, deletedAt: null } });
-    // **An empty paper is not publishable.** A student opening one would be
-    // shown a title and nothing to answer, and would have no way to tell that
-    // from a fault.
-    if (questions === 0) {
-      throw new AppError('STATE_CONFLICT', 'an assessment with no questions cannot be published', {
-        reason: 'NO_QUESTIONS',
-      });
-    }
-    await tx.exam.update({
-      where: { id: examId },
-      data: { status: 'published', publishedAt: new Date() },
-    });
-    /**
-     * **Publication is the moment it reaches people, so it is the moment they
-     * are told** — in this transaction, never after it. R116 clause 7's rule:
-     * no committed change may lose its notification obligation, and no row may
-     * announce a rolled-back one.
-     */
-    const told = await notifyAssessmentPublished(
-      tx,
-      examId,
-      {
-        targetKind: exam.targetKind,
-        levelId: exam.levelId,
-        branchId: exam.branchId,
-        administrativeGroupId: exam.administrativeGroupId,
-        sessionId: exam.sessionId,
-        teachingGroupId: exam.teachingGroupId,
-        studentId: exam.studentId,
-        subjectId: exam.subjectId,
-        date: exam.date,
-      },
-      actor.userId,
-    );
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'assessment.publish',
-      targetEntity: 'Exam',
-      targetId: examId,
-      detail: {
-        question_count: questions,
-        target_kind: exam.targetKind,
-        // TD-8/TD-14 — counts, never who. The audience is re-resolvable from
-        // the row; the names are nobody's business in an audit line.
-        notified_students: told.students,
-        notified_staff: told.staff,
-      },
-    });
+  await tx.exam.update({
+    where: { id: exam.id },
+    data: { status: 'published', publishedAt: new Date() },
   });
+  /**
+   * **Publication is the moment it reaches people, so it is the moment they
+   * are told** — in this transaction, never after it. R116 clause 7's rule:
+   * no committed change may lose its notification obligation, and no row may
+   * announce a rolled-back one. R136 — `exam_scheduled`, not
+   * `assessment_published`; see `notifyOnlineExamScheduled`'s docstring.
+   */
+  const told = await notifyOnlineExamScheduled(
+    tx,
+    exam.id,
+    {
+      targetKind: exam.targetKind,
+      levelId: exam.levelId,
+      branchId: exam.branchId,
+      administrativeGroupId: exam.administrativeGroupId,
+      sessionId: exam.sessionId,
+      teachingGroupId: exam.teachingGroupId,
+      studentId: exam.studentId,
+      subjectId: exam.subjectId,
+      date: exam.date,
+    },
+    actor.userId,
+  );
+  return {
+    notifiedStudents: told.students,
+    notifiedStaff: told.staff,
+    questionCount: questions,
+  };
 }
 
 /**
@@ -951,6 +983,20 @@ async function eligible(
   exam: AssessmentRow,
   studentId: string,
 ): Promise<boolean> {
+  /**
+   * **R136 clause 16/17 — publication ≠ Student access, enforced here rather
+   * than trusted to the caller.** `availableFrom` is `NULL` until an Admin
+   * manually opens it, or a timestamp already computed at scheduling time
+   * (R136 clause 9/10) — a UUID alone was never enough to reach a paper before
+   * the audience check above; it is not enough to reach one before its own
+   * clock, either. No background job flips anything: this reads the column at
+   * the instant somebody asks, which is what makes `now >= availableFrom`
+   * correct without one.
+   */
+  if (exam.availableFrom !== null && exam.availableFrom.getTime() > Date.now()) {
+    return false;
+  }
+
   const where = await examAudienceWhere(prisma, {
     targetKind: exam.targetKind,
     levelId: exam.levelId,
@@ -1181,6 +1227,11 @@ export async function saveResponses(
   }
 
   return prisma.$transaction(async (tx) => {
+    // R136 (Codex B2) — the same lock `assertNotFrozen`'s callers take, taken
+    // here before any state this transaction depends on is read, so a
+    // concurrent question edit and a concurrent first submission on this exam
+    // are always serialized rather than racing.
+    await lockExamRow(tx, examId);
     const exam = await tx.exam.findFirst({
       where: { id: examId, deletedAt: null, mode: 'online', status: 'published' },
       select: ASSESSMENT_SELECT,
@@ -1783,7 +1834,29 @@ export async function targetCandidates(
       orderBy: { date: 'desc' },
       take: TAKE,
     });
-    return sessions.map((s) => ({
+    /**
+     * **R136 (Codex B3) — the schedule-level filter above is a convenience
+     * narrowing, not the authority.** It scopes by `CourseScheduleStaff`,
+     * time-blind, while R91 effective authority is per-occurrence
+     * (`staffsSession`, the same predicate the write side now asserts). A
+     * مؤطِّرة removed from a specific session by a `SessionStaff` override
+     * must not still be offered it here even though she staffs the schedule
+     * in general.
+     */
+    const filtered =
+      isSuper || isAdmin
+        ? sessions
+        : (
+            await Promise.all(
+              sessions.map(async (s) => ({
+                s,
+                ok: await staffsSession(prisma, actor.userId, s.id),
+              })),
+            )
+          )
+            .filter((row) => row.ok)
+            .map((row) => row.s);
+    return filtered.map((s) => ({
       id: s.id,
       // The date is half the identity of an occurrence, so it is half the label.
       label: `${s.schedule.title} — ${s.date.toISOString().slice(0, 10)}`,
@@ -1835,6 +1908,7 @@ export interface AssessmentListRow {
   id: string;
   title: string;
   status: string;
+  mode: string;
   date: Date;
   maxGrade: string;
   targetKind: string;
@@ -1852,10 +1926,12 @@ export interface AssessmentListRow {
 }
 
 export interface AssessmentListFilters extends PageParams, SortParams {
-  status?: 'draft' | 'published' | 'closed';
   levelId?: string;
   subjectId?: string;
   academicYearId?: string;
+  /** R136 — narrows الجدولة's remote paper selector to the delivery mode
+   *  being scheduled; every other reader leaves it unset. */
+  mode?: 'physical' | 'online';
   q?: string;
 }
 
@@ -1932,10 +2008,18 @@ export async function listAssessments(
   const search = filters.q?.trim();
   const where: Prisma.ExamWhereInput = {
     deletedAt: null,
-    // The library is the ONLINE half. A sitting is `GET /exams`, and one list
-    // showing both would be answering two questions in one table.
-    mode: 'online',
-    ...(filters.status ? { status: filters.status } : {}),
+    /**
+     * **R136 — the reusable-content library, never occurrence history.**
+     * `status = 'draft'` is, by construction (R136 §2/§3), exactly and only
+     * a reusable source: the only operation that ever moves a row past
+     * `draft` is the atomic scheduling transaction, which assigns real
+     * occurrence facts in the same step — so a row still `draft` was never
+     * scheduled, and a row that WAS scheduled is never `draft` again. Both
+     * delivery modes are authored here now (R136 clause 2); a sitting's
+     * occurrence history belongs to الجدولة/نقاط الامتحانات, not this list.
+     */
+    status: 'draft',
+    ...(filters.mode ? { mode: filters.mode } : {}),
     ...(filters.levelId ? { levelId: filters.levelId } : {}),
     ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
     ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
@@ -1958,6 +2042,7 @@ export async function listAssessments(
         id: true,
         title: true,
         status: true,
+        mode: true,
         date: true,
         maxGrade: true,
         targetKind: true,
@@ -1988,6 +2073,7 @@ export async function listAssessments(
       id: row.id,
       title: row.title,
       status: row.status,
+      mode: row.mode,
       date: row.date,
       maxGrade: row.maxGrade.toString(),
       targetKind: row.targetKind,
@@ -2046,6 +2132,123 @@ export async function listAssessments(
  * resolves its audience in December (R122), and inheriting September's date
  * would silently address September's enrolments.
  */
+/** Midnight UTC today — TD-11's calendar date, never an instant. */
+export function todayUTC(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/**
+ * **The one place content is copied into a new row** — بناء الاختبارات's
+ * «إنشاء نسخة» (another reusable draft source) and الجدولة's scheduling
+ * (an independent occurrence, R136) are the SAME safe operation with
+ * different overrides, never two implementations. Copied: title,
+ * instructions, maximum, Level, Subject, academic year, every question with
+ * its options and order. **Never copied, under either caller: submissions,
+ * answers, grades, notifications, attendance, publication/history
+ * timestamps** — the new row has none of them because nothing here creates
+ * any of them. `source.id` becomes the new row's `sourceExamId` **directly**
+ * (R136 clause 4) — never the source's own `sourceExamId` — so a normal
+ * scheduling/reuse chain is always exactly one hop, never source→A→B→C.
+ */
+export async function copyContentIntoNewRow(
+  tx: Prisma.TransactionClient,
+  source: {
+    id: string;
+    title: string;
+    description: string | null;
+    maxGrade: { toString(): string };
+    levelId: string;
+    subjectId: string | null;
+    academicYearId: string | null;
+    mode: 'physical' | 'online';
+    targetKind: string;
+    administrativeGroupId: string | null;
+    sessionId: string | null;
+    teachingGroupId: string | null;
+    studentId: string | null;
+  },
+  overrides: {
+    mode?: 'physical' | 'online';
+    date: Date;
+    titleSuffix: boolean;
+    target?: {
+      targetKind: string;
+      administrativeGroupId: string | null;
+      sessionId: string | null;
+      teachingGroupId: string | null;
+      studentId: string | null;
+    };
+  },
+): Promise<{ id: string }> {
+  const questions = await tx.examQuestion.findMany({
+    where: { examId: source.id, deletedAt: null },
+    orderBy: { displayOrder: 'asc' },
+    select: {
+      kind: true,
+      prompt: true,
+      justification: true,
+      displayOrder: true,
+      options: {
+        where: { deletedAt: null },
+        orderBy: { displayOrder: 'asc' },
+        select: { label: true, displayOrder: true },
+      },
+    },
+  });
+
+  const target = overrides.target ?? {
+    targetKind: source.targetKind,
+    administrativeGroupId: source.administrativeGroupId,
+    sessionId: source.sessionId,
+    teachingGroupId: source.teachingGroupId,
+    studentId: source.studentId,
+  };
+
+  const created = await tx.exam.create({
+    data: {
+      title: overrides.titleSuffix ? copyTitle(source.title) : source.title,
+      description: source.description,
+      mode: overrides.mode ?? source.mode,
+      status: 'draft',
+      maxGrade: source.maxGrade.toString(),
+      levelId: source.levelId,
+      subjectId: source.subjectId,
+      academicYearId: source.academicYearId,
+      targetKind: target.targetKind as never,
+      administrativeGroupId: target.administrativeGroupId,
+      sessionId: target.sessionId,
+      teachingGroupId: target.teachingGroupId,
+      studentId: target.studentId,
+      date: overrides.date,
+      // R136 clause 4/12 — provenance only; never authorization, audience,
+      // availability, grading, freeze, publication, deletion or notification.
+      sourceExamId: source.id,
+    },
+    select: { id: true },
+  });
+
+  for (const question of questions) {
+    await tx.examQuestion.create({
+      data: {
+        examId: created.id,
+        kind: question.kind,
+        prompt: question.prompt,
+        justification: question.justification,
+        displayOrder: question.displayOrder,
+        options: {
+          create: question.options.map((option) => ({
+            label: option.label,
+            displayOrder: option.displayOrder,
+          })),
+        },
+      },
+    });
+  }
+
+  return created;
+}
+
 export async function copyAssessment(
   prisma: PrismaClient,
   actor: Actor,
@@ -2054,65 +2257,10 @@ export async function copyAssessment(
   const source = await loadForAuthor(prisma, actor, examId);
 
   return prisma.$transaction(async (tx) => {
-    const questions = await tx.examQuestion.findMany({
-      where: { examId, deletedAt: null },
-      orderBy: { displayOrder: 'asc' },
-      select: {
-        kind: true,
-        prompt: true,
-        justification: true,
-        displayOrder: true,
-        options: {
-          where: { deletedAt: null },
-          orderBy: { displayOrder: 'asc' },
-          select: { label: true, displayOrder: true },
-        },
-      },
+    const created = await copyContentIntoNewRow(tx, source, {
+      date: todayUTC(),
+      titleSuffix: true,
     });
-
-    const today = new Date();
-    const created = await tx.exam.create({
-      data: {
-        title: copyTitle(source.title),
-        description: source.description,
-        mode: 'online',
-        status: 'draft',
-        maxGrade: source.maxGrade,
-        levelId: source.levelId,
-        subjectId: source.subjectId,
-        academicYearId: source.academicYearId,
-        targetKind: source.targetKind,
-        administrativeGroupId: source.administrativeGroupId,
-        sessionId: source.sessionId,
-        teachingGroupId: source.teachingGroupId,
-        studentId: source.studentId,
-        date: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())),
-        // R134 — provenance only; see the schema comment on `sourceExamId`.
-        // The target/date above are copied for convenience and are exactly
-        // what `retargetAssessment` exists to let the author review and
-        // change before she publishes this use.
-        sourceExamId: examId,
-      },
-      select: { id: true },
-    });
-
-    for (const question of questions) {
-      await tx.examQuestion.create({
-        data: {
-          examId: created.id,
-          kind: question.kind,
-          prompt: question.prompt,
-          justification: question.justification,
-          displayOrder: question.displayOrder,
-          options: {
-            create: question.options.map((option) => ({
-              label: option.label,
-              displayOrder: option.displayOrder,
-            })),
-          },
-        },
-      });
-    }
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -2122,7 +2270,7 @@ export async function copyAssessment(
       targetId: created.id,
       // The provenance, and the counts that make the copy checkable. No student
       // appears here because no student is involved in a copy (TD-8, TD-14).
-      detail: { copied_from: examId, question_count: questions.length },
+      detail: { copied_from: examId },
     });
 
     return created;

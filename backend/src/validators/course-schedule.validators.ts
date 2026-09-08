@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-import { uuid, version } from "./common.js";
+import { calendarDate, uuid, version } from "./common.js";
+
+export { calendarDate };
 
 /**
  * Zod schemas for the Recurring Course Schedule boundary (TD-3.12, §4.4).
@@ -52,12 +54,6 @@ export const wallClock = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "expected HH:MM or HH:MM:SS")
   .transform((v) => new Date(`1970-01-01T${v.length === 5 ? `${v}:00` : v}Z`));
-
-/** A TD-11 calendar date — `YYYY-MM-DD`, never an instant. */
-export const calendarDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-  .transform((v) => new Date(`${v}T00:00:00Z`));
 
 /**
  * **R91 — an assignment carries its effective period.**

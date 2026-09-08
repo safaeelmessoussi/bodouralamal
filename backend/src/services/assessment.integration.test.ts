@@ -18,16 +18,15 @@ import {
   createAssessment,
   listAssessments,
   listSubmissions,
-  publishAssessment,
   readSubmission,
   removeQuestion,
   reorderQuestions,
-  retargetAssessment,
   saveResponses,
   studentPaper,
   targetCandidates,
   updateQuestion,
 } from './assessment.service.js';
+import { scheduleExam } from './exam-scheduling.service.js';
 
 /**
  * **The assessment builder, end to end** (SRS §4.6 as extended by R124).
@@ -108,7 +107,20 @@ async function person(name: string, beneficiary = false): Promise<string> {
   ).id;
 }
 
-/** A published assessment with one question of each requested kind. */
+/**
+ * **A scheduled, immediately-available online occurrence** (R136): builds a
+ * draft source, adds one question, then schedules it — the one atomic path
+ * that ever moves a row past `draft` now. Returns the OCCURRENCE's id, which
+ * is a different row from the draft `scheduleExam` copied it from (R136
+ * clause 3/4 — source and occurrence are never the same row); every caller
+ * below submits, reads or grades against this id, exactly as the ratified
+ * model requires.
+ *
+ * `{ policy: 'custom', at: new Date(0) }` rather than the `manual` default:
+ * `manual` leaves `availableFrom` `NULL` forever absent a later, separate
+ * "open now" act this revision does not add a route for, and this helper's
+ * many callers need a paper a student can already sit the instant it exists.
+ */
 async function publishedPaper(
   target: Parameters<typeof createAssessment>[2]['target'],
   levelOverride = levelId,
@@ -123,8 +135,14 @@ async function publishedPaper(
     ...(target.kind === 'session' ? {} : { date: TODAY }),
   });
   await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'اسمك؟' });
-  await publishAssessment(prisma, superAdmin(), id);
-  return id;
+  const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+    mode: 'online',
+    sourceExamId: id,
+    target,
+    ...(target.kind === 'session' ? {} : { date: TODAY }),
+    availability: { policy: 'custom', at: new Date(0) },
+  });
+  return occurrenceId;
 }
 
 async function clear(): Promise<void> {
@@ -509,24 +527,50 @@ describe('1–10 · authoring', () => {
     expect((await assessmentsForStudent(prisma, alice)).map((a) => a.id)).not.toContain(examId);
   });
 
-  it('10 · publishes — and refuses to publish an empty paper', async () => {
+  it('10 · schedules — and refuses to schedule an empty paper (R136)', async () => {
     const empty = await createAssessment(prisma, superAdmin(), {
       title: `${TAG} فارغة`,
       maxGrade: 20,
       levelId,
+      subjectId,
+      academicYearId,
       target: { kind: 'level' },
       date: TODAY,
     });
-    await expect(publishAssessment(prisma, superAdmin(), empty.id)).rejects.toMatchObject({
-      details: { reason: 'NO_QUESTIONS' },
-    });
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: empty.id,
+        target: { kind: 'level' },
+        date: TODAY,
+        availability: { policy: 'custom', at: new Date(0) },
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'NO_QUESTIONS' } });
+    // Refused, and the draft source is untouched — never partially scheduled.
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: empty.id } })).status).toBe(
+      'draft',
+    );
 
-    await publishAssessment(prisma, superAdmin(), examId);
-    const row = await prisma.exam.findUniqueOrThrow({ where: { id: examId } });
-    expect(row.status).toBe('published');
-    expect(row.publishedAt).not.toBeNull();
-    // And now it reaches the student it was written for.
-    expect((await assessmentsForStudent(prisma, alice)).map((a) => a.id)).toContain(examId);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: examId,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+    // The draft source stays a draft (R136 clause 3 — scheduling copies, it
+    // never retargets or consumes the source).
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: examId } })).status).toBe(
+      'draft',
+    );
+    const occurrence = await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } });
+    expect(occurrence.status).toBe('published');
+    expect(occurrence.publishedAt).not.toBeNull();
+    expect(occurrence.sourceExamId).toBe(examId);
+    // And now it reaches the student it was written for — at the OCCURRENCE's
+    // id, never the source's.
+    expect((await assessmentsForStudent(prisma, alice)).map((a) => a.id)).toContain(occurrenceId);
+    expect((await assessmentsForStudent(prisma, alice)).map((a) => a.id)).not.toContain(examId);
   });
 });
 
@@ -622,7 +666,17 @@ describe('16–21 · the student', () => {
       prompt: 'اختاري ما ينطبق',
       options: ['س', 'ص'],
     });
-    await publishAssessment(prisma, superAdmin(), examId);
+    // R136 — scheduling copies the draft into an independent occurrence;
+    // `examId` is reassigned to that occurrence so every `it()` below keeps
+    // addressing the row a student actually submits against, unchanged.
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: examId,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+    examId = occurrenceId;
 
     const rows = await prisma.examQuestion.findMany({
       where: { examId, deletedAt: null },
@@ -1248,11 +1302,19 @@ describe('SECURITY · an individual target may not name somebody outside the aut
       },
     });
 
-    await expect(publishAssessment(prisma, scopedAdmin(), created.id)).rejects.toMatchObject({
+    const scheduleIt = (actor: Actor) =>
+      scheduleExam(prisma, actor, {
+        mode: 'online',
+        sourceExamId: created.id,
+        target: { kind: 'level' },
+        date: TODAY,
+        availability: { policy: 'custom', at: new Date(0) },
+      });
+    await expect(scheduleIt(scopedAdmin())).rejects.toMatchObject({
       details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
     });
-    // A Super Admin may still publish it — her scope did not change.
-    await expect(publishAssessment(prisma, superAdmin(), created.id)).resolves.toBeUndefined();
+    // A Super Admin may still schedule it — her scope did not change.
+    await expect(scheduleIt(superAdmin())).resolves.toMatchObject({ id: expect.any(String) });
   });
 
   it('an Admin scoped to another branch cannot name a beneficiary at this one', async () => {
@@ -1437,25 +1499,41 @@ describe('the library — a paper that was created must still be there', () => {
     expect(mine[0]!.levelName).toBeTruthy();
   });
 
-  it('still lists it after publication — publishing is not disappearing', async () => {
+  it('R136 — stays listed, still a draft, after being scheduled: using it does not empty the library', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
     await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س' });
-    await publishAssessment(prisma, superAdmin(), id);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
 
-    // A second, independent read — which is all "closing the page and coming
-    // back" is. The row was always there; nothing could reach it.
+    // The source is copied, never retargeted or consumed (R136 clause 3): a
+    // second, independent read finds the draft exactly as it was.
     const page = await listAssessments(prisma, superAdmin(), {});
-    expect(page.data.find((row) => row.id === id)?.status).toBe('published');
+    expect(page.data.find((row) => row.id === id)?.status).toBe('draft');
+    // The occurrence `scheduleExam` produced is not a reusable source and
+    // must not appear in بناء الاختبارات's library, whatever its own status.
+    expect(page.data.some((row) => row.id === occurrenceId)).toBe(false);
   });
 
-  it('still lists it after closing — a finished paper is a historical resource', async () => {
+  it('R136 — closing the occurrence built from it leaves the source untouched and still listed', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
     await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س' });
-    await publishAssessment(prisma, superAdmin(), id);
-    await closeAssessment(prisma, superAdmin(), id);
-    expect(
-      (await listAssessments(prisma, superAdmin(), {})).data.find((row) => row.id === id)?.status,
-    ).toBe('closed');
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+    await closeAssessment(prisma, superAdmin(), occurrenceId);
+
+    const page = await listAssessments(prisma, superAdmin(), {});
+    expect(page.data.find((row) => row.id === id)?.status).toBe('draft');
+    expect(page.data.some((row) => row.id === occurrenceId)).toBe(false);
   });
 
   it('carries the counts that tell a draft from a paper somebody has sat', async () => {
@@ -1467,18 +1545,8 @@ describe('the library — a paper that was created must still be there', () => {
     expect(row.submissionCount).toBe(0);
   });
 
-  it('narrows by status, level and title — and every filter is optional', async () => {
+  it('narrows by level and title — and every filter is optional', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    expect(
-      (await listAssessments(prisma, superAdmin(), { status: 'draft' })).data.some(
-        (r) => r.id === id,
-      ),
-    ).toBe(true);
-    expect(
-      (await listAssessments(prisma, superAdmin(), { status: 'closed' })).data.some(
-        (r) => r.id === id,
-      ),
-    ).toBe(false);
     expect(
       (await listAssessments(prisma, superAdmin(), { levelId })).data.some((r) => r.id === id),
     ).toBe(true);
@@ -1576,24 +1644,42 @@ describe('reuse — the same paper again, never the same answers', () => {
 
   it('carries over NO submission, NO answer and NO grade — the whole point', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const question = await addQuestion(prisma, superAdmin(), id, {
+    await addQuestion(prisma, superAdmin(), id, {
       kind: 'short_text',
       prompt: 'اكتبي',
     });
-    await publishAssessment(prisma, superAdmin(), id);
+    // R136 — a submission/grade can only ever exist on the OCCURRENCE
+    // scheduling produces, never on the draft source itself; «إنشاء نسخة»
+    // from a historical occurrence (نقاط الامتحانات) is this same
+    // `copyAssessment`, unchanged — it stays a pure content operation
+    // regardless of which status the row it copies from is in.
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+    // `scheduleExam` copies the question INTO the occurrence with a fresh id
+    // (R136 clause 4/5 — direct provenance, never a chain), so it must be
+    // re-read from the occurrence rather than reused from the source.
+    const occurrenceQuestion = await prisma.examQuestion.findFirstOrThrow({
+      where: { examId: occurrenceId, deletedAt: null },
+      select: { id: true },
+    });
     await saveResponses(
       prisma,
       student(alice),
-      id,
+      occurrenceId,
       alice,
-      [{ questionId: question.id, text: 'جواب أيلول' }],
+      [{ questionId: occurrenceQuestion.id, text: 'جواب أيلول' }],
       { submit: true },
     );
     await prisma.grade.create({
-      data: { examId: id, studentId: alice, score: 12, status: 'published' },
+      data: { examId: occurrenceId, studentId: alice, score: 12, status: 'published' },
     });
 
-    const copy = await copyAssessment(prisma, superAdmin(), id);
+    const copy = await copyAssessment(prisma, superAdmin(), occurrenceId);
 
     for (const [what, count] of [
       ['submissions', await prisma.studentExamSubmission.count({ where: { examId: copy.id } })],
@@ -1608,42 +1694,54 @@ describe('reuse — the same paper again, never the same answers', () => {
     expect(answers).toBe(0);
   });
 
-  it('editing the copy leaves September untouched — historical integrity', async () => {
+  it('editing the copy leaves the sat occurrence untouched — historical integrity', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const question = await addQuestion(prisma, superAdmin(), id, {
+    await addQuestion(prisma, superAdmin(), id, {
       kind: 'short_text',
       prompt: 'السؤال الأصلي',
     });
-    await publishAssessment(prisma, superAdmin(), id);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+    const occurrenceQuestion = await prisma.examQuestion.findFirstOrThrow({
+      where: { examId: occurrenceId, deletedAt: null },
+      select: { id: true },
+    });
     await saveResponses(
       prisma,
       student(alice),
-      id,
+      occurrenceId,
       alice,
-      [{ questionId: question.id, text: 'جواب أيلول' }],
+      [{ questionId: occurrenceQuestion.id, text: 'جواب أيلول' }],
       { submit: true },
     );
 
-    const copy = await copyAssessment(prisma, superAdmin(), id);
+    // «إنشاء نسخة» from the sat occurrence — the same historical-occurrence-
+    // to-new-source copy R136 places in نقاط الامتحانات.
+    const copy = await copyAssessment(prisma, superAdmin(), occurrenceId);
     const copied = await authorPaper(prisma, superAdmin(), copy.id);
     await updateQuestion(prisma, superAdmin(), copy.id, copied.questions[0]!.id, 0, {
       prompt: 'سؤال ديسمبر المعدَّل',
     });
     await addQuestion(prisma, superAdmin(), copy.id, { kind: 'short_text', prompt: 'سؤال إضافي' });
 
-    // The original's wording, its answer, and its question count are unchanged.
-    const original = await authorPaper(prisma, superAdmin(), id);
+    // The occurrence's wording, its answer, and its question count are unchanged.
+    const original = await authorPaper(prisma, superAdmin(), occurrenceId);
     expect(original.questions).toHaveLength(1);
     expect(original.questions[0]!.prompt).toBe('السؤال الأصلي');
     const kept = await prisma.studentExamAnswer.findFirstOrThrow({
-      where: { submission: { examId: id }, questionId: question.id },
+      where: { submission: { examId: occurrenceId }, questionId: occurrenceQuestion.id },
       select: { text: true },
     });
     expect(kept.text).toBe('جواب أيلول');
 
-    // And the original is still frozen against edits, which is the other half.
+    // And the sat occurrence is still frozen against edits, which is the other half.
     await expect(
-      addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'لا' }),
+      addQuestion(prisma, superAdmin(), occurrenceId, { kind: 'short_text', prompt: 'لا' }),
     ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
   });
 
@@ -1713,19 +1811,30 @@ describe('R134 — provenance is a fact about wording, and grants nothing', () =
 
   it('is invisible to a student — never told a paper is a reuse', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const question = await addQuestion(prisma, superAdmin(), id, {
+    await addQuestion(prisma, superAdmin(), id, {
       kind: 'short_text',
       prompt: 'سؤال',
     });
-    await publishAssessment(prisma, superAdmin(), id);
     const copy = await copyAssessment(prisma, superAdmin(), id);
     await addQuestion(prisma, superAdmin(), copy.id, { kind: 'short_text', prompt: 'سؤال آخر' });
-    await publishAssessment(prisma, superAdmin(), copy.id);
+    // R136 — the occurrence's `sourceExamId` is `copy.id` DIRECTLY, never `id`
+    // (clause 4/5: provenance never chains), which is exactly the row a
+    // student must never learn is a reuse.
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: copy.id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
 
-    const paper = await studentPaper(prisma, student(alice), copy.id, alice);
+    const occurrenceRow = await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } });
+    expect(occurrenceRow.sourceExamId).toBe(copy.id);
+    expect(occurrenceRow.sourceExamId).not.toBe(id);
+
+    const paper = await studentPaper(prisma, student(alice), occurrenceId, alice);
     expect(paper.exam).not.toHaveProperty('sourceExamId');
     expect(paper.exam).not.toHaveProperty('sourceExam');
-    void question;
   });
 
   it('grants no authority — a caller outside scope cannot reach a copy through its source', async () => {
@@ -1739,86 +1848,202 @@ describe('R134 — provenance is a fact about wording, and grants nothing', () =
   });
 });
 
-describe('R134 — reviewing the audience/date before publishing a reuse or a copy', () => {
-  it('changes the target and date on a draft, and the change is what publishes', async () => {
-    const { id } = await levelPaper(levelId, superAdmin());
-    const copy = await copyAssessment(prisma, superAdmin(), id);
-    const before = await authorPaper(prisma, superAdmin(), copy.id);
-
-    await retargetAssessment(prisma, superAdmin(), copy.id, before.exam.version, {
-      target: { kind: 'administrative_group', id: otherGroupId },
-      date: TODAY,
-    });
-
-    const after = await authorPaper(prisma, superAdmin(), copy.id);
-    expect(after.exam.targetKind).toBe('administrative_group');
-    expect(after.exam.administrativeGroupId).toBe(otherGroupId);
-    // TD-15 — the row moved on.
-    expect(after.exam.version).toBe(before.exam.version + 1);
-  });
-
-  it('never changes the Level — the field is not in the input at all', async () => {
-    // Structural, not a runtime refusal: `retargetAssessment`'s own input type
-    // carries no `levelId`, so there is nowhere for one to arrive from — the
-    // same discipline `POST /assessments/{id}/copy` already applies to the
-    // questions themselves.
-    const { id } = await levelPaper(levelId, superAdmin());
-    const before = await authorPaper(prisma, superAdmin(), id);
-    await retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
-      target: { kind: 'level' },
-      date: TODAY,
-    });
-    const after = await authorPaper(prisma, superAdmin(), id);
-    expect(after.exam.levelId).toBe(levelId);
-  });
-
-  it('refuses once the paper is no longer a draft', async () => {
+/**
+ * **R136 retires `retargetAssessment` outright** — the R134-era "review the
+ * target/date on a draft, then a later publish step" two-act flow the tests
+ * this replaces exercised. الجدولة is now the one حفظ that assigns the
+ * target/date AND schedules in a single atomic call (`scheduleExam`); there
+ * is no intermediate "retargeted draft" state to review, so TD-15's stale-
+ * version guard against a blind overwrite has nothing left to protect —
+ * scheduling only ever READS the source to copy it, never mutates it in
+ * place, and two concurrent schedulers each produce their own independent,
+ * internally-consistent occurrence rather than racing to overwrite one row.
+ */
+describe('R136 — assigning the target/date IS scheduling, in one step', () => {
+  it('refuses to schedule a source that is already a scheduled occurrence', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
     await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
-    const before = await authorPaper(prisma, superAdmin(), id);
-    await publishAssessment(prisma, superAdmin(), id);
+    await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
 
+    // `id` is now a scheduled occurrence's own SOURCE — still `draft` itself
+    // (R136 clause 3) — but naming it again offers the source as if it were
+    // reusable content a second time over, which R136 clause 2 forbids only
+    // for a row that is NOT `draft`. Naming the SAME already-published
+    // occurrence, not the source, is the actual refused case:
+    const occurrence = await prisma.exam.findFirstOrThrow({
+      where: { sourceExamId: id },
+      select: { id: true },
+    });
     await expect(
-      retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
-        target: { kind: 'administrative_group', id: otherGroupId },
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: occurrence.id,
+        target: { kind: 'level' },
         date: TODAY,
+        availability: { policy: 'custom', at: new Date(0) },
       }),
-    ).rejects.toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'INVALID_TRANSITION' } });
+    ).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'SOURCE_ALREADY_SCHEDULED' },
+    });
   });
 
-  it('refuses a stale version rather than silently overwriting', async () => {
+  it('validates the target exactly as authoring does — an unknown group is refused', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const before = await authorPaper(prisma, superAdmin(), id);
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
 
     await expect(
-      retargetAssessment(prisma, superAdmin(), id, before.exam.version + 1, {
-        target: { kind: 'administrative_group', id: otherGroupId },
-        date: TODAY,
-      }),
-    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
-  });
-
-  it('validates the target exactly as creation does — an unknown group is refused', async () => {
-    const { id } = await levelPaper(levelId, superAdmin());
-    const before = await authorPaper(prisma, superAdmin(), id);
-
-    await expect(
-      retargetAssessment(prisma, superAdmin(), id, before.exam.version, {
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: id,
         target: { kind: 'administrative_group', id: crypto.randomUUID() },
         date: TODAY,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
-  it('refuses a caller outside the paper’s scope', async () => {
+  it('refuses a caller outside the source paper’s scope', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const before = await authorPaper(prisma, superAdmin(), id);
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
 
     await expect(
-      retargetAssessment(prisma, outsider(), id, before.exam.version, {
+      scheduleExam(prisma, outsider(), {
+        mode: 'online',
+        sourceExamId: id,
         target: { kind: 'level' },
         date: TODAY,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+/**
+ * **R136 (Codex B1) — deterministic proof of atomicity, not an architectural
+ * claim.** The R134-era flow was `copy`, then `retarget`, then `publish`,
+ * each its own HTTP call and its own transaction; a failure between any two
+ * left a real, persisted, half-completed row — an orphaned copy nobody
+ * scheduled, or a retargeted draft nobody published. `scheduleExam` performs
+ * the whole sequence inside ONE `prisma.$transaction`, so the only way to
+ * demonstrate that is real is to fail it LATE — after the occurrence row
+ * already exists inside that same transaction — and show nothing survives
+ * the rollback. A test that only checks the success path never exercises
+ * this at all.
+ */
+describe('R136 (Codex B1) — scheduling is atomic: a late failure leaves nothing behind', () => {
+  it('an online NO_QUESTIONS refusal (after the copy already exists) leaves no occurrence row', async () => {
+    const { id: emptyId } = await levelPaper(levelId, superAdmin());
+    const before = await prisma.exam.count({ where: { title: { startsWith: TAG } } });
+
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: emptyId,
+        target: { kind: 'level' },
+        date: TODAY,
+        availability: { policy: 'custom', at: new Date(0) },
+      }),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'NO_QUESTIONS' } });
+
+    // `copyContentIntoNewRow` runs BEFORE `publishOccurrenceTx`'s NO_QUESTIONS
+    // check, so a copy row demonstrably existed, inside this transaction,
+    // at the moment it failed. Its absence now is the transaction rollback —
+    // not a check this route happened never to reach.
+    const after = await prisma.exam.count({ where: { title: { startsWith: TAG } } });
+    expect(after).toBe(before);
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: emptyId } })).status).toBe(
+      'draft',
+    );
+  });
+
+  it('a physical EXAM_STAFF_DUPLICATE refusal (after the occurrence row already exists) leaves nothing behind', async () => {
+    const room = await prisma.room.create({
+      data: { name: `${TAG} قاعة الذرية`, branchId },
+      select: { id: true },
+    });
+    const duplicateUser = alice;
+    const { id: sourceId } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ورقة فيزيائية للذرية`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      academicYearId,
+      mode: 'physical',
+      target: { kind: 'level' },
+      date: TODAY,
+    });
+    await addQuestion(prisma, superAdmin(), sourceId, { kind: 'short_text', prompt: 'سؤال' });
+    const before = await prisma.exam.count({ where: { title: { startsWith: TAG } } });
+
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'physical',
+        sourceExamId: sourceId,
+        target: { kind: 'level' },
+        date: TODAY,
+        branchId,
+        roomId: room.id,
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+        // The SAME person named twice — `EXAM_STAFF_DUPLICATE` fires only
+        // after `occurrence` is already created inside this transaction.
+        staff: [
+          { userId: duplicateUser, position: 'supervisor' },
+          { userId: duplicateUser, position: 'assistant' },
+        ],
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'EXAM_STAFF_DUPLICATE' } });
+
+    const after = await prisma.exam.count({ where: { title: { startsWith: TAG } } });
+    expect(after).toBe(before);
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: sourceId } })).status).toBe(
+      'draft',
+    );
+  });
+
+  it('two concurrent schedulings of the SAME draft source both succeed, independently and without interference', async () => {
+    const { id: sourceId } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), sourceId, { kind: 'short_text', prompt: 'سؤال ١' });
+    await addQuestion(prisma, superAdmin(), sourceId, { kind: 'short_text', prompt: 'سؤال ٢' });
+
+    const schedule = () =>
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: sourceId,
+        target: { kind: 'level' },
+        date: TODAY,
+        availability: { policy: 'custom', at: new Date(0) },
+      });
+
+    // Fired together, not awaited in sequence — the whole point is that
+    // PostgreSQL, not test ordering, is what keeps these from colliding.
+    const [a, b] = await Promise.all([schedule(), schedule()]);
+
+    expect(a.id).not.toBe(b.id);
+
+    const source = await prisma.exam.findUniqueOrThrow({ where: { id: sourceId } });
+    // The source itself was only ever READ by either transaction — R136
+    // clause 3 — so two concurrent uses leave it exactly as it was.
+    expect(source.status).toBe('draft');
+
+    for (const occurrenceId of [a.id, b.id]) {
+      const occurrence = await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } });
+      expect(occurrence.status).toBe('published');
+      // Direct provenance, not a chain — both name the SAME source, never
+      // each other (R136 clause 4/5).
+      expect(occurrence.sourceExamId).toBe(sourceId);
+      const questions = await prisma.examQuestion.findMany({
+        where: { examId: occurrenceId, deletedAt: null },
+      });
+      // Each occurrence copied its OWN two questions — not zero (a race that
+      // silently dropped one transaction's copy) and not four (a race that
+      // let one transaction's insert bleed into the other's row).
+      expect(questions).toHaveLength(2);
+    }
   });
 });

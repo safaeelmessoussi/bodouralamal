@@ -6,16 +6,12 @@ import {
   copyAssessment,
   createAssessment,
   listAssessments,
-  listAssessmentTargets,
   listSubmissions,
-  publishAssessment,
   readAuthorPaper,
   readSubmission,
   removeQuestion,
   reorderQuestions,
-  retargetAssessment,
   type AssessmentPaper,
-  type AssessmentStatus,
   type AssessmentSummary,
   type JustificationRule,
   type QuestionKind,
@@ -24,6 +20,7 @@ import {
 } from '../../adapters/assessments.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
+import { TARGET_LABELS, TargetPicker } from '../../components/scheduling/target-picker.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
@@ -79,14 +76,6 @@ const JUSTIFICATION_LABELS: Record<JustificationRule, string> = {
   none: 'assessments.justificationNone',
   optional: 'assessments.justificationOptional',
   required: 'assessments.justificationRequired',
-};
-
-const TARGET_LABELS: Record<TargetKind, string> = {
-  level: 'assessments.targetLevel',
-  administrative_group: 'assessments.targetGroup',
-  session: 'assessments.targetSession',
-  teaching_group: 'assessments.targetTeachingGroup',
-  student: 'assessments.targetStudent',
 };
 
 const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId'] as const;
@@ -189,19 +178,20 @@ function Library({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
-  const [stateFilter, setStateFilter] = useState('');
+  const [modeFilter, setModeFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
   /**
-   * **One safe operation, two entry points** (R134). `POST /assessments/{id}/copy`
-   * is identical either way — an independent draft, its own empty target,
-   * submissions, grades and notifications. Only where the author lands differs:
-   * «إنشاء نسخة» opens the builder to edit the wording; «استخدام مرة أخرى» opens
-   * the same builder with the audience/date review dialog already up, since
-   * nothing about the wording needs changing, only who it reaches and when.
+   * **«إنشاء نسخة» stays a pure content operation** (R136). `POST
+   * /assessments/{id}/copy` produces an independent draft — its own empty
+   * target, submissions, grades and notifications — and this dialog is the
+   * only thing that ever calls it from here. Scheduling a paper, reused or
+   * not, is a السد navigation to الجدولة with the source pre-filled
+   * (`onSelect` below); it makes no request of its own, so there is nothing
+   * left to confirm.
    */
-  const [copying, setCopying] = useState<{ row: AssessmentSummary; reuse: boolean } | null>(null);
+  const [copying, setCopying] = useState<AssessmentSummary | null>(null);
 
-  const filtered = query.trim() !== '' || stateFilter !== '' || levelFilter !== '';
+  const filtered = query.trim() !== '' || modeFilter !== '' || levelFilter !== '';
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -211,7 +201,7 @@ function Library({
         {
           page,
           ...(query.trim() ? { q: query.trim() } : {}),
-          ...(stateFilter ? { status: stateFilter as AssessmentStatus } : {}),
+          ...(modeFilter ? { mode: modeFilter as 'physical' | 'online' } : {}),
           ...(levelFilter ? { level_id: levelFilter } : {}),
         },
         token,
@@ -223,20 +213,11 @@ function Library({
       setFailure(error);
       setStatus('error');
     }
-  }, [token, page, query, stateFilter, levelFilter]);
+  }, [token, page, query, modeFilter, levelFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  const statusLabel = (row: AssessmentSummary): string =>
-    t(
-      row.status === 'draft'
-        ? 'assessments.statusDraft'
-        : row.status === 'published'
-          ? 'assessments.statusPublished'
-          : 'assessments.statusClosed',
-    );
 
   const columns: Column<AssessmentSummary>[] = [
     {
@@ -247,11 +228,18 @@ function Library({
     {
       key: 'status',
       header: t('assessments.filterStatus'),
-      // **Never colour alone**: the badge carries the word, so the state is
-      // readable without perceiving the tone at all.
-      cell: (row) => (
-        <Badge tone={row.status === 'published' ? 'ok' : 'neutral'}>{statusLabel(row)}</Badge>
-      ),
+      /**
+       * **مسودة, always** (R136) — this library is `status = 'draft'`-only
+       * by construction, so the badge renders the one status a row here can
+       * ever carry rather than a live server field with nowhere else to go.
+       */
+      cell: () => <Badge tone="neutral">{t('assessments.statusDraft')}</Badge>,
+    },
+    {
+      key: 'mode',
+      header: t('assessments.mode'),
+      secondary: true,
+      cell: (row) => t(row.mode === 'online' ? 'assessments.modeOnline' : 'assessments.modePhysical'),
     },
     {
       key: 'level',
@@ -309,7 +297,7 @@ function Library({
           filtered={filtered}
           onClearFilters={() => {
             setQuery('');
-            setStateFilter('');
+            setModeFilter('');
             setLevelFilter('');
             setPage(1);
           }}
@@ -324,17 +312,16 @@ function Library({
                 }}
               />
               <SelectField
-                label={t('assessments.filterStatus')}
-                value={stateFilter}
+                label={t('assessments.mode')}
+                value={modeFilter}
                 onChange={(next) => {
-                  setStateFilter(next);
+                  setModeFilter(next);
                   setPage(1);
                 }}
                 options={[
                   { value: '', label: t('assessments.filterAll') },
-                  { value: 'draft', label: t('assessments.statusDraft') },
-                  { value: 'published', label: t('assessments.statusPublished') },
-                  { value: 'closed', label: t('assessments.statusClosed') },
+                  { value: 'online', label: t('assessments.modeOnline') },
+                  { value: 'physical', label: t('assessments.modePhysical') },
                 ]}
               />
               <SelectField
@@ -362,12 +349,19 @@ function Library({
                     },
                   },
                   {
+                    // **R136 — «استخدام مرة أخرى» is now a الجدولة navigation
+                    // action, not a request from this screen.** الجدولة
+                    // re-reads the source fresh (safe, server-revalidated
+                    // prefill) and is the ONE place scheduling happens; a
+                    // copy is never made merely to schedule.
                     label: t('assessments.reusePaper'),
-                    onSelect: (row) => setCopying({ row, reuse: true }),
+                    onSelect: (row) => {
+                      window.location.href = `/admin/schedules?kind=exam&new=1&source=${encodeURIComponent(row.id)}&mode=${row.mode}`;
+                    },
                   },
                   {
                     label: t('assessments.copyPaper'),
-                    onSelect: (row) => setCopying({ row, reuse: false }),
+                    onSelect: (row) => setCopying(row),
                   },
                 ]
               : []
@@ -376,18 +370,16 @@ function Library({
         {copying ? (
           <ConfirmDialog
             open
-            title={t(copying.reuse ? 'assessments.reusePaper' : 'assessments.copyConfirmTitle')}
-            body={t(copying.reuse ? 'assessments.reuseConfirmBody' : 'assessments.copyConfirmBody')}
-            confirmLabel={t(copying.reuse ? 'assessments.reusePaper' : 'assessments.copyPaper')}
+            title={t('assessments.copyConfirmTitle')}
+            body={t('assessments.copyConfirmBody')}
+            confirmLabel={t('assessments.copyPaper')}
             onCancel={() => setCopying(null)}
             onConfirm={async () => {
-              const { row, reuse } = copying;
+              const row = copying;
               setCopying(null);
               try {
                 const created = await copyAssessment(row.id, token);
-                window.location.href = reuse
-                  ? `?exam=${encodeURIComponent(created.id)}&review=1`
-                  : `?exam=${encodeURIComponent(created.id)}`;
+                window.location.href = `?exam=${encodeURIComponent(created.id)}`;
               } catch {
                 setNotice(t('assessments.copyFailed'));
               }
@@ -408,89 +400,6 @@ function Library({
   });
 }
 
-/**
- * **The target picker** (R125) — one control set for all four arms.
- *
- * **Composed from the shared primitives**, not a new picker: `SearchInput` to
- * narrow and `SelectField` to choose, which is the pair `attendance-panel`
- * already uses to add a beneficiary. A bespoke combobox would be a second
- * generic picker for the platform to keep in step.
- *
- * **The list is server-scoped and is not the boundary.** A مؤطِّرة is offered the
- * students she teaches and the occurrences she staffs; an Admin what stays
- * inside her branches. Naming an id the list never contained is refused again on
- * the write — this exists so an author is not shown a target that would be
- * refused, which is the opposite of deciding the permission here (rule O).
- */
-function TargetPicker({
-  kind,
-  levelId,
-  value,
-  onChange,
-  error,
-}: {
-  kind: TargetKind;
-  levelId: string;
-  value: string;
-  onChange: (next: string) => void;
-  error: string | null;
-}): ReactNode {
-  const { accessToken } = useSession();
-  const [query, setQuery] = useState('');
-  const [options, setOptions] = useState<{ id: string; label: string }[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
-
-  useEffect(() => {
-    let live = true;
-    setState('loading');
-    void listAssessmentTargets(
-      kind,
-      { ...(levelId ? { levelId } : {}), ...(query ? { q: query } : {}) },
-      accessToken,
-    )
-      .then((rows) => {
-        if (!live) return;
-        setOptions(rows);
-        setState('ready');
-        // A chosen id that the narrowed list no longer offers is cleared rather
-        // than left behind — a stale selection is what reaches the server as a
-        // target the author can no longer see.
-        if (value !== '' && !rows.some((r) => r.id === value)) onChange('');
-      })
-      .catch(() => {
-        if (live) setState('error');
-      });
-    return () => {
-      live = false;
-    };
-    // `onChange` and `value` are deliberately absent from the dependency list:
-    // this reloads when the QUESTION changes, not when the answer does. Adding
-    // them would refetch on every keystroke of a selection.
-  }, [kind, levelId, query, accessToken]);
-
-  return (
-    <>
-      <SearchInput label={t('assessments.targetSearch')} value={query} onChange={setQuery} />
-      <SelectField
-        label={t('assessments.targetPick')}
-        value={value}
-        onChange={onChange}
-        required
-        error={error}
-        hint={
-          state === 'ready' && options.length === 0
-            ? t('assessments.targetNone')
-            : t('assessments.targetHint')
-        }
-        options={[
-          { value: '', label: t('common.notSet') },
-          ...options.map((o) => ({ value: o.id, label: o.label })),
-        ]}
-      />
-    </>
-  );
-}
-
 function CreateDialog({
   scope,
   token,
@@ -504,6 +413,7 @@ function CreateDialog({
 }): ReactNode {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [mode, setMode] = useState<'physical' | 'online'>('online');
   const [maxGrade, setMaxGrade] = useState('20');
   const [targetKind, setTargetKind] = useState<TargetKind>('level');
   const [targetId, setTargetId] = useState('');
@@ -525,8 +435,16 @@ function CreateDialog({
           : null;
 
   const dirty = isDirty(
-    { title, description, maxGrade, targetKind, targetId, date },
-    { title: '', description: '', maxGrade: '20', targetKind: 'level', targetId: '', date: '' },
+    { title, description, mode, maxGrade, targetKind, targetId, date },
+    {
+      title: '',
+      description: '',
+      mode: 'online',
+      maxGrade: '20',
+      targetKind: 'level',
+      targetId: '',
+      date: '',
+    },
   );
 
   async function submit(): Promise<void> {
@@ -538,6 +456,7 @@ function CreateDialog({
         {
           title: title.trim(),
           description: description.trim() || null,
+          mode,
           max_grade: Number(maxGrade),
           level_id: scope.value.levelId,
           ...(scope.value.subjectId ? { subject_id: scope.value.subjectId } : {}),
@@ -578,6 +497,17 @@ function CreateDialog({
         label={t('assessments.description')}
         value={description}
         onChange={setDescription}
+      />
+      {/* R136 clause 2 — بناء الاختبارات authors content for either delivery
+          mode now; الجدولة decides how it is actually sat. */}
+      <SelectField
+        label={t('assessments.mode')}
+        value={mode}
+        onChange={(v) => setMode(v as 'physical' | 'online')}
+        options={[
+          { value: 'online', label: t('assessments.modeOnline') },
+          { value: 'physical', label: t('assessments.modePhysical') },
+        ]}
       />
       <TextField label={t('assessments.maxGrade')} value={maxGrade} onChange={setMaxGrade} required />
 
@@ -634,114 +564,6 @@ function CreateDialog({
   );
 }
 
-/**
- * **«مراجعة الجمهور والتاريخ»** (R134). A copy or a reuse starts with the
- * source's target and today's date, for convenience — never assumed correct.
- * This is where the author confirms them or picks fresh ones before
- * publishing, through the identical picker `CreateDialog` uses: one target
- * resolver, one place a UUID is validated, not a second one for edits.
- *
- * **The Level is fixed and not offered here.** The questions were written
- * for it; changing it would be a second, unguarded way to do what
- * `POST /assessments/{id}/copy` already does safely.
- */
-function RetargetDialog({
-  examId,
-  levelId,
-  initialKind,
-  version,
-  token,
-  onCancel,
-  onSaved,
-}: {
-  examId: string;
-  levelId: string;
-  initialKind: TargetKind;
-  version: number;
-  token: string | null;
-  onCancel: () => void;
-  onSaved: () => void;
-}): ReactNode {
-  const [targetKind, setTargetKind] = useState<TargetKind>(initialKind);
-  const [targetId, setTargetId] = useState('');
-  const [date, setDate] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [touched, setTouched] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  const needsDate = targetKind !== 'session';
-  const needsId = targetKind !== 'level';
-  const error =
-    (needsDate && date === '') || (needsId && targetId.trim() === '') ? t('common.required') : null;
-  const dirty = targetKind !== initialKind || targetId.trim() !== '' || date !== '';
-
-  async function submit(): Promise<void> {
-    setTouched(true);
-    if (error) return;
-    setBusy(true);
-    setFailed(false);
-    try {
-      await retargetAssessment(
-        examId,
-        version,
-        {
-          target: { kind: targetKind, ...(needsId ? { id: targetId.trim() } : {}) },
-          ...(needsDate ? { date } : {}),
-        },
-        token,
-      );
-      onSaved();
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <FormDialog
-      open
-      onCancel={onCancel}
-      onSubmit={() => void submit()}
-      title={t('assessments.reviewTarget')}
-      busy={busy}
-      dirty={dirty}
-    >
-      {failed ? <Feedback tone="warn">{t('assessments.saveFailed')}</Feedback> : null}
-      <SelectField
-        label={t('assessments.target')}
-        value={targetKind}
-        onChange={(v) => {
-          setTargetKind(v as TargetKind);
-          setTargetId('');
-        }}
-        options={(Object.keys(TARGET_LABELS) as TargetKind[]).map((k) => ({
-          value: k,
-          label: t(TARGET_LABELS[k]),
-        }))}
-      />
-      {needsId ? (
-        <TargetPicker
-          kind={targetKind}
-          levelId={levelId}
-          value={targetId}
-          onChange={setTargetId}
-          error={touched && targetId.trim() === '' ? t('common.required') : null}
-        />
-      ) : null}
-      {needsDate ? (
-        <DateField
-          label={t('assessments.date')}
-          value={date}
-          onChange={setDate}
-          required
-          hint={t('assessments.dateHint')}
-          error={touched && date === '' ? t('common.required') : null}
-        />
-      ) : null}
-    </FormDialog>
-  );
-}
 
 /** The builder and the inbox for one paper. */
 function OnePaper({
@@ -762,9 +584,8 @@ function OnePaper({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [confirm, setConfirm] = useState<'publish' | 'close' | null>(null);
+  const [confirm, setConfirm] = useState<'close' | null>(null);
   const [viewing, setViewing] = useState<AssessmentPaper | null>(null);
-  const [retargeting, setRetargeting] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -782,23 +603,6 @@ function OnePaper({
   useEffect(() => {
     void load();
   }, [load]);
-
-  /**
-   * **«استخدام مرة أخرى» lands here with the review dialog already open** —
-   * `?review=1`, set by the Library's reuse action. Nothing about the wording
-   * needs changing for a plain reuse, only who it reaches and when, so this
-   * skips straight past the question list rather than making her find the
-   * button. Consumed once: a later reload of the same URL must not reopen it.
-   */
-  useEffect(() => {
-    if (paper?.status !== 'draft') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('review') !== '1') return;
-    setRetargeting(true);
-    params.delete('review');
-    const query = params.toString();
-    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
-  }, [paper?.status]);
 
   /**
    * **The freeze, said once.** Once anybody has submitted, the paper is fixed;
@@ -869,13 +673,19 @@ function OnePaper({
         canWrite && paper ? (
           <>
             {editable ? (
-              <Button variant="secondary" disabled={busy} onClick={() => setRetargeting(true)}>
-                {t('assessments.reviewTarget')}
-              </Button>
-            ) : null}
-            {paper.status === 'draft' ? (
-              <Button variant="primary" disabled={busy} onClick={() => setConfirm('publish')}>
-                {t('assessments.publish')}
+              // **R136 — the retired «مراجعة الجمهور والتاريخ»/publish pair
+              // is replaced by ONE navigation to الجدولة**, which assigns
+              // the target/date and schedules atomically in a single حفظ.
+              // This button makes no request of its own; the paper's
+              // fresh, server-revalidated content is what الجدولة reads.
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => {
+                  window.location.href = `/admin/schedules?kind=exam&new=1&source=${encodeURIComponent(examId)}&mode=${paper.mode}`;
+                }}
+              >
+                {t('assessments.scheduleAction')}
               </Button>
             ) : null}
             {paper.status === 'published' ? (
@@ -971,12 +781,13 @@ function OnePaper({
             {t('assessments.eligible')}: {eligible}
           </p>
           {/**
-            * **Said before publishing, not discovered after it.** A paper whose
-            * target resolves to nobody published exactly like one addressed to a
-            * class — same confirmation, same success. It is not refused, because
-            * a legitimate case exists: publish for a Level, then admit the
-            * students, and R122 resolves the audience on the paper's own date.
-            * So the author is told, and decides.
+            * **A preview, not a gate.** `eligible` resolves the draft's own
+            * currently-stored target — the same one الجدولة offers to keep
+            * as-is, or lets the author change before scheduling (R136). A
+            * target that currently resolves to nobody is not refused here:
+            * a legitimate case exists (schedule for a Level, then admit
+            * students, R122 resolving the audience on the occurrence's own
+            * date), and the author decides with the number in front of her.
             */}
           {eligible === 0 && paper.status !== 'closed' ? (
             <Feedback tone="warn">{t('assessments.noAudience')}</Feedback>
@@ -1021,42 +832,13 @@ function OnePaper({
 
       {viewing ? <SubmissionDialog paper={viewing} onClose={() => setViewing(null)} /> : null}
 
-      {retargeting && paper ? (
-        <RetargetDialog
-          examId={examId}
-          levelId={paper.level_id}
-          initialKind={paper.target_kind}
-          version={paper.version}
-          token={token}
-          onCancel={() => setRetargeting(false)}
-          onSaved={() => {
-            setRetargeting(false);
-            void load();
-          }}
-        />
-      ) : null}
-
       <ConfirmDialog
-        open={confirm !== null}
-        title={t(confirm === 'close' ? 'assessments.close' : 'assessments.publish')}
-        body={
-          confirm === 'close'
-            ? t('assessments.closeConfirm')
-            : eligible === 0
-              ? t('assessments.publishConfirmNobody')
-              : t('assessments.publishConfirmCount').replace('{n}', String(eligible))
-        }
-        confirmLabel={t(confirm === 'close' ? 'assessments.close' : 'assessments.publish')}
+        open={confirm === 'close'}
+        title={t('assessments.close')}
+        body={t('assessments.closeConfirm')}
+        confirmLabel={t('assessments.close')}
         busy={busy}
-        onConfirm={() =>
-          void act(
-            () =>
-              confirm === 'close'
-                ? closeAssessment(examId, token)
-                : publishAssessment(examId, token),
-            t('assessments.saveFailed'),
-          )
-        }
+        onConfirm={() => void act(() => closeAssessment(examId, token), t('assessments.saveFailed'))}
         onCancel={() => setConfirm(null)}
       />
       </>

@@ -105,6 +105,13 @@ interface ChildWhereByModel {
   // A schedule's staffing has no life of its own: R91 makes an assignment a row
   // ON the schedule, so it is destroyed with one and never independently.
   courseScheduleStaff: Prisma.CourseScheduleStaffWhereInput;
+  // R136 (Codex H2) — the exam's own questions (grandchild options are
+  // removed separately, above the loop) and its notifications. Neither is
+  // evidence on its own; `Grade`/`StudentExamSubmission`/`Attendance` are,
+  // and are deliberately absent here — `CONDITIONAL_PURGE.Exam` refuses the
+  // whole purge by name while any of those exist.
+  examQuestion: Prisma.ExamQuestionWhereInput;
+  notification: Prisma.NotificationWhereInput;
 }
 
 type DeclaredChild = {
@@ -332,10 +339,23 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
     ],
   },
 
-  // R58 — supervisors belong to the sitting. A `Grade` or a submission against
-  // the exam is academic record and blocks the purge, which is correct: those
-  // outlive the arrangements, exactly as §4.6 says.
-  Exam: { model: 'exam', children: [{ model: 'examStaff', fk: 'examId' }] },
+  /**
+   * R58/R124/R136 (Codex H2) — supervisors, the paper's own questions (their
+   * options are removed first, above — a grandchild the flat mechanism here
+   * cannot reach) and its notifications belong to the sitting/source and are
+   * never evidence on their own. A `Grade`, a `StudentExamSubmission` or an
+   * `Attendance` row against the exam IS academic record and blocks the
+   * purge — enforced by `CONDITIONAL_PURGE.Exam` above with a named reason,
+   * not by an unhandled FK violation.
+   */
+  Exam: {
+    model: 'exam',
+    children: [
+      { model: 'examStaff', fk: 'examId' },
+      { model: 'examQuestion', fk: 'examId' },
+      { model: 'notification', fk: 'examId' },
+    ],
+  },
 
   // The link rows belong to the content; the bytes are handled separately by the
   // caller, because they live outside the transaction (R59.1).
@@ -413,6 +433,30 @@ const CONDITIONAL_PURGE: Record<
     // a coordinate the institution recorded, and R59 keeps it.
     purgeable: async (db, targetId) =>
       (await db.session.count({ where: { scheduleId: targetId } })) === 0,
+  },
+  /**
+   * **R136 (Codex H2) — the same purgeable-only-if-empty shape, for an Exam's
+   * recorded evidence.** `ExamQuestion`, `ExamStaff` and `Notification` are
+   * declared children below (owned, no evidence, safe to cascade);
+   * `StudentExamSubmission`, `Grade` and `Attendance` are deliberately NOT —
+   * they are the record of what a student actually did, which R133's
+   * evidence safeguards keep. Before this, the `Exam` purge plan declared
+   * only `examStaff`, so any exam that had ever had a question added (every
+   * real online one) hit an unhandled FK RESTRICT violation from
+   * `ExamQuestion` — this names the refusal instead of crashing on it, and a
+   * reusable source or a never-engaged occurrence (neither has any of the
+   * three) purges cleanly.
+   */
+  Exam: {
+    reason: 'EXAM_HAS_RECORDED_EVIDENCE',
+    purgeable: async (db, targetId) => {
+      const [submissions, grades, attendance] = await Promise.all([
+        db.studentExamSubmission.count({ where: { examId: targetId } }),
+        db.grade.count({ where: { examId: targetId } }),
+        db.attendance.count({ where: { examId: targetId } }),
+      ]);
+      return submissions === 0 && grades === 0 && attendance === 0;
+    },
   },
 };
 
@@ -923,6 +967,19 @@ async function purgeTrashEntry(
       }
 
       await enqueueContentStorageRetirement(tx, entry.targetEntity, entry.targetId, row);
+
+      /**
+       * **R136 (Codex H2) — `ExamQuestionOption` is a GRANDCHILD, one hop past
+       * what the flat `{ [fk]: targetId }` children mechanism below can
+       * express** (its FK is to `ExamQuestion.id`, not to `examId` directly).
+       * `CONDITIONAL_PURGE.Exam` already guarantees no submission answers any
+       * of these questions by the time this runs, so removing every option
+       * first is exactly what makes `ExamQuestion.deleteMany` below succeed
+       * rather than hit the same RESTRICT this fix exists to stop hitting.
+       */
+      if (entry.targetEntity === 'Exam') {
+        await tx.examQuestionOption.deleteMany({ where: { question: { examId: entry.targetId } } });
+      }
 
       for (const child of plan.children ?? []) {
         const childDelegate = tx[child.model] as unknown as {

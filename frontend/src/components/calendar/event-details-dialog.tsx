@@ -194,6 +194,7 @@ export function EventDetailsDialog({
           </dl>
 
           <JoinAction occurrence={occurrence} />
+          <ExamAvailabilityAction occurrence={occurrence} />
 
           {/**
             * **R123 — الحضور, where the occurrence already is.**
@@ -250,6 +251,68 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
     <p className="details__action">
       <ButtonLink variant="primary" href={`/classroom/${occurrence.id}`}>
         {t('classroom.join')}
+      </ButtonLink>
+    </p>
+  );
+}
+
+/**
+ * **«بدء الاختبار» — R136 clause 16/17, calendar visibility and Student
+ * access as two separate facts.**
+ *
+ * A remote exam occurrence appears on the calendar the moment it is
+ * scheduled, exactly like a physical sitting (R109's tier, unchanged) —
+ * `available_from` never hides the row. This is the OTHER fact: whether it
+ * can be OPENED right now. Three states, each its own sentence rather than
+ * one message straining to cover all three:
+ *
+ * 1. `available_from === null` — still on manual opening; an operator has
+ *    not opened it yet, and no countdown exists to promise one (R136 clause
+ *    17: manual opening is one-way and nothing here predicts it).
+ * 2. A future instant — reachable, and says exactly when.
+ * 3. `now >= available_from` — reachable now, and offers the door.
+ *
+ * **A physical sitting has no row here at all** — attending one was never
+ * gated by this platform, and `available_from` is `null` by construction for
+ * it (R136 clause 5).
+ *
+ * **Authorization is NOT decided here** (rule O, the same discipline
+ * `JoinAction` states above): whether THIS reader may actually open THIS
+ * paper is `eligible()`'s question, asked again — and enforced — the moment
+ * `/dashboard/student/assessments` reads it. Probing that here would cost a
+ * request for every occurrence anybody merely looked at and would still be
+ * stale by the time she clicked.
+ */
+function ExamAvailabilityAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
+  const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  if (occurrence.kind !== 'exam') return null;
+  if (occurrence.delivery_mode !== 'online') return null;
+
+  if (occurrence.available_from === null) {
+    return <p className="details__action muted">{t('calendar.examNotYetOpened')}</p>;
+  }
+
+  const opensAt = new Date(occurrence.available_from);
+  if (opensAt.getTime() > Date.now()) {
+    return (
+      <p className="details__action muted">
+        {t('calendar.examOpensAt')}{' '}
+        <time dateTime={occurrence.available_from} dir="ltr">
+          {opensAt.toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' })}
+        </time>
+      </p>
+    );
+  }
+
+  if (!accessToken) return null;
+
+  return (
+    <p className="details__action">
+      <ButtonLink
+        variant="primary"
+        href={`/dashboard/student/assessments?exam=${encodeURIComponent(occurrence.id)}`}
+      >
+        {t('calendar.examStart')}
       </ButtonLink>
     </p>
   );

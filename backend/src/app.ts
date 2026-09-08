@@ -35,6 +35,7 @@ import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as enrollments from './controllers/enrollment.controller.js';
 import * as exams from './controllers/exam.controller.js';
+import * as examScheduling from './controllers/exam-scheduling.controller.js';
 import * as grades from './controllers/grade.controller.js';
 import * as quran from './controllers/quran.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
@@ -723,12 +724,10 @@ export function createApp(
   // The paper as its AUTHOR sees it — including a draft, which `/paper` cannot
   // return and which is what a paper being written always is.
   guarded.get('/assessments/:id', assessments.authorRead(prisma));
-  guarded.patch('/assessments/:id/target', assessments.retarget(prisma));
   guarded.post('/assessments/:id/questions', assessments.addQuestionHandler(prisma));
   guarded.patch('/assessments/:id/questions/order', assessments.reorder(prisma));
   guarded.patch('/assessments/:id/questions/:questionId', assessments.patchQuestion(prisma));
   guarded.delete('/assessments/:id/questions/:questionId', assessments.deleteQuestion(prisma));
-  guarded.post('/assessments/:id/publish', assessments.publish(prisma));
   guarded.post('/assessments/:id/close', assessments.close(prisma));
   guarded.post('/assessments/:id/copy', assessments.copy(prisma));
   guarded.get('/assessments/:id/submissions', assessments.submissions(prisma));
@@ -791,14 +790,18 @@ export function createApp(
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.
 
-  // TD-3.6 (R58) — exams as SCHEDULED SITTINGS. Only `physical` exists; the
-  // online mode is refused with a coded reason rather than given an endpoint
-  // that does nothing, because a route with nothing behind it appears in the
-  // contract as a capability that exists.
+  // TD-3.6 (R58, R136) — exams as SCHEDULED SITTINGS.
   guarded.get('/exams', exams.list(prisma));
   guarded.post('/exams', exams.create(prisma));
   guarded.patch('/exams/:id', exams.update(prisma));
   guarded.delete('/exams/:id', exams.remove(prisma));
+  /**
+   * **R136 — الجدولة's ONE write, for both delivery modes.** `POST /exams`
+   * above stays for the simple/content-free physical path (R136 §19); this is
+   * where a reusable source (either mode) is copied into an independent,
+   * scheduled occurrence, atomically — see `exam-scheduling.service.ts`.
+   */
+  guarded.post('/exams/schedule', examScheduling.schedule(prisma));
 
   // §4.6 grading (M5a, R70). Nested under the exam because a grade cannot exist
   // without one — `Grade.exam_id` is NOT NULL with `ON DELETE RESTRICT`, and the

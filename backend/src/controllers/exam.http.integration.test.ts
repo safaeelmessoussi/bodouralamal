@@ -54,6 +54,11 @@ const EXAM_KEYS = [
   "start_time",
   "subject_id",
   "subject_name",
+  // R136 (H1) — the unified grading list's own audience arm, since an online
+  // occurrence's target is not always an administrative group. Listed
+  // deliberately: this set is asserted exactly.
+  "target_kind",
+  "teaching_group_name",
   "title",
   "version",
   // **R109 — the sitting's own visibility tier**, superseding §4.6's "an exam

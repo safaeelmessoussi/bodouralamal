@@ -2541,3 +2541,59 @@ approved scope covers Partners only, so this is reported rather than taken.
       `CAPACITY_FULL` and `SINGLE_SUBMISSION_FINAL` as retired **by name**.
       `docs/SRS-PROPOSAL-R127.md` lists the six current normative references to
       withdraw, and is **APPLIED to `SRS.md`** (2026-09-03).
+
+- [x] **R136 — the unified exam lifecycle (§4.6, R124/R125/R133/R134 extended).**
+      `POST /exams/schedule` is now the ONE atomic write that ever moves an
+      `Exam` row past `draft` — physical or online — always onto an
+      independently copied occurrence, never the reusable source itself.
+      `PATCH /assessments/{id}/target` and `POST /assessments/{id}/publish`
+      are withdrawn as routes. `Exam.available_from` (migration
+      `20260908100000_r136_exam_available_from`) is a new Student-access fact,
+      separate from calendar publication, enforced in `eligible()`; six
+      availability choices collapse to it, manual opening is one-way, and no
+      background job exists. Frontend rebuilt to match: بناء الاختبارات
+      (مسودة badge, mode choice on create, retired retarget dialog), الجدولة
+      (inline paper picker, shared five-arm target picker, availability
+      choices, one حفظ for both modes), the canonical occurrence dialog
+      (three-state availability action), and نقاط الامتحانات on both portals
+      (`target_kind`-aware audience label, «إنشاء نسخة في بناء الاختبارات»).
+- [x] **R136 also closes nine Codex-found defects from the R134-era flow**,
+      each verified against its actual failure mode rather than assumed fixed
+      by the architecture change: **B1** (scheduling atomicity) — three new
+      tests fail the transaction LATE and assert nothing survived the
+      rollback, plus a real `Promise.all` concurrency test against the same
+      draft source. **B2** (submission/question-edit race) — `lockExamRow`
+      row-locks both paths. **B3/B5** (teacher authority) — `staffsSession`
+      and new `staffsTeachingGroup` give `session`/`teaching_group` the same
+      direct, R91-dated predicate `student` already had, on both authoring
+      and grading; the Level/administrative-group fallthrough is now also
+      R91-dated instead of defaulting to today. **B4** (branch-scoped online
+      grading) — the audience-within-branch-scope check authoring already
+      runs is no longer skipped for lack of a `branch_id`. **H1** (grading
+      reachability) — `GET /exams` reads `status`, not `mode`. **H2** (purge
+      completeness) — the R133 purge plan owns `ExamQuestion`/
+      `ExamQuestionOption`/`Notification`, gated by a new
+      `EXAM_HAS_RECORDED_EVIDENCE` conditional-purge guard. **M2**
+      (notification counts) — audited counts are the live, deduplicated,
+      notified set. **M4** (date validation) — one shared, leap-year-correct
+      `calendarDate` validator replaces independently-drifting duplicates.
+- [x] **SRS Revision 136 RATIFIED** by the Document Owner, 2026-09-08, after a
+      three-round negotiation (read-only reconciliation, a proposal round the
+      Owner corrected on one point — scheduling must copy, never retarget or
+      consume, the reusable source — then final ratification with a detailed
+      29-section specification). Revision 134's clauses (11)/(12)/(14) are
+      superseded by R136's clauses (1)-(4); its clauses (1)-(10)/(13) stand.
+      Full verification: backend lint/typecheck/build clean, 331 unit tests,
+      2,359 integration tests across 105 files (17 pre-existing unrelated
+      skips); frontend lint/typecheck/build clean, 1,086 unit tests; OpenAPI
+      regenerated and TD-3 conformance unchanged in shape; all
+      `scripts/ci/check-*.sh` guards, doc-links and `git diff --check` pass.
+- [ ] **Deliberately deferred, named rather than dropped:** an authored-
+      physical-source picker in الجدولة (physical scheduling stays
+      content-free, as before R136); arrangement-editing UI for an
+      already-scheduled remote occurrence (no backend capability exists to
+      revise one short of scheduling again from a fresh copy — الجدولة's list
+      hides Edit for it instead of opening a form that cannot save); a live
+      browser/E2E walk of the new scheduling and calendar-availability flows
+      specifically (covered at the unit/integration/component level, not yet
+      separately walked in a real browser).

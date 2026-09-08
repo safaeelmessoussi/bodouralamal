@@ -11,11 +11,9 @@ import {
   createAssessment,
   listAssessments,
   listSubmissions,
-  publishAssessment,
   readSubmission,
   removeQuestion,
   reorderQuestions,
-  retargetAssessment,
   saveResponses,
   authorPaper,
   studentPaper,
@@ -25,7 +23,6 @@ import {
 import {
   assessmentListSchema,
   createAssessmentSchema,
-  retargetAssessmentSchema,
   targetCandidatesSchema,
   questionPatchSchema,
   questionSchema,
@@ -64,10 +61,10 @@ export function list(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const q = parse(assessmentListSchema, req.query ?? {});
     const result = await listAssessments(prisma, requireActor(req), {
-      ...(q.status ? { status: q.status } : {}),
       ...(q.level_id ? { levelId: q.level_id } : {}),
       ...(q.subject_id ? { subjectId: q.subject_id } : {}),
       ...(q.academic_year_id ? { academicYearId: q.academic_year_id } : {}),
+      ...(q.mode ? { mode: q.mode } : {}),
       ...(q.q ? { q: q.q } : {}),
       ...pageParamsFrom(req.query as Record<string, unknown>),
     });
@@ -97,24 +94,9 @@ export function create(prisma: PrismaClient) {
       ...(b.academic_year_id === undefined ? {} : { academicYearId: b.academic_year_id }),
       target: { kind: b.target.kind, ...(b.target.id === undefined ? {} : { id: b.target.id }) },
       ...(b.date === undefined ? {} : { date: b.date }),
+      ...(b.mode === undefined ? {} : { mode: b.mode }),
     });
     res.status(201).json({ id: created.id });
-  };
-}
-
-/**
- * `PATCH /assessments/{id}/target` — «مراجعة الجمهور والتاريخ» (R134). A copy
- * or a reuse starts with the source's target/date for convenience; this is
- * where the author confirms or changes them before publishing this use.
- */
-export function retarget(prisma: PrismaClient) {
-  return async (req: Request, res: Response): Promise<void> => {
-    const b = parse(retargetAssessmentSchema, req.body ?? {});
-    await retargetAssessment(prisma, requireActor(req), idParam(req, 'id'), b.version, {
-      target: { kind: b.target.kind, ...(b.target.id === undefined ? {} : { id: b.target.id }) },
-      ...(b.date === undefined ? {} : { date: b.date }),
-    });
-    res.status(204).end();
   };
 }
 
@@ -161,13 +143,6 @@ export function reorder(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const b = parse(reorderQuestionsSchema, req.body ?? {});
     await reorderQuestions(prisma, requireActor(req), idParam(req, 'id'), b.ids);
-    res.status(204).end();
-  };
-}
-
-export function publish(prisma: PrismaClient) {
-  return async (req: Request, res: Response): Promise<void> => {
-    await publishAssessment(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
   };
 }

@@ -6034,3 +6034,114 @@ as the 2026-09-04 drafting record. Ratified **chronologically after Revision
 review; the numbering was preserved rather than renumbered, and R135's own
 text (unchanged) already recorded R134 as not-yet-ratified at the time it was
 written — both statements are true of their own moment.
+
+
+## Unified exam lifecycle: one scheduling write, source and occurrence never the same row, and nine Codex defects closed (SRS Revision 136, 2026-09-08)
+
+**Owner-ratified after two prior rounds** — a read-only domain reconciliation,
+then a proposal round the Owner corrected on one point that reshaped the rest:
+scheduling an assessment must COPY the reusable source into an independent
+occurrence, never retarget or consume the source itself. The final
+ratification specified the model in detail (source/occurrence on `Exam.status`
+alone, direct-only provenance, the six availability policies, unified
+grading, and explicit closure requirements for nine defects an independent
+Codex review had found in the R134-era scheduling flow: B1 concurrency, B2
+concurrency, B3 session-targeting authorization, B4 branch-scoped online
+grading, B5 dated teacher-authority consistency, H1 grading reachability, H2
+purge completeness, M2 notification counts, M4 date validation) and
+authorized implementation directly.
+
+**`Exam.status` is the whole discriminator.** `draft` is بناء الاختبارات's
+reusable, unscheduled content, physical or online; `published`/`closed` is a
+scheduled occurrence, and `POST /exams/schedule` is now the ONLY path that
+ever moves a row past `draft` — always onto a freshly copied row, inside one
+`prisma.$transaction` that authorizes the source, copies it, assigns the
+occurrence's target/date/place, sets availability, freezes and publishes, and
+notifies. `PATCH /assessments/{id}/target` and `POST /assessments/{id}/publish`
+are withdrawn as routes (`assessment_published` stays defined and unwritten,
+R119's discipline for a retired write path). No second discriminator column
+was introduced — the ratified instruction was to prove the existing invariant
+sufficient before inventing one.
+
+**B1, closed with a deterministic proof, not an architectural claim.** Three
+new tests fail the atomic transaction LATE — after the occurrence row already
+exists inside it (an online `NO_QUESTIONS` refusal, a physical
+`EXAM_STAFF_DUPLICATE` refusal) — and assert nothing survived the rollback; a
+fourth fires two `scheduleExam` calls concurrently against the same draft
+source via `Promise.all` and asserts both succeed independently with distinct
+ids, distinct copied questions, and an untouched source.
+
+**B2–B5, H1, H2, M2, M4 — each closed against the actual defect, not merely by
+the architecture change:** a `lockExamRow` row lock now serializes a question
+edit against a concurrent first submission (B2); `staffsSession` and a new
+`staffsTeachingGroup` give `session`/`teaching_group` targets the same direct,
+R91-dated authorization `student` already had, on both the authoring and
+grading side, closing a hole where `teaching_group` refused every مؤطِّرة
+outright and `session`/dated-staffing fell through to a much broader Level
+question (B3/B5); a branch-scoped Admin grading a branchless online occurrence
+now gets the same audience-within-branch-scope check authoring already runs,
+never skipped for lack of a `branch_id` to compare (B4); `GET /exams` reads
+`status`, not `mode`, so نقاط الامتحانات and the teacher grading picker
+surface a scheduled occurrence of either delivery mode while still excluding
+every draft source (H1); the R133 purge plan now owns `ExamQuestion`/
+`ExamQuestionOption`/`Notification` as children, with a new conditional guard
+(`EXAM_HAS_RECORDED_EVIDENCE`) refusing the irreversible purge while a
+submission, grade or attendance record survives (H2); `exam_scheduled`'s
+audited recipient counts are the live, deduplicated, account-active set
+actually notified, not the raw candidate audience (M2); one shared
+`calendarDate` Zod validator, empirically verified against leap years,
+replaces what were independently-drifting duplicates (M4).
+
+**Availability is a new Student-access fact, separate from publication**
+(`Exam.available_from`, migration `20260908100000_r136_exam_available_from`).
+`NULL` (`manual`) never opens on its own; `at_start` | `offset_minutes` |
+`custom` compute one instant at scheduling time. Enforced inside `eligible()`
+— the one predicate `GET /assessments/{id}/paper` and the responses/submit
+routes already call — closing a real, previously-unenforced gap: the column
+existed from the scheduling write but nothing checked it against `now` before
+this pass. No background job exists or was added; manual opening is one-way.
+
+**The frontend was rebuilt to match, not left pending.** بناء الاختبارات
+retires the «مراجعة الجمهور والتاريخ» dialog and its `?review=1` auto-open,
+gains a mode choice on create, and shows a plain مسودة badge (every library
+row is a draft, by construction, so the status filter is gone with it).
+الجدولة's exam section gains an inline paper picker, the shared five-arm
+target picker (relocated to `components/scheduling/target-picker.tsx` so it
+is imported once rather than restated), and the six availability choices —
+one حفظ, routed through `scheduleExam` for both delivery modes; a physical
+sitting's existing simple/grade-only workflow is preserved exactly, and an
+authored physical source stays optional with no picker offered for it yet — a
+bounded, deliberate scope decision. The canonical occurrence dialog gains a
+three-state availability action (not yet opened / opens at / «بدء الاختبار»),
+authorization deliberately left to the destination read (rule O). نقاط
+الامتحانات and its teacher equivalent fix a real display defect the widened
+list exposed — the audience column read a `session`/`teaching_group`/
+`student` target as "the whole Level," `administrative_group_name`'s old
+fallback — by carrying `target_kind` onto the wire, and gain «إنشاء نسخة في
+بناء الاختبارات» from an open occurrence's grade sheet on both portals,
+reusing `POST /assessments/{id}/copy` unchanged.
+
+**Verified:** backend lint/typecheck/build clean; 331 backend unit tests;
+2,359 backend integration tests across 105 files (17 pre-existing, unrelated
+skips) against a real disposable PostgreSQL/MinIO/pg-boss stack, including
+every B1–M4 regression named above; frontend lint/typecheck/build clean;
+1,086 frontend unit tests. OpenAPI regenerated (168 paths / 217 operations,
+reconciled against the live router) and TD-3 conformance unchanged in shape
+(217/225 implemented, 8 pending, 0 undocumented — the two retired routes'
+removal and `/exams/schedule`'s addition are both reflected). All
+`scripts/ci/check-*.sh` guards, the documentation-links guard and
+`git diff --check` pass. Full SRS §0 revision entry (Revision 136) and the
+affected §4.6 clauses record the ratified model in the specification's own
+voice; this log entry is the historical record of what was done, not a
+second normative source.
+
+**Deliberately out of scope for this pass, named rather than silently
+dropped:** an authored-physical-source picker in الجدولة (physical scheduling
+stays content-free, exactly as before); arrangement-editing UI for an
+already-scheduled remote occurrence (no backend capability exists to revise a
+scheduled target/date short of scheduling again from a fresh copy, so none was
+built — الجدولة's list hides Edit for a remote row rather than opening a form
+that cannot save); full end-to-end browser/E2E verification of the new
+scheduling and calendar-availability flows, which the unit/integration suites
+above cover at the service and component level but a live browser pass has
+not separately walked.

@@ -173,7 +173,9 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
      * typecheck could see it because this function returns
      * `Record<string, unknown>`.
      *
-     * `null` for an Event and an Exam, which have no delivery model (R97.10).
+     * `null` for an Event always; for an Exam, `null` for a physical sitting
+     * and `'online'` for a remote one — R136 gives a scheduled remote
+     * occurrence a real delivery model where R97.10 originally found none.
      */
     delivery_mode: o.deliveryMode,
     online_media_mode: o.onlineMediaMode,
@@ -189,6 +191,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     instructors: o.instructors.map((i) => ({ id: i.id, display_name: i.displayName })),
     hijri_date: o.hijriDate,
     hijri_month_ar: o.hijriMonthArabic,
+    /** R136 clause 16/17 — see `Occurrence.availableFrom`'s own docstring. */
+    available_from: o.availableFrom,
   };
 }
 

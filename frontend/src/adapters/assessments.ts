@@ -40,11 +40,13 @@ export interface AssessmentPaper {
   title: string;
   description: string | null;
   status: AssessmentStatus;
+  /** R136 clause 2 — بناء الاختبارات authors content for either delivery mode. */
+  mode: 'physical' | 'online';
   target_kind: TargetKind;
   level_id: string;
   date: string;
   max_grade: string;
-  /** TD-15 — required by `retargetAssessment`. */
+  /** TD-15 optimistic-locking coordinate. */
   version: number;
   /** R134 — provenance only, present only on the author's own read. */
   source_exam_id?: string | null;
@@ -82,6 +84,8 @@ export async function createAssessment(
   input: {
     title: string;
     description?: string | null;
+    /** R136 clause 2 — absent defaults server-side to `online`. */
+    mode?: 'physical' | 'online';
     max_grade: number;
     level_id: string;
     subject_id?: string | null;
@@ -144,10 +148,6 @@ export async function reorderQuestions(
     body: { ids },
     token,
   });
-}
-
-export async function publishAssessment(examId: string, token: string | null): Promise<void> {
-  await api<void>(`/assessments/${examId}/publish`, { method: 'POST', body: {}, token });
 }
 
 export async function closeAssessment(examId: string, token: string | null): Promise<void> {
@@ -264,11 +264,13 @@ export async function listAssessmentTargets(
   ).data;
 }
 
-/** One row of the library — `GET /assessments`. */
+/** One row of the library — `GET /assessments`. Always `status: 'draft'`
+ *  (R136 §2); the field travels for the client's own record. */
 export interface AssessmentSummary {
   id: string;
   title: string;
   status: AssessmentStatus;
+  mode: 'physical' | 'online';
   date: string;
   max_grade: string;
   target_kind: TargetKind;
@@ -286,7 +288,9 @@ export interface AssessmentSummary {
 }
 
 export interface AssessmentListFilters {
-  status?: AssessmentStatus;
+  /** R136 — narrows الجدولة's remote paper selector; every row is otherwise
+   *  `status: 'draft'`, so there is nothing left for a status filter. */
+  mode?: 'physical' | 'online';
   level_id?: string;
   subject_id?: string;
   academic_year_id?: string;
@@ -317,28 +321,16 @@ export async function listAssessments(
   );
 }
 
-/** «نسخ كمسودة» — the wording again, never the answers. Answers the new draft's id. */
+/**
+ * **«إنشاء نسخة»** — the wording again, never the answers. A pure content
+ * operation (R136): works from a draft OR a historical occurrence alike
+ * (نقاط الامتحانات's «إنشاء نسخة في بناء الاختبارات» is this same call),
+ * always producing a fresh independent `draft` with no target, submissions,
+ * answers or grades carried over. Answers the new draft's id.
+ */
 export async function copyAssessment(
   examId: string,
   token: string | null,
 ): Promise<{ id: string }> {
   return api<{ id: string }>(`/assessments/${examId}/copy`, { method: 'POST', body: {}, token });
-}
-
-/**
- * **«مراجعة الجمهور والتاريخ»** (R134) — a copy or a reuse starts with the
- * source's target/date for convenience; this confirms or changes them before
- * publishing this use. Draft and unfrozen only; the Level cannot change here.
- */
-export async function retargetAssessment(
-  examId: string,
-  version: number,
-  input: { target: { kind: TargetKind; id?: string }; date?: string },
-  token: string | null,
-): Promise<void> {
-  await api<void>(`/assessments/${examId}/target`, {
-    method: 'PATCH',
-    body: { ...input, version },
-    token,
-  });
 }

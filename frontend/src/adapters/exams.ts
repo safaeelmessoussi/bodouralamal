@@ -3,18 +3,21 @@ import type { SortState } from '../components/ui/data-table.js';
 import { api } from '../lib/api.js';
 
 /**
- * Physical exam sittings (§4.6 as amended by SRS Revision 58).
+ * Physical exam sittings (§4.6 as amended by SRS Revision 58), plus R136's
+ * unified scheduling write for both delivery modes.
  *
  * **A sitting, not a paper.** R58 supersedes §4.6's *"digital exams only in
  * MVP"*: the platform now organises where and when an exam is sat — branch,
  * room, date, clock window and staff — while the paper itself (its questions,
  * its print layout, the marking of scripts) stays outside.
  *
- * **`online` is declared and refused.** The mode is offered in the interface,
- * disabled, with its reason stated (§14.4); the server answers
- * `ONLINE_NOT_AVAILABLE` if anything sends it anyway. There is deliberately **no
- * online endpoint, no online field and no online screen** — a field with nothing
- * behind it is a promise the platform has not made.
+ * **`createExam`/`POST /exams` stays a lower-level, content-free primitive**
+ * — `online` is still refused there (`ONLINE_NOT_AVAILABLE`) — but it is no
+ * longer الجدولة's own write path. `scheduleExam` below (`POST
+ * /exams/schedule`, R136) is: one atomic call, for either mode, that copies
+ * a بناء الاختبارات draft into an independent scheduled occurrence (or, for
+ * a physical sitting with no authored paper, creates one bare, exactly as
+ * `createExam` always did).
  */
 
 export type ExamMode = 'physical' | 'online';
@@ -56,6 +59,10 @@ export interface Exam {
   /** `null` is **the whole Level** (R58), never "no target". */
   administrative_group_id: string | null;
   administrative_group_name: string | null;
+  /** R136 — the target arm; an online occurrence may name any of R125's
+   *  five, not only `level`/`administrative_group`. */
+  target_kind: 'level' | 'administrative_group' | 'session' | 'teaching_group' | 'student';
+  teaching_group_name: string | null;
   /** R81 — what marks on this exam are out of. Per exam; no global scale. */
   max_grade: number;
   staff: ExamStaffRef[];
@@ -100,6 +107,39 @@ export interface ExamFilters {
   level_id?: string;
   from?: string;
   to?: string;
+}
+
+/**
+ * **R136 (H1) — one audience label, all five R125 arms.**
+ *
+ * The grading list used to read only `administrative_group_name`, falling
+ * back to "the whole Level" — correct for the two arms a physical sitting
+ * could ever carry, and silently wrong for an online occurrence's other
+ * three: a `session`/`teaching_group`/`student` target read as *the whole
+ * Level* is a real comprehension risk on a screen a مؤطِّرة is grading from.
+ * `session` and `student` stay deliberately generic rather than naming the
+ * occurrence or the beneficiary — the same privacy-conscious choice the
+ * calendar's own `audience_label` makes, for the same reason (a grading list
+ * is read by everybody the caller's own scope admits, which is wider than
+ * *this specific student's* audience).
+ */
+export function examAudienceLabel(
+  exam: Pick<Exam, 'target_kind' | 'administrative_group_name' | 'teaching_group_name'>,
+  labels: { session: string; student: string; wholeLevel: string },
+): string {
+  switch (exam.target_kind) {
+    case 'teaching_group':
+      return exam.teaching_group_name ?? labels.wholeLevel;
+    case 'session':
+      return labels.session;
+    case 'student':
+      return labels.student;
+    case 'administrative_group':
+      return exam.administrative_group_name ?? labels.wholeLevel;
+    case 'level':
+    default:
+      return labels.wholeLevel;
+  }
 }
 
 export async function listExams(
@@ -152,4 +192,68 @@ export async function updateExam(
 /** TD-5 soft delete plus a Trash snapshot; the staff rows go with it. */
 export async function deleteExam(id: string, token: string | null): Promise<void> {
   await api<void>(`/exams/${id}`, { method: 'DELETE', token });
+}
+
+/**
+ * **R136 clause 9/10 — six labelled choices, one stored fact.** `manual`
+ * leaves `Exam.available_from` `NULL` — an operator opens it later, one-way,
+ * never automatically. `at_start`/`offset_minutes` need the occurrence's own
+ * `start_time` to anchor on. `custom` is an explicit instant. Absent means
+ * `manual` — the safe default nobody chose is *not yet reachable*, not
+ * *reachable now*.
+ */
+export type ExamAvailabilityPolicy =
+  | { policy: 'manual' }
+  | { policy: 'at_start' }
+  | { policy: 'offset_minutes'; minutes: number }
+  | { policy: 'custom'; at: string };
+
+export interface ScheduleExamTarget {
+  kind: 'level' | 'administrative_group' | 'session' | 'teaching_group' | 'student';
+  id?: string;
+}
+
+export interface ScheduleExamInput {
+  mode: ExamMode;
+  /** Required for `online` (a remote occurrence always copies authored
+   *  content); optional for `physical`, which may still be content-free. */
+  source_exam_id?: string;
+  target: ScheduleExamTarget;
+  /** Refused on a `session` target — R122, the occurrence's own date. */
+  date?: string;
+  /** Physical only. */
+  start_time?: string;
+  end_time?: string;
+  branch_id?: string;
+  room_id?: string;
+  scheduling_type_id?: string | null;
+  visibility?: string;
+  staff?: ExamStaffRef[];
+  /** Remote only. Absent means `manual`. */
+  availability?: ExamAvailabilityPolicy;
+  /** Required exactly when `source_exam_id` is absent on a `physical`
+   *  sitting — its own title/maximum/Level/Subject/year, since there is no
+   *  source to take them from. */
+  bare?: {
+    title: string;
+    max_grade: number;
+    description?: string | null;
+    level_id: string;
+    subject_id: string;
+    academic_year_id: string;
+  };
+}
+
+/**
+ * **الجدولة's ONE write, for both delivery modes** (R136). One atomic
+ * transaction: authorize the source, copy it, assign the occurrence's
+ * target/date/place, set availability, freeze and publish, notify. Answers
+ * the new OCCURRENCE's id — never the source's own, which stays `draft` and
+ * unchanged (R136 clause 3).
+ */
+export async function scheduleExam(
+  input: ScheduleExamInput,
+  token: string | null,
+): Promise<{ id: string }> {
+  return api<{ id: string }>('/exams/schedule', { method: 'POST', body: input, token });
 }

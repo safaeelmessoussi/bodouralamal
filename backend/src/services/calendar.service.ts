@@ -191,6 +191,15 @@ export interface Occurrence {
    */
   status: string | null;
   /**
+   * **Exam (online) only — R136 clause 16/17.** ISO instant, or `null` when
+   * there is no access gate beyond `visibility` (every non-exam kind, a
+   * physical sitting, or a remote one still on manual opening). Publication
+   * (this row exists and is calendar-visible) and Student access are separate
+   * facts; this is the second one, read alongside `visibility` rather than
+   * folded into it.
+   */
+  availableFrom: string | null;
+  /**
    * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
    * official announcements as recorded in `HijriMonthStart` (Revisions 31–32).
    * `null` when the month has not been recorded and published — `DualDateDisplay`
@@ -518,6 +527,8 @@ function sessionOccurrence(
       level?.name ??
       null,
     status: session.status,
+    // R136 clause 16/17 — the access gate is an Exam fact only.
+    availableFrom: null,
     recurrence: null,
     branchName: sch.branch.name,
     // R97 — an online occurrence holds no room at all (CHECK
@@ -867,6 +878,8 @@ export async function readCalendar(
         teachingMode: null,
         audienceLabel: null,
         status: null,
+        // R136 clause 16/17 — the access gate is an Exam fact only.
+        availableFrom: null,
         id: event.id,
         title: event.title,
         date: iso(date),
@@ -894,16 +907,26 @@ export async function readCalendar(
     }
   }
 
-  // ── Exams: physical sittings (§4.6 as amended by R58).
+  // ── Exams: scheduled occurrences, physical or remote (§4.6 as amended by
+  // R58, then R136).
   //
   // **Read, not expanded.** An exam is one dated occurrence — it produces no
   // Sessions and follows no recurrence rule — so there is nothing to expand and
   // the date on the row is the date on the grid.
   //
-  // `online` is excluded: it has no place and no clock window, so it is not a
-  // thing that happens *somewhere at a time* and has no business on a room-and-
-  // date timetable. When the mode is built, whether it belongs here is its own
-  // decision rather than a consequence of this one.
+  // **`mode: 'online'` used to be excluded outright**, on the reasoning that it
+  // has no place and no clock window and so is not a thing that happens
+  // *somewhere at a time*. R136 makes وقت/تاريخ authoritative for a remote
+  // occurrence too (a place still is not — `exam_online_has_no_room_check`
+  // still forbids one), so an online sitting is exactly as much a dated thing
+  // on this grid as a physical one; only its room/branch columns stay null.
+  //
+  // **`status IN ('published', 'closed')`, not `mode`, is what excludes a
+  // paper.** بناء الاختبارات's own reusable `draft` content — physical or
+  // online — is not an arrangement anybody attends and must never appear here;
+  // `listAssessments`'s own library screen is where it is browsed (R136 §2, the
+  // same status-is-the-source/occurrence-line discipline `listExams` now
+  // applies for the same reason, Codex H1).
   //
   // The same subject/year filters that narrow the grid to Sessions apply: an
   // exam carries both, so it answers them honestly rather than being dropped.
@@ -916,11 +939,12 @@ export async function readCalendar(
       : await prisma.exam.findMany({
           where: {
             deletedAt: null,
-            mode: "physical",
+            status: { in: ["published", "closed"] },
             date: { gte: from, lte: query.to },
             // R109 — the same tier model the Events above pass, at the caller's
             // own tier. An anonymous visitor reads public sittings and nothing
-            // else.
+            // else. Already branch-null-aware for an online row (`examTierWhere`'s
+            // own "a branchless exam belongs to every branch" reading).
             ...examTierWhere(actor),
             ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
             ...(query.branchId ? { branchId: query.branchId } : {}),
@@ -950,6 +974,10 @@ export async function readCalendar(
             branch: { select: { id: true, name: true } },
             room: { select: { name: true } },
             administrativeGroup: { select: { name: true } },
+            // R136 — the two arms `administrativeGroup`/`level` never named:
+            // a `teaching_group` target has its own group to show rather than
+            // falling back to the whole Level's name.
+            teachingGroup: { select: { name: true } },
             schedulingType: {
               select: { id: true, name: true, structuralKind: true, attendanceMode: true },
             },
@@ -981,10 +1009,12 @@ export async function readCalendar(
       recurrence: null,
       branchName: exam.branch?.name ?? null,
       roomName: exam.room?.name ?? null,
-      // R97 — an Exam sitting is physical by §4.6 and has no delivery model of
-      // its own. Inventing `in_person` here would state a fact the row does not
-      // hold.
-      deliveryMode: null,
+      // **R136 — a remote occurrence now has a real delivery model.**
+      // `onlineMediaMode` stays null regardless: R97's provider-independence
+      // applies here exactly as it does to a Session, and an exam has no
+      // join/provider column to report one from — the reader learns *this is
+      // remote*, never *through what*.
+      deliveryMode: exam.mode === "online" ? "online" : null,
       onlineMediaMode: null,
       categoryId: exam.level.category.id,
       categoryName: exam.level.category.name,
@@ -993,14 +1023,41 @@ export async function readCalendar(
       subjectId: exam.subjectId,
       subjectName: exam.subject?.name ?? null,
       teachingMode: null,
-      // Who sits it: the narrower group where one was chosen, the Level
-      // otherwise — the same question `audienceLabel` answers for a session.
-      audienceLabel: exam.administrativeGroup?.name ?? exam.level.name,
+      /**
+       * **R136 — the two arms this label always knew (a named Administrative
+       * Group, or the whole Level) are joined by three more (R125).**
+       * `teaching_group` gets its own group's name, exactly like
+       * `administrativeGroup` above. `session` and `student` are deliberately
+       * generic rather than naming the occurrence or the beneficiary: this
+       * row is read by everybody the calendar's own tier admits (§4.6/R109),
+       * which is wider than *this specific student's* or *this specific
+       * class's* audience, and naming either here would be exactly the kind
+       * of exposure `assertMayAuthor`'s `student`/`session` arms exist to
+       * bound on the write side. The occurrence dialog, opened by someone
+       * `assertMayAuthor`/`loadForGrading` already admits, is where the exact
+       * beneficiary is named.
+       */
+      audienceLabel:
+        exam.targetKind === "teaching_group"
+          ? (exam.teachingGroup?.name ?? null)
+          : exam.targetKind === "session"
+            ? "حصة محددة"
+            : exam.targetKind === "student"
+              ? "طالب واحد"
+              : (exam.administrativeGroup?.name ?? exam.level.name),
       status: null,
       // §4.6 exam staff are supervisors, not instructors. The calendar's
       // `instructors` slot means *who teaches this*, and nobody teaches an
       // exam — inventing a value here would misstate what the row is.
       instructors: [],
+      // **R136 clause 16/17 — publication ≠ Student access.** `visibility`
+      // above already says whether this row is announced at all; `null` here
+      // means *no gate beyond that* (a physical sitting, or a manually-opened
+      // remote one), and a timestamp means the occurrence exists and is
+      // calendar-visible but not yet reachable — the dialog computes
+      // `now >= availableFrom` itself rather than the server pre-deciding it
+      // and going stale between the read and the reader's next click.
+      availableFrom: exam.availableFrom ? exam.availableFrom.toISOString() : null,
       ...hijri(exam.date, monthStarts),
     });
   }

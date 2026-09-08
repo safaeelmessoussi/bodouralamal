@@ -168,20 +168,20 @@ POST /events/{id}/attendance                  # §4.7 R123; staff marks a benefi
 POST /events/{id}/attendance/self             # §4.7 R123; «تسجيل حضوري» at an activity
 DELETE /events/{id}/attendance/{studentId}    # §4.7 R123, TD-5
 
-# ── Assessment builder (§4.6, R124) ─────────────────────────────────────────
-# The ONLINE half of `Exam`, which R58 declared and refused. Grading is NOT
-# here: `/exams/{id}/grades` already grades this row.
-GET /assessments                              # §4.6 R124/R125; THE LIBRARY — the papers this author may work with; every filter optional (rule A)
-POST /assessments                             # §4.6 R124; a new paper, in draft
+# ── Reusable exam content — بناء الاختبارات (§4.6, R124, R136) ─────────────
+# R136: this is the reusable-CONTENT library, both delivery modes now —
+# `status = 'draft'` only. Scheduling (an independent occurrence copy) is
+# `POST /exams/schedule` below, not a route in this group; grading is
+# `/exams/{id}/grades`, unchanged.
+GET /assessments                              # §4.6 R124/R125, R136; THE LIBRARY — reusable draft sources only, either mode; every filter optional (rule A)
+POST /assessments                             # §4.6 R124, R136; a new reusable source, in draft, either mode
 GET /assessments/targets                      # §4.6 R125; what THIS author may address — server-scoped, staff only
 GET /assessments/{id}                         # the paper as its AUTHOR sees it, drafts included; `/paper` is the beneficiary's and cannot return one
-PATCH /assessments/{id}/target                # §4.6 R134; review/change the copied audience and date before publishing a reuse or a copy
 POST /assessments/{id}/questions              # §4.6 R124; appended, never inserted at a position
 PATCH /assessments/{id}/questions/order       # §4.6 R124; the WHOLE sequence (R76)
 PATCH /assessments/{id}/questions/{questionId} # §4.6 R124; wording, justification, options; TD-15
 DELETE /assessments/{id}/questions/{questionId} # §4.6 R124, TD-5; the order closes up
-POST /assessments/{id}/publish                # §4.6 R124; draft → published
-POST /assessments/{id}/close                  # §4.6 R124; published → closed
+POST /assessments/{id}/close                  # §4.6 R124; an OCCURRENCE'S published → closed (a source is never published)
 POST /assessments/{id}/copy                   # §4.6 R124; «نسخ كمسودة» — the wording, never the answers or the marks
 GET /assessments/{id}/submissions             # §4.6 R124; who answered, and where their grade is
 GET /assessments/{id}/submissions/{studentId} # §4.6 R124; one submitted paper
@@ -336,8 +336,9 @@ DELETE /content/{id}                          # TD-3.5 (R53), TD-5, BR-15
 GET /content/{id}/download-url                # TD-3.5, TD-12
 
 # ── Exams, grading & Quran (TD-3.6)
-GET /exams                                    # TD-3.6 (R58) — scheduled exams
-POST /exams                                   # TD-3.6, §4.6
+GET /exams                                    # TD-3.6 (R58, R136) — scheduled OCCURRENCES, both modes now
+POST /exams                                   # TD-3.6, §4.6; the simple/content-free physical path (R136 §19), unchanged
+POST /exams/schedule                          # TD-3.6, R136; الجدولة's ONE write — an independent occurrence copy, either mode, one atomic transaction
 PATCH /exams/{id}                             # TD-3.6 (R58)
 DELETE /exams/{id}                            # TD-3.6 (R58), TD-5
 POST /exams/{id}/publish                      # TD-3.6, BR-8

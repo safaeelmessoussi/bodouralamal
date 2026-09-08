@@ -45,5 +45,31 @@ export const entityDescription = z
 /** TD-15: every edit form loads the current `version` and sends it back. */
 export const version = z.coerce.number().int().min(0);
 
+/**
+ * TD-11 — a calendar date, never an instant, and a REAL Gregorian date
+ * (R136, Codex M4).
+ *
+ * **The regex alone was the bug.** It only checks digit positions, so
+ * `2026-02-30` passed it — and `new Date('2026-02-30T00:00:00.000Z')` does not
+ * throw, it silently rolls forward to `2026-03-02`. Four call sites each
+ * defined this validator independently (`assessment`, `exam`, `session`,
+ * `course-schedule`) and all four carried the identical gap; named once here
+ * rather than fixed four times and re-copied a fifth.
+ *
+ * The `.refine` round-trips the typed year/month/day through `Date.UTC` and
+ * rejects anything that did not come back unchanged — exactly what a
+ * roll-over always breaks, and nothing else: `2028-02-29` (a real leap day)
+ * still passes; `2026-02-29` and `2026-02-30` do not.
+ */
+export const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
+  .refine((value) => {
+    const [y, m, d] = value.split('-').map(Number) as [number, number, number];
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+  }, 'not a real calendar date')
+  .transform((value) => new Date(`${value}T00:00:00.000Z`));
+
 /** A path or query identifier. Malformed input is a `400`, never a lookup. */
 export const uuid = z.uuid();

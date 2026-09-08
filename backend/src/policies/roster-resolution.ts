@@ -621,6 +621,53 @@ export async function staffsSession(
 }
 
 /**
+ * **R136 (Codex B5) — «may this مؤطِّرة address THIS Teaching Group», dated.**
+ *
+ * A `teaching_group` exam target names one group and no Level-wide claim, so
+ * — exactly like `student` and `session` above — it must not be judged by
+ * `assertExamInTeacherScope`'s administrative-group question, which this
+ * arm cannot even ask honestly: `exam_target_check` forces
+ * `administrative_group_id IS NULL` on a `teaching_group` row, so that
+ * predicate's `reachable.administrativeGroupIds.includes(null)` is always
+ * false and every مؤطِّرة was refused, staffed or not — the same shape of
+ * hole B3 closed for `session`, one target arm over.
+ *
+ * Two arms, in the same precedence `examScopeWhereForTeacher` already
+ * establishes for this Teaching Group's students: she staffs the schedule
+ * that names this exact group directly, or she holds `entire_level`
+ * staffing over the Level the group belongs to. Both are asked **as of the
+ * exam's own date** (R91) — a lapsed or not-yet-started assignment reaches
+ * neither.
+ */
+export async function staffsTeachingGroup(
+  prisma: PrismaClient,
+  teacherId: string,
+  teachingGroupId: string,
+  on: Date = new Date(),
+): Promise<boolean> {
+  const group = await prisma.teachingGroup.findFirst({
+    where: { id: teachingGroupId, deletedAt: null },
+    select: { levelId: true },
+  });
+  if (!group) return false;
+
+  const staffed = await prisma.courseScheduleStaff.count({
+    where: {
+      userId: teacherId,
+      ...effectiveOn(on),
+      schedule: {
+        deletedAt: null,
+        OR: [
+          { teachingGroupId },
+          { teachingMode: 'entire_level', levelId: group.levelId },
+        ],
+      },
+    },
+  });
+  return staffed > 0;
+}
+
+/**
  * **A teacher's scope for Hidden-event visibility (§4.4, Revision 43).**
  *
  * §4.4: a Teacher sees Hidden events *"whose scope intersects their own teaching
@@ -1213,8 +1260,21 @@ export async function examScopeWhereForTeacher(
         : s.teachingGroupId !== null
           ? (groupsBehindTeachingGroup.get(s.teachingGroupId) ?? [])
           : [];
-    if (reachable.length === 0) continue;
-    clauses.push({ ...base, administrativeGroupId: { in: [...new Set(reachable)] } });
+    if (reachable.length > 0) {
+      clauses.push({ ...base, administrativeGroupId: { in: [...new Set(reachable)] } });
+    }
+
+    /**
+     * **R136 (Codex B5) — a `teaching_group` target names the group, not one
+     * of its members' administrative groups.** The clause above only ever
+     * constrains `administrativeGroupId`, so it can never match a
+     * `teaching_group`-targeted exam (`administrative_group_id IS NULL` by
+     * `exam_target_check`); this row's own list stayed empty for exactly the
+     * assignments `staffsTeachingGroup` now admits by direct id.
+     */
+    if (s.teachingGroupId !== null) {
+      clauses.push({ ...base, teachingGroupId: s.teachingGroupId });
+    }
   }
 
   return clauses.length === 0 ? { id: { in: [] } } : { OR: clauses };

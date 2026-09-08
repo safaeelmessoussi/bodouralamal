@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { calendarDate } from './common.js';
+
 /**
  * **The write boundary for the assessment builder** (SRS §4.6, R124).
  *
@@ -7,12 +9,6 @@ import { z } from 'zod';
  * never dropped. A `201` after silently discarding a key tells a client its
  * request was understood when it was not.
  */
-
-/** TD-11 — a calendar date, never an instant. */
-const calendarDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
-  .transform((value) => new Date(`${value}T00:00:00.000Z`));
 
 export const assessmentTarget = z
   .object({
@@ -38,20 +34,9 @@ export const createAssessmentSchema = z
      * audience is resolved for.
      */
     date: calendarDate.optional(),
-  })
-  .strict();
-
-/**
- * `PATCH /assessments/{id}/target` — **R134's audience/date review**, before a
- * copy or a reuse is published. The Level is deliberately absent: the
- * questions were written for it, and changing it here would be a second,
- * unguarded way to do what `POST /assessments/{id}/copy` already does safely.
- */
-export const retargetAssessmentSchema = z
-  .object({
-    version: z.coerce.number().int().min(0),
-    target: assessmentTarget,
-    date: calendarDate.optional(),
+    /** R136 clause 2 — either delivery mode may be authored here now. Absent
+     *  defaults to `online`, unchanged. */
+    mode: z.enum(['physical', 'online']).optional(),
   })
   .strict();
 
@@ -126,20 +111,25 @@ export const targetCandidatesSchema = z
   .strict();
 
 /**
- * **`GET /assessments` — the library's query.**
+ * **`GET /assessments` — the reusable-content library's query** (R136).
  *
  * **Every parameter is optional**, which is rule A's API half: a management
  * screen shows the data it manages the moment it opens, and a filter narrows
  * what is visible rather than being the precondition for anything appearing.
  * `.strict()` so a misspelled filter is refused rather than silently ignored,
  * which would render as *«no results»* and read as an empty library.
+ *
+ * **No `status` filter** — R136 made the library `status = 'draft'` only,
+ * always, so there is nothing left for a status parameter to narrow.
  */
 export const assessmentListSchema = z
   .object({
-    status: z.enum(['draft', 'published', 'closed']).optional(),
     level_id: z.uuid().optional(),
     subject_id: z.uuid().optional(),
     academic_year_id: z.uuid().optional(),
+    /** R136 — الجدولة's remote paper selector narrows the library to the
+     *  delivery mode being scheduled; every other reader leaves it unset. */
+    mode: z.enum(['physical', 'online']).optional(),
     /** Title contains, case-insensitive. */
     q: z.string().trim().max(120).optional(),
     page: z.coerce.number().int().min(1).optional(),
