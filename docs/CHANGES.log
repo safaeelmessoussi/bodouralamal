@@ -5844,3 +5844,26 @@ CI outage; this is the first deploy since.
   unchanged local suite was repeated. The denied browser operation was not
   retried or rerouted. Staging and Production were untouched; the protected baseline
   remains `26e8a96b6f975e050d802f1851332216a424577b`.
+
+## Simplification A — unused UI exports (2026-09-08)
+
+- Accepted baseline: `0e16489b8a7724e6ed2701fd249a6cdd82154a1a` (hosted CI
+  `34160961940`, all seven jobs green). Resumed the same nine-file interrupted
+  diff; no reset, recreation or runtime/data mutation.
+- Removed the unused `CalendarSurface` file and six orphan exports: `MenuAction`,
+  `useActionFeedback`, `ListDialog`, `NotBuiltYet`, `addYears`, `formatDateNumeric`.
+  TypeScript import/dynamic-import inventory, routing/build entry points and
+  repository-wide symbol references confirm no consumers. Existing calendar
+  surfaces already compose `CalendarHeader` directly. Kept the live detail API,
+  canonical dialog, clamped date helpers and all regression assertions.
+- Classifications: A — those seven dead exports; B — duplicated agent/doc entry
+  guidance (next section); C — authorization and fixture consolidation preserved
+  without proof of equivalence; D — subprocess `registration-victim.ts`, shell-run
+  `snapshot-integration-state.ts`, all dependencies, OpenAPI/TD-3, migrations and
+  history; E — existing calendar-prefill SRS reconciliation, still unresolved.
+  No dependency removal or lockfile change is justified. Temporary inventory
+  scripts stay in `/tmp`, not in the repository.
+- Focused verification: exact frontend typecheck and 7 files / 164 assertions
+  pass (calendar/header, shared atomic guards, scheduling composition, dates,
+  date picker and routing). Frontend architecture now distinguishes the removed
+  list wrapper from the current form/dialog contract. No test assertion removed.

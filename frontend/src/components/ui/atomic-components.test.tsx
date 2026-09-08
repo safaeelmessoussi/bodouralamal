@@ -633,7 +633,7 @@ describe('unsaved form changes are protected by the shared dialog', () => {
      * lose-everything behaviour and nothing fails.
      *
      * Scoped to files that RENDER a `<FormDialog`, which is every form dialog on
-     * the platform. `ListDialog` and read-only `Dialog` callers are untouched —
+     * the platform. Read-only `Dialog` callers are untouched —
      * they hold nothing to lose.
      */
     const offenders = FILES.filter((f) => {

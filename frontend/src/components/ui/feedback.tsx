@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 /**
  * **The one place a message about an action appears** (2026-08-18).
@@ -58,25 +58,4 @@ export function Feedback({
       {children}
     </p>
   );
-}
-
-/**
- * The state behind an action message: the value, its setter, and the node.
- *
- * Screens kept `const [notice, setNotice] = useState<string | null>(null)` and
- * then each rendered it themselves — which is how the markup drifted. Here the
- * rendering is not the caller's to write.
- */
-export function useActionFeedback(): {
-  notice: string | null;
-  setNotice: (message: string | null) => void;
-  feedback: ReactNode;
-} {
-  const [notice, set] = useState<string | null>(null);
-  const setNotice = useCallback((message: string | null) => set(message), []);
-  return {
-    notice,
-    setNotice,
-    feedback: notice === null ? null : <Feedback>{notice}</Feedback>,
-  };
 }

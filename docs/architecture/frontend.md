@@ -818,10 +818,10 @@ was wrong was always **the difference**:
 `Dialog` gave the outline, and each form assembled the rest by hand.
 `components/ui/form-dialog.tsx` closes that — a form supplies its **fields**, and
 the component owns the wrapper, the notice, and the two buttons that end every
-form the same way. `ListDialog` beside it does the same for a dialog whose whole
-content is a set, and owns the part worth sharing: **an empty list means *there
-are none***, which for conflicts is a reassuring answer and must not render as an
-empty `<ul>` a reader mistakes for a failure to load.
+form the same way. The former `ListDialog` wrapper lost all consumers when these
+screens were consolidated and was removed; read-only dialogs compose `Dialog`
+with the relevant current list component. The historical comparison above
+explains the form contract, not a second supported implementation.
 
 ### A table shows names, and that is a contract property
 

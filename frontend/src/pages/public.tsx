@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { ApplicationHeader } from '../components/header/application-header.js';
 import { Logo } from '../components/ui/logo.js';
-import { SiteFooter } from '../components/site-footer.js';
 import { ButtonLink } from '../components/ui/button.js';
 import { t } from '../i18n/index.js';
 
@@ -69,32 +67,6 @@ export function AccountDeactivated(): ReactNode {
       <h1>{t('auth.deactivatedTitle')}</h1>
       <p>{t('auth.deactivatedBody')}</p>
     </main>
-  );
-}
-
-/**
- * A route that §14.1 defines but whose page is a later task.
- *
- * The header links to `/calendar` and `/resources` because those are real
- * navigation nodes; until their pages exist, following one lands here rather
- * than on a blank screen — §14.4 requires every surface to state which of its
- * states it is in, and "not yet" is one of them.
- */
-export function NotBuiltYet(): ReactNode {
-  return (
-    <>
-      <ApplicationHeader />
-      <main id="main" className="status-screen">
-        <h1>{t('states.notBuiltTitle')}</h1>
-        <p className="lede">{t('states.notBuiltBody')}</p>
-        <p>
-          <ButtonLink variant="primary" href="/">
-            {t('nav.home')}
-          </ButtonLink>
-        </p>
-      </main>
-      <SiteFooter />
-    </>
   );
 }
 

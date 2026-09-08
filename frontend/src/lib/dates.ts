@@ -29,13 +29,6 @@ export function addMonths(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
 
-/** Same convention as `addMonths` — the 1st of the resulting month, never the
- *  caller's day-of-month, since the callers that need this (year/decade
- *  paging) only ever care which year they land on. */
-export function addYears(date: Date, delta: number): Date {
-  return new Date(date.getFullYear() + delta, date.getMonth(), 1);
-}
-
 export function isSameDay(a: Date, b: Date): boolean {
   return toIsoDate(a) === toIsoDate(b);
 }
@@ -48,8 +41,8 @@ export function addDays(date: Date, delta: number): Date {
 }
 
 /**
- * A month/year step that keeps a real calendar date — never `addMonths`'/
- * `addYears`' "the 1st", and never a silent rollover.
+ * A month/year step that keeps a real calendar date — never `addMonths`'
+ * "the 1st", and never a silent rollover.
  *
  * `new Date(2026, 3, 31)` for "31 May, one month back" is NOT the 31st of
  * April — April has 30 days, so the constructor rolls it into the 1st of May,

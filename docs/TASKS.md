@@ -1,5 +1,20 @@
 # Tasks — بذور الأمل Platform
 
+## Repository simplification — 2026-09-08
+
+- [x] Reviewed the inherited removal of seven unreferenced frontend exports:
+  `CalendarSurface`, `MenuAction`, `useActionFeedback`, `ListDialog`,
+  `NotBuiltYet`, `addYears`, `formatDateNumeric`. Checked imports, dynamic
+  entry points, routes, test and script references; no live path or assertion
+  removed. Focused frontend: 7 files / 164 assertions; exact typecheck green.
+- [x] Kept subprocess fixtures, integration snapshot tooling, live Session
+  detail API, all declared dependencies, generated contracts and migrations.
+  No equivalent test setup was proven redundant enough to consolidate safely.
+- [ ] Shorten the existing agent entry path and separate current guidance from
+  historical lookup; preserve the unresolved calendar-prefill SRS wording below.
+- [ ] Final full local gates, behavior comparison, coherent commits, push and
+  exact hosted CI. No deployment or Owner-data mutation belongs to this milestone.
+
 ## Calendar/media regression correction — 2026-09-07
 
 - [x] Removed automatic profile-derived narrowing from the public calendar. The

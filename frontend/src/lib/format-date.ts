@@ -39,18 +39,6 @@ export function formatDate(value: string | null | undefined): string {
 }
 
 /**
- * The numeric form, for places where a month name is too long to fit — a table
- * column, a chip. Still Arabic-Indic, still day-first.
- */
-export function formatDateNumeric(value: string | null | undefined): string {
-  if (!value) return '';
-  const iso = value.slice(0, 10);
-  const [year, month, day] = iso.split('-');
-  if (!year || !month || !day) return value;
-  return `${day}/${month}/${year}`;
-}
-
-/**
  * **There is deliberately no digit-conversion helper here.**
  *
  * An earlier version of this module exported `toArabicDigits`, and the platform
