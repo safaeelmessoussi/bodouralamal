@@ -51,9 +51,9 @@ The Owner's 2026-09-07 correction requires login to preserve the chosen public c
 view. The API still returns profile suggestions, but this page no longer applies them
 automatically: on populated localhost that second request changed 61 authorized occurrences
 to zero by choosing an unrelated profile branch/level. URL filters and explicit controls
-remain freely changeable. This corrects the page's application of §4.4/TD-3.4 prefill;
-the Document Owner must reconcile that older automatic-prefill wording. No tier or scope
-predicate changes, and `GET /me/calendar` retains its personal meaning.
+remain freely changeable. SRS Revision 135 ratifies this correction in §4.4/TD-3.4,
+including initial load, session restoration and authentication changes. No tier or scope
+predicate changes, and `GET /me/calendar` retains its personal meaning (R82(8)).
 
 The **calendar dialog is the only occurrence-detail surface** (Owner decision,
 2026-09-07). Grid chips, table titles and content back-links all open that

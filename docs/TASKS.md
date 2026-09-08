@@ -11,7 +11,7 @@
   detail API, all declared dependencies, generated contracts and migrations.
   No equivalent test setup was proven redundant enough to consolidate safely.
 - [x] Shorten the existing agent entry path and separate current guidance from
-  historical lookup; preserve the unresolved calendar-prefill SRS wording below.
+  historical lookup; calendar-prefill reconciliation is recorded separately below.
 - [x] Final local gates: backend 331 / frontend 1,074 assertions, both lint/exact
   typecheck/build; disposable integration 2,349 passed / 17 skipped with clean
   isolation and 193 browser assertions; all 31 guard checks and 1,013 doc links.
@@ -46,8 +46,15 @@
   approval review exhausted its allowance. The unchanged implementation reuses
   the green disposable/full-suite evidence; exact hosted CI is still required
   for the repair commit. The later simplification milestone is not part of this batch.
-- [ ] Document Owner reconciliation: older SRS §4.4 / TD-3.4 profile-prefill
-  wording needs alignment with this explicit Owner correction; SRS was not edited.
+- [x] Document Owner reconciliation (2026-09-08, R135): Option A ratified in
+  SRS §4.4 / TD-3.4 / J6, with a narrow supersession note preserving Revision
+  43(12). Public filters stay reader-selected; `prefilled_filters` remains API
+  metadata and personal calendars retain their audience scoping. Docs/spec only.
+- [ ] **Separate follow-up, not settled by R135:** source inspection found that
+  `listSessionsForContent` can return a cancelled Session while the calendar
+  deep-link day read excludes cancelled Sessions, so a Library backlink may
+  resolve as unavailable. Not dynamically reproduced or fixed; review its
+  lifecycle/navigation contract independently, without changing retention or visibility.
 
 ## Canonical occurrence dialog and public readers — 2026-09-07
 

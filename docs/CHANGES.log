@@ -1,7 +1,7 @@
 # Project Changes Ledger
 
 ## Active Status
-- CURRENT TASK: Repository simplification verified locally; exact hosted CI gates handoff. See the current section of `docs/TASKS.md`.
+- CURRENT TASK: Public-calendar Option A ratified as SRS R135; documentation-only reconciliation. See `docs/TASKS.md` and the latest entry below; exact hosted CI gates handoff.
 - ACCEPTED BEHAVIOR: repair baseline `0e16489b8a7724e6ed2701fd249a6cdd82154a1a`, Owner-accepted localhost and green CI `34160961940`.
 - READ FIRST: current TASKS section and the latest ledger entries at the end of this file; search older entries only for task-specific provenance.
 - DEPLOYMENT: not authorized by this milestone; readiness decisions remain in `docs/operations/deployment-readiness.md`.
@@ -5931,3 +5931,26 @@ CI outage; this is the first deploy since.
   including disposable Production-mode browser/restart/recovery and image
   publication; no redundant local recovery drill was run for dead UI/docs changes.
   Migration history, raw historical ledger/proposals and SRS remain unchanged.
+
+## Public-calendar prefill — Owner-ratified Option A (2026-09-08, R135)
+
+- Starting from clean synchronized `develop` at
+  `d57e4b9434a46c5b68daacaa757d6614dd6c145c`, recorded the Owner's explicit
+  ratification of the accepted public-calendar behavior in SRS §4.4, TD-3.4
+  and journey J6. Revision 43(12)'s text remains verbatim with a narrow
+  supersession note; R134 remains reserved for its unrelated pending proposal.
+- Profile suggestions do not automatically populate public-calendar filters;
+  authentication changes authorized results, not reader/URL selections.
+  `prefilled_filters` stays unchanged on the wire. R82(8)'s personal-calendar
+  audience scoping, the Library and occurrence-dialog behavior remain unchanged.
+- Closed the wording task and updated the calendar architecture's pending note.
+  Preserved the cancelled-Session Library-backlink finding as a separate open
+  follow-up: source-traced only, no dynamic reproduction, policy choice or fix.
+  No application code, tests, schema, generated contract or environment changes.
+- Verification: 1,013 relative documentation links pass; OpenAPI currency passes
+  through the same read-only generator (`node --import tsx`, 168 paths / 217
+  operations); TD-3 conformance remains 217/225 with the same eight pending and
+  zero undocumented endpoints. Compared Revision 43(12)'s original paragraph
+  and SRS route declarations byte-for-byte with HEAD; both unchanged. Diff
+  validation passes. Local application/browser/integration suites were not
+  repeated for prose-only edits; the exact hosted pipeline remains the final gate.
