@@ -1,0 +1,73 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<link rel="stylesheet" href="APP_CSS">
+<style>body{margin:0}</style></head><body>
+<div class="admin" id="shell">
+  <button type="button" class="admin-nav-toggle" id="toggle" aria-expanded="true" aria-controls="admin-sidebar">
+    <span>القائمة</span>
+  </button>
+  <button type="button" class="admin-nav-backdrop" id="backdrop" hidden></button>
+  <nav class="admin-nav" id="admin-sidebar"><ul class="admin-nav__list">
+    <li><a class="admin-nav__item" href="#one" id="link1">واحد</a></li>
+    <li><a class="admin-nav__item" href="#two" id="link2">اثنان</a></li>
+  </ul></nav>
+  <main class="admin__main" id="main">
+    <div class="admin__head"><h1 class="admin__title">عنوان الصفحة</h1></div>
+    <p id="content">محتوى الصفحة الفعلي.</p>
+  </main>
+</div>
+<script>
+  // A minimal replica of `PortalShell`'s own toggle state machine (see its
+  // doc comment) — enough to drive the CSS invariants in isolation, with no
+  // React/backend/auth required. The class names and the three states
+  // (`null` | 'collapsed' | 'overlay') are exactly what the real component
+  // applies to `.admin`.
+  const shell = document.getElementById('shell');
+  const toggle = document.getElementById('toggle');
+  const backdrop = document.getElementById('backdrop');
+  let state = null;
+
+  function visible() {
+    if (state === 'overlay') return true;
+    if (state === 'collapsed') return false;
+    return window.matchMedia('(min-width: 60rem)').matches;
+  }
+
+  function apply() {
+    shell.className = state === null ? 'admin' : 'admin admin--nav-' + state;
+    backdrop.hidden = state !== 'overlay';
+    toggle.setAttribute('aria-expanded', String(visible()));
+  }
+
+  toggle.addEventListener('click', () => {
+    state = visible() ? 'collapsed' : 'overlay';
+    apply();
+  });
+  backdrop.addEventListener('click', () => {
+    state = 'collapsed';
+    apply();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state === 'overlay') {
+      state = 'collapsed';
+      apply();
+    }
+  });
+  // A real nav-item is a plain full-page `<a href>` (see `nav-item.tsx`), so
+  // following it closes the overlay by leaving the page entirely — the
+  // harness approximates that one property without actually navigating away.
+  for (const a of document.querySelectorAll('.admin-nav__item')) {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.__lastNavClicked = a.id;
+      state = 'collapsed';
+      apply();
+    });
+  }
+  window.__setNavState = (s) => {
+    state = s;
+    apply();
+  };
+  window.__navState = () => state;
+  apply();
+</script>
+</body></html>

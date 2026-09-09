@@ -45,12 +45,33 @@ const WIDE_QUERY = '(min-width: 60rem)';
  * nothing visual — it exists only so the button's own `aria-expanded` and its
  * next click read the right state before that first press.
  *
- * **One toggle serves both directions.** At the same width the menu now
- * opens as an overlay (Escape and a tap on the backdrop close it, and the
+ * **R138 item 8 correction (Owner, desktop screenshot) — "opening" is ALWAYS
+ * an overlay, never a layout column.** The first cut let a desktop toggle
+ * restore the sidebar as the ordinary `16rem` GRID COLUMN it already is by
+ * default — which reads as *correct* only until the reader notices that
+ * "opening" a column that already had a resting width means the grid itself
+ * changed shape under her, exactly the "pushes the page sideways" complaint.
+ * `override` therefore has exactly two explicit states, `'collapsed'` and
+ * `'overlay'`, and **neither ever touches `grid-template-columns` toward
+ * showing content** — collapsing reclaims the column (`1fr`, checked against
+ * the resting default so a genuine "more room" request stays that), and
+ * `'overlay'` NEVER restores the column: it renders `.admin-nav` as a
+ * `position: fixed` panel stacked on top of the page, at both widths, with
+ * only its bounded inline-size differing per breakpoint (`admin.css`). The
+ * resting, unclicked default is untouched — desktop still shows the column
+ * with nothing pressed, exactly as the Owner asked to keep — so the only
+ * behaviour this correction changes is what happens once a reader has
+ * actually pressed the button.
+ *
+ * **One toggle, one rule, both widths**: if the sidebar is visible in ANY
+ * form right now (the resting default, or a previously opened overlay),
+ * pressing it hides that form; if it is not visible, pressing it opens the
+ * OVERLAY — never the column. Mobile's own resting default is already
+ * "hidden," so this reduces to exactly its previous, Owner-confirmed-good
+ * behaviour there (Escape and a tap on the backdrop close it, and the
  * destination is on screen the instant a link is followed, per the full-page
- * navigation above), it also collapses back — desktop keeps today's expanded
- * default per the Owner, but gets the same control rather than a control that
- * only exists on the width where it is more obviously needed.
+ * navigation above); only desktop's second click — the one that used to
+ * restore the column — changes.
  */
 export function PortalShell({
   title,
@@ -82,9 +103,12 @@ export function PortalShell({
 
   // R138 item 8 — see the class doc comment for why this starts at `null`
   // rather than a guessed viewport, and why `isWide` drives no CSS.
-  const [override, setOverride] = useState<'open' | 'collapsed' | null>(null);
+  const [override, setOverride] = useState<'overlay' | 'collapsed' | null>(null);
   const [isWide, setIsWide] = useState(true);
-  const navOpen = override === null ? isWide : override === 'open';
+  // Visible in ANY form right now: the resting default (desktop only) or an
+  // explicitly opened overlay. Never true for `'collapsed'`, and the overlay
+  // is never "the column" — see the class doc comment.
+  const navVisible = override === 'overlay' ? true : override === 'collapsed' ? false : isWide;
 
   useEffect(() => {
     const mq = window.matchMedia(WIDE_QUERY);
@@ -95,20 +119,9 @@ export function PortalShell({
   }, []);
 
   useEffect(() => {
-    // An override left standing across a resize would sit oddly once the
-    // layout it was chosen for no longer applies — the same reasoning
-    // `ApplicationHeader`'s own sheet closes on for the identical reason.
-    if (override === null) return;
-    const mq = window.matchMedia(WIDE_QUERY);
-    const reset = (): void => setOverride(null);
-    mq.addEventListener('change', reset);
-    return () => mq.removeEventListener('change', reset);
-  }, [override]);
-
-  useEffect(() => {
-    // Escape closes the mobile drawer. Harmless when the override instead
-    // means "collapsed on desktop", where there is no overlay to dismiss.
-    if (override !== 'open') return undefined;
+    // Escape closes the overlay, at either width — there is nothing else
+    // `'collapsed'` needs Escape to do, since it has no overlay to dismiss.
+    if (override !== 'overlay') return undefined;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') setOverride('collapsed');
     };
@@ -117,35 +130,33 @@ export function PortalShell({
   }, [override]);
 
   function toggleNav(): void {
-    setOverride(navOpen ? 'collapsed' : 'open');
+    setOverride(navVisible ? 'collapsed' : 'overlay');
   }
 
   return (
     <>
       <ApplicationHeader />
       <div
-        className={
-          override === null
-            ? 'admin'
-            : `admin admin--nav-${override === 'open' ? 'open' : 'collapsed'}`
-        }
+        className={override === null ? 'admin' : `admin admin--nav-${override}`}
         ref={frame}
       >
         <button
           type="button"
           className="admin-nav-toggle"
-          aria-expanded={navOpen}
+          aria-expanded={navVisible}
           aria-controls="admin-sidebar"
           onClick={toggleNav}
         >
-          <span className="visually-hidden">{navOpen ? t('nav.closeMenu') : t('nav.openMenu')}</span>
-          <Icon name={navOpen ? 'close' : 'menu'} size={18} />
+          <span className="visually-hidden">
+            {navVisible ? t('nav.closeMenu') : t('nav.openMenu')}
+          </span>
+          <Icon name={navVisible ? 'close' : 'menu'} size={18} />
           <span aria-hidden="true">{t('admin.nav.toggle')}</span>
         </button>
-        {/* The mobile drawer's backdrop — CSS shows it only under WIDE_QUERY
-            and only while explicitly opened; a tap on it is the same "close"
-            Escape already offers. */}
-        {override === 'open' ? (
+        {/* The overlay's backdrop — CSS shows it only while `.admin-nav` is
+            the fixed panel (`.admin--nav-overlay`, both widths); a tap on it
+            is the same "close" Escape already offers. */}
+        {override === 'overlay' ? (
           <button
             type="button"
             className="admin-nav-backdrop"

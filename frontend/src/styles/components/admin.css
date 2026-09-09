@@ -72,16 +72,28 @@
    content the reader actually came for; R138 item 8 replaced that with the
    collapsed-by-default toggle below. */
 
-/* ── R138 item 8 — the sidebar's collapse toggle ─────────────────────────────
+/* ── R138 item 8 — the sidebar's collapse/overlay toggle ─────────────────────
  *
- * **The default lives ENTIRELY in these two media queries, not in JS.** A
- * script cannot know the viewport before its first render, so a JS-computed
- * default is wrong for one frame on every single page — and every navigation
- * here is a full document load (`nav-scroll.ts`), so that wrong frame would
- * repeat on every click rather than show once. `PortalShell` only ever adds
- * `.admin--nav-open` / `.admin--nav-collapsed` once its toggle has actually
- * been pressed; until then neither class exists and the query below is the
- * only thing deciding what shows.
+ * **The default lives ENTIRELY in media queries, not in JS.** A script cannot
+ * know the viewport before its first render, so a JS-computed default is
+ * wrong for one frame on every single page — and every navigation here is a
+ * full document load (`nav-scroll.ts`), so that wrong frame would repeat on
+ * every click rather than show once. `PortalShell` only ever adds
+ * `.admin--nav-overlay` / `.admin--nav-collapsed` once its toggle has
+ * actually been pressed; until then neither class exists and the plain
+ * `.admin`/`.admin-nav` rules above are the only thing deciding what shows —
+ * inline, at the column width they have always had, on every width the
+ * Owner did not ask this correction to touch.
+ *
+ * **Owner correction (screenshot, desktop) — "opening" is ALWAYS the overlay
+ * below, never the grid column.** `.admin--nav-overlay` never sets
+ * `grid-template-columns`: it removes `.admin-nav` from flow entirely
+ * (`position: fixed`) and stacks it on TOP of the page, at both widths, so
+ * opening it can never shift, resize or reflow `.admin__main` — the exact
+ * complaint the first cut's desktop "restore the column" behaviour produced.
+ * `.admin--nav-collapsed` is the only state that changes the column, and it
+ * only ever RECLAIMS it (`1fr`, more room for `.admin__main`) — never grows
+ * it back toward the sidebar, which is what made a click read as "expanding."
  *
  * **`60rem` is `ApplicationHeader`'s own breakpoint**, not a second number —
  * "one coherent responsive navigation system" (§14) is what that identity is
@@ -102,7 +114,7 @@
   font-weight: 600;
   cursor: pointer;
   /* A grid item may use `z-index` without `position` (CSS Grid §Z), which is
-     what keeps this reachable above the drawer/backdrop it opens below. */
+     what keeps this reachable above the overlay/backdrop it opens below. */
   z-index: 57;
 }
 
@@ -112,48 +124,70 @@
   padding: 0;
   cursor: pointer;
 }
+/* Shown, at BOTH widths, only while `.admin-nav` is the fixed overlay panel
+   below — width-independent, so declared once rather than twice. */
+.admin--nav-overlay .admin-nav-backdrop {
+  display: block;
+  position: fixed;
+  inset-block: var(--header-height) 0;
+  inset-inline: 0;
+  z-index: 55;
+  background: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+
+/**
+ * **The overlay panel itself — one rule, both widths.** Every property here
+ * is width-independent (RIGHT edge in RTL via `inset-inline-start: 0`, fixed
+ * to the page rather than the grid, its own scroll, above the backdrop and
+ * below the toggle's own `z-index: 57` so the button stays reachable to
+ * close it). Only `inline-size` differs per breakpoint, in the two media
+ * blocks below — mobile keeps its existing, Owner-confirmed-good width;
+ * desktop/tablet gets a bounded reading width rather than the whole
+ * viewport, per the correction.
+ */
+.admin--nav-overlay .admin-nav {
+  display: grid;
+  position: fixed;
+  inset-block: var(--header-height) 0;
+  inset-inline-start: 0;
+  max-block-size: none;
+  overflow-y: auto;
+  z-index: 56;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-inline-end: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
 
 @media (width < 60rem) {
-  /* The collapsed default. */
+  /* The collapsed default — unaffected by this correction. */
   .admin-nav {
     display: none;
   }
-  /* Explicitly opened: an overlay drawer, not content pushed back into the
-     flow — the destination a link leads to must be visible the instant it is
-     followed, and a drawer sitting in normal flow would itself be the thing
-     between the reader and the page again. */
-  .admin--nav-open .admin-nav {
-    display: grid;
-    position: fixed;
-    inset-block: var(--header-height) 0;
-    inset-inline-start: 0;
+  .admin--nav-overlay .admin-nav {
     inline-size: min(85vw, 20rem);
-    max-block-size: none;
-    overflow-y: auto;
-    z-index: 56;
-    padding: var(--space-4);
-    background: var(--color-surface);
-    border-inline-end: 1px solid var(--color-border);
-    box-shadow: var(--shadow-md);
-  }
-  .admin--nav-open .admin-nav-backdrop {
-    display: block;
-    position: fixed;
-    inset-block: var(--header-height) 0;
-    inset-inline: 0;
-    z-index: 55;
-    background: color-mix(in srgb, var(--color-text) 40%, transparent);
   }
 }
 
 @media (width >= 60rem) {
-  /* Desktop keeps its existing expanded default (the Owner's own instruction)
-     — collapsing is possible, but it is the exception, chosen explicitly. */
+  /* Desktop/tablet keeps its existing expanded default (the Owner's own
+     instruction) — nothing here changes what shows with nothing pressed. */
   .admin--nav-collapsed .admin-nav {
     display: none;
   }
-  .admin--nav-collapsed {
+  /* Both explicit states remove `.admin-nav` from the grid — collapsed
+     because it is hidden, overlay because it is `position: fixed` — so both
+     reclaim the column rather than leaving an empty `16rem` gap where an
+     out-of-flow element used to sit. */
+  .admin--nav-collapsed,
+  .admin--nav-overlay {
     grid-template-columns: 1fr;
+  }
+  .admin--nav-overlay .admin-nav {
+    /* A bounded reading width, not the whole viewport (the correction's own
+       requirement) — the sidebar's own existing column width, so the panel
+       reads as the same sidebar rather than a new, wider surface. */
+    inline-size: 16rem;
   }
 }
 
