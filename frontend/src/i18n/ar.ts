@@ -1474,8 +1474,12 @@ export const ar = {
     attendanceMarking: 'من يسجّل الحضور',
     markingStaffOnly: 'المؤطِّرة أو الإدارة فقط',
     markingSelfOrStaff: 'المستفيدة نفسها أو المؤطِّرة',
+    // R137 item 10 — stated explicitly as ADDITIVE, not as a replacement: the
+    // earlier wording described only what the beneficiary gains, which read
+    // as though enabling it might narrow the مؤطِّرة/الإدارة's own authority
+    // instead of leaving it exactly as it was.
     attendanceMarkingHint:
-      'إن اخترتِ «المستفيدة نفسها»، تستطيع كل مستفيدة تسجيل حضورها هي فقط، ولا تستطيع تسجيل غيرها ولا حذف حضور أحد.',
+      'إن اخترتِ «المستفيدة نفسها»، تُضاف لكل مستفيدة القدرة على تسجيل حضورها هي فقط، ولا تستطيع تسجيل غيرها ولا حذف حضور أحد؛ وتبقى صلاحية المؤطِّرة أو الإدارة في تسجيل حضور أي مستفيدة أو إلغائه كما هي، دون أي تغيير.',
     attendanceMarkingStaffOnlyHint:
       'حضور هذه الفئة تسجّله المؤطِّرة أو الإدارة دائماً؛ التسجيل الذاتي غير متاح لها.',
     typeFixed: 'النوع يُحدَّد عند الإنشاء — تغييره يعني نقل السجل إلى جدول آخر.',

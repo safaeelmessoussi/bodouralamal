@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import panel from './attendance-panel.tsx?raw';
 import dialog from './event-details-dialog.tsx?raw';
 import form from '../scheduling/scheduling-form.tsx?raw';
+import { ar } from '../../i18n/ar.js';
 
 describe('R123 — a vacation and a party offer nothing at all', () => {
   it('renders no panel when the occurrence takes no attendance', () => {
@@ -90,6 +91,29 @@ describe('R123 — the configuration form states the rule rather than offering i
 
   it('still shows a stored self_or_staff so a save cannot change it silently', () => {
     expect(form).toContain("attendanceMarking === 'self_or_staff'");
+  });
+
+  it('R137 item 10 — the hint states self-marking is ADDITIVE, not a narrowing of staff authority', () => {
+    expect(form).toContain('scheduling.attendanceMarkingHint');
+  });
+});
+
+/**
+ * **R137 item 10 — the catalogue string itself says both halves.**
+ *
+ * The earlier wording described only what the beneficiary gains; a reader of
+ * just that sentence could not tell whether enabling self-marking also took
+ * anything away from the مؤطِّرة/الإدارة. It never did — R123's `panel.tsx`
+ * always checked `isStaff` first, before the self branch is even reached —
+ * but the copy did not say so, and §14's rule is that the interface states a
+ * server rule rather than leaving it to be inferred.
+ */
+describe('R137 item 10 — self-attendance wording is explicitly additive', () => {
+  it('says the beneficiary GAINS the ability, and separately that staff keep theirs unchanged', () => {
+    const hint = ar.scheduling.attendanceMarkingHint;
+    expect(hint).toContain('تُضاف');
+    expect(hint).toContain('صلاحية المؤطِّرة أو الإدارة');
+    expect(hint).toMatch(/كما هي|دون أي تغيير/);
   });
 });
 
