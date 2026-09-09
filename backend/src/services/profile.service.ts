@@ -30,6 +30,16 @@ export interface OwnProfile {
   /** R62.6 — present for an account created through a child application. */
   referenceCode: string | null;
   /**
+   * **R137 — required at the write boundary for a beneficiary, asked of no
+   * one else** (R130's own rule, restated for self-service editing). `null`
+   * is a real state for a legacy beneficiary who predates the requirement —
+   * `updateOwnProfile` is what turns editing hers into the moment it is
+   * completed, not a silent gap kept open.
+   */
+  birthDate: string | null;
+  /** R79 — the one authoritative fact `birthDate`'s requirement reads. */
+  isBeneficiary: boolean;
+  /**
    * **R96 — this ACCOUNT HOLDER's QR identity**, never a child's.
    *
    * The subject here is the JWT `sub` (§5.2, R65), so a parent reading her own
@@ -102,6 +112,8 @@ export async function getOwnProfile(
       sex: true,
       accountStatus: true,
       referenceCode: true,
+      birthDate: true,
+      isBeneficiary: true,
       qrRef: true,
       version: true,
       preProvisionedEmail: true,
@@ -162,6 +174,8 @@ export async function getOwnProfile(
     sex: user.sex,
     accountStatus: user.accountStatus,
     referenceCode: user.referenceCode,
+    birthDate: user.birthDate ? user.birthDate.toISOString().slice(0, 10) : null,
+    isBeneficiary: user.isBeneficiary,
     qr: await qrMatrixFor(user.qrRef),
     enrolments: user.levelEnrollments.map((e) => ({
       id: e.id,
@@ -205,6 +219,44 @@ export async function getOwnProfile(
 export interface OwnProfileInput {
   phone?: string | null | undefined;
   nickname?: string | null | undefined;
+  /** R137 — already validated real and not in the future by the caller
+   *  (`person.birthDate`'s `.transform`), exactly as the Prisma column
+   *  itself is typed. */
+  birthDate?: Date | null | undefined;
+}
+
+/**
+ * **R137 — a beneficiary may not save this form while either field is
+ * missing, and may not save her way OUT of them once both are present.**
+ *
+ * R130 already requires both at registration for the arm that admits a
+ * beneficiary; this is the same rule, read again at the one other place
+ * either can change. Checked against the RESULTING values, not merely
+ * against what THIS request touches — the Owner's own instruction is that a
+ * legacy gap is completed the moment she is already in the form, not
+ * silently carried forward because today's edit happened to be about
+ * something else. An edit that only touches `nickname` therefore still
+ * requires phone and birth_date to already be complete; a beneficiary who
+ * already has both may not explicitly clear either back to empty.
+ */
+function assertBeneficiaryComplete(
+  current: { phone: string | null; birthDate: Date | null },
+  input: OwnProfileInput,
+): void {
+  const resultingPhone = input.phone !== undefined ? input.phone : current.phone;
+  const resultingBirthDate = input.birthDate !== undefined ? input.birthDate : current.birthDate;
+  const issues: { path: string; message: string }[] = [];
+  if (resultingPhone === null || resultingPhone.trim() === '') {
+    issues.push({ path: 'phone', message: 'required for a beneficiary profile' });
+  }
+  if (resultingBirthDate === null) {
+    issues.push({ path: 'birth_date', message: 'required for a beneficiary profile' });
+  }
+  if (issues.length > 0) {
+    throw new AppError('VALIDATION_FAILED', 'a beneficiary profile requires phone and birth date', {
+      issues,
+    });
+  }
 }
 
 export async function updateOwnProfile(
@@ -213,6 +265,13 @@ export async function updateOwnProfile(
   expectedVersion: number,
   input: OwnProfileInput,
 ): Promise<OwnProfile> {
+  const existing = await prisma.user.findFirst({
+    where: { id: caller.userId, deletedAt: null },
+    select: { phone: true, birthDate: true, isBeneficiary: true },
+  });
+  if (!existing) throw new AppError('AUTH_REQUIRED', 'account unavailable');
+  if (existing.isBeneficiary) assertBeneficiaryComplete(existing, input);
+
   // TD-15.1: a conditional UPDATE on `version`. `updateMany` is what makes the
   // condition part of the write rather than a check preceding it.
   const written = await prisma.user.updateMany({
@@ -220,6 +279,7 @@ export async function updateOwnProfile(
     data: {
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
+      ...(input.birthDate !== undefined ? { birthDate: input.birthDate } : {}),
       version: { increment: 1 },
     },
   });

@@ -23,6 +23,11 @@ export interface OwnProfile {
   account_status: string;
   /** R62.6 — present for an account created through a child application. */
   reference_code: string | null;
+  /** R137 — required at the write boundary for a beneficiary (R130); `null`
+   *  is a real state for a legacy beneficiary who predates the requirement. */
+  birth_date: string | null;
+  /** R79 — the one authoritative fact `birth_date`'s requirement reads. */
+  is_beneficiary: boolean;
   /** R96 — this person's stable QR identity. Identifies; never authenticates. */
   qr: QrMatrix;
   /**
@@ -67,6 +72,8 @@ export interface OwnGuardianLink {
 export interface OwnProfileEdit {
   phone?: string | null;
   nickname?: string | null;
+  /** R137 — `YYYY-MM-DD`, the same shape the shared R130 validator expects. */
+  birth_date?: string | null;
 }
 
 export async function fetchOwnProfile(token: string | null): Promise<OwnProfile> {

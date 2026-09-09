@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
 import { getOwnProfile, updateOwnProfile } from '../services/profile.service.js';
+import { birthDate } from '../validators/person.js';
 import { parse } from './parse.js';
 
 /**
@@ -33,6 +34,10 @@ const patchSchema = z
       .nullable()
       .optional(),
     nickname: z.string().trim().min(1).max(60).nullable().optional(),
+    /** R137 — the same shared R130 validator registration and the back
+     *  office already use; `null` explicitly clears it (refused outright
+     *  for a beneficiary by the service, which reads the resulting value). */
+    birth_date: birthDate.nullable().optional(),
     /** TD-15: the version the caller loaded. A stale one is a `409`. */
     version: z.number().int().nonnegative(),
   })
@@ -49,6 +54,11 @@ function dto(profile: Awaited<ReturnType<typeof getOwnProfile>>) {
     sex: profile.sex,
     account_status: profile.accountStatus,
     reference_code: profile.referenceCode,
+    // R137 — required for a beneficiary at the write boundary, asked of no
+    // one else (R130). `is_beneficiary` is what the client reads to decide
+    // whether to ask for it at all — never inferred from a role.
+    birth_date: profile.birthDate,
+    is_beneficiary: profile.isBeneficiary,
     // R96 — the account holder's own QR identity. Opaque: the payload carries a
     // version and one reference, and no name, contact detail or role.
     qr: profile.qr,
@@ -92,12 +102,16 @@ export function update(prisma: PrismaClient) {
     // so a body naming a field this endpoint refuses answered *server error*
     // instead of *that field is not accepted* — which is the whole point of
     // refusing it rather than ignoring it. Caught by the test that sends one.
-    const { version, ...fields } = parse(patchSchema, req.body ?? {});
+    const b = parse(patchSchema, req.body ?? {});
     const updated = await updateOwnProfile(
       prisma,
       { userId: actor.userId, activeRole: actor.activeRole ?? null },
-      version,
-      fields,
+      b.version,
+      {
+        ...(b.phone === undefined ? {} : { phone: b.phone }),
+        ...(b.nickname === undefined ? {} : { nickname: b.nickname }),
+        ...(b.birth_date === undefined ? {} : { birthDate: b.birth_date }),
+      },
     );
     res.json(dto(updated));
   };

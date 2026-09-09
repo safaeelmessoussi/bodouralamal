@@ -15,10 +15,11 @@ import { ErrorState, LoadingState } from '../../components/states.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
-import { TextField } from '../../components/ui/field.js';
+import { DateField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { isRealPastDate } from '../../lib/birth-date.js';
 import { UserQr } from '../../components/ui/user-qr.js';
 
 /**
@@ -118,17 +119,48 @@ function ProfileDetails({
   const { accessToken } = useSession();
   const [phone, setPhone] = useState(profile.phone ?? '');
   const [nickname, setNickname] = useState(profile.nickname ?? '');
+  /** R137 — asked and required only for a beneficiary (R130); a legacy
+   *  beneficiary who predates the requirement starts empty here, exactly as
+   *  the back-office edit already treats a missing legacy date. */
+  const [birthDate, setBirthDate] = useState(profile.birth_date ?? '');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+
+  /**
+   * **R137 — the same requirement R130 already states at registration, read
+   * again here.** `phoneOptional`'s old framing was misleading for exactly
+   * this population: a beneficiary's registration already required both, so
+   * editing must not silently let either go missing.
+   */
+  const phoneRequired = profile.is_beneficiary;
+  const phoneError =
+    touched && phoneRequired && phone.trim() === '' ? t('common.required') : null;
+  const birthDateError =
+    touched && profile.is_beneficiary
+      ? birthDate.trim() === ''
+        ? t('common.required')
+        : !isRealPastDate(birthDate)
+          ? t('register.errBirthDateInvalid')
+          : null
+      : null;
 
   async function save(): Promise<void> {
+    setTouched(true);
+    if (phoneError || birthDateError) return;
     setBusy(true);
     setNotice(null);
     try {
       const next = await updateOwnProfile(
         // Empty means *cleared*, which is a real answer for an optional field —
-        // distinct from "unchanged", which would be omitting the key.
-        { phone: phone.trim() === '' ? null : phone.trim(), nickname: nickname.trim() === '' ? null : nickname.trim() },
+        // distinct from "unchanged", which would be omitting the key. Never
+        // reached for a beneficiary: the checks above already refuse an
+        // empty phone/birth_date before this call is made.
+        {
+          phone: phone.trim() === '' ? null : phone.trim(),
+          nickname: nickname.trim() === '' ? null : nickname.trim(),
+          birth_date: birthDate.trim() === '' ? null : birthDate.trim(),
+        },
         profile.version,
         accessToken,
       );
@@ -197,7 +229,25 @@ function ProfileDetails({
       <p className="muted">{t('qr.lede')}</p>
       <UserQr qr={profile.qr} caption={profile.name_arabic} />
 
-      <TextField label={t('register.phoneOptional')} type="tel" value={phone} onChange={setPhone} hint={t('register.phoneHint')} />
+      <TextField
+        label={t(phoneRequired ? 'register.phone' : 'register.phoneOptional')}
+        type="tel"
+        value={phone}
+        onChange={setPhone}
+        hint={t('register.phoneHint')}
+        required={phoneRequired}
+        error={phoneError}
+      />
+      {profile.is_beneficiary ? (
+        <DateField
+          label={t('register.birthDate')}
+          value={birthDate}
+          onChange={setBirthDate}
+          hint={t('register.birthDateHint')}
+          required
+          error={birthDateError}
+        />
+      ) : null}
       <TextField label={t('register.nickname')} value={nickname} onChange={setNickname} hint={t('register.nicknameHint')} />
 
       {notice ? (

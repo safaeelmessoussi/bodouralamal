@@ -25,7 +25,7 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-profile-test]";
 
 interface Body {
-  error?: { code?: string };
+  error?: { code?: string; details?: { issues?: { path?: string }[] } };
   id?: string;
   name_arabic?: string;
   nickname?: string | null;
@@ -35,6 +35,8 @@ interface Body {
   account_status?: string;
   reference_code?: string | null;
   version?: number;
+  birth_date?: string | null;
+  is_beneficiary?: boolean;
 }
 
 const call = (method: string, path: string, token?: string, body?: unknown) =>
@@ -56,6 +58,10 @@ const bearer = (userId: string, roles: string[]): string =>
 /** A مؤطِّرة: staff, and nobody's student or parent. */
 let teacherId = "";
 let teacher = "";
+/** R137 — a beneficiary WITH both fields already recorded. */
+let woman = "";
+/** R137 — a beneficiary predating the requirement: neither field recorded. */
+let legacy = "";
 
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
@@ -94,6 +100,29 @@ beforeAll(async () => {
     data: { userId: user.id, roleId: role!.id, branchId: null },
   });
   teacher = bearer(user.id, ["teacher"]);
+
+  const withBoth = await prisma.user.create({
+    data: {
+      nameArabic: `${TAG} مستفيدة كاملة`,
+      accountStatus: "active",
+      phone: "+212 600 000 002",
+      sex: "female",
+      birthDate: new Date("2005-05-05T00:00:00Z"),
+      isBeneficiary: true,
+    },
+  });
+  woman = bearer(withBoth.id, ["student"]);
+
+  const legacyRow = await prisma.user.create({
+    data: {
+      nameArabic: `${TAG} مستفيدة قديمة`,
+      accountStatus: "active",
+      sex: "female",
+      isBeneficiary: true,
+      // phone and birth_date both absent — the pre-R117/R130 legacy state.
+    },
+  });
+  legacy = bearer(legacyRow.id, ["student"]);
 });
 
 afterAll(async () => {
@@ -193,5 +222,120 @@ describe("PATCH /profile — §5.2 basic contact info, and nothing else", () => 
     // A phone number in an audit row is personal data in a log.
     expect(JSON.stringify(row?.detail)).not.toContain("600 999 888");
     expect(JSON.stringify(row?.detail)).toContain("phone");
+  });
+});
+
+/**
+ * **R137 — تعديل بيانات المستخدم: phone and birth_date required for a
+ * beneficiary, and for no one else.**
+ *
+ * R130 already requires both at registration for the arm that admits a
+ * beneficiary; this is the same rule read again at the one other place
+ * either can change. Checked against the RESULTING values so an edit
+ * touching only `nickname` is never blocked by a legacy gap it did not
+ * create — and so a beneficiary may not explicitly clear either back out.
+ */
+describe("PATCH /profile — beneficiary phone/birth_date requirement (R137)", () => {
+  it("GET /profile carries birth_date and is_beneficiary", async () => {
+    const res = await call("GET", "/profile", woman);
+    expect(res.status).toBe(200);
+    expect(res.body.is_beneficiary).toBe(true);
+    expect(res.body.birth_date).toBe("2005-05-05");
+  });
+
+  it("a non-beneficiary (the teacher fixture) is NEVER asked for birth_date and may still clear phone", async () => {
+    const before = await call("GET", "/profile", teacher);
+    expect(before.body.is_beneficiary).toBe(false);
+    const res = await call("PATCH", "/profile", teacher, {
+      phone: null,
+      version: before.body.version,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.phone).toBeNull();
+    // Restore, so later tests in this file are unaffected.
+    await call("PATCH", "/profile", teacher, {
+      phone: "+212 600 000 001",
+      version: res.body.version,
+    });
+  });
+
+  it("a legacy beneficiary editing only her nickname is STILL asked to complete the gap first — the Owner's own instruction", async () => {
+    // "when edited through the applicable form, require completion rather
+    // than silently preserving an invalid partial profile" — read literally:
+    // reaching this form at all is the moment the gap is closed, not only
+    // the moment she happens to touch phone or birth_date directly.
+    const before = await call("GET", "/profile", legacy);
+    expect(before.body.phone).toBeNull();
+    expect(before.body.birth_date).toBeNull();
+    const res = await call("PATCH", "/profile", legacy, {
+      nickname: "لقب",
+      version: before.body.version,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    const after = await call("GET", "/profile", legacy);
+    expect(after.body.nickname).not.toBe("لقب");
+  });
+
+  it("a beneficiary CANNOT save with phone or birth_date missing, once she tries to set either", async () => {
+    const before = await call("GET", "/profile", legacy);
+    const res = await call("PATCH", "/profile", legacy, {
+      phone: "+212 600 333 444",
+      version: before.body.version,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    // birth_date is still missing, so the resulting profile is still
+    // incomplete — refused, not partially accepted.
+    const after = await call("GET", "/profile", legacy);
+    expect(after.body.phone).toBeNull();
+  });
+
+  it("completing BOTH fields together succeeds, and the profile is complete afterward", async () => {
+    const before = await call("GET", "/profile", legacy);
+    const res = await call("PATCH", "/profile", legacy, {
+      phone: "+212 600 333 444",
+      birth_date: "2004-01-01",
+      version: before.body.version,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.phone).toBe("+212 600 333 444");
+    expect(res.body.birth_date).toBe("2004-01-01");
+  });
+
+  it("a COMPLETE beneficiary may not clear phone back to null", async () => {
+    const before = await call("GET", "/profile", woman);
+    const res = await call("PATCH", "/profile", woman, {
+      phone: null,
+      version: before.body.version,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    const after = await call("GET", "/profile", woman);
+    expect(after.body.phone).toBe("+212 600 000 002");
+  });
+
+  it("a COMPLETE beneficiary may not clear birth_date back to null", async () => {
+    const before = await call("GET", "/profile", woman);
+    const res = await call("PATCH", "/profile", woman, {
+      birth_date: null,
+      version: before.body.version,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    const after = await call("GET", "/profile", woman);
+    expect(after.body.birth_date).toBe("2005-05-05");
+  });
+
+  it("refuses birth_date in the future, and a shape other than YYYY-MM-DD", async () => {
+    const before = await call("GET", "/profile", woman);
+    for (const bad of ["2099-01-01", "05/05/2005", "2005-13-40"]) {
+      const res = await call("PATCH", "/profile", woman, {
+        birth_date: bad,
+        version: before.body.version,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    }
   });
 });

@@ -92,3 +92,56 @@ describe('a beneficiary sees the guardian RELATIONSHIP, not the guardian', () =>
     expect(section).toContain('{e.category_name} — {e.level_name}');
   });
 });
+
+/**
+ * **R137 — تعديل بيانات المستخدم: phone and birth_date consistency with
+ * registration, for a beneficiary specifically.**
+ *
+ * R130 already requires both at registration for the arm that admits a
+ * beneficiary (the adult applicant, never a guardian-only parent and never
+ * a staff request). This closes the gap on the ONE OTHER surface either can
+ * change: editing must ask the same population for the same two fields, and
+ * must not silently accept either going missing.
+ */
+describe('phone and birth_date are required for a beneficiary profile, and for no one else (R137)', () => {
+  it('the page asks for birth_date only when is_beneficiary — never inferred from a role', () => {
+    const page = code(PAGE);
+    expect(page).toContain('profile.is_beneficiary');
+    const section = page.slice(page.indexOf('function ProfileDetails'));
+    expect(section).toContain("profile.is_beneficiary ? (");
+  });
+
+  it('the phone label switches to required for a beneficiary — the misleading "optional" framing is gone for her', () => {
+    const page = code(PAGE);
+    expect(page).toContain('const phoneRequired = profile.is_beneficiary;');
+    expect(page).toContain("t(phoneRequired ? 'register.phone' : 'register.phoneOptional')");
+  });
+
+  it('birth_date reuses the shared isRealPastDate check — the same one registration uses, not a reinvented one', () => {
+    expect(code(PAGE)).toContain("from '../../lib/birth-date.js'");
+    expect(code(PAGE)).toContain('isRealPastDate(birthDate)');
+  });
+
+  it('the backend accepts birth_date through the SHARED R130 validator, not a bespoke regex', () => {
+    expect(code(CONTROLLER)).toContain("import { birthDate } from '../validators/person.js';");
+    expect(code(CONTROLLER)).toContain('birth_date: birthDate.nullable().optional()');
+  });
+
+  it('the service refuses an incomplete beneficiary profile, checked against the RESULTING values', () => {
+    const svc = code(SERVICE);
+    expect(svc).toContain('function assertBeneficiaryComplete');
+    expect(svc).toContain('if (existing.isBeneficiary) assertBeneficiaryComplete(existing, input);');
+    // Resulting, not merely-what-was-sent: an edit touching only nickname
+    // must not be blocked by a legacy gap it did not create.
+    expect(svc).toContain('input.phone !== undefined ? input.phone : current.phone');
+    expect(svc).toContain('input.birthDate !== undefined ? input.birthDate : current.birthDate');
+  });
+
+  it('a non-beneficiary (guardian-only or staff) is never forced into either requirement', () => {
+    // The gate is the SAME boolean everywhere — one fact, read three times,
+    // never a role-based guess.
+    const svc = code(SERVICE);
+    const occurrences = svc.match(/isBeneficiary/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+  });
+});

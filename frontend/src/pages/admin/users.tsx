@@ -767,8 +767,12 @@ function ProfileDialog({
                 hint={t('admin.users.branchScopeHint')}
               />
             </div>
+            {/* R137 item 6 — a secondary action rendered as an actual add
+                action, matching the shared ＋ convention (`Button`'s own
+                `add` variant), not a low-emphasis secondary button that read
+                as informational rather than clickable. */}
             <Button
-              variant="secondary"
+              variant="add"
               disabled={role === ''}
               onClick={() => {
                 setRows((current) => [...current, { role, branch_id: branchId || null }]);
