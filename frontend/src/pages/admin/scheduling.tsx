@@ -29,6 +29,11 @@ import {
   type SchedulingType,
 } from '../../adapters/scheduling.js';
 import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
+import { listScheduleSessions } from '../../adapters/sessions.js';
+import {
+  ManualEditsDialog,
+  sessionsEligibleForOverwrite,
+} from '../../components/scheduling/manual-edits-dialog.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../../components/calendar/calendar-header.js';
@@ -1174,6 +1179,12 @@ export function SchedulingDialog({
   const [scopeId, setScopeId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * **R138 §4.4 item 5 — the preserve-vs-overwrite question**, held until
+   * answered. Set only when saving an EXISTING class would otherwise touch a
+   * Session eligible for forced resync (protected for `OVERRIDDEN` alone).
+   */
+  const [manualEditsPrompt, setManualEditsPrompt] = useState<{ count: number } | null>(null);
 
   /**
    * **Unsaved work here is the most expensive on the platform**, which is why the
@@ -1672,12 +1683,24 @@ export function SchedulingDialog({
     return null;
   }
 
-  async function submit(): Promise<void> {
+  async function submit(overwriteManuallyEdited?: boolean): Promise<void> {
     const invalid = validationError();
     if (invalid !== null) {
       // The whole point: say what is wrong instead of doing nothing.
       setNotice(invalid);
       return;
+    }
+    // **R138 §4.4 item 5 — ask first, only when it matters, and only once.**
+    // `overwriteManuallyEdited` is `undefined` on the reader's own click and a
+    // real boolean on the resumed call the prompt below makes, which is what
+    // tells this apart from asking again on every resubmission.
+    if (overwriteManuallyEdited === undefined && type === 'class' && item !== null) {
+      const sessions = await listScheduleSessions(item.id, token);
+      const affected = sessionsEligibleForOverwrite(sessions.data);
+      if (affected.length > 0) {
+        setManualEditsPrompt({ count: affected.length });
+        return;
+      }
     }
     setBusy(true);
     setNotice(null);
@@ -1839,6 +1862,7 @@ export function SchedulingDialog({
               effective_from: row.effective_from === '' ? null : row.effective_from,
               effective_until: row.effective_until === '' ? null : row.effective_until,
             })),
+          overwriteManuallyEdited: overwriteManuallyEdited ?? false,
         },
         item ? { id: item.id, version: item.version } : null,
         token,
@@ -1870,6 +1894,7 @@ export function SchedulingDialog({
   }
 
   return (
+    <>
     <FormDialog
       open
       title={t(editing ? 'scheduling.editTitle' : 'scheduling.create')}
@@ -2071,5 +2096,24 @@ export function SchedulingDialog({
         )}
       </SchedulingForm>
     </FormDialog>
+
+    {/* R138 §4.4 item 5 — asked only once `submit` has found a Session
+        eligible for forced resync affected by this class's save. */}
+    {manualEditsPrompt ? (
+      <ManualEditsDialog
+        count={manualEditsPrompt.count}
+        busy={busy}
+        onOverwrite={() => {
+          setManualEditsPrompt(null);
+          void submit(true);
+        }}
+        onPreserve={() => {
+          setManualEditsPrompt(null);
+          void submit(false);
+        }}
+        onCancel={() => setManualEditsPrompt(null)}
+      />
+    ) : null}
+    </>
   );
 }

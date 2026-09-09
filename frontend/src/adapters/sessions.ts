@@ -33,6 +33,15 @@ export interface ScheduleSession {
   start_time: string;
   end_time: string;
   status: string;
+  /**
+   * **R138 — this occurrence's OWN name and note.** Snapshotted from the
+   * schedule at materialization, on the same footing as `visibility` and
+   * `delivery_mode` above: a wider-scope edit resyncs it from the rule unless
+   * `overridden` protects it, and the editor opens on THIS value so an
+   * unrelated field save cannot silently revert a deliberate override.
+   */
+  title: string;
+  description: string | null;
   /** R43.4 — *a human decided about this occurrence*, not *differs from the
    *  schedule*. What a "this session only" edit leaves behind. */
   overridden: boolean;
@@ -87,6 +96,14 @@ export interface SessionEdit {
   start_time?: string;
   end_time?: string;
   room_id?: string | null;
+  /**
+   * **R138 — this occurrence's own name and note** (§4.4), on the same
+   * footing as `delivery_mode`/`visibility`: sent as this occurrence's value,
+   * and the server always marks the occurrence `overridden` on this write, so
+   * it is protected from a later resync exactly as an untouched field would be.
+   */
+  title?: string;
+  description?: string | null;
   /**
    * **R97 — this occurrence's own delivery.** Sent as a unit: naming the mode
    * means naming the media mode that goes with it, and the server refuses a

@@ -26,10 +26,14 @@ import {
   type OnlineMediaMode,
 } from '../../components/scheduling/delivery.js';
 import { StaffPicker } from '../../components/scheduling/staff-picker.js';
+import {
+  ManualEditsDialog,
+  sessionsEligibleForOverwrite,
+} from '../../components/scheduling/manual-edits-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { DateField, TextField } from '../../components/ui/field.js';
+import { DateField, TextArea, TextField } from '../../components/ui/field.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -37,6 +41,26 @@ import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { VisibilityField } from '../../components/scheduling/visibility-field.js';
+
+/**
+ * The fields `ScopeDialog` edits, whichever scope carries them onward —
+ * `this_session` to `PATCH /sessions/{id}`, the two wider scopes into the
+ * schedule's own `title`/`description`/etc. (R138 §4.4). One shape for all
+ * three scopes is what makes the field SET identical between them; only the
+ * destination differs, in `applyEdit` below.
+ */
+interface SessionScopeEdit {
+  date: string;
+  start_time: string;
+  end_time: string;
+  room_id: string | null;
+  delivery_mode: DeliveryMode;
+  online_media_mode: OnlineMediaMode | null;
+  visibility: string;
+  /** R138 — on the same footing as `delivery_mode`/`visibility` above. */
+  title: string;
+  description: string | null;
+}
 
 /**
  * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class,
@@ -130,6 +154,18 @@ export function ScheduleSessionsPage({
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * **R138 §4.4 — the preserve-vs-overwrite question**, held until answered.
+   * Set only when a wider-scope edit would otherwise touch a Session eligible
+   * for forced resync (protected for `OVERRIDDEN` alone — never one also
+   * `HAS_CONTENT`/`HAS_ATTENDANCE`/`LIFECYCLE`, which no answer here can move).
+   */
+  const [manualEditsPrompt, setManualEditsPrompt] = useState<{
+    session: ScheduleSession;
+    scope: EditScope;
+    edit: SessionScopeEdit;
+    count: number;
+  } | null>(null);
   const [materialsFor, setMaterialsFor] = useState<string | null>(null);
   /** The schedule's own scope, so an upload from a session lands where the
    *  class actually is — §4.9 requires Level, Subject, Year and Branch, and a
@@ -391,19 +427,59 @@ export function ScheduleSessionsPage({
     }
   }
 
+  /** The two wider scopes, once any preserve-vs-overwrite question is answered. */
+  async function performWideEdit(
+    session: ScheduleSession,
+    scope: 'this_and_future' | 'all_sessions',
+    edit: SessionScopeEdit,
+    overwriteManuallyEdited: boolean,
+  ): Promise<void> {
+    // Both wider scopes edit the RULE, so they carry only what a rule has —
+    // times, never a date. Moving one occurrence to another day is exactly what
+    // "this session only" is for.
+    //
+    // **Delivery IS a rule-level fact** (R97), so it travels with them: taking
+    // a class عن بُعد from next week onward is a change to how the class is
+    // delivered, and the server resyncs the future un-protected occurrences
+    // while leaving the past exactly as it happened.
+    // **R109 — the tier IS a rule-level fact**, on the same footing as delivery
+    // and for the same reason: hiding a class from next week onward is a change
+    // to the class, and the server resyncs the future un-protected occurrences
+    // while leaving the past exactly as it happened (R43.4).
+    // **R138 — title/description are rule-level facts too**, on the same
+    // footing, per the Owner's own worked example (§4.4 item 4).
+    const scheduleEdit = {
+      start_time: edit.start_time,
+      end_time: edit.end_time,
+      room_id: edit.room_id,
+      delivery_mode: edit.delivery_mode,
+      online_media_mode: edit.online_media_mode,
+      visibility: edit.visibility,
+      title: edit.title,
+      description: edit.description,
+      overwrite_manually_edited: overwriteManuallyEdited,
+    };
+    await run(
+      () =>
+        updateCourseSchedule(
+          scheduleId,
+          // The schedule's own version is not on this screen; the server
+          // refuses a stale one, and the notice tells the reader to reload.
+          0,
+          scope === 'this_and_future'
+            ? { ...scheduleEdit, scope: 'this_and_future', from_date: session.date }
+            : scheduleEdit,
+          accessToken,
+        ),
+      scope === 'this_and_future' ? 'admin.sessions.savedSplit' : 'admin.sessions.savedAll',
+    );
+  }
+
   /** The three scopes, each reaching the endpoint that owns it. */
   async function applyEdit(
     session: ScheduleSession,
     scope: EditScope,
-    edit: {
-      date: string;
-      start_time: string;
-      end_time: string;
-      room_id: string | null;
-      delivery_mode: DeliveryMode;
-      online_media_mode: OnlineMediaMode | null;
-      visibility: string;
-    },
+    edit: SessionScopeEdit,
   ): Promise<void> {
     if (scope === 'this_session') {
       // **Only THIS scope announces** (R83.3): the two wider ones edit the RULE
@@ -422,40 +498,21 @@ export function ScheduleSessionsPage({
       );
       return;
     }
-    // Both wider scopes edit the RULE, so they carry only what a rule has —
-    // times, never a date. Moving one occurrence to another day is exactly what
-    // "this session only" is for.
-    //
-    // **Delivery IS a rule-level fact** (R97), so it travels with them: taking
-    // a class عن بُعد from next week onward is a change to how the class is
-    // delivered, and the server resyncs the future un-protected occurrences
-    // while leaving the past exactly as it happened.
-    // **R109 — the tier IS a rule-level fact**, on the same footing as delivery
-    // and for the same reason: hiding a class from next week onward is a change
-    // to the class, and the server resyncs the future un-protected occurrences
-    // while leaving the past exactly as it happened (R43.4).
-    const scheduleEdit = {
-      start_time: edit.start_time,
-      end_time: edit.end_time,
-      room_id: edit.room_id,
-      delivery_mode: edit.delivery_mode,
-      online_media_mode: edit.online_media_mode,
-      visibility: edit.visibility,
-    };
-    await run(
-      () =>
-        updateCourseSchedule(
-          scheduleId,
-          // The schedule's own version is not on this screen; the server
-          // refuses a stale one, and the notice tells the reader to reload.
-          0,
-          scope === 'this_and_future'
-            ? { ...scheduleEdit, scope: 'this_and_future', from_date: session.date }
-            : scheduleEdit,
-          accessToken,
-        ),
-      scope === 'this_and_future' ? 'admin.sessions.savedSplit' : 'admin.sessions.savedAll',
+    // **R138 §4.4 item 5 — ask first, only when it matters.** The question is
+    // withheld unless a Session eligible for forced resync actually sits in
+    // this edit's range: asking it every time would train an administrator to
+    // click through it without reading, which is the failure §14.4 exists to
+    // prevent.
+    const affected = sessionsEligibleForOverwrite(
+      rows,
+      scope === 'this_and_future' ? session.date : undefined,
     );
+    if (affected.length === 0) {
+      await performWideEdit(session, scope, edit, false);
+      return;
+    }
+    setEditing(null);
+    setManualEditsPrompt({ session, scope, edit, count: affected.length });
   }
 
   return (
@@ -497,6 +554,31 @@ export function ScheduleSessionsPage({
           busy={busy}
           onCancel={() => setEditing(null)}
           onConfirm={(scope, edit) => void applyEdit(editing, scope, edit)}
+        />
+      ) : null}
+
+      {/* R138 §4.4 item 5 — asked only once `applyEdit` has found a Session
+          eligible for forced resync inside the edit's range. */}
+      {manualEditsPrompt ? (
+        <ManualEditsDialog
+          count={manualEditsPrompt.count}
+          busy={busy}
+          onOverwrite={() => {
+            const { session, scope, edit } = manualEditsPrompt;
+            setManualEditsPrompt(null);
+            void performWideEdit(session, scope as 'this_and_future' | 'all_sessions', edit, true);
+          }}
+          onPreserve={() => {
+            const { session, scope, edit } = manualEditsPrompt;
+            setManualEditsPrompt(null);
+            void performWideEdit(
+              session,
+              scope as 'this_and_future' | 'all_sessions',
+              edit,
+              false,
+            );
+          }}
+          onCancel={() => setManualEditsPrompt(null)}
         />
       ) : null}
 
@@ -651,20 +733,7 @@ function ScopeDialog({
    *  which only affects the in-person branch of the section below. */
   rooms: { id: string; name: string; capacity: number | null }[];
   busy: boolean;
-  onConfirm: (
-    scope: EditScope,
-    edit: {
-      date: string;
-      start_time: string;
-      end_time: string;
-      room_id: string | null;
-      delivery_mode: DeliveryMode;
-      online_media_mode: OnlineMediaMode | null;
-      /** R109 (§D) — where the tier goes depends on the scope chosen, exactly
-       *  as delivery already does. */
-      visibility: string;
-    },
-  ) => void;
+  onConfirm: (scope: EditScope, edit: SessionScopeEdit) => void;
   onCancel: () => void;
 }): ReactNode {
   const [scope, setScope] = useState<EditScope>('this_session');
@@ -690,6 +759,13 @@ function ScopeDialog({
    * republish an occurrence somebody had deliberately hidden.
    */
   const [visibility, setVisibility] = useState(session.visibility);
+  /**
+   * **R138 §4.4 item 2 — the same editable class properties as the series
+   * form**, opened on THIS occurrence's own name and note for the identical
+   * reason `delivery`/`visibility` are above.
+   */
+  const [title, setTitle] = useState(session.title);
+  const [description, setDescription] = useState(session.description ?? '');
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -726,6 +802,19 @@ function ScopeDialog({
             .replace('{date}', session.date)
             .replace('{total}', String(total))}
         </Feedback>
+
+        {/* **R138 §4.4 item 2 — the same title/description the series form
+            edits.** Opened on this occurrence's own value, exactly as
+            `delivery`/`visibility` are above: a wider scope carries the new
+            value into the rule, and the narrow scope leaves it as this
+            occurrence's own override. */}
+        <TextField label={t('scheduling.title')} value={title} onChange={setTitle} required />
+        <TextArea
+          label={t('scheduling.description')}
+          value={description}
+          onChange={setDescription}
+          rows={3}
+        />
 
         {/* **R109 — the same control the scheduling form uses** (§D). Where the
             change LANDS is the scope's decision, not this field's: one
@@ -786,6 +875,8 @@ function ScopeDialog({
                 delivery_mode: delivery,
                 online_media_mode: delivery === 'online' ? mediaMode : null,
                 visibility,
+                title,
+                description: description.trim() === '' ? null : description,
               })
             }
           >

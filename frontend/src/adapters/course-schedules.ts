@@ -112,6 +112,13 @@ export interface Materialization {
   existing: number;
   /** Future, un-overridden Sessions brought back into line with the schedule. */
   resynced: number;
+  /**
+   * **R138 — manually edited Sessions rewritten anyway**, because the admin
+   * chose "apply to all, including manually edited Sessions" when asked
+   * (§4.4). Counted apart from `resynced`: these were `protected_sessions`
+   * until that explicit choice, not ordinary un-overridden occurrences.
+   */
+  overwritten: number;
   protected_sessions: ProtectedSession[];
 }
 
@@ -299,7 +306,19 @@ export async function updateCourseSchedule(
       // form rendered the controls on both.
       | 'staff'
     >
-  > & { scope?: 'all_sessions' | 'this_and_future'; from_date?: string },
+  > & {
+    scope?: 'all_sessions' | 'this_and_future';
+    from_date?: string;
+    /**
+     * **R138 — the explicit preserve-vs-overwrite choice** (§4.4), asked only
+     * when the edit would otherwise affect a manually edited Session.
+     * Omitted or `false` leaves every manually edited Session exactly as a
+     * human left it; `true` resyncs it with the rest, same as an
+     * un-overridden Session. Session-level, not field-level (§4.4): a Session
+     * overridden for one reason is either fully resynced or fully spared.
+     */
+    overwrite_manually_edited?: boolean;
+  },
   token: string | null,
 ): Promise<ScheduleWriteResult & { split_from_schedule_id?: string }> {
   return api<ScheduleWriteResult & { split_from_schedule_id?: string }>(

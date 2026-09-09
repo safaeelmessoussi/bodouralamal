@@ -13,6 +13,10 @@ const WIRE: ScheduleSession = {
   start_time: '15:00',
   end_time: '17:00',
   status: 'scheduled',
+  // R138 — this occurrence's OWN name and note, on exactly the footing
+  // `delivery_mode`/`visibility` below have.
+  title: 'حصة تجويد القرآن',
+  description: null,
   overridden: false,
   room_id: null,
   // R97 — the occurrence's own delivery, snapshotted from its schedule.
@@ -33,6 +37,9 @@ describe('the adapter type matches the wire contract', () => {
       // R97 — the occurrence's OWN delivery, which after an override is not
       // its schedule's. The list renders it and the editor opens on it.
       'delivery_mode',
+      // R138 — this occurrence's OWN note, on the same footing as
+      // `delivery_mode`/`visibility`.
+      'description',
       'end_time',
       'id',
       'online_media_mode',
@@ -42,6 +49,9 @@ describe('the adapter type matches the wire contract', () => {
       'staff',
       'start_time',
       'status',
+      // R138 — this occurrence's OWN name, snapshotted at materialization and
+      // resynced from the rule unless `overridden` protects it.
+      'title',
       'version',
       // R109 (§D) — this occurrence's OWN tier, on exactly the footing
       // `delivery_mode` above has: snapshotted at materialization and decidable
@@ -107,5 +117,26 @@ describe('the three scopes are all stated, and each says what it changes', () =>
   it('names the two refusals TD-1 produces', () => {
     expect(ar.admin.sessions.pastRestore).toBeTruthy();
     expect(ar.admin.sessions.alreadyHeld).toBeTruthy();
+  });
+});
+
+describe('R138 §4.4 item 2 — the Session editor reuses the series form vocabulary', () => {
+  it('uses the SAME title/description labels as the series form, not a second copy', () => {
+    // A dialog-local pair of labels is how one of them drifts from the other —
+    // the exact trap `DeliverySection`'s shared-section comment names above.
+    expect(ar.scheduling.title).toBe('العنوان');
+    expect(ar.scheduling.description).toBe('الوصف');
+  });
+});
+
+describe('R138 §4.4 item 5 — the preserve-vs-overwrite question is stated', () => {
+  it('asks the question, states the count and names both real choices', () => {
+    expect(ar.admin.sessions.manualEditsTitle).toBeTruthy();
+    expect(ar.admin.sessions.manualEditsBody).toBeTruthy();
+    // The {n} placeholder is the count that makes this an informed decision —
+    // "three occurrences" reads very differently from "thirty" (§4.4).
+    expect(ar.admin.sessions.manualEditsCount).toContain('{n}');
+    expect(ar.admin.sessions.manualEditsOverwrite).toBeTruthy();
+    expect(ar.admin.sessions.manualEditsPreserve).toBeTruthy();
   });
 });

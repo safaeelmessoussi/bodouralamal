@@ -597,6 +597,13 @@ export interface SchedulingInput {
     effective_from?: string | null;
     effective_until?: string | null;
   }[];
+  /**
+   * **R138 §4.4 item 5 — class edit only.** The explicit preserve-vs-overwrite
+   * answer, asked by the caller before this is sent whenever the edit would
+   * otherwise touch a Session eligible for forced resync. Omitted (or a
+   * create) leaves every manually edited Session exactly as a human left it.
+   */
+  overwriteManuallyEdited?: boolean;
 }
 
 /**
@@ -701,6 +708,8 @@ export async function saveSchedulingItem(
             : {}),
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.staff ? { staff: input.staff } : {}),
+          // R138 §4.4 item 5 — the caller has already asked, when it mattered.
+          overwrite_manually_edited: input.overwriteManuallyEdited ?? false,
         },
         token,
       );
