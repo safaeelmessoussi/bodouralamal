@@ -352,7 +352,7 @@
    `icon.tsx`'s `chevron` path is a downward arrow, so open is a 180° turn. */
 .dropdown-trigger .btn__icon {
   flex: 0 0 auto;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 .dropdown-trigger[aria-expanded='true'] .btn__icon {
   transform: rotate(180deg);
