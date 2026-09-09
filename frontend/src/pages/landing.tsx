@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react';
 
 import { ApplicationHeader } from '../components/header/application-header.js';
-import { DashboardButton, SignInButton } from '../components/header/auth-buttons.js';
+import { SignInButton } from '../components/header/auth-buttons.js';
 import { BranchesSection } from '../components/branches-section.js';
 import { PartnersSection } from '../components/partners-section.js';
 import { SiteFooter } from '../components/site-footer.js';
-import { Card, Step } from '../components/ui/card.js';
-import { Container, Section } from '../components/ui/container.js';
-import { useActiveRole } from '../contexts/active-role.js';
+import { Container } from '../components/ui/container.js';
 import { useNavigation } from '../hooks/use-navigation.js';
 import { t } from '../i18n/index.js';
 
@@ -39,49 +37,15 @@ export function Landing(): ReactNode {
             are kept in the catalogue: the section may return, and an unused key
             costs nothing while a deleted one has to be rewritten. */}
 
-        <Section
-          id="stages"
-          eyebrow={t('landing.stagesEyebrow')}
-          title={t('landing.stagesTitle')}
-          lede={t('landing.stagesLede')}
-        >
-          <div className="grid grid--3">
-            <Card
-              icon="book"
-              title={t('landing.stageAdultTitle')}
-              body={t('landing.stageAdultBody')}
-              meta={t('landing.stageAdultMeta')}
-            />
-            <Card
-              icon="user"
-              title={t('landing.stageTeenTitle')}
-              body={t('landing.stageTeenBody')}
-              meta={t('landing.stageTeenMeta')}
-            />
-            <Card
-              icon="shield"
-              title={t('landing.stageChildTitle')}
-              body={t('landing.stageChildBody')}
-              meta={t('landing.stageChildMeta')}
-            />
-          </div>
-        </Section>
+        {/* **مسالك التعليم and كيف تنضمّين were removed on the Owner's
+            instruction (R138 item 10)**, both entirely — not replaced. The
+            `landing.stages*`/`landing.how*`/`landing.step*` strings are kept in
+            the catalogue on the same reasoning the mission section's own were:
+            an unused key costs nothing, a deleted one has to be retyped if
+            either section returns. `Card`, `Step` and `Section` are still used
+            elsewhere on the platform (§14), so nothing about their own
+            definitions changes — only this page's use of them. */}
 
-        <Section
-          id="how"
-          eyebrow={t('landing.howEyebrow')}
-          title={t('landing.howTitle')}
-          lede={t('landing.howLede')}
-          tint
-        >
-          {/* An ordered list because these steps genuinely happen in sequence
-              (§4.1b); the numbering is generated from the DOM order. */}
-          <ol className="steps">
-            <Step title={t('landing.step1Title')} body={t('landing.step1Body')} />
-            <Step title={t('landing.step2Title')} body={t('landing.step2Body')} />
-            <Step title={t('landing.step3Title')} body={t('landing.step3Body')} />
-          </ol>
-        </Section>
         <BranchesSection />
         <PartnersSection />
       </main>
@@ -97,12 +61,20 @@ export function Landing(): ReactNode {
  *
  * **A signed-in visitor never sees «تسجيل الدخول» here** (Owner, 2026-09-05).
  * The check is the platform's own canonical session state — the same
- * `useNavigation`/`useActiveRole` pair `ApplicationHeader` already reads for
- * its Dashboard-vs-Sign-in switch — never a local flag this page invents, so
- * the hero cannot disagree with the header sitting directly above it. The
+ * `useNavigation` `ApplicationHeader` already reads for its own
+ * Dashboard-vs-Sign-in switch — never a local flag this page invents, so the
+ * hero cannot disagree with the header sitting directly above it. The
  * server-side fix at `GET /auth/google` means the OLD button would still have
  * landed her on her dashboard if clicked; this is the label catching up to
  * what the endpoint now actually does.
+ *
+ * **No replacement CTA once signed in** (Owner, R138 item 9). It used to show
+ * `DashboardButton` here — a second «لوحة التحكم» directly under the header's
+ * own — and the Owner's instruction is explicit: remove it entirely, offer NO
+ * button at all, not a different one. She already reached the site signed in;
+ * the header a screen-length above states exactly the same fact and already
+ * offers the way in, so a second control repeating it lower on the same page
+ * is not a smaller CTA, it is a redundant one.
  */
 /** Exported for its own test — see `landing.test.tsx` — the same reasoning
  *  `hijri-calendar.tsx` exports `MonthRow` for: the defect this guards against
@@ -111,7 +83,6 @@ export function Landing(): ReactNode {
  *  `BranchesSection`/`PartnersSection`'s own data fetching for no reason. */
 export function Hero(): ReactNode {
   const { isAuthenticated } = useNavigation();
-  const { activeRoles: roles } = useActiveRole();
 
   return (
     <section className="hero" aria-labelledby="hero-title">
@@ -122,13 +93,13 @@ export function Hero(): ReactNode {
               {t('landing.heroTitle')}
             </h1>
             <p className="hero__lede">{t('landing.heroLede')}</p>
-            <div className="hero__actions">
-              {isAuthenticated ? (
-                <DashboardButton roles={roles} variant="primary" />
-              ) : (
+            {/* R138 item 9 — no button at all once signed in, not a smaller
+                or differently-labelled one. See the doc comment above. */}
+            {isAuthenticated ? null : (
+              <div className="hero__actions">
                 <SignInButton />
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Decorative: the association name is already the page heading, so

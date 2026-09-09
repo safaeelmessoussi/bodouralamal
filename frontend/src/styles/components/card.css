@@ -10,8 +10,17 @@
   .grid--3 {
     grid-template-columns: repeat(3, 1fr);
   }
+  /**
+   * **R138 item 11 — a single branch no longer sits stranded in a two-column
+   * row.** `repeat(2, 1fr)` gave a lone card exactly half the row and left the
+   * other half visibly empty — an association with one branch is an ordinary
+   * case, not a degraded one, and the layout should not look unfinished for
+   * it. `auto-fit` collapses tracks that have no content: one card fills the
+   * row, two sit side by side once each has room to be at least `20rem`, and
+   * three or more wrap onto further rows the same way.
+   */
   .grid--2 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   }
 }
 
@@ -49,57 +58,17 @@
   padding-block: clamp(1rem, 2.5vw, 1.5rem);
 }
 
-.card__icon {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  margin-block-end: 0.35rem;
-}
+/* `.card__title` stays: `BranchCard` (`branch-card.tsx`) uses it directly,
+ * unrelated to the `Card` component this file used to also define. */
 .card__title {
   font-size: var(--font-size-md);
 }
-.card__meta {
-  margin-block-start: auto;
-  padding-block-start: 0.6rem;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
 
-/* Numbered because the enrolment path genuinely is a sequence (§4.1b). */
-.steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-5);
-  counter-reset: step;
-}
-@media (min-width: 48rem) {
-  .steps {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-.step {
-  counter-increment: step;
-  padding-block-start: var(--space-4);
-  border-block-start: 3px solid var(--color-accent);
-}
-.step::before {
-  content: counter(step);
-  display: block;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-accent);
-  margin-block-end: 0.35rem;
-}
-.step__title {
-  font-size: var(--font-size-md);
-  margin-block-end: 0.35rem;
-}
+/* `.card__icon`/`.card__meta` (the `Card` component) and `.steps`/`.step`/
+ * `.step__title` (the `Step` component, an ordered §4.1b enrolment sequence)
+ * were removed with `components/ui/card.tsx` — R138 item 10 removed their
+ * only callers, مسالك التعليم and كيف تنضمّين, entirely rather than
+ * replacing them, and nothing else on the platform used either component. */
 
 .callout {
   padding: clamp(1.5rem, 4vw, 2.5rem);

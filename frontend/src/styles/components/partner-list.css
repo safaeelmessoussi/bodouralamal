@@ -1,10 +1,14 @@
 /**
  * «شركاؤنا» — a list of NAMES (NEW N).
  *
- * Not a card grid, and that is a content decision rather than a visual one: a
- * partner holds a name and nothing else, so a card would frame each one in an
- * empty box that reads as a missing logo — the page reporting an absence the
- * data does not have.
+ * Not a card GRID, and that is a content decision rather than a visual one: a
+ * partner holds a name and nothing else, so a `.card`-style box with an empty
+ * corner would read as a missing logo — the page reporting an absence the
+ * data does not have. **Each entry is still its own small surface** (R138
+ * item 11) rather than bare text loose in a row: a hairline border and the
+ * same raised background `.card` uses give a reader something to visually
+ * group a name and its one-line description under, which plain bold text
+ * beside plain text did not.
  *
  * `--measure` is deliberately not applied. It is the prose measure (rule AK),
  * and these are labels; letting names wrap at 64ch would break an organisation's
@@ -13,15 +17,31 @@
 .partner-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--space-3);
   padding: 0;
   margin: 0;
   list-style: none;
 }
 
 .partner-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.partner-list > li strong {
   font-weight: 600;
   color: var(--color-text);
+}
+
+.partner-list__description {
+  font-weight: 400;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 /**
@@ -31,15 +51,4 @@
 .site-footer__links {
   display: flex;
   gap: var(--space-4);
-}
-
-/** The description under the name — a stacked pair, not a second column. */
-.partner-list > li {
-  display: flex;
-  flex-direction: column;
-}
-
-.partner-list__description {
-  font-weight: 400;
-  color: var(--color-text-secondary);
 }
