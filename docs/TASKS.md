@@ -2776,3 +2776,102 @@ approved scope covers Partners only, so this is reported rather than taken.
       revision; this revision's own new checks (5)-(7) are built independent
       of that stale DOM state (a fresh page navigation) specifically so the
       pre-existing failure cannot mask new evidence.
+
+## R138 (Document Owner decision, ratified 2026-09-09) — see SRS Revision 138
+
+- [x] **(1) `recurrence=none` teaching-candidates 400 fixed** —
+      `teachingCandidatesQuerySchema` accepts `none` + a required `date`;
+      `weekdayOf(date)` feeds the existing weekday+time-overlap conflict
+      machinery, checked symmetrically against a colleague's own one-time
+      class. The default ＋ إضافة عنصر dialog produces no failing request.
+- [x] **(2)/(3) Session gains title/description at occurrence AND series
+      scope, with an explicit, Session-level (never field-level)
+      preserve-vs-overwrite choice for manually edited Sessions** —
+      `Session.title`/`description` snapshot-plus-`overridden` on the same
+      footing `delivery_mode`/`visibility` already have; NO per-field
+      override-column family introduced, per the Owner's own explicit
+      instruction — one `overridden` flag now covers seven mirrored fields.
+      `overwrite_manually_edited` threads through `updateCourseSchedule`/
+      `splitCourseSchedule`, scoped to Sessions protected for `OVERRIDDEN`
+      alone (never one also `HAS_CONTENT`/`HAS_ATTENDANCE`/`LIFECYCLE`).
+      Asked only when at least one eligible Session exists in range, through
+      ONE shared `ManualEditsDialog`/`sessionsEligibleForOverwrite` reused by
+      both the occurrence screen's wider scopes and the series editor's own
+      save — no two competing "all Sessions" implementations.
+- [x] **(4) Portal navigation collapses on mobile, opens as a bounded
+      overlay never an expanding column, on ANY width** — one shared
+      `PortalShell` for Admin/Teacher/Student; mobile default collapsed
+      (pure CSS, no JS-guessed first frame); desktop default unchanged
+      (expanded inline, nothing pressed). **Owner-found desktop defect,
+      corrected in this same revision**: opening the sidebar now NEVER sets
+      `grid-template-columns` — it is always `position: fixed`, right-side
+      RTL, bounded width (mobile unchanged; desktop 16rem, never the whole
+      viewport); collapsing is the only state that changes the grid, and it
+      only ever reclaims width, never regrows toward the sidebar. Escape,
+      backdrop tap and any nav-link click all close it at every width.
+- [x] **(5) Homepage: no authenticated hero CTA, two sections removed,
+      أين تجدنا/شركاؤنا redesigned** — `Hero` renders no `hero__actions` at
+      all once signed in (not a smaller/different CTA); مسالك التعليم/كيف
+      تنضمّين removed entirely, their only components (`Card`/`Step`) and
+      component-specific CSS deleted with them (`.card__title` kept —
+      `BranchCard` uses it on an unrelated footing); a lone branch no longer
+      sits stranded in a two-column grid (`auto-fit` minmax); each partner
+      renders as its own bordered surface. Both stay fully data-driven.
+- [x] **(6)/(7) Versioned, Super-Admin-managed Privacy Policy and Terms of
+      Use** — new `LegalDocument` model, the SAME pattern R119's
+      `LegalConsentText` already proved (immutable once active, nothing ever
+      deleted, DB-enforced one-active invariant), with `kind` as the one
+      genuine difference: the partial unique index is scoped
+      `(kind) WHERE status='active'`, so Privacy Policy and Terms of Use
+      each keep their own independently active version. No FK from
+      `ConsentRecord` — this is not the same evidentiary link as the
+      registration consent wording. `GET /legal-documents/{kind}` anonymous;
+      `/admin/legal-documents...` Super Admin only. `pages/legal.tsx` is
+      dynamic now (fetches the active version, honest "not yet published"
+      state, never a hardcoded fallback); nothing auto-seeded in production,
+      same precedent as `LegalConsentText`/`PARTNERS`. Content reviewed
+      against actual R133/R138 behaviour; genuinely unresolved facts
+      (retention period, legal-entity/CNDP detail, governing law) stay
+      marked ⚠, not fabricated — operational preparation, Owner/legal review
+      still appropriate before activating in production. `/superadmin/settings`
+      gains a `LegalDocumentsSection`, mounted per kind, structured
+      identically to `ConsentTextsSection`.
+- [x] **(8) Mobile month-grid chips wrap up to 3 lines instead of
+      ellipsis-truncating** — «حصة تجويد القرآن» no longer reads as «حـ…»;
+      wrap rule scoped inside the EXISTING `44rem` breakpoint, no new
+      overlapping breakpoint. A thin kind-indicator bar (extending R58's
+      exam-only pattern to session/event kinds) survives with
+      delivery/tag/time hidden on mobile. 7-column real month grid
+      unchanged in every particular — no agenda/list/day/card view.
+- [x] **SRS Revision 138 RATIFIED**, 2026-09-09. Full verification: backend
+      lint/typecheck/build clean, 38 files/334 unit tests; frontend
+      lint/typecheck/build clean, 103 files/1,211 unit tests; full
+      disposable-stack integration suite — 107 files/2,446 tests (17
+      pre-existing unrelated skips) — including new coverage for (1), (2)/(3)
+      and (6)/(7) (`legal-document.integration.test.ts` 14 tests,
+      `legal-document.http.integration.test.ts` 5 tests over real HTTP);
+      OpenAPI regenerated with no hand-edits (174 paths/225 operations, up
+      from 169/220), TD-3 unchanged in shape (225/233, 8 pending, 0
+      undocumented); all `scripts/ci/check-*.sh` guards, doc-links and
+      `git diff --check` pass.
+- [x] **Real-browser evidence, targeted at the two areas with genuine,
+      previously-unproven layout/wire risk.** A new, backend-free CSS-
+      geometry harness (`nav-toggle-harness.html` /
+      `verify-nav-toggle-geometry.mjs`, 18/18 checks) proves the navigation
+      correction specifically — at 390/1280/1440px, opening never moves or
+      resizes `.admin__main`, the overlay is always `position: fixed` and
+      bounded, Escape/backdrop/nav-link-click all close it — the same
+      layout-shift-no-source-check-can-see reasoning
+      `measure-page-header.mjs` already established. The legal-document HTTP
+      suite is the real-HTTP proof for (6)/(7)'s new wire contract. (4)'s
+      mobile behaviour, (5)'s CSS-only redesign and (8)'s chip wrapping are
+      covered by the EXISTING, unmodified `verify-public-reader.mjs`/
+      `calendar-geometry.mjs` real-browser suite (still 320-1280px clean)
+      plus targeted frontend unit/source-pinning tests — the same "targeted
+      rather than exhaustive" reasoning Revision 137 recorded, re-applied
+      explicitly rather than silently. **Deliberately not built**: a
+      dedicated CDP click-through of the Super Admin legal-document editor's
+      own UI — the equivalent property (wire contract, authorization,
+      immutability, supersession) is proven at the HTTP layer instead, and
+      the screen's own composition already inherits `ConsentTextsSection`'s
+      established browser coverage. No Staging or Production action taken.

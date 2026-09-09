@@ -6441,3 +6441,147 @@ stack's database had drifted three migrations behind (a pre-existing gap,
 unrelated to this pass's own code) and was brought current as an ordinary
 part of running these checks — a normal, additive `prisma migrate deploy`,
 not a reset — and is left healthy.
+
+## Scheduling consistency, Session editing, responsive portal navigation,
+## public site/legal content, and mobile calendar (SRS Revision 138,
+## 2026-09-09)
+
+**recurrence=none was refused by teaching-candidates.** R137(11) made `none`
+a first-class, default recurrence for حصة دراسية/محاضرة but left
+`teachingCandidatesQuerySchema`'s own, separately-declared enum unchanged —
+one missed spot among four places enumerating recurrence, the other three
+already correct. Fixed: `none` accepted, requiring a new `date` field
+precisely when it is chosen; `weekdayOf(date)` (new) derives the single
+weekday a one-time class's real date falls on and feeds the SAME
+weekday+time-overlap conflict machinery every recurring pattern already
+uses, symmetrically checking a colleague's own one-time class too. The
+default ＋ إضافة عنصر dialog (مرة واحدة, no date yet) now produces no
+request at all until a date is entered.
+
+**Session gains title/description at both occurrence and series scope, with
+an explicit, Session-level preserve-vs-overwrite choice for manually edited
+Sessions.** `title`/`description` snapshot from the schedule on the SAME
+footing `delivery_mode`/`visibility` already have — editable per-occurrence
+(هذه الحصة وحدها) or at the rule level (هذه الحصة وكل ما بعدها / كل حصص هذا
+الجدول), resyncing future un-protected occurrences exactly as the existing
+fields already do. **No per-field override-column family was introduced** —
+the Owner's own explicit instruction — the SAME single `overridden` flag
+that already protected `delivery_mode`/`visibility`/`room_id` now also
+protects the two new fields: one flag governing seven mirrored fields, not
+seven flags. A new `overwrite_manually_edited` parameter threads through
+both the whole-schedule resync and the this-and-future split's successor
+migration, scoped to Sessions protected for `OVERRIDDEN` alone — a Session
+also protected by content, attendance or lifecycle is never overwritten
+regardless of the flag, so historical work is never silently destroyed. The
+choice is asked only when it genuinely matters (at least one eligible
+Session in the edit's range), through ONE shared dialog and eligibility
+filter reused by both the occurrence screen's wider scopes and the series
+editor's own save — no two competing "all Sessions" implementations.
+
+**Portal navigation collapses on mobile and opens as a bounded overlay,
+never an expanding layout column, on any width.** One shared `PortalShell`
+serves Admin/Teacher/Student. Mobile: collapsed by default (pure CSS, no
+JS-guessed first frame), a toggle opens it as a right-side overlay drawer,
+closed by Escape, a backdrop tap, or following any nav link. Desktop: the
+existing expanded-inline default is unchanged — nothing pressed looks
+exactly as it did before this revision. **An Owner-found desktop defect is
+corrected in the same revision, not deferred**: the first cut let opening
+the sidebar on desktop restore it as the ordinary grid column, which
+measurably pushed page content sideways — exactly the Owner's own
+screenshot. Opening now NEVER touches `grid-template-columns`, at either
+width: the sidebar becomes `position: fixed`, bounded (16rem on desktop,
+never the whole viewport), stacked on top of the page. Collapsing is the
+only state that changes the grid, and it only ever reclaims width.
+
+**Homepage: no CTA in the authenticated hero, two sections removed,
+location/partners redesigned.** The hero previously repeated the header's
+own «لوحة التحكم» button one screen-length below it; it now shows nothing at
+all once signed in. مسالك التعليم and كيف تنضمّين are removed entirely — not
+replaced — and their only components, now genuinely unused everywhere, are
+deleted with their component-specific CSS. أين تجدنا's grid no longer
+strands a lone branch with visible empty space beside it; شركاؤنا's names
+now render as their own bordered surfaces rather than bare text in a row.
+Both stay fully data-driven, with no invented content.
+
+**The public Privacy Policy and Terms of Use are versioned and
+Super-Admin-managed**, on the identical pattern R119's `LegalConsentText`
+already proved — immutable once active, nothing ever deleted, a
+database-enforced one-active-version invariant — with one genuine addition,
+`kind`, since Privacy Policy and Terms of Use are two independent documents
+that must each keep their own current version at once (the new partial
+unique index is scoped per kind, not global). No consent-record links to
+it — this is a different evidentiary relationship from the registration
+consent wording. The public read is anonymous; management is Super Admin
+only, under `/superadmin/settings`, structured identically to the existing
+consent-text section beside it. `pages/legal.tsx` is dynamic now — it shows
+whichever version is active, or an honest "not yet published" state, never
+a hardcoded fallback. Nothing is auto-seeded in production, on the same
+precedent already established for the consent wording and for the public
+partners list: a plausible-looking legal document from a deploy script is
+worse than an honestly absent one. The recommended draft content was
+reviewed against current platform behaviour (Google scopes actually
+requested, R133's actual deletion/retention boundary, no sale/no
+advertising); what genuinely remains unresolved — retention period,
+legal-entity/CNDP detail, governing law — stays marked rather than
+invented, and Owner/legal review remains appropriate before any version
+drafted from it is activated in production.
+
+**Mobile month-grid event chips wrap across up to three lines instead of
+ellipsis-truncating to a handful of characters.** «حصة تجويد القرآن» no
+longer reads as «حـ…». The wrap rule lives inside the SAME established
+mobile breakpoint already tested since R91 — no new, overlapping breakpoint.
+A thin kind-indicator bar extends the existing exam-only pattern to the
+session and event kinds, costing no title width, since mobile hides
+delivery/tag/time and leaves colour plus this bar as the only remaining
+signal. The real 7-column month grid is unchanged in every particular — no
+agenda, list, day or card view was introduced.
+
+**Verified:** backend lint/typecheck/build clean, 38 files / 334 unit
+tests; frontend lint/typecheck/build clean, 103 files / 1,211 unit tests;
+full disposable-stack integration suite — 107 files / 2,446 tests (17
+pre-existing, unrelated skips) — passes with full all-table isolation,
+including new coverage for recurrence=none conflict-checking, the Session
+title/description snapshot-and-resync and the explicit preserve-vs-overwrite
+choice (including the worked case where a Session protected by two reasons
+is never overwritten), and the new legal-document model both at the service
+layer (14 tests) and over real HTTP through Nginx/API (5 tests). OpenAPI
+regenerated with no hand-edits (174 paths / 225 operations, up from
+169/220 — five new legal-document routes) and TD-3 conformance unchanged in
+shape (225/233 implemented, 8 pending, 0 undocumented). All
+`scripts/ci/check-*.sh` guards, the documentation-links guard and
+`git diff --check` pass.
+
+**Real-browser evidence was targeted at the two areas with genuine,
+previously-unproven layout/wire risk, and the reasoning is recorded rather
+than left implicit**, the same discipline Revision 137 already established.
+A new, backend-free CSS-geometry harness
+(`scripts/dev/browser/nav-toggle-harness.html` /
+`verify-nav-toggle-geometry.mjs`) proves the navigation correction
+specifically: at 390/1280/1440px, opening the sidebar never moves or
+resizes the main content region, the overlay is always `position: fixed`
+and bounded in width at every width tested, and Escape, the backdrop and a
+nav-link click all close it — 18/18 checks. This is the identical
+layout-shift-no-source-check-can-see reasoning `measure-page-header.mjs`
+was built for. The new legal-document HTTP integration suite is the
+real-HTTP proof of the versioned-legal-content wire contract. Mobile
+navigation behaviour, the homepage's CSS-only redesign, and the calendar
+chip wrapping are covered by the EXISTING, unmodified
+`verify-public-reader.mjs` / `calendar-geometry.mjs` real-browser suite
+(still clean at 320-1280px) plus targeted frontend unit and source-pinning
+tests, rather than by new dedicated browser walks — every one of those
+areas either extends already-proven infrastructure or is a property no
+browser-level check adds evidence for beyond what the existing suite
+already asserts. **Deliberately not built, named so a future reader does
+not mistake the omission for an oversight:** a dedicated CDP script
+clicking through the Super Admin legal-document editor's own UI — the
+equivalent property (the wire contract, the authorization boundary,
+immutability, supersession) is proven at the HTTP layer instead, and the
+screen's own composition already inherits the existing consent-text
+section's established browser coverage, since it is built from the
+identical shared components. `docs/SRS.md` is updated in place with
+Revision 138, including one now-superseded §14 passage (the System Settings
+line, extended rather than restated) corrected to name the new
+legal-documents management surface beside the consent-text section it sits
+next to. `docs/TASKS.md` is updated to match, ticked with this same
+evidence cited rather than restated. No Staging or Production action was
+taken at any point in this revision.
