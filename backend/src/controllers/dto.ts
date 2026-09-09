@@ -723,6 +723,10 @@ export interface MaterializationDto {
   created: number;
   existing: number;
   resynced: number;
+  /** R138 — of `resynced`, how many were previously manually edited Sessions
+   *  the administrator explicitly chose to overwrite. Zero unless that choice
+   *  was made. */
+  overwritten: number;
   protected_sessions: { id: string; date: string; reasons: string[] }[];
 }
 
@@ -730,12 +734,14 @@ export function materializationDto(row: {
   created: number;
   existing: number;
   resynced: number;
+  overwritten: number;
   protectedSessions: { id: string; date: Date; reasons: string[] }[];
 }): MaterializationDto {
   return {
     created: row.created,
     existing: row.existing,
     resynced: row.resynced,
+    overwritten: row.overwritten,
     protected_sessions: row.protectedSessions.map((p) => ({
       id: p.id,
       // A session's date is a TD-11 calendar date, not an instant.
@@ -834,6 +840,13 @@ export function scheduleRosterEntryDto(row: {
 export interface SessionDto {
   id: string;
   schedule_id: string;
+  /**
+   * **R138 — this occurrence's OWN title/description**, snapshotted at
+   * materialization and overridable for one date, on exactly the footing
+   * `room_id`/`delivery_mode`/`visibility` already have.
+   */
+  title: string;
+  description: string | null;
   /** TD-11 calendar date — a class happens on a day, not at an instant. */
   date: string;
   /** TD-11 wall-clock, `HH:MM`. */
@@ -883,6 +896,8 @@ export interface SessionDto {
 export function sessionDto(row: {
   id: string;
   scheduleId: string;
+  title: string;
+  description: string | null;
   date: Date;
   startTime: Date;
   endTime: Date;
@@ -900,6 +915,8 @@ export function sessionDto(row: {
   return {
     id: row.id,
     schedule_id: row.scheduleId,
+    title: row.title,
+    description: row.description,
     date: row.date.toISOString().slice(0, 10),
     start_time: timeOnly(row.startTime),
     end_time: timeOnly(row.endTime),
@@ -1731,6 +1748,9 @@ export function userDto(row: {
  */
 export interface ScheduleSessionDto {
   id: string;
+  /** R138 — this occurrence's own title/description; see `SessionDto`. */
+  title: string;
+  description: string | null;
   /** TD-11 calendar date, never an instant. */
   date: string;
   /** Wall-clock `HH:MM` (TD-11). */
@@ -1765,6 +1785,8 @@ export interface ScheduleSessionDto {
 
 export function scheduleSessionDto(row: {
   id: string;
+  title: string;
+  description: string | null;
   date: Date;
   startTime: Date;
   endTime: Date;
@@ -1780,6 +1802,8 @@ export function scheduleSessionDto(row: {
 }): ScheduleSessionDto {
   return {
     id: row.id,
+    title: row.title,
+    description: row.description,
     date: row.date.toISOString().slice(0, 10),
     start_time: row.startTime.toISOString().slice(11, 16),
     end_time: row.endTime.toISOString().slice(11, 16),

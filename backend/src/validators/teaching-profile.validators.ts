@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { uuid } from './common.js';
+import { calendarDate, uuid } from './common.js';
 
 /**
  * The teaching profile's write boundary (R88).
@@ -107,6 +107,7 @@ export const teachingCandidatesQuerySchema = z
     branch_id: uuid.optional(),
     exclude_schedule_id: uuid.optional(),
     recurrence: z.enum([
+      'none',
       'daily',
       'weekly',
       'multiple_weekdays',
@@ -123,9 +124,30 @@ export const teachingCandidatesQuerySchema = z
     start_time: clock,
     end_time: clock,
     delivery_mode: z.enum(['in_person', 'online']).optional(),
+    /**
+     * **R138 — the one calendar date a `none` (one-time) class actually
+     * occupies.** Every other pattern states which WEEKDAYS it occupies;
+     * `none` states none of them (§4.4, `anchor_date` alone names its single
+     * occurrence) and needs a real date instead for the appraisal to mean
+     * anything — without one, `none` would silently join `monthly`/`yearly`
+     * in `occupiedWeekdays`'s indeterminate branch, which is a correct
+     * answer for a pattern with no fixed weekday and a wrong one for a class
+     * that has exactly one, real, already-known date. Refused unless
+     * `recurrence = 'none'`, so the query never claims a date the pattern
+     * does not have one of a different kind, and required when it is.
+     */
+    date: calendarDate.optional(),
   })
   .strict()
   .refine((v) => v.start_time < v.end_time, {
     message: 'start_time must precede end_time',
     path: ['end_time'],
+  })
+  .refine((v) => v.recurrence !== 'none' || v.date !== undefined, {
+    message: 'date is required when recurrence is none',
+    path: ['date'],
+  })
+  .refine((v) => v.recurrence === 'none' || v.date === undefined, {
+    message: 'date is only meaningful when recurrence is none',
+    path: ['date'],
   });

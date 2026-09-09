@@ -588,6 +588,133 @@ describe("the appraisal is about the CLASS, not one occurrence", () => {
   });
 });
 
+/**
+ * **R138 — `recurrence=none` (مرة واحدة, R137's own default for a new class)
+ * is a first-class supported case, not merely accepted.**
+ *
+ * The regression this closes: `recurrence=none` returned `400
+ * VALIDATION_FAILED` — the appraisal's query schema had never been updated
+ * when R137 made `none` a real, storable class recurrence. Fixing the
+ * schema alone would have left the class effectively unappraised (`none`
+ * would fall into the same `availability_indeterminate` bucket `monthly`/
+ * `yearly` correctly occupy, which is wrong for `none`: unlike a monthly
+ * class, a one-time class's single occurrence date is already fully known
+ * at the moment the appraisal runs). `date` is the new, required-when-none
+ * parameter that makes it meaningful — the appraisal reuses the exact same
+ * weekday+time-overlap machinery every other pattern already goes through,
+ * by deriving which ONE weekday the given date falls on.
+ *
+ * 2026-09-02 is a Wednesday — the same date the alternating-parity test
+ * above already relies on, so this suite pins nothing new about the
+ * calendar itself.
+ */
+describe("recurrence=none (R138)", () => {
+  it("is now VALID — the regression is closed", async () => {
+    const res = await call(
+      "GET",
+      `/admin/teaching-candidates?recurrence=none&date=2026-09-02&start_time=15:30&end_time=17:00&subject_id=${subjectId}&level_id=${levelId}`,
+      adminToken,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("`date` is required when recurrence is none", async () => {
+    const res = await call(
+      "GET",
+      "/admin/teaching-candidates?recurrence=none&start_time=15:30&end_time=17:00",
+      adminToken,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("`date` is refused for any OTHER recurrence — it is not a general-purpose filter", async () => {
+    const res = await call(
+      "GET",
+      `${"/admin/teaching-candidates?"}${PROPOSED}&date=2026-09-02`,
+      adminToken,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("the occurrence date is actually checked — quiet for A, who is free that Wednesday afternoon", async () => {
+    const list = await appraise(
+      `recurrence=none&date=2026-09-02&start_time=15:30&end_time=17:00&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherA).warnings).toEqual([]);
+  });
+
+  it("and a different calendar date, landing on a DIFFERENT weekday, gets B's real Thursday answer", async () => {
+    // 2026-09-03 is a Thursday. B's only declared availability is Wednesday
+    // 08:00-12:00 (see `beforeAll`) — she HAS declared something, just not
+    // for this weekday, so the correct answer is "unavailable" (declared and
+    // does not fit), never "availability_not_declared" (declared nothing at
+    // all) — the same not-declared/does-not-fit distinction every other
+    // recurrence's own appraisal already draws, now proven to follow the
+    // DATE-derived weekday rather than the class's own declared time range.
+    const list = await appraise(
+      `recurrence=none&date=2026-09-03&start_time=15:30&end_time=17:00&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherB).warnings).toEqual(["unavailable"]);
+  });
+
+  it("a one-time class at the same hour as an existing conflict is a real, NAMED conflict", async () => {
+    const list = await appraise(
+      `recurrence=none&date=2026-09-02&start_time=15:30&end_time=17:00&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherD).warnings).toEqual(["conflict"]);
+    expect(named(list, teacherD).conflicts).toHaveLength(1);
+    expect(named(list, teacherD).conflicts[0]?.schedule_id).toBe(clashingSchedule);
+  });
+
+  it("a one-time class at a DIFFERENT hour is not a conflict", async () => {
+    const list = await appraise(
+      `recurrence=none&date=2026-09-02&start_time=09:00&end_time=10:00&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherD).warnings).toEqual(["unavailable"]);
+    expect(named(list, teacherD).conflicts).toEqual([]);
+  });
+
+  it("a colleague's OWN one-time class is checked as a real conflict too, not silently indeterminate", async () => {
+    const onceOff = await schedule("حصة لمرة واحدة", {
+      weekday: "wednesday",
+      start: "15:30",
+      end: "17:00",
+      recurrence: "none",
+      anchor: "2026-09-02",
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: onceOff, userId: teacherA, position: "teacher" },
+    });
+
+    const list = await appraise(
+      `recurrence=none&date=2026-09-02&start_time=15:30&end_time=17:00&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherA).warnings).toEqual(["conflict"]);
+    expect(named(list, teacherA).conflicts[0]?.schedule_id).toBe(onceOff);
+
+    await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: onceOff } });
+    await prisma.recurringCourseSchedule.deleteMany({ where: { id: onceOff } });
+  });
+
+  it("recurring behaviour is UNCHANGED by this — weekly still occupies its own weekday, nothing more", async () => {
+    const list = await appraise(
+      `${PROPOSED}&subject_id=${subjectId}&level_id=${levelId}`,
+    );
+    expect(named(list, teacherA).warnings).toEqual([]);
+    expect(named(list, teacherD).warnings).toEqual(["conflict"]);
+  });
+
+  it("authorization is unchanged — a مؤطِّرة still may not appraise, even for a one-time class", async () => {
+    const her = bearer(teacherA, [{ role: "teacher", branches: null }]);
+    const res = await call(
+      "GET",
+      `/admin/teaching-candidates?recurrence=none&date=2026-09-02&start_time=15:30&end_time=17:00&subject_id=${subjectId}`,
+      her,
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("who may ask", () => {
   it("a مؤطِّرة may not appraise candidates — planning is the administration's", async () => {
     const her = bearer(teacherA, [{ role: "teacher", branches: null }]);

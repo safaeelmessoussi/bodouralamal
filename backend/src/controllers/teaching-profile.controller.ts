@@ -71,6 +71,7 @@ export function candidates(prisma: PrismaClient) {
         startTime: q.start_time,
         endTime: q.end_time,
         deliveryMode: q.delivery_mode,
+        date: q.date,
       }),
     });
   };

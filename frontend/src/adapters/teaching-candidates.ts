@@ -48,6 +48,10 @@ export interface ProposedClassQuery {
   levelId?: string | undefined;
   excludeScheduleId?: string | undefined;
   deliveryMode?: 'in_person' | 'online' | undefined;
+  /** R138 — required by the server when `recurrence === 'none'`: the one
+   *  calendar date a one-time class occupies (`YYYY-MM-DD`), since `none`
+   *  carries no weekday of its own for the appraisal to reuse. */
+  date?: string | undefined;
 }
 
 export async function appraiseCandidates(
@@ -64,6 +68,7 @@ export async function appraiseCandidates(
   if (proposed.levelId) params.set('level_id', proposed.levelId);
   if (proposed.excludeScheduleId) params.set('exclude_schedule_id', proposed.excludeScheduleId);
   if (proposed.deliveryMode) params.set('delivery_mode', proposed.deliveryMode);
+  if (proposed.date) params.set('date', proposed.date);
 
   const res = await api<{ data: TeachingCandidate[] }>(
     `/admin/teaching-candidates?${params.toString()}`,

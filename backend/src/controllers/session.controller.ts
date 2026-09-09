@@ -42,6 +42,8 @@ export function override(prisma: PrismaClient) {
       {
         version: body.version,
         ...(body.date !== undefined ? { date: body.date } : {}),
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.start_time !== undefined
           ? { startTime: body.start_time }
           : {}),

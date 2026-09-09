@@ -833,6 +833,16 @@ export async function updateCourseSchedule(
     visibility?: Visibility | undefined;
     /** Required by `this_and_future` — the occurrence the split begins at. */
     fromDate?: Date;
+    /**
+     * **R138 — the administrator's explicit choice, asked only when a
+     * manually edited Session actually stood to be affected.** Session-level,
+     * never field-by-field (§4.4): threaded straight to `materializeSchedule`
+     * (`all_sessions`) or `splitCourseSchedule` (`this_and_future`), which are
+     * the only two places that decide it. Absent/false preserves the
+     * pre-existing behaviour exactly — an overridden Session is always spared
+     * unless this is explicitly `true`.
+     */
+    overwriteManuallyEdited?: boolean;
   },
   now: Date = new Date(),
 ): Promise<{
@@ -1090,7 +1100,13 @@ export async function updateCourseSchedule(
     const loaded = await loadSchedule(tx, id);
     if (!loaded)
       throw new AppError("INTERNAL", "schedule vanished mid-transaction");
-    const materialized = await materializeSchedule(tx, loaded, now, horizon);
+    const materialized = await materializeSchedule(
+      tx,
+      loaded,
+      now,
+      horizon,
+      data.overwriteManuallyEdited,
+    );
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -1181,6 +1197,11 @@ async function splitCourseSchedule(
     /** R109 — the successor's tier: this edit's, or the predecessor's. */
     visibility?: Visibility | undefined;
     version: number;
+    /** R138 — see `updateCourseSchedule`'s own field of the same name. Here it
+     *  decides whether a Session protected SOLELY by `OVERRIDDEN` moves to the
+     *  successor (and is resynced to the successor's values) or stays exactly
+     *  where it is, with the predecessor, as today. */
+    overwriteManuallyEdited?: boolean;
   },
   now: Date,
 ): Promise<{
@@ -1392,7 +1413,21 @@ async function splitCourseSchedule(
       select: SELECT_PROTECTABLE,
     });
     const reasons = await protectionReasons(tx, future);
-    const removable = future.filter((s) => !reasons.has(s.id));
+    // R138 — a Session protected SOLELY by `OVERRIDDEN` moves to the
+    // successor too, exactly like an ordinary un-protected one, when the
+    // administrator explicitly chose to overwrite manually edited Sessions.
+    // Any OTHER reason (held/cancelled, content, attendance, or a
+    // later-contributed rule) still keeps it with the predecessor regardless
+    // — real historical work is never moved by this flag.
+    const removable = future.filter((s) => {
+      const codes = reasons.get(s.id);
+      if (!codes) return true;
+      return (
+        data.overwriteManuallyEdited === true &&
+        codes.length === 1 &&
+        codes[0] === "OVERRIDDEN"
+      );
+    });
     if (removable.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: removable.map((s) => s.id) } },
@@ -1408,6 +1443,7 @@ async function splitCourseSchedule(
       loaded,
       splitOn,
       horizon,
+      data.overwriteManuallyEdited,
     );
 
     await audit.write(tx, {
@@ -1577,6 +1613,8 @@ export async function listScheduleSessions(
       take: window.take,
       select: {
         id: true,
+        title: true,
+        description: true,
         date: true,
         startTime: true,
         endTime: true,
@@ -1620,6 +1658,9 @@ export async function listScheduleSessions(
 
 export interface ScheduleSessionRow {
   id: string;
+  /** R138 — this occurrence's own title/description; see `Session` schema. */
+  title: string;
+  description: string | null;
   date: Date;
   startTime: Date;
   endTime: Date;

@@ -110,9 +110,29 @@ export const ALL_WEEKDAYS = [
   'sunday',
 ] as const;
 
+/**
+ * **R138 — the one weekday a `none` (one-time) class occupies.**
+ *
+ * `none` has no weekday SET (`weekdaysForClass` on the frontend deliberately
+ * never fills one in — a one-time class is named by `anchor_date` alone, and
+ * a filled-in weekday there would misrepresent it as a recurring pattern).
+ * But its single real occurrence still falls on a real day of the week, and
+ * that is exactly what this appraisal's weekday+time-overlap machinery
+ * already answers *every other* pattern with — treating it as occupying
+ * that one weekday reuses the existing conflict check precisely rather than
+ * inventing a second, date-range-based one. `getUTCDay()` is Sunday-0; this
+ * platform's week is Monday-first (BR-17), the same conversion
+ * `weekdaysForClass` uses.
+ */
+function weekdayOf(date: Date): string {
+  return ALL_WEEKDAYS[(date.getUTCDay() + 6) % 7]!;
+}
+
 export function occupiedWeekdays(
   recurrence: string,
   weekdays: readonly string[],
+  /** Only meaningful for `none` (R138) — every other pattern ignores it. */
+  date?: Date,
 ): string[] | null {
   switch (recurrence) {
     case 'weekly':
@@ -121,6 +141,8 @@ export function occupiedWeekdays(
       return [...weekdays];
     case 'daily':
       return [...ALL_WEEKDAYS];
+    case 'none':
+      return date ? [weekdayOf(date)] : null;
     default:
       return null;
   }

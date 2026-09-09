@@ -144,6 +144,12 @@ async function cleanup(): Promise<void> {
   // to a Session: a cancellation notice whose session vanished is unreadable.
   // Fixtures therefore unwind notices before the occurrences they name.
   await prisma.notification.deleteMany({ where: { session: scheduleWhere } });
+  // R138 — `attendance.session_id` is RESTRICT too (the same reasoning
+  // §20 rule 24 already states for content and staff): a Session that
+  // recorded attendance is exactly the protection-reason test needs, and it
+  // must be unwound before the Session itself or this cleanup would fail
+  // with a foreign-key violation the very first time such a fixture ran.
+  await prisma.attendance.deleteMany({ where: { session: scheduleWhere } });
   await prisma.session.deleteMany({ where: scheduleWhere });
   await prisma.courseScheduleStaff.deleteMany({
     where: { schedule: { subject: tagged } },
@@ -1078,6 +1084,309 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       where: { id: target.id },
     });
     expect(after.roomId).toBe(roomB);
+  });
+
+  /**
+   * **R138 — title/description join the resync/override/protection machinery
+   * on exactly the same footing every other Session field already has.**
+   */
+  it("a Session's own title/description are snapshotted from the schedule, and follow future resyncs", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ title: `${TAG} العنوان الأصلي` }),
+      NOW,
+    );
+    const before = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day("2026-06-16") },
+    });
+    expect(before.title).toBe(`${TAG} العنوان الأصلي`);
+
+    await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { title: `${TAG} العنوان الجديد`, version: 0 },
+      NOW,
+    );
+
+    const after = await prisma.session.findUniqueOrThrow({
+      where: { id: before.id },
+    });
+    expect(after.title).toBe(`${TAG} العنوان الجديد`);
+  });
+
+  it("تعديل الحصة (this session only) can give ONE occurrence its own title, protected from the next series edit", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ title: `${TAG} حلقة الأصل` }),
+      NOW,
+    );
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day("2026-06-16") },
+    });
+
+    const overridden = await overrideSession(prisma, superAdmin(), target.id, {
+      title: `${TAG} عنوان هذه الحصة فقط`,
+      description: `${TAG} وصف خاص بهذه الحصة`,
+      version: target.version,
+    });
+    expect(overridden.overridden).toBe(true);
+    expect(overridden.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
+    expect(overridden.description).toBe(`${TAG} وصف خاص بهذه الحصة`);
+
+    // The series is then renamed — an ordinary all_sessions edit.
+    await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { title: `${TAG} حلقة معاد تسميتها`, version: 0 },
+      NOW,
+    );
+
+    // The manually edited Session kept ITS OWN title — untouched, exactly as
+    // room_id/delivery_mode already were before this revision.
+    const stillHers = await prisma.session.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(stillHers.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
+
+    // A DIFFERENT, un-overridden Session of the same series DID pick up the
+    // rename — proving this is a per-Session decision, not a series-wide one.
+    const ordinary = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day("2026-06-23") },
+    });
+    expect(ordinary.title).toBe(`${TAG} حلقة معاد تسميتها`);
+  });
+
+  /**
+   * **R138 — the explicit preserve-vs-overwrite choice for manually edited
+   * Sessions.** Session-level, exactly as the Owner specified: overwriting
+   * clears `overridden` and resyncs EVERY mirrored field (not just the one
+   * that changed on the series), which is the "loss of field-level
+   * precision" the Owner named as an accepted tradeoff for the simpler
+   * session-level mechanism.
+   */
+  describe("the explicit preserve-vs-overwrite choice for manually edited Sessions", () => {
+    it("preserved by DEFAULT — overwriteManuallyEdited absent behaves exactly as before this revision", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ title: `${TAG} حلقة أ` }),
+        NOW,
+      );
+      const target = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day("2026-06-16") },
+      });
+      await overrideSession(prisma, superAdmin(), target.id, {
+        title: `${TAG} حصة معدَّلة يدويًا`,
+        roomId: roomB,
+        version: target.version,
+      });
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { title: `${TAG} حلقة أ المعدَّلة`, roomId: roomA, version: 0 },
+        NOW,
+      );
+      expect(result.materialized.overwritten).toBe(0);
+      expect(
+        result.materialized.protectedSessions.some((p) => p.id === target.id),
+      ).toBe(true);
+
+      const still = await prisma.session.findUniqueOrThrow({
+        where: { id: target.id },
+      });
+      expect(still.overridden).toBe(true);
+      expect(still.title).toBe(`${TAG} حصة معدَّلة يدويًا`);
+      expect(still.roomId).toBe(roomB);
+    });
+
+    it("overwriteManuallyEdited=true resyncs an OVERRIDDEN-only Session and clears the flag — EVERY mirrored field, not just the one that changed", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ title: `${TAG} حلقة ب` }),
+        NOW,
+      );
+      const target = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day("2026-06-16") },
+      });
+      // Session 2 was manually edited only for its ROOM — the Owner's own
+      // worked example (item 4/5): "manually edited only because its room
+      // changed".
+      await overrideSession(prisma, superAdmin(), target.id, {
+        roomId: roomB,
+        version: target.version,
+      });
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        {
+          title: `${TAG} حلقة ب المعاد تسميتها`,
+          roomId: roomA,
+          overwriteManuallyEdited: true,
+          version: 0,
+        },
+        NOW,
+      );
+      expect(result.materialized.overwritten).toBe(1);
+      expect(
+        result.materialized.protectedSessions.some((p) => p.id === target.id),
+      ).toBe(false);
+
+      const after = await prisma.session.findUniqueOrThrow({
+        where: { id: target.id },
+      });
+      // Session-level, not field-level (the Owner's accepted tradeoff): the
+      // TITLE also moved, even though the manual edit was only ever about the
+      // room — the same loss of field-level precision the Owner named
+      // explicitly as acceptable for the simpler mechanism.
+      expect(after.overridden).toBe(false);
+      expect(after.title).toBe(`${TAG} حلقة ب المعاد تسميتها`);
+      expect(after.roomId).toBe(roomA);
+    });
+
+    it("a Session ALSO protected by recorded attendance is NEVER overwritten, regardless of the flag", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ title: `${TAG} حلقة ج` }),
+        NOW,
+      );
+      const target = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day("2026-06-16") },
+      });
+      await overrideSession(prisma, superAdmin(), target.id, {
+        roomId: roomB,
+        version: target.version,
+      });
+      const student = await person("مستفيدة الحضور");
+      await prisma.attendance.create({
+        data: {
+          sessionId: target.id,
+          occurrenceDate: day("2026-06-16"),
+          studentId: student,
+          markedById: actorUserId,
+        },
+      });
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { roomId: roomA, overwriteManuallyEdited: true, version: 0 },
+        NOW,
+      );
+      // Real historical work is never a session-level toggle away from being
+      // overwritten — this Session is protected by BOTH `OVERRIDDEN` and
+      // `HAS_ATTENDANCE`, and the second reason alone is enough to refuse it.
+      expect(result.materialized.overwritten).toBe(0);
+      expect(
+        result.materialized.protectedSessions.find((p) => p.id === target.id)
+          ?.reasons.sort(),
+      ).toEqual(["HAS_ATTENDANCE", "OVERRIDDEN"]);
+
+      const still = await prisma.session.findUniqueOrThrow({
+        where: { id: target.id },
+      });
+      expect(still.overridden).toBe(true);
+      expect(still.roomId).toBe(roomB);
+    });
+
+    it("a split (هذه الحصة وكل ما بعدها) moves an OVERRIDDEN-only Session to the successor only when explicitly chosen", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ title: `${TAG} حلقة د` }),
+        NOW,
+      );
+      const target = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day("2026-06-23") },
+      });
+      await overrideSession(prisma, superAdmin(), target.id, {
+        roomId: roomB,
+        version: target.version,
+      });
+
+      // Without the explicit choice: the predecessor keeps it, exactly as
+      // the pre-existing split behaviour already guarantees.
+      const preserved = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        {
+          roomId: roomA,
+          scope: "this_and_future",
+          fromDate: day("2026-06-16"),
+          version: 0,
+        },
+        NOW,
+      );
+      const stillOnPredecessor = await prisma.session.findUniqueOrThrow({
+        where: { id: target.id },
+      });
+      expect(stillOnPredecessor.scheduleId).toBe(id);
+      expect(stillOnPredecessor.roomId).toBe(roomB);
+      expect(preserved.successorId).toBeDefined();
+
+      // Clean up this half so the second half below starts from a fresh
+      // schedule rather than a schedule this test already closed.
+      await deleteCourseSchedule(prisma, superAdmin(), id);
+      if (preserved.successorId) {
+        await deleteCourseSchedule(prisma, superAdmin(), preserved.successorId);
+      }
+
+      // With the explicit choice: an OVERRIDDEN-only Session moves to the
+      // successor and is resynced to the successor's new values.
+      const { id: id2 } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        // A different weekday than the first half above (whose leftover,
+        // still-overridden Session in roomB survives its schedule's deletion
+        // by design, §4.4) — orthogonal to what this half actually tests.
+        baseInput({ title: `${TAG} حلقة هـ`, weekdays: ["wednesday"] }),
+        NOW,
+      );
+      const target2 = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id2, date: day("2026-06-24") },
+      });
+      await overrideSession(prisma, superAdmin(), target2.id, {
+        roomId: roomB,
+        version: target2.version,
+      });
+
+      const overwritten = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id2,
+        {
+          roomId: roomA,
+          scope: "this_and_future",
+          fromDate: day("2026-06-16"),
+          overwriteManuallyEdited: true,
+          version: 0,
+        },
+        NOW,
+      );
+      expect(overwritten.successorId).toBeDefined();
+      const moved = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: overwritten.successorId!, date: day("2026-06-24") },
+      });
+      expect(moved.roomId).toBe(roomA);
+      expect(moved.overridden).toBe(false);
+      // The predecessor no longer carries this date at all — it truly moved,
+      // not merely copied.
+      const onOldSchedule = await prisma.session.findFirst({
+        where: { scheduleId: id2, date: day("2026-06-24"), deletedAt: null },
+      });
+      expect(onOldSchedule).toBeNull();
+    });
   });
 
   it("an override can replace the occurrence’s staff, and records old→new", async () => {

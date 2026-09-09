@@ -154,6 +154,16 @@ export async function loadForWrite(
 
 export interface SessionOverride {
   date?: Date;
+  /**
+   * **R138 — the same class-content fields the series form already edits**
+   * (§4.4), extended to a single occurrence exactly the way `roomId`/
+   * `deliveryMode`/`visibility` already are: a plain column snapshotted at
+   * materialization, changed here for THIS date, and protected from the next
+   * resync by the SAME `overridden` flag every other field on this row
+   * shares — no per-field marker, no second mechanism.
+   */
+  title?: string;
+  description?: string | null;
   startTime?: Date;
   endTime?: Date;
   roomId?: string | null;
@@ -270,6 +280,10 @@ export async function overrideSession(
     data.startTime?.toISOString(),
   );
   track("end_time", session.endTime.toISOString(), data.endTime?.toISOString());
+  // title/description are deliberately NOT tracked here (TD-14): they are
+  // free text, and `assertMinimizedDetail` refuses a `title` key outright as
+  // a copied label — `targetId` already identifies which row changed, which
+  // is the same reasoning `createAcademicYear`'s own audit row follows.
   track("room_id", session.roomId, delivery.roomId);
   // R97 — recorded in the audit row, because *when did this class stop meeting
   // in the building* is a question the record has to be able to answer.
@@ -291,6 +305,8 @@ export async function overrideSession(
       requireNotDeleted: true,
       data: {
         ...(data.date === undefined ? {} : { date: atMidnightUtc(data.date) }),
+        ...(data.title === undefined ? {} : { title: data.title }),
+        ...(data.description === undefined ? {} : { description: data.description }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
         // All three together (R97) — see `policies/delivery.ts`.

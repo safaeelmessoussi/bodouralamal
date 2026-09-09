@@ -6,6 +6,8 @@ import {
   checkDelivery,
   deliveryMode,
   onlineMediaMode,
+  scheduleDescription,
+  scheduleTitle,
   visibility,
   wallClock,
 } from "./course-schedule.validators.js";
@@ -33,6 +35,13 @@ export const overrideSessionSchema = z
   .object({
     version,
     date: calendarDate.optional(),
+    /**
+     * **R138 — the same class-content fields the series form edits**, on the
+     * one occurrence: the exact `scheduleTitle`/`scheduleDescription` bounds
+     * the series uses, not a second, independently-drifting definition.
+     */
+    title: scheduleTitle.optional(),
+    description: scheduleDescription,
     start_time: wallClock.optional(),
     end_time: wallClock.optional(),
     room_id: uuid.nullable().optional(),

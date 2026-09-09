@@ -90,6 +90,9 @@ export interface ProposedClass {
    */
   effectiveFrom?: Date | undefined;
   effectiveUntil?: Date | undefined;
+  /** R138 — the one calendar date a `recurrence: 'none'` proposed class
+   *  actually occupies; ignored for every other pattern. */
+  date?: Date | undefined;
 }
 
 const hhmm = (d: Date): string => d.toISOString().slice(11, 16);
@@ -151,7 +154,7 @@ export async function listTeachingCandidates(
       ).categoryId
     : null;
 
-  const days = occupiedWeekdays(proposed.recurrence, proposed.weekdays);
+  const days = occupiedWeekdays(proposed.recurrence, proposed.weekdays, proposed.date);
 
   /**
    * **Every OTHER schedule these people staff.**
@@ -298,6 +301,7 @@ export async function listTeachingCandidates(
         const otherDays = occupiedWeekdays(
           other.recurrence,
           other.weekdays.map(String),
+          other.anchorDate ?? undefined,
         );
         if (otherDays === null) continue;
         if (!seriesCanCoincide(proposedSeries, other)) continue;

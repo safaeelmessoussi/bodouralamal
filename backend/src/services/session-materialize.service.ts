@@ -44,6 +44,16 @@ import {
  *  cannot half-apply an edit that lands mid-loop. */
 export interface MaterializableSchedule extends ScheduleRecurrence {
   id: string;
+  /**
+   * **R138 — snapshotted onto every occurrence this run creates or resyncs**,
+   * on exactly the same footing every other default here already has
+   * (`roomId`, `deliveryMode`, `visibility`): a class renamed in November
+   * leaves October's occurrences saying what October was actually called,
+   * and an occurrence a human named individually is `overridden` and is
+   * never reached here at all (unless `overwriteManuallyEdited`, below).
+   */
+  title: string;
+  description: string | null;
   startTime: Date;
   endTime: Date;
   roomId: string | null;
@@ -93,8 +103,13 @@ export interface MaterializeResult {
   /** Future, un-overridden sessions brought back into line with the schedule
    *  (Revision 43.4). Without this an edit changed nothing about the occurrences
    *  that already existed, so §4.4's promise that it "rewrites future Sessions"
-   *  was not true. */
+   *  was not true. Includes `overwritten` (R138) — both counts as "resynced". */
   resynced: number;
+  /** R138 — of `resynced`, how many were previously `overridden` and were
+   *  resynced (and un-flagged) only because the administrator explicitly
+   *  chose to overwrite manually edited Sessions. Zero unless that choice
+   *  was made. */
+  overwritten: number;
   /** Sessions deliberately NOT touched because they hold data whose loss would
    *  change historical truth (§4.4, Revision 43.6). Surfaced with **every**
    *  applicable reason, never silently skipped — an administrator deciding
@@ -165,6 +180,24 @@ export async function materializeSchedule(
   schedule: MaterializableSchedule,
   today: Date,
   horizon: Date,
+  /**
+   * **R138 — the administrator's explicit choice, asked only when a
+   * manually edited Session actually stood to be affected** (§4.4, extending
+   * Revision 43.6 rather than loosening it).
+   *
+   * Session-level, never field-by-field, matching `overridden`'s own single
+   * flag: when true, a session protected **solely** by `OVERRIDDEN` (no
+   * `LIFECYCLE`/`HAS_CONTENT`/`HAS_ATTENDANCE` or any later-contributed
+   * reason) is resynced exactly like an ordinary future session and its flag
+   * is cleared — the administrator asked for it, explicitly, this once.
+   * A session protected by ANY other reason is untouched regardless of this
+   * flag: real historical work is never a session-level toggle away from
+   * being overwritten, and this parameter does not reach the orphan-removal
+   * pass below at all — deleting a manually edited occurrence outright is a
+   * different, more destructive act than resyncing its fields and is not
+   * what "apply the changes" was asked to mean.
+   */
+  overwriteManuallyEdited = false,
 ): Promise<MaterializeResult> {
   const from = atMidnightUtc(today);
   const dates = expandSchedule(schedule, from, horizon);
@@ -177,6 +210,13 @@ export async function materializeSchedule(
     existingRows.map((r) => [r.date.toISOString().slice(0, 10), r.id]),
   );
   const protectedIds = await protectedSessionIds(tx, schedule.id, from);
+  const overwritable = new Set(
+    overwriteManuallyEdited
+      ? [...protectedIds.entries()]
+          .filter(([, reasons]) => reasons.length === 1 && reasons[0] === "OVERRIDDEN")
+          .map(([id]) => id)
+      : [],
+  );
 
   let created = 0;
   for (const date of dates) {
@@ -192,6 +232,8 @@ export async function materializeSchedule(
       data: {
         scheduleId: schedule.id,
         date,
+        title: schedule.title,
+        description: schedule.description,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         // SNAPSHOT (Revision 43.4). Room and staff are written onto the
@@ -215,28 +257,39 @@ export async function materializeSchedule(
   // session is history and keeps what it was materialized with, whatever the
   // schedule now says (§4.4).
   let resynced = 0;
+  let overwritten = 0;
   for (const row of existingRows) {
     const key = row.date.toISOString().slice(0, 10);
     if (!dates.some((d) => d.toISOString().slice(0, 10) === key)) continue;
-    if (protectedIds.has(row.id)) continue;
+    const isOverwritable = overwritable.has(row.id);
+    if (protectedIds.has(row.id) && !isOverwritable) continue;
 
     await tx.session.update({
       where: { id: row.id },
       data: {
+        title: schedule.title,
+        description: schedule.description,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         roomId: schedule.roomId,
         // **R97 — future, un-protected occurrences follow the new default.**
         // The `overridden` occurrence never reaches this line: it is in
         // `protectedIds` and was skipped above, which is precisely how *«this
-        // one Thursday is in person»* survives an edit to the schedule.
+        // one Thursday is in person»* survives an edit to the schedule —
+        // unless the administrator explicitly chose to overwrite it (R138).
         deliveryMode: schedule.deliveryMode,
         onlineMediaMode: schedule.onlineMediaMode,
         // **R109 — future, un-protected occurrences follow the new tier**, and
         // the `overridden` one never reaches this line: it is in `protectedIds`
         // and was skipped above, which is precisely how *«this one Thursday
-        // stays hidden»* survives an edit that publishes the series.
+        // stays hidden»* survives an edit that publishes the series — unless
+        // overwritten explicitly (R138).
         visibility: schedule.visibility,
+        // **R138 — re-aligned with its schedule, so it is no longer a human's
+        // individual decision.** Clearing the flag is what makes that true
+        // rather than merely stated, exactly as `regenerateOne`'s own single-
+        // session path already does.
+        ...(isOverwritable ? { overridden: false } : {}),
       },
     });
     // **The occurrence's own date decides, not the edit's** (R91). Resyncing
@@ -244,6 +297,7 @@ export async function materializeSchedule(
     // replacement would leak outside its period.
     await snapshotStaff(tx, row.id, staffOn(schedule.staff, row.date));
     resynced += 1;
+    if (isOverwritable) overwritten += 1;
   }
 
   const wanted = new Set(dates.map((d) => d.toISOString().slice(0, 10)));
@@ -266,12 +320,18 @@ export async function materializeSchedule(
     scheduleId: schedule.id,
     created,
     resynced,
+    // R138 — sessions the administrator explicitly chose to overwrite are
+    // resynced, not protected; excluded here so the result reports what
+    // ACTUALLY stayed spared, matching `overwritten` for what changed instead.
+    overwritten,
     existing: existingRows.length - orphaned.length,
-    protectedSessions: [...protectedIds.entries()].map(([id, reasons]) => ({
-      id,
-      date: existingRows.find((r) => r.id === id)?.date ?? from,
-      reasons,
-    })),
+    protectedSessions: [...protectedIds.entries()]
+      .filter(([id]) => !overwritable.has(id))
+      .map(([id, reasons]) => ({
+        id,
+        date: existingRows.find((r) => r.id === id)?.date ?? from,
+        reasons,
+      })),
   };
 }
 
@@ -350,6 +410,8 @@ export async function loadSchedule(
     where: { id: scheduleId, deletedAt: null },
     select: {
       id: true,
+      title: true,
+      description: true,
       startTime: true,
       endTime: true,
       roomId: true,

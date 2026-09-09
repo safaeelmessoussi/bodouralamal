@@ -173,9 +173,13 @@ export function checkDelivery(
 }
 
 /** R57 — TD-9's bounds for a class's own name. The same limits `Event` takes,
- *  because they are the same kind of field. */
-const scheduleTitle = z.string().trim().min(1).max(120);
-const scheduleDescription = z.string().trim().max(2000).nullable().optional();
+ *  because they are the same kind of field.
+ *
+ *  Exported (R138) — `session.validators.ts`'s `overrideSessionSchema` reuses
+ *  these verbatim, since a single occurrence's title/description are the
+ *  exact same field under the exact same bounds, not a second definition. */
+export const scheduleTitle = z.string().trim().min(1).max(120);
+export const scheduleDescription = z.string().trim().max(2000).nullable().optional();
 
 export const createCourseScheduleSchema = z
   .object({
@@ -321,6 +325,16 @@ export const updateCourseScheduleSchema = z
     /** The occurrence the split begins at. Refused without the scope, so a
      *  stray date can never silently split a series. */
     from_date: calendarDate.optional(),
+    /**
+     * **R138 — the administrator's explicit, session-level choice**, asked by
+     * the interface only when a manually edited Session actually stands to
+     * be affected. Absent/false preserves every pre-existing behaviour
+     * exactly: an `overridden` Session is always spared. `true` resyncs (and
+     * un-flags) a Session protected SOLELY by having been manually edited —
+     * never one also protected by held/cancelled status, attached content or
+     * recorded attendance, regardless of this flag.
+     */
+    overwrite_manually_edited: z.boolean().optional(),
   })
   .strict()
   .refine((v) => v.scope !== "this_and_future" || v.from_date !== undefined, {

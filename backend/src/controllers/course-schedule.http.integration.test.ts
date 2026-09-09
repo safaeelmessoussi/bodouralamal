@@ -76,6 +76,7 @@ const WRITE_KEYS = ["materialization", "schedule"];
 const MATERIALIZATION_KEYS = [
   "created",
   "existing",
+  "overwritten",
   "protected_sessions",
   "resynced",
 ];
@@ -599,6 +600,54 @@ describe("the write boundary refuses what would re-point history", () => {
       MATERIALIZATION_KEYS,
     );
     expect(patched.body.materialization!["resynced"]).toBeGreaterThan(0);
+  });
+
+  it("R138 — accepts overwrite_manually_edited, and reports what it overwrote", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody(),
+    );
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId },
+      orderBy: { date: "asc" },
+    });
+    // An empty PATCH still marks `overridden` (R43.4) — enough to make this
+    // one Session the thing `overwrite_manually_edited` below reaches.
+    await call("PATCH", `/sessions/${session.id}`, superAdmin, {
+      version: session.version,
+    });
+
+    // Read the schedule's CURRENT version fresh rather than trust the
+    // creation response — this test's own point is the field below, not an
+    // assumption about what else may have touched the row in between.
+    const fresh = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+      select: { version: true },
+    });
+    const patched = await call(
+      "PATCH",
+      `/admin/course-schedules/${scheduleId}`,
+      superAdmin,
+      {
+        version: fresh.version,
+        // A time distinct from every sibling test in this describe block —
+        // `scheduleBody()`'s fixed room/weekday/teacher mean two schedules
+        // sharing a time slot here are a genuine, expected fixture clash,
+        // not a defect this test is about.
+        start_time: "06:00",
+        end_time: "07:00",
+        overwrite_manually_edited: true,
+      },
+    );
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+    // The deep session-level semantics (which reasons block an overwrite,
+    // the split's own moving behaviour) are proven exhaustively at the
+    // service layer (`course-schedule.integration.test.ts`); this is the
+    // wire-contract half — the field is accepted, and named back.
+    expect(patched.body.materialization!["overwritten"]).toBeGreaterThan(0);
   });
 });
 

@@ -31,6 +31,9 @@ const SESSION_KEYS = [
   // **R97 — this occurrence's OWN delivery**, snapshotted at materialization
   // and overridable for one date. After an override it is not the schedule's.
   "delivery_mode",
+  // **R138 — this occurrence's OWN description**, on exactly the footing
+  // every other snapshot-plus-overridden field here already has.
+  "description",
   "end_time",
   "id",
   "online_media_mode",
@@ -39,6 +42,8 @@ const SESSION_KEYS = [
   "schedule_id",
   "start_time",
   "status",
+  // **R138 — this occurrence's OWN title**, sorted after `status`.
+  "title",
   "version",
   // **R109 — this occurrence's OWN visibility tier**, on exactly the footing
   // `delivery_mode` above has: snapshotted at materialization and decidable for
@@ -382,6 +387,28 @@ describe("PATCH is a field edit, not a second entrance to the state machine", ()
     });
     expect(res.status).toBe(200);
     expect(res.body.overridden).toBe(true);
+  });
+
+  it("R138 — تعديل الحصة may set this occurrence's OWN title/description", async () => {
+    const s = await freshSession();
+    const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      title: `${TAG} عنوان هذه الحصة فقط`,
+      description: `${TAG} وصف خاص بهذه الحصة`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
+    expect(res.body.description).toBe(`${TAG} وصف خاص بهذه الحصة`);
+    expect(res.body.overridden).toBe(true);
+  });
+
+  it("R138 — an empty title is refused, the same TD-9 bound the series form has", async () => {
+    const s = await freshSession();
+    const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      title: "   ",
+    });
+    expect(res.status).toBe(400);
   });
 
   it("TD-15: a stale version is a 409", async () => {

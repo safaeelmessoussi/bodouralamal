@@ -1465,7 +1465,16 @@ export function SchedulingDialog({
    * reported as clashing with itself — the commonest false warning there is.
    */
   const appraisal = useTeachingCandidates(
-    type === 'class' && startTime !== '' && endTime !== ''
+    type === 'class' &&
+      startTime !== '' &&
+      endTime !== '' &&
+      // R138 — `none` (مرة واحدة, R137's own default for a new class) has no
+      // weekday of its own; the appraisal needs its one real occurrence date
+      // instead, and the form's own default state has not asked for one yet
+      // (`recurrence.startDate` starts empty on a NEW item). Withholding the
+      // request until it is set is what keeps the add-element dialog's
+      // default state from firing a request the server can only refuse.
+      (recurrence.type !== 'none' || recurrence.startDate !== '')
       ? {
           recurrence: recurrence.type,
           weekdays: weekdaysForClass(recurrence.type, recurrence.weekdays, recurrence.startDate),
@@ -1475,6 +1484,7 @@ export function SchedulingDialog({
           ...(scope.value.subjectId ? { subjectId: scope.value.subjectId } : {}),
           ...(scope.value.levelId ? { levelId: scope.value.levelId } : {}),
           ...(item?.id ? { excludeScheduleId: item.id } : {}),
+          ...(recurrence.type === 'none' ? { date: recurrence.startDate } : {}),
         }
       : null,
     token,

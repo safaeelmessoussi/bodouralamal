@@ -191,6 +191,9 @@ export function update(prisma: PrismaClient) {
           : {}),
         ...(body.scope !== undefined ? { scope: body.scope } : {}),
         ...(body.from_date !== undefined ? { fromDate: body.from_date } : {}),
+        ...(body.overwrite_manually_edited !== undefined
+          ? { overwriteManuallyEdited: body.overwrite_manually_edited }
+          : {}),
       },
     );
     // **R50: a split answers with the SUCCESSOR, not the closed predecessor.**

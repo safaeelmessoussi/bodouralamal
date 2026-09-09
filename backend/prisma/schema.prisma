@@ -1683,6 +1683,25 @@ model Session {
   scheduleId String                  @map("schedule_id") @db.Uuid
   schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
 
+  /// **R138 — this occurrence's OWN title/description, on exactly the same
+  /// snapshot-plus-`overridden` footing every other Session field already
+  /// has** (`room_id`, `delivery_mode`, `visibility`): written by
+  /// `session.materialize` from the schedule's current values, changeable
+  /// for ONE date through `session.override` (which sets `overridden` as it
+  /// already does for every other field), and thereafter spared by the next
+  /// schedule edit through the SAME single flag — no second, per-field
+  /// override marker. Bounds match `RecurringCourseSchedule.title`/
+  /// `.description` exactly (R57); collated `ar-x-icu` in SQL (TD-6a).
+  /// **Defaulted at the DB layer, unlike `RecurringCourseSchedule.title`
+  /// (which has none) — every REAL Session is written by materialization or
+  /// an explicit override, both of which always set this; the default exists
+  /// solely so the many pre-existing direct test fixtures across this
+  /// codebase that construct a scratch Session for an unrelated scenario
+  /// (attendance, content, delivery, trash-lifecycle...) do not all need an
+  /// edit for a value none of them assert on.
+  title       String  @default("حصة") @db.VarChar(120)
+  description String? @db.VarChar(2000)
+
   /// A calendar date, never an instant (TD-11).
   date      DateTime @db.Date
   startTime DateTime @map("start_time") @db.Time(0)
