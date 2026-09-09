@@ -654,12 +654,14 @@ async function seedAcademicYear(): Promise<void> {
     return;
   }
 
-  await prisma.academicYear.upsert({
-    where: { label: ACADEMIC_YEAR },
-    update: {},
+  // A plain create, not an upsert: `initializedByPresence` above already
+  // guarantees the table is empty on this path, and R137's label uniqueness
+  // is now a partial index (live rows only, `academic_year_label_live_key`)
+  // rather than a plain unique column — no longer a valid `upsert` target.
+  await prisma.academicYear.create({
     // Exactly one is_current row application-wide is enforced by a partial
     // unique index (TD-6), so re-running can never create a second.
-    create: { label: ACADEMIC_YEAR, isCurrent: true },
+    data: { label: ACADEMIC_YEAR, isCurrent: true },
   });
   await markInitialized('academic_year');
   console.log(`  academic year: ${ACADEMIC_YEAR} (is_current)`);

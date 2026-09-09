@@ -25,9 +25,12 @@ trap cleanup EXIT
 # **Its own year** (P1.2), in the far-future band the integration fixtures use,
 # so the harness never creates a period against a year the association runs —
 # and never has to guess which of the real years is safe to write into.
+# R137 — `label`'s uniqueness moved to a partial index (live rows only,
+# `academic_year_label_live_key`), so ON CONFLICT must name the same
+# predicate to infer it; the plain `(label)` form no longer matches any index.
 PSQL "INSERT INTO academic_year (id, label)
       VALUES (gen_random_uuid(), '$PERIOD_YEAR_LABEL')
-      ON CONFLICT (label) DO NOTHING;" >/dev/null
+      ON CONFLICT (label) WHERE deleted_at IS NULL DO NOTHING;" >/dev/null
 
 "$CHROME" --headless=new --disable-gpu --no-sandbox --remote-debugging-port=9253 \
   --remote-allow-origins='*' --user-data-dir="$WORK/profile" about:blank >/dev/null 2>&1 &

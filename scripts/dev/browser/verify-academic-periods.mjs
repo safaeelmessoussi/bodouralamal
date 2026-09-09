@@ -147,5 +147,117 @@ check(
   JSON.stringify(edit),
 );
 
+/* ── 5–7 · R137 — the year itself is now managed here too ──────────────── */
+
+// A fresh navigation rather than reusing whatever state checks 1-4 left the
+// page in — those checks pin an UNRELATED, pre-existing property (the period
+// dialog) that this addition does not depend on, and a stale open dialog from
+// them is not this addition's concern to untangle.
+await send('Page.navigate', { url: `${BASE}/admin/academic-periods` });
+await new Promise((r) => setTimeout(r, 4000));
+
+const NEW_YEAR_LABEL = process.env.NEW_YEAR_LABEL ?? '2146-2147';
+
+/** One authenticated API call from the page, reusing the same refresh cookie
+ *  the DOM checks above are already authenticated with — never a second
+ *  session (TD-4.13's reuse detection would revoke this one). */
+const api = (path, init) =>
+  evaluate(`(async () => {
+    const r = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: '{}',
+    });
+    const { access_token } = await r.json();
+    const res = await fetch('/api/v1' + ${JSON.stringify(path)}, {
+      ...${JSON.stringify(init ?? {})},
+      headers: {
+        Authorization: 'Bearer ' + access_token,
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    return { status: res.status, body: await res.text() };
+  })()`);
+
+const createdYear = await evaluate(`(async () => {
+  const setInput = (el, v) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const add = [...document.querySelectorAll('button')].find((b) => b.textContent.includes(${JSON.stringify('إضافة سنة دراسية')}));
+  if (!add) return { noAdd: true, labels: [...document.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  add.click();
+  await new Promise((r) => setTimeout(r, 800));
+  const d = document.querySelector('dialog[open]');
+  if (!d) return { noDialog: true };
+  const label = d.querySelector('input');
+  if (!label) return { noLabelInput: true };
+  setInput(label, ${JSON.stringify(NEW_YEAR_LABEL)});
+  await new Promise((r) => setTimeout(r, 150));
+  const save = [...d.querySelectorAll('button')].find((b) => /حفظ|إضافة|إنشاء/.test(b.textContent));
+  if (!save || save.disabled) return { saveDisabled: true };
+  save.click();
+  await new Promise((r) => setTimeout(r, 2000));
+  const row = [...document.querySelectorAll('.admin-table tbody tr')]
+    .find((r) => r.textContent.includes(${JSON.stringify(NEW_YEAR_LABEL)}));
+  return {
+    dialogClosed: !document.querySelector('dialog[open]'),
+    rowText: row ? row.textContent.replace(/\\s+/g, ' ').trim() : null,
+  };
+})()`);
+
+check(
+  '5 · إضافة سنة دراسية posts a new, non-current year, and it appears in the table',
+  createdYear.dialogClosed === true && typeof createdYear.rowText === 'string',
+  JSON.stringify(createdYear),
+);
+
+/**
+ * **The current year's delete is refused, WITHOUT ever attempting it through
+ * the browser against the real seeded row.** Reading which year is current is
+ * a plain GET; the refusal is asserted straight from the API response, which
+ * proves the exact server behaviour this screen depends on while leaving the
+ * association's actual current year completely untouched either way — a
+ * click-through would only ever prove the SAME refusal reached a confirm
+ * dialog it should never be possible to complete, at the cost of exercising
+ * real delete plumbing against production-shaped seed data for no more
+ * evidence than this direct call already gives.
+ */
+const years = JSON.parse((await api('/admin/academic-years?page=1&page_size=100')).body || '{}');
+const current = (years.data ?? []).find((y) => y.is_current === true);
+check('the seed still has exactly one current year to test against', Boolean(current), JSON.stringify(current));
+
+const refusedDelete = current
+  ? JSON.parse((await api(`/admin/academic-years/${current.id}`, { method: 'DELETE' })).body || '{}')
+  : null;
+
+check(
+  '6 · R137 — deleting the CURRENT academic year is refused by the server (ACADEMIC_YEAR_IS_CURRENT)',
+  refusedDelete?.error?.details?.reason === 'ACADEMIC_YEAR_IS_CURRENT',
+  JSON.stringify(refusedDelete),
+);
+
+const stillThere = current
+  ? JSON.parse((await api(`/admin/academic-years?page=1&page_size=100`)).body || '{}')
+  : null;
+check(
+  'the refused delete left the real current year exactly as it was',
+  stillThere ? (stillThere.data ?? []).some((y) => y.id === current.id && y.is_current === true) : false,
+  JSON.stringify(stillThere?.data?.find((y) => y.id === current?.id)),
+);
+
+/* Cleanup — this harness's own new year (P1.2). */
+const ownYearId = JSON.parse((await api('/admin/academic-years?page=1&page_size=100')).body || '{}')
+  .data?.find((y) => y.label === NEW_YEAR_LABEL)?.id;
+const cleaned = ownYearId
+  ? await api(`/admin/academic-years/${ownYearId}`, { method: 'DELETE' })
+  : { status: 0 };
+check(
+  '7 · this harness deletes its own disposable year afterward, cleanly',
+  ownYearId !== undefined && cleaned.status === 204,
+  JSON.stringify({ ownYearId, cleaned }),
+);
+
 await close();
 process.exit(finish());

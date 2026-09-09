@@ -3149,7 +3149,10 @@ model AcademicYear {
   periods   AcademicPeriod[]
   id        String           @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
-  label     String           @unique @db.VarChar(9)
+  /// **Unique among live rows** (partial index, R137) — a soft-deleted year
+  /// must not haunt its own label forever, the same reasoning
+  /// `SchedulingType.name` states beside its own partial index.
+  label     String           @db.VarChar(9)
   /// Exactly one `true` row application-wide — partial unique index in SQL.
   isCurrent Boolean          @default(false) @map("is_current")
 

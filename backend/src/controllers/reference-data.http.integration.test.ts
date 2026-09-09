@@ -334,7 +334,7 @@ describe("POST /admin/academic-years", () => {
       BASE,
       "POST",
       "/admin/academic-years",
-      { token: superAdmin, body: { label: CURRENT_YEAR, isCurrent: true } },
+      { token: superAdmin, body: { label: CURRENT_YEAR, is_current: true } },
     );
     expect(created.status).toBe(201);
     expect(created.body["is_current"]).toBe(true);
@@ -510,6 +510,25 @@ describe("PATCH and DELETE /admin/academic-years/{id}", () => {
 
     const list = await call("/admin/academic-years", superAdmin);
     expect(list.body.data!.map((r) => r.id)).not.toContain(scratchId);
+  });
+
+  it("R137 — a soft-deleted year's OWN label is reusable, not haunted forever", async () => {
+    // scratchId (just deleted above) was renamed to 2099-2100 earlier in this
+    // block. Before the R137 fix, `academic_year_label_key` was a PLAIN
+    // unique index with no `deleted_at` term — the same gap
+    // `scheduling_type_name_live_key` was written to close for a different
+    // table — so this exact label would have stayed permanently unusable.
+    const recreated = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: "2099-2100" } },
+    );
+    expect(recreated.status).toBe(201);
+    expect(recreated.body["label"]).toBe("2099-2100");
+    expect(recreated.body["id"]).not.toBe(scratchId);
+
+    await prisma.academicYear.deleteMany({ where: { id: recreated.body["id"] as string } });
   });
 
   it("is Super Admin only for both PATCH and DELETE", async () => {

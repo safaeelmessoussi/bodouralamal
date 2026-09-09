@@ -72,14 +72,14 @@ const yearBodySchema = z
     /** `YYYY-YYYY`; the pair's own relationship is checked in the service,
      *  where the sentence naming which half is wrong can be written once. */
     label: z.string().trim().min(1).max(9),
-    isCurrent: z.boolean().optional(),
+    is_current: z.boolean().optional(),
   })
   .strict();
 
 const yearPatchSchema = z
   .object({
     label: z.string().trim().min(1).max(9).optional(),
-    isCurrent: z.boolean().optional(),
+    is_current: z.boolean().optional(),
     /** TD-15. */
     version: z.coerce.number().int().min(0),
   })
@@ -91,7 +91,7 @@ export function createAcademicYearHandler(prisma: PrismaClient) {
     const b = parse(yearBodySchema, req.body ?? {});
     const row = await createAcademicYear(prisma, requireActor(req), {
       label: b.label,
-      ...(b.isCurrent === undefined ? {} : { isCurrent: b.isCurrent }),
+      ...(b.is_current === undefined ? {} : { isCurrent: b.is_current }),
     });
     res.status(201).json(academicYearRefDto(row));
   };
@@ -103,7 +103,7 @@ export function updateAcademicYearHandler(prisma: PrismaClient) {
     const b = parse(yearPatchSchema, req.body ?? {});
     const row = await updateAcademicYear(prisma, requireActor(req), idParam(req, 'id'), b.version, {
       ...(b.label === undefined ? {} : { label: b.label }),
-      ...(b.isCurrent === undefined ? {} : { isCurrent: b.isCurrent }),
+      ...(b.is_current === undefined ? {} : { isCurrent: b.is_current }),
     });
     res.json(academicYearRefDto(row));
   };
