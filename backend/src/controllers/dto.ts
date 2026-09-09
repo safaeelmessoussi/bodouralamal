@@ -26,6 +26,7 @@
  */
 
 import type { LegalConsentTextRow } from '../services/legal-consent-text.service.js';
+import type { LegalDocumentRow } from '../services/legal-document.service.js';
 import type { Prisma } from "../generated/prisma/client.js";
 import { splitComposedName } from '../lib/person-name.js';
 import { toNumber } from "../policies/grading.js";
@@ -2418,6 +2419,52 @@ export function publicConsentTextDto(row: {
     id: row.id,
     version_label: row.versionLabel,
     body_arabic: row.bodyArabic,
+  };
+}
+
+/**
+ * **One stored Privacy Policy/Terms of Use version, as the Super Admin
+ * legal-documents screen reads it** (R138 §12/§13).
+ *
+ * Same shape as `legalConsentTextDto` above, minus `body_digest`/usage count:
+ * nothing else references a `LegalDocument` row by foreign key the way a
+ * `ConsentRecord` references a `LegalConsentText`, so there is no "agreed to
+ * N times" fact to surface — the reason a version cannot be edited is stated
+ * by `status`/`activated_at` alone.
+ */
+export function legalDocumentDto(row: LegalDocumentRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    kind: row.kind,
+    version_label: row.version_label,
+    body_arabic: row.body_arabic,
+    status: row.status,
+    created_at: row.created_at,
+    activated_at: row.activated_at,
+    superseded_at: row.superseded_at,
+    version: row.version,
+  };
+}
+
+/**
+ * **What the public `/privacy`/`/terms` page receives.**
+ *
+ * The exact wording and deliberately nothing else — status, provenance and
+ * `version` (the TD-15 lock, meaningless off the admin screen) are
+ * administration's business, on the same reasoning `publicConsentTextDto`
+ * already states for the registration form.
+ */
+export function publicLegalDocumentDto(row: {
+  id: string;
+  versionLabel: string;
+  bodyArabic: string;
+  activatedAt: Date | null;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    version_label: row.versionLabel,
+    body_arabic: row.bodyArabic,
+    activated_at: row.activatedAt?.toISOString() ?? null,
   };
 }
 

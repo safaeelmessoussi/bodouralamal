@@ -577,6 +577,12 @@ export const ar = {
     ownerInput: '⚠ معلومة مطلوبة من الجمعية — لم تُحدَّد بعد.',
     pendingNote:
       'هذه الصفحة تصف ما تقوم به المنصة تقنياً. البنود المُعلَّمة أعلاه بانتظار ما تعتمده الجمعية ومستشارها القانوني.',
+    // R138 §12/§13 — the page is dynamic now (see pages/legal.tsx): these are
+    // its two new states. §14.4 — declared as a state, never a blank page and
+    // never invented text standing in for it.
+    notPublished:
+      'لم تُنشر بعد صيغة معتمدة من هذه الصفحة. سيراجع فريق الجمعية النص قريباً.',
+    publishedOn: 'معمول بها منذ {date}',
 
     privacyTitle: 'سياسة الخصوصية',
     privacyLede: 'ما الذي نجمعه، ولماذا، وإلى متى يبقى.',
@@ -2799,6 +2805,42 @@ export const ar = {
       historyTitle: 'الصيغ السابقة',
       historyHint: 'محفوظة بنصّها الكامل للاطّلاع فقط. لا تُحذف ولا تُعدَّل.',
       errLabelTaken: 'هذا المعرّف مستعمل في صيغة أخرى. اختاري معرّفاً آخر.',
+      errImmutable: 'هذه الصيغة سبق العمل بها فلا تُعدَّل. أنشئي صيغة جديدة بالنصّ المعدَّل.',
+    },
+    // R138 §12/§13 — the versioned Privacy Policy and Terms of Use. Generic
+    // wording shared by both kinds, with `{doc}` naming which one — the same
+    // structure `consentText` above uses, minus the parts specific to
+    // registration consent (no usage count: nothing else references a
+    // LegalDocument row by foreign key).
+    legalDocuments: {
+      privacyPolicyTitle: 'سياسة الخصوصية',
+      termsOfUseTitle: 'شروط الاستعمال',
+      lede: 'النصّ المعروض للزوار في {doc}. كل تعديل يعني صيغة جديدة — لا تُعدَّل صيغة سبق اعتمادها.',
+      inForce: 'الصيغة المعمول بها',
+      draft: 'مسوّدة',
+      superseded: 'صيغة سابقة',
+      noneActive:
+        'لا توجد صيغة معمول بها لـ{doc}، ولذلك لا تعرض صفحته العامة أي نص. أنشئي صيغة، اكتبي نصّها، ثم اعتمديها.',
+      add: 'صيغة جديدة',
+      addTitle: 'صيغة جديدة لـ{doc}',
+      editTitle: 'تعديل المسوّدة',
+      labelField: 'معرّف الصيغة',
+      labelHint: 'اسم تختارينه للتمييز بين صيغ {doc}، مثال: v1.0-2026-09.',
+      bodyField: 'النص بالعربية',
+      bodyHint: 'يُعرض على كل زائر كما هو، حرفاً بحرف. تُحفظ الفقرات والأسطر كما تكتبينها.',
+      saved: 'تم حفظ المسوّدة. لن تُعرض للزوار قبل اعتمادها.',
+      activate: 'اعتماد هذه الصيغة',
+      activateTitle: 'اعتماد صيغة',
+      activateBody:
+        'ستصبح «{label}» هي صيغة {doc} المعروضة لكل زائر. الصيغة المعمول بها حالياً تصير صيغة سابقة، ويبقى نصّها محفوظاً كما هو.',
+      activateConfirm: 'اعتماد',
+      activated: 'تم اعتماد الصيغة. تُعرض من الآن لكل زائر.',
+      activatedOn: 'معمول بها منذ {date}',
+      neverActivated: 'لم تُعتمد بعد',
+      immutable: 'لا تُعدَّل هذه الصيغة لأنها عُرضت للزوار. أي تغيير في النصّ يكون بإنشاء صيغة جديدة واعتمادها.',
+      historyTitle: 'الصيغ السابقة',
+      historyHint: 'محفوظة بنصّها الكامل للاطّلاع فقط. لا تُحذف ولا تُعدَّل.',
+      errLabelTaken: 'هذا المعرّف مستعمل في صيغة أخرى من {doc}. اختاري معرّفاً آخر.',
       errImmutable: 'هذه الصيغة سبق العمل بها فلا تُعدَّل. أنشئي صيغة جديدة بالنصّ المعدَّل.',
     },
     settings: {

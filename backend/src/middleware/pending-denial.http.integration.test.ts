@@ -170,6 +170,13 @@ const EXEMPT = new Set([
   // session. It publishes the id, the label and the text; never provenance,
   // status or usage. **The guard caught this one**, which is what it is for.
   "/registration/consent-text",
+  // R138 §12/§13: the public Privacy Policy / Terms of Use. **Anonymous for
+  // the identical reason the consent wording above is** — a notice the
+  // association is legally obliged to show cannot sit behind a session, and
+  // a visitor deciding whether to sign in at all is exactly who reads these.
+  // Publishes the id, the label, the text and the activation date; never
+  // status, provenance or the other draft/superseded versions.
+  "/legal-documents/{kind}",
   "/healthz",
   // Revision 35: the §5.1 landing-page branch directory, anonymous.
   "/branches",

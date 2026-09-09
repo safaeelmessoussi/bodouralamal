@@ -1,0 +1,13 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── The public Privacy Policy / Terms of Use body (R138 §12/§13) ──────────
+ *
+ * `pre-line` is what makes the approved text render with the paragraph
+ * breaks it was written with — the same reasoning `branch-card__hours` and
+ * the admin `consent-version__body` already apply to their own free-text
+ * fields (§7): the line breaks are part of what was approved, not something
+ * this page re-flows.
+ */
+.legal__body {
+  white-space: pre-line;
+}

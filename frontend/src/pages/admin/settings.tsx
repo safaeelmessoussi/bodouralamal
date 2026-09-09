@@ -10,6 +10,14 @@ import {
   type ConsentTextVersion,
   type Setting,
 } from '../../adapters/settings.js';
+import {
+  activateLegalDocument,
+  createLegalDocument,
+  listLegalDocuments,
+  updateLegalDocument,
+  type LegalDocumentKind,
+  type LegalDocumentVersion,
+} from '../../adapters/legal-documents.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ErrorState } from '../../components/states.js';
 import { Button } from '../../components/ui/button.js';
@@ -89,6 +97,20 @@ export function SettingsPage(): ReactNode {
           rather than as a string. Above the generic list because it is the
           reason this screen exists. */}
       <ConsentTextsSection />
+
+      {/* R138 §12/§13 — the public Privacy Policy and Terms of Use, versioned
+          the same way. Two independent documents, so two sections rather than
+          a kind selector switching one — each keeps its own history visible
+          without a click, the same reasoning `ConsentTextsSection` states for
+          its own history list. */}
+      <LegalDocumentsSection
+        kind="privacy_policy"
+        docLabel={t('admin.legalDocuments.privacyPolicyTitle')}
+      />
+      <LegalDocumentsSection
+        kind="terms_of_use"
+        docLabel={t('admin.legalDocuments.termsOfUseTitle')}
+      />
 
       {status === 'error' ? (
         <ErrorState onRetry={() => void load()} />
@@ -418,6 +440,283 @@ function VersionCard({
         <p className="settings-item__meta muted">{t('admin.consentText.immutable')}</p>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * **One of the two versioned public documents** (R138 §12/§13) — «سياسة
+ * الخصوصية» or «شروط الاستعمال», structured exactly like `ConsentTextsSection`
+ * above and parametrized by `kind` so the two screens cannot drift into two
+ * different implementations of the same draft → activate flow.
+ *
+ * No usage count on a card here (unlike `VersionCard`'s
+ * `consent_record_count`): nothing else references a `LegalDocument` row by
+ * foreign key, so there is no *"agreed to N times"* fact to surface — the
+ * reason a used version cannot be edited is stated by its own status alone.
+ */
+function LegalDocumentsSection({
+  kind,
+  docLabel,
+}: {
+  kind: LegalDocumentKind;
+  docLabel: string;
+}): ReactNode {
+  const { accessToken } = useSession();
+  const [rows, setRows] = useState<LegalDocumentVersion[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [editing, setEditing] = useState<LegalDocumentVersion | 'new' | null>(null);
+  const [confirming, setConfirming] = useState<LegalDocumentVersion | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    try {
+      setRows(await listLegalDocuments(kind, accessToken));
+      setStatus('ready');
+    } catch {
+      setStatus('error');
+    }
+  }, [accessToken, kind]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const active = rows.find((r) => r.status === 'active') ?? null;
+  const drafts = rows.filter((r) => r.status === 'draft');
+  const history = rows.filter((r) => r.status === 'superseded');
+
+  async function activate(row: LegalDocumentVersion): Promise<void> {
+    setBusy(true);
+    try {
+      await activateLegalDocument(row.id, accessToken);
+      setConfirming(null);
+      setNotice(t('admin.legalDocuments.activated'));
+      await load();
+    } catch {
+      setNotice(t('common.saveFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="settings-item">
+      <h2>{docLabel}</h2>
+      <p className="settings-item__meta muted">
+        {t('admin.legalDocuments.lede').replace('{doc}', docLabel)}
+      </p>
+
+      {notice ? <Feedback>{notice}</Feedback> : null}
+
+      {status === 'error' ? (
+        <ErrorState onRetry={() => void load()} />
+      ) : status === 'loading' ? (
+        <div className="skeleton" aria-live="polite" />
+      ) : (
+        <>
+          {active === null ? (
+            // Rule AH — the state in which the public page has no text to show
+            // at all, so it is a warning rather than an empty list.
+            <p className="field__error" role="alert">
+              {t('admin.legalDocuments.noneActive').replace('{doc}', docLabel)}
+            </p>
+          ) : (
+            <LegalDocumentCard row={active} heading={t('admin.legalDocuments.inForce')} />
+          )}
+
+          {drafts.map((row) => (
+            <LegalDocumentCard
+              key={row.id}
+              row={row}
+              heading={t('admin.legalDocuments.draft')}
+              onEdit={() => setEditing(row)}
+              onActivate={() => setConfirming(row)}
+            />
+          ))}
+
+          <div className="settings-item__actions">
+            <Button variant="add" onClick={() => setEditing('new')}>
+              {t('admin.legalDocuments.add')}
+            </Button>
+          </div>
+
+          {history.length > 0 ? (
+            <>
+              <h3>{t('admin.legalDocuments.historyTitle')}</h3>
+              <p className="settings-item__meta muted">
+                {t('admin.legalDocuments.historyHint')}
+              </p>
+              {history.map((row) => (
+                <LegalDocumentCard
+                  key={row.id}
+                  row={row}
+                  heading={t('admin.legalDocuments.superseded')}
+                />
+              ))}
+            </>
+          ) : null}
+        </>
+      )}
+
+      <LegalDocumentDialog
+        kind={kind}
+        docLabel={docLabel}
+        row={editing}
+        token={accessToken}
+        onClose={() => setEditing(null)}
+        onSaved={(message) => {
+          setEditing(null);
+          setNotice(message);
+          void load();
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={t('admin.legalDocuments.activateTitle')}
+        body={t('admin.legalDocuments.activateBody')
+          .replace('{label}', confirming?.version_label ?? '')
+          .replace('{doc}', docLabel)}
+        confirmLabel={t('admin.legalDocuments.activateConfirm')}
+        busy={busy}
+        onConfirm={() => void (confirming && activate(confirming))}
+        onCancel={() => setConfirming(null)}
+      />
+    </section>
+  );
+}
+
+/** One version, with its text in full — see `VersionCard`'s own reasoning. */
+function LegalDocumentCard({
+  row,
+  heading,
+  onEdit,
+  onActivate,
+}: {
+  row: LegalDocumentVersion;
+  heading: string;
+  onEdit?: () => void;
+  onActivate?: () => void;
+}): ReactNode {
+  return (
+    <article className="consent-version">
+      <h3 className="consent-version__heading">
+        {heading} — {row.version_label}
+      </h3>
+      <p className="settings-item__meta muted">
+        {row.activated_at
+          ? t('admin.legalDocuments.activatedOn').replace('{date}', row.activated_at.slice(0, 10))
+          : t('admin.legalDocuments.neverActivated')}
+      </p>
+      <p className="consent-version__body">{row.body_arabic}</p>
+      {onEdit || onActivate ? (
+        <div className="settings-item__actions">
+          {onEdit ? <Button onClick={onEdit}>{t('common.edit')}</Button> : null}
+          {onActivate ? (
+            <Button variant="primary" onClick={onActivate}>
+              {t('admin.legalDocuments.activate')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {row.status !== 'draft' ? (
+        <p className="settings-item__meta muted">{t('admin.legalDocuments.immutable')}</p>
+      ) : null}
+    </article>
+  );
+}
+
+/** Create a draft of one kind, or correct one that has never been in force. */
+function LegalDocumentDialog({
+  kind,
+  docLabel,
+  row,
+  token,
+  onClose,
+  onSaved,
+}: {
+  kind: LegalDocumentKind;
+  docLabel: string;
+  row: LegalDocumentVersion | 'new' | null;
+  token: string | null;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}): ReactNode {
+  const existing = row === 'new' || row === null ? null : row;
+  const [label, setLabel] = useState('');
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLabel(existing?.version_label ?? '');
+    setBody(existing?.body_arabic ?? '');
+    setError(null);
+  }, [existing]);
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      if (existing) {
+        await updateLegalDocument(
+          existing.id,
+          { version_label: label.trim(), body_arabic: body },
+          existing.version,
+          token,
+        );
+      } else {
+        await createLegalDocument({ kind, version_label: label.trim(), body_arabic: body }, token);
+      }
+      onSaved(t('admin.legalDocuments.saved'));
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.details['reason'] === 'LEGAL_DOCUMENT_VERSION_LABEL_TAKEN'
+          ? t('admin.legalDocuments.errLabelTaken').replace('{doc}', docLabel)
+          : err instanceof ApiError && err.details['reason'] === 'LEGAL_DOCUMENT_IMMUTABLE'
+            ? t('admin.legalDocuments.errImmutable')
+            : t('common.saveFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FormDialog
+      open={row !== null}
+      title={
+        existing
+          ? t('admin.legalDocuments.editTitle')
+          : t('admin.legalDocuments.addTitle').replace('{doc}', docLabel)
+      }
+      wide
+      submitLabel={t('common.save')}
+      busy={busy}
+      disabled={label.trim() === '' || body.trim() === ''}
+      dirty={label !== (existing?.version_label ?? '') || body !== (existing?.body_arabic ?? '')}
+      notice={error}
+      onSubmit={() => void submit()}
+      onCancel={onClose}
+    >
+      <TextField
+        label={t('admin.legalDocuments.labelField')}
+        value={label}
+        onChange={setLabel}
+        required
+        hint={t('admin.legalDocuments.labelHint').replace('{doc}', docLabel)}
+      />
+      <TextArea
+        label={t('admin.legalDocuments.bodyField')}
+        value={body}
+        onChange={setBody}
+        required
+        rows={12}
+        hint={t('admin.legalDocuments.bodyHint')}
+      />
+    </FormDialog>
   );
 }
 

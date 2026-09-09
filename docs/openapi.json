@@ -975,6 +975,291 @@
         }
       }
     },
+    "/admin/legal-documents/{kind}": {
+      "get": {
+        "summary": "The Privacy Policy or Terms of Use versions",
+        "description": "**Super Admin only** (§5.6, R138 §13), asserted against live rows per request (TD-12). `{kind}` is `privacy_policy` or `terms_of_use`. Every version of that ONE kind, newest first, **with its exact Arabic wording** — the same reasoning `/admin/legal-consent-texts` already carries its own text for. Each row carries `id`, `kind`, `version_label`, `body_arabic`, `status` (`draft | active | superseded`), `created_at`, `activated_at`, `superseded_at` and TD-15 `version`. **Nothing is ever deleted** — a version the public page once showed stays readable, and there is no delete verb on this resource.\n\n**Why a new resource rather than reusing `/admin/legal-consent-texts`**: that resource enforces exactly ONE active row GLOBALLY, correct for one shared consent wording and wrong here — the Privacy Policy and Terms of Use are two independent documents that must each have their own current version in force at once. `kind` is the discriminator; the active-version invariant below is scoped by it.",
+        "responses": {
+          "200": {
+            "description": "Every version of this kind, newest first."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — unknown kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/legal-documents": {
+      "post": {
+        "summary": "Draft a Privacy Policy or Terms of Use version",
+        "description": "**Super Admin only** (§5.6, R138 §13). Body: `{ kind, version_label, body_arabic }`. Creates a **draft** of the given kind; **creating is never activating**, which is a second, separately audited decision (see `/activate`). `version_label` is unique WITHIN its kind — Privacy Policy and Terms of Use may reuse the same label without colliding, since they are never compared to each other; a clash is `409` with `LEGAL_DOCUMENT_VERSION_LABEL_TAKEN`. `body_arabic` is the exact text, trimmed at the ends and normalised nowhere else. **Audited as `legaldocument.create` carrying the kind, never the body and never a copied label** (TD-8), the same minimisation `/admin/legal-consent-texts` already follows.",
+        "responses": {
+          "201": {
+            "description": "The draft."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — blank or over-long label or body, or unknown kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with LEGAL_DOCUMENT_VERSION_LABEL_TAKEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/legal-documents/{id}": {
+      "patch": {
+        "summary": "Edit a DRAFT legal document version",
+        "description": "**Super Admin only** (§5.6, R138 §13). Body: `{ version_label, body_arabic, version }`. **A never-activated draft only** — a version that has ever been in force is evidence of what the public page showed, so correcting even a typo is always a new version, refused with the coded reason `LEGAL_DOCUMENT_IMMUTABLE`. **TD-15 optimistic locking** on `version`: two Super Admins on one draft is a `409`, not an overwrite.",
+        "responses": {
+          "200": {
+            "description": "The updated draft."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with LEGAL_DOCUMENT_IMMUTABLE or LEGAL_DOCUMENT_VERSION_LABEL_TAKEN; VERSION_CONFLICT on a stale version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/legal-documents/{id}/activate": {
+      "post": {
+        "summary": "Put a legal document version into force",
+        "description": "**Super Admin only** (§5.6, R138 §13). No body. Stamps the outgoing version OF THE SAME KIND `superseded` and this one `active`, in one transaction and in that order — activating a Privacy Policy draft never touches the Terms of Use's own active row, or vice versa. **Exactly one version per kind is active, and the DATABASE enforces it** — a partial unique index over `(kind) WHERE status = 'active'`. **Its own route, not a `status` field on the PATCH**, the same reasoning `/admin/legal-consent-texts/{id}/activate` already carries. **A superseded version is not reactivated** (`LEGAL_DOCUMENT_SUPERSEDED`) — bringing old wording back is a new version carrying the same text. **Audited as `legaldocument.activate`**, naming the kind and the outgoing version by id.",
+        "responses": {
+          "200": {
+            "description": "The version now in force."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with LEGAL_DOCUMENT_ALREADY_ACTIVE or LEGAL_DOCUMENT_SUPERSEDED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/legal-documents/{kind}": {
+      "get": {
+        "summary": "The current Privacy Policy or Terms of Use",
+        "description": "**Anonymous** (§5.1, §5.6, TD-3.2, R138 §12/§13) — a notice the association is legally obliged to show cannot sit behind a session, and a visitor deciding whether to sign in at all is exactly who reads these. `{kind}` is `privacy_policy` or `terms_of_use`. Returns `{ id, version_label, body_arabic, activated_at }` for the version currently in force, and deliberately nothing else — status and provenance are administration's business.\n\n**Fails closed.** With no active version of that kind this answers `503` with `LEGAL_DOCUMENT_NOT_CONFIGURED` — a Super Admin must create and activate at least one Privacy Policy and one Terms of Use version before the public pages can render.",
+        "responses": {
+          "200": {
+            "description": "The version in force."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — unknown kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error envelope (TD-3.8). SERVICE_UNAVAILABLE with LEGAL_DOCUMENT_NOT_CONFIGURED — no version of this kind has been activated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/approvals": {
       "get": {
         "summary": "Approval queue",

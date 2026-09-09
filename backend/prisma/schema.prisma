@@ -808,6 +808,10 @@ model User {
   /// audit asks about each separately.
   legalConsentTextsCreated   LegalConsentText[]      @relation("LegalConsentTextCreatedBy")
   legalConsentTextsActivated LegalConsentText[]      @relation("LegalConsentTextActivatedBy")
+  /// R138 §12/§13 — who drafted a Privacy Policy/Terms of Use version, and who
+  /// published it. Same two-relation shape as the pair above, same reason.
+  legalDocumentsCreated      LegalDocument[]         @relation("LegalDocumentCreatedBy")
+  legalDocumentsActivated    LegalDocument[]         @relation("LegalDocumentActivatedBy")
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -2237,6 +2241,91 @@ model LegalConsentText {
 
   @@index([status])
   @@map("legal_consent_text")
+}
+
+enum LegalDocumentKind {
+  privacy_policy
+  terms_of_use
+
+  @@map("legal_document_kind")
+}
+
+enum LegalDocumentStatus {
+  draft
+  active
+  superseded
+
+  @@map("legal_document_status")
+}
+
+/// **The public Privacy Policy and Terms of Use, versioned the same way
+/// `LegalConsentText` already is** (R138 §12/§13).
+///
+/// ## Why a new model rather than reusing `LegalConsentText`
+///
+/// `LegalConsentText` enforces exactly ONE active row **globally** (its
+/// partial unique index has no discriminator) — correct for one shared
+/// consent wording, wrong here: Privacy Policy and Terms of Use are two
+/// independent documents that must each have their own current version at
+/// the same time. `kind` is that discriminator, and the active-version
+/// invariant below is scoped by it rather than shared across both.
+///
+/// ## The invariants — identical in kind to `LegalConsentText`'s
+///
+/// * **Immutable once used.** A row that has ever been `active` cannot have
+///   its wording or its label edited — enforced in the service, the same
+///   `assertEditable` shape. New wording is a NEW version.
+/// * **Exactly one active version PER KIND**, enforced by a partial unique
+///   index over `(kind) WHERE status = 'active'` — a database constraint,
+///   so two concurrent activations of the same kind cannot both win, while
+///   Privacy Policy and Terms of Use each keep their own active row.
+/// * **Nothing is destroyed.** Superseding is a status change; a version the
+///   public page once showed stays readable — *"what did the Privacy Policy
+///   say on date X"* must stay answerable from the platform's own data,
+///   which is the same reason `LegalConsentText` never deletes a row.
+///
+/// No FK from any other table references this — unlike `ConsentRecord`'s
+/// evidentiary link to `LegalConsentText`, nothing records "which version of
+/// the Privacy Policy a person read": the public page always shows whatever
+/// is active NOW, and the historical-readability invariant above is what
+/// keeps a past version answerable without a record needing to name it.
+model LegalDocument {
+  id String @id @default(uuid()) @db.Uuid
+
+  kind LegalDocumentKind
+
+  /// **The human-readable identifier the Owner assigns**, e.g. `v1.0-2026-09`,
+  /// unique WITHIN its kind — Privacy Policy and Terms of Use may reuse the
+  /// same label without colliding, since they are never compared to each
+  /// other.
+  versionLabel String @map("version_label") @db.VarChar(60)
+
+  /// **The exact Arabic text**, character for character. `Text`, not a
+  /// bounded `VarChar`, for the same reason `LegalConsentText.bodyArabic` is:
+  /// a legal document is not a label.
+  bodyArabic String @map("body_arabic")
+
+  status LegalDocumentStatus @default(draft)
+
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdBy   User     @relation("LegalDocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  /// When this version became the one the public page shows, and who decided.
+  /// Null while it is a draft.
+  activatedAt   DateTime? @map("activated_at") @db.Timestamptz(6)
+  activatedById String?   @map("activated_by_id") @db.Uuid
+  activatedBy   User?     @relation("LegalDocumentActivatedBy", fields: [activatedById], references: [id], onDelete: Restrict)
+
+  /// When a later version replaced it. Retained, never cleared.
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  /// TD-15 optimistic lock.
+  version Int @default(1)
+
+  @@unique([kind, versionLabel])
+  @@index([kind, status])
+  @@map("legal_document")
 }
 
 model ConsentRecord {

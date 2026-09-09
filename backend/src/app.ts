@@ -6,6 +6,7 @@ import * as selfManagedClaims from './controllers/self-managed-claim.controller.
 import * as approvals from './controllers/approval.controller.js';
 import * as academicPeriods from './controllers/academic-period.controller.js';
 import * as consentTexts from './controllers/legal-consent-text.controller.js';
+import * as legalDocuments from './controllers/legal-document.controller.js';
 import * as settings from './controllers/setting.controller.js';
 import * as teachingProfile from './controllers/teaching-profile.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
@@ -296,6 +297,14 @@ export function createApp(
    */
   api.get('/registration/consent-text', consentTexts.readActive(prisma));
 
+  /**
+   * **R138 §12/§13 — the public Privacy Policy and Terms of Use.** Anonymous
+   * for the same reason the consent text above is: a notice the association
+   * is legally obliged to show cannot be behind a session, and a visitor
+   * deciding whether to sign in at all is exactly who reads these.
+   */
+  api.get('/legal-documents/:kind', legalDocuments.readActive(prisma));
+
   // Branches & Rooms (§5.6, §14.2). Everything below requires a live Active
   // session; role and branch-scope checks live in the service (TD-2).
   // §4.4/TD-3.4: the calendar is PUBLIC — an anonymous visitor sees the public
@@ -386,6 +395,12 @@ export function createApp(
   guarded.post('/admin/legal-consent-texts', consentTexts.create(prisma));
   guarded.patch('/admin/legal-consent-texts/:id', consentTexts.update(prisma));
   guarded.post('/admin/legal-consent-texts/:id/activate', consentTexts.activate(prisma));
+  // R138 §12/§13 — the versioned Privacy Policy/Terms of Use, same shape as
+  // the consent texts above. Super Admin only, enforced in the service.
+  guarded.get('/admin/legal-documents/:kind', legalDocuments.list(prisma));
+  guarded.post('/admin/legal-documents', legalDocuments.create(prisma));
+  guarded.patch('/admin/legal-documents/:id', legalDocuments.update(prisma));
+  guarded.post('/admin/legal-documents/:id/activate', legalDocuments.activate(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
 
   // R62 — child applications. One request holds several children; each is

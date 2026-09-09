@@ -52,6 +52,11 @@ POST /admin/legal-consent-texts               # TD-3.11, §2.3, §4.1a (R119) �
 PATCH /admin/legal-consent-texts/{id}         # TD-3.11, §2.3, §4.1a (R119) — a never-activated draft only; used wording is immutable
 POST /admin/legal-consent-texts/{id}/activate # TD-3.11, §2.3, §4.1a (R119) — puts one version into force; exactly one active
 GET /registration/consent-text                # TD-3.2, §2.3, §4.1a (R119) — anonymous; the exact wording the form displays and submits the id of
+GET /admin/legal-documents/{kind}             # TD-3.11, §5.6 (R138 §13) — Super Admin only; every version of one kind (privacy_policy|terms_of_use)
+POST /admin/legal-documents                   # TD-3.11, §5.6 (R138 §13) — creates a DRAFT of one kind; activating is a separate decision
+PATCH /admin/legal-documents/{id}             # TD-3.11, §5.6 (R138 §13) — a never-activated draft only; used wording is immutable
+POST /admin/legal-documents/{id}/activate     # TD-3.11, §5.6 (R138 §13) — puts one version into force; exactly one active per kind
+GET /legal-documents/{kind}                   # TD-3.2, §5.1, §5.6 (R138 §12/§13) — anonymous; the current Privacy Policy or Terms of Use
 GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2; R49 optional assignments[] granted in the same transaction
 POST /child-applications                      # §4.1/§4.3 (R62) — one request, many children; signed-in adult
