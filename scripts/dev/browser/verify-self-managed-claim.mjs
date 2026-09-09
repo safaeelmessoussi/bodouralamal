@@ -136,5 +136,41 @@ check(
   !review.includes(SUBJECT) && !(await evaluate('document.body.innerHTML')).includes(SUBJECT),
 );
 
+/* ── 6 · R137 — the SAME queue, reachable from طلبات الانضمام too ───────── */
+check(
+  'طلبات الانضمام loads for the same Super Admin',
+  await navigate(`${BASE}/admin/approvals`, 'table'),
+);
+check(
+  'the standing sidebar no longer links to it — hiddenFromNav (R137), while the route above still worked',
+  (await evaluate(
+    `(() => !document.querySelector('nav.admin-nav a[href="/admin/self-managed-claims"]'))()`,
+  )) === true,
+);
+check(
+  'the نوع الطلب filter offers the self-managed-claims option',
+  (await setSelectValue('نوع الطلب', 'self-managed-claim')) === 'self-managed-claim',
+);
+await wait(600);
+
+const embedded = await bodyText();
+check(
+  'selecting it renders the SAME pending claim inline — one queue, reached two ways',
+  embedded.includes(CODE),
+);
+check(
+  'the credential coordinate stays absent here too — no second, looser implementation',
+  !embedded.includes(SUBJECT),
+);
+check(
+  'switching back to «كل الأنواع» restores the ordinary approvals table',
+  (await setSelectValue('نوع الطلب', '')) === '',
+);
+await wait(600);
+check(
+  'the ordinary approvals table is showing again, not stuck on the claims queue',
+  (await evaluate(`(() => !!document.querySelector('table caption'))()`)) === true,
+);
+
 await close();
 finish();
