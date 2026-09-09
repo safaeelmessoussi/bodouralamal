@@ -7,6 +7,7 @@ import SCHEDULING_SOURCE from './scheduling.tsx?raw';
 import EXAM_GRADES_SOURCE from './exam-grades.tsx?raw';
 import BUILDER_SOURCE from './assessments.tsx?raw';
 import EXAM_SECTION_SOURCE from '../../components/scheduling/exam-section.tsx?raw';
+import EVENT_DIALOG_SOURCE from '../../components/calendar/event-details-dialog.tsx?raw';
 
 /**
  * **R136, frontend-completion pass — an Owner browser walk found five real
@@ -133,6 +134,51 @@ describe('source-aware scheduler prefill (?source=&mode=)', () => {
   it('the reuse action from بناء الاختبارات carries both params, as a pure navigation with no request', () => {
     expect(code(BUILDER_SOURCE)).toContain(
       '`/admin/schedules?kind=exam&new=1&source=${encodeURIComponent(row.id)}&mode=${row.mode}`',
+    );
+  });
+});
+
+/**
+ * **R137 — the OTHER direction: a Session names the audience, the operator
+ * still picks the paper.** التقويم's «ربط اختبار» arrives with
+ * `?target_kind=session&target_id=`, the mirror image of `?source=&mode=`
+ * above — that one prefills WHICH PAPER and leaves the audience to pick,
+ * this one prefills WHICH AUDIENCE (one Session) and leaves the paper to
+ * pick, in the same canonical scheduler, still one حفظ.
+ */
+describe('session-target scheduler prefill (?target_kind=session&target_id=)', () => {
+  it('reads and validates both params — only the session kind is accepted here', () => {
+    expect(code(SCHEDULING_SOURCE)).toContain("params.get('target_kind')");
+    expect(code(SCHEDULING_SOURCE)).toContain("params.get('target_id')");
+    expect(code(SCHEDULING_SOURCE)).toContain("kind === 'session' && id !== null");
+  });
+
+  it('never invents the shape for the other four target arms', () => {
+    // The prefill is deliberately narrow — level/administrative_group/
+    // teaching_group/student are not handled by this URL contract at all.
+    const match = /const \[initialExamTarget\][\s\S]*?\}\);/.exec(code(SCHEDULING_SOURCE));
+    expect(match, 'the initialExamTarget state initializer').not.toBeNull();
+    expect(match![0]).not.toContain('administrative_group');
+    expect(match![0]).not.toContain('teaching_group');
+  });
+
+  it('seeds examSource with targetKind session and the named id — never re-derived from a fetch here', () => {
+    expect(code(SCHEDULING_SOURCE)).toContain(
+      "? { ...EXAM_SOURCE_INITIAL, targetKind: 'session', targetId: initialExamTarget.id }",
+    );
+  });
+
+  it('TargetPicker is what actually authorizes it — not this prefill', () => {
+    // The same fail-safe clearing behaviour already proven for a stale
+    // manual selection: a value the caller's own candidate list does not
+    // contain is silently cleared, never trusted because a URL said so.
+    expect(code(SCHEDULING_SOURCE)).not.toContain('readSession');
+    expect(code(SCHEDULING_SOURCE)).not.toContain('fetchSessionDetails');
+  });
+
+  it("التقويم's own «ربط اختبار» carries the exact matching params, as a pure navigation with no request", () => {
+    expect(code(EVENT_DIALOG_SOURCE)).toContain(
+      '`/admin/schedules?kind=exam&new=1&target_kind=session&target_id=${encodeURIComponent(occurrence.id)}`',
     );
   });
 });

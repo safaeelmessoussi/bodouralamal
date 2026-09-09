@@ -1323,6 +1323,26 @@ export interface SessionPage {
    * unattended path collision-free.
    */
   suggestedRecordingName: string;
+  /**
+   * **R137 — a scheduled exam addressed to THIS session** (`target_kind =
+   * 'session'`), so a lesson can gain a linked quick test days after it
+   * happened without pretending it occurred today. Same tier discipline as
+   * every other cross-reference here: `examTierWhere(actor)`, the identical
+   * gate the calendar grid itself applies to an exam row — a linked exam
+   * this caller could not otherwise see on the calendar is not listed here
+   * either. Usually one row; not constrained to exactly one, since nothing
+   * in R125's target model forbids a second quiz for the same lesson.
+   */
+  linkedExams: SessionLinkedExam[];
+}
+
+export interface SessionLinkedExam {
+  id: string;
+  title: string;
+  mode: 'physical' | 'online';
+  /** `null` for physical (R136 clause 5 — no separate access gate) and for
+   *  a still-manual online exam nobody has opened yet. */
+  availableFrom: Date | null;
 }
 
 /**
@@ -1480,9 +1500,31 @@ export async function readSessionPage(
 
   const occurrence = sessionOccurrence(session, monthStarts);
 
+  // R137 — a scheduled (never a reusable draft) exam addressed to this
+  // session, at the caller's own tier — the identical gate the calendar
+  // grid applies to an exam row (`examTierWhere`), so this never names an
+  // occurrence the caller could not otherwise discover on the calendar.
+  const linkedExamRows = await prisma.exam.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ['published', 'closed'] },
+      targetKind: 'session',
+      sessionId,
+      ...examTierWhere(actor),
+    },
+    select: { id: true, title: true, mode: true, availableFrom: true },
+    orderBy: { date: 'asc' },
+  });
+
   return {
     occurrence,
     notes: null,
+    linkedExams: linkedExamRows.map((e) => ({
+      id: e.id,
+      title: e.title,
+      mode: e.mode,
+      availableFrom: e.availableFrom,
+    })),
     /**
      * **«التسجيلات» is decided by the ORIGIN MARKER, never by the MIME type**
      * (R99.10).

@@ -290,6 +290,26 @@ export function SchedulingPage(): ReactNode {
     const mode = params.get('mode');
     return id !== null && (mode === 'online' || mode === 'physical') ? { id, mode } : null;
   });
+  /**
+   * **`?target_kind=session&target_id=` — التقويم's own «ربط اختبار» arrives
+   * here with the SESSION already chosen** (R137), the other direction from
+   * `?source=&mode=` above: that one names the paper and leaves the audience
+   * to pick; this one names the audience (one specific Session) and leaves
+   * the paper to pick. Read once, exactly like `initialExamSource`.
+   *
+   * **Never trusted directly.** `session` is the only kind this prefill
+   * supports — inventing the shape for the other four arms is not this
+   * entry point's job — and `TargetPicker` itself is what actually
+   * authorizes it: its own effect fetches the caller's real candidate list
+   * and clears any value that list does not contain, the identical
+   * fail-safe behaviour a stale or forged id already gets there.
+   */
+  const [initialExamTarget] = useState<{ id: string } | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const kind = params.get('target_kind');
+    const id = params.get('target_id');
+    return kind === 'session' && id !== null ? { id } : null;
+  });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
   /** The saved Event change awaiting the send-or-not decision (R82.5). */
   const [notifying, setNotifying] = useState<{
@@ -622,6 +642,7 @@ export function SchedulingPage(): ReactNode {
           item={editing === 'new' ? null : editing}
           {...(editing === 'new' && initialType ? { initialType } : {})}
           {...(editing === 'new' && initialExamSource ? { initialExamSource } : {})}
+          {...(editing === 'new' && initialExamTarget ? { initialExamTarget } : {})}
           token={accessToken}
           onCancel={() => setEditing(null)}
           onSaved={(saved) => {
@@ -895,6 +916,7 @@ export function SchedulingDialog({
   teachingContexts,
   initialType,
   initialExamSource,
+  initialExamTarget,
 }: {
   item: SchedulingItem | null;
   token: string | null;
@@ -934,6 +956,11 @@ export function SchedulingDialog({
    *  already chosen. A prefill, exactly like `initialType`: the picker below
    *  still re-reads it fresh rather than trusting anything the URL claims. */
   initialExamSource?: { id: string; mode: 'physical' | 'online' };
+  /** R137 — the calendar's own «ربط اختبار» arrives with the Session already
+   *  chosen. Also only a prefill: `TargetPicker` re-validates it against the
+   *  caller's own authorized candidate list the moment it renders, and
+   *  clears it silently if that list does not contain it. */
+  initialExamTarget?: { id: string };
 }): ReactNode {
   const editing = item !== null;
   const [type, setType] = useState<SchedulingType>(
@@ -1050,8 +1077,19 @@ export function SchedulingDialog({
    * from `?source=&mode=` when بناء الاختبارات linked here — see the effect
    * beside `scope`'s own declaration below, which needs it in scope to seed
    * the physical audience picker's Level the same way a manual pick does.
+   *
+   * **R137 — `?target_kind=session&target_id=` seeds the OTHER half**, when
+   * التقويم linked here instead: `targetKind`/`targetId` start on the named
+   * Session rather than the default `level` arm. Not re-verified by a
+   * fetch here, unlike the source prefill above — `TargetPicker` itself is
+   * the re-verification: it fetches the caller's authorized candidates the
+   * moment it renders and silently clears any value that list refuses.
    */
-  const [examSource, setExamSource] = useState<ExamSourceState>(EXAM_SOURCE_INITIAL);
+  const [examSource, setExamSource] = useState<ExamSourceState>(
+    initialExamTarget
+      ? { ...EXAM_SOURCE_INITIAL, targetKind: 'session', targetId: initialExamTarget.id }
+      : EXAM_SOURCE_INITIAL,
+  );
   const onSourceChange = (patch: Partial<ExamSourceState>): void =>
     setExamSource((current) => ({ ...current, ...patch }));
   /** R94 — which of her classes this sitting belongs to. */

@@ -6,6 +6,7 @@ import {
   OCCURRENCE_KIND_BADGE,
   OCCURRENCE_KIND_LABEL,
 } from '../../adapters/calendar.js';
+import { useActiveRoleOrNull } from '../../contexts/active-role.js';
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
 import { Button, ButtonLink } from '../ui/button.js';
@@ -13,6 +14,10 @@ import { levelLabel } from '../scope/level-select.js';
 import { Dialog } from '../ui/dialog.js';
 import { AttendancePanel } from './attendance-panel.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
+
+/** The roles that may reach الجدولة at all — the same set `AttendancePanel`
+ *  already uses to decide who sees the staff sheet rather than one button. */
+const STAFF_ROLES = ['admin', 'super_admin', 'teacher'];
 
 /**
  * Event details.
@@ -284,20 +289,36 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
  * stale by the time she clicked.
  */
 function ExamAvailabilityAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
-  const accessToken = useContext(SessionContext)?.accessToken ?? null;
   if (occurrence.kind !== 'exam') return null;
   if (occurrence.delivery_mode !== 'online') return null;
+  return <ExamAccessAction examId={occurrence.id} availableFrom={occurrence.available_from} />;
+}
 
-  if (occurrence.available_from === null) {
+/**
+ * **The three-state availability action, factored out so a linked exam
+ * (R137, `SessionLinkedExams` below) reads exactly the same states an exam's
+ * OWN occurrence dialog does** — one implementation of *is it open yet*,
+ * not two that could quietly disagree.
+ */
+function ExamAccessAction({
+  examId,
+  availableFrom,
+}: {
+  examId: string;
+  availableFrom: string | null;
+}): ReactNode {
+  const accessToken = useContext(SessionContext)?.accessToken ?? null;
+
+  if (availableFrom === null) {
     return <p className="details__action muted">{t('calendar.examNotYetOpened')}</p>;
   }
 
-  const opensAt = new Date(occurrence.available_from);
+  const opensAt = new Date(availableFrom);
   if (opensAt.getTime() > Date.now()) {
     return (
       <p className="details__action muted">
         {t('calendar.examOpensAt')}{' '}
-        <time dateTime={occurrence.available_from} dir="ltr">
+        <time dateTime={availableFrom} dir="ltr">
           {opensAt.toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' })}
         </time>
       </p>
@@ -310,7 +331,7 @@ function ExamAvailabilityAction({ occurrence }: { occurrence: Occurrence }): Rea
     <p className="details__action">
       <ButtonLink
         variant="primary"
-        href={`/dashboard/student/assessments?exam=${encodeURIComponent(occurrence.id)}`}
+        href={`/dashboard/student/assessments?exam=${encodeURIComponent(examId)}`}
       >
         {t('calendar.examStart')}
       </ButtonLink>
@@ -335,6 +356,8 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
    * public tier expects (TD-3.4).
    */
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  const activeRoles = useActiveRoleOrNull()?.activeRoles ?? [];
+  const canLinkExam = activeRoles.some((role) => STAFF_ROLES.includes(role));
   const [page, setPage] = useState<SessionDetails | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -364,8 +387,62 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
 
   const recordings = page?.recordings ?? [];
   const materials = page?.linked_content ?? [];
+  const linkedExams = page?.linked_exams ?? [];
 
   return (
+    <>
+      {/**
+        * **R137 — a lesson may gain a quick test days later, without
+        * pretending it happened today.** The Session's own date never
+        * changes; whether the linked exam can be OPENED right now is a
+        * separate fact, read exactly as an exam occurrence's own dialog
+        * reads it (`ExamAccessAction`, shared).
+        */}
+      {state === 'ready' && (linkedExams.length > 0 || canLinkExam) ? (
+        <section className="details__section" aria-labelledby="details-linked-exams">
+          <h3 id="details-linked-exams" className="details__section-title">
+            {t('session.linkedExams')}
+          </h3>
+          {linkedExams.length === 0 ? (
+            <p className="muted">{t('session.noLinkedExams')}</p>
+          ) : (
+            <ul className="details__list">
+              {linkedExams.map((exam) => (
+                <li key={exam.id}>
+                  <p>{exam.title}</p>
+                  {exam.mode === 'online' ? (
+                    <ExamAccessAction examId={exam.id} availableFrom={exam.available_from} />
+                  ) : (
+                    // A physical sitting is never "opened" online — attending
+                    // one was never gated by this platform (R136 clause 5).
+                    <p className="details__action muted">{t('session.linkedExamPhysical')}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/**
+            * **R137 — إضافة اختبار / ربط اختبار.** Routes to الجدولة, the
+            * one canonical scheduling write (R136) — never a second form
+            * here. The Session is prefilled as the target; which paper to
+            * use is still the operator's own choice, made there. Rule O:
+            * offered only to staff who could plausibly reach الجدولة at
+            * all, never decided here — the route itself still refuses
+            * anyone the server would.
+            */}
+          {canLinkExam ? (
+            <p className="details__action">
+              <ButtonLink
+                variant="secondary"
+                href={`/admin/schedules?kind=exam&new=1&target_kind=session&target_id=${encodeURIComponent(occurrence.id)}`}
+              >
+                {t('session.linkExam')}
+              </ButtonLink>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
     <section className="details__section" aria-labelledby="details-materials">
       <h3 id="details-materials" className="details__section-title">
         {t('session.materials')}
@@ -418,8 +495,8 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
           )}
         </>
       ) : null}
-
     </section>
+    </>
   );
 }
 

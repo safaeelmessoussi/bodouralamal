@@ -247,6 +247,14 @@ export function readSession(prisma: PrismaClient) {
       /** R75.6, server-owned since R99 — the browser recorder shows it,
        *  editable, and composes nothing itself. */
       suggested_recording_name: page.suggestedRecordingName,
+      // R137 — a scheduled exam addressed to this session, at the caller's
+      // own calendar tier.
+      linked_exams: page.linkedExams.map((e) => ({
+        id: e.id,
+        title: e.title,
+        mode: e.mode,
+        available_from: e.availableFrom?.toISOString() ?? null,
+      })),
     });
   };
 }

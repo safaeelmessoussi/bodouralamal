@@ -4,6 +4,9 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { addQuestion, createAssessment } from "../services/assessment.service.js";
+import { scheduleExam } from "../services/exam-scheduling.service.js";
+import type { Actor } from "../policies/actor.js";
 
 /** R66 — an enrolment carries its own branch, taken from the group so the
  *  composite FK `(administrative_group_id, branch_id)` holds. */
@@ -34,6 +37,9 @@ const YEAR_LABEL = "2096-2097";
 
 const PAGE_KEYS = [
   "linked_content",
+  // R137 — a scheduled exam addressed to this session, at the caller's own
+  // calendar tier.
+  "linked_exams",
   "notes",
   "occurrence",
   "recordings",
@@ -87,6 +93,13 @@ let academicYearId: string;
 let sessionId: string;
 let studentToken: string;
 let teacherToken: string;
+let superAdminId: string;
+const superAdmin = (): Actor => ({
+  userId: superAdminId,
+  roles: ["super_admin"],
+  roleScopes: [{ role: "super_admin", branches: null }],
+  activeRole: "super_admin",
+});
 /** The مؤطِّرة who actually staffs the occurrence — distinct from
  *  `teacherToken`, which belongs to an unrelated teacher used for the §4.9
  *  content tiers. R109 turns that distinction into a real one. */
@@ -134,6 +147,27 @@ async function makeContent(
 }
 
 async function clear(): Promise<void> {
+  // R137 — a linked exam names this Level AND, when targeted at a session,
+  // the Session itself (RESTRICT both ways) — so every exam this fixture
+  // could have created must go before the schedule/session cleanup below
+  // reaches them, not after.
+  const levels = await prisma.level.findMany({
+    where: { name: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const levelIds = levels.map((l) => l.id);
+  const exams = await prisma.exam.findMany({
+    where: { levelId: { in: levelIds } },
+    select: { id: true },
+  });
+  const examIds = exams.map((e) => e.id);
+  await prisma.examQuestionOption.deleteMany({
+    where: { question: { examId: { in: examIds } } },
+  });
+  await prisma.examQuestion.deleteMany({ where: { examId: { in: examIds } } });
+  await prisma.notification.deleteMany({ where: { examId: { in: examIds } } });
+  await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
+
   const schedules = await prisma.recurringCourseSchedule.findMany({
     where: { branch: { name: { startsWith: TAG } } },
     select: { id: true },
@@ -163,11 +197,6 @@ async function clear(): Promise<void> {
     where: { id: { in: ids } },
   });
 
-  const levels = await prisma.level.findMany({
-    where: { name: { startsWith: TAG } },
-    select: { id: true },
-  });
-  const levelIds = levels.map((l) => l.id);
   await prisma.educationalContent.deleteMany({
     where: { levelId: { in: levelIds } },
   });
@@ -331,6 +360,7 @@ beforeAll(async () => {
   teacherToken = bearer(await makeUser("أستاذة"), [
     { role: "teacher", branches: [branchA] },
   ]);
+  superAdminId = await makeUser("مديرة عامة");
 });
 
 afterAll(async () => {
@@ -655,5 +685,96 @@ describe("which sessions reference a content (§4.9, R43)", () => {
       (await call("/library/00000000-0000-4000-8000-000000000000/sessions"))
         .status,
     ).toBe(404);
+  });
+});
+
+/**
+ * **R137 — a scheduled exam addressed to THIS session appears here**, at the
+ * caller's own calendar tier, and the Session's own date is never touched by
+ * any of it.
+ */
+describe("linked_exams — a quick test attached to this session (R137)", () => {
+  async function scheduleLinkedExam(
+    title: string,
+    visibility: "public" | "private" | "hidden",
+  ): Promise<string> {
+    const source = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ${title}`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      academicYearId,
+    });
+    await addQuestion(prisma, superAdmin(), source.id, {
+      kind: "short_text",
+      prompt: "سؤال",
+    });
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: "online",
+      sourceExamId: source.id,
+      target: { kind: "session", id: sessionId },
+      availability: { policy: "manual" },
+      visibility,
+    });
+    return occurrenceId;
+  }
+
+  it("a scheduled PUBLIC linked exam appears, with the SAME three-state availability shape an exam occurrence carries", async () => {
+    const examId = await scheduleLinkedExam("عام", "public");
+    const res = await call(`/calendar/sessions/${sessionId}`);
+    expect(res.status).toBe(200);
+    const row = res.body["linked_exams"] as
+      | { id: string; title: string; mode: string; available_from: string | null }[]
+      | undefined;
+    const linked = row?.find((e) => e.id === examId);
+    expect(linked).toBeDefined();
+    expect(linked?.mode).toBe("online");
+    // `manual` policy — never silently opened.
+    expect(linked?.available_from).toBeNull();
+  });
+
+  it("the Session's own date is untouched by scheduling a linked exam days later", async () => {
+    const before = await call(`/calendar/sessions/${sessionId}`);
+    const beforeDate = before.body.occurrence!["date"];
+    await scheduleLinkedExam("لاحقاً", "public");
+    const after = await call(`/calendar/sessions/${sessionId}`);
+    expect(after.body.occurrence!["date"]).toBe(beforeDate);
+    expect(after.body.occurrence!["date"]).toBe("2096-09-03");
+  });
+
+  it("a still-DRAFT source (never scheduled) never appears — only a real occurrence does", async () => {
+    const source = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} مسودة غير مجدولة`,
+      maxGrade: 20,
+      levelId,
+      subjectId,
+      academicYearId,
+      target: { kind: "session", id: sessionId },
+    });
+    const res = await call(`/calendar/sessions/${sessionId}`);
+    const ids2 = (res.body["linked_exams"] as { id: string }[]).map((e) => e.id);
+    expect(ids2).not.toContain(source.id);
+  });
+
+  it("a HIDDEN linked exam is excluded for anonymous and student callers, and included for a Super Admin", async () => {
+    const examId = await scheduleLinkedExam("مخفي", "hidden");
+
+    const anon = await call(`/calendar/sessions/${sessionId}`);
+    expect(
+      (anon.body["linked_exams"] as { id: string }[]).map((e) => e.id),
+    ).not.toContain(examId);
+
+    const asStudent = await call(`/calendar/sessions/${sessionId}`, studentToken);
+    expect(
+      (asStudent.body["linked_exams"] as { id: string }[]).map((e) => e.id),
+    ).not.toContain(examId);
+
+    const superToken = bearer(superAdminId, [
+      { role: "super_admin", branches: null },
+    ]);
+    const asSuper = await call(`/calendar/sessions/${sessionId}`, superToken);
+    expect(
+      (asSuper.body["linked_exams"] as { id: string }[]).map((e) => e.id),
+    ).toContain(examId);
   });
 });

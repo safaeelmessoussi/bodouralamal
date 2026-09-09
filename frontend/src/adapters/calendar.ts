@@ -362,6 +362,23 @@ export interface SessionDetails {
   /** R75.6, server-owned since R99 — what to call the next recording of this
    *  occurrence. A suggestion, editable, and nothing reads it back. */
   suggested_recording_name: string;
+  /**
+   * **R137 — a scheduled exam addressed to THIS session** (a quick test
+   * attached to one class occurrence, R125's `session` target arm), at the
+   * caller's own calendar tier — never an occurrence this reader could not
+   * otherwise discover on the calendar. Usually one row; not assumed to be.
+   */
+  linked_exams: SessionLinkedExamRef[];
+}
+
+export interface SessionLinkedExamRef {
+  id: string;
+  title: string;
+  mode: 'physical' | 'online';
+  /** `null` for physical (no separate access gate) and for a still-manual
+   *  online exam nobody has opened yet — the same three states
+   *  `ExamAvailabilityAction` already reads on an exam OCCURRENCE. */
+  available_from: string | null;
 }
 
 /**
