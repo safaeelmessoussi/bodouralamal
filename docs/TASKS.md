@@ -2867,9 +2867,14 @@ approved scope covers Partners only, so this is reported rather than taken.
       mobile behaviour, (5)'s CSS-only redesign and (8)'s chip wrapping are
       covered by the EXISTING, unmodified `verify-public-reader.mjs`/
       `calendar-geometry.mjs` real-browser suite (still 320-1280px clean)
-      plus targeted frontend unit/source-pinning tests — the same "targeted
-      rather than exhaustive" reasoning Revision 137 recorded, re-applied
-      explicitly rather than silently. **Deliberately not built**: a
+      plus targeted frontend unit/source-pinning tests. **(1) and (2)/(3)
+      are NOT walked in a real browser this revision** — backed instead by
+      the integration suite above (9 tests for (1); 4 service tests plus
+      HTTP-level coverage for (2)/(3)) plus frontend unit/typecheck/lint/
+      build, the same real-DB-but-not-browser-driven tier Revision 137 used
+      for its own thinner extensions — the same "targeted rather than
+      exhaustive" reasoning Revision 137 recorded, re-applied explicitly
+      rather than silently. **Deliberately not built**: a
       dedicated CDP click-through of the Super Admin legal-document editor's
       own UI — the equivalent property (wire contract, authorization,
       immutability, supersession) is proven at the HTTP layer instead, and

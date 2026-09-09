@@ -6571,7 +6571,15 @@ chip wrapping are covered by the EXISTING, unmodified
 tests, rather than by new dedicated browser walks — every one of those
 areas either extends already-proven infrastructure or is a property no
 browser-level check adds evidence for beyond what the existing suite
-already asserts. **Deliberately not built, named so a future reader does
+already asserts. **The recurrence=none fix and the Session title/
+description/preserve-overwrite work are NOT walked in a real browser this
+revision either** — named explicitly rather than left for a reader to
+assume otherwise — and are backed instead by the disposable-stack
+integration suite cited above (9 new tests for the former; 4 service-level
+tests plus HTTP-level coverage for the latter) plus the full frontend unit/
+typecheck/lint/build sweep, the same real-database-but-not-browser-driven
+evidence tier Revision 137 already used for its own thinner extensions of
+existing infrastructure. **Deliberately not built, named so a future reader does
 not mistake the omission for an oversight:** a dedicated CDP script
 clicking through the Super Admin legal-document editor's own UI — the
 equivalent property (the wire contract, the authorization boundary,
