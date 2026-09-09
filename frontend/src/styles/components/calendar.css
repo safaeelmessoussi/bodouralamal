@@ -469,6 +469,17 @@ tr:last-child .cal-cell {
  *
  * The washes were lifted OFF full strength for exactly this reason: at 80% the
  * chips read as blocks of colour and pulled the eye before the dates did. */
+/**
+ * **A thin kind indicator that costs no title width** (R138 item 14 —
+ * "event types/states distinguishable without consuming most title width").
+ * `.event-chip--exam` already carried this edge (R58) below; the session and
+ * event kinds relied on background tint alone, which is exactly the "colour
+ * alone is not the signal" gap §14.4 flags elsewhere. Applied here in the
+ * base rule, not only inside the mobile query — the bar is a hairline, not a
+ * layout cost, so there is no reason for desktop to lack the same
+ * distinction the mobile view now needs (mobile hides `__delivery`/`__tag`/
+ * `__time`, leaving colour and this bar as the only kind signal left).
+ */
 .event-chip {
   display: flex;
   align-items: baseline;
@@ -483,10 +494,12 @@ tr:last-child .cal-cell {
   text-align: start;
   background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
   color: var(--color-primary);
+  box-shadow: inset 2px 0 0 var(--color-primary);
 }
 .event-chip--event {
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   color: var(--color-accent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 /* R58 — an exam is the one item on a timetable somebody must not mistake for an
    ordinary class, so it is the only chip carrying a full-strength edge as well
@@ -705,12 +718,48 @@ tr:last-child .cal-cell {
   .event-chip__tag {
     display: none;
   }
-  /* One full-width target per occurrence. The complete accessible label and
-     canonical dialog retain the time, delivery and kind. */
+  /**
+   * **R138 item 14 — density from wrapping, not from truncating one line.**
+   *
+   * `padding` drops further and `align-items: center` is gone: centering a
+   * single line of hidden-overflow text made sense when the box was always
+   * exactly one line tall, but it fights a multi-line title, which now sits
+   * flush against the box's own edges instead of floating in extra
+   * whitespace the box no longer needs.
+   *
+   * `min-height` stays — `--space-10` (2.5rem = 40px) keeps every chip a real
+   * tap target regardless of how few lines a short title needs
+   * (`calendar-geometry.mjs`'s `tappable` check requires ≥32px), while a
+   * longer title simply grows the box past that floor via the wrap rule on
+   * `.event-chip__title` below. One full-width target per occurrence; the
+   * complete accessible label and canonical dialog retain the time, delivery
+   * and kind this width no longer has room to show as separate text.
+   */
   .event-chip {
     min-height: var(--space-10);
-    padding: var(--space-1);
-    align-items: center;
+    padding: 0.2rem 0.35rem;
+    align-items: flex-start;
+  }
+  /**
+   * **Wrap, don't ellipsis — this is the actual defect being fixed.**
+   *
+   * «حصة تجويد القرآن» read as «حـ…» under `white-space: nowrap` +
+   * `text-overflow: ellipsis`, which is a title a reader cannot identify her
+   * own class from. `-webkit-line-clamp` (supported in every engine this
+   * project targets, Chromium/WebKit/Firefox alike, despite the vendor
+   * prefix) is the same idiom `.content-card__description` already uses for
+   * exactly this shape of problem — let Arabic wrap across up to 3 lines,
+   * using nearly the full cell width the mobile query already frees up by
+   * hiding time/delivery/tag, and clip only once that space is genuinely
+   * spent rather than after a handful of characters.
+   */
+  .event-chip__title {
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
   .cal-day__gregorian {
     font-size: var(--font-size-sm);
