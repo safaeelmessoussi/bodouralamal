@@ -717,6 +717,55 @@ describe('unsaved form changes are protected by the shared dialog', () => {
  * where they can actually be read.
  */
 
+describe('one collapsed dropdown shell (R137 item 8)', () => {
+  /**
+   * **The defect: three ways to pick one thing, three different shapes.**
+   *
+   * `SelectField` was already a native, collapsed `<select>`. `SearchableSelect`
+   * and `MultiSelectField` were not — both rendered every option inline,
+   * always, so a form mixing a plain select with a searchable one showed two
+   * visibly different kinds of control. Both now collapse to the same
+   * `field__control dropdown-trigger` shape and open the SAME way: click,
+   * Enter or Space on a real `<button>`, Escape or an outside click to close.
+   * `NotificationBell` already built that open/close wiring for the header's
+   * own popover; `useDisclosure` is that behaviour factored out so a second
+   * and third control reuse it instead of a slightly different
+   * `mousedown`/`keydown` pair each.
+   */
+  it('both searchable and multi-select collapse behind the shared trigger shape', () => {
+    for (const path of ['components/ui/searchable-select.tsx', 'components/ui/multi-select.tsx']) {
+      const source = stripComments(RAW[`/src/${path}`] ?? '');
+      expect(source, path).toContain('field__control dropdown-trigger');
+      expect(source, path).toContain('aria-haspopup="listbox"');
+      expect(source, path).toContain('aria-expanded={open}');
+    }
+  });
+
+  it('both reuse the shared open/close hook rather than a second Escape/outside-click implementation', () => {
+    const offenders = FILES.filter((f) => {
+      if (f.path === 'lib/use-disclosure.ts' || f.path === 'components/notifications/notification-bell.tsx') {
+        return false;
+      }
+      const text = stripComments(f.text);
+      // The `NotificationBell` shape: its own local Escape/outside-click pair.
+      // A second file with the identical pair would be the same drift this
+      // guard exists to catch — reused via `useDisclosure`, not reinvented.
+      return /document\.addEventListener\('keydown'/.test(text) && /document\.addEventListener\('mousedown'/.test(text);
+    }).map((f) => f.path);
+    expect(offenders).toEqual([]);
+
+    for (const path of ['components/ui/searchable-select.tsx', 'components/ui/multi-select.tsx']) {
+      expect(stripComments(RAW[`/src/${path}`] ?? ''), path).toContain('useDisclosure');
+    }
+  });
+
+  it('the multi-select panel offers real checkboxes through the shared ChoiceField, not a second checkbox markup', () => {
+    const source = stripComments(RAW['/src/components/ui/multi-select.tsx'] ?? '');
+    expect(source).toContain('<ChoiceField');
+    expect(source).not.toMatch(/<input[^>]*type="checkbox"/);
+  });
+});
+
 describe('one date picker', () => {
   /**
    * **`date-picker.tsx` is the ONLY place a date is entered on this platform**

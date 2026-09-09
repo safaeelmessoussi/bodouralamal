@@ -37,8 +37,13 @@ interface FieldShellProps {
 /**
  * The label/hint/error scaffolding every field shares. Split out so a new field
  * type is one component and not a fourth copy of the accessibility wiring.
+ *
+ * **Exported (R137)** so `SearchableSelect` and `MultiSelectField` — both
+ * collapsed dropdowns now, same as this module's own `SelectField` — get the
+ * identical label/hint/error markup around their trigger button rather than a
+ * fifth hand-rolled copy of it.
  */
-function FieldShell({ label, error, hint, required, children }: FieldShellProps): ReactNode {
+export function FieldShell({ label, error, hint, required, children }: FieldShellProps): ReactNode {
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;

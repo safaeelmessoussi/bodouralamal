@@ -129,11 +129,27 @@ export function RecurrenceEditor({
    */
   allowOnce = true,
   hint,
+  /**
+   * **R137 item 9 — a multi-day item's own end date, paired with the start
+   * date rather than left standing alone below this editor.**
+   *
+   * A repeating pattern's *"two bounds of one rule"* are start date and
+   * *repeat until*; a one-time item that can still span several calendar days
+   * (a holiday, most often) has a DIFFERENT pair — start date and the span's
+   * own end — but it is still exactly two bounds of one thing. Both belong in
+   * the SAME `.form__row` as `startDate`, and since *repeat until* is already
+   * hidden for `مرة واحدة` (there is nothing to repeat), the slot beside
+   * `startDate` is free for this instead. Passed only by a caller whose kind
+   * can span days; every other caller omits it and the slot stays empty for
+   * `مرة واحدة`, exactly as before.
+   */
+  spanEnd,
 }: {
   value: RecurrenceValue;
   onChange: (next: RecurrenceValue) => void;
   allowOnce?: boolean;
   hint?: string;
+  spanEnd?: { value: string; onChange: (next: string) => void; hint?: string };
 }): ReactNode {
   const pattern = patternOf(value);
   const spec = PATTERNS[pattern];
@@ -199,8 +215,19 @@ export function RecurrenceEditor({
         />
         {/* **Shown only when there is something to bound.** A one-off has no
             *repeat until*, and a control asking when a single occurrence stops
-            recurring would ask about a rule that does not exist. */}
-        {pattern === 'once' ? null : (
+            recurring would ask about a rule that does not exist. The same slot
+            carries the span's own end date instead, when the caller offers
+            one — never both, since a one-time item is never also repeating. */}
+        {pattern === 'once' ? (
+          spanEnd ? (
+            <DateField
+              label={t('scheduling.endDate')}
+              value={spanEnd.value}
+              onChange={spanEnd.onChange}
+              {...(spanEnd.hint !== undefined ? { hint: spanEnd.hint } : {})}
+            />
+          ) : null
+        ) : (
           <DateField
             label={t('scheduling.recurrenceEnd')}
             value={value.endDate}

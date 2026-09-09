@@ -627,22 +627,27 @@ function AcademicPeriodFormDialog({
         error={touched ? sequenceError : null}
       />
 
-      <DateField
-        label={t('admin.academicPeriods.colStart')}
-        value={startDate}
-        onChange={setStartDate}
-        required
-        error={touched ? startError : null}
-      />
+      {/* R137 item 9 — the semester's own two bounds, paired compactly rather
+          than stacked full-width, the same treatment every other start/end
+          pair on the platform gets. */}
+      <div className="form__row">
+        <DateField
+          label={t('admin.academicPeriods.colStart')}
+          value={startDate}
+          onChange={setStartDate}
+          required
+          error={touched ? startError : null}
+        />
 
-      <DateField
-        label={t('admin.academicPeriods.colEnd')}
-        value={endDate}
-        onChange={setEndDate}
-        required
-        hint={t('admin.academicPeriods.endHint')}
-        error={touched ? endError : null}
-      />
+        <DateField
+          label={t('admin.academicPeriods.colEnd')}
+          value={endDate}
+          onChange={setEndDate}
+          required
+          hint={t('admin.academicPeriods.endHint')}
+          error={touched ? endError : null}
+        />
+      </div>
     </FormDialog>
   );
 }

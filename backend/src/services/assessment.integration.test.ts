@@ -490,6 +490,57 @@ describe('1–10 · authoring', () => {
     ).rejects.toMatchObject({ details: { reason: 'OPTIONS_REQUIRED' } });
   });
 
+  it('R137 item 5 — editing an MC question replaces its options: add, remove, no dangling reference, and the same ≥2 shape guard as create', async () => {
+    // A scratch question, not one of the four `ids` the reorder test below
+    // counts on — this test cleans up after itself so that count stays true.
+    const q = await addQuestion(prisma, superAdmin(), examId, {
+      kind: 'multiple_choice',
+      prompt: 'مؤقت — تعديل الخيارات',
+      options: ['أ', 'ب', 'ج'],
+    });
+    const before = await prisma.examQuestion.findUniqueOrThrow({
+      where: { id: q.id },
+      select: {
+        version: true,
+        options: { where: { deletedAt: null }, select: { id: true, label: true } },
+      },
+    });
+    expect(before.options.map((o) => o.label)).toEqual(['أ', 'ب', 'ج']);
+    const removedOptionId = before.options[1]!.id;
+
+    // One save both removes «ب» and adds «د» — a real add-and-remove through
+    // تعديل, not two separate operations.
+    await updateQuestion(prisma, superAdmin(), examId, q.id, before.version, {
+      options: ['أ', 'ج', 'د'],
+    });
+
+    const after = await prisma.examQuestion.findUniqueOrThrow({
+      where: { id: q.id },
+      select: { options: { where: { deletedAt: null }, select: { label: true } } },
+    });
+    expect(after.options.map((o) => o.label)).toEqual(['أ', 'ج', 'د']);
+
+    // The removed option is soft-deleted, not hard-deleted (a
+    // `student_exam_answer_option` RESTRICT FK would refuse a hard delete once
+    // anyone had chosen it, and `assertNotFrozen` stops this path from ever
+    // being reached after that) — but a fresh read never sees it as live, so
+    // nothing dangles from the reader's point of view.
+    const removedRow = await prisma.examQuestionOption.findUniqueOrThrow({
+      where: { id: removedOptionId },
+      select: { deletedAt: true },
+    });
+    expect(removedRow.deletedAt).not.toBeNull();
+
+    // The same ≥2-option shape guard `addQuestion` enforces applies to an
+    // edit too — a save cannot leave an MC question with too few options to
+    // be a choice at all.
+    await expect(
+      updateQuestion(prisma, superAdmin(), examId, q.id, before.version + 1, { options: ['أ'] }),
+    ).rejects.toMatchObject({ details: { reason: 'OPTIONS_REQUIRED' } });
+
+    await removeQuestion(prisma, superAdmin(), examId, q.id);
+  });
+
   it('8 · reorders, and refuses a partial sequence', async () => {
     const reversed = [...ids].reverse();
     await reorderQuestions(prisma, superAdmin(), examId, reversed);
@@ -1744,6 +1795,62 @@ describe('reuse — the same paper again, never the same answers', () => {
     await expect(
       addQuestion(prisma, superAdmin(), occurrenceId, { kind: 'short_text', prompt: 'لا' }),
     ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+  });
+
+  it('R137 item 4 — the OTHER half of independence: editing the reusable SOURCE after scheduling never touches the occurrence it already produced', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    const q = await addQuestion(prisma, superAdmin(), id, {
+      kind: 'multiple_choice',
+      prompt: 'السؤال الأصلي',
+      options: ['أ', 'ب'],
+    });
+    // Scheduling copies the source's CURRENT content into a fresh, independent
+    // occurrence row — this is that copy, made once, right here.
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      availability: { policy: 'custom', at: new Date(0) },
+    });
+
+    // `id` is still the reusable DRAFT source (§4.6/R136: scheduling never
+    // marks the source itself frozen — only the occurrence it produced), so
+    // تعديل، إضافة سؤال and إزالة سؤال all keep working on it exactly as
+    // before it was ever scheduled from.
+    const sourceRow = await prisma.exam.findUniqueOrThrow({
+      where: { id },
+      select: { status: true },
+    });
+    expect(sourceRow.status).toBe('draft');
+
+    await updateQuestion(prisma, superAdmin(), id, q.id, 0, {
+      prompt: 'السؤال المعدَّل بعد الجدولة',
+      options: ['أ', 'ب', 'ج'],
+    });
+    const extra = await addQuestion(prisma, superAdmin(), id, {
+      kind: 'short_text',
+      prompt: 'سؤال أُضيف بعد الجدولة',
+    });
+    await removeQuestion(prisma, superAdmin(), id, extra.id);
+
+    // The already-scheduled occurrence's own question is untouched — same
+    // wording, same option count, same total — regardless of anything done to
+    // the source afterward.
+    const occurrenceQuestions = await prisma.examQuestion.findMany({
+      where: { examId: occurrenceId, deletedAt: null },
+      select: { prompt: true, options: { where: { deletedAt: null }, select: { label: true } } },
+    });
+    expect(occurrenceQuestions).toHaveLength(1);
+    expect(occurrenceQuestions[0]!.prompt).toBe('السؤال الأصلي');
+    expect(occurrenceQuestions[0]!.options.map((o) => o.label)).toEqual(['أ', 'ب']);
+
+    // And a fresh read of the SOURCE shows every edit really landed there —
+    // this is independence in both directions, not the source silently
+    // refusing to change.
+    const sourcePaper = await authorPaper(prisma, superAdmin(), id);
+    expect(sourcePaper.questions).toHaveLength(1);
+    expect(sourcePaper.questions[0]!.prompt).toBe('السؤال المعدَّل بعد الجدولة');
   });
 
   it('a second sitting resolves its OWN audience, on its own date', async () => {

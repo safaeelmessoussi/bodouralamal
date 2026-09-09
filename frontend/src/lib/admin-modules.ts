@@ -35,6 +35,17 @@ import {
 export interface AdminModule extends PortalModule {
   /** §14.1's grouping. `null` is the main list, which is now most of the menu. */
   section: AdminSection | null;
+  /**
+   * **R137 — routable and permission-gated exactly as before; absent from
+   * the menu.** A module used infrequently enough that a standing menu
+   * entry stopped earning its place, without withdrawing its route,
+   * authorization or deep-link reach — `moduleForPath`/`canAccess` never
+   * read this flag, only `visibleModules` does. `طلبات الحساب المستقل` is
+   * the first case: R132's own workflow moves into `طلبات الانضمام`
+   * instead, so the menu stops repeating an entry point that already
+   * exists there.
+   */
+  hiddenFromNav?: boolean;
 }
 
 export type { ModuleStatus };
@@ -142,22 +153,34 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
-     * **طلبات الحساب المستقل — R132, Super Admin only.**
+     * **طلبات الحساب المستقل — R132, Super Admin only; moved OUT of the
+     * standing menu by R137.**
      *
-     * A former minor at 18 asks to hold her own login. Deciding it is an
-     * ACCOUNT act, so it sits beside `المستخدمون` under the same authority
-     * (R112) rather than in the operational `طلبات الانضمام` queue an Admin
-     * reaches — approving one binds a credential to a person's record, which is
-     * the most takeover-sensitive decision the platform offers.
+     * A former minor at 18 asks to hold her own login — still an ACCOUNT
+     * act, still Super-Admin-only (R112), and the decision logic and its
+     * authority are entirely unchanged: approving one still binds a
+     * credential to a person's record, the most takeover-sensitive decision
+     * the platform offers. What changed is only how often anyone opens this
+     * particular door — infrequently enough that a standing menu entry
+     * stopped earning its place beside eleven others used daily.
      *
-     * As with every entry, this is reach and not enforcement: the service
-     * asserts Super Admin, so a typed URL still receives `403`.
+     * **The route, the page and the authorization all still exist.**
+     * `hiddenFromNav` removes it from `visibleModules` alone; `moduleForPath`
+     * still resolves it, `AdminRouter` still serves `SelfManagedClaimsPage`,
+     * and the service still asserts Super Admin regardless of how the reader
+     * arrived. The queue itself is now ALSO reachable inline from
+     * `طلبات الانضمام` (نوع الطلب → «أصبح للمستفيدة حساب خاص» — the
+     * SAME component and the SAME decision logic, not a second
+     * implementation), which is the entry point most readers now use; this
+     * one survives as the direct link R132 already published and any
+     * existing bookmark or test still needs.
      */
     path: '/admin/self-managed-claims',
     labelKey: 'admin.nav.selfManagedClaims',
     section: null,
     roles: SUPER_ONLY,
     status: 'ready',
+    hiddenFromNav: true,
   },
   {
     /**
@@ -519,7 +542,7 @@ export const canAccess = canAccessModule;
 
 /** The back-office modules a given session may see, in §14.1's order. */
 export function visibleModules(roles: readonly string[]): AdminModule[] {
-  return visibleIn(ADMIN_MODULES, roles);
+  return visibleIn(ADMIN_MODULES, roles).filter((m) => m.hiddenFromNav !== true);
 }
 
 /**

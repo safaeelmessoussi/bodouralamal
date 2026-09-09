@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 
 import { RecurrenceEditor, SchedulingTimes, type RecurrenceValue } from './recurrence-editor.js';
 import { CheckboxField, SelectField, TextArea, TextField } from '../ui/field.js';
-import { DateField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import { SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
 import type { SchedulingTypeRow } from '../../adapters/scheduling-catalogue.js';
@@ -237,17 +236,21 @@ export function SchedulingForm({
 
       {/* The start date lives in the recurrence editor, beside *repeat until* —
           the two bounds of one rule belong together, and for an alternating
-          pattern the start date IS part of the rule (§7). */}
-      <RecurrenceEditor value={recurrence} onChange={onRecurrence} allowOnce={allowOnce} />
-
-      {showEndDate && recurrence.type === 'none' ? (
-        <DateField
-          label={t('scheduling.endDate')}
-          value={endDate}
-          onChange={onEndDate}
-          hint={t('scheduling.endDateHint')}
-        />
-      ) : null}
+          pattern the start date IS part of the rule (§7). **R137 item 9**: a
+          one-time item's own SPAN end date (a holiday running several days)
+          is the other thing that ever occupies that same slot — passed
+          through rather than rendered standalone full-width below, which is
+          what this used to do. `RecurrenceEditor` shows at most one of
+          *repeat until* / span end at a time, since a one-time item is never
+          also repeating. */}
+      <RecurrenceEditor
+        value={recurrence}
+        onChange={onRecurrence}
+        allowOnce={allowOnce}
+        {...(showEndDate
+          ? { spanEnd: { value: endDate, onChange: onEndDate, hint: t('scheduling.endDateHint') } }
+          : {})}
+      />
 
       {children}
     </>

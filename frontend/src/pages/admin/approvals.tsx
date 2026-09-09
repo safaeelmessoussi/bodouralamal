@@ -33,6 +33,7 @@ import { Button } from '../../components/ui/button.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { ROLES } from '../../adapters/users.js';
+import { SelfManagedClaimsQueue } from './self-managed-claims.js';
 import {
   listAdministrativeGroups,
   type AdministrativeGroup,
@@ -58,6 +59,29 @@ export function registrationNeedsApplicantPlacement(
 ): boolean {
   return row.type === 'registration' && row.children.length === 0;
 }
+
+/**
+ * **R137 item 12 — the self-managed-claims queue (R132), reached from here.**
+ *
+ * `طلبات الحساب المستقل` used to be its own standing menu entry; it is
+ * infrequently used, so it is now folded into the نوع الطلب filter of this
+ * screen instead and the sidebar entry is hidden (`hiddenFromNav`, kept fully
+ * routable). This is a FRONTEND-ONLY filter value, deliberately not a fifth
+ * `ApprovalType`: a self-managed claim (binding a Google email to an existing
+ * beneficiary record, R132) is a structurally different request from anything
+ * `listApprovals` unions together, and merging it in would duplicate the
+ * decision logic the Owner said not to duplicate. Selecting it swaps the table
+ * for the SAME `SelfManagedClaimsQueue` the direct route renders — one
+ * implementation, reached two ways.
+ *
+ * Its label deliberately reuses `admin.selfManagedClaims.title` rather than
+ * the Arabic phrase already claimed by `identity-review` two options below
+ * («مراجعة: أصبح للمستفيدة حساب خاص», R68/§4.3 — a different, pre-existing
+ * workflow about a minor's family links, not a Google-account claim): two
+ * options with the same label in one dropdown would be a real defect.
+ */
+const SELF_MANAGED_CLAIMS_FILTER = 'self-managed-claim' as const;
+type QueueFilter = '' | ApprovalType | typeof SELF_MANAGED_CLAIMS_FILTER;
 
 /**
  * `/admin/approvals` — طلبات الانضمام, the approval queue (§5.6, §14.2).
@@ -105,7 +129,8 @@ export function ApprovalsPage(): ReactNode {
    */
   const [sort, setSort] = useState<SortState | null>(null);
   const [total, setTotal] = useState(0);
-  const [typeFilter, setTypeFilter] = useState<'' | ApprovalType>('');
+  const [typeFilter, setTypeFilter] = useState<QueueFilter>('');
+  const showingSelfManagedClaims = typeFilter === SELF_MANAGED_CLAIMS_FILTER;
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [reviewUserId] = useState(() =>
     new URLSearchParams(window.location.search).get('review_user_id'),
@@ -130,6 +155,10 @@ export function ApprovalsPage(): ReactNode {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    // R137 — the self-managed-claims filter renders a different queue
+    // entirely (`SelfManagedClaimsQueue`, its own data source); this table
+    // has nothing to fetch while it is selected.
+    if (typeFilter === SELF_MANAGED_CLAIMS_FILTER) return;
     setStatus('loading');
     try {
       // The filter goes to the SERVER, unlike the Branches search which narrows
@@ -345,6 +374,29 @@ export function ApprovalsPage(): ReactNode {
 
   const applicantNames = deciding?.row.applicants.map((a) => a.name).join('، ') ?? '';
 
+  // Shared between both render branches below, so the two options lists
+  // (identity-review's own label included) cannot drift apart.
+  const typeFilterField = (
+    <SelectField
+      label={t('admin.approvals.filterType')}
+      value={typeFilter}
+      placeholder={t('admin.approvals.filterAll')}
+      options={[
+        { value: 'registration', label: t('admin.approvals.typeRegistration') },
+        { value: 'family-link', label: t('admin.approvals.typeLink') },
+        { value: 'child-application', label: t('admin.approvals.typeChild') },
+        { value: 'identity-review', label: t('admin.approvals.typeIdentityReview') },
+        { value: SELF_MANAGED_CLAIMS_FILTER, label: t('admin.selfManagedClaims.title') },
+      ]}
+      onChange={(value) => {
+        setTypeFilter(value as QueueFilter);
+        // A filter change with the page left at 3 shows an empty table on
+        // a queue that has matches.
+        setPage(1);
+      }}
+    />
+  );
+
   return (
     <AdminLayout title={t('admin.nav.approvals')} lede={t('admin.approvals.lede')}>
       {notice ? (
@@ -353,55 +405,46 @@ export function ApprovalsPage(): ReactNode {
         </Feedback>
       ) : null}
 
-      <DataTable
-        caption={t('admin.approvals.tableCaption')}
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        status={status}
-        actions={actions}
-        onRetry={() => void load()}
-        filtered={typeFilter !== '' || branchFilter !== null}
-        onClearFilters={() => {
-          setTypeFilter('');
-          setBranchFilter(null);
-          setPage(1);
-        }}
-        toolbar={
-          <>
-            <SelectField
-              label={t('admin.approvals.filterType')}
-              value={typeFilter}
-              placeholder={t('admin.approvals.filterAll')}
-              options={[
-                { value: 'registration', label: t('admin.approvals.typeRegistration') },
-                { value: 'family-link', label: t('admin.approvals.typeLink') },
-                { value: 'child-application', label: t('admin.approvals.typeChild') },
-                { value: 'identity-review', label: t('admin.approvals.typeIdentityReview') },
-              ]}
-              onChange={(value) => {
-                setTypeFilter(value as '' | ApprovalType);
-                // A filter change with the page left at 3 shows an empty table on
-                // a queue that has matches.
-                setPage(1);
-              }}
-            />
-            <BranchSelector
-              branches={branches}
-              value={branchFilter}
-              label={t('admin.approvals.filterBranch')}
-              emptyLabel={t('admin.approvals.filterAllBranches')}
-              onChange={(value) => {
-                setBranchFilter(value);
-                setPage(1);
-              }}
-            />
-          </>
-        }
-        sort={sort}
-        onSort={setSort}
-        pagination={{ page, pageSize: 25, total, onPage: setPage }}
-      />
+      {showingSelfManagedClaims ? (
+        <>
+          <div className="datatable__toolbar">{typeFilterField}</div>
+          <SelfManagedClaimsQueue />
+        </>
+      ) : (
+        <DataTable
+          caption={t('admin.approvals.tableCaption')}
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          status={status}
+          actions={actions}
+          onRetry={() => void load()}
+          filtered={typeFilter !== '' || branchFilter !== null}
+          onClearFilters={() => {
+            setTypeFilter('');
+            setBranchFilter(null);
+            setPage(1);
+          }}
+          toolbar={
+            <>
+              {typeFilterField}
+              <BranchSelector
+                branches={branches}
+                value={branchFilter}
+                label={t('admin.approvals.filterBranch')}
+                emptyLabel={t('admin.approvals.filterAllBranches')}
+                onChange={(value) => {
+                  setBranchFilter(value);
+                  setPage(1);
+                }}
+              />
+            </>
+          }
+          sort={sort}
+          onSort={setSort}
+          pagination={{ page, pageSize: 25, total, onPage: setPage }}
+        />
+      )}
 
       {placing ? (
         <PlacementDialog

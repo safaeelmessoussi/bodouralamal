@@ -36,8 +36,24 @@ import {
  * needs or should be handling. The birth date is absent too — it decided
  * eligibility before the row existed, and re-showing it would put a personal
  * datum on a screen whose decision does not turn on it.
+ *
+ * **R137 — the direct route survives, unchanged, but is no longer the only
+ * door.** `SelfManagedClaimsQueue` below is the actual list-and-decide
+ * implementation, with no `AdminLayout` of its own; this page is now a thin
+ * wrapper around it, and `طلبات الانضمام` (`approvals.tsx`) embeds the SAME
+ * component directly — one decision implementation, reached two ways,
+ * exactly the Owner's instruction not to duplicate it.
  */
 export function SelfManagedClaimsPage(): ReactNode {
+  return (
+    <AdminLayout title={t('admin.selfManagedClaims.title')} lede={t('admin.selfManagedClaims.lede')}>
+      <SelfManagedClaimsQueue />
+    </AdminLayout>
+  );
+}
+
+/** The list, the two decision dialogs, and nothing about where they are mounted. */
+export function SelfManagedClaimsQueue(): ReactNode {
   const { accessToken } = useSession();
   const [rows, setRows] = useState<PendingSelfManagedClaim[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -133,10 +149,7 @@ export function SelfManagedClaimsPage(): ReactNode {
   }
 
   return (
-    <AdminLayout
-      title={t('admin.selfManagedClaims.title')}
-      lede={t('admin.selfManagedClaims.lede')}
-    >
+    <>
       {notice === null ? null : <Feedback>{notice}</Feedback>}
 
       <DataTable
@@ -185,6 +198,6 @@ export function SelfManagedClaimsPage(): ReactNode {
           />
         </FormDialog>
       )}
-    </AdminLayout>
+    </>
   );
 }

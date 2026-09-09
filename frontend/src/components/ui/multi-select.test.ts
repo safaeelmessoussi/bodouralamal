@@ -35,10 +35,16 @@ describe('the assistants are a multi-select', () => {
   });
 });
 
-describe('the control keeps the selection visible and the list bounded', () => {
-  it('separates chosen from choosable', () => {
-    expect(code(CONTROL)).toContain('multi-select__chosen');
-    expect(code(CONTROL)).toContain('multi-select__options');
+describe('the control keeps the selection bounded and, collapsed, out of the way (R137 item 8)', () => {
+  it('collapses to a single trigger — the SAME field__control shape SelectField and SearchableSelect use — until opened', () => {
+    expect(code(CONTROL)).toContain('field__control dropdown-trigger');
+    expect(code(CONTROL)).toContain('aria-haspopup="listbox"');
+    expect(code(CONTROL)).toContain('aria-expanded={open}');
+  });
+
+  it("the closed trigger reads as a plain-language summary («٣ محددة»), not the roster itself", () => {
+    expect(code(CONTROL)).toContain("t('common.selectedCount')");
+    expect(code(CONTROL)).not.toMatch(/multi-select__chosen/);
   });
 
   it('searches only above a threshold, so a short list is not cluttered', () => {
@@ -53,7 +59,12 @@ describe('the control keeps the selection visible and the list bounded', () => {
     expect(code(CONTROL)).not.toContain('await ');
   });
 
-  it('removes through a real button, not a glyph in a span', () => {
-    expect(code(CONTROL)).toContain('aria-label={`${t(\'common.remove\')}');
+  it('offers each option as a real, shared checkbox field — a toggle a screen reader announces as one, not a glyph in a button', () => {
+    expect(code(CONTROL)).toContain('<ChoiceField');
+    expect(code(CONTROL)).toContain('checked={selected.includes(o.value)}');
+  });
+
+  it('Escape and an outside click close the panel — the same disclosure NotificationBell already established, reused rather than reinvented', () => {
+    expect(code(CONTROL)).toContain('useDisclosure');
   });
 });

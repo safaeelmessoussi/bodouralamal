@@ -346,7 +346,11 @@ export function ExamSection({
                 />
               ) : null}
               {source.availabilityChoice === 'custom' ? (
-                <>
+                // R137 item 9 — a date and its own time are exactly the pair
+                // `SchedulingTimes` already renders compactly; this is the
+                // same shape, so it shares the same `.form__row` treatment
+                // instead of stacking two full-width fields.
+                <div className="form__row">
                   <DateField
                     label={t('scheduling.exam.customDate')}
                     value={source.customDate}
@@ -360,7 +364,7 @@ export function ExamSection({
                     hint={t('scheduling.timeHint')}
                     required
                   />
-                </>
+                </div>
               ) : null}
             </>
           ) : null}

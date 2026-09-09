@@ -148,8 +148,9 @@ describe('role gating (TD-2)', () => {
     expect(forAdmin).not.toContain('/superadmin/hijri-calendar');
   });
 
-  it('gives a Super Admin everything', () => {
-    expect(visibleModules(['super_admin'])).toHaveLength(ADMIN_MODULES.length);
+  it('gives a Super Admin every module EXCEPT the ones deliberately hidden from the menu (R137)', () => {
+    const hidden = ADMIN_MODULES.filter((m) => m.hiddenFromNav === true).length;
+    expect(visibleModules(['super_admin'])).toHaveLength(ADMIN_MODULES.length - hidden);
   });
 
   it('gives a role with no back-office grant nothing at all', () => {
@@ -197,6 +198,37 @@ describe('role gating (TD-2)', () => {
       expect(canAccess(module, ['admin']), path).toBe(true);
       expect(module.section, path).toBeNull();
     }
+  });
+});
+
+/**
+ * **R137 — hidden from the menu is not withdrawn.**
+ *
+ * The one property that must survive `hiddenFromNav` exactly: the route
+ * still resolves, the Super-Admin authorization is unchanged, and an
+ * existing bookmark or deep link still reaches the same page it always
+ * did — only the standing sidebar entry is gone.
+ */
+describe('a module hidden from the menu keeps its route and authorization (R137)', () => {
+  it('/admin/self-managed-claims is absent from the visible menu for every role, including Super Admin', () => {
+    for (const roles of [['super_admin'], ['admin'], ['teacher'], []]) {
+      expect(visibleModules(roles).map((m) => m.path)).not.toContain(
+        '/admin/self-managed-claims',
+      );
+    }
+  });
+
+  it('but moduleForPath still resolves it — the route was never removed', () => {
+    expect(moduleForPath('/admin/self-managed-claims')?.path).toBe(
+      '/admin/self-managed-claims',
+    );
+  });
+
+  it('and canAccess still grants exactly Super Admin, unchanged from R132', () => {
+    const module = ADMIN_MODULES.find((m) => m.path === '/admin/self-managed-claims')!;
+    expect(canAccess(module, ['super_admin'])).toBe(true);
+    expect(canAccess(module, ['admin'])).toBe(false);
+    expect(canAccess(module, ['teacher'])).toBe(false);
   });
 });
 
@@ -435,7 +467,15 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     // invalidated — under it a Super Admin saw nine cards and an Admin saw none.
     const { dashboardCards } = await import('../pages/admin/index.js');
     expect(dashboardCards(['super_admin']).map((m) => m.path)).toEqual(
-      [...MAIN_NAV_ORDER, ...ADMINISTRATION_ORDER].filter((p) => p !== '/admin'),
+      [...MAIN_NAV_ORDER, ...ADMINISTRATION_ORDER].filter(
+        (p) =>
+          p !== '/admin' &&
+          // R137 — moved out of the standing menu (and so out of the
+          // dashboard launcher, which is the same list minus itself); the
+          // route, the page and the Super-Admin authorization all still
+          // exist, reached directly or from طلبات الانضمام's own filter.
+          p !== '/admin/self-managed-claims',
+      ),
     );
     /**
      * **R105's ORDER is unchanged; the Admin's membership is** (Owner,
@@ -451,6 +491,7 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
           p !== '/admin/users' &&
           // R132 — Super-Admin-only for the same reason المستخدمون is: deciding
           // who may hold a login is account administration, not operational work.
+          // R137 — also hidden from the menu now, for every role alike.
           p !== '/admin/self-managed-claims',
       ),
     );

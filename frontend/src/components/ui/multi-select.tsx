@@ -1,6 +1,8 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { Button } from './button.js';
+import { ChoiceField, FieldShell } from './field.js';
+import { Icon } from './icon.js';
+import { useDisclosure } from '../../lib/use-disclosure.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -14,14 +16,20 @@ import { t } from '../../i18n/index.js';
  *
  * ## What it is, and what it deliberately is not
  *
- * **Not a combobox.** A `<select multiple>` is famously hard to use — ctrl-click
- * to add, and a mis-click loses the whole selection — so this is a **search box
- * over a bounded list, plus the chosen items shown as removable chips**. The
- * selection is always visible and never one keystroke from being lost.
+ * **Not a `<select multiple>`.** A `<select multiple>` is famously hard to use
+ * — ctrl-click to add, and a mis-click loses the whole selection — so this
+ * offers real checkboxes, one per option, which a pointer, a keyboard and a
+ * screen reader all operate the identical way.
  *
- * **The chosen are separated from the choosable**, which is what makes the
- * control readable at any list length: what you have picked is a short list at
- * the top, and what you may still pick is filtered below.
+ * **Collapsed by default (R137 item 8).** The control reads exactly like
+ * `SelectField`/`SearchableSelect` until opened — the same `field__control`
+ * trigger, showing a plain-language summary ("٣ محددة", the Owner's own
+ * example) rather than the whole roster. It used to render every chosen chip
+ * and every choosable option inline, always; on the association's real roster
+ * that turned a short form into a page of checkboxes, which is the defect this
+ * collapses away. Opening it (click, Enter or Space on the trigger) reveals the
+ * SAME checkbox list as before — nothing about *what* is offered changed, only
+ * *when* it takes up space on the screen.
  *
  * **Search is presentational.** It narrows options the caller already handed
  * over; it fetches nothing and filters no authorization. The caller stays
@@ -31,6 +39,10 @@ import { t } from '../../i18n/index.js';
  * **Excluding an option is the caller's job too** (the lead مؤطرة must not also
  * be an assistant, §20 rule 22's distinction between two roles on one thing) —
  * this component has no opinion about *why* something is not offered.
+ *
+ * **Escape and a click outside both close the panel** — `useDisclosure`, the
+ * same behaviour `NotificationBell` already established for the header's own
+ * popover, reused rather than reinvented a third time.
  */
 export interface MultiSelectOption {
   value: string;
@@ -63,104 +75,92 @@ export function MultiSelectField({
   error?: string | null;
   searchThreshold?: number;
 }): ReactNode {
-  const id = useId();
+  const { open, toggle, containerRef } = useDisclosure<HTMLDivElement>();
   const [query, setQuery] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const chosen = useMemo(
-    () => selected.map((v) => options.find((o) => o.value === v)).filter((o) => o !== undefined),
-    [selected, options],
+  const chosenCount = useMemo(
+    () => options.filter((o) => selected.includes(o.value)).length,
+    [options, selected],
   );
 
-  const available = useMemo(() => {
+  const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return options.filter(
-      (o) => !selected.includes(o.value) && (needle === '' || o.label.toLowerCase().includes(needle)),
-    );
-  }, [options, selected, query]);
+    return needle === '' ? options : options.filter((o) => o.label.toLowerCase().includes(needle));
+  }, [options, query]);
 
   const searchable = options.length >= searchThreshold;
 
+  function toggleOption(value: string): void {
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  }
+
+  const summary =
+    chosenCount === 0
+      ? (emptyLabel ?? t('common.noneChosen'))
+      : t('common.selectedCount').replace('{n}', String(chosenCount));
+
   return (
-    <fieldset
-      className={error ? 'field field--invalid multi-select' : 'field multi-select'}
-      aria-invalid={error ? true : undefined}
-      aria-describedby={
-        [hint ? `${id}-hint` : null, error ? `${id}-error` : null]
-          .filter(Boolean)
-          .join(' ') || undefined
-      }
-    >
-      <legend className="field__label">
-        {label}
-        {required ? (
-          <span className="field__required" aria-hidden="true">
-            *
-          </span>
-        ) : null}
-      </legend>
+    <FieldShell label={label} error={error} hint={hint} required={required}>
+      {({ id, describedBy }) => (
+        <div className="dropdown-select multi-select" ref={containerRef}>
+          <button
+            id={id}
+            ref={triggerRef}
+            type="button"
+            className="field__control dropdown-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            disabled={disabled}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+            onClick={toggle}
+          >
+            <span className="dropdown-trigger__label">{summary}</span>
+            <Icon name="chevron" size={16} />
+          </button>
 
-      {chosen.length > 0 ? (
-        <ul className="multi-select__chosen">
-          {chosen.map((o) => (
-            <li key={o.value}>
-              {/* Removing is a button, not an × glyph in a span: it is an action
-                  and needs the role, the focus ring and the accessible name. */}
-              <Button
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => onChange(selected.filter((v) => v !== o.value))}
-                aria-label={`${t('common.remove')} — ${o.label}`}
-              >
-                {o.label} ✕
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="field__hint">{emptyLabel ?? t('common.noneChosen')}</p>
+          {open ? (
+            <div className="dropdown-select__panel" role="group" aria-label={label}>
+              {options.length === 0 ? (
+                <p className="field__hint">{emptyLabel ?? t('common.noneChosen')}</p>
+              ) : (
+                <>
+                  {searchable ? (
+                    <input
+                      className="field__control"
+                      type="search"
+                      value={query}
+                      disabled={disabled}
+                      placeholder={searchPlaceholder ?? t('common.search')}
+                      aria-label={`${t('common.search')} — ${label}`}
+                      onChange={(e) => setQuery(e.target.value)}
+                      autoFocus
+                    />
+                  ) : null}
+
+                  <ul className="multi-select__options">
+                    {visible.length === 0 ? (
+                      <li className="field__hint">{t('common.noMatches')}</li>
+                    ) : (
+                      visible.map((o) => (
+                        <li key={o.value}>
+                          <ChoiceField
+                            label={o.label}
+                            checked={selected.includes(o.value)}
+                            disabled={disabled}
+                            onChange={() => toggleOption(o.value)}
+                          />
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
       )}
-
-      {searchable ? (
-        <input
-          id={`${id}-search`}
-          className="field__control"
-          type="search"
-          value={query}
-          disabled={disabled}
-          placeholder={searchPlaceholder ?? t('common.search')}
-          aria-label={`${t('common.search')} — ${label}`}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      ) : null}
-
-      <ul className="multi-select__options">
-        {available.length === 0 ? (
-          <li className="field__hint">{t('common.noMatches')}</li>
-        ) : (
-          available.map((o) => (
-            <li key={o.value}>
-              <Button
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => onChange([...selected, o.value])}
-              >
-                ＋ {o.label}
-              </Button>
-            </li>
-          ))
-        )}
-      </ul>
-
-      {hint ? (
-        <p className="field__hint" id={`${id}-hint`}>
-          {hint}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="field__error" id={`${id}-error`} role="alert">
-          {error}
-        </p>
-      ) : null}
-    </fieldset>
+    </FieldShell>
   );
 }

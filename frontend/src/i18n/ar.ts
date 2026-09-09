@@ -283,6 +283,10 @@ export const ar = {
     search: 'بحث',
     remove: 'إزالة',
     noneChosen: 'لم تُختَر أي واحدة بعد.',
+    // R137 item 8 — the collapsed multi-select's own closed-state summary
+    // («3 محددة», the Owner's own wording), so a reader never has to open the
+    // panel just to know how many are chosen.
+    selectedCount: '{n} محددة',
     noMatches: 'لا توجد نتائج.',
     searchPlaceholder: 'ابحث…',
     notSet: 'غير محدَّد',

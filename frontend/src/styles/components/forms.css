@@ -310,55 +310,81 @@
   font-size: var(--font-size-xs);
 }
 
-/* The atomic multi-select (2026-08-13). Chosen items sit above the choosable
-   ones so the selection stays visible at any list length, and the options list
-   is bounded rather than growing with the association's roster — the defect it
-   replaced was a form whose height tracked the number of مؤطرات. */
-.multi-select__chosen {
+/* ── The unified collapsed dropdown (R137 item 8) ─────────────────────────
+ *
+ * `SelectField` (a native `<select>`), `SearchableSelect` and
+ * `MultiSelectField` all now read as ONE control shape until opened: a
+ * `field__control`-styled trigger showing the current answer (or a summary,
+ * for several), with a chevron that says there is more underneath. Opening
+ * either of the latter two reveals a bordered panel directly below the
+ * trigger, in normal document flow rather than a floating popover — the
+ * simplest way to stay responsive at every width in R137's own list without
+ * a second implementation of viewport-edge collision handling, and it never
+ * overlaps content the way a floating panel could at 320px.
+ */
+.dropdown-select__control {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  list-style: none;
-  margin: 0 0 var(--space-2);
-  padding: 0;
 }
-.multi-select__options {
+.dropdown-select__control .dropdown-trigger {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dropdown-trigger {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
-  list-style: none;
-  margin: var(--space-2) 0 0;
+  cursor: pointer;
+  text-align: start;
+}
+.dropdown-trigger:disabled {
+  cursor: not-allowed;
+}
+.dropdown-trigger__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* The chevron flips to say "open" the same way everywhere it appears —
+   `icon.tsx`'s `chevron` path is a downward arrow, so open is a 180° turn. */
+.dropdown-trigger .btn__icon {
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+.dropdown-trigger[aria-expanded='true'] .btn__icon {
+  transform: rotate(180deg);
+}
+.dropdown-select__panel {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
   padding: var(--space-2);
-  max-block-size: 12rem;
-  overflow-y: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
-/* The atomic single-choice searchable select (2026-08-17). Deliberately the same
-   furniture as the multi-select above — a bounded, scrollable, bordered list
-   under a search box — because they are one concept differing only in how many
-   answers they take, and two visual treatments would make that difference look
-   like a different kind of control. The list is a COLUMN rather than wrapping
-   chips: an option here is a whole answer, and a reader scans candidates down
-   rather than across. */
-.searchable-select__chosen {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-  margin: 0 0 var(--space-2);
-}
+/* The atomic multi-select (2026-08-13; collapsed behind a trigger, R137) and
+   the atomic single-choice searchable select (2026-08-17) — deliberately the
+   SAME furniture, a bounded, scrollable COLUMN inside the shared
+   `.dropdown-select__panel` above, because they are one concept differing
+   only in how many answers they take, and two visual treatments would make
+   that difference look like a different kind of control. A column rather than
+   wrapping chips: an option here is a whole answer (or, for the multi-select,
+   a whole checkbox row), and a reader scans candidates down rather than
+   across. */
+.multi-select__options,
 .searchable-select__options {
   display: grid;
   gap: 0.15rem;
   list-style: none;
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2);
-  max-block-size: 14rem;
+  margin: 0;
+  padding: 0;
+  max-block-size: 12rem;
   overflow-y: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 /* Full-width rows, start-aligned: the label is the target, so the whole row is
    the target rather than only the text inside it. */
@@ -366,6 +392,9 @@
   justify-content: start;
   width: 100%;
   padding-block: var(--space-2);
+}
+.multi-select__options .field--choice {
+  padding-block: 0.35rem;
 }
 
 /**
