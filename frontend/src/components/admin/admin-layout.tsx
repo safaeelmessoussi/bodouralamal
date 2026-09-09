@@ -78,7 +78,7 @@ function AdminSidebar({
   const ungrouped = modules.filter((m) => m.section === null);
 
   return (
-    <nav className="admin-nav" aria-label={t('admin.nav.label')}>
+    <nav className="admin-nav" id="admin-sidebar" aria-label={t('admin.nav.label')}>
       {ungrouped.length > 0 ? (
         <ul className="admin-nav__list">
           {ungrouped.map((module) => (

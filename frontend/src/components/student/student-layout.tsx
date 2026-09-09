@@ -92,7 +92,7 @@ function StudentSidebar({
 }): ReactNode {
   const modules = visibleStudentModules(roles, { actingForChild });
   return (
-    <nav className="admin-nav" aria-label={t('student.nav.label')}>
+    <nav className="admin-nav" id="admin-sidebar" aria-label={t('student.nav.label')}>
       <ul className="admin-nav__list">
         {modules.map((module) => (
           <NavItem key={module.path} module={module} current={current} />

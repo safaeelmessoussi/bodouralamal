@@ -80,7 +80,7 @@ function TeacherSidebar({
   const modules = visibleTeacherModules(roles, { teachesQuran: me?.teaches_quran === true });
 
   return (
-    <nav className="admin-nav" aria-label={t('teacher.nav.label')}>
+    <nav className="admin-nav" id="admin-sidebar" aria-label={t('teacher.nav.label')}>
       <ul className="admin-nav__list">
         {modules.map((module) => (
           <NavItem key={module.path} module={module} current={current} />

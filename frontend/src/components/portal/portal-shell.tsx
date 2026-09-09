@@ -1,9 +1,16 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { keepSidebarPlace } from '../../lib/nav-scroll.js';
+import { t } from '../../i18n/index.js';
 import { ApplicationHeader } from '../header/application-header.js';
+import { Icon } from '../ui/icon.js';
 import { Breadcrumb, type Crumb } from './breadcrumb.js';
 import { NoPermissionState } from '../states.js';
+
+/** `60rem` — the SAME breakpoint `ApplicationHeader`'s own burger uses (§14's
+ *  "one coherent responsive navigation system" rather than a second number
+ *  that drifts from it). */
+const WIDE_QUERY = '(min-width: 60rem)';
 
 /**
  * The frame every portal shares: header, sidebar, titled main region.
@@ -22,6 +29,28 @@ import { NoPermissionState } from '../states.js';
  * portal: both have the same long menu and the same full-page loads, and a
  * behaviour each portal had to opt into is a behaviour that would be missing
  * from the next one (rule AE). See `lib/nav-scroll.ts`.
+ *
+ * **R138 item 8 — the sidebar collapses on mobile, without a second nav
+ * system.** Below `WIDE_QUERY` a reader had to scroll past however long
+ * الإدارة's menu is before reaching the page she came for; a fixed-length menu
+ * ahead of variable-length content is the complaint whatever the exact count.
+ *
+ * The default is **pure CSS** (`admin.css`), on purpose: a JS-computed
+ * default would be wrong for one frame on first paint — there is no way to
+ * know the viewport before mount — and every navigation here is a full
+ * document load (see `nav-scroll.ts`), so that wrong frame would repeat on
+ * EVERY click, not show once. `override` therefore starts at `null`, meaning
+ * *follow the media query*, and only ever holds an explicit answer once the
+ * toggle button has been pressed. `isWide` is tracked separately and drives
+ * nothing visual — it exists only so the button's own `aria-expanded` and its
+ * next click read the right state before that first press.
+ *
+ * **One toggle serves both directions.** At the same width the menu now
+ * opens as an overlay (Escape and a tap on the backdrop close it, and the
+ * destination is on screen the instant a link is followed, per the full-page
+ * navigation above), it also collapses back — desktop keeps today's expanded
+ * default per the Owner, but gets the same control rather than a control that
+ * only exists on the width where it is more obviously needed.
  */
 export function PortalShell({
   title,
@@ -51,10 +80,80 @@ export function PortalShell({
     return nav ? keepSidebarPlace(nav) : undefined;
   }, []);
 
+  // R138 item 8 — see the class doc comment for why this starts at `null`
+  // rather than a guessed viewport, and why `isWide` drives no CSS.
+  const [override, setOverride] = useState<'open' | 'collapsed' | null>(null);
+  const [isWide, setIsWide] = useState(true);
+  const navOpen = override === null ? isWide : override === 'open';
+
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_QUERY);
+    setIsWide(mq.matches);
+    const onChange = (e: MediaQueryListEvent): void => setIsWide(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    // An override left standing across a resize would sit oddly once the
+    // layout it was chosen for no longer applies — the same reasoning
+    // `ApplicationHeader`'s own sheet closes on for the identical reason.
+    if (override === null) return;
+    const mq = window.matchMedia(WIDE_QUERY);
+    const reset = (): void => setOverride(null);
+    mq.addEventListener('change', reset);
+    return () => mq.removeEventListener('change', reset);
+  }, [override]);
+
+  useEffect(() => {
+    // Escape closes the mobile drawer. Harmless when the override instead
+    // means "collapsed on desktop", where there is no overlay to dismiss.
+    if (override !== 'open') return undefined;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOverride('collapsed');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [override]);
+
+  function toggleNav(): void {
+    setOverride(navOpen ? 'collapsed' : 'open');
+  }
+
   return (
     <>
       <ApplicationHeader />
-      <div className="admin" ref={frame}>
+      <div
+        className={
+          override === null
+            ? 'admin'
+            : `admin admin--nav-${override === 'open' ? 'open' : 'collapsed'}`
+        }
+        ref={frame}
+      >
+        <button
+          type="button"
+          className="admin-nav-toggle"
+          aria-expanded={navOpen}
+          aria-controls="admin-sidebar"
+          onClick={toggleNav}
+        >
+          <span className="visually-hidden">{navOpen ? t('nav.closeMenu') : t('nav.openMenu')}</span>
+          <Icon name={navOpen ? 'close' : 'menu'} size={18} />
+          <span aria-hidden="true">{t('admin.nav.toggle')}</span>
+        </button>
+        {/* The mobile drawer's backdrop — CSS shows it only under WIDE_QUERY
+            and only while explicitly opened; a tap on it is the same "close"
+            Escape already offers. */}
+        {override === 'open' ? (
+          <button
+            type="button"
+            className="admin-nav-backdrop"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => setOverride('collapsed')}
+          />
+        ) : null}
         {sidebar}
         <main id="main" className="admin__main">
           <div className="admin__head">

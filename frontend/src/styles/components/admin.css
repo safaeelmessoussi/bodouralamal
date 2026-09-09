@@ -66,10 +66,97 @@
     padding-inline-end: var(--space-2);
   }
 }
-/* Below the two-column breakpoint the sidebar is a normal block in the flow —
-   it is not sticky, so it must not be height-capped either, or it would become a
-   small scrolling box in the middle of the page. The rules above are inside the
-   media query for exactly that reason. */
+/* Below the two-column breakpoint the sidebar is not sticky, so it must not be
+   height-capped either — the rules above are inside the media query for
+   exactly that reason. It used to sit in the flow there, ahead of whatever
+   content the reader actually came for; R138 item 8 replaced that with the
+   collapsed-by-default toggle below. */
+
+/* ── R138 item 8 — the sidebar's collapse toggle ─────────────────────────────
+ *
+ * **The default lives ENTIRELY in these two media queries, not in JS.** A
+ * script cannot know the viewport before its first render, so a JS-computed
+ * default is wrong for one frame on every single page — and every navigation
+ * here is a full document load (`nav-scroll.ts`), so that wrong frame would
+ * repeat on every click rather than show once. `PortalShell` only ever adds
+ * `.admin--nav-open` / `.admin--nav-collapsed` once its toggle has actually
+ * been pressed; until then neither class exists and the query below is the
+ * only thing deciding what shows.
+ *
+ * **`60rem` is `ApplicationHeader`'s own breakpoint**, not a second number —
+ * "one coherent responsive navigation system" (§14) is what that identity is
+ * for.
+ */
+.admin-nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  padding: 0.5rem var(--space-3);
+  margin-block-end: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  /* A grid item may use `z-index` without `position` (CSS Grid §Z), which is
+     what keeps this reachable above the drawer/backdrop it opens below. */
+  z-index: 57;
+}
+
+.admin-nav-backdrop {
+  display: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+@media (width < 60rem) {
+  /* The collapsed default. */
+  .admin-nav {
+    display: none;
+  }
+  /* Explicitly opened: an overlay drawer, not content pushed back into the
+     flow — the destination a link leads to must be visible the instant it is
+     followed, and a drawer sitting in normal flow would itself be the thing
+     between the reader and the page again. */
+  .admin--nav-open .admin-nav {
+    display: grid;
+    position: fixed;
+    inset-block: var(--header-height) 0;
+    inset-inline-start: 0;
+    inline-size: min(85vw, 20rem);
+    max-block-size: none;
+    overflow-y: auto;
+    z-index: 56;
+    padding: var(--space-4);
+    background: var(--color-surface);
+    border-inline-end: 1px solid var(--color-border);
+    box-shadow: var(--shadow-md);
+  }
+  .admin--nav-open .admin-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset-block: var(--header-height) 0;
+    inset-inline: 0;
+    z-index: 55;
+    background: color-mix(in srgb, var(--color-text) 40%, transparent);
+  }
+}
+
+@media (width >= 60rem) {
+  /* Desktop keeps its existing expanded default (the Owner's own instruction)
+     — collapsing is possible, but it is the exception, chosen explicitly. */
+  .admin--nav-collapsed .admin-nav {
+    display: none;
+  }
+  .admin--nav-collapsed {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-nav__group-title {
   font-size: var(--font-size-xs);
   font-weight: 700;
