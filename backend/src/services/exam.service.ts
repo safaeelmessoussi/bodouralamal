@@ -160,7 +160,10 @@ export async function assertCoherent(
   await assertSubjectTaughtAtLevel(tx, input.levelId, input.subjectId);
 
   const [year, room] = await Promise.all([
-    tx.academicYear.findFirst({ where: { id: input.academicYearId }, select: { id: true } }),
+    tx.academicYear.findFirst({
+      where: { id: input.academicYearId, deletedAt: null },
+      select: { id: true },
+    }),
     tx.room.findFirst({ where: { id: input.roomId, deletedAt: null }, select: { branchId: true } }),
   ]);
   if (!year) throw new AppError('NOT_FOUND', 'no such academic year');

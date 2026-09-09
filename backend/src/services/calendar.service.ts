@@ -1203,7 +1203,7 @@ export async function prefilledFilters(
   if (actor === null || actor.accountStatus !== "active") return null;
 
   const currentYear = await prisma.academicYear.findFirst({
-    where: { isCurrent: true },
+    where: { isCurrent: true, deletedAt: null },
     select: { id: true },
   });
 

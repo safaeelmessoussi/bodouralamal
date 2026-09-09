@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
   assignSubjectToLevel,
+  createAcademicYear,
+  deleteAcademicYear,
   listAcademicYears,
   listLevelSubjects,
   unassignSubjectFromLevel,
@@ -11,6 +14,7 @@ import {
   listLevelSurahs,
   listQuranSurahs,
   unassignSurahFromLevel,
+  updateAcademicYear,
 } from '../services/reference-data.service.js';
 // Subject's home is the taxonomy service — this endpoint is its selector
 // projection, not a second source for it.
@@ -55,6 +59,62 @@ export function academicYears(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const rows = await listAcademicYears(prisma, requireActor(req));
     res.json({ data: rows.map(academicYearRefDto) });
+  };
+}
+
+/**
+ * **R137 — academic year create/edit/delete.** Read stays the unpaginated
+ * selector above; these three are the write half §4.10 always described but
+ * `20260724194811_init_schema`'s own comment left unbuilt until now.
+ */
+const yearBodySchema = z
+  .object({
+    /** `YYYY-YYYY`; the pair's own relationship is checked in the service,
+     *  where the sentence naming which half is wrong can be written once. */
+    label: z.string().trim().min(1).max(9),
+    isCurrent: z.boolean().optional(),
+  })
+  .strict();
+
+const yearPatchSchema = z
+  .object({
+    label: z.string().trim().min(1).max(9).optional(),
+    isCurrent: z.boolean().optional(),
+    /** TD-15. */
+    version: z.coerce.number().int().min(0),
+  })
+  .strict();
+
+/** `POST /admin/academic-years` — Super Admin, audited. */
+export function createAcademicYearHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const b = parse(yearBodySchema, req.body ?? {});
+    const row = await createAcademicYear(prisma, requireActor(req), {
+      label: b.label,
+      ...(b.isCurrent === undefined ? {} : { isCurrent: b.isCurrent }),
+    });
+    res.status(201).json(academicYearRefDto(row));
+  };
+}
+
+/** `PATCH /admin/academic-years/{id}` — Super Admin, TD-15, audited. */
+export function updateAcademicYearHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const b = parse(yearPatchSchema, req.body ?? {});
+    const row = await updateAcademicYear(prisma, requireActor(req), idParam(req, 'id'), b.version, {
+      ...(b.label === undefined ? {} : { label: b.label }),
+      ...(b.isCurrent === undefined ? {} : { isCurrent: b.isCurrent }),
+    });
+    res.json(academicYearRefDto(row));
+  };
+}
+
+/** `DELETE /admin/academic-years/{id}` — TD-5 soft delete, Super Admin,
+ *  refused while a period, exam, course schedule or content still names it. */
+export function deleteAcademicYearHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await deleteAcademicYear(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(204).end();
   };
 }
 

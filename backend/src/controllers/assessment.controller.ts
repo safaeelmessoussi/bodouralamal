@@ -110,6 +110,7 @@ export function addQuestionHandler(prisma: PrismaClient) {
       prompt: b.prompt,
       ...(b.justification === undefined ? {} : { justification: b.justification }),
       ...(b.options === undefined ? {} : { options: b.options }),
+      ...(b.points === undefined ? {} : { points: b.points }),
     });
     res.status(201).json({ id: created.id });
   };
@@ -128,6 +129,7 @@ export function patchQuestion(prisma: PrismaClient) {
         ...(b.prompt === undefined ? {} : { prompt: b.prompt }),
         ...(b.justification === undefined ? {} : { justification: b.justification }),
         ...(b.options === undefined ? {} : { options: b.options }),
+        ...(b.points === undefined ? {} : { points: b.points }),
       },
     );
     res.status(204).end();

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { academicYearLabelError } from './academic-periods.js';
 import { t } from '../../i18n/index.js';
+import SOURCE from './academic-periods.tsx?raw';
 
 /**
  * **A domain conflict must not be told as a concurrency accident** (2026-09-05).
@@ -36,5 +38,68 @@ describe('the taken-sequence refusal reads as what it is', () => {
     // A guard against the message and the call site drifting apart: if the
     // token is renamed here and not there, the number reaches nobody.
     expect(t('admin.academicPeriods.duplicate')).toContain('{sequence}');
+  });
+});
+
+/**
+ * **R137 — الفصول الدراسية becomes a coherent surface for the year itself**,
+ * not only its semesters. The Owner's exact complaint was that «إضافة فصل»'s
+ * own year selector showed only «2026-2027» — not because it was filtered to
+ * the current year (it never was, `years.map(...)` is and was unconditional,
+ * see the assertion below), but because there was nowhere to create a second
+ * one. This is the write path that closes the actual gap.
+ */
+describe('academicYearLabelError — the same YYYY-YYYY-consecutive-pair rule the server enforces', () => {
+  it('accepts two consecutive years', () => {
+    expect(academicYearLabelError('2026-2027')).toBeNull();
+    expect(academicYearLabelError('2099-2100')).toBeNull();
+  });
+
+  it('refuses a malformed shape', () => {
+    expect(academicYearLabelError('')).not.toBeNull();
+    expect(academicYearLabelError('2026')).not.toBeNull();
+    expect(academicYearLabelError('2026-27')).not.toBeNull();
+    expect(academicYearLabelError('sept-2026')).not.toBeNull();
+  });
+
+  it('refuses a second year that is not the first plus one', () => {
+    expect(academicYearLabelError('2026-2028')).not.toBeNull();
+    expect(academicYearLabelError('2026-2025')).not.toBeNull();
+    expect(academicYearLabelError('2026-2026')).not.toBeNull();
+  });
+});
+
+describe('the semester selector was never filtered to the current year — and years now have a create action', () => {
+  it('the year selector offered to «إضافة فصل» is the unconditional list, every year', () => {
+    // The actual defect: not a filter to remove, but a write path to add.
+    // This pins that the selector itself stayed unconditional throughout.
+    expect(SOURCE).toContain('options={years.map((y) => ({ value: y.id, label: y.label }))}');
+  });
+
+  it('offers create, edit and delete for the academic year itself', () => {
+    expect(SOURCE).toContain("setEditingYear('new')");
+    expect(SOURCE).toContain('createAcademicYear');
+    expect(SOURCE).toContain('updateAcademicYear');
+    expect(SOURCE).toContain('deleteAcademicYear');
+  });
+
+  it('a blocked deletion is explained with the shared reference-data notice, not a generic sentence', () => {
+    expect(SOURCE).toContain('classifyDeletion');
+    expect(SOURCE).toContain('BlockedNotice');
+  });
+
+  it('a new or renamed year appears without a page reload — إضافة فصل reads the same state', () => {
+    // Both dialogs' onSave calls reload the SAME `years` state (`loadYears`),
+    // which the period form's own selector already reads live.
+    expect(SOURCE).toContain('await loadYears();');
+  });
+
+  it('the current year gets a distinct, clear refusal — not the generic dependency notice', () => {
+    // ACADEMIC_YEAR_IS_CURRENT carries no blocked_by, so classifyDeletion's
+    // generic conflict sentence would otherwise tell her to refresh — which
+    // does not free the flag either.
+    expect(SOURCE).toContain('ACADEMIC_YEAR_IS_CURRENT');
+    expect(t('admin.academicYears.isCurrentCannotDelete')).toContain('السنة الدراسية الحالية');
+    expect(t('admin.academicYears.isCurrentCannotDelete')).not.toContain('حدّثي الصفحة');
   });
 });

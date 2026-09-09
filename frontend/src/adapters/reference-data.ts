@@ -49,6 +49,8 @@ export interface AcademicYearRef {
   label: string;
   /** Lets a form default to the live year rather than asking someone to recall it. */
   is_current: boolean;
+  /** TD-15 — R137's year-management screen edits this same row. */
+  version: number;
 }
 
 export async function listSubjects(
@@ -70,4 +72,34 @@ export async function reorderSubjects(
 export async function listAcademicYears(token: string | null): Promise<AcademicYearRef[]> {
   const body = await api<{ data: AcademicYearRef[] }>('/admin/academic-years', { token });
   return body.data;
+}
+
+/**
+ * **R137 — academic year create/edit/delete.** Read stays the unpaginated
+ * selector above; these three close the gap that left «إضافة فصل» offering
+ * only whichever single year the seed had created, with nowhere to make
+ * another.
+ */
+export async function createAcademicYear(
+  input: { label: string; is_current?: boolean },
+  token: string | null,
+): Promise<AcademicYearRef> {
+  return api<AcademicYearRef>('/admin/academic-years', { method: 'POST', body: input, token });
+}
+
+export async function updateAcademicYear(
+  id: string,
+  version: number,
+  patch: { label?: string; is_current?: boolean },
+  token: string | null,
+): Promise<AcademicYearRef> {
+  return api<AcademicYearRef>(`/admin/academic-years/${id}`, {
+    method: 'PATCH',
+    body: { ...patch, version },
+    token,
+  });
+}
+
+export async function deleteAcademicYear(id: string, token: string | null): Promise<void> {
+  await api<void>(`/admin/academic-years/${id}`, { method: 'DELETE', token });
 }

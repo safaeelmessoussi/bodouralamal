@@ -25,6 +25,10 @@ export interface AssessmentQuestion {
   kind: QuestionKind;
   prompt: string;
   justification: JustificationRule;
+  /** R137 — an optional grade allocation; `null` when unset. */
+  points: string | null;
+  /** TD-15 — required by `updateQuestion`. */
+  version: number;
   options: { id: string; display_order: number; label: string }[];
 }
 
@@ -110,6 +114,8 @@ export async function addQuestion(
     prompt: string;
     justification?: JustificationRule;
     options?: string[];
+    /** R137 — an optional grade allocation. */
+    points?: number;
   },
   token: string | null,
 ): Promise<{ id: string }> {
@@ -124,7 +130,13 @@ export async function updateQuestion(
   examId: string,
   questionId: string,
   version: number,
-  patch: { prompt?: string; justification?: JustificationRule; options?: string[] },
+  patch: {
+    prompt?: string;
+    justification?: JustificationRule;
+    options?: string[];
+    /** R137 — `undefined` leaves it unchanged; `null` clears it explicitly. */
+    points?: number | null;
+  },
   token: string | null,
 ): Promise<void> {
   await api<void>(`/assessments/${examId}/questions/${questionId}`, {

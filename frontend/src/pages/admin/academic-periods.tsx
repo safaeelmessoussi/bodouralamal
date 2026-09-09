@@ -6,23 +6,32 @@ import {
   updateAcademicPeriod,
   type AcademicPeriodRef,
 } from '../../adapters/academic-periods.js';
-import { listAcademicYears, type AcademicYearRef } from '../../adapters/reference-data.js';
+import {
+  createAcademicYear,
+  deleteAcademicYear,
+  listAcademicYears,
+  updateAcademicYear,
+  type AcademicYearRef,
+} from '../../adapters/reference-data.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Badge } from '../../components/ui/badge.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
 import { Button } from '../../components/ui/button.js';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
   DataTable,
   type Column,
   type RowAction,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { DateField, SelectField, TextField } from '../../components/ui/field.js';
+import { CheckboxField, DateField, SelectField, TextField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import { isDirty } from '../../lib/form-dirty.js';
 
 /**
@@ -66,11 +75,16 @@ export function AcademicPeriodsPage(): ReactNode {
 
   const [rows, setRows] = useState<AcademicPeriodRef[]>([]);
   const [years, setYears] = useState<AcademicYearRef[]>([]);
+  const [yearsStatus, setYearsStatus] = useState<TableStatus>('loading');
   const [yearFilter, setYearFilter] = useState('');
   const [status, setStatus] = useState<TableStatus>('loading');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<AcademicPeriodRef | 'new' | null>(null);
+  // R137 — the years themselves, managed on this same page.
+  const [editingYear, setEditingYear] = useState<AcademicYearRef | 'new' | null>(null);
+  const [deletingYear, setDeletingYear] = useState<AcademicYearRef | null>(null);
+  const [blockedYear, setBlockedYear] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -91,13 +105,104 @@ export function AcademicPeriodsPage(): ReactNode {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    // The years are the form's source and the filter's; a failure leaves both
-    // empty rather than the table, which stays readable either way.
-    void listAcademicYears(accessToken)
-      .then(setYears)
-      .catch(() => setYears([]));
+  const loadYears = useCallback(async () => {
+    setYearsStatus('loading');
+    try {
+      setYears(await listAcademicYears(accessToken));
+      setYearsStatus('ready');
+    } catch {
+      setYearsStatus('error');
+    }
   }, [accessToken]);
+
+  useEffect(() => {
+    void loadYears();
+  }, [loadYears]);
+
+  /**
+   * **R137 — creating or renaming a year here reflects instantly through
+   * `يبدأ في`'s own selector**, without a page reload: `إضافة فصل` reads the
+   * SAME `years` state, so a year created for exactly this purpose is
+   * immediately choosable rather than requiring a refresh first.
+   */
+  async function saveYear(
+    input: { label: string; is_current: boolean },
+    existing: AcademicYearRef | null,
+  ): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (existing) {
+        await updateAcademicYear(
+          existing.id,
+          existing.version,
+          { label: input.label, is_current: input.is_current },
+          accessToken,
+        );
+      } else {
+        await createAcademicYear(
+          { label: input.label, is_current: input.is_current },
+          accessToken,
+        );
+      }
+      setEditingYear(null);
+      await loadYears();
+      setNotice(t(existing ? 'common.saved' : 'common.created'));
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'DUPLICATE') {
+        setNotice(t('admin.academicYears.duplicate'));
+      } else if (error instanceof ApiError && error.status === 409) {
+        setNotice(t('common.conflict'));
+        setEditingYear(null);
+        await loadYears();
+      } else {
+        setNotice(t('common.saveFailed'));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDeleteYear(): Promise<void> {
+    if (!deletingYear) return;
+    setBusy(true);
+    try {
+      await deleteAcademicYear(deletingYear.id, accessToken);
+      setDeletingYear(null);
+      await loadYears();
+      setNotice(t('admin.academicYears.deleted'));
+    } catch (error) {
+      /**
+       * **The current-year refusal is a distinct event, not a dependency
+       * list** (`ACADEMIC_YEAR_IS_CURRENT`, no `blocked_by`): named ahead of
+       * `classifyDeletion`, whose generic conflict sentence would otherwise
+       * tell her to refresh — which does not resolve *this* one either.
+       */
+      const reason =
+        error instanceof ApiError
+          ? (error.details as { reason?: string } | undefined)?.reason
+          : undefined;
+      if (reason === 'ACADEMIC_YEAR_IS_CURRENT') {
+        setNotice(t('admin.academicYears.isCurrentCannotDelete'));
+        setDeletingYear(null);
+        setBusy(false);
+        return;
+      }
+      const outcome = classifyDeletion(error);
+      if (outcome.kind === 'blocked') {
+        // Stays open and names what blocks it, same as every other
+        // reference-data deletion (rule AZ.1).
+        setBlockedYear(error);
+        setBusy(false);
+        return;
+      }
+      setDeletingYear(null);
+      if (outcome.kind === 'already-gone') await loadYears();
+      setNotice(deletionNotice(outcome));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save(
     input: { academic_year_id: string; sequence: number; start_date: string; end_date: string },
@@ -205,38 +310,131 @@ export function AcademicPeriodsPage(): ReactNode {
     ? [{ label: t('common.edit'), onSelect: (r) => setEditing(r) }]
     : [];
 
+  const yearColumns: Column<AcademicYearRef>[] = [
+    { key: 'label', header: t('admin.academicYears.colLabel'), cell: (y) => y.label },
+    {
+      key: 'is_current',
+      header: t('admin.academicYears.colState'),
+      cell: (y) => (
+        <Badge tone={y.is_current ? 'ok' : 'neutral'}>
+          {y.is_current
+            ? t('admin.academicYears.currentBadge')
+            : t('admin.enrollments.endedBadge')}
+        </Badge>
+      ),
+    },
+  ];
+
+  const yearActions: RowAction<AcademicYearRef>[] = canWrite
+    ? [
+        { label: t('common.edit'), onSelect: (y) => setEditingYear(y) },
+        {
+          label: t('common.delete'),
+          onSelect: (y) => {
+            setDeletingYear(y);
+            setBlockedYear(null);
+          },
+        },
+      ]
+    : [];
+
   return (
     <AdminLayout
       title={t('admin.academicPeriods.title')}
       lede={t('admin.academicPeriods.lede')}
       actions={
         canWrite ? (
-          <Button variant="add" onClick={() => setEditing('new')} disabled={years.length === 0}>
-            {t('admin.academicPeriods.create')}
-          </Button>
+          <>
+            <Button variant="add" onClick={() => setEditingYear('new')}>
+              {t('admin.academicYears.create')}
+            </Button>
+            <Button variant="add" onClick={() => setEditing('new')} disabled={years.length === 0}>
+              {t('admin.academicPeriods.create')}
+            </Button>
+          </>
         ) : null
       }
     >
       {notice ? <Feedback>{notice}</Feedback> : null}
 
-      <SelectField
-        label={t('admin.academicPeriods.filterYear')}
-        value={yearFilter}
-        onChange={setYearFilter}
-        options={[
-          { value: '', label: t('admin.academicPeriods.allYears') },
-          ...years.map((y) => ({ value: y.id, label: y.label })),
-        ]}
-      />
+      {/* **R137 — السنة الدراسية → الفصول الدراسية, one coherent surface.**
+          Years are managed here, above the semesters they contain, so
+          إضافة فصل's own year selector is never limited to whichever single
+          row the seed happened to create — a previous, current or future year
+          is created here first, then chosen below like any other. */}
+      <section aria-labelledby="academic-years-heading">
+        <h2 id="academic-years-heading">{t('admin.academicYears.title')}</h2>
+        <p className="muted">{t('admin.academicYears.lede')}</p>
 
-      <DataTable
-        caption={t('admin.academicPeriods.title')}
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        status={status}
-        actions={actions}
-        onRetry={() => void load()}
+        <DataTable
+          caption={t('admin.academicYears.title')}
+          columns={yearColumns}
+          rows={years}
+          rowKey={(y) => y.id}
+          status={yearsStatus}
+          actions={yearActions}
+          onRetry={() => void loadYears()}
+        />
+      </section>
+
+      <section aria-labelledby="academic-periods-heading">
+        <h2 id="academic-periods-heading">{t('admin.academicPeriods.title')}</h2>
+
+        <SelectField
+          label={t('admin.academicPeriods.filterYear')}
+          value={yearFilter}
+          onChange={setYearFilter}
+          options={[
+            { value: '', label: t('admin.academicPeriods.allYears') },
+            ...years.map((y) => ({ value: y.id, label: y.label })),
+          ]}
+        />
+
+        <DataTable
+          caption={t('admin.academicPeriods.title')}
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          status={status}
+          actions={actions}
+          onRetry={() => void load()}
+        />
+      </section>
+
+      {editingYear ? (
+        <AcademicYearFormDialog
+          initial={editingYear === 'new' ? null : editingYear}
+          busy={busy}
+          onCancel={() => setEditingYear(null)}
+          onSave={(input) => void saveYear(input, editingYear === 'new' ? null : editingYear)}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={deletingYear !== null}
+        {...(blockedYear
+          ? {
+              blocked: (
+                <BlockedNotice
+                  error={blockedYear}
+                  item={t('admin.academicYears.deleteBody').replace(
+                    '{label}',
+                    deletingYear?.label ?? '',
+                  )}
+                />
+              ),
+            }
+          : {})}
+        title={t('admin.academicYears.deleteTitle')}
+        body={t('admin.academicYears.deleteBody').replace('{label}', deletingYear?.label ?? '')}
+        confirmLabel={t('common.delete')}
+        danger
+        busy={busy}
+        onConfirm={() => void confirmDeleteYear()}
+        onCancel={() => {
+          setDeletingYear(null);
+          setBlockedYear(null);
+        }}
       />
 
       {editing ? (
@@ -249,6 +447,77 @@ export function AcademicPeriodsPage(): ReactNode {
         />
       ) : null}
     </AdminLayout>
+  );
+}
+
+/**
+ * **R137 — the same YYYY-YYYY-consecutive-pair rule the server enforces**
+ * (`assertSequentialLabel`, `reference-data.service.ts`), checked here too so
+ * a reader sees why before she ever submits, not only after a round trip.
+ * Exported so it is tested directly rather than only through the rendered
+ * form — the same discipline `weekdaysForClass` follows.
+ */
+export function academicYearLabelError(label: string): string | null {
+  const match = /^(\d{4})-(\d{4})$/.exec(label);
+  if (!match) return t('admin.academicYears.labelInvalid');
+  const [, first, second] = match as unknown as [string, string, string];
+  return Number(second) === Number(first) + 1 ? null : t('admin.academicYears.labelInvalid');
+}
+
+function AcademicYearFormDialog({
+  initial,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  initial: AcademicYearRef | null;
+  busy: boolean;
+  onSave: (input: { label: string; is_current: boolean }) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const [label, setLabel] = useState(initial?.label ?? '');
+  const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
+  const [touched, setTouched] = useState(false);
+
+  const labelError = academicYearLabelError(label);
+  const invalid = labelError;
+
+  const dirty = isDirty(
+    { label, isCurrent },
+    { label: initial?.label ?? '', isCurrent: initial?.is_current ?? false },
+  );
+
+  function submit(): void {
+    setTouched(true);
+    if (invalid) return;
+    onSave({ label, is_current: isCurrent });
+  }
+
+  return (
+    <FormDialog
+      open
+      onCancel={onCancel}
+      onSubmit={submit}
+      title={t(initial ? 'admin.academicYears.edit' : 'admin.academicYears.create')}
+      busy={busy}
+      dirty={dirty}
+    >
+      <TextField
+        label={t('admin.academicYears.colLabel')}
+        value={label}
+        onChange={setLabel}
+        required
+        hint={t('admin.academicYears.labelHint')}
+        error={touched ? labelError : null}
+      />
+
+      <CheckboxField
+        label={t('admin.academicYears.isCurrent')}
+        checked={isCurrent}
+        onChange={setIsCurrent}
+        hint={t('admin.academicYears.isCurrentHint')}
+      />
+    </FormDialog>
   );
 }
 

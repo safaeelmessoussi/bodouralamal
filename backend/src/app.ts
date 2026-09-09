@@ -587,6 +587,10 @@ export function createApp(
   // that needs either reads these rather than growing its own list.
   guarded.get('/admin/subjects', referenceData.subjects(prisma));
   guarded.get('/admin/academic-years', referenceData.academicYears(prisma));
+  // R137 — academic-year create/edit/delete, Super Admin, TD-15/TD-5.
+  guarded.post('/admin/academic-years', referenceData.createAcademicYearHandler(prisma));
+  guarded.patch('/admin/academic-years/:id', referenceData.updateAcademicYearHandler(prisma));
+  guarded.delete('/admin/academic-years/:id', referenceData.deleteAcademicYearHandler(prisma));
   // R122 — the semesters a year is made of. Read by any staff who may read
   // reference data; written by a Super Admin, asserted in the service.
   guarded.get('/admin/academic-periods', academicPeriods.list(prisma));

@@ -613,7 +613,12 @@ export interface SchedulingInput {
  */
 export function weekdaysForClass(recurrence: string, weekdays: string[], startDate: string): string[] {
   if (weekdays.length > 0) return weekdays;
-  if (recurrence === 'daily' || recurrence === 'monthly' || recurrence === 'yearly') return [];
+  // R137 — a one-time class has no weekday at all; `anchor_date` alone names
+  // its single occurrence, and a filled-in weekday here would claim a
+  // recurring pattern the row does not have.
+  if (recurrence === 'none' || recurrence === 'daily' || recurrence === 'monthly' || recurrence === 'yearly') {
+    return [];
+  }
   if (startDate === '') return [];
   // `getUTCDay()` is 0=Sunday; `WEEKDAYS` is Monday-first (BR-17).
   const day = new Date(`${startDate}T00:00:00Z`).getUTCDay();

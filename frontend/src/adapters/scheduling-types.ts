@@ -85,9 +85,11 @@ export const STRUCTURAL_KIND_SPECS: Record<SchedulingType, SchedulingTypeSpec> =
     hasAllDay: false,
     // A class is bounded by `effective_until` (R50), not by an end date.
     hasEndDate: false,
-    // The database refuses `none` on a schedule: a non-recurring occurrence is
-    // an Event, not a class that happens once.
-    allowsOnce: false,
+    // **R137 — a genuine one-time حصة دراسية/محاضرة is legitimate** (Owner
+    // decision, 2026-09-09): it still needs the audience/room/staff richness
+    // only a schedule carries, which an Event cannot express. `once` reuses
+    // the same anchor-date field `biweekly_alternating` already has.
+    allowsOnce: true,
     hasOccurrences: true,
   },
   activity: {

@@ -241,6 +241,12 @@ DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R2
 #    drafted in docs/SRS-PROPOSAL-R46.md and awaits the Owner.
 GET /admin/subjects                           # TD-3 extension 2026-08-05; selector source for §5.6 schedule form
 GET /admin/academic-years                     # TD-3 extension 2026-08-05; selector source, carries is_current
+# R137 — the write half TD-3 always implied: create/edit/delete an academic
+# year itself, Super Admin, TD-15/TD-5, so the semester form's year selector
+# is no longer limited to whichever one row the seed happened to create.
+POST /admin/academic-years                    # R137; Super Admin only, audited
+PATCH /admin/academic-years/{id}              # R137; Super Admin only, TD-15, audited
+DELETE /admin/academic-years/{id}             # R137; TD-5 soft delete, refused while referenced
 # R122 — an academic year is made of dated semesters, and an Enrollment names
 # one. Read is reference data (TD-2 R26/R30); writes are Super Admin only.
 GET /admin/academic-periods                   # §7 R122; the enrolment form's source, carries derived is_current

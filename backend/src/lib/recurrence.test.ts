@@ -241,10 +241,31 @@ describe("daily", () => {
   });
 });
 
-describe("none is never expanded on a schedule", () => {
-  it("produces nothing — a non-recurring occurrence is an Event (§4.4)", () => {
-    const r = rule({ recurrence: "none" });
+describe("none — a genuine one-time حصة دراسية/محاضرة (R137)", () => {
+  it("produces exactly its one anchor date when the date falls in range", () => {
+    const r = rule({ recurrence: "none", weekdays: [], anchorDate: day("2026-06-15") });
+    expect(iso(expandSchedule(r, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-15",
+    ]);
+  });
+
+  it("produces nothing when the anchor date falls outside the requested range", () => {
+    const r = rule({ recurrence: "none", weekdays: [], anchorDate: day("2026-07-01") });
     expect(expandSchedule(r, day("2026-06-01"), day("2026-06-30"))).toEqual([]);
+  });
+
+  it("produces nothing with no anchor date at all — the shape CHECK never lets this reach the database", () => {
+    const r = rule({ recurrence: "none", weekdays: [] });
+    expect(expandSchedule(r, day("2026-06-01"), day("2026-06-30"))).toEqual([]);
+  });
+
+  it("ignores any weekday set — the anchor date alone decides", () => {
+    // A stray weekday value (e.g. from a client that filled one in anyway)
+    // must never turn a one-time class into a recurring one.
+    const r = rule({ recurrence: "none", weekdays: ["monday"], anchorDate: day("2026-06-15") });
+    expect(iso(expandSchedule(r, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-15",
+    ]);
   });
 });
 

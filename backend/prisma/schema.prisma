@@ -301,8 +301,10 @@ enum RecordingStatus {
 /// §4.4 — ONE shared recurrence vocabulary, used by both `Event` and
 /// `RecurringCourseSchedule` (Revision 43). Deliberately not modelled twice:
 /// the alternating-week arithmetic is exactly the code nobody wants written in
-/// two places. `none` is valid for an Event and PROHIBITED on a schedule (a
-/// non-recurring occurrence is an Event) — enforced by CHECK in SQL.
+/// two places. `none` is valid for an Event, and — since R137 — for a
+/// `class`-kind schedule too (a genuine one-time حصة دراسية/محاضرة, which
+/// needs the audience/room/staff richness only a schedule carries); every
+/// other structural kind still reaches a one-off through Event, unchanged.
 enum RecurrenceType {
   none
   daily
@@ -1526,8 +1528,11 @@ model RecurringCourseSchedule {
   /// was public in fact.
   visibility Visibility @default(public)
 
-  /// Shared vocabulary (§4.4). `none` is PROHIBITED here (CHECK) — a
-  /// non-recurring occurrence is an Event.
+  /// Shared vocabulary (§4.4). **R137 — `none` is now valid on a `class`-kind
+  /// schedule**, a genuine one-time حصة دراسية/محاضرة (Owner decision,
+  /// 2026-09-09); every other structural kind still expresses a one-off as an
+  /// Event. `none` reuses `anchor_date` as its own single occurrence date,
+  /// exactly as `biweekly_alternating` anchors on it (shape CHECK).
   recurrence RecurrenceType
 
   /// Used by weekly / multiple_weekdays / biweekly_alternating. One element for
@@ -1538,6 +1543,10 @@ model RecurringCourseSchedule {
   monthOfYear Int?        @map("month_of_year")
   /// The week `biweekly_alternating` counts from — without an anchor, "week on"
   /// is undefined and the two halves of the alternation are indistinguishable.
+  /// **R137 — for `none`, this IS the occurrence's one date**, not a week
+  /// anchor: a one-time class needs exactly one day, and reusing this column
+  /// rather than adding a second "single date" field keeps one place that
+  /// answers *which day does this series' arithmetic start from*.
   anchorDate  DateTime?   @map("anchor_date") @db.Date
 
   /// The last date this recurrence produces occurrences for (SRS Revision 50).
@@ -2904,6 +2913,18 @@ model ExamQuestion {
    */
   justification JustificationRule @default(none)
 
+  /// **R137 — an optional grade allocation, so a student can see what a
+  /// question is worth** before answering it. `NULL` is the ordinary,
+  /// unallocated state every question already had; a paper may leave every
+  /// question unallocated forever. It is never awarded automatically — a
+  /// human still enters `Grade.score` (R124/§4.6 manual grading, unchanged).
+  /// Enforced only at the moment a remote paper is scheduled/published
+  /// (`publishOccurrenceTx`): once ANY live question on a paper carries a
+  /// value, EVERY live question must, and they must sum to `Exam.maxGrade`
+  /// exactly — never enforced while merely authoring, so a paper mid-edit is
+  /// never blocked from saving one question at a time.
+  points Decimal? @map("points") @db.Decimal(6, 2)
+
   /// TD-15 — two authors editing one paper must not clobber each other.
   version Int @default(0)
 
@@ -3132,7 +3153,21 @@ model AcademicYear {
   /// Exactly one `true` row application-wide — partial unique index in SQL.
   isCurrent Boolean          @default(false) @map("is_current")
 
+  /// TD-15 — R137 gives this row real writes (create/edit/delete) for the
+  /// first time; two administrators correcting the label or the current-year
+  /// flag together must not silently clobber each other, exactly as
+  /// `AcademicPeriod.version` beside it already guards.
+  version Int @default(0)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// **R137 — TD-5 soft delete, added so a year created in error (or one
+  /// whose administration is genuinely finished) can be removed the same way
+  /// every other reference-data row is.** Refused while anything still
+  /// references it — periods, exams, course schedules, content — exactly
+  /// `deleteLevel`'s and `deleteSubject`'s own blocking-reference discipline.
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
 
   content EducationalContent[]
 

@@ -2160,3 +2160,244 @@ describe('R136 (frontend-completion) — content-only creation, no target or dat
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
+
+describe('R137 — optional per-question points, checked once, at scheduling', () => {
+  let examId = '';
+
+  beforeAll(async () => {
+    examId = (
+      await createAssessment(prisma, superAdmin(), {
+        title: `${TAG} ورقة بنقاط الأسئلة`,
+        maxGrade: 20,
+        levelId,
+        subjectId,
+        academicYearId,
+        target: { kind: 'level' },
+        date: TODAY,
+      })
+    ).id;
+  });
+
+  it('every question may leave points unset — the ordinary, fully legal state', async () => {
+    const q = await addQuestion(prisma, superAdmin(), examId, {
+      kind: 'short_text',
+      prompt: 'بلا نقطة محددة',
+    });
+    const row = await prisma.examQuestion.findUniqueOrThrow({
+      where: { id: q.id },
+      select: { points: true },
+    });
+    expect(row.points).toBeNull();
+    await removeQuestion(prisma, superAdmin(), examId, q.id);
+  });
+
+  it('a question may carry an explicit point allocation, created and then edited', async () => {
+    const q = await addQuestion(prisma, superAdmin(), examId, {
+      kind: 'short_text',
+      prompt: 'نقطتها 4',
+      points: 4,
+    });
+    expect(
+      (
+        await prisma.examQuestion.findUniqueOrThrow({
+          where: { id: q.id },
+          select: { points: true },
+        })
+      ).points?.toString(),
+    ).toBe('4');
+
+    await updateQuestion(prisma, superAdmin(), examId, q.id, 0, { points: 6 });
+    expect(
+      (
+        await prisma.examQuestion.findUniqueOrThrow({
+          where: { id: q.id },
+          select: { points: true },
+        })
+      ).points?.toString(),
+    ).toBe('6');
+
+    // `null` explicitly clears a previously-set allocation.
+    await updateQuestion(prisma, superAdmin(), examId, q.id, 1, { points: null });
+    expect(
+      (await prisma.examQuestion.findUniqueOrThrow({ where: { id: q.id }, select: { points: true } }))
+        .points,
+    ).toBeNull();
+    await removeQuestion(prisma, superAdmin(), examId, q.id);
+  });
+
+  it('the database refuses a zero or negative allocation', async () => {
+    await expect(
+      prisma.examQuestion.create({
+        data: {
+          examId,
+          displayOrder: 999,
+          kind: 'short_text',
+          prompt: 'نقطة غير موجبة',
+          points: 0,
+        },
+      }),
+    ).rejects.toBeTruthy();
+  });
+
+  describe('the total is enforced once, only at scheduling — never while authoring', () => {
+    let partialExamId = '';
+    let mismatchExamId = '';
+    let exactExamId = '';
+    let unallocatedExamId = '';
+
+    beforeAll(async () => {
+      partialExamId = (
+        await createAssessment(prisma, superAdmin(), {
+          title: `${TAG} تخصيص جزئي`,
+          maxGrade: 10,
+          levelId,
+          subjectId,
+          academicYearId,
+        })
+      ).id;
+      await addQuestion(prisma, superAdmin(), partialExamId, {
+        kind: 'short_text',
+        prompt: 'س1',
+        points: 6,
+      });
+      // Second question left unallocated — the partial case.
+      await addQuestion(prisma, superAdmin(), partialExamId, { kind: 'short_text', prompt: 'س2' });
+
+      mismatchExamId = (
+        await createAssessment(prisma, superAdmin(), {
+          title: `${TAG} تخصيص غير مطابق`,
+          maxGrade: 20,
+          levelId,
+          subjectId,
+          academicYearId,
+        })
+      ).id;
+      await addQuestion(prisma, superAdmin(), mismatchExamId, {
+        kind: 'short_text',
+        prompt: 'س1',
+        points: 4,
+      });
+      await addQuestion(prisma, superAdmin(), mismatchExamId, {
+        kind: 'short_text',
+        prompt: 'س2',
+        points: 6,
+      });
+      // 4 + 6 = 10, but max_grade is 20.
+
+      exactExamId = (
+        await createAssessment(prisma, superAdmin(), {
+          title: `${TAG} تخصيص مطابق`,
+          maxGrade: 20,
+          levelId,
+          subjectId,
+          academicYearId,
+        })
+      ).id;
+      await addQuestion(prisma, superAdmin(), exactExamId, {
+        kind: 'short_text',
+        prompt: 'س1',
+        points: 4,
+      });
+      await addQuestion(prisma, superAdmin(), exactExamId, {
+        kind: 'short_text',
+        prompt: 'س2',
+        points: 6,
+      });
+      await addQuestion(prisma, superAdmin(), exactExamId, {
+        kind: 'short_text',
+        prompt: 'س3',
+        points: 10,
+      });
+      // 4 + 6 + 10 = 20, matching max_grade exactly.
+
+      unallocatedExamId = (
+        await createAssessment(prisma, superAdmin(), {
+          title: `${TAG} بلا تخصيص إطلاقاً`,
+          maxGrade: 20,
+          levelId,
+          subjectId,
+          academicYearId,
+        })
+      ).id;
+      await addQuestion(prisma, superAdmin(), unallocatedExamId, { kind: 'short_text', prompt: 'س1' });
+    });
+
+    it('refuses to schedule/publish a paper with a PARTIAL allocation', async () => {
+      await expect(
+        scheduleExam(prisma, superAdmin(), {
+          mode: 'online',
+          sourceExamId: partialExamId,
+          target: { kind: 'level' },
+          date: TODAY,
+          availability: { policy: 'manual' },
+        }),
+      ).rejects.toMatchObject({
+        code: 'STATE_CONFLICT',
+        details: { reason: 'QUESTION_POINTS_INCOMPLETE' },
+      });
+    });
+
+    it('refuses to schedule/publish a paper whose FULL allocation does not sum to max_grade', async () => {
+      await expect(
+        scheduleExam(prisma, superAdmin(), {
+          mode: 'online',
+          sourceExamId: mismatchExamId,
+          target: { kind: 'level' },
+          date: TODAY,
+          availability: { policy: 'manual' },
+        }),
+      ).rejects.toMatchObject({
+        code: 'STATE_CONFLICT',
+        details: { reason: 'QUESTION_POINTS_MISMATCH', configured_total: 10, max_grade: 20 },
+      });
+    });
+
+    it('schedules successfully once the allocation sums EXACTLY to max_grade, and the copy carries it', async () => {
+      const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: exactExamId,
+        target: { kind: 'level' },
+        date: TODAY,
+        availability: { policy: 'manual' },
+      });
+      const points = (
+        await prisma.examQuestion.findMany({
+          where: { examId: occurrenceId, deletedAt: null },
+          select: { points: true },
+          orderBy: { displayOrder: 'asc' },
+        })
+      ).map((q) => q.points?.toString());
+      expect(points).toEqual(['4', '6', '10']);
+    });
+
+    it('schedules successfully with NO allocation at all — the ordinary case', async () => {
+      await expect(
+        scheduleExam(prisma, superAdmin(), {
+          mode: 'online',
+          sourceExamId: unallocatedExamId,
+          target: { kind: 'level' },
+          date: TODAY,
+          availability: { policy: 'manual' },
+        }),
+      ).resolves.toMatchObject({ id: expect.any(String) });
+    });
+
+    it('R136 independence holds — editing the SOURCE’s points never touches an already-scheduled copy', async () => {
+      // exactExamId is now `published` (scheduled above) and therefore frozen;
+      // this proves the copy the schedule created is untouched by anything
+      // done to the source afterward, not that the source itself is editable.
+      const copy = await prisma.exam.findFirstOrThrow({
+        where: { sourceExamId: exactExamId },
+        select: { id: true },
+      });
+      const before = (
+        await prisma.examQuestion.findMany({
+          where: { examId: copy.id, deletedAt: null },
+          select: { points: true },
+          orderBy: { displayOrder: 'asc' },
+        })
+      ).map((q) => q.points?.toString());
+      expect(before).toEqual(['4', '6', '10']);
+    });
+  });
+});

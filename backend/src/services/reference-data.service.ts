@@ -1,7 +1,8 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { SubjectRef } from './taxonomy.service.js';
 import type { Actor } from '../policies/actor.js';
@@ -60,6 +61,13 @@ export interface AcademicYearRef {
    * remember which one that is.
    */
   isCurrent: boolean;
+  /**
+   * **R137, on the same reasoning `SubjectRef.version` already states**: a
+   * selector does not need it, the year-management screen editing this same
+   * row does, and one list serving both is what keeps there from being a
+   * second, narrower read to fall out of step with this one.
+   */
+  version: number;
 }
 
 export async function listAcademicYears(
@@ -69,11 +77,229 @@ export async function listAcademicYears(
   assertCanReadReferenceData(actor);
 
   return prisma.academicYear.findMany({
+    where: { deletedAt: null },
     // Newest first: a form is almost always about the current year or the one
     // after it, and `label` sorts correctly precisely because TD-6 constrains it
     // to `YYYY-YYYY`.
     orderBy: { label: 'desc' },
-    select: { id: true, label: true, isCurrent: true },
+    select: { id: true, label: true, isCurrent: true, version: true },
+  });
+}
+
+/**
+ * **R137 — the label's own shape, beyond the database's `YYYY-YYYY` CHECK.**
+ *
+ * The migration that added that CHECK recorded the intended second half —
+ * *"second year = first + 1"* — as **service-enforced (TD-6)**, a promise no
+ * service ever kept because nothing wrote this row before now. This is where
+ * that promise is finally kept, the first time a caller other than the seed
+ * ever creates or renames one.
+ */
+function assertSequentialLabel(label: string): void {
+  const match = /^(\d{4})-(\d{4})$/.exec(label);
+  if (!match) {
+    throw new AppError('VALIDATION_FAILED', 'expected the shape YYYY-YYYY', {
+      issues: [{ path: 'label', message: 'must be two consecutive years, YYYY-YYYY' }],
+    });
+  }
+  const [, first, second] = match as unknown as [string, string, string];
+  if (Number(second) !== Number(first) + 1) {
+    throw new AppError('VALIDATION_FAILED', 'the second year must be the first plus one', {
+      issues: [{ path: 'label', message: 'the second year must be exactly one more than the first' }],
+    });
+  }
+}
+
+/** Super Admin only — the same authority `academic-period.service.ts` requires
+ *  to write the periods this year contains (R26, R43.3). */
+function assertCanWriteYears(actor: Actor): void {
+  if (!scope.isSuperAdmin(actor.roleScopes)) {
+    throw new AppError('FORBIDDEN', 'academic years are Super Admin only (R26, R43.3)');
+  }
+}
+
+const YEAR_SELECT = { id: true, label: true, isCurrent: true, version: true } as const;
+
+/**
+ * `POST /admin/academic-years` — Super Admin, audited.
+ *
+ * **`is_current` moves atomically, in the same transaction.** The database's
+ * partial unique index already refuses two `true` rows; doing the unset here
+ * rather than leaving the index to reject the insert is what turns "make this
+ * one current" into an actual re-assignment instead of a refusal the caller
+ * has to work around by patching the old year first.
+ */
+export async function createAcademicYear(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { label: string; isCurrent?: boolean },
+): Promise<AcademicYearRef> {
+  assertCanWriteYears(actor);
+  assertSequentialLabel(input.label);
+
+  return prisma.$transaction(async (tx) => {
+    if (input.isCurrent) {
+      await tx.academicYear.updateMany({
+        where: { isCurrent: true },
+        data: { isCurrent: false },
+      });
+    }
+    const created = await tx.academicYear.create({
+      data: { label: input.label, isCurrent: input.isCurrent ?? false },
+      select: YEAR_SELECT,
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'academicyear.create',
+      targetEntity: 'AcademicYear',
+      targetId: created.id,
+      // TD-14 — `targetId` already identifies which row; the label is not
+      // logged a second time (`assertMinimizedDetail` refuses a `label` key
+      // generically, the same guard every other free-text field respects).
+      detail: { is_current: created.isCurrent },
+    });
+    return created;
+  });
+}
+
+/**
+ * `PATCH /admin/academic-years/{id}` — Super Admin, TD-15, audited.
+ *
+ * Both fields are independently optional: renaming a mistyped label need not
+ * touch which year is current, and marking a year current need not restate
+ * its own label.
+ */
+export async function updateAcademicYear(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+  expectedVersion: number,
+  patch: { label?: string; isCurrent?: boolean },
+): Promise<AcademicYearRef> {
+  assertCanWriteYears(actor);
+  if (patch.label !== undefined) assertSequentialLabel(patch.label);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.academicYear.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existing) throw new AppError('NOT_FOUND', 'no such academic year');
+
+    if (patch.isCurrent === true) {
+      await tx.academicYear.updateMany({
+        where: { isCurrent: true, id: { not: id } },
+        data: { isCurrent: false },
+      });
+    }
+
+    const saved = await updateWithVersion<Prisma.AcademicYearGetPayload<{ select: typeof YEAR_SELECT }>>({
+      delegate: tx.academicYear,
+      id,
+      expectedVersion,
+      requireNotDeleted: true,
+      data: {
+        ...(patch.label === undefined ? {} : { label: patch.label }),
+        ...(patch.isCurrent === undefined ? {} : { isCurrent: patch.isCurrent }),
+      },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'academicyear.update',
+      targetEntity: 'AcademicYear',
+      targetId: id,
+      detail: { fields: Object.keys(patch) },
+    });
+    return { id: saved.id, label: saved.label, isCurrent: saved.isCurrent, version: saved.version };
+  });
+}
+
+/**
+ * `DELETE /admin/academic-years/{id}` — TD-5 soft delete, Super Admin,
+ * refused while anything still references it.
+ *
+ * **Blockers, not cascade** (`deleteLevel`'s own discipline): a year's
+ * periods, exams, course schedules and content are each somebody's record or
+ * commitment, never removed to make a reference row deletable. Unlike a
+ * Level, a year owns no purely-structural link that could safely follow it —
+ * there is nothing here to cascade, only things to refuse against.
+ */
+export async function deleteAcademicYear(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+): Promise<void> {
+  assertCanWriteYears(actor);
+
+  await prisma.$transaction(async (tx) => {
+    // §16.2 sanctioned raw-SQL exception (a): SELECT … FOR UPDATE row lock —
+    // check-then-write on an invariant needs the lock, not just the check
+    // (TD-15.2), or a period/exam/schedule lands between the count and the
+    // delete.
+    await tx.$queryRaw`SELECT id FROM "academic_year" WHERE id = ${id}::uuid FOR UPDATE`;
+
+    const year = await tx.academicYear.findFirst({ where: { id, deletedAt: null } });
+    if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
+
+    /**
+     * **The current year may not be deleted out from under the platform.**
+     *
+     * `is_current` has no `deleted_at` term in its own partial unique index —
+     * soft-deleting this row would not free the flag, and nothing else would
+     * become current automatically. The remedy is explicit and cheap (mark a
+     * different year current first, an ordinary edit), so this refuses rather
+     * than leaving the association with a live `is_current = true` row that no
+     * screen can see or ever ordinarily reach.
+     */
+    if (year.isCurrent) {
+      throw new AppError('STATE_CONFLICT', 'the current academic year cannot be deleted', {
+        reason: 'ACADEMIC_YEAR_IS_CURRENT',
+      });
+    }
+
+    // No `deleted_at` term on `academicPeriod`: it carries no soft-delete
+    // column at all, so every row found here is live by construction — the
+    // same reasoning `deleteLevel`'s Grade count already states.
+    const [periods, exams, schedules, content] = await Promise.all([
+      tx.academicPeriod.count({ where: { academicYearId: id } }),
+      tx.exam.count({ where: { academicYearId: id, deletedAt: null } }),
+      tx.recurringCourseSchedule.count({ where: { academicYearId: id, deletedAt: null } }),
+      tx.educationalContent.count({ where: { academicYearId: id, deletedAt: null } }),
+    ]);
+    await assertNoBlockingReferences([
+      { label: 'periods', count: periods },
+      { label: 'exams', count: exams },
+      { label: 'course_schedules', count: schedules },
+      { label: 'content', count: content },
+    ]);
+
+    const now = new Date();
+    await tx.academicYear.update({
+      where: { id },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await trash.snapshot(
+      tx,
+      {
+        targetEntity: 'AcademicYear',
+        targetId: id,
+        snapshot: JSON.parse(JSON.stringify(year)) as object,
+        deletedById: actor.userId,
+      },
+      now,
+    );
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'academicyear.delete',
+      targetEntity: 'AcademicYear',
+      targetId: id,
+      // TD-14 — `targetId` already identifies which row; see the matching
+      // note on `createAcademicYear`.
+      detail: { was_current: year.isCurrent },
+    });
   });
 }
 

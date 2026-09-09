@@ -207,15 +207,12 @@ function initialRecurrenceType(
   /**
    * **Only where `مرة واحدة` is actually offered.**
    *
-   * `allowsOnce` is `false` for a class, and not as a UI preference: *"the
-   * database refuses `none` on a schedule — a non-recurring occurrence is an
-   * Event, not a class that happens once"*. Defaulting to it there put the form
-   * state out of step with its own control, which rendered `يومياً` while the
-   * state said `none` — a mismatch that would have reached the server as a
-   * value it refuses.
+   * `allowsOnce` reads from the one registry (`scheduling-types.ts`) rather
+   * than being repeated here, so a kind whose eligibility changes — as a class
+   * or lecture's did, R137 — updates this default without a second edit.
    *
-   * So the creation default is `once` for every kind that can BE once, and the
-   * previous `weekly` for the one that cannot.
+   * The creation default is `once` for every kind that can BE once (R137: all
+   * four now), never a recurring pattern nobody asked for.
    */
   return specOfKind(kind).allowsOnce ? 'none' : 'weekly';
 }
@@ -964,9 +961,9 @@ export function SchedulingDialog({
    * the new item was still pre-set to repeat.
    *
    * It also closes a latent fault in the other direction. `once` is offered
-   * only where `allowsOnce` is true — the database refuses that recurrence on a
-   * schedule — so switching activity → class used to leave the state on a value
-   * the control no longer displayed and the server would reject.
+   * only where `allowsOnce` is true for the CURRENT kind, so switching to a
+   * kind that cannot be `once` (none, since R137) never leaves the state on a
+   * value the control no longer displays.
    *
    * **Creation only.** An existing item answers with its stored recurrence and
    * is never rewritten by opening its form; `item` is fixed for the life of the
@@ -1082,6 +1079,20 @@ export function SchedulingDialog({
   const [responsibleId, setResponsibleId] = useState(
     item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
   );
+  /**
+   * **R137 — switching TO عطلة clears staffing, not merely hides it.**
+   *
+   * عطلة has no responsible/assistant staff (Owner, 2026-09-09): the save
+   * payload already sends none for it, but a value typed for a *different*
+   * kind before switching must not sit in the form's state either — reopening
+   * the staffing section after switching back and forth would otherwise show
+   * a name that was never really chosen for this item.
+   */
+  useEffect(() => {
+    if (item !== null || type !== 'holiday') return;
+    setResponsibleId('');
+    setAssistantIds([]);
+  }, [item, type]);
   /**
    * **Hydrated from the stored row on Edit** (NEW B §A).
    *
@@ -1732,16 +1743,24 @@ export function SchedulingDialog({
            * other name, and sending her own id keeps that fact in the payload
            * rather than leaving it implied.
            */
-          eventStaff: [
-            ...(canAssignStaff
-              ? responsibleId
-                ? [{ user_id: responsibleId, position: 'responsible' as const }]
-                : []
-              : me?.id
-                ? [{ user_id: me.id, position: 'responsible' as const }]
-                : []),
-            ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
-          ],
+          // **R137 — عطلة has no responsible/assistant staff at all** (Owner,
+          // 2026-09-09): a holiday is not an activity somebody runs, and the
+          // server refuses staff on one outright (`HOLIDAY_SHAPE`). Sent empty
+          // here rather than merely hidden below, so a value picked before
+          // switching the kind TO عطلة can never reach the request.
+          eventStaff:
+            type === 'holiday'
+              ? []
+              : [
+                  ...(canAssignStaff
+                    ? responsibleId
+                      ? [{ user_id: responsibleId, position: 'responsible' as const }]
+                      : []
+                    : me?.id
+                      ? [{ user_id: me.id, position: 'responsible' as const }]
+                      : []),
+                  ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
+                ],
           teachingMode: mode,
           targetId,
           branchId: scope.value.branchId,
@@ -1999,6 +2018,7 @@ export function SchedulingDialog({
                       : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
             }
             locked={editing}
+            hideStaffing={type === 'holiday'}
           />
         )}
       </SchedulingForm>

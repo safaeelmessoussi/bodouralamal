@@ -11,7 +11,9 @@ import {
   readSubmission,
   removeQuestion,
   reorderQuestions,
+  updateQuestion,
   type AssessmentPaper,
+  type AssessmentQuestion,
   type AssessmentSummary,
   type JustificationRule,
   type QuestionKind,
@@ -24,7 +26,7 @@ import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type TableStatus } from '../../components/ui/data-table.js';
-import { SearchInput, SelectField, TextArea, TextField } from '../../components/ui/field.js';
+import { NumberField, SearchInput, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -512,6 +514,10 @@ function OnePaper({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  // R137 — a question already written may be reopened for editing; `null`
+  // means the dialog is closed, `AssessmentQuestion` means it is open on
+  // that row.
+  const [editingQuestion, setEditingQuestion] = useState<AssessmentQuestion | null>(null);
   const [confirm, setConfirm] = useState<'close' | null>(null);
   const [viewing, setViewing] = useState<AssessmentPaper | null>(null);
 
@@ -657,6 +663,14 @@ function OnePaper({
                 <p className="assessment-questions__prompt">
                   <strong>{t('assessments.question').replace('{n}', String(index + 1))}</strong>{' '}
                   <span className="muted">{t(KIND_LABELS[q.kind])}</span>
+                  {/* R137 — shown to author and student alike (per-surface
+                      wiring below); a maximum, never the mark earned. */}
+                  {q.points !== null ? (
+                    <span className="muted">
+                      {' — '}
+                      {t('assessments.questionPointsOf').replace('{points}', q.points)}
+                    </span>
+                  ) : null}
                 </p>
                 <p>{q.prompt}</p>
                 {q.options.length > 0 ? (
@@ -679,6 +693,13 @@ function OnePaper({
                     </Button>
                     <Button variant="ghost" disabled={busy} onClick={() => void move(index, 1)}>
                       {t('assessments.moveDown')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => setEditingQuestion(q)}
+                    >
+                      {t('common.edit')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -753,7 +774,34 @@ function OnePaper({
           onCancel={() => setAdding(false)}
           onSave={(input) => {
             setAdding(false);
-            void act(() => addQuestion(examId, input, token).then(() => undefined), t('assessments.saveFailed'));
+            // Never `null` here — `QuestionDialog`'s own submit() only sends
+            // `null` when editing an existing question (`initial` set).
+            const { points, ...rest } = input;
+            void act(
+              () =>
+                addQuestion(
+                  examId,
+                  { ...rest, ...(points === null || points === undefined ? {} : { points }) },
+                  token,
+                ).then(() => undefined),
+              t('assessments.saveFailed'),
+            );
+          }}
+        />
+      ) : null}
+
+      {editingQuestion ? (
+        <QuestionDialog
+          initial={editingQuestion}
+          busy={busy}
+          onCancel={() => setEditingQuestion(null)}
+          onSave={(input) => {
+            const version = editingQuestion.version;
+            setEditingQuestion(null);
+            void act(
+              () => updateQuestion(examId, editingQuestion.id, version, input, token),
+              t('assessments.saveFailed'),
+            );
           }}
         />
       ) : null}
@@ -775,10 +823,14 @@ function OnePaper({
 }
 
 function QuestionDialog({
+  initial,
   busy,
   onCancel,
   onSave,
 }: {
+  /** R137 — present on تعديل, absent on إضافة سؤال. `kind` is fixed at
+   *  creation and stays read-only here: a new kind is a new question. */
+  initial?: AssessmentQuestion;
   busy: boolean;
   onCancel: () => void;
   onSave: (input: {
@@ -786,39 +838,60 @@ function QuestionDialog({
     prompt: string;
     justification?: JustificationRule;
     options?: string[];
+    /** `undefined` leaves an existing allocation untouched on تعديل and is
+     *  simply omitted on إضافة; `null` explicitly clears one on تعديل. */
+    points?: number | null;
   }) => void;
 }): ReactNode {
-  const [kind, setKind] = useState<QuestionKind>('short_text');
-  const [prompt, setPrompt] = useState('');
-  const [justification, setJustification] = useState<JustificationRule>('none');
-  const [options, setOptions] = useState<string[]>(['', '']);
+  const [kind, setKind] = useState<QuestionKind>(initial?.kind ?? 'short_text');
+  const [prompt, setPrompt] = useState(initial?.prompt ?? '');
+  const [justification, setJustification] = useState<JustificationRule>(
+    initial?.justification ?? 'none',
+  );
+  const [options, setOptions] = useState<string[]>(
+    initial ? initial.options.map((o) => o.label) : ['', ''],
+  );
+  const [points, setPoints] = useState(initial?.points ?? '');
   const [touched, setTouched] = useState(false);
 
   const isChoice = kind === 'single_choice' || kind === 'multiple_choice';
   const filled = options.map((o) => o.trim()).filter((o) => o !== '');
+  const pointsError =
+    points.trim() !== '' && (!Number.isFinite(Number(points)) || Number(points) <= 0)
+      ? t('assessments.questionPointsInvalid')
+      : null;
   const error =
     prompt.trim() === ''
       ? t('common.required')
       : isChoice && filled.length < 2
         ? t('common.required')
-        : null;
+        : pointsError;
 
-  const dirty = isDirty({ kind, prompt, justification, options }, {
-    kind: 'short_text',
-    prompt: '',
-    justification: 'none',
-    options: ['', ''],
-  });
+  const dirty = isDirty(
+    { kind, prompt, justification, options, points },
+    {
+      kind: initial?.kind ?? 'short_text',
+      prompt: initial?.prompt ?? '',
+      justification: initial?.justification ?? 'none',
+      options: initial ? initial.options.map((o) => o.label) : ['', ''],
+      points: initial?.points ?? '',
+    },
+  );
 
   function submit(): void {
     setTouched(true);
     if (error) return;
+    const pointsValue = points.trim() === '' ? null : Number(points);
     onSave({
       kind,
       prompt: prompt.trim(),
       // **Only where the kind allows it.** The server refuses the other
       // combinations rather than dropping them, and the form does not send one.
       ...(isChoice ? { justification, options: filled } : {}),
+      // On إضافة a `null` (never chosen) is simply omitted — nothing to
+      // clear yet; on تعديل it is sent through so a cleared field actually
+      // clears a previously-set allocation rather than leaving it stale.
+      ...(initial ? { points: pointsValue } : pointsValue === null ? {} : { points: pointsValue }),
     });
   }
 
@@ -827,7 +900,7 @@ function QuestionDialog({
       open
       onCancel={onCancel}
       onSubmit={submit}
-      title={t('assessments.addQuestion')}
+      title={t(initial ? 'assessments.editQuestion' : 'assessments.addQuestion')}
       busy={busy}
       dirty={dirty}
     >
@@ -835,6 +908,8 @@ function QuestionDialog({
         label={t('assessments.questionType')}
         value={kind}
         onChange={(v) => setKind(v as QuestionKind)}
+        disabled={initial !== undefined}
+        hint={initial ? t('assessments.questionTypeFixed') : undefined}
         options={(Object.keys(KIND_LABELS) as QuestionKind[]).map((k) => ({
           value: k,
           label: t(KIND_LABELS[k]),
@@ -848,19 +923,44 @@ function QuestionDialog({
         error={touched && prompt.trim() === '' ? t('common.required') : null}
       />
 
+      {/* R137 — optional on every kind alike; never awarded automatically
+          (§4.6 manual grading, unchanged). Consistency against the paper's
+          own max_grade is checked once, at scheduling — never here. */}
+      <NumberField
+        label={t('assessments.questionPoints')}
+        value={points}
+        onChange={setPoints}
+        min={0.01}
+        max={9999.99}
+        step="0.01"
+        hint={t('assessments.questionPointsHint')}
+        error={touched ? pointsError : null}
+      />
+
       {isChoice ? (
         <>
           {options.map((value, index) => (
-            <TextField
-              key={index}
-              label={t('assessments.option').replace('{n}', String(index + 1))}
-              value={value}
-              onChange={(next) =>
-                setOptions(options.map((o, i) => (i === index ? next : o)))
-              }
-            />
+            <div className="form__row" key={index}>
+              <TextField
+                label={t('assessments.option').replace('{n}', String(index + 1))}
+                value={value}
+                onChange={(next) =>
+                  setOptions(options.map((o, i) => (i === index ? next : o)))
+                }
+              />
+              {/* **A real remove, not a blank-and-hope** (R137): the option
+                  leaves the array outright, so the count driving `error`
+                  above reflects what will actually be saved. */}
+              <Button
+                variant="ghost"
+                disabled={options.length <= 2}
+                onClick={() => setOptions(options.filter((_, i) => i !== index))}
+              >
+                {t('assessments.removeOption')}
+              </Button>
+            </div>
           ))}
-          <Button variant="ghost" onClick={() => setOptions([...options, ''])}>
+          <Button variant="add" onClick={() => setOptions([...options, ''])}>
             {t('assessments.addOption')}
           </Button>
           <SelectField

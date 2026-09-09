@@ -142,6 +142,7 @@ export async function readScopeOptions(
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
     prisma.academicYear.findMany({
+      where: { deletedAt: null },
       select: { id: true, label: true, isCurrent: true },
       orderBy: { label: 'desc' },
     }),

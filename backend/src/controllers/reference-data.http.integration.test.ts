@@ -256,20 +256,277 @@ describe("GET /admin/subjects", () => {
 });
 
 describe("GET /admin/academic-years", () => {
-  it("returns id, label and is_current", async () => {
+  it("returns id, label, is_current and version", async () => {
     const res = await call("/admin/academic-years", superAdmin);
     expect(res.status).toBe(200);
     const row = res.body.data!.find((r) => r.label === YEAR_LABEL)!;
-    expect(Object.keys(row).sort()).toEqual(["id", "is_current", "label"]);
+    expect(Object.keys(row).sort()).toEqual([
+      "id",
+      "is_current",
+      "label",
+      "version",
+    ]);
     // The one piece of metadata a selector needs: it lets a form default to the
     // live year rather than asking someone to remember which it is.
     expect(typeof row.is_current).toBe("boolean");
+    // R137 — the same list now serves the year-management screen's edits.
+    expect(typeof row.version).toBe("number");
   });
 
   it("orders newest first", async () => {
     const res = await call("/admin/academic-years", superAdmin);
     const labels = res.body.data!.map((r) => String(r.label));
     expect([...labels].sort((a, b) => b.localeCompare(a))).toEqual(labels);
+  });
+});
+
+/* ── R137 — academic year create/edit/delete ─────────────────────────────── */
+
+describe("POST /admin/academic-years", () => {
+  const NEW_YEAR = "2096-2097";
+  const BAD_PAIR = "2096-2099";
+  const NOT_SEQUENTIAL_LATER = "2096-2095";
+  const CURRENT_YEAR = "2097-2098";
+
+  afterAll(async () => {
+    await prisma.academicYear.deleteMany({
+      where: { label: { in: [NEW_YEAR, BAD_PAIR, NOT_SEQUENTIAL_LATER, CURRENT_YEAR] } },
+    });
+  });
+
+  it("creates a year that previously had no write path at all", async () => {
+    const res = await call2("POST", "/admin/academic-years", superAdmin);
+    expect(res.status).toBe(400); // no body — proves the schema is enforced first
+    const created = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: NEW_YEAR } },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body["label"]).toBe(NEW_YEAR);
+    expect(created.body["is_current"]).toBe(false);
+    expect(typeof created.body["version"]).toBe("number");
+  });
+
+  it("refuses a label whose second year is not the first plus one", async () => {
+    const res = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: BAD_PAIR } },
+    );
+    expect(res.status).toBe(400);
+    const res2 = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: NOT_SEQUENTIAL_LATER } },
+    );
+    expect(res2.status).toBe(400);
+  });
+
+  it("moves is_current atomically — creating a new current year unsets the old one", async () => {
+    const before = await call("/admin/academic-years", superAdmin);
+    const previouslyCurrent = before.body.data!.find((r) => r.is_current)!;
+
+    const created = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: CURRENT_YEAR, isCurrent: true } },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body["is_current"]).toBe(true);
+
+    const after = await call("/admin/academic-years", superAdmin);
+    const oldRow = after.body.data!.find((r) => r.id === previouslyCurrent.id)!;
+    expect(oldRow.is_current).toBe(false);
+
+    // Restore the fixture's original current year for the rest of the suite.
+    // The new row must be unset FIRST — the partial unique index allows only
+    // one `is_current = true` row at a time.
+    await prisma.academicYear.update({
+      where: { id: created.body["id"] as string },
+      data: { isCurrent: false },
+    });
+    await prisma.academicYear.update({
+      where: { id: previouslyCurrent.id as string },
+      data: { isCurrent: true },
+    });
+  });
+
+  it("refuses a duplicate label", async () => {
+    const res = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: YEAR_LABEL } },
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("is Super Admin only", async () => {
+    const res = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: admin, body: { label: "2093-2094" } },
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("PATCH and DELETE /admin/academic-years/{id}", () => {
+  let scratchId: string;
+  let scratchVersion: number;
+
+  beforeAll(async () => {
+    const created = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-years",
+      { token: superAdmin, body: { label: "2098-2099" } },
+    );
+    scratchId = created.body["id"] as string;
+    scratchVersion = created.body["version"] as number;
+  });
+
+  afterAll(async () => {
+    await prisma.academicYear.deleteMany({ where: { id: scratchId } });
+  });
+
+  it("renames the label", async () => {
+    const res = await httpCall<Record<string, unknown>>(
+      BASE,
+      "PATCH",
+      `/admin/academic-years/${scratchId}`,
+      {
+        token: superAdmin,
+        body: { label: "2099-2100", version: scratchVersion },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(res.body["label"]).toBe("2099-2100");
+    scratchVersion = res.body["version"] as number;
+  });
+
+  it("refuses a stale version — TD-15", async () => {
+    const res = await httpCall<Record<string, unknown>>(
+      BASE,
+      "PATCH",
+      `/admin/academic-years/${scratchId}`,
+      { token: superAdmin, body: { label: "2100-2101", version: 0 } },
+    );
+    expect(res.status).toBe(409);
+    expect(res.body["error"]).toMatchObject({ code: "VERSION_CONFLICT" });
+  });
+
+  it("is refused while a period still names it — the same guard deleteLevel uses", async () => {
+    const period = await httpCall<Record<string, unknown>>(
+      BASE,
+      "POST",
+      "/admin/academic-periods",
+      {
+        token: superAdmin,
+        body: {
+          academic_year_id: scratchId,
+          sequence: 1,
+          start_date: "2098-09-01",
+          end_date: "2099-01-31",
+        },
+      },
+    );
+    expect(period.status).toBe(201);
+
+    const del = await httpCall<Record<string, unknown>>(
+      BASE,
+      "DELETE",
+      `/admin/academic-years/${scratchId}`,
+      { token: superAdmin },
+    );
+    expect(del.status).toBe(409);
+    expect(del.body["error"]).toMatchObject({
+      code: "STATE_CONFLICT",
+      details: { blocked_by: { periods: 1 } },
+    });
+
+    // Clean the period so the DELETE test below can prove the happy path.
+    await prisma.academicPeriod.delete({ where: { id: period.body["id"] as string } });
+  });
+
+  it("refuses to delete the CURRENT year outright — a distinct reason, no blocked_by", async () => {
+    const previouslyCurrent = await prisma.academicYear.findFirstOrThrow({
+      where: { isCurrent: true },
+      select: { id: true },
+    });
+    // The partial unique index allows only one is_current row — unset the
+    // real one first, exactly as the atomic-reassignment path does.
+    await prisma.academicYear.update({
+      where: { id: previouslyCurrent.id },
+      data: { isCurrent: false },
+    });
+    await prisma.academicYear.update({
+      where: { id: scratchId },
+      data: { isCurrent: true },
+    });
+
+    const del = await httpCall<Record<string, unknown>>(
+      BASE,
+      "DELETE",
+      `/admin/academic-years/${scratchId}`,
+      { token: superAdmin },
+    );
+    expect(del.status).toBe(409);
+    expect(del.body["error"]).toMatchObject({
+      code: "STATE_CONFLICT",
+      details: { reason: "ACADEMIC_YEAR_IS_CURRENT" },
+    });
+    // No dependency list — this is a distinct refusal, not a blocked one.
+    expect(
+      (del.body["error"] as { details?: Record<string, unknown> }).details?.["blocked_by"],
+    ).toBeUndefined();
+
+    // Restore exactly as found: unset the scratch row, then re-mark the
+    // real year current — leaves no net state change for the isolation gate.
+    await prisma.academicYear.update({
+      where: { id: scratchId },
+      data: { isCurrent: false },
+    });
+    await prisma.academicYear.update({
+      where: { id: previouslyCurrent.id },
+      data: { isCurrent: true },
+    });
+  });
+
+  it("deletes a year nothing references, and it disappears from the selector", async () => {
+    const del = await httpCall<Record<string, unknown>>(
+      BASE,
+      "DELETE",
+      `/admin/academic-years/${scratchId}`,
+      { token: superAdmin },
+    );
+    expect(del.status).toBe(204);
+
+    const list = await call("/admin/academic-years", superAdmin);
+    expect(list.body.data!.map((r) => r.id)).not.toContain(scratchId);
+  });
+
+  it("is Super Admin only for both PATCH and DELETE", async () => {
+    const patch = await httpCall<Record<string, unknown>>(
+      BASE,
+      "PATCH",
+      `/admin/academic-years/${scratchId}`,
+      { token: admin, body: { label: "2101-2102", version: 0 } },
+    );
+    expect(patch.status).toBe(403);
+    const del = await httpCall<Record<string, unknown>>(
+      BASE,
+      "DELETE",
+      `/admin/academic-years/${scratchId}`,
+      { token: admin },
+    );
+    expect(del.status).toBe(403);
   });
 });
 

@@ -58,6 +58,8 @@ const LABELS: Record<string, string> = {
   events: 'states.err.blockedBy.events',
   enrollments: 'states.err.blockedBy.enrollments',
   pending_requests: 'states.err.blockedBy.pendingRequests',
+  /** R137 — an Academic Year's own semesters. */
+  periods: 'states.err.blockedBy.periods',
 };
 
 /**

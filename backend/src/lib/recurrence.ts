@@ -166,9 +166,9 @@ export interface ScheduleRecurrence {
  * in days from the anchor: anchoring on the day would make a Tuesday-and-Friday
  * alternating schedule flip parity mid-week.
  *
- * `none` never appears here — the database refuses it on a schedule
- * (`course_schedule_recurrence_not_none_check`), because a non-recurring
- * occurrence is an Event.
+ * **R137 — `none` is a real case here now**: a one-time حصة دراسية/محاضرة,
+ * matching exactly `rule.anchorDate` (reused as the occurrence's own single
+ * date, the same column `biweekly_alternating` anchors its parity on).
  */
 export function expandSchedule(rule: ScheduleRecurrence, from: Date, to: Date): Date[] {
   const start = atMidnightUtc(from);
@@ -196,6 +196,9 @@ export function expandSchedule(rule: ScheduleRecurrence, from: Date, to: Date): 
 
 function matches(rule: ScheduleRecurrence, d: Date, wanted: Set<number>): boolean {
   switch (rule.recurrence) {
+    case 'none':
+      return rule.anchorDate !== null && daysBetween(atMidnightUtc(rule.anchorDate), d) === 0;
+
     case 'daily':
       return true;
 
@@ -225,10 +228,9 @@ function matches(rule: ScheduleRecurrence, d: Date, wanted: Set<number>): boolea
       );
 
     default:
-      // Includes `none`, which the database refuses on a schedule. Returning
-      // false rather than throwing: an unexpanded schedule generates no
-      // sessions, which is visible and harmless, where a throw would fail a
-      // whole materialization run over one bad row.
+      // An unrecognized rule generates no sessions, which is visible and
+      // harmless, where a throw would fail a whole materialization run over
+      // one bad row.
       return false;
   }
 }

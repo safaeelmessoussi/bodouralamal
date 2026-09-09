@@ -116,7 +116,7 @@ export async function horizonFor(
   today: Date,
 ): Promise<Date> {
   const current = await db.academicYear.findFirst({
-    where: { isCurrent: true },
+    where: { isCurrent: true, deletedAt: null },
     select: { label: true },
   });
   const endYear = current ? Number(current.label.slice(5, 9)) : NaN;

@@ -70,4 +70,10 @@ describe('"weekly" means the same thing for a class as for an activity', () => {
       expect(weekdaysForClass(pattern, [], '2026-09-01')).toEqual([]);
     }
   });
+
+  it('R137 — a one-time class (`none`) never gets a weekday filled in', () => {
+    // A single occurrence is named by `anchor_date` alone; a filled-in
+    // weekday would misrepresent it as a recurring pattern.
+    expect(weekdaysForClass('none', [], '2026-09-01')).toEqual([]);
+  });
 });

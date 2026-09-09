@@ -244,8 +244,8 @@ export async function createAcademicPeriod(
   normalize(input);
 
   return prisma.$transaction(async (tx) => {
-    const year = await tx.academicYear.findUnique({
-      where: { id: input.academicYearId },
+    const year = await tx.academicYear.findFirst({
+      where: { id: input.academicYearId, deletedAt: null },
       select: { id: true },
     });
     if (!year) throw new AppError('NOT_FOUND', 'no such academic year');

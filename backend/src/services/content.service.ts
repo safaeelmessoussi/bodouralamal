@@ -313,7 +313,7 @@ export async function initiateUpload(
   await assertSubjectTaughtAtLevel(prisma, input.meta.levelId, input.meta.subjectId);
 
   const year = await prisma.academicYear.findFirst({
-    where: { id: input.meta.academicYearId },
+    where: { id: input.meta.academicYearId, deletedAt: null },
     select: { id: true },
   });
   if (!year) throw new AppError('NOT_FOUND', 'no such academic year');

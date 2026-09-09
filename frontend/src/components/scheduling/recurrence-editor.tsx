@@ -123,9 +123,9 @@ export function RecurrenceEditor({
   value,
   onChange,
   /**
-   * A course schedule refuses `none` at the database level — a non-recurring
-   * occurrence **is** an Event (§4.4). Offering *once* there would offer
-   * something the platform will always refuse.
+   * Read from `STRUCTURAL_KIND_SPECS[kind].allowsOnce` by every caller, so a
+   * kind ineligible for `مرة واحدة` never offers a pattern the platform would
+   * refuse.
    */
   allowOnce = true,
   hint,

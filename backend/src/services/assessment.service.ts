@@ -660,6 +660,15 @@ export interface QuestionInput {
   justification?: 'none' | 'optional' | 'required';
   /** Required for a choice question, refused for a text one. */
   options?: string[];
+  /**
+   * **R137 — an optional grade allocation**, so a student can see what the
+   * question is worth. Legal on every kind alike; `undefined`/`null` is the
+   * ordinary unallocated state. Never checked against `Exam.maxGrade` here —
+   * a paper mid-edit must be free to carry a partial or mismatched total, so
+   * that consistency is enforced once, at `publishOccurrenceTx`, the moment a
+   * remote paper is actually scheduled.
+   */
+  points?: number | null;
 }
 
 /** `POST /assessments/{id}/questions` — appended, never inserted at a position. */
@@ -690,6 +699,7 @@ export async function addQuestion(
         kind: input.kind,
         prompt: input.prompt,
         justification: input.justification ?? 'none',
+        points: input.points ?? null,
         ...(input.options === undefined
           ? {}
           : {
@@ -749,14 +759,20 @@ function assertQuestionShape(input: QuestionInput): void {
   }
 }
 
-/** `PATCH /assessments/{id}/questions/{questionId}` — wording, justification, options. */
+/** `PATCH /assessments/{id}/questions/{questionId}` — wording, justification, options, points. */
 export async function updateQuestion(
   prisma: PrismaClient,
   actor: Actor,
   examId: string,
   questionId: string,
   expectedVersion: number,
-  patch: { prompt?: string; justification?: 'none' | 'optional' | 'required'; options?: string[] },
+  patch: {
+    prompt?: string;
+    justification?: 'none' | 'optional' | 'required';
+    options?: string[];
+    /** R137. `undefined` leaves it unchanged; `null` explicitly clears it. */
+    points?: number | null;
+  },
 ): Promise<void> {
   await loadForAuthor(prisma, actor, examId);
 
@@ -782,6 +798,7 @@ export async function updateQuestion(
       data: {
         ...(patch.prompt === undefined ? {} : { prompt: patch.prompt }),
         ...(patch.justification === undefined ? {} : { justification: patch.justification }),
+        ...(patch.points === undefined ? {} : { points: patch.points }),
       },
     });
 
@@ -976,6 +993,8 @@ export async function publishOccurrenceTx(
     studentId: string | null;
     subjectId: string | null;
     date: Date;
+    /** R137 — the total a fully-allocated question set must sum to. */
+    maxGrade: { toString(): string };
   },
 ): Promise<{ notifiedStudents: number; notifiedStaff: number; questionCount: number }> {
   /**
@@ -985,15 +1004,19 @@ export async function publishOccurrenceTx(
    */
   await assertAudienceWithinBranchScope(tx, actor, exam);
 
-  const questions = await tx.examQuestion.count({ where: { examId: exam.id, deletedAt: null } });
+  const questions = await tx.examQuestion.findMany({
+    where: { examId: exam.id, deletedAt: null },
+    select: { points: true },
+  });
   // **An empty paper is not publishable.** A student opening one would be
   // shown a title and nothing to answer, and would have no way to tell that
   // from a fault.
-  if (questions === 0) {
+  if (questions.length === 0) {
     throw new AppError('STATE_CONFLICT', 'an assessment with no questions cannot be published', {
       reason: 'NO_QUESTIONS',
     });
   }
+  assertQuestionPointsConsistent(questions, exam.maxGrade);
   await tx.exam.update({
     where: { id: exam.id },
     data: { status: 'published', publishedAt: new Date() },
@@ -1024,8 +1047,59 @@ export async function publishOccurrenceTx(
   return {
     notifiedStudents: told.students,
     notifiedStaff: told.staff,
-    questionCount: questions,
+    questionCount: questions.length,
   };
+}
+
+/**
+ * **R137 — the points-allocation rule, checked once, here.**
+ *
+ * Every question may leave `points` unset forever — the ordinary case, and
+ * fully legal. But once ANY live question on the paper carries a value, the
+ * Owner's rule is that the paper is USING allocated points, and a partial or
+ * mismatched configuration must not reach a student: **every** question must
+ * then carry one, and they must sum EXACTLY to `Exam.maxGrade` — never
+ * silently accepted as, say, 17 out of a stated 20.
+ *
+ * Deliberately not enforced while merely authoring a question (`addQuestion`/
+ * `updateQuestion`): a paper is built one question at a time, and blocking an
+ * individual save on a total that will only balance once the last question is
+ * written would make ordinary incremental authoring impossible. The one
+ * moment totals must be true is the moment a remote paper is actually
+ * scheduled/published — this function, called only from there.
+ */
+function assertQuestionPointsConsistent(
+  questions: { points: { toString(): string } | null }[],
+  maxGrade: { toString(): string },
+): void {
+  const allocated = questions.filter((q) => q.points !== null);
+  if (allocated.length === 0) return;
+
+  if (allocated.length !== questions.length) {
+    throw new AppError(
+      'STATE_CONFLICT',
+      'some questions carry a point allocation and others do not',
+      {
+        reason: 'QUESTION_POINTS_INCOMPLETE',
+        allocated: allocated.length,
+        total: questions.length,
+      },
+    );
+  }
+
+  // Summed as strings-of-decimals via Number — safe at this precision
+  // (`numeric(6,2)`, ≤9999.99 each, ≤200 questions per TD-3 limits) and
+  // consistent with how `max_grade` itself is compared elsewhere in this file.
+  const sum = allocated.reduce((total, q) => total + Number(q.points!.toString()), 0);
+  const target = Number(maxGrade.toString());
+  // Decimal(6,2) — compare to the cent to avoid a binary-float false mismatch.
+  if (Math.round(sum * 100) !== Math.round(target * 100)) {
+    throw new AppError(
+      'STATE_CONFLICT',
+      'the configured question points do not sum to the maximum grade',
+      { reason: 'QUESTION_POINTS_MISMATCH', configured_total: sum, max_grade: target },
+    );
+  }
 }
 
 /**
@@ -1125,6 +1199,10 @@ export interface StudentPaper {
     kind: string;
     prompt: string;
     justification: string;
+    /** R137 — an optional grade allocation, shown to the student too. */
+    points: { toString(): string } | null;
+    /** TD-15 — required by `PATCH .../questions/{id}`. */
+    version: number;
     options: { id: string; displayOrder: number; label: string }[];
   }[];
   submission: {
@@ -1197,6 +1275,8 @@ export async function authorPaper(
       kind: true,
       prompt: true,
       justification: true,
+      points: true,
+      version: true,
       options: {
         where: { deletedAt: null },
         select: { id: true, displayOrder: true, label: true },
@@ -1256,6 +1336,8 @@ export async function studentPaper(
       kind: true,
       prompt: true,
       justification: true,
+      points: true,
+      version: true,
       options: {
         where: { deletedAt: null },
         select: { id: true, displayOrder: true, label: true },
@@ -1664,6 +1746,8 @@ async function readPaperFor(
       kind: true,
       prompt: true,
       justification: true,
+      points: true,
+      version: true,
       options: {
         where: { deletedAt: null },
         select: { id: true, displayOrder: true, label: true },
@@ -2285,6 +2369,7 @@ export async function copyContentIntoNewRow(
       prompt: true,
       justification: true,
       displayOrder: true,
+      points: true,
       options: {
         where: { deletedAt: null },
         orderBy: { displayOrder: 'asc' },
@@ -2332,6 +2417,11 @@ export async function copyContentIntoNewRow(
         prompt: question.prompt,
         justification: question.justification,
         displayOrder: question.displayOrder,
+        // R137 — the copy inherits whatever allocation the source carried,
+        // exactly as it inherits everything else about a question; R136's
+        // independence still holds, since this is a fresh, separately owned
+        // row (editing the copy's points never touches the source's).
+        points: question.points,
         options: {
           create: question.options.map((option) => ({
             label: option.label,

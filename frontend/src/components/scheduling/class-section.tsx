@@ -238,6 +238,7 @@ export function ActivitySection({
   canAssignStaff,
   disabled,
   scopeKinds = ALL_SCOPE_KINDS,
+  hideStaffing = false,
 }: {
   scopeKind: string;
   onScopeKind: (v: string) => void;
@@ -270,6 +271,13 @@ export function ActivitySection({
    *  only `group`: §4.9 and TD-2 forbid them a branch, category, level or the
    *  Global scope, so offering those would offer a refusal. */
   scopeKinds?: readonly { value: string; labelKey: string }[];
+  /**
+   * **R137 — عطلة has no responsible/assistant staff at all** (Owner,
+   * 2026-09-09): a holiday is not an activity somebody runs. Not merely
+   * `disabled`, which would still submit whatever the control held —
+   * removed from the tree entirely, so there is nothing to submit.
+   */
+  hideStaffing?: boolean;
 }): ReactNode {
   return (
     <>
@@ -299,38 +307,44 @@ export function ActivitySection({
 
       {/* R71 — who answers for it. Rendered on edit as well as creation,
           because staffing is a decision an Admin revisits: the responsible
-          مؤطرة changes without the celebration changing. */}
-      <StaffPicker
-        staff={staff}
-        leadStaff={leadStaff ?? staff}
-        leadLocked={responsibleLocked}
-        leadLabel={t('admin.calendar.responsible')}
-        leadId={responsibleId}
-        onLead={onResponsible}
-        assistantsLabel={t('admin.calendar.eventAssistants')}
-        assistantsHint={
-          canAssignStaff
-            ? t('admin.calendar.eventAssistantsHint')
-            : t('admin.calendar.staffAdminOnly')
-        }
-        assistantIds={assistantIds}
-        onAssistants={onAssistants}
-        /**
-         * **Not disabled for a مؤطرة any more** (2026-08-20).
-         *
-         * R71.4 kept all event staffing with Admins, so this control was
-         * read-only for her — and when she was granted her own event's
-         * assistants, the grant was unreachable: the `＋` registered nothing and
-         * the event saved with no assistants at all, looking exactly like a
-         * click that had not landed.
-         *
-         * **The lead is locked separately** (`leadLocked`), which is the part
-         * that must not move; the assistants are the part this grant is for.
-         * The server refuses anything else regardless — it is the authority,
-         * and this control is not.
-         */
-        disabled={disabled ?? false}
-      />
+          مؤطرة changes without the celebration changing.
+          **R137 — never rendered for عطلة** (`hideStaffing`): a holiday has
+          no responsible/assistant staff, and an admin filling this in only to
+          be refused at save time (`HOLIDAY_SHAPE`) is the exact mismatch this
+          closes. */}
+      {hideStaffing ? null : (
+        <StaffPicker
+          staff={staff}
+          leadStaff={leadStaff ?? staff}
+          leadLocked={responsibleLocked}
+          leadLabel={t('admin.calendar.responsible')}
+          leadId={responsibleId}
+          onLead={onResponsible}
+          assistantsLabel={t('admin.calendar.eventAssistants')}
+          assistantsHint={
+            canAssignStaff
+              ? t('admin.calendar.eventAssistantsHint')
+              : t('admin.calendar.staffAdminOnly')
+          }
+          assistantIds={assistantIds}
+          onAssistants={onAssistants}
+          /**
+           * **Not disabled for a مؤطرة any more** (2026-08-20).
+           *
+           * R71.4 kept all event staffing with Admins, so this control was
+           * read-only for her — and when she was granted her own event's
+           * assistants, the grant was unreachable: the `＋` registered nothing and
+           * the event saved with no assistants at all, looking exactly like a
+           * click that had not landed.
+           *
+           * **The lead is locked separately** (`leadLocked`), which is the part
+           * that must not move; the assistants are the part this grant is for.
+           * The server refuses anything else regardless — it is the authority,
+           * and this control is not.
+           */
+          disabled={disabled ?? false}
+        />
+      )}
     </>
   );
 }

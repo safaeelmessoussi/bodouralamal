@@ -52,6 +52,10 @@ export const createAssessmentSchema = z
  * `multiple_choice` would leave an answer that answers a different question, so
  * the patch schema below does not accept it — a new question is a new question.
  */
+/** R137 — an optional grade allocation; `exam_question_points_positive_check`
+ *  mirrors the positivity half server-side. */
+const points = z.coerce.number().positive().max(9999.99);
+
 export const questionSchema = z
   .object({
     kind: z.enum(['short_text', 'long_text', 'single_choice', 'multiple_choice']),
@@ -59,6 +63,7 @@ export const questionSchema = z
     /** Only meaningful on a choice question; the service refuses it elsewhere. */
     justification: z.enum(['none', 'optional', 'required']).optional(),
     options: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
+    points: points.optional(),
   })
   .strict();
 
@@ -70,6 +75,8 @@ export const questionPatchSchema = z
     /** The whole set, replaced. A partial edit of options has no meaning: their
      *  order is part of what the student saw. */
     options: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
+    /** `null` explicitly clears a previously-set allocation. */
+    points: points.nullable().optional(),
   })
   .strict();
 

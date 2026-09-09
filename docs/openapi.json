@@ -6036,10 +6036,10 @@
     "/admin/academic-years": {
       "get": {
         "summary": "List academic years (selector)",
-        "description": "**TD-3 extension, Document Owner decision 2026-08-05**, for the same reason as `/admin/subjects`: `POST /admin/course-schedules` requires `academic_year_id`. The **canonical source for every admin selector needing an Academic Year**. **Read-only**, Admin or Super Admin (TD-2 R26), Teachers excluded (R30). Newest first — `label` sorts correctly precisely because TD-6 constrains it to `YYYY-YYYY`, and a form is almost always about the current year or the next. **Exactly `id`, `label`, `is_current`.** `is_current` is the one piece of metadata a selector genuinely needs: it lets a form default to the live year instead of asking an administrator to remember which one that is. Unpaginated, for the reason given on `/admin/subjects`.",
+        "description": "**TD-3 extension, Document Owner decision 2026-08-05**, for the same reason as `/admin/subjects`: `POST /admin/course-schedules` requires `academic_year_id`. The **canonical source for every admin selector needing an Academic Year**. **Read-only**, Admin or Super Admin (TD-2 R26), Teachers excluded (R30). Newest first — `label` sorts correctly precisely because TD-6 constrains it to `YYYY-YYYY`, and a form is almost always about the current year or the next. **Exactly `id`, `label`, `is_current`, `version`.** `is_current` is the one piece of metadata a selector genuinely needs: it lets a form default to the live year instead of asking an administrator to remember which one that is; `version` (R137) is TD-15's coordinate, carried on this same list so the year-management screen editing these rows needs no second, narrower read. Unpaginated, for the reason given on `/admin/subjects`.",
         "responses": {
           "200": {
-            "description": "Every academic year, newest first."
+            "description": "Every live academic year, newest first."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -6053,6 +6053,195 @@
           },
           "403": {
             "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an academic year",
+        "description": "**R137, Super Admin only** (TD-2 R26 — the same authority that writes the periods this year contains). Body: `{ label, is_current? }`. **`label` must be two CONSECUTIVE years, `YYYY-YYYY`** — the database's own `academic_year_label_format_check` enforces the shape and this service enforces the pair (`second = first + 1`), a promise `20260724194811_init_schema`'s own migration comment recorded as \"service-enforced\" before any service ever wrote this row. **`is_current` moves atomically**: setting it `true` here unsets whichever year previously held it, in the same transaction — the database's partial unique index (`academic_year` `is_current` WHERE true) already refuses two `true` rows, and this is what turns \"make this one current\" into a real re-assignment rather than a conflict the caller has to work around by patching the old year first. Audited as `academicyear.create`.",
+        "responses": {
+          "201": {
+            "description": "The created year."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed label, or a second year that is not the first plus one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE — that label already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/academic-years/{id}": {
+      "patch": {
+        "summary": "Rename an academic year, or make it current",
+        "description": "R137, Super Admin only, TD-15 optimistic locking, audited as `academicyear.update`. Body: `{ label?, is_current?, version }` — either field alone is legitimate: renaming a mistyped label need not touch which year is current, and marking a year current need not restate its own label. The label's YYYY-YYYY-pair rule and the atomic `is_current` reassignment are identical to creation.",
+        "responses": {
+          "200": {
+            "description": "The updated year."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT on a stale version, or DUPLICATE for a label collision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an academic year",
+        "description": "R137, Super Admin only; TD-5 soft delete with a Trash snapshot and an audit row. **Refused while anything still names it** (`409 STATE_CONFLICT`, `blocked_by`): its academic periods, exams, course schedules and Library content — each a person's record or a commitment made to one. **No cascade**: unlike a Level, a year owns no purely-structural join safe to remove with it, so this only ever refuses or succeeds outright, never partially clears a path for itself. **The CURRENT year is refused outright** (`409 STATE_CONFLICT`, `reason: ACADEMIC_YEAR_IS_CURRENT`, no `blocked_by`): `is_current`'s own partial unique index carries no `deleted_at` term, so soft-deleting it would neither free the flag nor make any other year current automatically — mark a different year current first, an ordinary edit.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with blocked_by naming periods, exams, course_schedules or content, or reason ACADEMIC_YEAR_IS_CURRENT.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9158,7 +9347,7 @@
     "/assessments/{id}/questions": {
       "post": {
         "summary": "Append a question",
-        "description": "**§4.6, R124 — one question, appended.** Body: `{ kind, prompt, justification?, options? }`. Four kinds and no fifth: `short_text` · `long_text` · `single_choice` (UCQ) · `multiple_choice` (MCQ). **Appended, never inserted at a position** — a create that also chose one would be a second ordering mechanism beside the reorder route, and R76 settled that ordering is expressed as a whole sequence. **A choice question needs at least two options** (`OPTIONS_REQUIRED`) and a text question refuses them outright (`OPTIONS_NOT_ALLOWED`) rather than dropping them: a client sending options on a `short_text` has misunderstood something, and a `201` would confirm the misunderstanding. `justification` is `none` | `optional` | `required` and is **meaningful only on a choice question** — a text answer IS its own justification, and both the schema and `exam_question_justification_check` say so. **The paper freezes the moment somebody submits** (`ASSESSMENT_HAS_SUBMISSIONS`): adding, editing, removing or reordering after that would make an answer mean something the student never said. Audited with the kind and an option COUNT — never the prompt or a label (TD-14).",
+        "description": "**§4.6, R124 — one question, appended.** Body: `{ kind, prompt, justification?, options?, points? }`. Four kinds and no fifth: `short_text` · `long_text` · `single_choice` (UCQ) · `multiple_choice` (MCQ). **Appended, never inserted at a position** — a create that also chose one would be a second ordering mechanism beside the reorder route, and R76 settled that ordering is expressed as a whole sequence. **A choice question needs at least two options** (`OPTIONS_REQUIRED`) and a text question refuses them outright (`OPTIONS_NOT_ALLOWED`) rather than dropping them: a client sending options on a `short_text` has misunderstood something, and a `201` would confirm the misunderstanding. `justification` is `none` | `optional` | `required` and is **meaningful only on a choice question** — a text answer IS its own justification, and both the schema and `exam_question_justification_check` say so. **`points` (R137) is an optional grade allocation**, legal on every kind alike, positive, ≤9999.99 — never checked against `max_grade` here; that consistency is enforced once, only at scheduling (see `POST /exams/schedule`). **The paper freezes the moment somebody submits** (`ASSESSMENT_HAS_SUBMISSIONS`): adding, editing, removing or reordering after that would make an answer mean something the student never said. Audited with the kind and an option COUNT — never the prompt or a label (TD-14).",
         "responses": {
           "201": {
             "description": "Created; `{ id }`."
@@ -9300,7 +9489,7 @@
     "/assessments/{id}/questions/{questionId}": {
       "patch": {
         "summary": "Edit a question",
-        "description": "**§4.6, R124 — wording, justification and the option set.** TD-15 `version`. **`kind` is not accepted**: changing a `short_text` into a `multiple_choice` would leave an answer that answers a different question, so a new question is a new question. `options` replaces the **whole set** — their order is part of what the student saw, so a partial edit has no meaning. Refused once anybody has submitted (`ASSESSMENT_HAS_SUBMISSIONS`); the database would refuse the option soft-delete anyway, since a chosen option is referenced under `RESTRICT`, but the service refuses first with a sentence an administrator can act on.",
+        "description": "**§4.6, R124 — wording, justification, the option set and its point allocation.** TD-15 `version`. **`kind` is not accepted**: changing a `short_text` into a `multiple_choice` would leave an answer that answers a different question, so a new question is a new question. `options` replaces the **whole set** — their order is part of what the student saw, so a partial edit has no meaning. **`points` (R137)**: omitted leaves the existing allocation untouched, `null` explicitly clears it, a number replaces it — never checked against `max_grade` here (see `POST /assessments/{id}/questions` and `POST /exams/schedule`). Refused once anybody has submitted (`ASSESSMENT_HAS_SUBMISSIONS`); the database would refuse the option soft-delete anyway, since a chosen option is referenced under `RESTRICT`, but the service refuses first with a sentence an administrator can act on.",
         "responses": {
           "204": {
             "description": "Saved."
@@ -11876,7 +12065,7 @@
     "/exams/schedule": {
       "post": {
         "summary": "Schedule an exam occurrence — physical or remote",
-        "description": "**§4.6, R136 — الجدولة's ONE write, for both delivery modes, replacing `PATCH /assessments/{id}/target` and `POST /assessments/{id}/publish`.** Those two retired routes let a client compose *retarget, then publish* as separate calls with separate transactions (Codex B1): a failure between them could leave a retargeted-but-unpublished draft, or a publish notifying an audience a concurrent retarget had already moved on from. This route performs the whole sequence — authorize the source, copy it, assign the occurrence's target/date/place, set availability, freeze and publish, notify — inside ONE transaction. Nothing partially completes.\n\n**Source vs. occurrence, never the same row (clause 2/3).** `mode: 'online'` REQUIRES `source_exam_id`, naming a `status: 'draft'` paper built in بناء الاختبارات (`POST /assessments`); scheduling COPIES its content into a new, independent row and publishes THAT — the draft source is never retargeted, consumed or moved past `draft`. Naming a row that is not `draft` is `409 STATE_CONFLICT` / `SOURCE_ALREADY_SCHEDULED`: it is already somebody else's occurrence, not reusable content. `mode: 'physical'` may omit `source_exam_id` — R58/R136's existing content-free sitting is unchanged — or name one to schedule authored content physically, exactly like online.\n\n**Body**: `{ mode, source_exam_id?, target, date?, start_time?, end_time?, branch_id?, room_id?, scheduling_type_id?, visibility?, staff[]?, availability?, bare? }`, `.strict()`. `target` is `POST /assessments`'s own five-arm shape. `date` is required unless `target.kind = 'session'`, which takes the occurrence's own date (R122). `branch_id`/`room_id`/`start_time`/`end_time` are REQUIRED for `mode: 'physical'` (`PHYSICAL_PLACE_REQUIRED`) and refused as columns for `mode: 'online'`, which carries no place by construction. `bare` — `{ title, max_grade, description?, level_id, subject_id, academic_year_id }` — is REQUIRED exactly when `source_exam_id` is absent, since a contentless physical sitting has no source to take them from.\n\n**Availability (clause 9/10) — Student access, separate from publication.** `availability.policy` is one of `manual` (default; `available_from` stays `NULL`, opened later by an operator) | `at_start` (the occurrence's own `start_time`) | `offset_minutes` (`start_time` plus N minutes, 1–1440) | `custom` (an explicit instant). `at_start`/`offset_minutes` need a real `start_time` to anchor on (`AVAILABILITY_NEEDS_START_TIME`). Physical ignores this key entirely — a physical sitting has no separate access gate. **Manual opening is one-way** (clause 17): once set, `available_from` is never returned to `NULL` or moved by anything this route does.\n\n**Notifications** — `exam_scheduled`, for both modes alike, superseding the retired `assessment_published` (R136 §19): a beneficiary or staff member is told once real scheduling happens, never at authoring.",
+        "description": "**R137 — question points are checked here, once, for a remote paper only.** Every question may leave `points` unset forever (the ordinary case); once ANY live question on the source carries a value, EVERY live question must, and they must sum EXACTLY to the paper's `max_grade` — refused otherwise (`409 QUESTION_POINTS_INCOMPLETE` for a partial allocation, `409 QUESTION_POINTS_MISMATCH` for a complete one that does not sum correctly), never silently accepted or rounded. Checked on the copy, inside the same transaction as everything else below, so a paper is never blocked from being authored one question at a time — only from being scheduled while its allocation is inconsistent.\n\n**§4.6, R136 — الجدولة's ONE write, for both delivery modes, replacing `PATCH /assessments/{id}/target` and `POST /assessments/{id}/publish`.** Those two retired routes let a client compose *retarget, then publish* as separate calls with separate transactions (Codex B1): a failure between them could leave a retargeted-but-unpublished draft, or a publish notifying an audience a concurrent retarget had already moved on from. This route performs the whole sequence — authorize the source, copy it, assign the occurrence's target/date/place, set availability, freeze and publish, notify — inside ONE transaction. Nothing partially completes.\n\n**Source vs. occurrence, never the same row (clause 2/3).** `mode: 'online'` REQUIRES `source_exam_id`, naming a `status: 'draft'` paper built in بناء الاختبارات (`POST /assessments`); scheduling COPIES its content into a new, independent row and publishes THAT — the draft source is never retargeted, consumed or moved past `draft`. Naming a row that is not `draft` is `409 STATE_CONFLICT` / `SOURCE_ALREADY_SCHEDULED`: it is already somebody else's occurrence, not reusable content. `mode: 'physical'` may omit `source_exam_id` — R58/R136's existing content-free sitting is unchanged — or name one to schedule authored content physically, exactly like online.\n\n**Body**: `{ mode, source_exam_id?, target, date?, start_time?, end_time?, branch_id?, room_id?, scheduling_type_id?, visibility?, staff[]?, availability?, bare? }`, `.strict()`. `target` is `POST /assessments`'s own five-arm shape. `date` is required unless `target.kind = 'session'`, which takes the occurrence's own date (R122). `branch_id`/`room_id`/`start_time`/`end_time` are REQUIRED for `mode: 'physical'` (`PHYSICAL_PLACE_REQUIRED`) and refused as columns for `mode: 'online'`, which carries no place by construction. `bare` — `{ title, max_grade, description?, level_id, subject_id, academic_year_id }` — is REQUIRED exactly when `source_exam_id` is absent, since a contentless physical sitting has no source to take them from.\n\n**Availability (clause 9/10) — Student access, separate from publication.** `availability.policy` is one of `manual` (default; `available_from` stays `NULL`, opened later by an operator) | `at_start` (the occurrence's own `start_time`) | `offset_minutes` (`start_time` plus N minutes, 1–1440) | `custom` (an explicit instant). `at_start`/`offset_minutes` need a real `start_time` to anchor on (`AVAILABILITY_NEEDS_START_TIME`). Physical ignores this key entirely — a physical sitting has no separate access gate. **Manual opening is one-way** (clause 17): once set, `available_from` is never returned to `NULL` or moved by anything this route does.\n\n**Notifications** — `exam_scheduled`, for both modes alike, superseding the retired `assessment_published` (R136 §19): a beneficiary or staff member is told once real scheduling happens, never at authoring.",
         "responses": {
           "201": {
             "description": "Created; `{ id }` of the new occurrence — never the source's own id."
@@ -11922,7 +12111,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT — SOURCE_ALREADY_SCHEDULED, NO_QUESTIONS for an empty online source, ROOM_BRANCH_MISMATCH, BRANCH_MISMATCH, GROUP_LEVEL_MISMATCH, or SUBJECT_NOT_IN_LEVEL from the shared curriculum policy.",
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — SOURCE_ALREADY_SCHEDULED, NO_QUESTIONS for an empty online source, QUESTION_POINTS_INCOMPLETE or QUESTION_POINTS_MISMATCH (R137), ROOM_BRANCH_MISMATCH, BRANCH_MISMATCH, GROUP_LEVEL_MISMATCH, or SUBJECT_NOT_IN_LEVEL from the shared curriculum policy.",
             "content": {
               "application/json": {
                 "schema": {

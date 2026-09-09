@@ -269,6 +269,53 @@ describe("materialization (TD-7, §20 rule 24)", () => {
   });
 });
 
+describe("R137 — a genuine one-time حصة دراسية/محاضرة (`recurrence: 'none'`)", () => {
+  it("materializes exactly one session, on its own anchor date", async () => {
+    const { id, materialized } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: "none", weekdays: [], anchorDate: day("2026-06-10") }),
+      NOW,
+    );
+    expect(materialized.created).toBe(1);
+    expect(await datesOf(id)).toEqual(["2026-06-10"]);
+  });
+
+  it("a second materialization run creates nothing more — idempotent, like every other pattern", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: "none", weekdays: [], anchorDate: day("2026-06-10") }),
+      NOW,
+    );
+    const [again] = await runMaterialization(prisma, { schedule_id: id }, NOW);
+    expect(again?.created).toBe(0);
+    expect(await datesOf(id)).toEqual(["2026-06-10"]);
+  });
+
+  it("a one-time class still collides with an existing session in the same room at the same time", async () => {
+    await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: "none", weekdays: [], anchorDate: day("2026-06-10") }),
+      NOW,
+    );
+    await expect(
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({
+          recurrence: "none",
+          weekdays: [],
+          anchorDate: day("2026-06-10"),
+          roomId: roomA,
+        }),
+        NOW,
+      ),
+    ).rejects.toMatchObject({ code: "SCHEDULE_CONFLICT" });
+  });
+});
+
 describe("a schedule edit never destroys work (§4.4, §20 rule 24)", () => {
   it("leaves an OVERRIDDEN session alone and REPORTS it", async () => {
     const { id } = await createCourseSchedule(

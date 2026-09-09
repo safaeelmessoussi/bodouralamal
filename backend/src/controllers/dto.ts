@@ -1292,14 +1292,17 @@ export interface AcademicYearRefDto {
   /** What lets a form default to the live year rather than asking someone to
    *  remember which it is. */
   is_current: boolean;
+  /** TD-15 — R137's year-management screen edits this same row. */
+  version: number;
 }
 
 export function academicYearRefDto(row: {
   id: string;
   label: string;
   isCurrent: boolean;
+  version: number;
 }): AcademicYearRefDto {
-  return { id: row.id, label: row.label, is_current: row.isCurrent };
+  return { id: row.id, label: row.label, is_current: row.isCurrent, version: row.version };
 }
 
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
@@ -2524,6 +2527,10 @@ export interface AssessmentPaperDto {
     kind: string;
     prompt: string;
     justification: string;
+    /** R137 — an optional grade allocation, `null` when unset. */
+    points: string | null;
+    /** TD-15 — required by `PATCH .../questions/{id}`. */
+    version: number;
     options: { id: string; display_order: number; label: string }[];
   }[];
   /** `null` when this person has not started. Never another student's. */
@@ -2570,6 +2577,8 @@ export function assessmentPaperDto(row: {
     kind: string;
     prompt: string;
     justification: string;
+    points: { toString(): string } | null;
+    version: number;
     options: { id: string; displayOrder: number; label: string }[];
   }[];
   submission: {
@@ -2607,6 +2616,8 @@ export function assessmentPaperDto(row: {
       kind: String(q.kind),
       prompt: q.prompt,
       justification: String(q.justification),
+      points: q.points === null ? null : q.points.toString(),
+      version: q.version,
       options: q.options.map((o) => ({
         id: o.id,
         display_order: o.displayOrder,

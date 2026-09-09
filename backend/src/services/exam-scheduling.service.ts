@@ -322,6 +322,8 @@ export async function scheduleExam(
         subjectId: true,
         date: true,
         startTime: true,
+        // R137 — the total a fully-allocated question set must sum to.
+        maxGrade: true,
       },
     });
 

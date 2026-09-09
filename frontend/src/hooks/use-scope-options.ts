@@ -282,6 +282,10 @@ export function useScopeOptions({
         id: y.id,
         label: y.label,
         is_current: y.is_current,
+        // This narrower `/me/scope-options` read carries no real TD-15
+        // coordinate — nobody edits a year from here — matching `Level`'s own
+        // placeholder above.
+        version: 0,
       }));
       setLevelSubjects(
         new Map(payload.levels.map((l) => [l.id, l.subject_ids])),
