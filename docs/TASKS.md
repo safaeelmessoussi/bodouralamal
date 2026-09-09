@@ -2658,3 +2658,121 @@ approved scope covers Partners only, so this is reported rather than taken.
       exists to revise one short of scheduling again from a fresh copy —
       الجدولة's list hides Edit for it instead of opening a form that cannot
       save).
+
+## R137 (Document Owner decision, ratified 2026-09-09) — see SRS Revision 137
+
+- [x] **(1) Academic Year full CRUD, co-located with its semesters at
+      الفصول الدراسية** — `POST/PATCH/DELETE /admin/academic-years`, TD-5
+      soft delete, TD-15 optimistic locking, Super Admin only. Deleting the
+      current year refused (`ACADEMIC_YEAR_IS_CURRENT`). Semester form now
+      offers every year, not only the current one. **Two real defects found
+      by real-browser testing and fixed in the same unit:** the write
+      schema's wire key (`isCurrent` → `is_current`, matching TD-3 and the
+      already-correct OpenAPI prose) and `label`'s uniqueness (plain →
+      partial index scoped to live rows, matching `scheduling_type.name`,
+      so a soft-deleted year's label is reusable within TD-5's undo window).
+      §14's stale `/superadmin/settings` AcademicYear-management line is
+      corrected in place, superseded.
+- [x] **(2) Link an existing reusable assessment to an existing Session**,
+      past/present/future — `GET /calendar/sessions/{id}` gains
+      `linked_exams` (calendar-tier gated, `examTierWhere`); the calendar
+      dialog renders it through the shared `ExamAccessAction`; two entry
+      points (بناء الاختبارات, a Session's own dialog) both navigate to the
+      SAME الجدولة surface via `?target_kind=session&target_id=`, re-
+      validated by `TargetPicker` itself rather than trusted from the URL.
+      Session date and exam availability remain independent facts.
+- [x] **(3) Optional per-question point allocation** (`ExamQuestion.points`),
+      never auto-awarded, all-or-nothing checked only at scheduling
+      (`QUESTION_POINTS_INCOMPLETE`/`QUESTION_POINTS_MISMATCH`). R136 copy
+      independence proven in both directions (editing the source after
+      scheduling never touches the copy; editing the copy afterward is
+      independent of the source).
+- [x] **(4) Complete question CRUD proven exhaustively** — create/read/تعديل/
+      delete/reorder, R124 freeze unchanged, R136 copy independence proven
+      for prompt/options/question-count in both directions (not just points).
+- [x] **(5) MC option CRUD, create AND edit** — تعديل replaces the full
+      option set; removed options soft-deleted, never dangling in a live
+      read; the ≥2-option shape guard applies identically on edit. No
+      correct-answer concept exists in this platform's model, so that named
+      concern is structurally moot.
+- [x] **(6) Secondary add actions read as real buttons** — إضافة خيار/إضافة
+      دور fixed via the shared `variant="add"`, not a two-screen patch;
+      `atomic-components.test.tsx` guards the convention platform-wide.
+- [x] **(7) عطلة carries no staffing fields, structurally** — `hideStaffing`
+      removes the controls from the tree (not CSS/disabled-hidden); switching
+      to عطلة clears any staffing already typed; the save payload sends an
+      explicitly empty staff array. Backend `HOLIDAY_SHAPE` refusal predates
+      this and is unchanged.
+- [x] **(8) One collapsed dropdown shape platform-wide** — `SearchableSelect`/
+      `MultiSelectField` now collapse behind the same `field__control`
+      trigger `SelectField` already used, opening on click/Enter/Space;
+      `MultiSelectField`'s panel is real checkboxes (`ChoiceField`) with a
+      "٣ محددة" closed-state summary. New shared `useDisclosure` hook
+      (`NotificationBell`'s own Escape/outside-click pattern, factored out).
+      No existing call site changed (props unchanged). Guarded platform-wide;
+      verified in a real 375px RTL browser check (no overflow, correct
+      truncation/chevron rendering).
+- [x] **(9) Compact paired date/time controls platform-wide** — a one-time
+      item's span end date now shares `RecurrenceEditor`'s start-date
+      `.form__row` (the same slot *repeat until* occupies for a repeating
+      pattern); `exam-section.tsx`'s custom date+time and
+      `academic-periods.tsx`'s semester start/end date get the same
+      treatment, closing the remaining unpaired instances found by a
+      platform-wide audit.
+- [x] **(10) Self-attendance for المرأة restated as additive** — no
+      authorization change was needed (R123 already checked staff authority
+      first); the configuration form's own hint previously described only
+      the beneficiary's gain and now states both halves explicitly.
+- [x] **(11) مرة واحدة offered, and DEFAULT, for حصة دراسية/محاضرة** —
+      `allowsOnce` true for all four structural kinds; `anchor_date` reused
+      as the one-time occurrence's own date (no new column);
+      `course_schedule_recurrence_shape_check` extended to require it for
+      `none`. SRS §7's Revision-43 CHECK note corrected in place, superseded
+      for this one kind. Editing existing recurring schedules unaffected.
+- [x] **(12) طلبات الحساب المستقل moved out of the standing menu**, R132
+      preserved in full — `hiddenFromNav` keeps the route/authorization/deep
+      links; `SelfManagedClaimsQueue` extracted so the direct route and a new
+      نوع الطلب filter on طلبات الانضمام render the SAME component (no
+      duplicated decision logic); the filter's label deliberately reuses the
+      queue's own title rather than colliding with `identity-review`'s
+      distinct, pre-existing label. Real-browser walk (extended
+      `verify-self-managed-claim.mjs`): the same pending claim reachable and
+      decidable both ways; sidebar link genuinely gone (DOM query, not text
+      scan); filter reset restores the ordinary table. 20/20 checks passed.
+- [x] **(13) تعديل بيانات المستخدم states phone/DOB requirements honestly** —
+      `birth_date`/`is_beneficiary` on `GET/PATCH /profile`; a beneficiary's
+      form now shows both as required, reusing registration's own validator;
+      `updateOwnProfile` checks the RESULTING record, so a legacy incomplete
+      beneficiary is asked to complete the gap on any edit, not only when she
+      touches phone/DOB directly. Guardian-only/staff accounts untouched.
+- [x] **(14) R136's exam architecture deliberately unchanged** — بناء
+      الاختبارات=WHAT, الجدولة=WHEN/WHERE/WHO(+WHICH RESERVED SESSION since
+      (2)), التقويم=discovery, نقاط الامتحانات=grading; scheduling still
+      copies, never retargets; no `Paper`/`Sitting` table; no retired
+      publish/retarget UX restored; grade save/publish stay distinct.
+- [x] **SRS Revision 137 RATIFIED**, 2026-09-09. Full verification: backend
+      lint/typecheck/build clean; frontend lint/typecheck/build clean, 100
+      files/1,179 unit tests; full disposable-stack integration suite — 105
+      files/2,404 tests (17 pre-existing unrelated skips) — including new
+      coverage for (1)/(3)/(4)/(5); OpenAPI regenerated with no diff
+      (169 paths/220 operations), TD-3 unchanged in shape (220/228, 8
+      pending, 0 undocumented); all `scripts/ci/check-*.sh` guards,
+      doc-links and `git diff --check` pass.
+- [x] **Real-browser E2E acceptance, targeted rather than exhaustive.** New/
+      extended walks for the two genuinely new write surfaces this revision
+      built — clause (1) (`verify-academic-periods.mjs`, new checks 5-7) and
+      clause (12) (`verify-self-managed-claim.mjs`, new checks) — where the
+      risk of an untested wire-contract mismatch was highest, and clause
+      (1)'s walk is exactly what found this revision's own two defects.
+      Clauses (2)-(11)/(13) extend or compose EXISTING, already-E2E-proven
+      infrastructure (R90/R123/R125/R136's own browser harnesses) with
+      comparatively thin additions and are covered instead by the
+      disposable-stack integration suite plus targeted frontend unit/guard
+      tests. **A pre-existing, unrelated defect was found and deliberately
+      NOT fixed here** (avoiding broadening this revision into another
+      milestone): `verify-academic-periods.mjs`'s own checks (2)-(4) predate
+      the platform-wide native `type="date"` retirement (2026-09-05) and
+      fail against the current `DatePicker` regardless of anything in this
+      revision; this revision's own new checks (5)-(7) are built independent
+      of that stale DOM state (a fresh page navigation) specifically so the
+      pre-existing failure cannot mask new evidence.

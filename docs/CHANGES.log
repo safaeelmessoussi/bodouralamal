@@ -6276,3 +6276,168 @@ backend capability exists to revise one short of scheduling again from a
 fresh copy, so الجدولة's list still hides Edit for it rather than opening a
 form that cannot save. No Staging or Production action was taken; every
 fixture this pass wrote was disposable, tagged, and confirmed cleaned.
+
+## Academic-year administration, session-linked assessments, question/option
+## CRUD, holiday/attendance/dropdown/layout UX fixes, self-managed-claims
+## consolidation, beneficiary profile completeness (SRS Revision 137,
+## 2026-09-09)
+
+Fourteen independent, additive items plus two genuine defects real-browser
+testing found while verifying the first one. Full clause-by-clause record in
+`docs/SRS.md`'s Revision 137 entry; this is the delivery summary.
+
+**Academic Year gains full administration** (create/edit/delete, TD-5 soft
+delete, TD-15 optimistic locking), co-located with its semesters at الفصول
+الدراسية rather than on the general System Settings screen §14 had
+(inaccurately) described but never built. Deleting the current year is
+refused outright. The semester form now offers every year, not only the
+current one — the real gap behind "the semester form only ever offers one
+year."
+
+**Two real defects, found only because this was proven against a real
+browser rather than trusted from integration coverage alone, corrected in
+the same unit:** the academic-year write schema accepted `isCurrent`
+(camelCase) under strict validation while the real frontend — and this
+endpoint's own already-published OpenAPI prose — always sent `is_current`;
+every existing test happened to send the same wrong key the buggy schema
+accepted, so the create/edit dialog was completely non-functional through
+the actual UI despite full test coverage passing. Separately,
+`academic_year.label`'s unique index predated this same pass's own
+soft-delete addition and was never converted to the live-rows-only partial
+shape a sibling table already uses for the identical reason, so a
+soft-deleted year's label stayed permanently unusable, forever, inside TD-5's
+own seven-day undo window. Both fixed to the shape every sibling
+reference-data write already follows, with new integration coverage and a
+new migration (partial unique index).
+
+**An existing reusable assessment may now be linked to an existing class
+Session**, past, present or future — no new scheduling implementation (the
+existing `target: { kind: 'session' }` arm already accepted this); the gap
+was that nothing surfaced the link back to the calendar or gave a direct
+entry point from either direction. A Session's date and an exam's
+availability remain independent facts, unchanged.
+
+**A question may carry an optional point allocation**, never auto-awarded,
+checked all-or-nothing only at the moment a paper is scheduled — never while
+merely authoring one question at a time. R136's copy-on-schedule
+independence is proven in both directions for this and for ordinary question
+edits: the reusable source and an already-scheduled occurrence never affect
+each other regardless of which is edited afterward.
+
+**Question CRUD (create/read/edit/delete/reorder) and multiple-choice option
+CRUD (create AND edit, not create-only) are both now exhaustively proven** —
+edited options are soft-deleted with no dangling live reference, and the
+same ≥2-option shape guard applies on edit as on create. No correct-answer
+concept exists anywhere in this platform's model, which makes the "dangling
+correct-answer reference" concern the Owner named structurally moot rather
+than something to separately guard.
+
+**Secondary add actions (إضافة خيار, إضافة دور) now read as actual,
+clickable buttons**, fixed once through the shared `Button` component's
+`variant="add"` rather than as two separate literal-string patches — both
+already used the shared component; only the low-emphasis variant passed to
+it was wrong.
+
+**عطلة carries no staffing fields, structurally** — removed from the tree
+rather than hidden or disabled, cleared automatically when switching a form
+in progress to عطلة, and the save payload sends an explicitly empty staff
+array rather than merely omitting the field. The backend's own refusal of
+staff on a holiday predates this and was already correct; only the frontend
+previously offered a control the server would have refused.
+
+**Every dropdown on the platform now collapses to the same shape.**
+`SearchableSelect` and `MultiSelectField` used to render their full option
+list inline, always — a real defect on the association's actual rosters,
+turning a short form into a long one. Both now present the identical
+`field__control` trigger the native `SelectField` already used, opening only
+on click/Enter/Space; the multi-select's open panel is real checkboxes
+through the shared `ChoiceField`, and its closed state reads a plain
+"٣ محددة" summary. A new shared `useDisclosure` hook factors out the
+Escape/outside-click behaviour `NotificationBell` already had, so a second
+and third control reuse it. No existing call site needed a change — both
+components' public props are unchanged.
+
+**Paired date/time controls are compact platform-wide, not on one screen.**
+A one-time item's own multi-day span end date now shares the recurrence
+editor's start-date row instead of standing full-width below it, and two
+further screens found by an audit (an exam's custom availability date+time,
+a semester's own start/end date) get the same treatment.
+
+**Self-attendance for المرأة is restated, in the interface, as additive.**
+No authorization change was needed — staff/admin authority was never
+narrowed by enabling self-marking, and this was already correctly enforced
+server-side (R123). The configuration screen's own hint previously described
+only what the beneficiary gains and now states both halves explicitly.
+
+**مرة واحدة is now offered, and is the default, for a new حصة دراسية or
+محاضرة** — reusing the existing `anchor_date` column rather than adding a new
+one; editing existing recurring schedules is unaffected. This narrowly
+supersedes an earlier revision's absolute rule that a non-recurring
+occurrence is always an Event, recorded and reconciled explicitly in
+`docs/SRS.md` rather than silently overwritten.
+
+**طلبات الحساب المستقل moves out of the standing admin menu, with R132 fully
+preserved** — the route, its authorization and every deep link keep working
+unchanged (`hiddenFromNav`, a new generic flag rather than a removal). The
+same list-and-decide component now also renders inline inside طلبات
+الانضمام, reached through a new filter option, so there is one decision
+implementation reached two ways rather than a duplicated one. Verified in a
+real browser: the same pending claim reachable and decidable through both
+surfaces, and the sidebar link genuinely gone.
+
+**تعديل بيانات المستخدم now states phone/date-of-birth requirements
+honestly.** A beneficiary profile (registration already required both) shows
+them as required, reusing the same validator registration uses; a legacy
+beneficiary record missing either is now asked to complete the gap on any
+profile edit, not silently allowed to keep saving around it. Guardian-only
+and staff accounts are untouched — neither field is asked of them.
+
+**R136's exam architecture is deliberately, entirely unchanged** by any of
+the above: بناء الاختبارات remains content, الجدولة remains the one
+scheduling surface, scheduling still copies rather than retargets, no
+Paper/Sitting table is introduced, and grade save/publish remain distinct
+acts.
+
+**Verified:** backend lint/typecheck/build clean; frontend lint/typecheck/
+build clean, 100 files / 1,179 unit tests; full disposable-stack integration
+suite — 105 files / 2,404 tests (17 pre-existing, unrelated skips) — passes
+with full all-table isolation, including new coverage this pass added for
+the academic-year write path, the current-year-delete refusal, the
+label-reuse-after-soft-delete fix, question-points independence in both copy
+directions, and question/option edit independence. OpenAPI regenerated with
+no diff (169 paths / 220 operations — the academic-year routes' documented
+bodies were already correct; the implementation was brought into line with
+them) and TD-3 conformance unchanged in shape (220/228 implemented, 8
+pending, 0 undocumented). All `scripts/ci/check-*.sh` guards, the
+documentation-links guard and `git diff --check` pass.
+
+**Real-browser E2E evidence was targeted rather than exhaustive, and the
+reasoning is recorded rather than left implicit.** The two genuinely new
+write surfaces this pass built — academic-year administration and the
+self-managed-claims consolidation — each received a dedicated new or
+extended real-browser walk with disposable, tagged, self-cleaning fixtures,
+and the academic-year walk is exactly what found this pass's own two
+defects. Every other item extends or composes existing, already-E2E-proven
+infrastructure from earlier revisions with comparatively thin additions, and
+is covered instead by the disposable-stack integration suite above plus
+targeted frontend unit/guard tests. `docs/SRS.md` is updated in place for
+every clause this pass touches, including two now-superseded passages
+(the stale System-Settings academic-year-management line, and Revision 43's
+absolute non-recurring-is-an-Event CHECK note) corrected rather than left to
+contradict the new behaviour silently. `docs/TASKS.md` is updated to match,
+ticked with the same evidence cited rather than restated.
+
+**A pre-existing, unrelated defect was found and deliberately NOT fixed
+here, to avoid broadening this pass into another milestone:** three checks
+in the existing `verify-academic-periods.mjs` harness (covering semester
+creation) predate the platform-wide retirement of native `type="date"`
+inputs from an earlier, unrelated revision, and fail against the current
+date-picker component regardless of anything in this pass. This pass's own
+new checks in the same file are built independent of that stale DOM
+state — a fresh page navigation rather than continuing from it — specifically
+so the pre-existing, unrelated failure could not mask this pass's own new
+evidence. No Staging or Production action was taken. The local development
+stack's database had drifted three migrations behind (a pre-existing gap,
+unrelated to this pass's own code) and was brought current as an ordinary
+part of running these checks — a normal, additive `prisma migrate deploy`,
+not a reset — and is left healthy.
