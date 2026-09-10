@@ -6761,3 +6761,99 @@ matching "R138 correction #2" addendum. No SRS change — this replaces one
 already-shipped correction's approach; it does not alter ratified product
 policy. No Staging or Production action was taken; redeploying, if wanted,
 remains a separate, not-yet-requested step.
+
+## R138 correction #3 — an empty-drawer regression, `أقسامي` opened on
+## nothing (Owner-reported on Staging, same day, 2026-09-10)
+
+Correction #2 above moved the toggle into the page header and the drawer
+into a proper panel — and left one thing unexamined: every portal layout
+still built its own `<nav>` unconditionally, for every session, whatever
+its final module list for that portal actually contained. `PortalShell`
+could only ever check whether a `<nav>` ELEMENT existed, never whether
+there was anything real inside it, so a Student session acting as a role
+`STUDENT_MODULES` admits none of (and not a guardian actively acting for a
+linked child) got a perfectly ordinary-looking `<nav>` wrapping an empty
+`<ul>` — and `أقسامي` opened a drawer with nothing in it.
+
+**Root cause, precisely**: `AdminSidebar`/`TeacherSidebar`/`StudentSidebar`
+each computed `visible*Modules(...)` INSIDE themselves and rendered
+unconditionally; the layout component handed `PortalShell` a `sidebar` prop
+that was always a non-null `<nav>`, so `PortalShell` had no signal to read
+other than "a React element was passed," which is true whether that element
+contains seven links or zero.
+
+**The fix moves the computation, not merely the check.** Each layout
+(`AdminLayout`/`TeacherLayout`/`StudentLayout`) now computes its OWN final,
+permission- (and, for Teacher, capability-) filtered module list BEFORE
+deciding what to render, and passes `sidebar={modules.length > 0 ? <XSidebar
+modules={modules} .../> : null}` — `null`, never an empty `<nav>`, is what a
+portal with nothing to navigate to now hands down. `PortalShell.sidebar` is
+`ReactNode | null`; a new `hasNav = sidebar !== null` is the single signal
+every rendering decision in the component now reads.
+
+**When `hasNav` is `false`, nothing renders for the nav slot at all** — not
+merely hidden with CSS: no toggle button, no `.admin-nav-panel` drawer wrapper
+(so no header, no title, no close button), no backdrop, and — the part a
+purely presentational fix would have missed — no RESERVED grid column
+either. `.admin`'s own `grid-template-columns: 16rem 1fr` at `>=60rem` is
+unconditional in the base rule, so a session with no nav would otherwise
+still have `.admin__main` pushed into a second column beside 16rem of empty
+space; a new `admin--no-nav` modifier (mirroring `admin--nav-collapsed`'s
+own `grid-template-columns: 1fr`, stated as its own class because this
+portal never had a sidebar to collapse in the first place) reclaims it. The
+page-header actions row (`.admin__actions`) is narrowed the same way: it now
+renders only when it would actually hold something — the toggle, a page's
+own action, or both — never as an empty container when a portal with no nav
+also has no page-specific action to show.
+
+**Admin retains its control unconditionally**, by construction rather than
+by a special case: §14.1's five administration sections are never empty for
+an admin role, so `hasNav` is always `true` there and nothing about this
+correction is visible on that portal. Teacher and Student now apply the
+exact same rule Admin already satisfied — the control appears only when
+there is somewhere for it to lead.
+
+Nine new cases in `portal-shell.test.tsx`: Admin, a genuine مؤطِّرة, and a
+genuine مستفيدة (roles `STUDENT_MODULES`/`TEACHER_MODULES` actually admit)
+each show the control — the control-group proof that the fix does not
+withhold it from a session that genuinely has somewhere to go; a Teacher
+session acting as a role the registry names no node for, and a Student
+session in the EXACT shape of the Owner's own report (a role
+`STUDENT_MODULES` admits none of), both show none of it — "permission
+filtering removes every link" is asserted as identical in outcome to an
+explicit empty list, not a separate code path. A further four tests pin
+`PortalShell`'s own structural contract directly, independent of any
+registry: `sidebar={null}` renders no toggle/drawer/heading/close/backdrop
+and no `.admin__actions` row when there is also no page action; a lone page
+action still renders without a toggle beside it; a real sidebar still
+renders the toggle and, once opened, the drawer.
+
+A second static harness, `nav-toggle-harness-empty.html`, joins the existing
+one — a portal with no contextual nav at all, alongside a stand-in
+`ApplicationHeader` burger. `verify-nav-toggle-geometry.mjs` now navigates
+`navigate(url, requireStateMachine)` (generalised — the empty harness has no
+toggle state machine to wait for) and checks, at all four widths
+(320/390/1280/1440px, since "nothing renders for an empty nav slot" has no
+width dependency): no toggle, no `.admin-nav`, no drawer panel, no backdrop,
+and the grid genuinely reclaims the column (`getComputedStyle(...).gridTemplateColumns`
+resolves to a single track, not measured only by class name). On mobile
+specifically it additionally confirms the header burger stays visible and
+untouched — its correct INVISIBILITY at desktop widths is
+`check-header-nav-exclusive.sh`'s own property already, and duplicating that
+check here risked only disagreeing with it rather than adding evidence.
+**68/68 checks pass**, up from 46/46 (the 22 new checks are the empty-harness
+pass across four widths, six checks each, minus the two desktop-width burger
+checks correctly not run).
+
+Verification: frontend typecheck/lint/build clean; 103 files/1,227 unit
+tests (up from 1,218); `check-design-tokens.sh`, `check-header-nav-exclusive.sh`,
+`check-shared-layout.sh`, doc-links and `git diff --check` all clean.
+Correction #2's own approved behaviour — the non-floating control, the
+bounded overlay, the desktop-inline default, RTL positioning, and
+Escape/backdrop/link/internal-close — is unchanged by this pass; only WHEN
+the control appears is narrowed. The semester-notice fix (337e425) remains
+untouched. `docs/TASKS.md` gained a matching "R138 correction #3" addendum.
+No SRS change — a session with no accessible sections was always meant to
+see none; this corrects the implementation to actually honour that, it does
+not alter ratified product policy. No Staging or Production action was
+taken; redeploying, if wanted, remains a separate, not-yet-requested step.

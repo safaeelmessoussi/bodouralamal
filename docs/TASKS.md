@@ -2972,3 +2972,58 @@ for full detail.
       untouched. No Staging or Production action taken; no SRS change —
       this replaces one already-shipped correction's approach, it does not
       alter ratified product policy.
+
+## R138 correction #3 — an empty-drawer regression, `أقسامي` opened on nothing (Owner-reported on Staging, same day, 2026-09-10)
+
+**Root cause**: correction #2 above still had every portal layout build its
+own `<nav>` UNCONDITIONALLY, so `PortalShell` could only ever check whether
+a `<nav>` element existed — never whether the session's own,
+permission-filtered module list for that portal actually had anything in
+it. A Student session whose active role `STUDENT_MODULES` admits none of
+(and who is not a guardian actively acting for a linked child) got an empty
+`<ul>` inside a perfectly normal-looking `<nav>`, and `أقسامي` opened a
+drawer with nothing in it. See [CHANGES](CHANGES.log) for full detail.
+
+- [x] **Each layout now computes its own final module list BEFORE deciding
+      what to pass `PortalShell`** — `AdminLayout`/`TeacherLayout`/
+      `StudentLayout` all hoist `visible*Modules(...)` out of their
+      `*Sidebar` sub-component and pass `sidebar={null}` when it is empty,
+      never a `<nav>` wrapping zero links.
+- [x] **`PortalShell.sidebar` is `ReactNode | null` now**, and `null` is a
+      first-class signal (`hasNav = sidebar !== null`) that suppresses the
+      toggle, the drawer, its header and close button, the backdrop, AND the
+      grid column `.admin`'s two-column layout would otherwise reserve for
+      it (`admin--no-nav`, `>=60rem` only — below that the layout is already
+      single-column). The page's own action row (`.admin__actions`) now
+      renders only when it would hold something — the toggle, a page action,
+      or both — never as an empty container.
+- [x] **Admin keeps its control** — §14.1's five sections are never empty
+      for an admin role, so nothing changes there. Teacher and Student now
+      correctly show no control at all when their own final list is empty,
+      the same rule Admin already satisfied by construction.
+- [x] Nine new `portal-shell.test.tsx` cases: Admin/Teacher/Student each with
+      a real, non-empty list (control renders); Teacher with a role
+      `TEACHER_MODULES` admits none of (permission filtering → empty, no
+      control — the general case); Student with the EXACT Owner-reported
+      shape (a role `STUDENT_MODULES` admits none of); and four
+      `PortalShell`-level contract tests isolated from any registry
+      (`sidebar={null}` → nothing renders; no actions row when nothing would
+      be in it; a lone page action still renders without a toggle; a real
+      sidebar still renders the toggle).
+- [x] A second static harness (`nav-toggle-harness-empty.html`) added
+      alongside the existing one, replicating a portal with no contextual
+      nav plus a stand-in `ApplicationHeader` burger. `verify-nav-toggle-geometry.mjs`
+      checks it at all four widths (no toggle/nav/panel/backdrop, the grid
+      column reclaimed) and confirms the header burger stays visible and
+      untouched on mobile specifically (its own visibility at desktop widths
+      is `check-header-nav-exclusive.sh`'s property, not duplicated here).
+      **68/68 checks pass.**
+- [x] Verification: frontend typecheck/lint/build clean; 103 files/1,227
+      unit tests (up from 1,218); `check-design-tokens.sh`,
+      `check-header-nav-exclusive.sh`, `check-shared-layout.sh`, doc-links
+      and `git diff --check` all clean. Correction #2's own approved
+      behaviour (non-floating control, bounded overlay, desktop inline
+      default, RTL positioning, Escape/backdrop/link/internal-close) and the
+      semester-notice fix (337e425) are both untouched — this only narrows
+      WHEN the control appears. No Staging or Production action taken; no
+      SRS change.
