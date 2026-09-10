@@ -98,14 +98,50 @@
  * **`60rem` is `ApplicationHeader`'s own breakpoint**, not a second number —
  * "one coherent responsive navigation system" (§14) is what that identity is
  * for.
+ *
+ * **Owner-reported defect (screenshot, mobile) — the toggle overlapped the
+ * drawer's own first nav item.** The toggle used to be an ordinary IN-FLOW
+ * grid child of `.admin`, sitting at the very top of the content area,
+ * immediately below the sticky header — which is also exactly where the
+ * fixed-position overlay drawer's own top edge sits (`inset-block-start:
+ * var(--header-height)`). Two unrelated things occupying the same screen
+ * position, with the toggle's `z-index` deliberately ABOVE the drawer's so
+ * it stays reachable to close it, is what put its label on top of the
+ * drawer's own first link instead of beside it.
+ *
+ * The fix removes it from `.admin`'s grid flow entirely — `position: fixed`
+ * — and moves it to the bottom corner rather than the top one. The top
+ * corner was tried first and rejected on inspection: `.admin__head`'s own
+ * action button (§ "The page header" below, `grid-template-columns: 1fr
+ * auto`) already occupies the top-LEFT in RTL on most admin screens, so a
+ * fixed top-left toggle would trade one overlap for another rather than
+ * removing it. The BOTTOM corner has no other fixed or floating element on
+ * this platform (checked) and no page content ever renders there, so it is
+ * clear at every width and on every screen, in either direction: opposite
+ * the side the drawer opens from (`inset-inline-start: 0` on the drawer is
+ * the RIGHT edge in RTL; the toggle sits at `inset-inline-end`, the LEFT),
+ * and below the header's own bottom-fixed nothing. A scroll inside a long
+ * drawer never carries it out of reach either way, fixed positioning being
+ * viewport-relative.
+ *
+ * This also removes a second, latent risk the old in-flow placement
+ * created: with the toggle counted as an ordinary grid item alongside
+ * `.admin-nav` and `.admin__main`, the DEFAULT (nothing pressed) desktop
+ * state had three items auto-placing into a two-column grid — accidentally
+ * tolerable only because auto-placement's fallback wrapping happened not to
+ * visibly break that specific case, not because the markup was actually
+ * correct. Fixed positioning removes the ambiguity rather than relying on
+ * that coincidence.
  */
 .admin-nav-toggle {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   width: fit-content;
   padding: 0.5rem var(--space-3);
-  margin-block-end: var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -113,8 +149,9 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  /* A grid item may use `z-index` without `position` (CSS Grid §Z), which is
-     what keeps this reachable above the overlay/backdrop it opens below. */
+  box-shadow: var(--shadow-md);
+  /* Above the drawer (56) and its backdrop (55), so it stays reachable to
+     close either one. */
   z-index: 57;
 }
 
@@ -141,9 +178,19 @@
  * to the page rather than the grid, its own scroll, above the backdrop and
  * below the toggle's own `z-index: 57` so the button stays reachable to
  * close it). Only `inline-size` differs per breakpoint, in the two media
- * blocks below — mobile keeps its existing, Owner-confirmed-good width;
- * desktop/tablet gets a bounded reading width rather than the whole
- * viewport, per the correction.
+ * blocks below — desktop/tablet gets a bounded reading width rather than
+ * the whole viewport, per the correction.
+ *
+ * **Mobile's width is `75vw`, tightened from `85vw`** as the one measured
+ * side effect of fixing the toggle-overlap defect above: at the narrowest
+ * width this platform is checked at (320px, §14), `85vw` left only 48px
+ * clear on the opposite side — not enough for the toggle's own ≥44px tap
+ * target to sit without touching the drawer's edge, whatever corner it is
+ * moved to. `75vw` (240px of content at 320px, still comfortably wide for
+ * Arabic nav labels) leaves a real, measured margin — proven in
+ * `verify-nav-toggle-geometry.mjs`'s own rect-intersection checks — rather
+ * than shaving the toggle's margin down to a number that merely happens to
+ * clear it on the one width that was checked by eye.
  */
 .admin--nav-overlay .admin-nav {
   display: grid;
@@ -165,7 +212,7 @@
     display: none;
   }
   .admin--nav-overlay .admin-nav {
-    inline-size: min(85vw, 20rem);
+    inline-size: min(75vw, 20rem);
   }
 }
 

@@ -81,4 +81,30 @@ describe('the sidebar exposes ONE collapse control, on every render', () => {
   it('states aria-expanded as an explicit true/false, never omitted', () => {
     expect(render()).toMatch(/class="admin-nav-toggle"[^>]*aria-expanded="(true|false)"/);
   });
+
+  it('is icon-only, matching ApplicationHeader\'s own burger — a regression guard', () => {
+    /**
+     * **The Owner's second reported defect** (screenshot): a visible
+     * "القائمة" text label made the button wide enough to overlap the
+     * overlay drawer it opens on the narrowest phones §14 checks (320px).
+     * Icon-only (with the SAME `visually-hidden` a11y label every other
+     * toggle on the platform already carries) is what gives it real,
+     * measured clearance — proven in `verify-nav-toggle-geometry.mjs`, not
+     * only asserted here. This pins the STATIC half: no visible text node
+     * sits beside the icon inside the button.
+     */
+    const html = render();
+    const match = /<button type="button" class="admin-nav-toggle"[^>]*>([\s\S]*?)<\/button>/.exec(
+      html,
+    );
+    expect(match, 'the toggle button markup').not.toBeNull();
+    const inner = match![1]!;
+    // Strip the one a11y-only span (never visible) and any SVG, then confirm
+    // nothing readable is left over.
+    const visibleText = inner
+      .replace(/<span class="visually-hidden">[\s\S]*?<\/span>/, '')
+      .replace(/<svg[\s\S]*?<\/svg>/, '')
+      .trim();
+    expect(visibleText).toBe('');
+  });
 });

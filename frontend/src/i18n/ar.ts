@@ -1543,11 +1543,6 @@ export const ar = {
     notFoundBody: 'لا يوجد قسم بهذا العنوان.',
     nav: {
       label: 'أقسام الإدارة',
-      // R138 item 8 — the sidebar's own collapse control, shared by all three
-      // portals (`PortalShell`) rather than each inventing its own word: the
-      // open/closed state itself is announced through the existing
-      // `nav.openMenu`/`nav.closeMenu` pair the header's own burger uses.
-      toggle: 'القائمة',
       dashboard: 'لوحة التحكم',
       // **Administrative Groups, not حلقات.** §20 rule 22 forbids conflating
       // organisation with delivery, and this label did exactly that: a حلقة is

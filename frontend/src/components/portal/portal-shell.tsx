@@ -147,11 +147,16 @@ export function PortalShell({
           aria-controls="admin-sidebar"
           onClick={toggleNav}
         >
+          {/* Icon-only, matching `ApplicationHeader`'s own burger exactly —
+              "one coherent responsive navigation system" (§14) is what that
+              identity is for, and it is also what keeps this control small
+              enough to have real, measured clearance from the drawer it
+              opens on the narrowest phones (see `admin.css`'s own doc
+              comment on where it is fixed and why). */}
           <span className="visually-hidden">
             {navVisible ? t('nav.closeMenu') : t('nav.openMenu')}
           </span>
           <Icon name={navVisible ? 'close' : 'menu'} size={18} />
-          <span aria-hidden="true">{t('admin.nav.toggle')}</span>
         </button>
         {/* The overlay's backdrop — CSS shows it only while `.admin-nav` is
             the fixed panel (`.admin--nav-overlay`, both widths); a tap on it

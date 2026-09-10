@@ -30,6 +30,19 @@
  *   collapsed. The first cut restored the sidebar as the ordinary grid
  *   column, which is measurably the same failure `measure-page-header.mjs`
  *   was built for: a layout shift no source-level check could see.
+ * - **The toggle button's own rect never intersects the drawer's, or the
+ *   page's own action button's, at any width or state** — the Owner's
+ *   SECOND reported defect (a screenshot showing القائمة's own label
+ *   rendered on top of the drawer's first link) and the harness's own
+ *   earlier blind spot (it checked `.admin-nav`'s `display`/`position` in
+ *   the untouched desktop default, but never that it actually lands in a
+ *   separate column from `.admin__main` rather than overlapping it).
+ *
+ * **Mobile is checked at 320px, the narrowest width §14 names** — the worst
+ * case for clearance, not a representative one. Passing there is what
+ * justified tightening the drawer from `85vw` to `75vw` in `admin.css`, and
+ * is stronger evidence than checking a more comfortable 390px and hoping
+ * narrower phones are fine too.
  */
 const PORT = process.env.PORT ?? '9223';
 const URL_TO_OPEN = process.argv[2];
@@ -98,8 +111,19 @@ function check(label, ok, note) {
   results.push(`${ok ? 'PASS' : 'FAIL'}  ${label}${note ? '  — ' + note : ''}`);
 }
 
+/** Two DOM rects overlap iff their projections intersect on both axes. */
+function intersects(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.left < b.left + b.width &&
+    a.left + a.width > b.left &&
+    a.top < b.top + b.height &&
+    a.top + a.height > b.top
+  );
+}
+
 /* ── Mobile — collapsed by default, opens as an overlay, closes three ways ── */
-await setWidth(390);
+await setWidth(320);
 await navigate();
 
 const mobileDefault = await evaluate(rect('.admin-nav'));
@@ -108,11 +132,19 @@ check(
   mobileDefault.display === 'none',
   `display=${mobileDefault.display}`,
 );
+const toggleDefaultMobile = await evaluate(rect('.admin-nav-toggle'));
+const actionDefaultMobile = await evaluate(rect('#page-action'));
+check(
+  'mobile: toggle does not overlap the page\'s own action button by default',
+  !intersects(toggleDefaultMobile, actionDefaultMobile),
+  `toggle=${JSON.stringify(toggleDefaultMobile)} action=${JSON.stringify(actionDefaultMobile)}`,
+);
 
 const mainBeforeOpen = await evaluate(rect('.admin__main'));
 await evaluate(`document.getElementById('toggle').click()`);
 const navOpenMobile = await evaluate(rect('.admin-nav'));
 const mainAfterOpenMobile = await evaluate(rect('.admin__main'));
+const toggleOpenMobile = await evaluate(rect('.admin-nav-toggle'));
 check(
   'mobile: opening does not move .admin__main',
   mainBeforeOpen.left === mainAfterOpenMobile.left && mainBeforeOpen.width === mainAfterOpenMobile.width,
@@ -122,6 +154,11 @@ check(
   'mobile: overlay is position:fixed, bounded width (not the whole viewport)',
   navOpenMobile.position === 'fixed' && navOpenMobile.width > 0 && navOpenMobile.width <= 340,
   `position=${navOpenMobile.position} width=${navOpenMobile.width}`,
+);
+check(
+  'mobile: the OPEN toggle button itself does not overlap the drawer\'s own rect — the Owner\'s reported defect',
+  !intersects(toggleOpenMobile, navOpenMobile),
+  `toggle=${JSON.stringify(toggleOpenMobile)} drawer=${JSON.stringify(navOpenMobile)}`,
 );
 
 // Escape closes it.
@@ -153,6 +190,30 @@ for (const width of [1280, 1440]) {
     desktopDefault.display !== 'none' && desktopDefault.position !== 'fixed',
     `display=${desktopDefault.display} position=${desktopDefault.position}`,
   );
+  // Closes a blind spot the FIRST version of this harness had: it checked
+  // `.admin-nav`'s display/position in the untouched default, but never
+  // that `.admin-nav` and `.admin__main` actually land in SEPARATE grid
+  // columns rather than overlapping — a real risk once the toggle became a
+  // third auto-placed grid child alongside them (now moot, since the toggle
+  // is `position: fixed` and never occupies a grid track at all, but this
+  // stays as the regression guard for exactly that class of defect).
+  const mainDefault = await evaluate(rect('.admin__main'));
+  check(
+    // RTL: the first grid column (nav, 16rem) renders on the RIGHT, so nav's
+    // `left` is the LARGER of the two — main sits to its left, at a smaller
+    // `left`. (Caught by this exact assertion the first time it was written
+    // backwards: it read main.left > nav.left, which is the LTR direction.)
+    `desktop ${width}px: nav and main occupy separate, non-overlapping columns by default`,
+    !intersects(desktopDefault, mainDefault) && mainDefault.left < desktopDefault.left,
+    `nav=${JSON.stringify(desktopDefault)} main=${JSON.stringify(mainDefault)}`,
+  );
+  const toggleDefaultDesktop = await evaluate(rect('.admin-nav-toggle'));
+  const actionDefaultDesktop = await evaluate(rect('#page-action'));
+  check(
+    `desktop ${width}px: toggle does not overlap the page's own action button by default`,
+    !intersects(toggleDefaultDesktop, actionDefaultDesktop),
+    `toggle=${JSON.stringify(toggleDefaultDesktop)} action=${JSON.stringify(actionDefaultDesktop)}`,
+  );
 
   // Collapse it (first press) — main is expected to widen; that direction was
   // never the complaint.
@@ -171,10 +232,16 @@ for (const width of [1280, 1440]) {
   await evaluate(`document.getElementById('toggle').click()`);
   const navOverlay = await evaluate(rect('.admin-nav'));
   const mainOverlay = await evaluate(rect('.admin__main'));
+  const toggleOverlay = await evaluate(rect('.admin-nav-toggle'));
   check(
     `desktop ${width}px: second press opens the OVERLAY (position:fixed), never the grid column`,
     navOverlay.position === 'fixed',
     `position=${navOverlay.position}`,
+  );
+  check(
+    `desktop ${width}px: the OPEN toggle button does not overlap the drawer's own rect`,
+    !intersects(toggleOverlay, navOverlay),
+    `toggle=${JSON.stringify(toggleOverlay)} drawer=${JSON.stringify(navOverlay)}`,
   );
   check(
     `desktop ${width}px: overlay width is bounded, not the whole viewport`,
