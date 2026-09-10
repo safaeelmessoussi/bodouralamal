@@ -62,6 +62,32 @@
  *   every width this script already covers, not only mobile — the property
  *   ("nothing renders for an empty nav slot") has no width dependency, so
  *   there is no narrower or wider case to single out.
+ *
+ * - **R138 correction #4 (Owner, 2026-09-10) — a POPULATED drawer with an
+ *   invisible list.** `@media (width < 60rem) { .admin-nav { display: none;
+ *   } }` exists for the plain, unwrapped resting default and has no selector
+ *   scoping it away from the SAME class nested inside `.admin-nav-panel`
+ *   once the drawer is open — so it kept winning there too, at every mobile
+ *   width, for any portal whose list was genuinely non-empty. The panel
+ *   wrapper rendered correctly (bounded, `position: fixed`, header and close
+ *   button visible) and every check above stayed green, because none of
+ *   them read anything ONE level inside `.admin-nav` itself. Two things
+ *   in this harness were blind to exactly that: the two-item stub list
+ *   (`nav-toggle-harness.html`) never gave a `display: none` list anything
+ *   visible to lose, and `element.click()` — used throughout this file to
+ *   simulate closing the drawer — fires a handler whether or not the
+ *   element is actually rendered, a property no real tap has.
+ *
+ *   The harness's stub list is now SEVEN real Student labels (`ar.ts`'s
+ *   `student.nav.*`, the exact portal the Owner's screenshot showed), and
+ *   `checkPopulatedNav()` reads the LINKS themselves — computed `display`,
+ *   `visibility`, a non-zero rect, containment within the drawer and below
+ *   its header, the active one's distinct highlight, and genuine keyboard
+ *   focusability (impossible under a `display: none` ancestor, which is
+ *   exactly why it is asserted rather than only the container's own rect).
+ *   Run at the resting desktop default, the mobile overlay and the desktop
+ *   overlay alike, plus a dedicated short-viewport pass proving the list
+ *   scrolls independently once it outgrows the panel.
  */
 const PORT = process.env.PORT ?? '9223';
 const URL_TO_OPEN = process.argv[2];
@@ -195,6 +221,107 @@ async function checkDrawerWinsPaintOrder(label, toggleRect, panelRect) {
   );
 }
 
+/**
+ * **R138 correction #4 — the harness's own missed blind spot.** `.admin-nav`
+ * used to be measured only as a WHOLE (its own rect, `display`, `position`)
+ * — never its CHILDREN. A `.admin-nav` correctly sized and positioned can
+ * still have `display: none` win on the element ONE level in, and every
+ * check above stayed green regardless: the panel's own rect does not
+ * depend on what is inside it, and `element.click()` (used throughout this
+ * file to simulate closing the drawer) fires a handler whether or not the
+ * element is visually rendered at all — a property no real tap has. This
+ * is the check that closes both gaps: it reads the actual link nodes, their
+ * OWN computed style and rect, and proves each is focusable — which a
+ * `display: none` ancestor makes impossible regardless of what `.focus()`
+ * is called on.
+ */
+const EXPECTED_LABELS = [
+  'لوحة المستفيدة',
+  'تقويمي',
+  'مكتبة المحتوى',
+  'حفظي',
+  'اختباراتي',
+  'نقاطي',
+  'حسابي',
+];
+
+async function checkPopulatedNav(prefix, containerSelector, headerSelector) {
+  const items = await evaluate(`(() => {
+    return [...document.querySelectorAll('.admin-nav__item')].map((a) => {
+      const r = a.getBoundingClientRect();
+      const cs = getComputedStyle(a);
+      return {
+        text: a.textContent.trim(),
+        current: a.getAttribute('aria-current') === 'page',
+        rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) },
+        display: cs.display,
+        visibility: cs.visibility,
+        background: cs.backgroundColor,
+      };
+    });
+  })()`);
+
+  check(`${prefix}: exact link count (7)`, items.length === 7, `count=${items.length}`);
+
+  const labels = items.map((i) => i.text);
+  check(
+    `${prefix}: exact labels, in order`,
+    JSON.stringify(labels) === JSON.stringify(EXPECTED_LABELS),
+    JSON.stringify(labels),
+  );
+
+  const allVisible = items.every(
+    (i) => i.display !== 'none' && i.visibility !== 'hidden' && i.rect.width > 0 && i.rect.height > 0,
+  );
+  check(
+    `${prefix}: every link has a real, non-zero, visible computed rect — the exact property the defect broke`,
+    allVisible,
+    JSON.stringify(items.map((i) => ({ text: i.text, display: i.display, rect: i.rect }))),
+  );
+
+  const containerRect = await evaluate(rect(containerSelector));
+  const withinContainer = items.every(
+    (i) =>
+      i.rect.left >= containerRect.left - 1 &&
+      i.rect.left + i.rect.width <= containerRect.left + containerRect.width + 1,
+  );
+  check(
+    `${prefix}: every link is contained within the drawer's own bounds`,
+    withinContainer,
+    JSON.stringify({ container: containerRect }),
+  );
+
+  if (headerSelector) {
+    const headerRect = await evaluate(rect(headerSelector));
+    const belowHeader = items.every((i) => i.rect.top >= headerRect.top + headerRect.height - 1);
+    check(
+      `${prefix}: every link begins below the drawer header, never under it`,
+      belowHeader,
+      JSON.stringify({ header: headerRect }),
+    );
+  }
+
+  const current = items.find((i) => i.current);
+  const other = items.find((i) => !i.current);
+  check(
+    `${prefix}: the active destination is visibly highlighted (a distinct background from an inactive one)`,
+    Boolean(current) && Boolean(other) && current.background !== other.background,
+    JSON.stringify({ current: current?.background, other: other?.background }),
+  );
+
+  const focusable = await evaluate(`(() => {
+    return [...document.querySelectorAll('.admin-nav__item')].every((a) => {
+      a.focus();
+      return document.activeElement === a;
+    });
+  })()`);
+  check(
+    `${prefix}: keyboard focus reaches every link — impossible under a \`display: none\` ancestor`,
+    focusable === true,
+    `focusable=${focusable}`,
+  );
+}
+
 /* ── Mobile — collapsed by default, opens as an overlay, closes four ways ──
  * Checked at BOTH 320px (the narrowest width §14 names — the worst case for
  * clearance) and 390px (a representative phone), per the correction's own
@@ -243,6 +370,7 @@ for (const width of [320, 390]) {
     toggleOpenMobile,
     navOpenMobile,
   );
+  await checkPopulatedNav(`mobile ${width}px (open drawer)`, '.admin-nav-panel', '.admin-nav-panel__head');
   const panelCloseMobile = await evaluate(rect('#panel-close'));
   check(
     `mobile ${width}px: the drawer carries its own close button, inside the panel's own bounds`,
@@ -275,6 +403,40 @@ for (const width of [320, 390]) {
   state = await evaluate(`window.__navState()`);
   check(`mobile ${width}px: clicking a nav link closes the overlay`, state === 'collapsed', `state=${state}`);
 }
+
+/* ── The drawer's list scrolls when it outgrows the panel ─────────────────
+ * A short viewport (300px, well under the seven-item list's own content
+ * height) is the deliberate worst case: the panel's own `max-block-size`
+ * (`admin.css`) leaves it no taller than the viewport allows, so if the
+ * list did not scroll independently, entries past the fold would be
+ * unreachable outright — the same defect class R58's "the sidebar scrolls
+ * itself" comment already recorded for the resting desktop column. */
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 300, deviceScaleFactor: 1, mobile: false });
+await navigate(URL_TO_OPEN);
+await evaluate(`document.getElementById('toggle').click()`);
+const scroll = await evaluate(`(() => {
+  const nav = document.querySelector('.admin-nav');
+  const before = nav.scrollTop;
+  nav.scrollTop = 200;
+  const after = nav.scrollTop;
+  return {
+    overflowY: getComputedStyle(nav).overflowY,
+    scrollHeight: nav.scrollHeight,
+    clientHeight: nav.clientHeight,
+    before,
+    after,
+  };
+})()`);
+check(
+  'short viewport: the list genuinely outgrows the panel (content taller than the visible area)',
+  scroll.scrollHeight > scroll.clientHeight,
+  JSON.stringify(scroll),
+);
+check(
+  'short viewport: the list is independently scrollable (overflow-y: auto, and scrollTop actually moves)',
+  scroll.overflowY === 'auto' && scroll.after > scroll.before,
+  JSON.stringify(scroll),
+);
 
 /* ── Desktop — expanded by default; the correction itself ──────────────── */
 for (const width of [1280, 1440]) {
@@ -314,6 +476,9 @@ for (const width of [1280, 1440]) {
     !intersects(toggleDefaultDesktop, headingDefaultDesktop),
     `toggle=${JSON.stringify(toggleDefaultDesktop)} heading=${JSON.stringify(headingDefaultDesktop)}`,
   );
+  // The resting default has no panel wrapper or header at all — `.admin-nav`
+  // is its own container, in flow, exactly as it always was.
+  await checkPopulatedNav(`desktop ${width}px (resting default)`, '.admin-nav', null);
 
   // Collapse it (first press) — main is expected to widen; that direction was
   // never the complaint.
@@ -344,6 +509,7 @@ for (const width of [1280, 1440]) {
     toggleOverlay,
     navOverlay,
   );
+  await checkPopulatedNav(`desktop ${width}px (open drawer)`, '.admin-nav-panel', '.admin-nav-panel__head');
   check(
     `desktop ${width}px: overlay panel width is bounded, not the whole viewport`,
     navOverlay.width > 0 && navOverlay.width <= 400,

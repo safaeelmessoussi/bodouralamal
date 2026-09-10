@@ -3027,3 +3027,81 @@ drawer with nothing in it. See [CHANGES](CHANGES.log) for full detail.
       semester-notice fix (337e425) are both untouched — this only narrows
       WHEN the control appears. No Staging or Production action taken; no
       SRS change.
+
+## R138 correction #4 — a POPULATED mobile drawer with an invisible list (Owner-reported against localhost, same day, 2026-09-10)
+
+**Root cause, exact**: `@media (width < 60rem) { .admin-nav { display: none; }
+}` (`admin.css`) exists for exactly ONE shape — the plain, unwrapped resting
+default, collapsed until the toggle is pressed. It carries no selector
+scoping it away from the SAME `.admin-nav` class nested inside
+`.admin-nav-panel` once the drawer is genuinely open (correction #2's own
+addition), and `.admin-nav-panel .admin-nav`'s own reset rule never set
+`display`, so nothing outranked it. The panel wrapper rendered correctly —
+bounded, `position: fixed`, its header and close button visible — while its
+one child computed `display: none`, a `0×0` box: a populated drawer with a
+correctly-sized frame and nothing paintable inside it. Confirmed live
+against `localhost` with the Owner's own real multi-role account and a
+plain single-role student fixture before any fix was written.
+
+**Why the 68/68 pass on the previous correction proved nothing about this**:
+every prior geometry check measured `.admin-nav-panel` or `.admin-nav` as a
+WHOLE — its own rect, `display`, `position` — never a level further in. The
+static harness's own stub list was two items long and never gave a
+`display: none` list anything visible to lose. And `element.click()`, used
+throughout the harness to simulate closing the drawer, fires a handler
+whether or not the element is actually rendered — a property no real tap
+has, so every "clicking a link closes it" check stayed green regardless of
+whether the link could ever have been seen or reached first.
+
+- [x] **Fix**: `.admin-nav-panel .admin-nav { display: grid; ... }` — the
+      SAME value `.admin-nav`'s own base rule already declares, restated at
+      `.admin-nav-panel .admin-nav`'s higher specificity so it outranks the
+      collapse rule at every width, regardless of media-query source order.
+- [x] `nav-toggle-harness.html`'s stub list is now SEVEN real Student labels
+      (`ar.ts`'s `student.nav.*`, the exact portal from the Owner's
+      screenshot), one marked `aria-current="page"`.
+      `verify-nav-toggle-geometry.mjs` gained `checkPopulatedNav()` — reads
+      the LINKS themselves: exact count and labels, computed
+      `display`/`visibility` and a non-zero rect, containment within the
+      drawer and below its header, the active one's distinct highlight, and
+      genuine keyboard focusability (impossible under a `display: none`
+      ancestor). Run at the resting desktop default, the mobile overlay and
+      the desktop overlay alike, plus a dedicated short-viewport pass
+      proving the list scrolls independently once it outgrows the panel.
+      **110/110 checks pass**, up from 68/68 (42 new).
+- [x] The existing empty-list scenario (`nav-toggle-harness-empty.html`,
+      correction #3) is untouched and still 0 toggle/drawer/backdrop at
+      every width — a populated list rendering correctly does not relax the
+      "nothing renders when there is nothing to navigate to" rule.
+- [x] **Real-browser confirmation against the running local stack**, not
+      only the static harness: minted real dev sessions (`issue-dev-session.sh`)
+      for three genuine accounts already in the local database — a
+      single-role Student, a single-role Teacher, and the Owner's own
+      multi-role account acting as Admin — and drove headless Chrome against
+      `localhost` at 390px. Before the fix: the Student session reproduced
+      the exact defect (`.admin-nav` computed `display: none`, `0×0`, while
+      the panel itself measured correctly). After: all seven Student links,
+      six permitted Teacher links (capability-gated `إدخال حفظ المستفيدات`
+      correctly absent — no capability, no entry, unrelated to this fix),
+      and all twenty-four Admin links render with real non-zero rects;
+      clicking a link in each case produces a genuine route change
+      (`/teacher/availability`, `/admin/users`) and the drawer is gone
+      afterward.
+- [x] Verification: frontend typecheck/lint/build clean; 103 files/1,227
+      unit tests (unchanged — a pure CSS defect, invisible to markup-only
+      SSR tests, so no new vitest assertions apply); `check-design-tokens.sh`,
+      `check-header-nav-exclusive.sh`, `check-shared-layout.sh`, doc-links
+      and `git diff --check` all clean. The ApplicationHeader hamburger, the
+      non-floating toggle, bounded overlay geometry, RTL positioning, the
+      empty-list behaviour (correction #3) and the semester-notice fix
+      (337e425) are all unchanged. No Staging or Production action taken; no
+      SRS change — a defect in already-ratified navigation behaviour, not a
+      policy change.
+- [x] **Separately discovered, out of scope, NOT touched**: the local dev
+      database has drifted behind migrations (`column "title" of relation
+      "session" does not exist`), breaking `seed-r82-scenario.ts` and the
+      `verify-portals.sh`/`verify-admin-navigation.sh` harnesses that depend
+      on it. Unrelated to this navigation work and to R138; a normal
+      additive `prisma migrate deploy` against the local database would
+      resolve it, left to the Document Owner to authorize separately per
+      this session's explicit instruction not to migrate.

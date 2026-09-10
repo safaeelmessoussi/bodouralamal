@@ -2,9 +2,21 @@
 <link rel="stylesheet" href="APP_CSS">
 <style>body{margin:0}</style></head><body>
 <div class="admin" id="shell">
+  <!-- **R138 correction #4** — POPULATED, not a two-item stub: the defect
+       (a `.admin-nav` computing `display: none` while nested inside the
+       open `.admin-nav-panel`) is invisible to a list short enough to
+       render as `0×0` without anyone noticing anything is missing at a
+       glance. Seven items, the exact count and order of a real Student
+       menu (`student.nav.*` in `ar.ts`), with the first marked
+       `aria-current="page"` as the active destination always is. -->
   <nav class="admin-nav" id="admin-sidebar"><ul class="admin-nav__list">
-    <li><a class="admin-nav__item" href="#one" id="link1">واحد</a></li>
-    <li><a class="admin-nav__item" href="#two" id="link2">اثنان</a></li>
+    <li><a class="admin-nav__item" href="/one" id="link1" aria-current="page">لوحة المستفيدة</a></li>
+    <li><a class="admin-nav__item" href="/two" id="link2">تقويمي</a></li>
+    <li><a class="admin-nav__item" href="/three" id="link3">مكتبة المحتوى</a></li>
+    <li><a class="admin-nav__item" href="/four" id="link4">حفظي</a></li>
+    <li><a class="admin-nav__item" href="/five" id="link5">اختباراتي</a></li>
+    <li><a class="admin-nav__item" href="/six" id="link6">نقاطي</a></li>
+    <li><a class="admin-nav__item" href="/seven" id="link7">حسابي</a></li>
   </ul></nav>
   <main class="admin__main" id="main">
     <div class="admin__head">

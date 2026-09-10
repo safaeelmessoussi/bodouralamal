@@ -186,8 +186,31 @@
 /* `.admin-nav` inside the panel is plain scrollable content — the PANEL now
    owns the fixed positioning and the scroll, so the sticky-column rules
    below (its OTHER, unwrapped, resting-desktop-column form) are reset here
-   rather than fought with higher specificity. */
+   rather than fought with higher specificity.
+ *
+ * **R138 correction #4 (Owner, 2026-09-10) — a populated mobile drawer with
+ * an invisible list.** `.admin-nav { display: none; }` below `60rem` (a few
+ * rules down) exists for exactly ONE shape — the plain, UNWRAPPED resting
+ * default, collapsed until the toggle is pressed. It has no selector
+ * scoping it to that shape alone, so it kept applying to the SAME class
+ * nested inside `.admin-nav-panel` once the drawer was actually open —
+ * `.admin-nav`'s own base rule (`display: grid`) and this reset both left
+ * `display` unset, so nothing here ever outranked it. The panel itself
+ * rendered — bounded, `position: fixed`, its header and close button
+ * visible — while its one child computed `display: none`, `0×0`: a
+ * populated drawer with a correctly-sized frame and nothing paintable
+ * inside it, indistinguishable BY EYE from the empty-list defect correction
+ * #3 fixed, though the cause and the reader's actual own module list are
+ * both entirely different this time.
+ *
+ * `display: grid` restates `.admin-nav`'s own base value, but as
+ * `.admin-nav-panel .admin-nav` (two classes) rather than one — the
+ * specificity the collapse rule below cannot beat, at any width, so this
+ * one declaration is what actually decides which of the two contradictory
+ * rules governs the nested case, rather than leaving it to which one
+ * happens to load last. */
 .admin-nav-panel .admin-nav {
+  display: grid;
   position: static;
   flex: 1 1 auto;
   min-block-size: 0;
@@ -227,7 +250,12 @@
 }
 
 @media (width < 60rem) {
-  /* The collapsed default — unaffected by this correction. */
+  /* The collapsed default — unaffected by this correction. Applies ONLY to
+     the plain, unwrapped `.admin-nav`: `.admin-nav-panel .admin-nav` above
+     is a higher-specificity `display: grid` that outranks this rule at any
+     width, which is what keeps the OPEN drawer's own list visible here
+     rather than collapsed along with the resting default it has nothing to
+     do with (R138 correction #4). */
   .admin-nav {
     display: none;
   }

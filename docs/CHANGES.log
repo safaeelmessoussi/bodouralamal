@@ -6857,3 +6857,56 @@ No SRS change — a session with no accessible sections was always meant to
 see none; this corrects the implementation to actually honour that, it does
 not alter ratified product policy. No Staging or Production action was
 taken; redeploying, if wanted, remains a separate, not-yet-requested step.
+
+## R138 correction #4 — a POPULATED mobile drawer with an invisible list
+## (Owner-reported against localhost, same day, 2026-09-10)
+
+**Root cause**: `@media (width < 60rem) { .admin-nav { display: none; } }`
+(`admin.css`) exists for the plain, unwrapped resting default only, with no
+selector scoping it away from the SAME class nested inside
+`.admin-nav-panel` once the drawer is open (correction #2). Its own reset
+rule never set `display`, so nothing outranked the collapse rule — the
+panel rendered correctly (bounded, fixed, header and close button visible)
+while its one child computed `display: none`, `0×0`. Confirmed live against
+`localhost` with real accounts before writing the fix.
+
+**Why correction #2/#3's 68/68 missed it**: every prior check measured the
+panel or the nav as a WHOLE, never a level inside it; the harness's own
+stub list was two items and had nothing visible to lose; and
+`element.click()` — used throughout to simulate closing the drawer — fires
+regardless of whether the element is actually rendered, a property no real
+tap has.
+
+**Fix**: `.admin-nav-panel .admin-nav { display: grid; ... }` — restates
+`.admin-nav`'s own base value at higher specificity, outranking the
+collapse rule at every width. `nav-toggle-harness.html`'s stub list is now
+seven real Student labels; `verify-nav-toggle-geometry.mjs` gained
+`checkPopulatedNav()` — count, labels, computed display/visibility, non-zero
+rects, containment within the drawer and below its header, active-link
+highlight, and genuine keyboard focusability — run at the desktop default,
+the mobile overlay and the desktop overlay, plus a short-viewport
+scroll-proof pass. **110/110 checks pass** (up from 68/68). The empty-list
+scenario (correction #3) is untouched and still passes.
+
+**Real-browser confirmation**: minted real dev sessions for three accounts
+already in the local database (single-role Student, single-role Teacher,
+the Owner's own multi-role account acting as Admin) and drove headless
+Chrome against `localhost` at 390px. All seven Student links, six permitted
+Teacher links, and all twenty-four Admin links render with real non-zero
+rects after the fix; clicking a link produces a genuine route change and
+the drawer is gone afterward.
+
+Verification: frontend typecheck/lint/build clean; 103 files/1,227 unit
+tests (unchanged — a pure CSS defect invisible to markup-only SSR tests);
+`check-design-tokens.sh`, `check-header-nav-exclusive.sh`,
+`check-shared-layout.sh`, doc-links and `git diff --check` all clean. The
+ApplicationHeader hamburger, the non-floating toggle, bounded overlay
+geometry, RTL positioning, correction #3's empty-list behaviour and the
+semester-notice fix (337e425) are all unchanged. No Staging or Production
+action taken; no SRS change.
+
+Separately discovered, out of scope, not touched: the local dev database
+has drifted behind migrations (`column "title" of relation "session" does
+not exist`), breaking `seed-r82-scenario.ts` and the harnesses that depend
+on it — unrelated to this work, left for the Document Owner to authorize a
+migration separately.
