@@ -7,6 +7,8 @@ import {
   type OnlineMediaMode,
 } from './delivery.js';
 import { SelectField } from '../ui/field.js';
+import { Feedback } from '../ui/feedback.js';
+import { MultiSelectField } from '../ui/multi-select.js';
 import { StaffPicker } from './staff-picker.js';
 import { StaffingPeriods, type StaffingPeriod } from './staffing-periods.js';
 import { t } from '../../i18n/index.js';
@@ -224,8 +226,8 @@ export const TEACHER_SCOPE_KINDS = [
 export function ActivitySection({
   scopeKind,
   onScopeKind,
-  scopeId,
-  onScopeId,
+  scopeIds,
+  onScopeIds,
   scopeOptions,
   locked,
   staff,
@@ -242,8 +244,20 @@ export function ActivitySection({
 }: {
   scopeKind: string;
   onScopeKind: (v: string) => void;
-  scopeId: string;
-  onScopeId: (v: string) => void;
+  /**
+   * **R139 — several, not one.** `أقسام الظهور` — a specific Level, several
+   * Levels, every Level inside the branch(es) named (leave this empty once a
+   * branch is chosen), or every branch and Level a genuinely global actor
+   * reaches — are one control now rather than four: `EventScopes`
+   * (`event.service.ts`) has always accepted an ARRAY per dimension, and only
+   * this picker still asked for one id. Leaving the whole picker empty while
+   * `scopeKind` names a real dimension is refused (§4.4's own scope-required
+   * rule, restated below) — the empty-Levels-within-a-branch reading applies
+   * ONLY when `scopeKind === 'branch'` and at least one branch is chosen; it
+   * is never how "nothing chosen at all" is expressed.
+   */
+  scopeIds: readonly string[];
+  onScopeIds: (next: string[]) => void;
   scopeOptions: { id: string; name: string }[];
   /** Scope is set at creation and refused on edit — §4.4 populates the four-way
    *  joins explicitly, and re-pointing them later would silently change who has
@@ -291,16 +305,34 @@ export function ActivitySection({
             onChange={onScopeKind}
             options={scopeKinds.map((k) => ({ value: k.value, label: t(k.labelKey) }))}
           />
+          {/* **"Platform-wide" and "all my branches" are one control**
+              (R139), because the server already tells them apart correctly
+              — a branch-scoped actor's own `global` choice never reaches
+              further than her own branches (`resolveBranches`,
+              `event.service.ts`). Stated once, here, rather than guessing at
+              a second label this form cannot verify on its own. */}
+          {scopeKind === 'global' ? (
+            <Feedback>{t('admin.calendar.scopeGlobalHint')}</Feedback>
+          ) : null}
           {scopeKind === 'global' ? null : (
-            <SelectField
-              label={t('admin.calendar.scopeTargetLabel')}
-              value={scopeId}
-              onChange={onScopeId}
-              options={[
-                { value: '', label: t('common.choose') },
-                ...scopeOptions.map((o) => ({ value: o.id, label: o.name })),
-              ]}
-            />
+            <>
+              <MultiSelectField
+                label={t('admin.calendar.scopeTargetLabel')}
+                selected={scopeIds}
+                onChange={onScopeIds}
+                options={scopeOptions.map((o) => ({ value: o.id, label: o.name }))}
+                emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+              />
+              {/* **The "all Levels within these branches" reading, stated
+                  rather than left implicit** (R139). It is only ever true for
+                  `scopeKind === 'branch'`: choosing several Levels or several
+                  Categories with none of THEM chosen is simply an empty
+                  picker, refused the same as it always was — a hint here
+                  would be naming a reading that branch does not have. */}
+              {scopeKind === 'branch' && scopeIds.length > 0 ? (
+                <Feedback>{t('admin.calendar.scopeAllLevelsHint')}</Feedback>
+              ) : null}
+            </>
           )}
         </>
       )}

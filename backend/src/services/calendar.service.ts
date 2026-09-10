@@ -162,6 +162,29 @@ export interface Occurrence {
   categoryName: string | null;
   levelId: string | null;
   levelName: string | null;
+  /**
+   * **R139 — the WHOLE scope, not just its first row.** An Event's own
+   * `EventBranch`/`EventCategory`/`EventLevel` join tables have always
+   * accepted more than one row each (§4.4's four-way scope joins); the read
+   * side only ever surfaced the first one, through `branchId`/`categoryId`/
+   * `levelId` above — correct for authorization (those already resolve
+   * against every row, never only the first) but silently wrong for
+   * DISPLAY: an event scoped to three Levels showed one and dropped two with
+   * nothing saying so. These carry every attached row; `branchId` etc. stay
+   * exactly as they were — the first entry of the SAME list — so an existing
+   * reader asking "which one" keeps the answer it always got. A Session and
+   * an Exam have exactly one branch/Level by their own different mechanism
+   * (`RecurringCourseSchedule`'s single mandatory target, §4.4c, unchanged by
+   * this revision), so these are always a single-element array for them —
+   * never empty, since both kinds always carry a branch and a Session always
+   * resolves a Level through its teaching mode.
+   */
+  branchIds: string[];
+  branchNames: string[];
+  categoryIds: string[];
+  categoryNames: string[];
+  levelIds: string[];
+  levelNames: string[];
   /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
    *  verbatim and implement no fallback. */
   instructors: { id: string; displayName: string }[];
@@ -541,6 +564,16 @@ function sessionOccurrence(
     categoryName: level?.category.name ?? null,
     levelId: level?.id ?? null,
     levelName: level?.name ?? null,
+    // A Session always resolves exactly one branch and (through its
+    // schedule's teaching mode) at most one Level — R139's plural fields are
+    // single-element/empty here, never a second source for what `branchId`/
+    // `levelId` above already answer.
+    branchIds: [sch.branchId],
+    branchNames: [sch.branch.name],
+    categoryIds: level ? [level.category.id] : [],
+    categoryNames: level ? [level.category.name] : [],
+    levelIds: level ? [level.id] : [],
+    levelNames: level ? [level.name] : [],
     // From the session's OWN snapshot, never the schedule's (Revision 43.4).
     instructors: session.staff.map((assignment) => ({
       id: assignment.user.id,
@@ -845,17 +878,23 @@ export async function readCalendar(
             schedulingType: {
               select: { id: true, name: true, structuralKind: true, attendanceMode: true },
             },
+            /**
+             * **R139 — every scoped row, not only the first.** These three
+             * joins have always accepted more than one row each (§4.4); this
+             * read used to `take: 1`, correct for nothing downstream except
+             * the DISPLAY fields below, which is exactly what silently
+             * dropped a Level or a branch from an event scoped to several.
+             * The audience-matching reads elsewhere in this file (`some`/
+             * `none`) were never limited this way — only this projection was.
+             */
             branchScopes: {
               select: { branch: { select: { id: true, name: true } } },
-              take: 1,
             },
             categoryScopes: {
               select: { category: { select: { id: true, name: true } } },
-              take: 1,
             },
             levelScopes: {
               select: { level: { select: { id: true, name: true } } },
-              take: 1,
             },
           },
         });
@@ -890,6 +929,16 @@ export async function readCalendar(
         description: event.description,
         recurrence: event.recurrenceType,
         branchName: event.branchScopes[0]?.branch.name ?? null,
+        // R139 — the whole scope. Empty on every dimension the event carries
+        // no restriction on (never "all rows dropped but one"), matching the
+        // SAME "no row = no restriction on this dimension" reading the
+        // audience-matching queries in this file already use.
+        branchIds: event.branchScopes.map((s) => s.branch.id),
+        branchNames: event.branchScopes.map((s) => s.branch.name),
+        categoryIds: event.categoryScopes.map((s) => s.category.id),
+        categoryNames: event.categoryScopes.map((s) => s.category.name),
+        levelIds: event.levelScopes.map((s) => s.level.id),
+        levelNames: event.levelScopes.map((s) => s.level.name),
         // An Event is the exception layer (§4.4); it has no room and no
         // instructor of its own.
         roomName: null,
@@ -1020,6 +1069,14 @@ export async function readCalendar(
       categoryName: exam.level.category.name,
       levelId: exam.levelId,
       levelName: exam.level.name,
+      // An exam sitting always names exactly one Level/Category (R136); its
+      // branch is nullable (a remote sitting may carry none at all).
+      branchIds: exam.branchId ? [exam.branchId] : [],
+      branchNames: exam.branch ? [exam.branch.name] : [],
+      categoryIds: [exam.level.category.id],
+      categoryNames: [exam.level.category.name],
+      levelIds: [exam.levelId],
+      levelNames: [exam.level.name],
       subjectId: exam.subjectId,
       subjectName: exam.subject?.name ?? null,
       teachingMode: null,

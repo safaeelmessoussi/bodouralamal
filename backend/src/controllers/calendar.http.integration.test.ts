@@ -30,6 +30,15 @@ interface Row {
   /** R97 — `null` for an Event and an Exam, which have no delivery model. */
   delivery_mode: string | null;
   online_media_mode: string | null;
+  branch_id: string | null;
+  level_id: string | null;
+  /** R139 — the whole scope, additive beside the singular fields above. */
+  branch_ids: string[];
+  branch_names: string[];
+  category_ids: string[];
+  category_names: string[];
+  level_ids: string[];
+  level_names: string[];
 }
 interface Body {
   error?: { code?: string };
@@ -405,9 +414,15 @@ const OCCURRENCE_KEYS = [
   // See `Occurrence.availableFrom`'s own docstring.
   "available_from",
   "branch_id",
+  // R139 — the whole scope, alongside the summary field above. Always
+  // single-element for a Session/Exam; only an Event genuinely varies.
+  "branch_ids",
   "branch_name",
+  "branch_names",
   "category_id",
+  "category_ids",
   "category_name",
+  "category_names",
   "date",
   "delivery_mode",
   "description",
@@ -418,7 +433,9 @@ const OCCURRENCE_KEYS = [
   "instructors",
   "kind",
   "level_id",
+  "level_ids",
   "level_name",
+  "level_names",
   "online_media_mode",
   "recurrence",
   "room_name",
@@ -455,6 +472,31 @@ describe("the occurrence projection reaches the wire (§16.2, R97)", () => {
       expect(e).toHaveProperty("delivery_mode");
       expect(e.delivery_mode).toBeNull();
       expect(e.online_media_mode).toBeNull();
+    }
+  });
+
+  /**
+   * **R139 — the plural fields carry a real array over real HTTP**, not
+   * merely inside the service's own TypeScript types. Every occurrence in
+   * the development fixture is single-branch, so this checks the SHAPE
+   * (an array, containing the singular field's own value) rather than
+   * asserting a fixture-specific multi-branch row — `calendar.integration.test.ts`
+   * already proves the multi-value CONTENT against a real created event; this
+   * proves it reaches the wire at all.
+   */
+  it("the plural scope fields are real arrays, each containing the singular field's own value", async () => {
+    const res = await call(`/calendar?${RANGE}`);
+    const rows = mine(res.body);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(Array.isArray(row.branch_ids)).toBe(true);
+      expect(Array.isArray(row.branch_names)).toBe(true);
+      expect(Array.isArray(row.category_ids)).toBe(true);
+      expect(Array.isArray(row.category_names)).toBe(true);
+      expect(Array.isArray(row.level_ids)).toBe(true);
+      expect(Array.isArray(row.level_names)).toBe(true);
+      if (row.branch_id !== null) expect(row.branch_ids).toContain(row.branch_id);
+      if (row.level_id !== null) expect(row.level_ids).toContain(row.level_id);
     }
   });
 });

@@ -52,6 +52,15 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   category_name: null,
   level_id: null,
   level_name: null,
+  // R139 — the plural scope fields. Empty by default, matching every other
+  // field on this fixture: a test that needs a multi-valued scope states it
+  // explicitly through `over`, rather than the factory guessing one.
+  branch_ids: [],
+  branch_names: [],
+  category_ids: [],
+  category_names: [],
+  level_ids: [],
+  level_names: [],
   // Revision 43 session fields. The factory carries them so the fixture is a
   // real occurrence rather than a subset that happens to compile.
   subject_id: null,
@@ -674,6 +683,99 @@ describe('event details', () => {
       <EventDetailsDialog occurrence={occurrence()} branchNames={new Map()} onClose={() => undefined} />,
     );
     expect(html).not.toContain('details__hijri');
+  });
+});
+
+/**
+ * **R139 — an event scoped to several branches or several Levels shows
+ * every one of them, not only the first.** The defect this pins: the read
+ * used to `take: 1` on each join table, so an event genuinely scoped to
+ * three Levels displayed one and silently dropped two — nothing here says
+ * "and two more". Below two, the existing single-value fields keep
+ * answering exactly as they always did (the next describe block).
+ */
+describe('a multi-scoped event shows every attached branch/category/Level (R139)', () => {
+  it('joins every branch when the event carries more than one', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({
+          branch_name: 'مقر أمرشيش',
+          branch_names: ['مقر أمرشيش', 'مقر تاركة'],
+        })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('مقر أمرشيش، مقر تاركة');
+  });
+
+  it('joins every Level when the event carries more than one', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({
+          level_name: 'المستوى 1',
+          level_names: ['المستوى 1', 'المستوى 2'],
+        })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('المستوى 1، المستوى 2');
+  });
+
+  it('joins every category when the event carries more than one', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({
+          category_name: 'الكبار',
+          category_names: ['الكبار', 'اليافعون'],
+        })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('الكبار، اليافعون');
+  });
+
+  it('falls back to the singular field for the ordinary single-branch/Level case', () => {
+    // The overwhelmingly common shape — one Level, one branch — must read
+    // exactly as it did before this correction, not through the new joined
+    // path with one entry.
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({
+          branch_name: 'مقر أمرشيش',
+          branch_names: ['مقر أمرشيش'],
+          level_name: 'المستوى 3',
+          level_names: ['المستوى 3'],
+          category_name: 'الكبار',
+          category_names: ['الكبار'],
+        })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('مقر أمرشيش');
+    expect(html).not.toContain('،');
+  });
+
+  it('does not crash when a response omits the new plural fields entirely', () => {
+    // `api<T>()` is an unchecked cast (this file's own history: a wrong
+    // literal once compiled and rendered every session as an Event) — a
+    // response missing `branch_names`/`category_names`/`level_names` must
+    // degrade to the singular fields, never throw.
+    const bare = occurrence({ branch_name: 'مقر أمرشيش' });
+    // @ts-expect-error — simulating a response that predates R139's fields.
+    delete bare.branch_names;
+    // @ts-expect-error — same, for the other two.
+    delete bare.category_names;
+    // @ts-expect-error — same.
+    delete bare.level_names;
+    expect(() =>
+      renderToStaticMarkup(
+        <EventDetailsDialog occurrence={bare} branchNames={new Map()} onClose={() => undefined} />,
+      ),
+    ).not.toThrow();
   });
 });
 

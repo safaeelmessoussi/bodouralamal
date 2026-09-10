@@ -3225,3 +3225,69 @@ implementation of something that already exists).
       including `attendance-ui.test.ts`'s 12 cases. No code changed, so no
       migration, no OpenAPI/TD-3 change, no new commit beyond this
       documentation entry.
+
+### §1 — Flexible event scope: the five-tier taxonomy already existed; the read side and the creation picker are corrected to reach it
+
+The pre-implementation audit (schema, `event.service.ts`, `calendar.service.ts`,
+the frontend scope picker, existing tests) found the taxonomy itself —
+platform-wide / all-branches-the-actor-may-reach / selected branches /
+all-Levels-in-selected-branches / selected Levels, plus no-Level-at-all for a
+genuinely general event — already fully server-enforced through the existing
+`EventScopes` shape and `EventBranch`/`EventCategory`/`EventLevel`/
+`EventAdministrativeGroup` join tables (§7, R24). Two genuine, narrowly-scoped
+gaps were found and fixed; nothing about authorization, the data model or
+`RecurringCourseSchedule`'s single-target invariant (§4.4c, including محاضرة
+per the 2026-08-28 class-shape ruling) changed.
+
+- [x] **`calendar.service.ts`** — removed a `take: 1` truncation on the
+      `branchScopes`/`categoryScopes`/`levelScopes` Prisma includes that
+      silently showed a reader only the FIRST attached branch/category/Level
+      of a genuinely multi-scoped event; the join rows and every
+      authorization/audience-matching read over them were always complete.
+      `Occurrence` gains `branch_ids`/`branch_names`, `category_ids`/
+      `category_names`, `level_ids`/`level_names`, additive beside the
+      unchanged singular fields (Revision 36); always single-element for a
+      Session or an Exam.
+- [x] **`calendar.controller.ts`**'s `occurrenceDto()` — carries the six new
+      plural fields onto the wire (`branch_ids`, `branch_names`,
+      `category_ids`, `category_names`, `level_ids`, `level_names`).
+- [x] **`class-section.tsx`**'s `ActivitySection` — the scope-target picker
+      is now `MultiSelectField`-based (`scopeIds: string[]`), on the SAME
+      `EventScopes` arrays the backend already accepted; explicit Arabic
+      hints distinguish "no Level chosen → every Level in the selected
+      branch(es)" from the platform/all-branches global case.
+- [x] **`scheduling.tsx`** — submits the full chosen set
+      (`{ branchIds: scopeIds }` etc.) instead of a single-element array.
+      Two incidental defects found and fixed in the same touched code: the
+      scope-required check lacked the `!editing` guard its siblings already
+      have (a Teacher editing her own event, whose picker is locked/hidden
+      on edit, could be wrongly blocked from saving an unrelated change);
+      switching `scopeKind` did not clear the previous dimension's
+      `scopeIds` (a branch id could be submitted as a `levelId` after an
+      un-deselected dimension switch).
+- [x] **`event-details-dialog.tsx`** — renders every attached
+      branch/category/Level when there is more than one, joined with `، `,
+      falling back to the existing singular display otherwise.
+- [x] New tests: `calendar.integration.test.ts` (+4 — the whole scope is
+      read back, not only the first branch/Level/category; a Level-less
+      event reports empty arrays not null; a Session always reports exactly
+      one), `calendar.http.integration.test.ts` (+1 — the plural fields are
+      real arrays over real HTTP, each containing the singular field's own
+      value), `class-section.scope.test.tsx` (new file, 13 cases — picker
+      count/empty-state/labels, the all-Levels hint shown/hidden correctly,
+      the global hint, locked/editing state, and source-pinned assertions
+      against `scheduling.tsx`'s own payload/kind-switch/`!editing`-guard
+      code), `calendar.test.tsx` (+5 — a multi-scoped event shows every
+      attached branch/category/Level).
+- [x] Verification: backend lint/typecheck/build clean, 38 files/334 unit
+      tests; frontend lint/typecheck/build clean, 105 files/1,248 unit
+      tests (up from 1,230); full disposable-stack integration suite green,
+      all-table isolation intact; `docs/openapi.json` regenerated with no
+      hand-edits (174 paths/225 operations, unchanged route count — wire
+      fields added, not routes), TD-3 conformance unchanged (225/233
+      implemented, 0 undocumented); all `check-*.sh` guards, doc-links and
+      `git diff --check` clean. **No migration** — the join tables already
+      stored multiple rows per event; only the read projection and the
+      creation form changed. SRS Revision 139 ratified. No Staging or
+      Production action taken. Remaining sections (§3, §2) continue in
+      subsequent commits.

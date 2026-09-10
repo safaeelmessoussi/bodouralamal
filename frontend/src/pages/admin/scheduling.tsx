@@ -1176,7 +1176,8 @@ export function SchedulingDialog({
     item?.attendanceMarking ?? 'staff_only',
   );
   const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
-  const [scopeId, setScopeId] = useState('');
+  // R139 — several, not one; see `ActivitySection`'s own doc comment.
+  const [scopeIds, setScopeIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -1251,7 +1252,7 @@ export function SchedulingDialog({
     // Mirrors the initialiser above — the pair §A proved has to agree.
     schedulingTypeId: item?.ids.schedulingTypeId ?? null,
     scopeKind: canAssignStaff ? 'global' : 'group',
-    scopeId: '',
+    scopeIds: [] as string[],
     // Mirrors the initialiser above — a pristine baseline that disagreed with
     // it is what kept `dirty` false while the value was wrong (§A).
     attendanceMarking: item?.attendanceMarking ?? 'staff_only',
@@ -1280,7 +1281,10 @@ export function SchedulingDialog({
       responsibleId,
       visibility,
       scopeKind,
-      scopeId,
+      // Order is not a choice (rule U's own reasoning for `assistantIds`
+      // above) — sorted so re-picking the same set in a different order does
+      // not report the form as dirty.
+      scopeIds: [...scopeIds].sort(),
       attendanceMarking,
     },
     pristine,
@@ -1649,8 +1653,18 @@ export function SchedulingDialog({
        * named — so the reader saw «تعذّر الحفظ» about a choice nobody had asked
        * her to make. A مؤطرة with no group of her own is told that too, because
        * *there is nothing to choose* is a different answer from *choose one*.
+       *
+       * **Never on edit** (R139, found while widening this exact check to an
+       * array): the scope picker is `locked` and hidden once editing — §4.4
+       * populates the four-way joins at creation, and re-pointing them later
+       * would silently change who has been seeing the event — so `scopeIds`
+       * is never seeded from the item being edited. Without this guard a
+       * مؤطرة (whose default `scopeKind` is `'group'`, never `'global'`)
+       * could not save ANY edit to her own event, including one touching
+       * nothing about its scope — the same `!editing` shape the item-type
+       * and start-date checks above already use for the identical reason.
        */
-      if (scopeKind !== 'global' && scopeId === '') {
+      if (!editing && scopeKind !== 'global' && scopeIds.length === 0) {
         return scopeOptionsEmpty
           ? t('scheduling.invalid.noScopeForYou')
           : t('scheduling.invalid.scope');
@@ -1735,15 +1749,15 @@ export function SchedulingDialog({
           scope:
             scopeKind === 'global'
               ? { global: true }
-              : scopeId === ''
+              : scopeIds.length === 0
                 ? undefined
                 : scopeKind === 'branch'
-                  ? { branchIds: [scopeId] }
+                  ? { branchIds: scopeIds }
                   : scopeKind === 'category'
-                    ? { categoryIds: [scopeId] }
+                    ? { categoryIds: scopeIds }
                     : scopeKind === 'group'
-                      ? { groupIds: [scopeId] }
-                      : { levelIds: [scopeId] },
+                      ? { groupIds: scopeIds }
+                      : { levelIds: scopeIds },
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
@@ -2037,9 +2051,16 @@ export function SchedulingDialog({
         ) : (
           <ActivitySection
             scopeKind={scopeKind}
-            onScopeKind={setScopeKind}
-            scopeId={scopeId}
-            onScopeId={setScopeId}
+            onScopeKind={(next) => {
+              // **A dimension's own ids do not survive switching dimensions**
+              // (R139). A branch's UUID left sitting in state after switching
+              // to «مستوى» would be submitted as `levelIds` on the next
+              // save — the wrong table entirely, not merely a stale choice.
+              setScopeKind(next);
+              setScopeIds([]);
+            }}
+            scopeIds={scopeIds}
+            onScopeIds={setScopeIds}
             /**
              * **A مؤطرة is offered only herself as responsible** (2026-08-20).
              *

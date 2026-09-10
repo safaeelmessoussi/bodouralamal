@@ -16,8 +16,8 @@ import SCHEDULING_SOURCE from '../../pages/admin/scheduling.tsx?raw';
 const baseProps = {
   scopeKind: 'branch',
   onScopeKind: () => {},
-  scopeId: '',
-  onScopeId: () => {},
+  scopeIds: [],
+  onScopeIds: () => {},
   scopeOptions: [],
   locked: false,
   staff: [],

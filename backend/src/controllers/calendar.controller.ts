@@ -183,6 +183,20 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     category_name: o.categoryName,
     level_id: o.levelId,
     level_name: o.levelName,
+    /**
+     * **R139 — the whole scope, alongside the summary fields above.**
+     * `Occurrence`'s own docstring explains why: `branch_id`/`category_id`/
+     * `level_id` stay the first entry of the SAME list, for a reader that
+     * only ever asked "which one"; these are for a reader asking "how many,
+     * and which ones" — an event scoped to several Levels or branches, which
+     * the summary fields alone would silently narrow to one.
+     */
+    branch_ids: o.branchIds,
+    branch_names: o.branchNames,
+    category_ids: o.categoryIds,
+    category_names: o.categoryNames,
+    level_ids: o.levelIds,
+    level_names: o.levelNames,
     subject_id: o.subjectId,
     subject_name: o.subjectName,
     teaching_mode: o.teachingMode,

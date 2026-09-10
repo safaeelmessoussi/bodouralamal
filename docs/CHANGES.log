@@ -7012,3 +7012,61 @@ above; frontend suite (1,230 tests, already green from §4) includes
 `attendance-ui.test.ts`'s 12 cases. No migration, no OpenAPI/TD-3 change, no
 SRS change. No Staging or Production action taken. Remaining sections (§1,
 §3, §2) continue in subsequent commits.
+
+## Owner revision, §1 — flexible event scope: the five-tier taxonomy already
+## existed; the read side and the creation picker are corrected to reach it
+## (2026-09-10)
+
+The pre-implementation audit (schema, `event.service.ts`, `calendar.service.ts`,
+the frontend scope picker, existing tests) found platform-wide /
+all-branches-the-actor-may-reach / selected branches / all-Levels-in-selected-
+branches / selected Levels, plus no-Level-at-all for a genuinely general event,
+already fully server-enforced through the existing `EventScopes` shape and the
+`EventBranch`/`EventCategory`/`EventLevel`/`EventAdministrativeGroup` join
+tables (§7, R24) — create, edit, recurrence, series-split, conflict-detection,
+candidate-selection, visibility and deletion all already read the SAME shape
+and the SAME join rows consistently. Two genuine, display/input-layer gaps
+were found and fixed; authorization, the data model and
+`RecurringCourseSchedule`'s single-target invariant (§4.4c, including محاضرة
+per the 2026-08-28 class-shape ruling) are untouched.
+
+**(1) `calendar.service.ts`** used `take: 1` on the `branchScopes`/
+`categoryScopes`/`levelScopes` Prisma includes, so a genuinely multi-branch or
+multi-Level event silently showed a reader only its first attached
+branch/Level — the join rows and every authorization/audience-matching query
+over them were always complete. `Occurrence` gains `branch_ids`/`branch_names`,
+`category_ids`/`category_names`, `level_ids`/`level_names`, additive beside the
+unchanged singular fields (Revision 36); always single-element for a Session or
+an Exam.
+
+**(2) `ActivitySection`'s scope-target picker** (`class-section.tsx`, used by
+نشاط/حفل/عطلة creation on `/admin/scheduling`) accepted one id per dimension,
+though `EventScopes.branchIds`/`categoryIds`/`levelIds`/`groupIds` have always
+been arrays on the wire. It is now `MultiSelectField`-based (`scopeIds:
+string[]`), submitting the full chosen set on the same arrays the backend
+already accepted — no backend contract change was required for creation.
+Explicit Arabic hints distinguish "no Level chosen → every Level in the
+selected branch(es)" from the platform/all-branches global case.
+
+**Two incidental defects found while auditing this exact code, fixed in the
+same commit:** the activity/holiday scope-required check on
+`/admin/scheduling` lacked the `!editing` guard its siblings already have, so
+a Teacher editing her own event — whose picker is locked/hidden on edit and
+never repopulates `scopeIds` — could be wrongly blocked from saving an
+unrelated change; switching `scopeKind` did not clear the previous dimension's
+`scopeIds`, which could submit a branch id as a `levelId` after an
+un-deselected dimension switch.
+
+Verification: backend lint/typecheck/build clean, 38 files/334 unit tests;
+frontend lint/typecheck/build clean, 105 files/1,248 unit tests (up from
+1,230); full disposable-stack integration suite — 107 files/2,451 tests (17
+pre-existing unrelated skips), all-table isolation intact — including 4 new
+cases in `calendar.integration.test.ts` and 1 new case in
+`calendar.http.integration.test.ts`. `docs/openapi.json` regenerated with no
+hand-edits (174 paths/225 operations, unchanged route count — wire fields
+added, not routes); TD-3 conformance unchanged (225/233 implemented, 0
+undocumented). All `check-*.sh` guards, doc-links and `git diff --check`
+clean. **No migration** — the join tables already stored multiple rows per
+event; only the read projection and the creation form changed. SRS Revision
+139 ratified. No Staging or Production action taken. Remaining sections (§3,
+§2) continue in subsequent commits.

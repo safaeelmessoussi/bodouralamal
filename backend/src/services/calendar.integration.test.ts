@@ -776,3 +776,75 @@ describe("§4.4/§5.7 — the Hijri overlay from official recorded data (Revisio
     );
   });
 });
+
+/**
+ * **R139 — an event scoped to several branches or several Levels reports
+ * every one of them, not only the first.** `branchScopes`/`categoryScopes`/
+ * `levelScopes` have always accepted more than one row each (§4.4); the
+ * calendar read used to `take: 1` on each, correct for nothing downstream
+ * except the DISPLAY fields — an event genuinely scoped to two Levels
+ * reported one and silently dropped the other. The audience-matching reads
+ * elsewhere in this file were never limited this way; only this projection
+ * was, which is why every OTHER test above keeps passing unchanged.
+ */
+describe("§4.4/R139 — the whole scope, not only the first branch/Level/category", () => {
+  it("lists every branch an event is scoped to", async () => {
+    const b1 = await makeBranch("فرع أ");
+    const b2 = await makeBranch("فرع ب");
+    await makeEvent("public", { branchIds: [b1, b2] });
+
+    const rows = scoped(await readCalendar(prisma, null, range));
+    const event = rows.find((r) => r.kind === "event")!;
+
+    expect(event.branchIds.sort()).toEqual([b1, b2].sort());
+    expect(event.branchNames.length).toBe(2);
+    // The summary field is unchanged — the FIRST of the same list, for a
+    // reader who only ever asked "which one".
+    expect(event.branchId).not.toBeNull();
+    expect(event.branchIds).toContain(event.branchId);
+  });
+
+  it("lists every Level an event is scoped to", async () => {
+    const levels = await prisma.level.findMany({
+      take: 2,
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    const branchId = await makeBranch("مراكش");
+    await makeEvent("public", {
+      branchIds: [branchId],
+      levelIds: levels.map((l) => l.id),
+    });
+
+    const rows = scoped(await readCalendar(prisma, null, range));
+    const event = rows.find((r) => r.kind === "event")!;
+
+    expect(event.levelIds.sort()).toEqual(levels.map((l) => l.id).sort());
+    expect(event.levelNames.length).toBe(levels.length);
+    expect(event.levelId).not.toBeNull();
+    expect(event.levelIds).toContain(event.levelId);
+  });
+
+  it("an event scoped to no Level at all (§4.4's own reading of an empty join) reports an empty array, not a null entry", async () => {
+    const branchId = await makeBranch("مراكش");
+    await makeEvent("public", { branchIds: [branchId] });
+
+    const rows = scoped(await readCalendar(prisma, null, range));
+    const event = rows.find((r) => r.kind === "event")!;
+
+    expect(event.levelIds).toEqual([]);
+    expect(event.levelNames).toEqual([]);
+    expect(event.levelId).toBeNull();
+  });
+
+  it("a Session always reports exactly one branch and at most one Level — R139 changes nothing there", async () => {
+    const branchId = await makeBranch("مراكش");
+    await makeGroup(branchId);
+
+    const rows = scoped(await readCalendar(prisma, null, range));
+    const session = rows.find((r) => r.kind === "session");
+    expect(session).toBeDefined();
+    expect(session!.branchIds.length).toBe(1);
+    expect(session!.levelIds.length).toBeLessThanOrEqual(1);
+  });
+});

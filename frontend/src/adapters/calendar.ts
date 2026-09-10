@@ -88,6 +88,21 @@ export interface Occurrence {
   category_name: string | null;
   level_id: string | null;
   level_name: string | null;
+  /**
+   * **R139 — the whole scope.** `branch_id`/`category_id`/`level_id` above
+   * stay the first entry of the SAME list — a reader asking "which one"
+   * keeps the answer it always got. These are for "how many, and which
+   * ones": an event scoped to several branches or several Levels, which the
+   * singular fields alone would narrow to one. Always single-element for a
+   * Session/Exam (one branch/Level by construction, §4.4c) — only an Event
+   * genuinely varies.
+   */
+  branch_ids: string[];
+  branch_names: string[];
+  category_ids: string[];
+  category_names: string[];
+  level_ids: string[];
+  level_names: string[];
   /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
      no lifecycle, so these are null for it rather than invented. */
   subject_id: string | null;

@@ -58,6 +58,49 @@ export function EventDetailsDialog({
   const branch =
     occurrence?.branch_name ??
     (occurrence?.branch_id ? branchNames.get(occurrence.branch_id) : undefined);
+  /**
+   * **R139 — every attached one, joined, when there is more than one.**
+   * `branch_names`/`category_names`/`level_names` are always at least
+   * single-element for a Session/Exam (one branch/Level by construction);
+   * only an Event genuinely carries several. Below one, the existing
+   * `branch`/`category_name`/`level_name` fields keep answering exactly as
+   * they always did — including `branch`'s own fallback through the public
+   * branch directory, which the plural field does not need since the
+   * backend always names an Event's branches itself.
+   */
+  /**
+   * **`?? []` is deliberate** (`api<T>()` is an unchecked cast — this exact
+   * file's own docstring above records the last defect that trusting it
+   * produced, a wrong literal that compiled and rendered every session as an
+   * Event). A response missing these new fields must not crash the dialog;
+   * it falls back to the singular fields exactly as if none were attached.
+   */
+  const branches =
+    occurrence && (occurrence.branch_names ?? []).length > 1
+      ? occurrence.branch_names.join('، ')
+      : branch;
+  const categories =
+    occurrence && (occurrence.category_names ?? []).length > 1
+      ? occurrence.category_names.join('، ')
+      : occurrence?.category_name;
+  const levels =
+    occurrence && (occurrence.level_names ?? []).length > 1
+      ? // **Bare names, not "Category — Level" per entry.** `level_names` and
+        // `category_names` come from two SEPARATE join tables (`EventLevel`,
+        // `EventCategory`) and are not parallel arrays — pairing them by
+        // index would show a level beside a category it may not belong to.
+        // The Category row above already gives that context; §4.4b's
+        // disambiguation rule is for naming ONE Level unambiguously, which
+        // does not apply to a joined list a reader is already reading as a
+        // set.
+        occurrence.level_names.join('، ')
+      : occurrence?.level_name
+        ? levelLabel({
+            id: occurrence.level_id ?? '',
+            name: occurrence.level_name,
+            category_name: occurrence.category_name,
+          })
+        : undefined;
 
   return (
     <Dialog
@@ -116,17 +159,17 @@ export function EventDetailsDialog({
               </>
             ) : null}
 
-            {occurrence.category_name ? (
+            {categories ? (
               <>
                 <dt>{t('calendar.detailsCategory')}</dt>
-                <dd>{occurrence.category_name}</dd>
+                <dd>{categories}</dd>
               </>
             ) : null}
 
-            {occurrence.level_name ? (
+            {levels ? (
               <>
                 <dt>{t('calendar.detailsLevel')}</dt>
-                <dd>{levelLabel({ id: occurrence.level_id ?? '', name: occurrence.level_name, category_name: occurrence.category_name })}</dd>
+                <dd>{levels}</dd>
               </>
             ) : null}
 
@@ -139,10 +182,10 @@ export function EventDetailsDialog({
             {occurrence.status === 'cancelled' ? (
               <><dt>{t('calendar.detailsStatus')}</dt><dd role="status">{t('calendar.cancelled')}</dd></>
             ) : null}
-            {branch ? (
+            {branches ? (
               <>
                 <dt>{t('calendar.detailsBranch')}</dt>
-                <dd>{branch}</dd>
+                <dd>{branches}</dd>
               </>
             ) : null}
 

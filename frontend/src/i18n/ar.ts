@@ -1757,19 +1757,34 @@ export const ar = {
       recurrenceEnd: 'نهاية التكرار',
       recurrenceEndHint: 'آخر تاريخ يتكرر فيه النشاط.',
       visibilityHint: 'عام: يراه الزوار. خاص: للمسجلات. مخفي: للطاقم فقط.',
+      // R139 — «كل الفروع» reads correctly for BOTH actors without a second
+      // label: for a مديرة عامة it is every branch the association has; for
+      // a مديرة scoped to one or more branches, the server already narrows
+      // this to exactly hers (`resolveBranches`/`reachableBranches`,
+      // `event.service.ts`) — this control never shows her a wider promise
+      // than what actually gets attached.
       scopeGlobal: 'كل الفروع',
-      scopeBranch: 'فرع',
+      scopeGlobalHint: 'كل فروعك المصرح بها؛ للمشرفة العامة، كل فروع الجمعية.',
+      // R139 — plural: the picker beneath this choice takes SEVERAL now.
+      scopeBranch: 'فروع',
       scopeLabel: 'النطاق',
       scopeTargetLabel: 'الجهة المعنية',
+      // R139 — the picker itself now shows "اختاري…" only until something is
+      // chosen (`MultiSelectField`'s own empty state); this names what an
+      // EMPTY choice under a real dimension means, once submission refuses it.
+      scopeTargetEmpty: 'لم تُختَر جهة بعد.',
+      // R139 — stated once the reader has chosen at least one فرع, so "no
+      // Level chosen" reads as a decision rather than an omission.
+      scopeAllLevelsHint: 'بلا اختيار مستوى، يشمل هذا كل المستويات في الفرع (الفروع) المختارة.',
       // النطاق يُحدَّد عند الإنشاء: إعادة توجيهه لاحقاً تغيّر — بصمت — من كان يرى النشاط.
       responsible: 'المؤطِّرة المسؤولة',
       eventAssistants: 'المؤطِّرات المساعدات',
       eventAssistantsHint: 'المسؤولة تدير النشاط؛ المساعدات يطّلعن عليه دون تعديله.',
       staffAdminOnly: 'إسناد المسؤولية عن النشاط من صلاحيات الإدارة.',
       scopeFixed: 'النطاق يُحدَّد عند الإنشاء ولا يُعدَّل.',
-      scopeCategory: 'فئة',
-      scopeGroup: 'مجموعة مستوى',
-      scopeLevel: 'مستوى',
+      scopeCategory: 'فئات',
+      scopeGroup: 'مجموعات مستوى',
+      scopeLevel: 'مستويات',
       scopeHint: 'يُحدَّد عند الإنشاء فقط.',
       scopeLocked: 'لا يمكن تغيير نطاق النشاط بعد إنشائه — تغيير الجمهور إعادة إنشاء لا تعديل.',
       deleted: 'تم حذف النشاط.',
