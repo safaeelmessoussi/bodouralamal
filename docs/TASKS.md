@@ -2880,3 +2880,39 @@ approved scope covers Partners only, so this is reported rather than taken.
       immutability, supersession) is proven at the HTTP layer instead, and
       the screen's own composition already inherits `ConsentTextsSection`'s
       established browser coverage. No Staging or Production action taken.
+
+## R138 correction — mobile nav-toggle overlap and a stale semester notice (Owner-reported on Staging, 2026-09-10)
+
+Both found by the Document Owner actually using R138 on the deployed Staging
+site (`develop`@`ca1ef5c`), by screenshot. Fixes only — no SRS clause
+changes, no product-policy decision; see [CHANGES](CHANGES.log) for full
+detail.
+
+- [x] **Item (4)'s own toggle button overlapped the drawer it opens** —
+      `.admin-nav-toggle` carried a visible «القائمة» text label wide enough
+      to collide with the mobile overlay drawer's first nav link at narrow
+      widths. Made icon-only, matching `ApplicationHeader`'s own burger
+      convention exactly (a11y label unchanged, `visually-hidden`); moved to
+      `position: fixed` so it is never a grid child at all; the overlay
+      drawer's own mobile width tightened from `85vw` to `75vw` as the one
+      measured side effect. `verify-nav-toggle-geometry.mjs` gained
+      dedicated toggle-vs-drawer and toggle-vs-page-action rect-intersection
+      checks and now runs at 320px (the narrowest width §14 names, not
+      merely a comfortable one): 26/26 checks pass, superseding the 18/18-
+      at-390px figure recorded above.
+- [x] **`تسجيل مستفيدة`'s «يرجى اختيار الفصل الدراسي قبل الحفظ» notice
+      outlived the semester being chosen** — pre-existing R122 behaviour,
+      surfaced by R138's own Staging walkthrough. The server-derived default
+      period (`listAcademicPeriods`) resolves asynchronously; a reader who
+      pressed حفظ in the moment before it resolved saw the refusal, watched
+      the field fill itself in correctly a beat later, and the refusal
+      stayed on screen describing a state that was no longer true — `notice`
+      was previously cleared only at the start of a subsequent successful
+      submit. A new effect clears it the instant Level, branch and period
+      are all answered, mirroring the same three checks `submit()` itself
+      gates on. Source-pinned in `enrolment-period.test.ts`.
+- [x] Verification: frontend typecheck/lint/build clean; 103 files/1,214
+      unit tests (up from 1,211); `check-design-tokens.sh`,
+      `check-header-nav-exclusive.sh`, `check-shared-layout.sh` and
+      `git diff --check` all clean; `verify-nav-toggle-geometry.mjs` 26/26 at
+      320/1280/1440px. Backend untouched by either fix, so not re-run.

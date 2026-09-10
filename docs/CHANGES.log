@@ -6593,3 +6593,62 @@ legal-documents management surface beside the consent-text section it sits
 next to. `docs/TASKS.md` is updated to match, ticked with this same
 evidence cited rather than restated. No Staging or Production action was
 taken at any point in this revision.
+
+## R138 correction — mobile nav-toggle overlap and a stale semester notice
+## (Owner-reported on Staging, 2026-09-10)
+
+Both defects were found by the Document Owner actually using Revision 138 on
+the deployed Staging site (`develop`@`ca1ef5c`), by screenshot — not during
+the revision's own verification. Bug fixes only; no SRS clause changes.
+
+**The mobile nav drawer's own toggle button overlapped the drawer's first
+link.** `.admin-nav-toggle` carried a visible «القائمة» text label, making
+it wide enough (65-67px) to collide with the overlay drawer's first nav
+item at phone widths — exactly the geometry class
+`verify-nav-toggle-geometry.mjs` was built to catch, but its own harness
+markup had not been kept in sync with the real component and so missed it.
+Fixed by making the toggle icon-only, matching `ApplicationHeader`'s own
+burger exactly (same `visually-hidden` a11y label, no visible text) — both
+a consistency fix and the change that actually shrinks the button enough to
+clear the drawer. Also moved `.admin-nav-toggle` to `position: fixed`
+(bottom-inline-end) so it is structurally never a grid child needing
+auto-placement, after first trying top-inline-end and finding it collides
+with `.admin__actions`' own action button instead. Even icon-only, the
+drawer's `85vw` mobile width left insufficient clearance at 320px (the
+narrowest width §14 names) — tightened to `75vw`, the one measured side
+effect of this fix, still comfortably readable. `verify-nav-toggle-geometry.mjs`
+gained `intersects()` rect-overlap checks (toggle-vs-drawer, toggle-vs-page-
+action, at both mobile and desktop-overlay states) and a closed blind spot
+(desktop nav-vs-main non-overlap, not only their `display`/`position`), and
+now runs at 320px rather than 390px: **26/26 checks pass**, up from the
+18/18-at-390px this log recorded for Revision 138 itself.
+`portal-shell.test.tsx` gained a regression guard asserting the toggle's
+rendered markup carries no visible text besides its `visually-hidden` span.
+
+**`تسجيل مستفيدة`'s «يرجى اختيار الفصل الدراسي قبل الحفظ» notice survived
+the semester actually being chosen.** Pre-existing R122 behaviour, not new
+in Revision 138, surfaced by using R138's own admin flows on Staging. The
+server-derived default academic period (`listAcademicPeriods`) resolves
+asynchronously after the dialog mounts; a reader who pressed حفظ in the
+moment before it resolved saw the refusal, watched the field fill itself in
+correctly a beat later, and the refusal stayed on screen describing a state
+that was no longer true — `notice` was previously cleared in exactly one
+place, the start of a subsequent successful submit, and nothing watched the
+fields the refusal complained about actually becoming answered. Fixed with
+a dedicated effect that clears `notice` the instant Level, the derived
+branch and the period are all answered — the same three conditions
+`submit()`'s own sequential guards already check, so it can never clear a
+still-genuine refusal ahead of them. Source-pinned with two new assertions
+in `enrolment-period.test.ts`.
+
+Verification: frontend typecheck/lint/build clean; 103 files/1,214 unit
+tests (up from 1,211 — the two new source-pinning assertions plus the
+strengthened `portal-shell.test.tsx` case); `check-design-tokens.sh`,
+`check-header-nav-exclusive.sh`, `check-shared-layout.sh` and
+`git diff --check` all clean; `verify-nav-toggle-geometry.mjs` real-browser
+run 26/26 at 320/1280/1440px. Backend is untouched by either fix and was
+not re-run. `docs/TASKS.md` gained a matching addendum under R138. No SRS
+change — neither fix alters ratified product policy, only corrects its
+implementation. No Staging or Production action was taken by this pass
+itself; redeploying the fix to Staging, if wanted, is a separate,
+not-yet-requested step.
