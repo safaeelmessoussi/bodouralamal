@@ -6910,3 +6910,64 @@ has drifted behind migrations (`column "title" of relation "session" does
 not exist`), breaking `seed-r82-scenario.ts` and the harnesses that depend
 on it — unrelated to this work, left for the Document Owner to authorize a
 migration separately.
+
+## Owner revision — flexible event scope, Teacher scheduling/Hifz/grades,
+## scoped personal calendars, library deep-link, dialog-based attendance
+## (in progress, 2026-09-10)
+
+A six-section Owner request, audited before any implementation (SRS,
+schema, authorization policies, scheduling services, event dialogs, TD-3,
+OpenAPI) and sequenced smallest-safest first at the Owner's own choice. The
+audit found three of the six sections already built or substantially built,
+reused rather than reimplemented (rule 5): Teacher access to
+`إدخال الحفظ`/`نقاط الامتحانات` (already scoped through
+`studentsTaughtBy` in both `roster-resolution.ts` and `grade.service.ts`,
+already in her menu since R106); attendance inside event dialogs (already
+sitting at the bottom of `EventDetailsDialog` via `<AttendancePanel>` since
+R123, with no timing/finalization rule beyond "whoever staffs that
+occurrence on its date" — so the request's own stop-condition resolves to
+"nothing to invent," not a blocker); and the Library deep-link mechanism
+itself (`resources.tsx`'s `?content=` focus, built 2026-08-17). §1 (event
+scope) and §3 (personal calendars) are real, scoped extension work — `Event`
+already has full multi-branch/multi-Level scope via join tables and a
+Level-less `holiday` kind, while `RecurringCourseSchedule` stays
+single-target by design. §2 (Teacher schedule creation) is a genuine policy
+reversal of TD-2's existing `⊘`, with an explicit prior rationale ("a
+schedule defines her own scope, so letting her create one would let her
+widen it") — the Owner has confirmed the anchor that keeps that safe: a
+Teacher may create a schedule only for a Level/branch she already holds
+through `TeacherCategoryCapability`/`TeacherSubjectCapability` and a
+`UserBranchRole`, never through the schedule she is about to create.
+
+**§4 — Library `عرض المحتوى` now deep-links to the exact item, done first as
+the smallest section.** `library.tsx`'s open-item link used to carry only
+`?level=<id>`, landing on the bare shelf; it now carries `&content=<id>`
+too, reusing `resources.tsx`'s own already-built `?content=` mechanism
+verbatim (the identical parameter `EventDetailsDialog`'s materials links
+already use) — no new route, dialog, viewer or backend change. A missing or
+unauthorized id already opens nothing, since the item is looked up only
+inside the shelf the server already scoped to this caller — the existing
+honest non-disclosure behaviour, not a new one. `ContentPreviewDialog`'s
+media elements already carry `controls` with no `autoPlay`, so autoplay
+restrictions were never at risk. Back navigation is the browser's own
+history on a real `<a href>`.
+
+New coverage: `library.test.tsx` (3 source-pinning cases — the exact href
+template, `?level=` retained alongside `?content=`, the id read per-row
+rather than hoisted) and three new real-browser checks in
+`verify-student-flows.mjs` (8a/8b/8c) — the link exists and is clicked
+through the real screen, the resulting page is `/resources` with the dialog
+genuinely open and titled with the real item, and a hard `Page.reload`
+reopens the identical item. The real-browser checks could not be executed
+locally this pass — blocked by the same pre-existing, unrelated local-DB
+migration drift already recorded above — and are written to the
+established pattern for when that is resolved.
+
+Verification: frontend typecheck/lint/build clean; 104 files/1,230 unit
+tests (up from 1,227); `check-design-tokens.sh`,
+`check-header-nav-exclusive.sh`, `check-shared-layout.sh`, doc-links and
+`git diff --check` all clean. No SRS change — `resources.tsx`'s own doc
+comment already describes this exact intended behaviour; §4 corrects
+`library.tsx` to actually reach it rather than establishing a new rule. No
+Staging or Production action taken. Remaining sections (§5/§6 verification,
+§1, §3, §2) continue in subsequent commits.

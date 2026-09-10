@@ -170,6 +170,73 @@ check(
   JSON.stringify({ heading: library.heading }),
 );
 
+/**
+ * **`عرض المحتوى` deep-links to the exact item** (Owner request,
+ * 2026-09-10). It used to land on the bare `/resources?level=` shelf; the
+ * fix threads `&content=<id>` through — the SAME parameter
+ * `resources.tsx`'s own `LevelView` already reads to open
+ * `ContentPreviewDialog` on arrival. Proven here through the real screens:
+ * the id clicked is read back from the dialog that actually opens, not
+ * merely asserted from the URL, which is what would catch a param that
+ * changed shape without the reader on the other end changing with it.
+ */
+const openItem = await evaluate(`(() => {
+  const link = [...document.querySelectorAll('a')].find(
+    (a) => a.textContent.trim() === ${JSON.stringify('عرض المحتوى')},
+  );
+  if (!link) return { found: false };
+  const href = link.getAttribute('href');
+  link.click();
+  return { found: true, href };
+})()`);
+check(
+  '8a · مكتبة المحتوى carries at least one openable item to prove the deep-link with',
+  openItem.found === true,
+  JSON.stringify(openItem),
+);
+for (let i = 0; i < 40; i += 1) {
+  const ready = await evaluate(`location.pathname === '/resources'`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+for (let i = 0; i < 40; i += 1) {
+  const ready = await evaluate(`!!document.querySelector('dialog[open] .dialog__title')`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const deepLinked = await evaluate(`(() => ({
+  path: location.pathname,
+  search: location.search,
+  dialogOpen: !!document.querySelector('dialog[open]'),
+  title: document.querySelector('dialog[open] .dialog__title')?.textContent.trim() ?? null,
+}))()`);
+check(
+  '8b · clicking it navigates to المحتوى التعليمي with the item already open, not the bare shelf',
+  deepLinked.path === '/resources' &&
+    deepLinked.search.includes('content=') &&
+    deepLinked.dialogOpen === true &&
+    Boolean(deepLinked.title),
+  JSON.stringify(deepLinked),
+);
+
+// Refreshing (a real reload, not a soft navigation) reopens the SAME item —
+// the durability requirement a query-param deep link exists to satisfy.
+await send('Page.reload', {});
+for (let i = 0; i < 40; i += 1) {
+  const ready = await evaluate(`!!document.querySelector('dialog[open] .dialog__title')`).catch(() => false);
+  if (ready) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+const afterReload = await evaluate(`(() => ({
+  dialogOpen: !!document.querySelector('dialog[open]'),
+  title: document.querySelector('dialog[open] .dialog__title')?.textContent.trim() ?? null,
+}))()`);
+check(
+  '8c · refreshing the URL reopens the exact same authorized item',
+  afterReload.dialogOpen === true && afterReload.title === deepLinked.title,
+  JSON.stringify({ before: deepLinked.title, after: afterReload }),
+);
+
 await open('/dashboard/student/account');
 const account = await shell();
 check(

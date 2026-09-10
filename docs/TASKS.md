@@ -3105,3 +3105,70 @@ whether the link could ever have been seen or reached first.
       additive `prisma migrate deploy` against the local database would
       resolve it, left to the Document Owner to authorize separately per
       this session's explicit instruction not to migrate.
+
+## Owner revision — flexible event scope, Teacher scheduling/Hifz/grades, scoped personal calendars, library deep-link, dialog-based attendance (in progress, 2026-09-10)
+
+Six sections, sequenced smallest-safest first per the Owner's own instruction.
+The pre-implementation audit (SRS, schema, authorization, event dialogs,
+TD-3, OpenAPI) found **three of the six already built or substantially
+built** — reused rather than reimplemented, per rule 5:
+
+* **§5 (`إدخال الحفظ`/`نقاط الامتحانات` for Teachers)** — already fully
+  wired: `assertCanManageQuranProgress` and `grade.service.ts` both already
+  carry a teacher arm scoped through `studentsTaughtBy`; TD-2 already grants
+  both; `/teacher/quran` and `/teacher/exams` are already in her menu (R106),
+  gated on `teachesQuran`. Needs verification/tests, not new code.
+* **§6 (attendance inside event dialogs)** — already built and already
+  sitting at the bottom of `EventDetailsDialog` via `<AttendancePanel>`
+  (R123): self-confirm for المرأة, staff sheet, correct
+  `attendance_mode`/`attendance_marking` gating, full TD-3/OpenAPI coverage.
+  On the Owner's own stop-condition: §4.7 carries no timing/finalization
+  rule beyond "whoever staffs that occurrence on its date" — nothing to
+  invent; the existing rule already governs it.
+* **§4 (Library deep-link)** — `resources.tsx` already reads `?content=<id>`
+  and opens `ContentPreviewDialog` on arrival (2026-08-17), the identical
+  mechanism `EventDetailsDialog`'s own materials links already use. Only
+  `library.tsx`'s own link was missing the parameter — see below, now fixed.
+
+§1 (Event scope) and §3 (personal/scoped calendars) are real, scoped
+extension work — `Event` already has full multi-branch/multi-Level scope
+(`EventBranch`/`EventLevel`/`EventCategory`, a Level-less `holiday` kind);
+`RecurringCourseSchedule` stays single-target by design. §2 (Teacher
+scheduling creation) is a genuine policy reversal of TD-2's existing `⊘` —
+Owner-confirmed anchor: a Teacher may create a schedule only for a
+Level/branch she already holds through `TeacherCategoryCapability`/
+`TeacherSubjectCapability` and a `UserBranchRole`, never through the
+schedule she is about to create.
+
+### §4 — Library `عرض المحتوى` deep-links to the exact item
+
+- [x] `frontend/src/pages/dashboard/library.tsx`'s open-item link now
+      carries `&content=${item.id}` alongside the existing `?level=`,
+      reusing `resources.tsx`'s already-built `?content=` focus mechanism
+      verbatim — no new backend route, no new dialog, no new viewer. A
+      missing or unauthorized id already opens nothing (the item is looked
+      up only inside the server-scoped shelf `resources.tsx` already
+      fetched), which is the existing honest non-disclosure behaviour, not a
+      new one. Autoplay is unaffected — `ContentPreviewDialog`'s
+      `<video>`/`<audio>` already carry `controls` and no `autoPlay`. Back
+      navigation is the browser's own history on a real `<a href>`, not a
+      client-side route.
+- [x] New source-pinning test, `library.test.tsx` (3 cases): the exact href
+      template, `?level=` retained alongside `?content=`, and the id read
+      from the row rather than a hoisted/shared value.
+- [x] `verify-student-flows.mjs` gained three real-browser checks (8a/8b/8c):
+      the link exists and is clicked through the real screen; the resulting
+      page is `/resources` with `?content=` in the URL AND the preview
+      dialog genuinely open, titled with the real item; a hard `Page.reload`
+      reopens the identical item, proving the durable-URL requirement rather
+      than only asserting the string. **Not executable locally right now** —
+      blocked by the same pre-existing, unrelated local-DB migration drift
+      noted above (`seed-r82-scenario.ts`); written to the established
+      pattern and will run once that is resolved.
+- [x] Verification: frontend typecheck/lint/build clean; 104 files/1,230
+      unit tests (up from 1,227); `check-design-tokens.sh`,
+      `check-header-nav-exclusive.sh`, `check-shared-layout.sh`, doc-links
+      and `git diff --check` all clean. No SRS change — `resources.tsx`'s
+      own doc comment already describes this exact intended behaviour; this
+      corrects `library.tsx` to actually reach it, it does not establish a
+      new rule.
