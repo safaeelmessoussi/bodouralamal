@@ -6652,3 +6652,112 @@ change — neither fix alters ratified product policy, only corrects its
 implementation. No Staging or Production action was taken by this pass
 itself; redeploying the fix to Staging, if wanted, is a separate,
 not-yet-requested step.
+
+## R138 correction #2 — the nav-toggle redesigned in-layout (Owner-reported
+## on Staging, same day, 2026-09-10)
+
+The mobile-overlap fix directly above (af8dcb9) made the toggle icon-only
+and `position: fixed` in a screen corner, and cleared the drawer overlap
+geometrically — 26/26 checks, at every width §14 names. The Owner's very
+next report, on the same deployed Staging build, named what that fix broke:
+a control floating disconnected from the page it operates, easy to
+overlook, and — icon-only beside `ApplicationHeader`'s own icon-only
+burger — read as two identical hamburgers on one screen, distinguishable
+only by position. This is a REPLACEMENT of that fix's approach, not a
+further tuning of its coordinates.
+
+**The toggle moved into `.admin__head`'s own `.admin__actions` row** — the
+SAME flex container a page's own action button already renders through.
+Two flex siblings cannot overlap each other by construction, which is the
+"structurally reserved space" the correction specified: no coordinate is
+chosen to avoid the page's own action button, the layout that already keeps
+actions apart does that on its own. `.admin__actions` is now rendered
+unconditionally by `PortalShell` (previously only when a page supplied its
+own `actions`), holding the toggle first and any page-specific actions
+after.
+
+**It carries a `sidebar` panel icon (a new `IconName` — a rectangle with a
+vertical divider) and its own VISIBLE Arabic label**, never `menu`/`close`,
+the exact icons `ApplicationHeader`'s burger uses — so the two controls
+cannot be mistaken for each other by icon OR by position. The label reads
+the SAME noun each portal's own `<nav aria-label>` already carries rather
+than a fourth invented word: `admin.nav.label` («أقسام الإدارة»),
+`teacher.nav.label` («أقسام التدريس»), `student.nav.label` («أقسامي»),
+threaded into `PortalShell` as a new required `navLabel` prop so
+Admin/Teacher/Student stay consistent without touching each portal's own
+sidebar composition. Two new interpolated catalogue entries
+(`nav.showSections`/`nav.hideSections`, `{label}` filled per portal) supply
+the desktop wording exactly as specified — "إظهار {label}" when collapsed,
+"إخفاء {label}" otherwise, since the resting default already shows the
+sidebar with nothing pressed; mobile, which starts collapsed regardless of
+which of its two forms was last shown, states the neutral noun alone rather
+than a state verb the drawer's own header (below) makes moot the instant it
+opens.
+
+**The opened drawer is now a PANEL (`.admin-nav-panel`) with its own header
+and close button, not a bare `<nav>`.** `PortalShell` wraps the same
+`<nav id="admin-sidebar">` each layout already builds in a header row
+(the portal's own `navLabel` as a title, plus a close control) only while
+`override === 'overlay'` — conditionally rendered, the same way the
+backdrop already was, so nothing at rest carries markup for a state it is
+not in. Escape, the backdrop and any nav-link click still close it exactly
+as before; the internal close button is a fourth, always-reachable way that
+does not depend on the (now in-flow, potentially scrolled-past or covered
+on narrow phones) trigger being found again.
+
+**The close button itself is a new shared `IconButton` component
+(`components/ui/icon-button.tsx`), not a second bespoke button styled for
+this second panel.** `Dialog`'s own close button was already the identical
+concept — a small, bordered, icon-only dismiss control with a
+`visually-hidden` accessible name — and the constitution is explicit about
+this exact moment (§2.6: *"promote it the moment a second consumer
+appears... by moving it, never copying it"*). `.dialog__close`'s CSS moved
+(not copied) to a shared `.icon-button` rule in `button.css`; `Dialog` now
+renders through `IconButton` with `className="dialog__close"` preserved so
+the existing rendered-HTML class marker `atomic-components.test.tsx` checks
+for needs no change, and `admin-nav-panel__close` never existed as its own
+styled class — it was written, measured working, and then deleted in favour
+of the shared one before this landed.
+
+**`verify-nav-toggle-geometry.mjs` and its harness are rewritten**, per the
+correction's own instruction to remove the fixed-bottom-corner assumption:
+`nav-toggle-harness.html`'s toggle now lives in a real `.admin__head`/
+`.admin__actions` row (icon + visible label, sized like the real
+`<Button icon="sidebar">`), and its overlay state performs the SAME DOM
+surgery `PortalShell` does — building an `.admin-nav-panel` wrapper (header,
+title, close button) around the nav only while open, removing it entirely
+otherwise — rather than a CSS-only simplification. One geometry assertion
+had to be redesigned rather than merely re-pointed: "the toggle's rect never
+intersects the drawer's" was the right invariant for a `position: fixed`
+toggle that was never meant to be covered, but is the WRONG one now that the
+toggle is ordinary in-flow content a modal can legitimately sit on top of —
+asserting it produced a false failure at 320px, where `.admin__actions`
+genuinely sits under the drawer's own bounds. The actual property — proven
+instead — is paint order: at the genuine overlap point (`elementFromPoint`),
+the drawer always resolves on top, never the toggle over the drawer's own
+content, which is the precise shape of the original Owner-reported defect.
+Coverage widened from 320/1280/1440px to **320/390/1280/1440px** (the
+correction's own full width list); a new `.admin-nav-panel__close` bounds
+check and four close-method checks (button, Escape, backdrop, nav link) run
+at every one of them. **46/46 checks pass.**
+
+`portal-shell.test.tsx`'s static-render suite is substantially rewritten:
+the previous "is icon-only, matching ApplicationHeader's own burger" guard
+pinned exactly the design this correction reverses, and is replaced with
+guards for the opposite property (a real, non-empty visible label; the
+`sidebar` icon path present and `menu`/`close`'s absent; the header's own
+`nav.openMenu`/`nav.closeMenu` wording absent from the toggle specifically,
+scoped rather than whole-page, since the real header legitimately carries
+that wording elsewhere on the very same static render) plus new coverage
+for the toggle's location inside `.admin__actions` and the drawer panel's
+absence at rest.
+
+Verification: frontend typecheck/lint/build clean; 103 files/1,218 unit
+tests (up from 1,214); `check-design-tokens.sh`, `check-header-nav-exclusive.sh`,
+`check-shared-layout.sh`, doc-links and `git diff --check` all clean;
+`verify-nav-toggle-geometry.mjs` 46/46 at 320/390/1280/1440px. The semester-
+notice fix (337e425) is untouched by this pass. `docs/TASKS.md` gained a
+matching "R138 correction #2" addendum. No SRS change — this replaces one
+already-shipped correction's approach; it does not alter ratified product
+policy. No Staging or Production action was taken; redeploying, if wanted,
+remains a separate, not-yet-requested step.

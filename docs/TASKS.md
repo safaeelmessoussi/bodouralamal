@@ -2916,3 +2916,59 @@ detail.
       `check-header-nav-exclusive.sh`, `check-shared-layout.sh` and
       `git diff --check` all clean; `verify-nav-toggle-geometry.mjs` 26/26 at
       320/1280/1440px. Backend untouched by either fix, so not re-run.
+
+## R138 correction #2 — the nav-toggle redesigned in-layout (Owner-reported on Staging, same day, 2026-09-10)
+
+The FIX directly above cleared the drawer overlap geometrically by making the
+toggle `position: fixed` and icon-only — and the Owner's very next report on
+the same deployed Staging build named what that broke: a control floating
+disconnected from the layout it operates, and — icon-only beside
+`ApplicationHeader`'s own icon-only burger — indistinguishable from it at a
+glance (two apparent hamburgers on one screen). This correction replaces
+that fix's approach rather than tuning it further; see [CHANGES](CHANGES.log)
+for full detail.
+
+- [x] **The toggle is an ordinary flex child of `.admin__head`'s own
+      `.admin__actions` now** — the SAME row a page's own action button
+      already uses, never a floating element with its own coordinates. Two
+      flex siblings cannot overlap by construction, which is the
+      "structurally reserved space" the correction asked for.
+- [x] **It carries a `sidebar` panel icon (new `IconName`) and its OWN
+      VISIBLE Arabic label** — never `menu`/`close`, `ApplicationHeader`'s
+      own icons — reading the SAME noun each portal's `<nav aria-label>`
+      already carries (`admin.nav.label` أقسام الإدارة, `teacher.nav.label`
+      أقسام التدريس, `student.nav.label` أقسامي), threaded into `PortalShell`
+      as a new `navLabel` prop so Admin/Teacher/Student stay consistent
+      without a fourth invented word. Desktop states the exact phrasing
+      specified (`إظهار`/`إخفاء {label}`); mobile — which starts collapsed
+      regardless — states the neutral noun alone.
+- [x] **The opened drawer is now a PANEL (`.admin-nav-panel`) with its own
+      header and close button**, not a bare `<nav>` — a title (`navLabel`
+      again) plus a close control that does not depend on the (now in-flow,
+      possibly covered) trigger being reachable again. The close button
+      itself is a new shared `IconButton` component (constitution §2.4/§2.6:
+      "promote it the moment a second consumer appears... by moving it,
+      never copying it") — `Dialog`'s own close button was the first
+      consumer of this exact concept and now renders through the same
+      component, `.dialog__close` kept only as the class name callers still
+      recognise.
+- [x] Escape, the backdrop, any nav-link click and the new internal close
+      button all close the overlay, at both widths — the approved behaviour
+      is unchanged, only reached one more way.
+- [x] `verify-nav-toggle-geometry.mjs` rewritten: no more assumptions about
+      a fixed bottom-corner element: checks the in-layout toggle's own
+      non-overlap with the page's action button and heading, the new panel's
+      header/close-button geometry, and — replacing a brittle "never
+      intersects" assertion that could not hold once the toggle became
+      ordinary in-flow content — a paint-order check (`elementFromPoint` at
+      the genuine overlap point) proving the OPEN drawer always visually
+      wins over content behind it, which is the actual property the
+      original defect violated. **46/46 checks pass, at 320/390/1280/1440px**
+      (widened from 320/1280/1440, matching the correction's own width list).
+- [x] Verification: frontend typecheck/lint/build clean; 103 files/1,218
+      unit tests (up from 1,214); `check-design-tokens.sh`,
+      `check-header-nav-exclusive.sh`, `check-shared-layout.sh`, doc-links
+      and `git diff --check` all clean. The semester-notice fix (337e425) is
+      untouched. No Staging or Production action taken; no SRS change —
+      this replaces one already-shipped correction's approach, it does not
+      alter ratified product policy.
