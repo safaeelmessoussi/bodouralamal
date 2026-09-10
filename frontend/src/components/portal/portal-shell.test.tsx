@@ -308,16 +308,29 @@ describe('the sidebar exposes ONE toggle, visually distinct from the header burg
     expect(render()).toMatch(/class="[^"]*\badmin-nav-toggle\b[^"]*"[^>]*aria-expanded="(true|false)"/);
   });
 
-  it('renders inside the shared page-header actions row, not floating over it', () => {
-    // The "structurally reserved space" the correction asked for: the
-    // toggle is a flex sibling of any page-specific action, inside the
-    // SAME `.admin__actions` container — not a second styling surface with
-    // its own coordinates.
+  /**
+   * **R138 correction #5 (Owner, 2026-09-10) — the toggle is a shell
+   * control, never page content.** Correction #2's placement (inside
+   * `.admin__head`'s own `.admin__actions` row) is exactly what the Owner's
+   * follow-up report named: on desktop that row lives in `.admin__main`,
+   * the grid's column across from the sidebar in RTL, so the control ended
+   * up stranded on the opposite side from the navigation it operates; below
+   * the two-column breakpoint the same row falls directly under the page
+   * title, reading as a page action. These tests replace the ones the
+   * correction reverses.
+   */
+  it('renders OUTSIDE the page-header actions row — never a page action', () => {
     const html = render();
-    // No `<div>` nests inside `.admin__actions` here (its only children are
-    // buttons), so the next `</div>` closes the actions row itself.
-    const match = /<div class="admin__actions">([\s\S]*?)<\/div>/.exec(html);
-    expect(match, 'the actions row').not.toBeNull();
+    expect(html).not.toMatch(/<div class="admin__actions">[\s\S]*?admin-nav-toggle[\s\S]*?<\/div>/);
+  });
+
+  it('renders inside its own shell region, grouped with the sidebar it controls', () => {
+    // `.admin-nav-region` occupies the SAME grid slot `.admin-nav` used to
+    // occupy alone (see `admin.css`'s own doc comment) — no admin__actions
+    // parent, no page-header ancestor of any kind.
+    const html = render();
+    const match = /<div class="admin-nav-region">([\s\S]*?)<nav /.exec(html);
+    expect(match, 'the nav region, ahead of the sidebar it wraps').not.toBeNull();
     expect(match![1]).toContain('admin-nav-toggle');
   });
 });

@@ -3424,3 +3424,121 @@ for this one grant only.
 Both §3 and §2 complete the six-section Owner-requested revision (§4/§5/§6
 already verified; §1 shipped as Revision 139). All six sections are now
 implemented, verified and documented.
+
+## Follow-up repair — portal-shell control placement, and the legal pages' BA-000 (2026-09-10)
+
+Two Owner-reported acceptance defects found in manual testing after the six
+sections above shipped. Neither reopens §1–§6; both are fixed at the layer
+the Owner's own report named.
+
+### Defect A — the sections toggle read as page content, not a shell control
+
+- [x] **Root cause**: `PortalShell` (R138 correction #2) placed the
+      show/hide-sections toggle inside `.admin__head`'s own `.admin__actions`
+      row — page-specific content, in `.admin__main` (the grid's SECOND
+      column). In RTL that column sits to the LEFT of the sidebar's own first
+      column, stranding the control on the opposite side from the navigation
+      it operates; below the two-column breakpoint the same row falls
+      directly under the page title, reading as a page action.
+- [x] **Fix (R138 correction #5)** — `portal-shell.tsx`: the toggle moved
+      into a new `admin-nav-region` wrapper occupying the SAME grid slot
+      `.admin-nav` used to occupy alone (structurally, still exactly two
+      grid participants — no new tracks or areas). Below `60rem` DOM order
+      alone puts it ahead of `.admin__main`; at `≥60rem` it stacks above the
+      sidebar, in the sidebar's own column. `admin.css`: new
+      `.admin-nav-region` rule; `.admin--nav-collapsed`/`.admin--nav-overlay`
+      narrow the column to `auto` (the toggle's own width) rather than to
+      zero, since the control must stay reachable to re-expand.
+- [x] Tests: `portal-shell.test.tsx` — replaced the stale "renders inside
+      `.admin__actions`" assertion with two: outside the page-actions row,
+      and inside its own shell region (19 tests total, up from 18).
+      `nav-toggle-harness.html`/`verify-nav-toggle-geometry.mjs` restructured
+      to match, with new checks: the toggle sits outside `.admin__main` on
+      desktop (the headline regression — 1008 ≥ 976 at 1280px, never
+      stranded), above the page title on mobile, remains visible and
+      reachable after collapsing, and no document-level horizontal overflow
+      at every tested width (320/390/1280/1440) — **124/124 real-Chrome
+      checks pass**.
+- [x] Real-app spot-check (fresh dev-session cookies, live local stack,
+      1280px desktop + 390px mobile): Admin (`/admin`), Teacher (`/teacher`),
+      Student (`/dashboard/student`) all render the toggle inside
+      `admin-nav-region`, positioned identically to the harness
+      (`toggle.left=1008 ≥ main.right=976`); Super Admin (same `/admin`
+      shell) confirmed via the shared `AdminLayout`. Mobile: toggle above
+      the title, no overflow, on all three.
+
+### Defect B — سياسة الخصوصية / شروط الاستعمال failed with BA-000
+
+- [x] **Root cause, proven from the running environment, not assumed** (see
+      `docs/CHANGES.log` for the full diagnostic trail): TWO independent,
+      purely environmental local-dev-stack defects, neither in application
+      code. **(1)** `bodour-api-1`'s running image predated the R138 commit
+      (`f0cfc8d`) by ~7 hours — `dist/src/app.js` inside the stale container
+      carried no `legal-documents` route at all, so every request fell
+      through to the `guarded` router's unconditional auth middleware and
+      came back `401`, not the coded `404`/`503` the actual implementation
+      would give. **(2)** The local dev database had never had
+      `20260909120000_r138_session_title` or
+      `20260909132600_r138_legal_documents` applied —
+      `_prisma_migrations` stopped at R137 — so even a correct image would
+      have hit a raw "relation does not exist" Prisma error, collapsed by
+      `normalize()` into a generic `INTERNAL`/500 the frontend's
+      `classifyError()` renders as **BA-000** (`error-classes.ts`'s own
+      `'unknown'` bucket — a status/shape the classifier does not name a
+      specific code for). The schema, migration, service, controller,
+      route, validators, frontend adapter/page and OpenAPI/TD-3 registry
+      were all already correct and mutually consistent — confirmed line by
+      line before touching anything.
+- [x] **Fix — local development environment only, via the repository's own
+      documented workflow** (`docs/development/getting-started.md`), no
+      code changed: `docker compose build api` (current `develop` HEAD),
+      `docker compose run --rm api npx prisma migrate deploy` (applied
+      exactly the two pending migrations), `docker compose up -d
+      --force-recreate --no-deps api`. `GET /healthz` green; the public
+      route now correctly answers `503 LEGAL_DOCUMENT_NOT_CONFIGURED` for
+      an empty kind — the honest "not yet published" state, never `BA-000`.
+- [x] **Content** — the database held zero `LegalDocument` rows of either
+      kind (never auto-seeded, by design, same as `PARTNERS`/
+      `LegalConsentText`). Real Arabic Privacy Policy and Terms of Use text
+      authored and activated through the actual Super Admin API (`POST
+      /admin/legal-documents` → `POST .../{id}/activate`), reconciled
+      against the current, implemented platform: Google OAuth
+      (`openid`/`email` only), what is actually collected (name, email,
+      optional phone, date of birth, branch/category/Level, attendance
+      incl. self-attendance where R123 permits, exam/assessment
+      answers/grades, Quran/Hifz progress, consent records incl.
+      `media_release`), the **seven-day** deletion recovery window (R133 —
+      the pre-existing recommended-draft text in `ar.ts` still said R111's
+      superseded three days; corrected there too), what R133 retains after
+      deletion, monthly/two-generation backup rotation (R133(6)), public
+      calendar/content tiers, and voluntary teacher voice recordings.
+      Genuinely unresolved facts (CNDP registration, legal representative,
+      governing law/jurisdiction, exact retention period for de-identified
+      records) are marked with the platform's own `⚠` owner-input
+      convention, never invented (§20 rule 9). `ar.ts`'s own
+      `termsLawBody` was missing entirely (a heading with no body) —
+      added, same convention.
+- [x] Real-browser: `verify-legal-pages.mjs` extended — a hard reload
+      (`ignoreCache: true`) re-renders the real body, not a cached error;
+      320px/390px mobile renders the real body with no document-level
+      horizontal overflow, for both pages. **18/18 checks pass**, live
+      local stack, genuinely anonymous (no bearer token at any point).
+- [x] Lifecycle verification: the existing R138 suites
+      (`legal-document.integration.test.ts`,
+      `legal-document.http.integration.test.ts`) already cover the full
+      matrix this defect touches — one active per kind, activation
+      supersedes, active immutable, superseded cannot reactivate,
+      unauthorized management refused, anonymous public read, the
+      not-configured 503 itself (with the other kind unaffected, restored
+      after the test) — unchanged, re-run clean against the disposable
+      stack as part of this pass's full verification (nothing in this
+      code path was touched).
+- [x] Verification: backend lint/typecheck/build clean, 334/334 unit
+      tests; frontend lint/typecheck/build clean, 106 files/1,258 unit
+      tests; full disposable-stack integration suite green, all-table
+      isolation intact. No OpenAPI/TD-3 change (no route added or
+      changed). All `check-*.sh` guards, doc-links and `git diff --check`
+      clean. No migration authored — the two pending ones were already
+      written by R138 and merely needed applying. No Staging or Production
+      action taken; only the local dev container/database were touched,
+      using the repository's own documented, safe workflow.

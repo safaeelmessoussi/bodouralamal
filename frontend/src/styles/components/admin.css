@@ -35,6 +35,41 @@
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 
+/**
+ * **R138 correction #5 — the toggle lives WITH the sidebar, structurally.**
+ *
+ * `PortalShell`'s own doc comment records the defect this fixes: correction
+ * #2 put the toggle inside `.admin__head`'s `.admin__actions` row, which is
+ * PAGE content, in `.admin__main` — the grid's SECOND column. In RTL that
+ * column sits to the LEFT of the sidebar's own first column, so the control
+ * that shows or hides the nav ended up on the opposite side from the nav
+ * itself; below `44rem`, `.admin__head` collapses to one column and the same
+ * row lands directly under the page title, reading as a page action rather
+ * than a shell control.
+ *
+ * `.admin-nav-region` occupies the exact grid slot `.admin-nav` used to
+ * occupy alone — no new grid tracks, no explicit `grid-column`, because
+ * `.admin`'s two-column auto-placement already puts whichever element comes
+ * FIRST in DOM order into column 1 (the backdrop and the opened overlay
+ * panel are both `position: fixed`, so neither one counts as a placed grid
+ * item; only this region and `.admin__main` do, exactly as `.admin-nav` and
+ * `.admin__main` always were the only two). The toggle stacks above whatever
+ * form the nav is currently in: the resting/collapsed column at rest, or
+ * nothing at all once `override === 'overlay'` has moved `sidebar` into its
+ * own fixed panel — see `PortalShell`'s conditional render.
+ *
+ * **Below `60rem`** the grid has one implicit column, so DOM order alone
+ * stacks this region (toggle only, since `.admin-nav` itself is `display:
+ * none` there by default) ahead of `.admin__main` — "above/outside the
+ * page-specific header block," with no separate mobile rule required.
+ */
+.admin-nav-region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
 .admin-nav {
   display: grid;
   gap: var(--space-6);
@@ -267,13 +302,21 @@
   .admin--nav-collapsed .admin-nav {
     display: none;
   }
-  /* Both explicit states remove `.admin-nav` from the grid — collapsed
-     because it is hidden, overlay because the panel that now holds it is
-     `position: fixed` — so both reclaim the column rather than leaving an
-     empty `16rem` gap where an out-of-flow element used to sit. */
+  /**
+   * **R138 correction #5 — the column narrows to the TOGGLE's own width,
+   * never to zero.** Both explicit states remove the actual `.admin-nav`
+   * LIST from the grid — collapsed because it is hidden, overlay because the
+   * panel that now holds it is `position: fixed` — so `.admin__main` still
+   * gets back nearly all of the `16rem` R138 item 8 asked for. What no
+   * longer disappears with it is `.admin-nav-region`'s own column: the
+   * toggle lives there now (correction #5), and a control that vanishes the
+   * moment it is pressed could never be pressed again — `auto` sizes the
+   * column to exactly the toggle's own content width, the smallest a column
+   * that must still show a real button can be.
+   */
   .admin--nav-collapsed,
   .admin--nav-overlay {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
   }
 }
 

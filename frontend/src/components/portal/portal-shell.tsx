@@ -107,6 +107,42 @@ const WIDE_QUERY = '(min-width: 60rem)';
  *    nav link still work exactly as before, this is a fourth, always-visible
  *    way to do the same thing from inside the panel itself.
  *
+ * **R138 correction #5 (Owner, 2026-09-10) — the toggle is a PORTAL-SHELL
+ * control, not page content, and correction #2's placement said otherwise.**
+ * Putting it inside `.admin__head`'s own `.admin__actions` row read as
+ * exactly that: on desktop the row sits in `.admin__main` (the grid's SECOND
+ * column), which in RTL is the column across from the sidebar — so the
+ * control that shows/hides the nav ended up stranded on the opposite side
+ * from the nav itself. Below the two-column breakpoint `.admin__head`
+ * collapses to one column and the actions row falls directly under the page
+ * title/description, reading as a page-specific action rather than what it
+ * actually is.
+ *
+ * **The fix moves the toggle out of the page-header block entirely**, into a
+ * new `admin-nav-region` that wraps it together with the sidebar itself
+ * (`admin.css`, "The sidebar toggle lives WITH the sidebar"). Structurally
+ * this is the SAME two-grid-child shape `.admin` already had — one child in
+ * the nav's own column, one in `.admin__main`'s — so no new grid tracks or
+ * areas are needed and every existing collapse/overlay rule keeps working
+ * unchanged; only WHAT occupies the nav column's slot changes; from `.admin-
+ * nav` alone to a small wrapper stacking the toggle above it.
+ *
+ * **Below `60rem` the grid has one implicit column**, so DOM order alone
+ * puts `admin-nav-region` (toggle only — the resting `.admin-nav` is
+ * `display: none` there) ahead of `.admin__main` in the stacking order,
+ * which is exactly "above/outside the page-specific content header block"
+ * with no separate mobile rule required — the same structural change serves
+ * both widths.
+ *
+ * **Collapsing on desktop can no longer reclaim the FULL nav column**, since
+ * the toggle inside it must stay reachable to re-expand — `admin.css`'s
+ * `.admin--nav-collapsed`/`.admin--nav-overlay` now narrow that column to
+ * `auto` (exactly the toggle's own width) rather than removing it to `0` via
+ * a single-column grid. `.admin__main` still widens on collapse, which is
+ * the property the Owner's own R138 item 8 asked for; only the LAST sliver —
+ * the toggle's own width — no longer vanishes with it, because vanishing it
+ * is what stranded the control in the first place.
+ *
  * **R138 correction #3 (Owner, 2026-09-10) — an EMPTY drawer regression.**
  * `أقسامي` opened a drawer with nothing in it on the Student dashboard.
  * `sidebar` used to arrive as an always-non-null `<nav>` element — every
@@ -251,32 +287,52 @@ export function PortalShell({
             onClick={() => setOverride('collapsed')}
           />
         ) : null}
+        {/* **R138 correction #5 — the toggle lives WITH the sidebar, as its
+            own shell control, never inside the page-specific header.** This
+            wrapper occupies the SAME grid slot `.admin-nav` used to occupy
+            alone; the toggle stacks above whichever form the nav is
+            currently in (the resting/collapsed column here, or nothing when
+            the overlay has taken the sidebar into its own fixed panel
+            below). See the class doc comment's correction #5 for why this
+            is what keeps the control visually anchored to the navigation at
+            every width, on both sides of the collapse. */}
         {hasNav ? (
-          override === 'overlay' ? (
-            // **The opened drawer is now a PANEL with its own header** — see
-            // the class doc comment's correction #2. `sidebar` still renders
-            // exactly the `<nav id="admin-sidebar">` each layout already
-            // builds; this wraps it with a title (the same `navLabel` the
-            // toggle uses, so the drawer names itself in the reader's own
-            // words) and a close button that does not depend on the trigger
-            // being reachable again.
-            <div className="admin-nav-panel">
-              <div className="admin-nav-panel__head">
-                <span className="admin-nav-panel__title">{navLabel}</span>
-                {/* The SAME `IconButton` `Dialog`'s own close button renders
-                    through — one compact icon-only control, not a second one
-                    drawn for this second panel (constitution §2.4/§2.6). */}
-                <IconButton
-                  icon="close"
-                  label={t('nav.closeMenu')}
-                  onClick={() => setOverride('collapsed')}
-                />
-              </div>
-              {sidebar}
+          <div className="admin-nav-region">
+            <Button
+              variant="secondary"
+              icon="sidebar"
+              className="admin-nav-toggle"
+              aria-expanded={navVisible}
+              aria-controls="admin-sidebar"
+              onClick={toggleNav}
+            >
+              {toggleLabel}
+            </Button>
+            {override === 'overlay' ? null : sidebar}
+          </div>
+        ) : null}
+        {hasNav && override === 'overlay' ? (
+          // **The opened drawer is now a PANEL with its own header** — see
+          // the class doc comment's correction #2. `sidebar` still renders
+          // exactly the `<nav id="admin-sidebar">` each layout already
+          // builds; this wraps it with a title (the same `navLabel` the
+          // toggle uses, so the drawer names itself in the reader's own
+          // words) and a close button that does not depend on the trigger
+          // being reachable again.
+          <div className="admin-nav-panel">
+            <div className="admin-nav-panel__head">
+              <span className="admin-nav-panel__title">{navLabel}</span>
+              {/* The SAME `IconButton` `Dialog`'s own close button renders
+                  through — one compact icon-only control, not a second one
+                  drawn for this second panel (constitution §2.4/§2.6). */}
+              <IconButton
+                icon="close"
+                label={t('nav.closeMenu')}
+                onClick={() => setOverride('collapsed')}
+              />
             </div>
-          ) : (
-            sidebar
-          )
+            {sidebar}
+          </div>
         ) : null}
         <main id="main" className="admin__main">
           <div className="admin__head">
@@ -294,31 +350,11 @@ export function PortalShell({
               <h1 className="admin__title">{title}</h1>
               {lede ? <p className="lede">{lede}</p> : null}
             </div>
-            {/* **Rendered whenever there is a toggle OR a page action** (R138
-                correction #2, narrowed by correction #3) — the two live in
-                the SAME flex row so neither can overlap the other by
-                construction, but the row itself no longer appears when
-                BOTH are absent (a page with no actions, on a portal with no
-                contextual nav to toggle) — an empty container is exactly
-                the kind of "reserved space for nothing" correction #3 asked
-                to remove. */}
-            {hasNav || (permitted && actions) ? (
-              <div className="admin__actions">
-                {hasNav ? (
-                  <Button
-                    variant="secondary"
-                    icon="sidebar"
-                    className="admin-nav-toggle"
-                    aria-expanded={navVisible}
-                    aria-controls="admin-sidebar"
-                    onClick={toggleNav}
-                  >
-                    {toggleLabel}
-                  </Button>
-                ) : null}
-                {permitted && actions ? actions : null}
-              </div>
-            ) : null}
+            {/* **R138 correction #5 — page-specific actions only.** The
+                toggle moved out to `admin-nav-region` above; this row is now
+                exactly what its name always claimed it was — the current
+                PAGE's own actions — and renders only when there is one. */}
+            {permitted && actions ? <div className="admin__actions">{actions}</div> : null}
           </div>
 
           {/* An `Active` account holding no role at all is reachable only through

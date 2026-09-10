@@ -2,35 +2,39 @@
 <link rel="stylesheet" href="APP_CSS">
 <style>body{margin:0}</style></head><body>
 <div class="admin" id="shell">
-  <!-- **R138 correction #4** — POPULATED, not a two-item stub: the defect
-       (a `.admin-nav` computing `display: none` while nested inside the
-       open `.admin-nav-panel`) is invisible to a list short enough to
-       render as `0×0` without anyone noticing anything is missing at a
-       glance. Seven items, the exact count and order of a real Student
-       menu (`student.nav.*` in `ar.ts`), with the first marked
-       `aria-current="page"` as the active destination always is. -->
-  <nav class="admin-nav" id="admin-sidebar"><ul class="admin-nav__list">
-    <li><a class="admin-nav__item" href="/one" id="link1" aria-current="page">لوحة المستفيدة</a></li>
-    <li><a class="admin-nav__item" href="/two" id="link2">تقويمي</a></li>
-    <li><a class="admin-nav__item" href="/three" id="link3">مكتبة المحتوى</a></li>
-    <li><a class="admin-nav__item" href="/four" id="link4">حفظي</a></li>
-    <li><a class="admin-nav__item" href="/five" id="link5">اختباراتي</a></li>
-    <li><a class="admin-nav__item" href="/six" id="link6">نقاطي</a></li>
-    <li><a class="admin-nav__item" href="/seven" id="link7">حسابي</a></li>
-  </ul></nav>
+  <!-- **R138 correction #5** — the toggle now lives WITH the sidebar, in its
+       own `admin-nav-region` wrapper occupying the SAME grid slot
+       `.admin-nav` used to occupy alone — never inside the page header's
+       `.admin__actions`. Sized like the real `<Button icon="sidebar">` this
+       button actually renders, so the harness measures a realistic width. -->
+  <div class="admin-nav-region">
+    <button type="button" class="btn btn--secondary admin-nav-toggle" id="toggle" aria-expanded="true" aria-controls="admin-sidebar">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4zM15 4v16" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
+      <span id="toggle-label">إخفاء أقسام الإدارة</span>
+    </button>
+    <!-- **R138 correction #4** — POPULATED, not a two-item stub: the defect
+         (a `.admin-nav` computing `display: none` while nested inside the
+         open `.admin-nav-panel`) is invisible to a list short enough to
+         render as `0×0` without anyone noticing anything is missing at a
+         glance. Seven items, the exact count and order of a real Student
+         menu (`student.nav.*` in `ar.ts`), with the first marked
+         `aria-current="page"` as the active destination always is. -->
+    <nav class="admin-nav" id="admin-sidebar"><ul class="admin-nav__list">
+      <li><a class="admin-nav__item" href="/one" id="link1" aria-current="page">لوحة المستفيدة</a></li>
+      <li><a class="admin-nav__item" href="/two" id="link2">تقويمي</a></li>
+      <li><a class="admin-nav__item" href="/three" id="link3">مكتبة المحتوى</a></li>
+      <li><a class="admin-nav__item" href="/four" id="link4">حفظي</a></li>
+      <li><a class="admin-nav__item" href="/five" id="link5">اختباراتي</a></li>
+      <li><a class="admin-nav__item" href="/six" id="link6">نقاطي</a></li>
+      <li><a class="admin-nav__item" href="/seven" id="link7">حسابي</a></li>
+    </ul></nav>
+  </div>
   <main class="admin__main" id="main">
     <div class="admin__head">
       <div class="admin__heading"><h1 class="admin__title">عنوان الصفحة</h1></div>
       <div class="admin__actions">
-        <!-- **R138 correction #2** — the toggle is an ordinary flex child of
-             `.admin__actions` now, beside any page-specific action, carrying
-             the `sidebar` icon (never `menu`/`close`) plus a VISIBLE label.
-             Sized like the real `<Button icon="sidebar">` this button
-             actually renders, so the harness measures a realistic width. -->
-        <button type="button" class="btn btn--secondary admin-nav-toggle" id="toggle" aria-expanded="true" aria-controls="admin-sidebar">
-          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4zM15 4v16" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
-          <span id="toggle-label">إخفاء أقسام الإدارة</span>
-        </button>
+        <!-- **R138 correction #5** — page-specific actions only; the toggle
+             moved out to `.admin-nav-region` above. -->
         <button type="button" class="btn btn--primary btn--add" id="page-action"><span aria-hidden="true">+</span>إضافة عنصر</button>
       </div>
     </div>
@@ -41,12 +45,15 @@
   // A minimal replica of `PortalShell`'s own toggle state machine (see its
   // doc comment) — enough to drive the CSS invariants in isolation, with no
   // React/backend/auth required. The class names, the three states (`null`
-  // | 'collapsed' | 'overlay') and — since R138 correction #2 — the DOM
-  // surgery itself (`.admin-nav` moves INTO a freshly built `.admin-nav-panel`
-  // wrapper only while the overlay is open, exactly as `PortalShell` only
-  // ever renders that wrapper conditionally) are what the real component
-  // does; nothing here is a simplification of a property being tested.
+  // | 'collapsed' | 'overlay') and — since R138 correction #2, restructured
+  // by correction #5 — the DOM surgery itself (`.admin-nav` moves INTO a
+  // freshly built `.admin-nav-panel` wrapper only while the overlay is open,
+  // leaving `.admin-nav-region` holding just the toggle, exactly as
+  // `PortalShell` only ever renders the panel conditionally) are what the
+  // real component does; nothing here is a simplification of a property
+  // being tested.
   const shell = document.getElementById('shell');
+  const navRegion = document.querySelector('.admin-nav-region');
   const nav = document.getElementById('admin-sidebar');
   const main = document.getElementById('main');
   let state = null;
@@ -105,7 +112,7 @@
       });
       shell.insertBefore(backdrop, panel);
     } else if (state !== 'overlay' && panel) {
-      shell.insertBefore(nav, panel);
+      navRegion.appendChild(nav);
       panel.remove();
       panel = null;
       backdrop.remove();

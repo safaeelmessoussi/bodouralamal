@@ -158,6 +158,27 @@ const rect = (sel) => `(() => {
   return { left: Math.round(b.left), top: Math.round(b.top), width: Math.round(b.width), height: Math.round(b.height), position: cs.position, display: cs.display };
 })()`;
 
+/**
+ * **Follow-up defect A — no document-level horizontal overflow at any tested
+ * width.** Relocating the toggle out of the page header and into its own
+ * shell region is exactly the kind of change that can silently widen the
+ * page if the new element's box does not respect the grid track it sits in
+ * (an unconstrained `min-inline-size`, a button that refuses to shrink).
+ * `scrollWidth > clientWidth` on the root element is the same test this
+ * project's other geometry harnesses already use for the identical property.
+ */
+async function checkNoOverflow(label) {
+  const overflow = await evaluate(`(() => {
+    const el = document.documentElement;
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+  })()`);
+  check(
+    `${label}: no document-level horizontal overflow`,
+    overflow.scrollWidth <= overflow.clientWidth,
+    JSON.stringify(overflow),
+  );
+}
+
 const results = [];
 function check(label, ok, note) {
   results.push(`${ok ? 'PASS' : 'FAIL'}  ${label}${note ? '  — ' + note : ''}`);
@@ -339,7 +360,7 @@ for (const width of [320, 390]) {
   const toggleDefaultMobile = await evaluate(rect('.admin-nav-toggle'));
   const actionDefaultMobile = await evaluate(rect('#page-action'));
   check(
-    `mobile ${width}px: toggle does not overlap the page's own action button by default — the SAME .admin__actions row`,
+    `mobile ${width}px: toggle does not overlap the page's own action button`,
     !intersects(toggleDefaultMobile, actionDefaultMobile),
     `toggle=${JSON.stringify(toggleDefaultMobile)} action=${JSON.stringify(actionDefaultMobile)}`,
   );
@@ -349,6 +370,23 @@ for (const width of [320, 390]) {
     !intersects(toggleDefaultMobile, headingDefaultMobile),
     `toggle=${JSON.stringify(toggleDefaultMobile)} heading=${JSON.stringify(headingDefaultMobile)}`,
   );
+  /**
+   * **Follow-up defect A — the toggle reads as a SHELL control, not a page
+   * action.** The Owner's own report: on mobile it rendered directly under
+   * the title/description, looking like an action that belongs to the
+   * current page. `admin-nav-region` is the first element in DOM order
+   * below `60rem` (a single implicit grid column, so DOM order IS visual
+   * order), so its top must be strictly above the heading's — "outside and
+   * above the page-specific header block," not merely non-overlapping with
+   * it (two elements can fail to overlap and still read as one below the
+   * other in the wrong order).
+   */
+  check(
+    `mobile ${width}px: the toggle sits ABOVE the page title — a shell control, not a page action under it`,
+    toggleDefaultMobile.top < headingDefaultMobile.top,
+    `toggle.top=${toggleDefaultMobile.top} heading.top=${headingDefaultMobile.top}`,
+  );
+  await checkNoOverflow(`mobile ${width}px`);
 
   const mainBeforeOpen = await evaluate(rect('.admin__main'));
   await evaluate(`document.getElementById('toggle').click()`);
@@ -476,6 +514,22 @@ for (const width of [1280, 1440]) {
     !intersects(toggleDefaultDesktop, headingDefaultDesktop),
     `toggle=${JSON.stringify(toggleDefaultDesktop)} heading=${JSON.stringify(headingDefaultDesktop)}`,
   );
+  /**
+   * **Follow-up defect A, the headline regression.** The Owner's own report:
+   * "the navigation/sections are on the right, but إخفاء أقسامي is isolated
+   * on the far left of the page" — because the toggle used to live inside
+   * `.admin__main` (the grid's SECOND column), which in RTL sits to the LEFT
+   * of the sidebar's own first column. This is the direct check for that:
+   * the toggle's left edge must be at or beyond `.admin__main`'s own right
+   * edge — i.e. entirely OUTSIDE the main column, in the nav's own
+   * territory, never inside the region the page title/description occupy.
+   */
+  check(
+    `desktop ${width}px: the toggle sits in the nav's own (right, RTL) column — never stranded inside .admin__main on the opposite side`,
+    toggleDefaultDesktop.left >= mainDefault.left + mainDefault.width,
+    `toggle.left=${toggleDefaultDesktop.left} main.right=${mainDefault.left + mainDefault.width}`,
+  );
+  await checkNoOverflow(`desktop ${width}px (resting default)`);
   // The resting default has no panel wrapper or header at all — `.admin-nav`
   // is its own container, in flow, exactly as it always was.
   await checkPopulatedNav(`desktop ${width}px (resting default)`, '.admin-nav', null);
@@ -490,6 +544,23 @@ for (const width of [1280, 1440]) {
     navCollapsed.display === 'none',
     `display=${navCollapsed.display}`,
   );
+  check(
+    `desktop ${width}px: collapsing still widens .admin__main — R138 item 8's own property, preserved`,
+    mainCollapsed.width > mainDefault.width,
+    `before=${mainDefault.width} after=${mainCollapsed.width}`,
+  );
+  /**
+   * **The property correction #5 adds**: the control that hides the sidebar
+   * must survive its own click. A collapse that also removed the toggle
+   * would leave no way to press it a second time to bring the sidebar back.
+   */
+  const toggleAfterCollapse = await evaluate(rect('.admin-nav-toggle'));
+  check(
+    `desktop ${width}px: the toggle REMAINS visible and reachable after collapsing`,
+    toggleAfterCollapse !== null && toggleAfterCollapse.width > 0 && toggleAfterCollapse.height > 0,
+    JSON.stringify(toggleAfterCollapse),
+  );
+  await checkNoOverflow(`desktop ${width}px (collapsed)`);
 
   // The correction's own invariant: the SECOND press — bringing the sidebar
   // back — must be the overlay panel, and must leave .admin__main EXACTLY

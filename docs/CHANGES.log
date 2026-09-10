@@ -7213,3 +7213,159 @@ Revision 140 ratified (§2 clause). No Staging or Production action taken.
 This completes the six-section Owner-requested revision: §4/§5/§6 verified
 already built; §1 shipped as SRS Revision 139; §3/§2 shipped as SRS Revision
 140.
+
+## Follow-up repair — portal-shell control placement (defect A), and the
+## legal pages' BA-000 (defect B) (2026-09-10)
+
+Two Owner-reported acceptance defects found in manual testing of the shipped
+work above. Neither reopens §1–§6; both are focused repairs at the layer the
+Owner's own report named. No SRS revision — neither changes normative
+behaviour; both correct an implementation defect (A) and an environment
+defect (B) against requirements already ratified.
+
+### Defect A — the sections toggle read as page content, not a shell control
+
+Manual testing found `PortalShell`'s show/hide-sections toggle (R138
+correction #2) visually detached from the navigation it controls: on
+desktop it sat inside `.admin__main`, the grid's SECOND column — the
+opposite side from the sidebar's own first column in RTL — and on mobile it
+rendered directly under the page title, reading as a page-specific action.
+
+**Root cause**: the toggle lived inside `.admin__head`'s own
+`.admin__actions` row — page content, never shell content, by construction.
+
+**Fix (R138 correction #5)**: `portal-shell.tsx` moves the toggle into a
+new `admin-nav-region` wrapper occupying the exact grid slot `.admin-nav`
+used to occupy alone (still exactly two grid participants; no new tracks or
+areas). Below `60rem`, DOM order alone puts the region ahead of
+`.admin__main`; at `≥60rem` the toggle stacks above the sidebar, in the
+sidebar's own column. `admin.css` gains `.admin-nav-region`, and
+`.admin--nav-collapsed`/`.admin--nav-overlay` now narrow the column to
+`auto` (the toggle's own width) rather than to zero, because the control
+that hides the sidebar must stay reachable to bring it back — a control
+that vanishes on its own click could never be pressed a second time.
+
+Tests: `portal-shell.test.tsx` (19 cases, up from 18 — the stale
+"renders inside `.admin__actions`" assertion replaced by two proving the
+opposite: outside the page-actions row, inside its own shell region).
+`nav-toggle-harness.html` restructured to match; `verify-nav-toggle-
+geometry.mjs` gains the direct regression checks — the toggle sits outside
+`.admin__main` on desktop (`toggle.left ≥ main.right` — 1008 ≥ 976 at
+1280px, the exact Owner-reported "stranded on the far left" fixed), above
+the page title on mobile, remains visible and reachable after collapsing,
+and no document-level horizontal overflow at 320/390/1280/1440px —
+**124/124 real-Chrome checks pass**. Real-app spot-check with fresh
+dev-session identities against the live local stack (Admin, Teacher,
+Student, Super Admin — all four via the two distinct Layout components and
+the shared `AdminLayout`) matches the harness's own measurements exactly at
+both 1280px desktop and 390px mobile.
+
+### Defect B — سياسة الخصوصية / شروط الاستعمال failed with BA-000
+
+**Diagnosis, proven from the running environment rather than assumed.**
+The schema, migration files, service, controller, route registration,
+validators, frontend adapter/page and OpenAPI/TD-3 registry (R138 §12/§13)
+were read end to end first and found entirely correct and mutually
+consistent — the defect was not in any of them. Two independent,
+purely-environmental local-dev-stack facts were the actual cause:
+
+1. **A stale running container.** `bodour-api-1` was running an image built
+   ~7 hours before R138's own commit (`f0cfc8d`) merged — `docker exec
+   bodour-api-1 grep -c legal-documents /app/dist/src/app.js` returned 0.
+   Every request to `GET /legal-documents/{kind}` fell through Express's
+   router to the `guarded` sub-router's unconditional auth middleware and
+   came back a bare `401`, not the coded response the real implementation
+   gives — confirmed live (`curl` against the running stack) and by the
+   identical `401` a deliberately bogus path produced on the same stale
+   build.
+2. **Unapplied migrations.** `_prisma_migrations` on the local dev database
+   stopped at `20260909100000_r137_academic_year_label_live_unique` — both
+   `20260909120000_r138_session_title` and
+   `20260909132600_r138_legal_documents` were pending, confirmed directly
+   (`to_regclass('public.legal_document')` → `NULL`; the enum types absent
+   from `pg_type` too). Root cause 1 masked this: once the route existed,
+   this alone would have thrown a raw "relation does not exist" error,
+   collapsed by `normalize()` (TD-3.8 — never leak internals to the
+   response body) into a generic `INTERNAL`/500. The frontend's
+   `classifyError()` (`lib/error-classes.ts`) has no named bucket for every
+   possible status/shape and falls back to `'unknown'` — rendered as
+   **`BA-000`**, the code actually observed.
+
+**Fix — local development environment only, via the repository's own
+documented workflow**
+(`docs/development/getting-started.md`), no application code touched:
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml build api`
+(current `develop` HEAD, confirmed by grepping the freshly built image's
+own `dist/src/app.js`), `... run --rm api npx prisma migrate deploy`
+(applied exactly the two pending migrations — `93 migrations found`, both
+now `finished_at`-stamped), `... up -d --force-recreate --no-deps api`.
+`GET /healthz` green (`database: ok`); the public route now correctly
+answers `503 LEGAL_DOCUMENT_NOT_CONFIGURED` for an empty kind — case 2 of
+the three the Owner's own instruction distinguished (ACTIVE / not-yet-
+published / genuine failure), never the generic error.
+
+**Content.** The `legal_document` table held zero rows of either kind — by
+design, never auto-seeded, the same reasoning `PARTNERS`/
+`LegalConsentText` already state (a plausible-looking legal document a
+deploy script fabricated is worse than an honestly absent one). Real
+Arabic Privacy Policy and Terms of Use text was authored and activated
+through the actual Super Admin API (`POST /admin/legal-documents` → `POST
+.../{id}/activate`, using an existing `[dev-session]`-tagged Super Admin
+fixture account — never Owner-populated data), reconciled clause by clause
+against the currently implemented platform: Google OAuth
+(`openid`/`email` scopes only, matching `oauth.ts`), what is actually
+collected (name, email, optional phone, date of birth — R130 — branch/
+category/Level, attendance including self-attendance where R123's
+`attendance_marking` permits, exam/assessment answers and grades, Quran/
+Hifz progress, consent records including `media_release`), the platform's
+own public calendar/content visibility tiers, voluntary teacher voice
+recordings as educational content, the **seven-day** account-recovery
+window (R133(1) — superseding R111's three days, verified against
+`account-deletion.service.ts`'s own comments, not merely the SRS text),
+what R133 retains after permanent deletion and why, and monthly/
+two-generation backup rotation (R133(6)). Genuinely unresolved facts — CNDP
+registration, the legal representative's name, governing law and
+jurisdiction, the exact retention period for de-identified preserved
+records — are marked with the platform's own `⚠` owner-input convention,
+never invented (§20 rule 9), exactly as the existing `ar.ts` draft already
+modelled for the retention-period case.
+
+**The stale reference draft was also corrected**, for the same reason a
+draft that misstates current policy is worse than no draft:
+`ar.ts`'s `legal.privacyRetentionBody` still said "three days" (R111's
+window, superseded by R133 five days before this pass); and
+`legal.termsLawHeading` («القانون المطبَّق») carried no body at all — a
+heading with nothing under it. Both fixed; `legal.test.ts`'s existing
+content-invariant tests (Google scopes named exactly, retention marked
+pending, no-sale promised, deletion says what survives) are unaffected,
+since they assert other keys.
+
+**Real-browser**: `verify-legal-pages.mjs` extended — a hard reload
+(`Page.reload({ ignoreCache: true })`) re-renders the real body rather than
+a cached error; 320px and 390px mobile render the real body with no
+document-level horizontal overflow, for both pages. **18/18 checks pass**
+against the live local stack, genuinely anonymous throughout (no bearer
+token at any point, matching Google's own OAuth policy requirement this
+page exists to satisfy).
+
+**Lifecycle verification**: unchanged, because nothing in this code path
+was touched — the existing R138 suites
+(`legal-document.integration.test.ts`, `legal-document.http.integration
+.test.ts`) already cover the full matrix this defect touches (one active
+per kind, activation supersedes the previous active, active immutable,
+superseded cannot reactivate, unauthorized management refused, anonymous
+public read, and the not-configured `503` itself — proven with the OTHER
+kind's own active row confirmed unaffected, restored in a `finally` block
+for isolation with the rest of the suite) — re-run clean against the
+disposable stack as part of this pass's full verification.
+
+Verification: backend lint/typecheck/build clean, 38 files/334 unit tests;
+frontend lint/typecheck/build clean, 106 files/1,258 unit tests; full
+disposable-stack integration suite green, all-table isolation intact. No
+OpenAPI/TD-3 change — no route was added or altered. All `check-*.sh`
+guards, doc-links and `git diff --check` clean. No migration authored —
+the two applied were already written by R138 and only needed deploying.
+No Staging or Production action taken; only the local dev container and
+database were touched, through the repository's own documented, safe
+workflow (`docs/development/getting-started.md`), and only to apply
+already-written migrations and rebuild from already-committed source.
