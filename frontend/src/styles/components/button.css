@@ -55,3 +55,28 @@
 .btn__icon {
   flex: none;
 }
+
+/* **The one icon-only control** (moved here from `dialog.css`, R138
+   correction #2 — constitution §2.6: "promote it the moment a second
+   consumer appears... by moving it, never copying it"). `Dialog`'s own
+   close button and the admin portal's nav-drawer close button are the same
+   concept; this is that concept, once. Deliberately NOT `.btn`: `.btn`'s
+   padding is sized for a visible label, and an icon alone inside it sits in
+   a box far larger than the glyph. */
+.icon-button {
+  margin-inline-start: auto;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.icon-button:hover {
+  border-color: var(--color-primary-emphasis);
+  color: var(--color-primary);
+}

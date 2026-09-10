@@ -32,6 +32,15 @@ export const ar = {
     closeMenu: 'إغلاق القائمة',
     skipToContent: 'تخطَّ إلى المحتوى',
     account: 'الحساب',
+    // **The portal sidebar's own toggle** (Owner correction, 2026-09-10) —
+    // deliberately separate from `openMenu`/`closeMenu` above, which name
+    // `ApplicationHeader`'s own site-wide burger. `{label}` is each portal's
+    // OWN section name (`admin.nav.label` أقسام الإدارة, `teacher.nav.label`
+    // أقسام التدريس, `student.nav.label` أقسامي) — one pair of phrasings
+    // reused with whichever noun the reader's own portal already uses for its
+    // menu, rather than a fourth hardcoded name invented here.
+    showSections: 'إظهار {label}',
+    hideSections: 'إخفاء {label}',
   },
   roles: {
     switcherLabel: 'الدور الحالي',

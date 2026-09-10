@@ -95,23 +95,10 @@
   font-size: var(--font-size-md);
   margin: 0;
 }
-.dialog__close {
-  margin-inline-start: auto;
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-}
-.dialog__close:hover {
-  border-color: var(--color-primary-emphasis);
-  color: var(--color-primary);
-}
+/* `.dialog__close`'s own styling now lives at `.icon-button` (`button.css`)
+   — `IconButton` renders both classes, so this selector stays valid for
+   anything scoped to it (the source-pinning test in
+   `atomic-components.test.tsx`) without a second copy of the rule. */
 
 /* **The one intentional scroller.** The head above and any actions below stay
    put; this is what moves. It carries the full §4.4/§4.9 event record as it

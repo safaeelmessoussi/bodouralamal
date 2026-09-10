@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { keepSidebarPlace } from '../../lib/nav-scroll.js';
 import { t } from '../../i18n/index.js';
 import { ApplicationHeader } from '../header/application-header.js';
-import { Icon } from '../ui/icon.js';
+import { Button } from '../ui/button.js';
+import { IconButton } from '../ui/icon-button.js';
 import { Breadcrumb, type Crumb } from './breadcrumb.js';
 import { NoPermissionState } from '../states.js';
 
@@ -72,6 +73,39 @@ const WIDE_QUERY = '(min-width: 60rem)';
  * destination is on screen the instant a link is followed, per the full-page
  * navigation above); only desktop's second click — the one that used to
  * restore the column — changes.
+ *
+ * **R138 correction #2 (Owner, 2026-09-10) — the toggle lives IN the page
+ * header now, not floating over it.** The previous fix (af8dcb9) made the
+ * toggle icon-only and `position: fixed` in the bottom corner, to stop it
+ * overlapping the drawer it opens. Geometrically that worked — but the
+ * Owner's own next screenshot named what it broke: a control disconnected
+ * from the layout it operates is easy to overlook, and an icon-only button
+ * beside `ApplicationHeader`'s OWN icon-only burger read as **two identical
+ * hamburgers**, one for the site and one that just happens to also be on
+ * screen, with nothing distinguishing them but position.
+ *
+ * The correction addresses both at once, structurally rather than by
+ * further tuning a floating element's coordinates:
+ *
+ * 1. **It renders inside `.admin__head`'s own `.admin__actions`** — the SAME
+ *    flex row a page's own action button already uses (`admin.css`'s "The
+ *    page header"). Two flex siblings cannot overlap by construction, which
+ *    is what "structurally reserved space" means here: no coordinate was
+ *    chosen to avoid the action button, the layout that already keeps
+ *    actions apart does that on its own.
+ * 2. **It carries a `sidebar` icon (a panel glyph) plus its OWN visible
+ *    Arabic label**, never `menu`/`close` — the exact icons
+ *    `ApplicationHeader`'s burger uses — so the two controls cannot be
+ *    mistaken for each other even at a glance, and a reader does not have to
+ *    infer its purpose from position alone. The label itself names the
+ *    portal's OWN section noun (`navLabel`, threaded in below) rather than a
+ *    generic "menu," and states show/hide explicitly on desktop, where the
+ *    resting default already shows the sidebar with nothing pressed.
+ * 3. **The opened drawer gained its own header with a close button** — so
+ *    closing it no longer depends on finding the (now in-flow, potentially
+ *    scrolled-past or covered) trigger again; Escape, the backdrop and any
+ *    nav link still work exactly as before, this is a fourth, always-visible
+ *    way to do the same thing from inside the panel itself.
  */
 export function PortalShell({
   title,
@@ -79,6 +113,7 @@ export function PortalShell({
   breadcrumb,
   actions,
   sidebar,
+  navLabel,
   permitted,
   children,
 }: {
@@ -89,6 +124,15 @@ export function PortalShell({
   /** Page-level controls — a "create" button belongs here, beside the heading. */
   actions?: ReactNode;
   sidebar: ReactNode;
+  /**
+   * **The portal's own name for its sidebar** — the SAME text each layout
+   * already gives the `<nav>` landmark's own `aria-label` (`admin.nav.label`
+   * أقسام الإدارة, `teacher.nav.label` أقسام التدريس, `student.nav.label`
+   * أقسامي). The toggle and the opened drawer's own header both read it, so
+   * "show/hide X" always names the portal it is actually in rather than a
+   * fourth invented word for the same three menus.
+   */
+  navLabel: string;
   /** Whether this session may open the current module (TD-2, UX layer). */
   permitted: boolean;
   children: ReactNode;
@@ -133,6 +177,20 @@ export function PortalShell({
     setOverride(navVisible ? 'collapsed' : 'overlay');
   }
 
+  // **The label states the exact phrasing the Owner specified.** Mobile gets
+  // one neutral name regardless of state — the drawer's own header (below)
+  // is what a reader actually looks at once it is open, and it starts
+  // collapsed there in any case (see the class doc comment). Desktop's
+  // resting default already shows the sidebar, so its label states an
+  // explicit verb — "show" only once something has been collapsed, "hide"
+  // otherwise — because pressing it with nothing yet pressed is the one
+  // desktop case that must read as "hide," not "toggle."
+  const toggleLabel = !isWide
+    ? navLabel
+    : navVisible
+      ? t('nav.hideSections').replace('{label}', navLabel)
+      : t('nav.showSections').replace('{label}', navLabel);
+
   return (
     <>
       <ApplicationHeader />
@@ -140,27 +198,9 @@ export function PortalShell({
         className={override === null ? 'admin' : `admin admin--nav-${override}`}
         ref={frame}
       >
-        <button
-          type="button"
-          className="admin-nav-toggle"
-          aria-expanded={navVisible}
-          aria-controls="admin-sidebar"
-          onClick={toggleNav}
-        >
-          {/* Icon-only, matching `ApplicationHeader`'s own burger exactly —
-              "one coherent responsive navigation system" (§14) is what that
-              identity is for, and it is also what keeps this control small
-              enough to have real, measured clearance from the drawer it
-              opens on the narrowest phones (see `admin.css`'s own doc
-              comment on where it is fixed and why). */}
-          <span className="visually-hidden">
-            {navVisible ? t('nav.closeMenu') : t('nav.openMenu')}
-          </span>
-          <Icon name={navVisible ? 'close' : 'menu'} size={18} />
-        </button>
-        {/* The overlay's backdrop — CSS shows it only while `.admin-nav` is
-            the fixed panel (`.admin--nav-overlay`, both widths); a tap on it
-            is the same "close" Escape already offers. */}
+        {/* The overlay's backdrop — CSS shows it only while `.admin-nav-panel`
+            exists below; a tap on it is the same "close" Escape and the
+            panel's own close button already offer. */}
         {override === 'overlay' ? (
           <button
             type="button"
@@ -170,7 +210,30 @@ export function PortalShell({
             onClick={() => setOverride('collapsed')}
           />
         ) : null}
-        {sidebar}
+        {override === 'overlay' ? (
+          // **The opened drawer is now a PANEL with its own header** — see the
+          // class doc comment's correction #2. `sidebar` still renders exactly
+          // the `<nav id="admin-sidebar">` each layout already builds; this
+          // wraps it with a title (the same `navLabel` the toggle uses, so the
+          // drawer names itself in the reader's own words) and a close button
+          // that does not depend on the trigger being reachable again.
+          <div className="admin-nav-panel">
+            <div className="admin-nav-panel__head">
+              <span className="admin-nav-panel__title">{navLabel}</span>
+              {/* The SAME `IconButton` `Dialog`'s own close button renders
+                  through — one compact icon-only control, not a second one
+                  drawn for this second panel (constitution §2.4/§2.6). */}
+              <IconButton
+                icon="close"
+                label={t('nav.closeMenu')}
+                onClick={() => setOverride('collapsed')}
+              />
+            </div>
+            {sidebar}
+          </div>
+        ) : (
+          sidebar
+        )}
         <main id="main" className="admin__main">
           <div className="admin__head">
             {/* **The heading block is a named element now** (2026-08-17), because
@@ -187,7 +250,25 @@ export function PortalShell({
               <h1 className="admin__title">{title}</h1>
               {lede ? <p className="lede">{lede}</p> : null}
             </div>
-            {permitted && actions ? <div className="admin__actions">{actions}</div> : null}
+            {/* **Always rendered now** (R138 correction #2) — the sidebar
+                toggle lives here unconditionally, and a page's own actions
+                join it in the SAME flex row when it has any. This is the
+                "structurally reserved space" the correction asked for: two
+                flex siblings cannot overlap each other by construction, so
+                nothing here chooses coordinates to avoid the other. */}
+            <div className="admin__actions">
+              <Button
+                variant="secondary"
+                icon="sidebar"
+                className="admin-nav-toggle"
+                aria-expanded={navVisible}
+                aria-controls="admin-sidebar"
+                onClick={toggleNav}
+              >
+                {toggleLabel}
+              </Button>
+              {permitted && actions ? actions : null}
+            </div>
           </div>
 
           {/* An `Active` account holding no role at all is reachable only through

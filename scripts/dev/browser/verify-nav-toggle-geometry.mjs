@@ -1,5 +1,6 @@
 /**
- * **R138 item 8 correction — the sidebar toggle measured in a real browser.**
+ * **R138 item 8, and two corrections since — the sidebar toggle measured in
+ * a real browser.**
  *
  * ## Why this exists as a script and not as a test
  *
@@ -8,9 +9,10 @@
  * own doc comment explains this project's DOM-free component tests cannot
  * see. This drives the installed Chrome over CDP the same way, against a
  * static harness (`nav-toggle-harness.html`) that replicates `PortalShell`'s
- * own toggle state machine and class names — no backend, no auth, no
- * database required, since the property under test is CSS geometry, not
- * application behaviour.
+ * own toggle state machine, its DOM surgery and class names — no backend, no
+ * auth, no database required, since the property under test is CSS geometry,
+ * not application behaviour (exact Arabic wording is a source-pinning
+ * concern, covered instead by `portal-shell.test.tsx`).
  *
  * ## Usage
  *
@@ -20,29 +22,32 @@
  * ## What it asserts, and why each one is the Owner's own reported defect
  *
  * - **Mobile (< 60rem): collapsed by default**, opens as an overlay that
- *   does not push `.admin__main`, closes on a nav-link click, Escape and the
- *   backdrop. This is the behaviour the Owner already confirmed is good —
- *   asserted here as a regression guard, not a new requirement.
- * - **Desktop/tablet (>= 60rem): expanded by default** (unchanged), and —
- *   the correction — pressing the toggle a SECOND time (from the collapsed
- *   state) shows the sidebar as a bounded-width overlay that leaves
- *   `.admin__main` at EXACTLY the position/width it already had once
- *   collapsed. The first cut restored the sidebar as the ordinary grid
- *   column, which is measurably the same failure `measure-page-header.mjs`
- *   was built for: a layout shift no source-level check could see.
- * - **The toggle button's own rect never intersects the drawer's, or the
- *   page's own action button's, at any width or state** — the Owner's
- *   SECOND reported defect (a screenshot showing القائمة's own label
- *   rendered on top of the drawer's first link) and the harness's own
- *   earlier blind spot (it checked `.admin-nav`'s `display`/`position` in
- *   the untouched desktop default, but never that it actually lands in a
- *   separate column from `.admin__main` rather than overlapping it).
+ *   does not push `.admin__main`, closes on a nav-link click, Escape, the
+ *   backdrop and — since R138 correction #2 — the drawer's OWN internal
+ *   close button. This is the behaviour the Owner already confirmed is
+ *   good — asserted here as a regression guard, not a new requirement.
+ * - **Desktop/tablet (>= 60rem): expanded by default** (unchanged), and
+ *   pressing the toggle a SECOND time (from the collapsed state) shows the
+ *   sidebar as a bounded-width overlay that leaves `.admin__main` at
+ *   EXACTLY the position/width it already had once collapsed — restoring
+ *   the ordinary grid column instead is the same layout-shift failure
+ *   `measure-page-header.mjs` was built for.
+ * - **R138 correction #2 (Owner, 2026-09-10) — the toggle moved from a
+ *   floating, `position: fixed`, icon-only corner button into
+ *   `.admin__head`'s own `.admin__actions` row.** The Owner's own report
+ *   named what the floating version broke: disconnected from the layout it
+ *   operates, and — icon-only beside `ApplicationHeader`'s own icon-only
+ *   burger — indistinguishable from it at a glance. What is checked here is
+ *   the geometric HALF of that correction (the wording/icon-identity half is
+ *   `portal-shell.test.tsx`'s): the toggle's own rect never intersects the
+ *   page's own action button, the opened drawer (now `.admin-nav-panel`,
+ *   with its own header and close button) at any width or state — closing
+ *   the exact blind spot that let the ORIGINAL toggle-overlaps-drawer defect
+ *   ship unnoticed in the first place.
  *
- * **Mobile is checked at 320px, the narrowest width §14 names** — the worst
- * case for clearance, not a representative one. Passing there is what
- * justified tightening the drawer from `85vw` to `75vw` in `admin.css`, and
- * is stronger evidence than checking a more comfortable 390px and hoping
- * narrower phones are fine too.
+ * **Mobile is checked at both 320px (the narrowest width §14 names — the
+ * worst case for clearance) and 390px (a representative phone)**; desktop at
+ * 1280px and 1440px — the full width list the correction named.
  */
 const PORT = process.env.PORT ?? '9223';
 const URL_TO_OPEN = process.argv[2];
@@ -122,61 +127,133 @@ function intersects(a, b) {
   );
 }
 
-/* ── Mobile — collapsed by default, opens as an overlay, closes three ways ── */
-await setWidth(320);
-await navigate();
+/**
+ * **The toggle is `position: static` now — it can legitimately sit BEHIND
+ * the open drawer**, the same as any ordinary page content a modal covers.
+ * That is not the Owner's original defect (the toggle rendering ON TOP OF
+ * the drawer's own text) and asserting plain rect non-intersection here
+ * would fail on a coincidence this correction never promised to avoid: a
+ * narrow phone's `.admin__actions` row can sit underneath the panel's own
+ * bounds once it opens.
+ *
+ * The actual property is paint order: wherever the two rects genuinely
+ * overlap, `elementFromPoint` at that point must resolve INTO the panel,
+ * never into the toggle — i.e. the drawer visually wins, exactly as any
+ * correctly-layered overlay must. `.admin-nav-panel`'s `z-index: 56` against
+ * the toggle's un-positioned, no-`z-index` default is what the CSS painting
+ * order already guarantees; this proves it rather than trusting the rule.
+ */
+function overlapCenter(a, b) {
+  if (!intersects(a, b)) return null;
+  const left = Math.max(a.left, b.left);
+  const right = Math.min(a.left + a.width, b.left + b.width);
+  const top = Math.max(a.top, b.top);
+  const bottom = Math.min(a.top + a.height, b.top + b.height);
+  return { x: Math.round((left + right) / 2), y: Math.round((top + bottom) / 2) };
+}
 
-const mobileDefault = await evaluate(rect('.admin-nav'));
-check(
-  'mobile: collapsed by default',
-  mobileDefault.display === 'none',
-  `display=${mobileDefault.display}`,
-);
-const toggleDefaultMobile = await evaluate(rect('.admin-nav-toggle'));
-const actionDefaultMobile = await evaluate(rect('#page-action'));
-check(
-  'mobile: toggle does not overlap the page\'s own action button by default',
-  !intersects(toggleDefaultMobile, actionDefaultMobile),
-  `toggle=${JSON.stringify(toggleDefaultMobile)} action=${JSON.stringify(actionDefaultMobile)}`,
-);
+async function topElementAt(x, y) {
+  return evaluate(`(() => {
+    const el = document.elementFromPoint(${x}, ${y});
+    if (!el) return null;
+    return { insideToggle: !!el.closest('.admin-nav-toggle'), insidePanel: !!el.closest('.admin-nav-panel') };
+  })()`);
+}
 
-const mainBeforeOpen = await evaluate(rect('.admin__main'));
-await evaluate(`document.getElementById('toggle').click()`);
-const navOpenMobile = await evaluate(rect('.admin-nav'));
-const mainAfterOpenMobile = await evaluate(rect('.admin__main'));
-const toggleOpenMobile = await evaluate(rect('.admin-nav-toggle'));
-check(
-  'mobile: opening does not move .admin__main',
-  mainBeforeOpen.left === mainAfterOpenMobile.left && mainBeforeOpen.width === mainAfterOpenMobile.width,
-  `before ${mainBeforeOpen.left}/${mainBeforeOpen.width} after ${mainAfterOpenMobile.left}/${mainAfterOpenMobile.width}`,
-);
-check(
-  'mobile: overlay is position:fixed, bounded width (not the whole viewport)',
-  navOpenMobile.position === 'fixed' && navOpenMobile.width > 0 && navOpenMobile.width <= 340,
-  `position=${navOpenMobile.position} width=${navOpenMobile.width}`,
-);
-check(
-  'mobile: the OPEN toggle button itself does not overlap the drawer\'s own rect — the Owner\'s reported defect',
-  !intersects(toggleOpenMobile, navOpenMobile),
-  `toggle=${JSON.stringify(toggleOpenMobile)} drawer=${JSON.stringify(navOpenMobile)}`,
-);
+async function checkDrawerWinsPaintOrder(label, toggleRect, panelRect) {
+  const point = overlapCenter(toggleRect, panelRect);
+  if (!point) {
+    check(label, true, 'toggle and open drawer do not occupy the same screen region here');
+    return;
+  }
+  const top = await topElementAt(point.x, point.y);
+  check(
+    label,
+    top?.insidePanel === true && top?.insideToggle !== true,
+    `overlap point (${point.x},${point.y}) resolves to ${JSON.stringify(top)} — toggle=${JSON.stringify(toggleRect)} panel=${JSON.stringify(panelRect)}`,
+  );
+}
 
-// Escape closes it.
-await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-let state = await evaluate(`window.__navState()`);
-check('mobile: Escape closes the overlay', state === 'collapsed', `state=${state}`);
+/* ── Mobile — collapsed by default, opens as an overlay, closes four ways ──
+ * Checked at BOTH 320px (the narrowest width §14 names — the worst case for
+ * clearance) and 390px (a representative phone), per the correction's own
+ * width list. */
+for (const width of [320, 390]) {
+  await setWidth(width);
+  await navigate();
 
-// Backdrop click closes it.
-await evaluate(`window.__setNavState('overlay')`);
-await evaluate(`document.getElementById('backdrop').click()`);
-state = await evaluate(`window.__navState()`);
-check('mobile: backdrop click closes the overlay', state === 'collapsed', `state=${state}`);
+  const mobileDefault = await evaluate(rect('.admin-nav'));
+  check(
+    `mobile ${width}px: collapsed by default`,
+    mobileDefault.display === 'none',
+    `display=${mobileDefault.display}`,
+  );
+  const toggleDefaultMobile = await evaluate(rect('.admin-nav-toggle'));
+  const actionDefaultMobile = await evaluate(rect('#page-action'));
+  check(
+    `mobile ${width}px: toggle does not overlap the page's own action button by default — the SAME .admin__actions row`,
+    !intersects(toggleDefaultMobile, actionDefaultMobile),
+    `toggle=${JSON.stringify(toggleDefaultMobile)} action=${JSON.stringify(actionDefaultMobile)}`,
+  );
+  const headingDefaultMobile = await evaluate(rect('.admin__title'));
+  check(
+    `mobile ${width}px: toggle does not overlap the page heading by default`,
+    !intersects(toggleDefaultMobile, headingDefaultMobile),
+    `toggle=${JSON.stringify(toggleDefaultMobile)} heading=${JSON.stringify(headingDefaultMobile)}`,
+  );
 
-// Following a nav link closes it (full-page navigation in the real app).
-await evaluate(`window.__setNavState('overlay')`);
-await evaluate(`document.getElementById('link1').click()`);
-state = await evaluate(`window.__navState()`);
-check('mobile: clicking a nav link closes the overlay', state === 'collapsed', `state=${state}`);
+  const mainBeforeOpen = await evaluate(rect('.admin__main'));
+  await evaluate(`document.getElementById('toggle').click()`);
+  const navOpenMobile = await evaluate(rect('.admin-nav-panel'));
+  const mainAfterOpenMobile = await evaluate(rect('.admin__main'));
+  const toggleOpenMobile = await evaluate(rect('.admin-nav-toggle'));
+  check(
+    `mobile ${width}px: opening does not move .admin__main`,
+    mainBeforeOpen.left === mainAfterOpenMobile.left && mainBeforeOpen.width === mainAfterOpenMobile.width,
+    `before ${mainBeforeOpen.left}/${mainBeforeOpen.width} after ${mainAfterOpenMobile.left}/${mainAfterOpenMobile.width}`,
+  );
+  check(
+    `mobile ${width}px: overlay is a position:fixed panel, bounded width (not the whole viewport)`,
+    navOpenMobile.position === 'fixed' && navOpenMobile.width > 0 && navOpenMobile.width <= 340,
+    `position=${navOpenMobile.position} width=${navOpenMobile.width}`,
+  );
+  await checkDrawerWinsPaintOrder(
+    `mobile ${width}px: where the open drawer covers the (now in-flow) toggle, the DRAWER paints on top — never the toggle over the drawer's own content, the original Owner-reported defect`,
+    toggleOpenMobile,
+    navOpenMobile,
+  );
+  const panelCloseMobile = await evaluate(rect('#panel-close'));
+  check(
+    `mobile ${width}px: the drawer carries its own close button, inside the panel's own bounds`,
+    panelCloseMobile !== null &&
+      panelCloseMobile.left >= navOpenMobile.left &&
+      panelCloseMobile.left + panelCloseMobile.width <= navOpenMobile.left + navOpenMobile.width,
+    `close=${JSON.stringify(panelCloseMobile)} panel=${JSON.stringify(navOpenMobile)}`,
+  );
+
+  // The panel's own close button closes it.
+  await evaluate(`document.getElementById('panel-close').click()`);
+  let state = await evaluate(`window.__navState()`);
+  check(`mobile ${width}px: the drawer's own close button closes the overlay`, state === 'collapsed', `state=${state}`);
+
+  // Escape closes it.
+  await evaluate(`window.__setNavState('overlay')`);
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  state = await evaluate(`window.__navState()`);
+  check(`mobile ${width}px: Escape closes the overlay`, state === 'collapsed', `state=${state}`);
+
+  // Backdrop click closes it.
+  await evaluate(`window.__setNavState('overlay')`);
+  await evaluate(`document.getElementById('backdrop').click()`);
+  state = await evaluate(`window.__navState()`);
+  check(`mobile ${width}px: backdrop click closes the overlay`, state === 'collapsed', `state=${state}`);
+
+  // Following a nav link closes it (full-page navigation in the real app).
+  await evaluate(`window.__setNavState('overlay')`);
+  await evaluate(`document.getElementById('link1').click()`);
+  state = await evaluate(`window.__navState()`);
+  check(`mobile ${width}px: clicking a nav link closes the overlay`, state === 'collapsed', `state=${state}`);
+}
 
 /* ── Desktop — expanded by default; the correction itself ──────────────── */
 for (const width of [1280, 1440]) {
@@ -190,19 +267,15 @@ for (const width of [1280, 1440]) {
     desktopDefault.display !== 'none' && desktopDefault.position !== 'fixed',
     `display=${desktopDefault.display} position=${desktopDefault.position}`,
   );
-  // Closes a blind spot the FIRST version of this harness had: it checked
+  // Closes a blind spot an earlier version of this harness had: it checked
   // `.admin-nav`'s display/position in the untouched default, but never
   // that `.admin-nav` and `.admin__main` actually land in SEPARATE grid
-  // columns rather than overlapping — a real risk once the toggle became a
-  // third auto-placed grid child alongside them (now moot, since the toggle
-  // is `position: fixed` and never occupies a grid track at all, but this
-  // stays as the regression guard for exactly that class of defect).
+  // columns rather than overlapping.
   const mainDefault = await evaluate(rect('.admin__main'));
   check(
     // RTL: the first grid column (nav, 16rem) renders on the RIGHT, so nav's
     // `left` is the LARGER of the two — main sits to its left, at a smaller
-    // `left`. (Caught by this exact assertion the first time it was written
-    // backwards: it read main.left > nav.left, which is the LTR direction.)
+    // `left`.
     `desktop ${width}px: nav and main occupy separate, non-overlapping columns by default`,
     !intersects(desktopDefault, mainDefault) && mainDefault.left < desktopDefault.left,
     `nav=${JSON.stringify(desktopDefault)} main=${JSON.stringify(mainDefault)}`,
@@ -213,6 +286,12 @@ for (const width of [1280, 1440]) {
     `desktop ${width}px: toggle does not overlap the page's own action button by default`,
     !intersects(toggleDefaultDesktop, actionDefaultDesktop),
     `toggle=${JSON.stringify(toggleDefaultDesktop)} action=${JSON.stringify(actionDefaultDesktop)}`,
+  );
+  const headingDefaultDesktop = await evaluate(rect('.admin__title'));
+  check(
+    `desktop ${width}px: toggle does not overlap the page heading by default`,
+    !intersects(toggleDefaultDesktop, headingDefaultDesktop),
+    `toggle=${JSON.stringify(toggleDefaultDesktop)} heading=${JSON.stringify(headingDefaultDesktop)}`,
   );
 
   // Collapse it (first press) — main is expected to widen; that direction was
@@ -227,24 +306,25 @@ for (const width of [1280, 1440]) {
   );
 
   // The correction's own invariant: the SECOND press — bringing the sidebar
-  // back — must be the overlay, and must leave .admin__main EXACTLY where it
-  // already was once collapsed, not shift it back toward the sidebar.
+  // back — must be the overlay panel, and must leave .admin__main EXACTLY
+  // where it already was once collapsed, not shift it back toward the
+  // sidebar.
   await evaluate(`document.getElementById('toggle').click()`);
-  const navOverlay = await evaluate(rect('.admin-nav'));
+  const navOverlay = await evaluate(rect('.admin-nav-panel'));
   const mainOverlay = await evaluate(rect('.admin__main'));
   const toggleOverlay = await evaluate(rect('.admin-nav-toggle'));
   check(
-    `desktop ${width}px: second press opens the OVERLAY (position:fixed), never the grid column`,
+    `desktop ${width}px: second press opens the OVERLAY PANEL (position:fixed), never the grid column`,
     navOverlay.position === 'fixed',
     `position=${navOverlay.position}`,
   );
-  check(
-    `desktop ${width}px: the OPEN toggle button does not overlap the drawer's own rect`,
-    !intersects(toggleOverlay, navOverlay),
-    `toggle=${JSON.stringify(toggleOverlay)} drawer=${JSON.stringify(navOverlay)}`,
+  await checkDrawerWinsPaintOrder(
+    `desktop ${width}px: wherever the open drawer covers the toggle, the DRAWER paints on top`,
+    toggleOverlay,
+    navOverlay,
   );
   check(
-    `desktop ${width}px: overlay width is bounded, not the whole viewport`,
+    `desktop ${width}px: overlay panel width is bounded, not the whole viewport`,
     navOverlay.width > 0 && navOverlay.width <= 400,
     `width=${navOverlay.width} of viewport ${width}`,
   );
@@ -253,8 +333,26 @@ for (const width of [1280, 1440]) {
     mainCollapsed.left === mainOverlay.left && mainCollapsed.width === mainOverlay.width,
     `collapsed ${mainCollapsed.left}/${mainCollapsed.width} vs overlay ${mainOverlay.left}/${mainOverlay.width}`,
   );
+  const panelCloseDesktop = await evaluate(rect('#panel-close'));
+  check(
+    `desktop ${width}px: the drawer carries its own close button too, inside the panel's own bounds`,
+    panelCloseDesktop !== null &&
+      panelCloseDesktop.left >= navOverlay.left &&
+      panelCloseDesktop.left + panelCloseDesktop.width <= navOverlay.left + navOverlay.width,
+    `close=${JSON.stringify(panelCloseDesktop)} panel=${JSON.stringify(navOverlay)}`,
+  );
 
-  // Escape closes it here too.
+  // The panel's own close button closes it here too.
+  await evaluate(`document.getElementById('panel-close').click()`);
+  let state = await evaluate(`window.__navState()`);
+  check(
+    `desktop ${width}px: the drawer's own close button closes the overlay`,
+    state === 'collapsed',
+    `state=${state}`,
+  );
+
+  // Escape closes it as well.
+  await evaluate(`window.__setNavState('overlay')`);
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   state = await evaluate(`window.__navState()`);
   check(`desktop ${width}px: Escape closes the overlay`, state === 'collapsed', `state=${state}`);

@@ -60,6 +60,7 @@ export function AdminLayout({
       {...(breadcrumb ? { breadcrumb } : {})}
       actions={actions}
       permitted={permitted}
+      navLabel={t('admin.nav.label')}
       sidebar={<AdminSidebar roles={roles} current={current} />}
     >
       {children}

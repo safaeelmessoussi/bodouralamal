@@ -88,71 +88,116 @@
  * **Owner correction (screenshot, desktop) — "opening" is ALWAYS the overlay
  * below, never the grid column.** `.admin--nav-overlay` never sets
  * `grid-template-columns`: it removes `.admin-nav` from flow entirely
- * (`position: fixed`) and stacks it on TOP of the page, at both widths, so
- * opening it can never shift, resize or reflow `.admin__main` — the exact
- * complaint the first cut's desktop "restore the column" behaviour produced.
- * `.admin--nav-collapsed` is the only state that changes the column, and it
- * only ever RECLAIMS it (`1fr`, more room for `.admin__main`) — never grows
- * it back toward the sidebar, which is what made a click read as "expanding."
+ * (`position: fixed`, inside `.admin-nav-panel` below) and stacks it on TOP
+ * of the page, at both widths, so opening it can never shift, resize or
+ * reflow `.admin__main` — the exact complaint the first cut's desktop
+ * "restore the column" behaviour produced. `.admin--nav-collapsed` is the
+ * only state that changes the column, and it only ever RECLAIMS it (`1fr`,
+ * more room for `.admin__main`) — never grows it back toward the sidebar,
+ * which is what made a click read as "expanding."
  *
  * **`60rem` is `ApplicationHeader`'s own breakpoint**, not a second number —
  * "one coherent responsive navigation system" (§14) is what that identity is
  * for.
  *
- * **Owner-reported defect (screenshot, mobile) — the toggle overlapped the
- * drawer's own first nav item.** The toggle used to be an ordinary IN-FLOW
- * grid child of `.admin`, sitting at the very top of the content area,
- * immediately below the sticky header — which is also exactly where the
- * fixed-position overlay drawer's own top edge sits (`inset-block-start:
- * var(--header-height)`). Two unrelated things occupying the same screen
- * position, with the toggle's `z-index` deliberately ABOVE the drawer's so
- * it stays reachable to close it, is what put its label on top of the
- * drawer's own first link instead of beside it.
+ * **Two corrections since, both Owner-reported by screenshot, worth keeping
+ * on record because each is a real defect a plausible-looking fix produced:**
  *
- * The fix removes it from `.admin`'s grid flow entirely — `position: fixed`
- * — and moves it to the bottom corner rather than the top one. The top
- * corner was tried first and rejected on inspection: `.admin__head`'s own
- * action button (§ "The page header" below, `grid-template-columns: 1fr
- * auto`) already occupies the top-LEFT in RTL on most admin screens, so a
- * fixed top-left toggle would trade one overlap for another rather than
- * removing it. The BOTTOM corner has no other fixed or floating element on
- * this platform (checked) and no page content ever renders there, so it is
- * clear at every width and on every screen, in either direction: opposite
- * the side the drawer opens from (`inset-inline-start: 0` on the drawer is
- * the RIGHT edge in RTL; the toggle sits at `inset-inline-end`, the LEFT),
- * and below the header's own bottom-fixed nothing. A scroll inside a long
- * drawer never carries it out of reach either way, fixed positioning being
- * viewport-relative.
+ * 1. The toggle used to be an ordinary IN-FLOW grid child of `.admin`, at the
+ *    very top of the content area — exactly where the fixed-position overlay
+ *    drawer's own top edge sits, with the toggle's `z-index` deliberately
+ *    ABOVE the drawer's so it stayed reachable to close it. That put its
+ *    label on top of the drawer's own first nav link.
+ * 2. **The fix for (1) (af8dcb9) made it `position: fixed` in a screen
+ *    corner, icon-only.** That cleared the drawer, geometrically — and
+ *    created a NEW defect: a control floating disconnected from the layout
+ *    it operates, indistinguishable at a glance from `ApplicationHeader`'s
+ *    own icon-only burger sitting a few rows away — effectively two
+ *    identical hamburgers on one screen.
  *
- * This also removes a second, latent risk the old in-flow placement
- * created: with the toggle counted as an ordinary grid item alongside
- * `.admin-nav` and `.admin__main`, the DEFAULT (nothing pressed) desktop
- * state had three items auto-placing into a two-column grid — accidentally
- * tolerable only because auto-placement's fallback wrapping happened not to
- * visibly break that specific case, not because the markup was actually
- * correct. Fixed positioning removes the ambiguity rather than relying on
- * that coincidence.
+ * **The toggle is an ordinary flex child of `.admin__actions` now** — see
+ * `PortalShell`'s own doc comment for the reasoning — which is what makes
+ * BOTH of the above impossible at once: it cannot land where the drawer
+ * opens (that position belongs to `.admin__head`, nowhere near the drawer's
+ * fixed top edge), and it carries the `sidebar` icon plus its own visible
+ * label rather than `menu`, so no amount of proximity to the real burger
+ * reads as a second copy of it. No custom rule is needed for its own
+ * position or size any more — `.btn`/`.btn--secondary` (the shared button
+ * system) and `.admin__actions`'s existing flex row do the whole job, which
+ * is itself the property being relied on: this is not a second styling
+ * surface invented for one control.
  */
-.admin-nav-toggle {
+
+/**
+ * **The opened drawer — now a PANEL with its own header, not a bare `<nav>`**
+ * (R138 correction #2). `.admin-nav-panel` owns every property the OLD
+ * `.admin--nav-overlay .admin-nav` rule used to (RIGHT edge in RTL via
+ * `inset-inline-start: 0`, fixed to the page rather than the grid, above the
+ * backdrop, its own scroll) — the wrapper exists so a close button and a
+ * title can sit ABOVE the nav list, in a row that never scrolls away with it.
+ * It is only ever in the DOM while `override === 'overlay'` (`PortalShell`
+ * renders it conditionally, the same way the backdrop already was), so
+ * nothing here needs an `.admin--nav-overlay` prefix to stay inert at rest —
+ * unlike `.admin-nav` below, which is also used, unwrapped, as the resting
+ * desktop column.
+ *
+ * **Mobile's width is `75vw`, tightened from `85vw`** in the previous
+ * correction — unchanged here since the geometry that drove it (an element
+ * needing real clearance on the panel's opposite side at 320px) still holds,
+ * now for the panel rather than the bare nav.
+ */
+.admin-nav-panel {
+  display: flex;
+  flex-direction: column;
   position: fixed;
-  inset-block-end: var(--space-4);
-  inset-inline-end: var(--space-4);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: fit-content;
-  padding: 0.5rem var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  inset-block: var(--header-height) 0;
+  inset-inline-start: 0;
+  z-index: 56;
   background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+  border-inline-end: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
-  /* Above the drawer (56) and its backdrop (55), so it stays reachable to
-     close either one. */
-  z-index: 57;
+}
+.admin-nav-panel__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-block-end: 1px solid var(--color-border);
+  font-weight: 700;
+}
+.admin-nav-panel__title {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+/* The close button itself is the shared `IconButton` (`.icon-button`,
+   `button.css`) — the SAME control `Dialog`'s own close button renders
+   through, not a second one styled here for this second panel. */
+/* `.admin-nav` inside the panel is plain scrollable content — the PANEL now
+   owns the fixed positioning and the scroll, so the sticky-column rules
+   below (its OTHER, unwrapped, resting-desktop-column form) are reset here
+   rather than fought with higher specificity. */
+.admin-nav-panel .admin-nav {
+  position: static;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  max-block-size: none;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+@media (width < 60rem) {
+  .admin-nav-panel {
+    inline-size: min(75vw, 20rem);
+  }
+}
+@media (width >= 60rem) {
+  .admin-nav-panel {
+    /* A bounded reading width, not the whole viewport — the sidebar's own
+       existing column width, so the panel reads as the same sidebar rather
+       than a new, wider surface. */
+    inline-size: 16rem;
+  }
 }
 
 .admin-nav-backdrop {
@@ -161,8 +206,8 @@
   padding: 0;
   cursor: pointer;
 }
-/* Shown, at BOTH widths, only while `.admin-nav` is the fixed overlay panel
-   below — width-independent, so declared once rather than twice. */
+/* Shown, at BOTH widths, only while `.admin-nav-panel` (above) is the open
+   drawer — width-independent, so declared once rather than twice. */
 .admin--nav-overlay .admin-nav-backdrop {
   display: block;
   position: fixed;
@@ -172,47 +217,10 @@
   background: color-mix(in srgb, var(--color-text) 40%, transparent);
 }
 
-/**
- * **The overlay panel itself — one rule, both widths.** Every property here
- * is width-independent (RIGHT edge in RTL via `inset-inline-start: 0`, fixed
- * to the page rather than the grid, its own scroll, above the backdrop and
- * below the toggle's own `z-index: 57` so the button stays reachable to
- * close it). Only `inline-size` differs per breakpoint, in the two media
- * blocks below — desktop/tablet gets a bounded reading width rather than
- * the whole viewport, per the correction.
- *
- * **Mobile's width is `75vw`, tightened from `85vw`** as the one measured
- * side effect of fixing the toggle-overlap defect above: at the narrowest
- * width this platform is checked at (320px, §14), `85vw` left only 48px
- * clear on the opposite side — not enough for the toggle's own ≥44px tap
- * target to sit without touching the drawer's edge, whatever corner it is
- * moved to. `75vw` (240px of content at 320px, still comfortably wide for
- * Arabic nav labels) leaves a real, measured margin — proven in
- * `verify-nav-toggle-geometry.mjs`'s own rect-intersection checks — rather
- * than shaving the toggle's margin down to a number that merely happens to
- * clear it on the one width that was checked by eye.
- */
-.admin--nav-overlay .admin-nav {
-  display: grid;
-  position: fixed;
-  inset-block: var(--header-height) 0;
-  inset-inline-start: 0;
-  max-block-size: none;
-  overflow-y: auto;
-  z-index: 56;
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border-inline-end: 1px solid var(--color-border);
-  box-shadow: var(--shadow-md);
-}
-
 @media (width < 60rem) {
   /* The collapsed default — unaffected by this correction. */
   .admin-nav {
     display: none;
-  }
-  .admin--nav-overlay .admin-nav {
-    inline-size: min(75vw, 20rem);
   }
 }
 
@@ -223,18 +231,12 @@
     display: none;
   }
   /* Both explicit states remove `.admin-nav` from the grid — collapsed
-     because it is hidden, overlay because it is `position: fixed` — so both
-     reclaim the column rather than leaving an empty `16rem` gap where an
-     out-of-flow element used to sit. */
+     because it is hidden, overlay because the panel that now holds it is
+     `position: fixed` — so both reclaim the column rather than leaving an
+     empty `16rem` gap where an out-of-flow element used to sit. */
   .admin--nav-collapsed,
   .admin--nav-overlay {
     grid-template-columns: 1fr;
-  }
-  .admin--nav-overlay .admin-nav {
-    /* A bounded reading width, not the whole viewport (the correction's own
-       requirement) — the sidebar's own existing column width, so the panel
-       reads as the same sidebar rather than a new, wider surface. */
-    inline-size: 16rem;
   }
 }
 

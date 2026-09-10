@@ -30,7 +30,12 @@ export type IconName =
   | 'file'
   | 'download'
   | 'search'
-  | 'folder';
+  | 'folder'
+  // A layout with a side panel — the admin-sections toggle (§14), chosen
+  // specifically because it reads as neither the header's own hamburger
+  // (`menu`) nor a close action (`close`): a reader must not mistake the
+  // portal's own control for a second copy of the site-wide one.
+  | 'sidebar';
 
 const PATHS: Record<IconName, string> = {
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -52,6 +57,9 @@ const PATHS: Record<IconName, string> = {
   download: 'M12 4v10m0 0l-4-4m4 4l4-4M5 19h14',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm6 -2l4 4',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z',
+  // A rectangle with a vertical divider — a panel beside a page, the
+  // universal "sidebar" glyph, and structurally unlike every other icon here.
+  sidebar: 'M4 4h16v16H4V4zM15 4v16',
 };
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }): ReactNode {

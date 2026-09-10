@@ -44,6 +44,7 @@ export function TeacherLayout({
       lede={lede}
       actions={actions}
       permitted={permitted}
+      navLabel={t('teacher.nav.label')}
       sidebar={<TeacherSidebar roles={roles} current={current} me={me} />}
     >
       {children}

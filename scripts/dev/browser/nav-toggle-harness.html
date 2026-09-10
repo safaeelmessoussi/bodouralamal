@@ -2,14 +2,6 @@
 <link rel="stylesheet" href="APP_CSS">
 <style>body{margin:0}</style></head><body>
 <div class="admin" id="shell">
-  <button type="button" class="admin-nav-toggle" id="toggle" aria-expanded="true" aria-controls="admin-sidebar">
-    <span class="visually-hidden">القائمة</span>
-    <!-- Sized like the real `<Icon size={18} />` SVG this button actually
-         renders, so the harness measures a realistic button width rather
-         than an empty one. -->
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
-  </button>
-  <button type="button" class="admin-nav-backdrop" id="backdrop" hidden></button>
   <nav class="admin-nav" id="admin-sidebar"><ul class="admin-nav__list">
     <li><a class="admin-nav__item" href="#one" id="link1">واحد</a></li>
     <li><a class="admin-nav__item" href="#two" id="link2">اثنان</a></li>
@@ -18,6 +10,15 @@
     <div class="admin__head">
       <div class="admin__heading"><h1 class="admin__title">عنوان الصفحة</h1></div>
       <div class="admin__actions">
+        <!-- **R138 correction #2** — the toggle is an ordinary flex child of
+             `.admin__actions` now, beside any page-specific action, carrying
+             the `sidebar` icon (never `menu`/`close`) plus a VISIBLE label.
+             Sized like the real `<Button icon="sidebar">` this button
+             actually renders, so the harness measures a realistic width. -->
+        <button type="button" class="btn btn--secondary admin-nav-toggle" id="toggle" aria-expanded="true" aria-controls="admin-sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4zM15 4v16" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
+          <span id="toggle-label">إخفاء أقسام الإدارة</span>
+        </button>
         <button type="button" class="btn btn--primary btn--add" id="page-action"><span aria-hidden="true">+</span>إضافة عنصر</button>
       </div>
     </div>
@@ -27,13 +28,18 @@
 <script>
   // A minimal replica of `PortalShell`'s own toggle state machine (see its
   // doc comment) — enough to drive the CSS invariants in isolation, with no
-  // React/backend/auth required. The class names and the three states
-  // (`null` | 'collapsed' | 'overlay') are exactly what the real component
-  // applies to `.admin`.
+  // React/backend/auth required. The class names, the three states (`null`
+  // | 'collapsed' | 'overlay') and — since R138 correction #2 — the DOM
+  // surgery itself (`.admin-nav` moves INTO a freshly built `.admin-nav-panel`
+  // wrapper only while the overlay is open, exactly as `PortalShell` only
+  // ever renders that wrapper conditionally) are what the real component
+  // does; nothing here is a simplification of a property being tested.
   const shell = document.getElementById('shell');
-  const toggle = document.getElementById('toggle');
-  const backdrop = document.getElementById('backdrop');
+  const nav = document.getElementById('admin-sidebar');
+  const main = document.getElementById('main');
   let state = null;
+  let panel = null;
+  let backdrop = null;
 
   function visible() {
     if (state === 'overlay') return true;
@@ -41,18 +47,64 @@
     return window.matchMedia('(min-width: 60rem)').matches;
   }
 
-  function apply() {
-    shell.className = state === null ? 'admin' : 'admin admin--nav-' + state;
-    backdrop.hidden = state !== 'overlay';
-    toggle.setAttribute('aria-expanded', String(visible()));
+  function buildPanel() {
+    const p = document.createElement('div');
+    p.className = 'admin-nav-panel';
+    const head = document.createElement('div');
+    head.className = 'admin-nav-panel__head';
+    const title = document.createElement('span');
+    title.className = 'admin-nav-panel__title';
+    title.textContent = 'أقسام الإدارة';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.id = 'panel-close';
+    close.className = 'icon-button';
+    close.innerHTML =
+      '<span class="visually-hidden">إغلاق القائمة</span>' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>';
+    close.addEventListener('click', () => {
+      state = 'collapsed';
+      apply();
+    });
+    head.appendChild(title);
+    head.appendChild(close);
+    p.appendChild(head);
+    p.appendChild(nav);
+    return p;
   }
 
-  toggle.addEventListener('click', () => {
+  function apply() {
+    shell.className = state === null ? 'admin' : 'admin admin--nav-' + state;
+
+    // Mirror `PortalShell`'s own conditional JSX exactly: the panel wrapper
+    // and the backdrop exist in the DOM ONLY while `state === 'overlay'`.
+    if (state === 'overlay' && !panel) {
+      panel = buildPanel();
+      shell.insertBefore(panel, main);
+      backdrop = document.createElement('button');
+      backdrop.type = 'button';
+      backdrop.id = 'backdrop';
+      backdrop.className = 'admin-nav-backdrop';
+      backdrop.setAttribute('aria-hidden', 'true');
+      backdrop.tabIndex = -1;
+      backdrop.addEventListener('click', () => {
+        state = 'collapsed';
+        apply();
+      });
+      shell.insertBefore(backdrop, panel);
+    } else if (state !== 'overlay' && panel) {
+      shell.insertBefore(nav, panel);
+      panel.remove();
+      panel = null;
+      backdrop.remove();
+      backdrop = null;
+    }
+
+    document.getElementById('toggle').setAttribute('aria-expanded', String(visible()));
+  }
+
+  document.getElementById('toggle').addEventListener('click', () => {
     state = visible() ? 'collapsed' : 'overlay';
-    apply();
-  });
-  backdrop.addEventListener('click', () => {
-    state = 'collapsed';
     apply();
   });
   document.addEventListener('keydown', (e) => {

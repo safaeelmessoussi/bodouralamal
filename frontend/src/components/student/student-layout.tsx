@@ -69,6 +69,7 @@ export function StudentLayout({
       lede={lede}
       actions={actions}
       permitted={permitted}
+      navLabel={t('student.nav.label')}
       sidebar={<StudentSidebar roles={roles} current={current} actingForChild={actingForChild} />}
     >
       {children}

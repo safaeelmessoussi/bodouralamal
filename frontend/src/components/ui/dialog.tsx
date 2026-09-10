@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
-import { Icon } from './icon.js';
+import { IconButton } from './icon-button.js';
 
 /**
  * The platform dialog, built on the **native `<dialog>`** element.
@@ -131,10 +131,12 @@ export function Dialog({
           <h2 id={titleId} className="dialog__title">
             {title}
           </h2>
-          <button type="button" className="dialog__close" onClick={onClose}>
-            <span className="visually-hidden">{t('common.close')}</span>
-            <Icon name="close" size={20} />
-          </button>
+          <IconButton
+            icon="close"
+            label={t('common.close')}
+            onClick={onClose}
+            className="dialog__close"
+          />
         </div>
         <div className="dialog__body">{children}</div>
       </div>
