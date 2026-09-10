@@ -52,6 +52,12 @@ export function AdminLayout({
   const { activeRoles: roles } = useActiveRole();
   const current = moduleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles) : false;
+  // **Computed here, not inside `AdminSidebar`** (R138 correction #3 — an
+  // empty-drawer regression, Owner-reported). `PortalShell` decides whether
+  // to render the toggle/drawer AT ALL from this exact, final,
+  // permission-filtered list — never from whether a `<nav>` element exists,
+  // which renders regardless of how many items it contains.
+  const modules = visibleModules(roles);
 
   return (
     <PortalShell
@@ -61,7 +67,7 @@ export function AdminLayout({
       actions={actions}
       permitted={permitted}
       navLabel={t('admin.nav.label')}
-      sidebar={<AdminSidebar roles={roles} current={current} />}
+      sidebar={modules.length > 0 ? <AdminSidebar modules={modules} current={current} /> : null}
     >
       {children}
     </PortalShell>
@@ -69,13 +75,12 @@ export function AdminLayout({
 }
 
 function AdminSidebar({
-  roles,
+  modules,
   current,
 }: {
-  roles: readonly string[];
+  modules: readonly AdminModule[];
   current: AdminModule | null;
 }): ReactNode {
-  const modules = visibleModules(roles);
   const ungrouped = modules.filter((m) => m.section === null);
 
   return (

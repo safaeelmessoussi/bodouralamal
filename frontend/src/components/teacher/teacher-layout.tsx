@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { useActiveRole } from '../../contexts/active-role.js';
-import { useSession, type Me } from '../../contexts/session.js';
+import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import {
   canAccess,
@@ -37,6 +37,10 @@ export function TeacherLayout({
   const { me } = useSession();
   const current = teacherModuleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles) : false;
+  // **Computed here, not inside `TeacherSidebar`** — see `admin-layout.tsx`'s
+  // own note. `PortalShell` renders the toggle/drawer only when this final,
+  // permission- and capability-filtered list is non-empty.
+  const modules = visibleTeacherModules(roles, { teachesQuran: me?.teaches_quran === true });
 
   return (
     <PortalShell
@@ -45,7 +49,7 @@ export function TeacherLayout({
       actions={actions}
       permitted={permitted}
       navLabel={t('teacher.nav.label')}
-      sidebar={<TeacherSidebar roles={roles} current={current} me={me} />}
+      sidebar={modules.length > 0 ? <TeacherSidebar modules={modules} current={current} /> : null}
     >
       {children}
     </PortalShell>
@@ -68,18 +72,12 @@ export function TeacherLayout({
  * which `i18n/resolves.test.ts` caught, exactly as it is meant to.
  */
 function TeacherSidebar({
-  roles,
+  modules,
   current,
-  me,
 }: {
-  roles: readonly string[];
+  modules: readonly TeacherModule[];
   current: TeacherModule | null;
-  me: Me | null;
 }): ReactNode {
-  // **R87 §M** — what she actually teaches, as the server computed it. Without
-  // it every capability-gated entry stays hidden, which is the safe direction.
-  const modules = visibleTeacherModules(roles, { teachesQuran: me?.teaches_quran === true });
-
   return (
     <nav className="admin-nav" id="admin-sidebar" aria-label={t('teacher.nav.label')}>
       <ul className="admin-nav__list">

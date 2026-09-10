@@ -106,6 +106,28 @@ const WIDE_QUERY = '(min-width: 60rem)';
  *    scrolled-past or covered) trigger again; Escape, the backdrop and any
  *    nav link still work exactly as before, this is a fourth, always-visible
  *    way to do the same thing from inside the panel itself.
+ *
+ * **R138 correction #3 (Owner, 2026-09-10) — an EMPTY drawer regression.**
+ * `أقسامي` opened a drawer with nothing in it on the Student dashboard.
+ * `sidebar` used to arrive as an always-non-null `<nav>` element — every
+ * layout built one unconditionally, even for a session whose final,
+ * permission-filtered module list came back empty (a role `STUDENT_MODULES`
+ * admits none of, or a guardian not actively acting for a linked child) — so
+ * PRESENCE of the `<nav>` wrapper was the only thing this component could
+ * ever have checked, and an empty `<ul>` inside it is not the same fact as
+ * "there is nothing to navigate to."
+ *
+ * `sidebar` is `ReactNode | null` now, and each layout computes its OWN
+ * final module list before deciding what to pass — `null` when it is empty,
+ * never a `<nav>` wrapping zero links. This component reads that one signal
+ * (`hasNav = sidebar !== null`) and, when it is `false`, renders NONE of the
+ * toggle, the drawer, its header, its close button, the backdrop, or even
+ * the grid column `.admin`'s own two-column layout would otherwise reserve
+ * for it (`admin--no-nav`, `admin.css`) — never merely hiding an empty shell
+ * with CSS. Admin's own five §14.1 sections are never empty for an admin
+ * role, so this changes nothing there; Teacher and Student now correctly
+ * show no control at all when their own final list has nothing in it,
+ * exactly as Admin already would if it ever did.
  */
 export function PortalShell({
   title,
@@ -123,7 +145,15 @@ export function PortalShell({
   breadcrumb?: readonly Crumb[];
   /** Page-level controls — a "create" button belongs here, beside the heading. */
   actions?: ReactNode;
-  sidebar: ReactNode;
+  /**
+   * The portal's own contextual navigation, or `null` when the session's
+   * final, permission-filtered module list for this portal is empty.
+   * `null` is a meaningful, distinct value here — it is what tells this
+   * component to render no toggle, no drawer and no reserved layout space
+   * for one, rather than an empty `<nav>` it would otherwise have to try to
+   * introspect (R138 correction #3).
+   */
+  sidebar: ReactNode | null;
   /**
    * **The portal's own name for its sidebar** — the SAME text each layout
    * already gives the `<nav>` landmark's own `aria-label` (`admin.nav.label`
@@ -137,6 +167,10 @@ export function PortalShell({
   permitted: boolean;
   children: ReactNode;
 }): ReactNode {
+  // The single signal every rendering decision below reads — see the class
+  // doc comment's correction #3.
+  const hasNav = sidebar !== null;
+
   const frame = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // The sidebar arrives as a node, so it is found in the DOM rather than held
@@ -195,13 +229,20 @@ export function PortalShell({
     <>
       <ApplicationHeader />
       <div
-        className={override === null ? 'admin' : `admin admin--nav-${override}`}
+        className={
+          !hasNav
+            ? 'admin admin--no-nav'
+            : override === null
+              ? 'admin'
+              : `admin admin--nav-${override}`
+        }
         ref={frame}
       >
-        {/* The overlay's backdrop — CSS shows it only while `.admin-nav-panel`
-            exists below; a tap on it is the same "close" Escape and the
-            panel's own close button already offer. */}
-        {override === 'overlay' ? (
+        {/* Nothing in this slot at all when there is no contextual nav to
+            show — no backdrop, no drawer, no reserved grid column
+            (`admin--no-nav`, `admin.css`). See the class doc comment's
+            correction #3. */}
+        {hasNav && override === 'overlay' ? (
           <button
             type="button"
             className="admin-nav-backdrop"
@@ -210,30 +251,33 @@ export function PortalShell({
             onClick={() => setOverride('collapsed')}
           />
         ) : null}
-        {override === 'overlay' ? (
-          // **The opened drawer is now a PANEL with its own header** — see the
-          // class doc comment's correction #2. `sidebar` still renders exactly
-          // the `<nav id="admin-sidebar">` each layout already builds; this
-          // wraps it with a title (the same `navLabel` the toggle uses, so the
-          // drawer names itself in the reader's own words) and a close button
-          // that does not depend on the trigger being reachable again.
-          <div className="admin-nav-panel">
-            <div className="admin-nav-panel__head">
-              <span className="admin-nav-panel__title">{navLabel}</span>
-              {/* The SAME `IconButton` `Dialog`'s own close button renders
-                  through — one compact icon-only control, not a second one
-                  drawn for this second panel (constitution §2.4/§2.6). */}
-              <IconButton
-                icon="close"
-                label={t('nav.closeMenu')}
-                onClick={() => setOverride('collapsed')}
-              />
+        {hasNav ? (
+          override === 'overlay' ? (
+            // **The opened drawer is now a PANEL with its own header** — see
+            // the class doc comment's correction #2. `sidebar` still renders
+            // exactly the `<nav id="admin-sidebar">` each layout already
+            // builds; this wraps it with a title (the same `navLabel` the
+            // toggle uses, so the drawer names itself in the reader's own
+            // words) and a close button that does not depend on the trigger
+            // being reachable again.
+            <div className="admin-nav-panel">
+              <div className="admin-nav-panel__head">
+                <span className="admin-nav-panel__title">{navLabel}</span>
+                {/* The SAME `IconButton` `Dialog`'s own close button renders
+                    through — one compact icon-only control, not a second one
+                    drawn for this second panel (constitution §2.4/§2.6). */}
+                <IconButton
+                  icon="close"
+                  label={t('nav.closeMenu')}
+                  onClick={() => setOverride('collapsed')}
+                />
+              </div>
+              {sidebar}
             </div>
-            {sidebar}
-          </div>
-        ) : (
-          sidebar
-        )}
+          ) : (
+            sidebar
+          )
+        ) : null}
         <main id="main" className="admin__main">
           <div className="admin__head">
             {/* **The heading block is a named element now** (2026-08-17), because
@@ -250,25 +294,31 @@ export function PortalShell({
               <h1 className="admin__title">{title}</h1>
               {lede ? <p className="lede">{lede}</p> : null}
             </div>
-            {/* **Always rendered now** (R138 correction #2) — the sidebar
-                toggle lives here unconditionally, and a page's own actions
-                join it in the SAME flex row when it has any. This is the
-                "structurally reserved space" the correction asked for: two
-                flex siblings cannot overlap each other by construction, so
-                nothing here chooses coordinates to avoid the other. */}
-            <div className="admin__actions">
-              <Button
-                variant="secondary"
-                icon="sidebar"
-                className="admin-nav-toggle"
-                aria-expanded={navVisible}
-                aria-controls="admin-sidebar"
-                onClick={toggleNav}
-              >
-                {toggleLabel}
-              </Button>
-              {permitted && actions ? actions : null}
-            </div>
+            {/* **Rendered whenever there is a toggle OR a page action** (R138
+                correction #2, narrowed by correction #3) — the two live in
+                the SAME flex row so neither can overlap the other by
+                construction, but the row itself no longer appears when
+                BOTH are absent (a page with no actions, on a portal with no
+                contextual nav to toggle) — an empty container is exactly
+                the kind of "reserved space for nothing" correction #3 asked
+                to remove. */}
+            {hasNav || (permitted && actions) ? (
+              <div className="admin__actions">
+                {hasNav ? (
+                  <Button
+                    variant="secondary"
+                    icon="sidebar"
+                    className="admin-nav-toggle"
+                    aria-expanded={navVisible}
+                    aria-controls="admin-sidebar"
+                    onClick={toggleNav}
+                  >
+                    {toggleLabel}
+                  </Button>
+                ) : null}
+                {permitted && actions ? actions : null}
+              </div>
+            ) : null}
           </div>
 
           {/* An `Active` account holding no role at all is reachable only through

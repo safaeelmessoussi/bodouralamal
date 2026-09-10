@@ -62,6 +62,16 @@ export function StudentLayout({
 
   const current = studentModuleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles, { actingForChild }) : false;
+  // **Computed here, not inside `StudentSidebar`** (R138 correction #3 — the
+  // empty-drawer regression the Owner reported: `أقسامي` opened an entirely
+  // empty right-side drawer). `PortalShell` decides whether to render the
+  // toggle/drawer AT ALL from this exact, final, permission-filtered list —
+  // never from whether a `<nav>` element exists, which renders regardless of
+  // how many items it holds. A session whose roles admit none of
+  // `STUDENT_MODULES` (and is not a guardian actively acting for a linked
+  // child) now sees no control and no drawer here, rather than one that opens
+  // on nothing.
+  const modules = visibleStudentModules(roles, { actingForChild });
 
   return (
     <PortalShell
@@ -70,7 +80,7 @@ export function StudentLayout({
       actions={actions}
       permitted={permitted}
       navLabel={t('student.nav.label')}
-      sidebar={<StudentSidebar roles={roles} current={current} actingForChild={actingForChild} />}
+      sidebar={modules.length > 0 ? <StudentSidebar modules={modules} current={current} /> : null}
     >
       {children}
     </PortalShell>
@@ -83,15 +93,12 @@ export function StudentLayout({
  * list short enough to read at once.
  */
 function StudentSidebar({
-  roles,
+  modules,
   current,
-  actingForChild,
 }: {
-  roles: readonly string[];
+  modules: readonly StudentModule[];
   current: StudentModule | null;
-  actingForChild: boolean;
 }): ReactNode {
-  const modules = visibleStudentModules(roles, { actingForChild });
   return (
     <nav className="admin-nav" id="admin-sidebar" aria-label={t('student.nav.label')}>
       <ul className="admin-nav__list">

@@ -48,9 +48,24 @@
  * **Mobile is checked at both 320px (the narrowest width §14 names — the
  * worst case for clearance) and 390px (a representative phone)**; desktop at
  * 1280px and 1440px — the full width list the correction named.
+ *
+ * - **R138 correction #3 (Owner, 2026-09-10) — `أقسامي` opened an entirely
+ *   empty drawer on the Student dashboard.** A layout that always built its
+ *   own `<nav>`, even for a session whose final module list for that portal
+ *   was empty, gave this harness (and `PortalShell`) nothing to check but
+ *   "does a nav element exist" — never "is there anything real inside it."
+ *   A SECOND static harness (`nav-toggle-harness-empty.html`) replicates the
+ *   OTHER shape `PortalShell` can now render — no toggle, no `.admin-nav`,
+ *   no drawer, no reserved grid column, `admin--no-nav` — alongside a stand-in
+ *   for `ApplicationHeader`'s own burger, proving that control stays
+ *   untouched by a portal having nothing of its own to toggle. Checked at
+ *   every width this script already covers, not only mobile — the property
+ *   ("nothing renders for an empty nav slot") has no width dependency, so
+ *   there is no narrower or wider case to single out.
  */
 const PORT = process.env.PORT ?? '9223';
 const URL_TO_OPEN = process.argv[2];
+const EMPTY_URL_TO_OPEN = process.argv[3];
 
 async function targets() {
   const r = await fetch(`http://127.0.0.1:${PORT}/json/list`);
@@ -92,12 +107,18 @@ async function setWidth(width) {
   });
 }
 
-async function navigate() {
-  await send('Page.navigate', { url: URL_TO_OPEN });
+/**
+ * `requireStateMachine` is `false` for the empty-nav harness: it has no
+ * toggle to drive, so no `__setNavState` script ever runs — waiting for one
+ * would only burn the full timeout on every navigation.
+ */
+async function navigate(url, requireStateMachine = true) {
+  await send('Page.navigate', { url });
+  const readyExpr = requireStateMachine
+    ? `document.readyState === 'complete' && typeof window.__setNavState === 'function'`
+    : `document.readyState === 'complete'`;
   for (let i = 0; i < 40; i++) {
-    const ready = await evaluate(
-      `document.readyState === 'complete' && typeof window.__setNavState === 'function'`,
-    ).catch(() => false);
+    const ready = await evaluate(readyExpr).catch(() => false);
     if (ready) break;
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -180,7 +201,7 @@ async function checkDrawerWinsPaintOrder(label, toggleRect, panelRect) {
  * width list. */
 for (const width of [320, 390]) {
   await setWidth(width);
-  await navigate();
+  await navigate(URL_TO_OPEN);
 
   const mobileDefault = await evaluate(rect('.admin-nav'));
   check(
@@ -259,7 +280,7 @@ for (const width of [320, 390]) {
 for (const width of [1280, 1440]) {
   await setWidth(width);
   await evaluate(`window.__setNavState(null)`); // back to the untouched default
-  await navigate();
+  await navigate(URL_TO_OPEN);
 
   const desktopDefault = await evaluate(rect('.admin-nav'));
   check(
@@ -356,6 +377,62 @@ for (const width of [1280, 1440]) {
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   state = await evaluate(`window.__navState()`);
   check(`desktop ${width}px: Escape closes the overlay`, state === 'collapsed', `state=${state}`);
+}
+
+/* ── R138 correction #3 — the OTHER shape: no contextual nav at all ─────────
+ * `أقسامي` opened empty on the Student dashboard because every layout built
+ * its own `<nav>` unconditionally. `nav-toggle-harness-empty.html`
+ * replicates a portal whose final module list came back empty — checked at
+ * every width, since "nothing renders for an empty nav slot" has no width
+ * dependency, and explicitly including a mobile pass because that is where
+ * the Owner's own screenshot was taken. */
+if (EMPTY_URL_TO_OPEN) {
+  for (const width of [320, 390, 1280, 1440]) {
+    await setWidth(width);
+    await navigate(EMPTY_URL_TO_OPEN, false);
+
+    const toggle = await evaluate(rect('.admin-nav-toggle'));
+    check(`empty nav ${width}px: no toggle renders at all`, toggle === null, `toggle=${JSON.stringify(toggle)}`);
+
+    const nav = await evaluate(rect('.admin-nav'));
+    check(`empty nav ${width}px: no .admin-nav renders`, nav === null, `nav=${JSON.stringify(nav)}`);
+
+    const panel = await evaluate(rect('.admin-nav-panel'));
+    check(`empty nav ${width}px: no drawer panel renders`, panel === null, `panel=${JSON.stringify(panel)}`);
+
+    const backdrop = await evaluate(rect('.admin-nav-backdrop'));
+    check(
+      `empty nav ${width}px: no backdrop renders`,
+      backdrop === null,
+      `backdrop=${JSON.stringify(backdrop)}`,
+    );
+
+    const gridColumns = await evaluate(
+      `getComputedStyle(document.getElementById('shell')).gridTemplateColumns`,
+    );
+    const trackCount = gridColumns.trim().split(/\s+/).filter(Boolean).length;
+    check(
+      `empty nav ${width}px: the grid reclaims the column — a single track, not two`,
+      trackCount === 1,
+      `grid-template-columns=${gridColumns}`,
+    );
+
+    // The burger is only ever VISIBLE below 60rem — `check-header-nav-exclusive.sh`
+    // already guards that switch, and duplicating it here would only risk
+    // disagreeing with it. What this harness proves is narrower and its own:
+    // on mobile, where the Owner's own screenshot was taken, the burger is
+    // there and untouched by the portal beneath it having no nav of its own.
+    if (width < 60 * 16) {
+      const burger = await evaluate(rect('#header-burger'));
+      check(
+        `empty nav ${width}px: ApplicationHeader's own burger stays present and untouched`,
+        burger !== null && burger.display !== 'none' && burger.width > 0 && burger.height > 0,
+        `burger=${JSON.stringify(burger)}`,
+      );
+    }
+  }
+} else {
+  check('empty-nav harness checks (R138 correction #3)', false, 'no second URL passed to this script');
 }
 
 console.log(results.join('\n'));

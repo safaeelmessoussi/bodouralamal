@@ -13,6 +13,9 @@ CHROME="$(command -v google-chrome || command -v chromium || command -v chromium
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true' EXIT
 sed "s|APP_CSS|file://$PWD/$CSS|" scripts/dev/browser/nav-toggle-harness.html > "$WORK/harness.html"
+# **R138 correction #3** — the OTHER shape a portal can render: no contextual
+# nav at all (an empty, permission-filtered module list). See the .mjs.
+sed "s|APP_CSS|file://$PWD/$CSS|" scripts/dev/browser/nav-toggle-harness-empty.html > "$WORK/harness-empty.html"
 
 "$CHROME" --headless=new --disable-gpu --no-sandbox \
   --remote-debugging-port=9223 --remote-allow-origins='*' \
@@ -29,4 +32,4 @@ if [[ "$CHROME_READY" != "1" ]]; then
   exit 1
 fi
 
-node scripts/dev/browser/verify-nav-toggle-geometry.mjs "file://$WORK/harness.html"
+node scripts/dev/browser/verify-nav-toggle-geometry.mjs "file://$WORK/harness.html" "file://$WORK/harness-empty.html"

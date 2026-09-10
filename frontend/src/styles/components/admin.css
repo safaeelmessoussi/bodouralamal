@@ -22,6 +22,15 @@
     /* The sidebar is a fixed reading width; the module takes the rest. */
     grid-template-columns: 16rem 1fr;
   }
+  /* **R138 correction #3** — a portal whose final, permission-filtered
+     module list is empty (`PortalShell`'s `sidebar` prop is `null`) reclaims
+     the column entirely, at rest, rather than reserving `16rem` for a nav
+     that will never render. Same effect `.admin--nav-collapsed` already has
+     once a sidebar is toggled away — stated as its own modifier because this
+     portal never HAD one to toggle in the first place. */
+  .admin--no-nav {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */

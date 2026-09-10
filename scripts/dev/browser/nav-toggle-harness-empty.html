@@ -1,0 +1,28 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<link rel="stylesheet" href="APP_CSS">
+<style>body{margin:0}</style></head><body>
+<!-- **R138 correction #3** — the OTHER shape `PortalShell` can render: a
+     portal whose final, permission-filtered module list came back empty
+     (the Owner-reported defect — `أقسامي` opened on nothing). No toggle, no
+     `.admin-nav`, no drawer, no reserved grid column — only `.admin__main`,
+     exactly what `admin admin--no-nav` produces. A real header burger sits
+     above it, standing in for `ApplicationHeader`'s own, to prove THAT
+     control is untouched by a portal having nothing of its own to toggle. -->
+<header class="app-header">
+  <button type="button" class="app-header__burger" id="header-burger" aria-expanded="false" aria-controls="mobile-menu">
+    <span class="visually-hidden">فتح القائمة</span>
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
+  </button>
+</header>
+<div class="admin admin--no-nav" id="shell">
+  <main class="admin__main" id="main">
+    <div class="admin__head">
+      <div class="admin__heading"><h1 class="admin__title">عنوان الصفحة</h1></div>
+      <div class="admin__actions">
+        <button type="button" class="btn btn--primary btn--add" id="page-action"><span aria-hidden="true">+</span>إضافة عنصر</button>
+      </div>
+    </div>
+    <p id="content">محتوى الصفحة الفعلي.</p>
+  </main>
+</div>
+</body></html>
