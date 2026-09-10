@@ -7070,3 +7070,146 @@ clean. **No migration** — the join tables already stored multiple rows per
 event; only the read projection and the creation form changed. SRS Revision
 139 ratified. No Staging or Production action taken. Remaining sections (§3,
 §2) continue in subsequent commits.
+
+## Owner revision, §3 — personal calendars corrected against R139's flexible
+## Event scope (2026-09-10)
+
+`GET /me/calendar` (R82.8) was already the platform's answer to *"what
+concerns me"* — `personalFilters()` in `calendar.service.ts`, a filter
+composed into the SAME `readCalendar` projection `GET /calendar` uses, never
+a second pipeline. Auditing it against R139 found one genuine defect and
+confirmed the rest already correct.
+
+**The defect**: `personalFilters`'s Event predicate checked each scope
+dimension (branch/category/level/group) as an INDEPENDENT `OR` arm, so a
+student enrolled in the right Level at the WRONG branch matched an Event
+scoped to *"this branch AND that Level"* through the Level arm alone —
+exactly the accidentally-broadening `OR` this audit was told to find.
+`eventAudienceWhere` (`roster-resolution.ts`, R82.7) already resolves the
+SAME Event's notification audience as an intersection (*"naming a Category
+alongside a Branch narrows the Branch, it does not add a second, unrelated
+population"*); `personalFilters` now reads the same way — `OR` across her
+enrolments, `AND` across the dimensions ONE enrolment must satisfy. The
+global-event arm and her own `EventStaff` assignment arm are unchanged.
+
+**Confirmed, not merely assumed**: R139's multi-value scope already reached
+the personal calendar correctly (`some`/`in`, never `take: 1` — that was §1's
+separate display-projection bug, already fixed). Session-side scoping (R92
+combined-branch audience, R91 dated staffing) needed no correction — already
+exercised by `session-audience.http.integration.test.ts` and
+`effective-staffing.http.integration.test.ts`. `GET /calendar`'s visibility
+tiers, R135's filter-prefill semantics, `GET /me/calendar`'s deliberately
+narrower-than-public scope, `GET /calendar/sessions/{id}`'s direct-ID
+`404`-not-existence-leak behaviour, and §4's Library deep-link are all
+unchanged, asserted so rather than left alone.
+
+New tests: `personal-calendar.integration.test.ts` (new file, 9 cases — the
+intersection correction with its control cases, R139's multi-branch/
+multi-Level scope reaching the personal calendar, the global-Event arm, a
+مؤطِّرة's own staffed-regardless-of-scope arm, and her own class session
+appearing on her calendar).
+
+Verification: backend lint/typecheck/build clean, 334/334 unit tests; full
+disposable-stack integration suite green, all-table isolation intact,
+including the new file (9/9). No migration, no OpenAPI/TD-3 change. SRS
+Revision 140 ratified (§3 clause). No Staging or Production action taken.
+
+## Owner revision, §2 — a مؤطِّرة may create a class within her own declared
+## scope, superseding R114(2) for this one grant (2026-09-10)
+
+TD-2's *"Create/edit Recurring Course Schedules"* row read Teacher `⊘` since
+Revision 43 — R71.0/R72.1 recorded why: §4.4c derives her scope *from the
+schedules she staffs*, so creating one with no other anchor would widen her
+own reach circularly. The Owner's own anchor decision breaks the
+circularity with a DIFFERENT, non-circular pair: her declared
+`TeacherCategoryCapability`/`TeacherSubjectCapability` (R114, an OR) and her
+`teacher` `UserBranchRole` — never the schedule she is about to create.
+
+**`course-schedule.service.ts`**: `createCourseSchedule` accepts a مؤطِّرة
+when her branch is one she holds a live `teacher` `UserBranchRole` in
+(`assertCanActOnBranch`, the SAME mechanism an Admin's own branch scope
+already uses); the target Level's Category or Subject is declared
+(`assertTeacherDeclaredCapability`, checked once the target resolves);
+`teaching_mode` is `entire_level` only (`assertTeacherEntireLevelOnly` —
+Administrative/Teaching Group targeting stays with the administration); and
+she is named the schedule's own `teacher` in the same request
+(`assertTeacherSelfStaffed`, `TEACHER_MUST_SELF_STAFF` otherwise — R93(3)'s
+`RESPONSIBLE_MUST_BE_SELF` precedent, reused). `updateCourseSchedule` accepts
+her for a schedule she currently, effectively staffs
+(`assertTeacherCurrentlyStaffs`, any position — R87 §G), refuses `NOT_FOUND`
+otherwise (§20 rule 17), and refuses a `staff` patch removing her own
+`teacher` position (`assertTeacherRemainsStaffed`). `this_and_future`
+splitting and deletion stay manager-only, unchanged — the ratified grant is
+creation and operational editing, not every write TD-2's row could
+theoretically cover.
+
+**`GET /me/course-schedule-options`** (new route): a second, single-purpose
+read beside `/me/scope-options`, never a flag on it — an Admin reads that
+SAME endpoint for the SAME `ClassSection` chain, unbounded by declared
+capability, so a mode flag risks one branch of a shared conditional quietly
+narrowing or widening the OTHER caller. Branches from her `teacher`
+`UserBranchRole`; a Level whose Category she declared offers every Subject
+it teaches; a Level reached only through a declared Subject offers just that
+one; an undeclared Level is absent.
+
+**Frontend**: `/teacher/schedules`'s `TEACHER_TYPES` gains `class`, reusing
+the canonical `SchedulingDialog`/`ClassSection` — no duplicate scheduler.
+`ClassSection` gains `staffLocked` (a static *"you are this class's
+مؤطِّرة"* statement replacing the multi-row staffing editor she is
+server-refused from using any other way, on `ActivitySection`'s own
+`responsibleLocked` precedent) and `modes` is restricted to `['entire_level']`
+for her. `useScopeOptions` gains `restrictToOwnCapability`, read only at
+`ClassSection`'s own call site, selected by the same `canAssignStaff` flag
+already distinguishing Admin from Teacher throughout the shared dialog —
+every other caller and item type is unaffected.
+
+**A pre-existing test's assumption was superseded, not silently bypassed**:
+`course-schedule.http.integration.test.ts`'s *"still cannot create, edit,
+delete, or preview conflicts"* asserted a Teacher who staffs a schedule can
+never edit it — exactly the restriction §2 lifts for operational fields. It
+is rewritten to assert the current, ratified shape: her create attempt using
+`administrative_group` mode is refused for the specific, coded reason
+`TEACHER_ENTIRE_LEVEL_ONLY` (not a blanket `403`); her edit of a schedule
+she staffs now succeeds (`200`, the field verified changed); delete and the
+conflicts preview remain refused, unchanged.
+
+New tests: `course-schedule-teacher.integration.test.ts` (new file, 14 cases
+— the full positive/negative authorization matrix: Category-alone and
+Subject-alone grants, wrong branch, undeclared Level/Category via direct
+target substitution, non-`entire_level` targeting, missing/wrong
+self-staffing, a bare Teacher role with neither anchor, edit bounded by
+current staffing with the `NOT_FOUND`-not-`FORBIDDEN` shape, the
+remain-staffed guard, `this_and_future` refusal, Admin/Super Admin
+unchanged, and the cross-section chain — her created class's materialized
+Session reaching both the enrolled student's and her own personal
+calendar); 7 new cases in `scope-options.http.integration.test.ts` for
+`/me/course-schedule-options`; `class-section.staff-locked.test.tsx` (new
+file, 9 cases — the locked-staffing render, and source-pinned assertions
+against `scheduling.tsx`/`teacher/schedules.tsx`'s own wiring).
+
+**Real-browser**: `verify-teacher-scheduling.mjs` extended — checks 10/11
+updated (حصة now correctly offered, no longer asserted absent); new check 13
+(the entire_level-only mode and the staffLocked statement render correctly
+for a real Teacher account; her Level picker is genuinely empty —
+server-filtered, not client-guessed — since this scenario declares her no
+capability). **Not executable in this session** — blocked by a pre-existing,
+unrelated local-DB migration drift (`session.title`, from
+`20260909120000_r138_session_title`, absent from the persistent local dev
+database); written to the established pattern and will run once that drift
+is resolved. The disposable-stack integration suite is the real-HTTP-
+equivalent evidence for the exact same scenarios in the meantime.
+
+Verification: backend lint/typecheck/build clean, 334/334 unit tests;
+frontend lint/typecheck/build clean, 106 files/1,257 unit tests (up from
+105 files/1,248); full disposable-stack integration suite — 109 files/2,482
+tests (17 pre-existing unrelated skips), all-table isolation intact.
+`docs/openapi.json` regenerated with no hand-edits (175 paths/226
+operations, one new route); TD-3 conformance updated
+(`scripts/ci/td3-routes.txt`), 226/234 implemented, 0 undocumented. All
+`check-*.sh` guards, doc-links and `git diff --check` clean. **No
+migration** — every table this section reads or writes already existed. SRS
+Revision 140 ratified (§2 clause). No Staging or Production action taken.
+
+This completes the six-section Owner-requested revision: §4/§5/§6 verified
+already built; §1 shipped as SRS Revision 139; §3/§2 shipped as SRS Revision
+140.

@@ -634,23 +634,45 @@ async function personalFilters(
   });
 
   const levelIds = [...new Set(enrolments.map((e) => e.levelId))];
-  const branchIds = [...new Set(enrolments.map((e) => e.branchId))];
-  const categoryIds = [...new Set(enrolments.map((e) => e.level.categoryId))];
   const groupIds = enrolments
     .map((e) => e.administrativeGroupId)
     .filter((id): id is string => id !== null);
   const circleIds = seats.map((s) => s.teachingGroupId);
 
   /**
-   * **An event concerns her if ANY of its scopes names something she is in** —
-   * a union, unlike the notification audience, which intersects the scopes of an
-   * event to find its recipients. The two are different questions asked from
-   * different ends: *does this event's scope include me* versus *who does this
-   * event's scope include*.
+   * **§3, Revision 140 — an event concerns her only where ONE enrolment
+   * satisfies EVERY dimension the event actually names, mirroring
+   * `eventAudienceWhere`'s own rule** (`roster-resolution.ts`: *"scopes of
+   * different kinds intersect and scopes of the same kind union… naming a
+   * Category alongside a Branch narrows the Branch, it does not add a second,
+   * unrelated population"*). The version this replaces checked each dimension
+   * as an INDEPENDENT `OR` arm — a student enrolled in Level Y at branch B3
+   * matched an event scoped to *"branch B1 AND level Y"* through the level
+   * arm alone, never checking that her branch was B1. That is exactly the
+   * accidentally-broadening `OR` this revision's own audit was told to find:
+   * the notification audience for the identical event already excluded her
+   * correctly, so her personal calendar disagreed with who the event
+   * actually notifies.
    *
-   * A **global** event (no scope rows at all) is on everybody's calendar, which
-   * is exactly where R82.7 puts it: visible to all, notified to none.
+   * Still a union ACROSS enrolments (she may hold several), never a union
+   * across dimensions WITHIN one enrolment — `eventAudienceWhere` reads the
+   * same way from the opposite direction (one `User` predicate; this is one
+   * `Event` predicate per enrolment, `OR`-ed together).
+   *
+   * A **global** event (no scope rows at all) is on everybody's calendar,
+   * which is exactly where R82.7 puts it: visible to all, notified to none.
    */
+  const dimensionMatch = (
+    field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
+    idField: "branchId" | "categoryId" | "levelId" | "administrativeGroupId",
+    value: string | null,
+  ): Prisma.EventWhereInput => ({
+    OR: [
+      { [field]: { none: {} } },
+      ...(value ? [{ [field]: { some: { [idField]: value } } }] : []),
+    ],
+  });
+
   const event: Prisma.EventWhereInput = {
     OR: [
       {
@@ -661,24 +683,18 @@ async function personalFilters(
           { administrativeGroupScopes: { none: {} } },
         ],
       },
-      ...(branchIds.length
-        ? [{ branchScopes: { some: { branchId: { in: branchIds } } } }]
-        : []),
-      ...(categoryIds.length
-        ? [{ categoryScopes: { some: { categoryId: { in: categoryIds } } } }]
-        : []),
-      ...(levelIds.length
-        ? [{ levelScopes: { some: { levelId: { in: levelIds } } } }]
-        : []),
-      ...(groupIds.length
-        ? [
-            {
-              administrativeGroupScopes: {
-                some: { administrativeGroupId: { in: groupIds } },
-              },
-            },
-          ]
-        : []),
+      ...enrolments.map((e) => ({
+        AND: [
+          dimensionMatch("branchScopes", "branchId", e.branchId),
+          dimensionMatch("categoryScopes", "categoryId", e.level.categoryId),
+          dimensionMatch("levelScopes", "levelId", e.levelId),
+          dimensionMatch(
+            "administrativeGroupScopes",
+            "administrativeGroupId",
+            e.administrativeGroupId,
+          ),
+        ],
+      })),
       // Her own assignments, whatever the scope says.
       { staff: { some: { userId, deletedAt: null } } },
     ],

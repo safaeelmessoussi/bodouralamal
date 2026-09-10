@@ -46,3 +46,23 @@ export interface ScopeOptionsPayload {
 export async function fetchScopeOptions(token: string | null): Promise<ScopeOptionsPayload> {
   return (await api<{ data: ScopeOptionsPayload }>('/me/scope-options', { token })).data;
 }
+
+/**
+ * **`GET /me/course-schedule-options` — a مؤطِّرة's own declared-capability
+ * scope, for creating her own class** (SRS §2, Revision 140).
+ *
+ * Same wire shape as `/me/scope-options` above — reusing `ScopeOptionsPayload`
+ * verbatim — narrowed by the SERVER to a different question: not *everything
+ * a staff member may filter by* (unscoped on purpose, §4.9 tier 3), but *the
+ * Levels/Subjects/branches she is actually authorised to schedule a class
+ * for* (her declared `TeacherCategoryCapability`/`TeacherSubjectCapability`
+ * and her `teacher` `UserBranchRole`). A separate endpoint rather than a flag
+ * on the one above, for the reason the service's own docstring gives: an
+ * Admin reads the SAME hook for the SAME `ClassSection` scope chain, and her
+ * authority is not bounded by declared capability at all.
+ */
+export async function fetchCourseScheduleOptions(
+  token: string | null,
+): Promise<ScopeOptionsPayload> {
+  return (await api<{ data: ScopeOptionsPayload }>('/me/course-schedule-options', { token })).data;
+}

@@ -908,10 +908,17 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
     expect(denied.body.error?.code).toBe("NOT_FOUND");
   });
 
-  it("still cannot create, edit, delete, or preview conflicts", async () => {
-    // §14.1: teachers "do not create or edit schedules". Widening the READ did
-    // not widen the write — that distinction is the whole point of scoping by
-    // role rather than by route.
+  it("§2, Revision 140 — may now EDIT a schedule she staffs; still cannot delete or preview conflicts; her own creation is bounded by §2's own rules, not a blanket refusal", async () => {
+    // §14.1's "teachers do not create or edit schedules" is SUPERSEDED by §2
+    // for exactly two verbs, each independently bounded — never a blanket
+    // widening of "the write". Delete and the conflicts preview are
+    // UNCHANGED: §2's own ratified grant is creation-within-declared-scope
+    // and operational editing of a schedule she currently staffs, nothing
+    // wider. The full create-authorization matrix (declared capability,
+    // branch role, entire_level-only, self-staffing) is exercised
+    // exhaustively in `course-schedule-teacher.integration.test.ts`; this
+    // suite only needs to prove THIS endpoint composes those checks
+    // correctly, not re-derive each case.
     const created = await call(
       "POST",
       "/admin/course-schedules",
@@ -921,26 +928,45 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
     const id = (created.body.schedule as { id: string }).id;
     const version = (created.body.schedule as { version: number }).version;
 
-    expect(
-      (
-        await call(
-          "POST",
-          "/admin/course-schedules",
-          staffingTeacherToken,
-          scheduleBody(),
-        )
-      ).status,
-    ).toBe(403);
-    expect(
-      (
-        await call(
-          "PATCH",
-          `/admin/course-schedules/${id}`,
-          staffingTeacherToken,
-          { version, start_time: "21:00" },
-        )
-      ).status,
-    ).toBe(403);
+    // **CREATE — still refused for HER, but now for a specific, coded reason
+    // rather than a blanket FORBIDDEN**: `scheduleBody()`'s default
+    // `administrative_group` mode is refused by §2's own `entire_level`-only
+    // rule (`TEACHER_ENTIRE_LEVEL_ONLY`) — an organisational-targeting act §2
+    // deliberately left with the administration, not a capability gap.
+    const attempt = await call(
+      "POST",
+      "/admin/course-schedules",
+      staffingTeacherToken,
+      scheduleBody(),
+    );
+    expect(attempt.status).toBe(400);
+    expect(attempt.body.error?.details?.["reason"]).toBe(
+      "TEACHER_ENTIRE_LEVEL_ONLY",
+    );
+
+    // **EDIT — now ALLOWED, because `scheduleBody()`'s own default `staff`
+    // names `teacherId` as this schedule's teacher** (§2's
+    // `assertTeacherCurrentlyStaffs`, the exact fact this whole describe
+    // block is named for). Patches `title`, not `start_time`: `scheduleBody`'s
+    // shared `slot()` allocator gives this schedule a tiny, order-dependent
+    // `end_time`, and a fixed `start_time` here would collide with the DB's
+    // own `course_schedule_time_order_check` for a reason having nothing to
+    // do with authorization. The field actually changes, proving this is a
+    // real write, not merely an unrefused request.
+    const edited = await call(
+      "PATCH",
+      `/admin/course-schedules/${id}`,
+      staffingTeacherToken,
+      { version, title: `${TAG} حلقة معدَّلة` },
+    );
+    expect(edited.status).toBe(200);
+    expect((edited.body.schedule as { title?: string }).title).toBe(
+      `${TAG} حلقة معدَّلة`,
+    );
+
+    // **DELETE — unchanged, still refused.** Deletion was never part of §2's
+    // ratified grant (`docs/CHANGES.log`/SRS Revision 140) — she may create
+    // and operationally edit, never delete, even her own class.
     expect(
       (
         await call(
@@ -950,6 +976,8 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
         )
       ).status,
     ).toBe(403);
+    // **Conflicts preview — unchanged, still refused.** An administrative
+    // planning view, not part of the operational-edit grant.
     expect(
       (
         await call(

@@ -4,7 +4,7 @@ import type { Branch } from '../adapters/branches-admin.js';
 import { listAdministrativeGroups, type AdministrativeGroup } from '../adapters/administrative-groups.js';
 import type { AcademicYearRef } from '../adapters/reference-data.js';
 import type { Category, Level } from '../adapters/taxonomy.js';
-import { fetchScopeOptions } from '../adapters/scope-options.js';
+import { fetchCourseScheduleOptions, fetchScopeOptions } from '../adapters/scope-options.js';
 import type { SubjectRef } from '../adapters/reference-data.js';
 import { levelLabel } from '../components/scope/level-select.js';
 
@@ -144,6 +144,24 @@ export interface UseScopeOptionsInput {
    * stricter behaviour, never a pair the server refuses.
    */
   mode?: 'form' | 'filter';
+  /**
+   * **SRS §2, Revision 140 — read her own declared-capability scope, not the
+   * platform's whole curriculum vocabulary.**
+   *
+   * `false` (the default) preserves this hook's existing behaviour for every
+   * existing caller, unchanged: `/me/scope-options`, deliberately UNSCOPED on
+   * the curriculum axes (§4.9 tier 3 — every staff member reads every content
+   * tier). `true` switches the ONE fetch this hook makes to
+   * `/me/course-schedule-options` instead, which narrows Levels/Subjects to
+   * what a مؤطِّرة has actually declared and Branches to her `teacher`
+   * `UserBranchRole` — see that endpoint's own docstring for why this is a
+   * second read rather than a flag threaded onto the first.
+   *
+   * Branches by an Admin's own scope are UNCHANGED either way: an Admin never
+   * passes this, so `ClassSection`'s one shared scope chain serves both
+   * callers correctly from the same hook.
+   */
+  restrictToOwnCapability?: boolean;
 }
 
 /**
@@ -164,6 +182,7 @@ export function useScopeOptions({
   initial,
   defaultCurrentYear = false,
   mode = 'form',
+  restrictToOwnCapability = false,
 }: UseScopeOptionsInput): ScopeOptions {
   const subjectsUnscoped = mode === 'filter';
   /**
@@ -248,7 +267,9 @@ export function useScopeOptions({
        * for less of one small payload, and asking for all of it is what lets
        * the Level → Subject narrowing be a lookup instead of a second request.
        */
-      const payload = await fetchScopeOptions(token);
+      const payload = await (restrictToOwnCapability
+        ? fetchCourseScheduleOptions(token)
+        : fetchScopeOptions(token));
       if (cancelled) return;
       // `/me/scope-options` is a SELECTOR payload and deliberately narrower than
       // the management one: it carries what a dropdown needs. The fields below
@@ -304,7 +325,7 @@ export function useScopeOptions({
     return () => {
       cancelled = true;
     };
-  }, [token, wants, needsLevels, defaultCurrentYear]);
+  }, [token, wants, needsLevels, defaultCurrentYear, restrictToOwnCapability]);
 
   /**
    * ## Subjects depend on the Level — **when a Level is being chosen**

@@ -1290,7 +1290,20 @@ export function SchedulingDialog({
     pristine,
   );
 
-  const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, defaultCurrentYear: true });
+  /**
+   * **SRS §2 — a مؤطِّرة's own declared-capability scope for a class, never the
+   * platform's whole curriculum** (`/me/course-schedule-options`, distinct
+   * from the unscoped `/me/scope-options` every other caller of this hook
+   * still reads). Harmless for every OTHER item type: only `ClassSection`
+   * reads `scope.options.levelId`/`subjectId` at all, so a Teacher composing
+   * an activity or an exam is unaffected by this narrowing.
+   */
+  const scope = useScopeOptions({
+    token,
+    fields: SCOPE_FIELDS,
+    defaultCurrentYear: true,
+    restrictToOwnCapability: !canAssignStaff,
+  });
 
   /**
    * **`?source=&mode=` (R136, frontend-completion pass) — the source-aware
@@ -1480,7 +1493,12 @@ export function SchedulingDialog({
    * reported as clashing with itself — the commonest false warning there is.
    */
   const appraisal = useTeachingCandidates(
+    // **§2 — `staffLocked` means nothing here is offered for it to warn
+    // about.** `GET /admin/teaching-candidates` is also Admin-only, so this
+    // would only ever be a wasted, refused request for a مؤطِّرة self-staffing
+    // her own class.
     type === 'class' &&
+      canAssignStaff &&
       startTime !== '' &&
       endTime !== '' &&
       // R138 — `none` (مرة واحدة, R137's own default for a new class) has no
@@ -1868,14 +1886,35 @@ export function SchedulingDialog({
            * Rows with nobody chosen are dropped rather than refused — an empty
            * row is a row the administrator started and abandoned, not a request.
            */
-          staff: staffing
-            .filter((row) => row.user_id !== '')
-            .map((row) => ({
-              user_id: row.user_id,
-              position: row.position,
-              effective_from: row.effective_from === '' ? null : row.effective_from,
-              effective_until: row.effective_until === '' ? null : row.effective_until,
-            })),
+          /**
+           * **SRS §2 — a مؤطِّرة scheduling her own class is its teacher,
+           * sent as the fact it structurally is** (mirrors `eventStaff`'s own
+           * `responsible` pinning above for the identical reason): the
+           * `StaffingPeriods` editor is not offered to her (`staffLocked`),
+           * so `staffing` state never held anything for her to begin with —
+           * this states what the form already means rather than reading an
+           * empty array and sending nobody.
+           */
+          staff:
+            !canAssignStaff && type === 'class'
+              ? me?.id
+                ? [
+                    {
+                      user_id: me.id,
+                      position: 'teacher' as const,
+                      effective_from: null,
+                      effective_until: null,
+                    },
+                  ]
+                : []
+              : staffing
+                  .filter((row) => row.user_id !== '')
+                  .map((row) => ({
+                    user_id: row.user_id,
+                    position: row.position,
+                    effective_from: row.effective_from === '' ? null : row.effective_from,
+                    effective_until: row.effective_until === '' ? null : row.effective_until,
+                  })),
           overwriteManuallyEdited: overwriteManuallyEdited ?? false,
         },
         item ? { id: item.id, version: item.version } : null,
@@ -1969,7 +2008,14 @@ export function SchedulingDialog({
             locked={editing}
             mode={mode}
             onMode={setMode}
-            modes={MODES}
+            /**
+             * **SRS §2 — self-service class creation is `entire_level` only.**
+             * `assertTeacherEntireLevelOnly` (`course-schedule.service.ts`)
+             * refuses any other mode from her server-side; not offering the
+             * choice is what keeps the form from presenting one that always
+             * fails (rule O).
+             */
+            modes={canAssignStaff ? MODES : (['entire_level'] as const)}
             rooms={rooms}
             roomId={roomId}
             onRoom={setRoomId}
@@ -1981,6 +2027,7 @@ export function SchedulingDialog({
             staffing={staffing}
             onStaffing={setStaffing}
             appraisal={appraisal}
+            staffLocked={!canAssignStaff}
             /* **The bounds the server measures against** (§5). `startDate` is
                the schedule's anchor and the recurrence end is R50's series
                bound — the same two values the payload sends as `startDate` and

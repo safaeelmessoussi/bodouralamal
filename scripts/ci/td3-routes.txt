@@ -286,6 +286,12 @@ PATCH /admin/scheduling-types/order           # R76.4; the sequence; refused unl
 # may ask, so the Admin reference reads stay refused to teaching staff (R26/R30).
 GET /me/scope-options                         # NEW D; staff only; branch-scoped branches
 
+# §2, Revision 140 — a مؤطِّرة's own declared-capability scope for creating her
+# own class. A second, single-purpose read beside /me/scope-options above,
+# never a flag on it: an Admin reads that SAME endpoint for the SAME class
+# form, and her authority is not bounded by declared capability at all.
+GET /me/course-schedule-options               # R140; teaching staff only; Category/Subject-capability-narrowed
+
 GET /admin/categories                         # §5.6 "Categories & Subjects", §14.2 screen standard
 POST /admin/categories                        # §5.6; Super Admin only (reference data, TD-2 R26)
 PATCH /admin/categories/{id}                  # §5.6; TD-15 optimistic locking

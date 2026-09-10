@@ -32,24 +32,45 @@ import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.j
  * namespace, not an authorization boundary.
  *
  * So this screen shares the adapter **and** the two cell renderers with
- * `/admin/schedules`. What differs is what §14.1 says differs: a teacher reads
- * their **Recurring Course Schedules** and their audience and does not create or
- * edit them — there is no create, edit or delete for a class here, and the
- * server refuses those verbs regardless. R71.0 records why that `⊘` is
- * load-bearing: §4.4c derives a Teacher's whole scope *from the schedules they
- * staff*, so creating one would let them widen their own reach.
+ * `/admin/schedules`. A teacher reads their **Recurring Course Schedules** and
+ * their audience through the same role-scoped read every other caller of this
+ * table uses (`readableScope`, `course-schedule.service.ts`).
  *
  * **R72 — Activities are different, and are authored here.** TD-2 has granted
  * *"Schedule/edit Events (own scope; hidden allowed)"* since R43 and the service
  * has enforced it ever since, but **§14.1 gave that capability nowhere to
  * happen** — the same defect R69 found for `مواد المستوى` and R70.1 for grade
- * entry. It reuses `SchedulingDialog` with `types={['activity']}`, because R56
- * already made scheduling one form whose *type is a field*; a second screen
- * would be exactly what R69 spent a revision undoing.
+ * entry. It reuses `SchedulingDialog`, because R56 already made scheduling one
+ * form whose *type is a field*; a second screen would be exactly what R69
+ * spent a revision undoing.
  *
- * **The scope rules are the server's, unchanged.** A Teacher must name
- * Administrative Groups they teach and may not reach a branch, category, level
- * or the Global scope — this screen renders those refusals rather than
+ * **§2/Revision 140 — a class joins the grant, closing the circularity R71.0
+ * once recorded here in terms.** §4.4c derives a Teacher's whole scope *from
+ * the schedules they staff*, so letting her create one with no OTHER anchor
+ * would have let her widen her own reach — R71.0's own reasoning, and the
+ * reason `class` was excluded from `TEACHER_TYPES` for as long as it was. §2
+ * closes it with a DIFFERENT, non-circular anchor: her declared
+ * `TeacherCategoryCapability`/`TeacherSubjectCapability` (R114) and her
+ * `teacher` `UserBranchRole` — never the schedule she is about to create.
+ * `assertTeacherDeclaredCapability`/`assertTeacherEntireLevelOnly`/
+ * `assertTeacherSelfStaffed` (`course-schedule.service.ts`) are the server's
+ * own statement of the boundary; this screen renders the same narrowing
+ * (`ClassSection`'s `staffLocked`, `modes={['entire_level']}`, the
+ * `/me/course-schedule-options` read) rather than reimplementing it.
+ * **`PATCH /admin/course-schedules/{id}` also now accepts her**, for a class
+ * she currently staffs (`assertTeacherCurrentlyStaffs`) — same boundary
+ * Session CRUD already uses — but this table offers no edit ACTION for it
+ * yet; only creation is wired here. Not a narrower server grant, a smaller
+ * first UI slice: her occurrence-level tools (حصص الحلقة → cancel/reschedule
+ * one Session) already cover the common case, and a class-level edit action
+ * is left for a later pass rather than assumed done because the route
+ * accepts it.
+ *
+ * **The scope rules are the server's, unchanged.** For an activity, a Teacher
+ * must name Administrative Groups they teach and may not reach a branch,
+ * category, level or the Global scope; for a class, she may not reach a Level
+ * or Subject she has not declared, nor a branch outside her own
+ * `UserBranchRole` — this screen renders those refusals rather than
  * reimplementing them.
  */
 export function TeacherSchedulesPage(): ReactNode {
@@ -234,14 +255,17 @@ export function TeacherSchedulesPage(): ReactNode {
               academicYearId: r.academic_year_id ?? '',
               groupId: r.teaching_mode === 'administrative_group' ? r.target_id : null,
             }))}
-          // R72 — the one kind a Teacher may author. The form locks the field
-          // rather than offering a selector with a single option.
+          // R72/§2 — the kinds a Teacher may author here.
           types={TEACHER_TYPES}
           onCancel={() => setComposing(false)}
           onSaved={() => {
             setComposing(false);
-            // The class list is unaffected by an activity, and reloading it
-            // would suggest otherwise. The new event appears on the calendar.
+            // **§2 — a new class belongs in the table below**, unlike an
+            // activity or an exam, neither of which this list holds. Reloading
+            // unconditionally is harmless for those two (it re-fetches the
+            // SAME rows) and is what makes a newly self-staffed class appear
+            // without a manual refresh.
+            void load();
           }}
         />
       ) : null}
@@ -249,18 +273,24 @@ export function TeacherSchedulesPage(): ReactNode {
   );
 }
 
-/** R72 — TD-2 grants a Teacher exactly this one kind on this screen. */
+/** R72/§2 — TD-2 grants a Teacher exactly these three kinds on this screen. */
 /**
- * **What a مؤطرة may create** (R94), and why `class` is not on it.
+ * **What a مؤطرة may create** (R94, extended by §2/Revision 140).
  *
  * `activity` is TD-2's grant, live since R72. `exam` is TD-2's too — the
  * service has accepted a teacher-authored sitting in her §4.4c scope since R70
  * — and no screen offered it, which is rule P's defect for the ninth time.
  *
- * **`class` is deliberately absent, and the reason is security rather than
- * caution.** R71.0 and R72.1 both record it: §4.4c derives a مؤطرة's entire
- * scope *from the schedules she staffs*, so creating one would let her widen her
- * own reach. It stays with the administration until an SRS revision says
- * otherwise.
+ * **`class` joins them under §2, and the earlier absence was deliberate for a
+ * reason §2 specifically answers.** R71.0 and R72.1 both recorded it: §4.4c
+ * derives a مؤطرة's entire scope *from the schedules she staffs*, so letting
+ * her create one with no OTHER anchor would let her widen her own reach —
+ * the circularity `course-schedule.service.ts`'s own `assertTeacherDeclared
+ * Capability` docstring names in terms. §2 closes it with a DIFFERENT anchor
+ * that is not circular: her declared `TeacherCategoryCapability`/
+ * `TeacherSubjectCapability` (R114) and her `teacher` `UserBranchRole` —
+ * never the schedule she is about to create. `ClassSection` itself narrows
+ * further, offered nothing beyond that: `entire_level` mode only, and she is
+ * named its teacher structurally rather than offered a choice.
  */
-const TEACHER_TYPES = ['activity', 'exam'] as const;
+const TEACHER_TYPES = ['activity', 'exam', 'class'] as const;

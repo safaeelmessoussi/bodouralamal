@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { readScopeOptions } from '../services/scope-options.service.js';
+import { readCourseScheduleOptions, readScopeOptions } from '../services/scope-options.service.js';
 import { scopeOptionsDto } from './dto.js';
 
 /**
@@ -17,6 +17,22 @@ import { scopeOptionsDto } from './dto.js';
 export function read(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const options = await readScopeOptions(prisma, requireActor(req));
+    res.json({ data: scopeOptionsDto(options) });
+  };
+}
+
+/**
+ * `GET /me/course-schedule-options` (SRS §2, Revision 140) — a مؤطِّرة's own
+ * declared-capability scope for creating her own class.
+ *
+ * Same wire shape as `/me/scope-options` (`scopeOptionsDto` is reused
+ * unchanged), narrowed to a different question by the SERVICE, not the DTO —
+ * see `readCourseScheduleOptions`'s own docstring for why this is a separate
+ * read rather than a flag on the one above.
+ */
+export function readForCourseSchedule(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const options = await readCourseScheduleOptions(prisma, requireActor(req));
     res.json({ data: scopeOptionsDto(options) });
   };
 }

@@ -341,13 +341,22 @@ const types = await evaluate(`(async () => {
 })()`);
 
 check(
-  '10 · her type selector offers BOTH نشاط and امتحان',
-  (types.values ?? []).includes('activity') && (types.values ?? []).includes('exam'),
+  '10 · her type selector offers نشاط, امتحان AND حصة',
+  (types.values ?? []).includes('activity') && (types.values ?? []).includes('exam') &&
+    (types.values ?? []).includes('class'),
   JSON.stringify(types),
 );
 check(
-  '11 · and NOT حصة — §4.4c derives her scope from the classes she staffs',
-  !(types.values ?? []).includes('class'),
+  /**
+   * **§2, Revision 140 — حصة joined the grant.** §4.4c still derives her
+   * REACH from the classes she staffs; what changed is that creating one no
+   * longer needs a circular anchor — her declared capability and her
+   * `UserBranchRole` (never the schedule about to exist) authorise it. This
+   * offering the option is the FIRST half of that story; check 13 below
+   * proves the server still holds the line when she has declared nothing.
+   */
+  '11 · the option is offered because §2 grants it — not because §4.4c widened',
+  (types.values ?? []).includes('class'),
   JSON.stringify(types.values),
 );
 
@@ -405,6 +414,66 @@ check(
   '12 · she creates an EXAM for a class she teaches, and it is accepted',
   examSaved.closed === true && examCalls.length === 1 && examCalls[0]?.status === 201,
   JSON.stringify({ examSaved, examCalls }),
+);
+
+/* ── 13 · حصة — offered because §2 grants it; her candidate list is SERVER-filtered ── */
+
+const classForm = await evaluate(`(async () => {
+  document.querySelector('dialog[open] button[aria-label="إغلاق"]')?.click();
+  await new Promise((r) => setTimeout(r, 500));
+  const add = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('إضافة عنصر'));
+  if (!add) return { noAdd: true };
+  add.click();
+  await new Promise((r) => setTimeout(r, 2000));
+  let dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noDialog: true };
+  const set = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const labelled = (text) => {
+    const l = [...dialog.querySelectorAll('label')].find((x) => x.textContent.trim() === text);
+    return l ? dialog.querySelector('#' + CSS.escape(l.getAttribute('for') || '')) : null;
+  };
+  const typeSel = labelled('نوع العنصر');
+  if (!typeSel) return { noTypeSelect: true };
+  set(typeSel, 'class');
+  await new Promise((r) => setTimeout(r, 1800));
+  dialog = document.querySelector('dialog[open]');
+
+  const modeSel = labelled('نمط التدريس');
+  const modeOptions = modeSel ? [...modeSel.options].map((o) => o.value) : null;
+
+  // **§2 — no declared TeacherCategoryCapability/TeacherSubjectCapability in
+  // this scenario, so her Level picker must be empty**: proof, in the real
+  // rendered UI against a real account, that the candidate list is filtered
+  // by her actual declared scope rather than showing every Level and relying
+  // on the write to refuse the ones she picks.
+  const levelLabel = [...dialog.querySelectorAll('label')].find((l) => l.textContent.trim() === 'المستوى');
+  const levelSel = levelLabel ? dialog.querySelector('#' + CSS.escape(levelLabel.getAttribute('for') || '')) : null;
+  const levelOptions = levelSel ? [...levelSel.options].map((o) => o.textContent.trim()) : null;
+
+  return {
+    modeOptions,
+    staffLockedShown: dialog.textContent.includes('أنتِ المؤطّرة المسؤولة عن هذه الحصة.'),
+    levelOptions,
+  };
+})()`);
+
+check(
+  '13a · حصة offers entire_level ONLY, and states she is its responsible مؤطِّرة — no picker offered for it',
+  JSON.stringify(classForm.modeOptions) === JSON.stringify(['entire_level']) &&
+    classForm.staffLockedShown === true,
+  JSON.stringify(classForm),
+);
+check(
+  // At most the ONE placeholder option ("choose…"); no real Level, because
+  // she has declared no capability in this scenario.
+  '13b · her Level picker is EMPTY — a server-filtered candidate list, not a client-side promise the write would refuse',
+  Array.isArray(classForm.levelOptions) && classForm.levelOptions.length <= 1,
+  JSON.stringify(classForm.levelOptions),
 );
 
 close();

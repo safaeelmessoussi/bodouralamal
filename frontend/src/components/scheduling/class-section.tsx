@@ -67,6 +67,17 @@ export interface ClassSectionProps {
    *  Absent while the form has no time yet — there is nothing to appraise
    *  against, and an appraisal of a blank class would be noise. */
   appraisal?: Record<string, TeachingCandidate>;
+  /**
+   * **SRS §2 — a مؤطِّرة scheduling her own class is its teacher, structurally,
+   * not a choice offered and then defaulted.** The server refuses any other
+   * `staff` shape from her (`TEACHER_MUST_SELF_STAFF`), so `StaffingPeriods`'s
+   * own multi-row, multi-person editor — built for an Admin naming a
+   * replacement mid-year — would offer a form of picking somebody else that
+   * always fails. A static statement replaces it, exactly as `ActivitySection`
+   * already replaces a picker with a fixed fact for a مؤطرة's own event
+   * (`responsibleLocked`).
+   */
+  staffLocked?: boolean;
 }
 
 export function ClassSection({
@@ -88,6 +99,7 @@ export function ClassSection({
   appraisal,
   scheduleFrom,
   scheduleUntil,
+  staffLocked,
 }: ClassSectionProps): ReactNode {
   return (
     <>
@@ -152,16 +164,20 @@ export function ClassSection({
           `StaffPicker` is unchanged and still serves the exam sitting and the
           celebration, which staff a single dated thing. R90's warnings ride on
           each row here through the same appraisal. */}
-      <StaffingPeriods
-        staff={teachers}
-        value={staffing}
-        onChange={onStaffing}
-        {...(appraisal ? { appraisal } : {})}
-        /* The class's own life, so an assignment outside it is marked as it is
-           typed — and re-marked the moment these dates are edited. */
-        scheduleFrom={scheduleFrom}
-        scheduleUntil={scheduleUntil}
-      />
+      {staffLocked ? (
+        <Feedback>{t('admin.schedules.staffLockedToSelf')}</Feedback>
+      ) : (
+        <StaffingPeriods
+          staff={teachers}
+          value={staffing}
+          onChange={onStaffing}
+          {...(appraisal ? { appraisal } : {})}
+          /* The class's own life, so an assignment outside it is marked as it
+             is typed — and re-marked the moment these dates are edited. */
+          scheduleFrom={scheduleFrom}
+          scheduleUntil={scheduleUntil}
+        />
+      )}
     </>
   );
 }

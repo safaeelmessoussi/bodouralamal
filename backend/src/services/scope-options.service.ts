@@ -198,3 +198,174 @@ export async function readScopeOptions(
     branches,
   };
 }
+
+/** Staff only, and a مؤطِّرة specifically — this answers *what may I schedule a
+ *  class for*, which is never a question an Admin needs asked on her behalf
+ *  (she already reads the unscoped `/me/scope-options`, §2). */
+function assertTeacher(actor: Actor): void {
+  if (!scope.hasRole(actor.roleScopes, 'teacher')) {
+    throw new AppError('FORBIDDEN', 'course schedule options are for teaching staff');
+  }
+}
+
+/**
+ * **`GET /me/course-schedule-options` — a مؤطِّرة's own declared-capability
+ * scope, for creating her own class** (SRS §2, Revision 140).
+ *
+ * ## Why this is not `/me/scope-options` with a flag
+ *
+ * `/me/scope-options` is deliberately **unscoped** on the curriculum axes
+ * (`readScopeOptions`'s own docstring: *"the curriculum vocabulary is
+ * deliberately not [narrowed]… §4.9 tier 3 already admits every staff member
+ * to every content tier"*), and BOTH an Admin and a مؤطِّرة read that same
+ * endpoint for the identical `ClassSection` scope chain today — an Admin's
+ * class-creation authority is not bounded by declared capability at all. Add-
+ * ing a mode flag to that endpoint risks the exact defect this platform's own
+ * history warns against: one branch of a shared conditional quietly widening
+ * (or narrowing) the OTHER caller. A new, single-purpose, single-caller read
+ * carries no such risk — R93.4's own precedent (*"a narrower question, never
+ * a wider permission"*), applied a second time for the second Owner-approved
+ * capability grant this platform makes to a مؤطِّرة's own declared profile.
+ *
+ * ## What narrows, and why
+ *
+ * **Branches**: her live `teacher` `UserBranchRole` rows (`branchesForRole`) —
+ * the SAME mechanism an Admin's own branch scope already uses, reused
+ * deliberately for this ONE new grant rather than through
+ * `teacherBranchIds`'s "where she already teaches" derivation (used
+ * everywhere else a مؤطِّرة's reach is read): she has, by construction, no
+ * `CourseScheduleStaff` row on the schedule she is about to create, so a
+ * reach derived from existing schedules could never authorise a first one.
+ * `NULL` still means every branch for that assignment (§7, R24) — this
+ * endpoint does not invent a narrower reading of a role scope than any other
+ * surface gives it.
+ *
+ * **Levels** (and their per-Level Subjects): a Level whose CATEGORY she has
+ * declared (`TeacherCategoryCapability`) offers every Subject it teaches — the
+ * Category declaration is the broader of the two grants and is not narrowed
+ * further by which specific Subject she named. A Level reached ONLY through a
+ * declared SUBJECT (`TeacherSubjectCapability`, no matching Category
+ * declaration) offers just that Subject, never the Level's others — she
+ * declared one Subject, not the whole curriculum of a Level she has no
+ * Category claim on.
+ */
+export async function readCourseScheduleOptions(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<ScopeOptions> {
+  assertTeacher(actor);
+
+  const branchIds = scope.branchesForRole(actor.roleScopes, 'teacher');
+
+  const [categoryCaps, subjectCaps] = await Promise.all([
+    prisma.teacherCategoryCapability.findMany({
+      where: { userId: actor.userId },
+      select: { categoryId: true },
+    }),
+    prisma.teacherSubjectCapability.findMany({
+      where: { userId: actor.userId },
+      select: { subjectId: true },
+    }),
+  ]);
+  const declaredCategoryIds = new Set(categoryCaps.map((c) => c.categoryId));
+  const declaredSubjectIds = new Set(subjectCaps.map((s) => s.subjectId));
+
+  const [categories, branches, levels, years] = await Promise.all([
+    prisma.category.findMany({
+      where: { deletedAt: null, id: { in: [...declaredCategoryIds] } },
+      select: { id: true, name: true },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+    }),
+    prisma.branch.findMany({
+      where: {
+        deletedAt: null,
+        // `null` is every branch for that assignment (§7, R24) — never "none".
+        ...(branchIds === null ? {} : { id: { in: branchIds } }),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.level.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { categoryId: { in: [...declaredCategoryIds] } },
+          {
+            subjects: {
+              some: {
+                deletedAt: null,
+                subject: { deletedAt: null },
+                subjectId: { in: [...declaredSubjectIds] },
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        categoryId: true,
+        category: { select: { name: true, selfAttendanceAllowed: true } },
+        subjects: {
+          where: { deletedAt: null, subject: { deletedAt: null } },
+          select: { subjectId: true },
+        },
+      },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+    }),
+    prisma.academicYear.findMany({
+      where: { deletedAt: null },
+      select: { id: true, label: true, isCurrent: true },
+      orderBy: { label: 'desc' },
+    }),
+  ]);
+
+  const settings = await prisma.systemSetting.findMany({
+    where: {
+      key: {
+        in: [...new Set(levels.map((l) => l.categoryId))].map(
+          (id) => `${DEFAULT_VISIBILITY_PREFIX}${id}`,
+        ),
+      },
+    },
+    select: { key: true, value: true },
+  });
+  const byCategory = new Map(
+    settings.map((s) => [s.key.slice(DEFAULT_VISIBILITY_PREFIX.length), s.value]),
+  );
+
+  const narrowedLevels = levels.map((l) => {
+    const categoryDeclared = declaredCategoryIds.has(l.categoryId);
+    const subjectIds = l.subjects
+      .map((s) => s.subjectId)
+      .filter((id) => categoryDeclared || declaredSubjectIds.has(id));
+    return {
+      id: l.id,
+      name: l.name,
+      categoryId: l.categoryId,
+      categoryName: l.category.name,
+      defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
+      selfAttendanceAllowed: l.category.selfAttendanceAllowed,
+      subjectIds,
+    };
+  });
+
+  const referencedSubjectIds = new Set(narrowedLevels.flatMap((l) => l.subjectIds));
+  const subjects = await prisma.subject.findMany({
+    where: { deletedAt: null, id: { in: [...referencedSubjectIds] } },
+    select: { id: true, name: true },
+    orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+  });
+
+  return {
+    categories,
+    levels: narrowedLevels,
+    subjects,
+    academicYears: years.map((y) => ({
+      id: y.id,
+      label: y.label,
+      isCurrent: y.isCurrent,
+    })),
+    branches,
+  };
+}

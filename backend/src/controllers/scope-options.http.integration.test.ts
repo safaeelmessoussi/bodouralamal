@@ -112,6 +112,35 @@ beforeAll(async () => {
     })
   ).id;
 
+  // §2 — a SECOND Level, under a Category she does NOT declare, reached only
+  // through a declared SUBJECT — proves the narrowing is per-Level, not a
+  // single flag on the whole read.
+  ids["categoryB"] = (await prisma.category.create({ data: { name: `${TAG} فئة ب` } })).id;
+  ids["levelB"] = (
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى ب`, categoryId: ids["categoryB"]!, genderRestriction: "any" },
+    })
+  ).id;
+  ids["subjectDeclared"] = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة معلنة` } })
+  ).id;
+  ids["subjectUndeclared"] = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة غير معلنة` } })
+  ).id;
+  await prisma.levelSubject.create({
+    data: { levelId: ids["levelB"]!, subjectId: ids["subjectDeclared"]! },
+  });
+  await prisma.levelSubject.create({
+    data: { levelId: ids["levelB"]!, subjectId: ids["subjectUndeclared"]! },
+  });
+  // A THIRD Level, in neither declared Category nor reached by any declared
+  // Subject — proves absence, not merely presence.
+  ids["levelUnreached"] = (
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى غير مُعلَن`, categoryId: ids["categoryB"]!, genderRestriction: "any" },
+    })
+  ).id;
+
   ids["teacher"] = await person("مؤطرة");
   ids["admin"] = await person("إدارية");
   ids["student"] = await person("مستفيدة");
@@ -120,20 +149,34 @@ beforeAll(async () => {
   ]);
   tokens["admin"] = bearer(ids["admin"]!, [{ role: "admin", branches: null }]);
   tokens["student"] = bearer(ids["student"]!, [{ role: "student", branches: null }]);
+
+  // §2 — her declared scope: Category `category` (covers `level` wholesale)
+  // and Subject `subjectDeclared` alone (reaches `levelB`, narrowed to that
+  // one Subject — `subjectUndeclared` shares the Level but not the grant).
+  await prisma.teacherCategoryCapability.create({
+    data: { userId: ids["teacher"]!, categoryId: ids["category"]! },
+  });
+  await prisma.teacherSubjectCapability.create({
+    data: { userId: ids["teacher"]!, subjectId: ids["subjectDeclared"]! },
+  });
 });
 
 async function clear(): Promise<void> {
   const tagged = { startsWith: TAG };
-  await prisma.educationalContent.deleteMany({ where: { title: tagged } });
-  await prisma.levelSubject.deleteMany({ where: { subject: { name: tagged } } });
-  await prisma.subject.deleteMany({ where: { name: tagged } });
-  await prisma.level.deleteMany({ where: { name: tagged } });
-  await prisma.category.deleteMany({ where: { name: tagged } });
   const users = await prisma.user.findMany({
     where: { nameArabic: tagged },
     select: { id: true },
   });
   const userIds = users.map((u) => u.id);
+  // §2 — RESTRICT against `category`/`subject` (TD-5), unwound first.
+  await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: userIds } } });
+
+  await prisma.educationalContent.deleteMany({ where: { title: tagged } });
+  await prisma.levelSubject.deleteMany({ where: { subject: { name: tagged } } });
+  await prisma.subject.deleteMany({ where: { name: tagged } });
+  await prisma.level.deleteMany({ where: { name: tagged } });
+  await prisma.category.deleteMany({ where: { name: tagged } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -284,5 +327,59 @@ describe("NEW D — appearing in a dropdown grants nothing", () => {
       tokens["student"],
     );
     expect([401, 403, 404]).toContain(refused.status);
+  });
+});
+
+/* ── §2, Revision 140 — /me/course-schedule-options ─────────────────────── */
+
+describe("§2 — /me/course-schedule-options answers a DIFFERENT question than /me/scope-options", () => {
+  it("a Category declaration offers the whole Level, every Subject it teaches", async () => {
+    const res = await call("GET", "/me/course-schedule-options", tokens["teacher"]);
+    expect(res.status).toBe(200);
+    const level = (res.body.data!.levels ?? []).find((l) => l["id"] === ids["level"]);
+    expect(level).toBeDefined();
+    expect(level?.["subject_ids"]).toEqual(expect.arrayContaining([ids["taught"]]));
+  });
+
+  it("a Subject declaration alone reaches its Level, narrowed to just that Subject", async () => {
+    const res = await call("GET", "/me/course-schedule-options", tokens["teacher"]);
+    const level = (res.body.data!.levels ?? []).find((l) => l["id"] === ids["levelB"]);
+    expect(level).toBeDefined();
+    expect(level?.["subject_ids"]).toEqual([ids["subjectDeclared"]]);
+    expect(level?.["subject_ids"]).not.toContain(ids["subjectUndeclared"]);
+  });
+
+  it("a Level reached by NEITHER a declared Category nor a declared Subject is absent, not merely empty", async () => {
+    const res = await call("GET", "/me/course-schedule-options", tokens["teacher"]);
+    const levelIds = (res.body.data!.levels ?? []).map((l) => String(l["id"]));
+    expect(levelIds).not.toContain(ids["levelUnreached"]);
+  });
+
+  it("branches are her teacher UserBranchRole branches — the SAME boundary /me/scope-options already uses", async () => {
+    const res = await call("GET", "/me/course-schedule-options", tokens["teacher"]);
+    const branchIds = (res.body.data!.branches ?? []).map((b) => String(b["id"]));
+    expect(branchIds).toContain(ids["branchA"]);
+    expect(branchIds).not.toContain(ids["branchB"]);
+  });
+
+  it("is narrower than /me/scope-options for the SAME caller — the platform's whole curriculum is not offered here", async () => {
+    const wide = await call("GET", "/me/scope-options", tokens["teacher"]);
+    const narrow = await call("GET", "/me/course-schedule-options", tokens["teacher"]);
+    const wideLevelIds = (wide.body.data!.levels ?? []).map((l) => String(l["id"]));
+    const narrowLevelIds = (narrow.body.data!.levels ?? []).map((l) => String(l["id"]));
+    // /me/scope-options offers every Level (unscoped, §4.9 tier 3); the
+    // undeclared Level appears there and must not appear in the narrow read.
+    expect(wideLevelIds).toContain(ids["levelUnreached"]);
+    expect(narrowLevelIds).not.toContain(ids["levelUnreached"]);
+  });
+
+  it("refuses a non-teacher outright — an Admin's own class-creation authority is not bounded by declared capability", async () => {
+    const res = await call("GET", "/me/course-schedule-options", tokens["admin"]);
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a beneficiary and an anonymous caller", async () => {
+    expect((await call("GET", "/me/course-schedule-options", tokens["student"])).status).toBe(403);
+    expect((await call("GET", "/me/course-schedule-options")).status).toBe(401);
   });
 });

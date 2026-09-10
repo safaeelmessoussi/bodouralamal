@@ -8,6 +8,7 @@ import type {
 import { AppError } from "../lib/errors.js";
 import { assertMarkingAllowedForType, assertTypeOfKind } from "./scheduling-type.service.js";
 import {
+  calendarDay,
   intervalsOverlap,
   withinScheduleLife,
   type Interval,
@@ -93,6 +94,176 @@ function assertCanManage(actor: Actor): void {
 /** Whether this caller manages schedules — creates, edits, deletes them. */
 const isManager = (actor: Actor): boolean =>
   scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor);
+
+/**
+ * **SRS §2, Revision 140 — a مؤطِّرة may create a class within her OWN
+ * declared scope, never through the schedule she is about to create.**
+ *
+ * This supersedes R114(2)'s blanket *"[declared capability] grants no
+ * scheduling authority"* for this ONE grant, stated once here rather than by
+ * editing R114's own historical text. R114(2) otherwise stands unchanged —
+ * declaring a Subject or Category still grants no Quran authority, no
+ * assignment authority and no administrative reach; teaching authority over
+ * an EXISTING class is still exclusively `CourseScheduleStaff`, resolved
+ * through R91's effective-dated mechanism, unchanged below.
+ *
+ * ## Why `UserBranchRole` here, and `teacherBranchIds` everywhere else
+ *
+ * Every other teacher-reach surface derives her branches from the schedules
+ * she already staffs (`branch.service.ts`'s own `visibleBranchIds`: *"a
+ * teacher's reach is where they teach, not where their row was written"*).
+ * That derivation is circular for the ONE action that creates her first row
+ * on a schedule — she cannot reach a branch "where she teaches" before she
+ * has taught anything there. `UserBranchRole` is the SAME mechanism an
+ * Admin's own branch scope already uses (`MANAGING_ROLE` above), reused
+ * deliberately for this one bootstrapping grant, never generalised to widen
+ * her reach anywhere else.
+ *
+ * ## Why capability, and why an OR of the two
+ *
+ * `TeacherCategoryCapability`/`TeacherSubjectCapability` (R114) are the
+ * association's own record of *"the administration may consider me for
+ * this"* — self-declared, but the SAME planning signal `GET
+ * /admin/teaching-candidates` already surfaces to warn an administrator
+ * scheduling somebody outside it. A Category declaration authorises any
+ * Subject the Level teaches (the broader grant); a Subject declaration alone
+ * authorises just that Subject, never a Level's others (§2's own scope
+ * narrowing, mirrored in `readCourseScheduleOptions`).
+ */
+async function assertTeacherDeclaredCapability(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  effectiveLevelId: string,
+  subjectId: string,
+): Promise<void> {
+  const level = await tx.level.findUniqueOrThrow({
+    where: { id: effectiveLevelId },
+    select: { categoryId: true },
+  });
+  const [categoryCap, subjectCap] = await Promise.all([
+    tx.teacherCategoryCapability.findUnique({
+      where: { userId_categoryId: { userId, categoryId: level.categoryId } },
+    }),
+    tx.teacherSubjectCapability.findUnique({
+      where: { userId_subjectId: { userId, subjectId } },
+    }),
+  ]);
+  if (!categoryCap && !subjectCap) {
+    throw new AppError(
+      "FORBIDDEN",
+      "scheduling a class requires a declared capability for its Level or Subject",
+      { reason: "CAPABILITY_NOT_DECLARED" },
+    );
+  }
+}
+
+/**
+ * **She must be structurally accountable for a class she creates on her own
+ * authority** — the same reasoning R93(3) already states for an Event's
+ * `RESPONSIBLE_MUST_BE_SELF`: the interface offers the choice that is
+ * accepted, and a مؤطِّرة creating a class nobody can then say she teaches is
+ * authority with no accountability attached to it.
+ */
+function assertTeacherSelfStaffed(
+  userId: string,
+  staff: ScheduleStaffInput[],
+): void {
+  if (!staff.some((s) => s.userId === userId && s.position === "teacher")) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "a Teacher scheduling her own class must name herself as its teacher",
+      { reason: "TEACHER_MUST_SELF_STAFF" },
+    );
+  }
+}
+
+/**
+ * **Self-service class creation is `entire_level` only** (§2). The anchor
+ * decision names "a Level within a Category she holds" — Administrative and
+ * Teaching Group targeting are organisational acts (§4.4c: who is placed in
+ * which roster) that remain with the administration, unchanged, exactly as
+ * `Manage Administrative Groups`/`Manage Teaching Groups` already are (TD-2).
+ * Widening her OWN class creation to also let her choose an existing group's
+ * roster was not part of the ratified grant and is deliberately left for a
+ * future revision to consider, rather than assumed here.
+ */
+function assertTeacherEntireLevelOnly(mode: TeachingMode): void {
+  if (mode !== "entire_level") {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "a Teacher may schedule a class for an entire Level only",
+      { reason: "TEACHER_ENTIRE_LEVEL_ONLY" },
+    );
+  }
+}
+
+/**
+ * **Plain-JS mirror of `effectiveOn` (`effective-staffing.ts`)** — that one
+ * builds a Prisma fragment for a fresh query; this checks an already-loaded
+ * row (`existing.staff`, read once by `updateCourseSchedule`), so a second
+ * round trip is not spent re-asking a question the caller already has the
+ * answer to. Both bounds inclusive, `null` open at that end — identical rule,
+ * restated because it composes over JS values here, not a `where`.
+ */
+function isEffectiveNow(
+  s: { effectiveFrom: Date | null; effectiveUntil: Date | null },
+  now: Date,
+): boolean {
+  const day = calendarDay(now);
+  if (s.effectiveFrom && s.effectiveFrom > day) return false;
+  if (s.effectiveUntil && s.effectiveUntil < day) return false;
+  return true;
+}
+
+/**
+ * **§2 — editing is bounded by CURRENT staffing, not by declared capability
+ * or branch role.** Once a class exists, "may she touch it" is the same
+ * question R91 already answers for every other operational surface —
+ * `CourseScheduleStaff`, effective today — never a second resolution
+ * mechanism. **Any position**, main or assistant (R87 §G: *"an assistant IS
+ * the main teacher for operational authorization on the class she staffs"*),
+ * exactly as Session CRUD and recording start/stop already read it (TD-2).
+ */
+function assertTeacherCurrentlyStaffs(
+  staff: readonly {
+    userId: string;
+    effectiveFrom: Date | null;
+    effectiveUntil: Date | null;
+  }[],
+  userId: string,
+  now: Date,
+): void {
+  const staffs = staff.some(
+    (s) => s.userId === userId && isEffectiveNow(s, now),
+  );
+  // §20 rule 17 — a schedule she does not staff answers exactly as one that
+  // does not exist; confirming its existence to her is the leak this refuses.
+  if (!staffs) throw new AppError("NOT_FOUND", "no such schedule");
+}
+
+/**
+ * **She may not remove her own accountability by patching `staff`** — the
+ * same reasoning `assertTeacherSelfStaffed` states for creation, applied to
+ * an edit: a مؤطِّرة editing her own class may add or remove assistants, but a
+ * `staff` patch that no longer names her as `teacher` would let her hand the
+ * class away on her own authority, which R71.4's sibling rule for Events
+ * already refuses in terms (*"not authority to decide who else answers for
+ * it"*). Absent `staff` in the patch, R90's existing "left alone" behaviour
+ * is unaffected — there is nothing here to check.
+ */
+function assertTeacherRemainsStaffed(
+  userId: string,
+  staff: ScheduleStaffInput[] | undefined,
+): void {
+  if (staff === undefined) return;
+  if (!staff.some((s) => s.userId === userId && s.position === "teacher")) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "a Teacher may not edit herself out of her own class's staffing",
+      { reason: "TEACHER_MUST_REMAIN_STAFFED" },
+    );
+  }
+}
 
 /**
  * **Reading a schedule is not managing one** (Document Owner decision,
@@ -550,13 +721,37 @@ export async function createCourseSchedule(
   input: CourseScheduleInput,
   now: Date = new Date(),
 ): Promise<{ id: string; materialized: MaterializeResult }> {
-  assertCanManage(actor);
-  scope.assertCanActOnBranch(
-    actor.roleScopes,
-    MANAGING_ROLE,
-    input.branchId,
-    "no such branch",
-  );
+  /**
+   * **SRS §2 — a مؤطِّرة may create a class within her own declared scope.**
+   * Admin/Super Admin are unchanged in every particular below; a Teacher
+   * passes this gate and is then held to `entire_level` mode, her own
+   * `UserBranchRole` branches, and a declared Category/Subject capability
+   * for the target — checked once the target is resolved, below.
+   */
+  const selfServiceTeacher =
+    !isManager(actor) && scope.hasRole(actor.roleScopes, "teacher");
+  if (!isManager(actor) && !selfServiceTeacher) {
+    throw new AppError(
+      "FORBIDDEN",
+      "course schedule management requires admin or teaching staff acting within her own declared scope",
+    );
+  }
+  if (selfServiceTeacher) {
+    assertTeacherEntireLevelOnly(input.teachingMode);
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      "teacher",
+      input.branchId,
+      "no such branch",
+    );
+  } else {
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      input.branchId,
+      "no such branch",
+    );
+  }
 
   const horizon = await horizonFor(prisma, now);
 
@@ -585,6 +780,16 @@ export async function createCourseSchedule(
       target.effectiveLevelId,
       input.subjectId,
     );
+
+    // **§2 — the declared-capability check, now that the target is resolved.**
+    if (selfServiceTeacher) {
+      await assertTeacherDeclaredCapability(
+        tx,
+        actor.userId,
+        target.effectiveLevelId,
+        input.subjectId,
+      );
+    }
 
     // **`effectiveLevelId` is derived, not a column.** Separated here because
     // the row below is built by spreading `target`, and a derived field carried
@@ -644,6 +849,7 @@ export async function createCourseSchedule(
     // R123 — self-marking cannot be configured on a type that has no sheet.
     await assertMarkingAllowedForType(tx, input.schedulingTypeId, input.attendanceMarking);
     const staff = input.staff ?? [];
+    if (selfServiceTeacher) assertTeacherSelfStaffed(actor.userId, staff);
     await assertStaffAccountsAvailable(tx, staff.map((person) => person.userId));
     const conflicts = await findConflicts(
       tx,
@@ -850,9 +1056,28 @@ export async function updateCourseSchedule(
   successorId?: string;
   materialized: MaterializeResult;
 }> {
-  assertCanManage(actor);
+  /**
+   * **§2 — editing is a manager act, OR a مؤطِّرة acting on a class she
+   * currently staffs** (checked below, once `existing.staff` is loaded — the
+   * NOT_FOUND-on-refusal shape needs the row read first, per §20 rule 17).
+   */
+  const selfServiceTeacher =
+    !isManager(actor) && scope.hasRole(actor.roleScopes, "teacher");
+  if (!isManager(actor) && !selfServiceTeacher) {
+    throw new AppError(
+      "FORBIDDEN",
+      "course schedule management requires admin or teaching staff",
+    );
+  }
 
   if (data.scope === "this_and_future") {
+    /**
+     * **Splitting stays a manager-only act** even for a مؤطِّرة who may
+     * otherwise edit this schedule (§2). R50's split creates a successor
+     * schedule and closes the predecessor — a wider act than the operational
+     * edit §2 grants her, and not part of the ratified capability.
+     */
+    assertCanManage(actor);
     if (!data.fromDate) {
       throw new AppError(
         "VALIDATION_FAILED",
@@ -906,12 +1131,17 @@ export async function updateCourseSchedule(
     },
   });
   if (!existing) throw new AppError("NOT_FOUND", "no such schedule");
-  scope.assertCanActOnBranch(
-    actor.roleScopes,
-    MANAGING_ROLE,
-    existing.branchId,
-    "no such schedule",
-  );
+  if (selfServiceTeacher) {
+    assertTeacherCurrentlyStaffs(existing.staff, actor.userId, now);
+    assertTeacherRemainsStaffed(actor.userId, data.staff);
+  } else {
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      existing.branchId,
+      "no such schedule",
+    );
+  }
 
   const horizon = await horizonFor(prisma, now);
 

@@ -482,6 +482,13 @@ export function createApp(
    * question rather than widen an admin read.
    */
   guarded.get('/me/scope-options', scopeOptions.read(prisma));
+  /**
+   * SRS §2, Revision 140 — a مؤطِّرة's own declared-capability scope, for
+   * creating her own class. Beside `/me/scope-options` for the same reason:
+   * a narrower question, never a wider permission — see the service's own
+   * docstring for why this is not a flag on the read above.
+   */
+  guarded.get('/me/course-schedule-options', scopeOptions.readForCourseSchedule(prisma));
   guarded.put('/events/:id/staff', events.setStaff(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
