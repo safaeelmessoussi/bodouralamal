@@ -1799,9 +1799,11 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
     expect(await prisma.refreshToken.count({ where: { userId: victim } })).toBe(0);
     expect(await prisma.refreshSession.count({ where: { userId: victim } })).toBe(0);
     expect(await prisma.rateLimitCounter.count({ where: { userId: victim } })).toBe(0);
-    // The stable lock carries no owner and remains to serialize the next
-    // claimant. The two ownership channels above are what release the address.
-    expect(await prisma.normalizedEmailLock.count({ where: { email } })).toBe(1);
+    // Codex B4 — once both ownership channels release the address, the lock
+    // row that served them is retired too: it is a bare copy of her deleted
+    // email with no live claim left to serialize, and R133(3) counts "her
+    // authentication" among what permanent deletion removes.
+    expect(await prisma.normalizedEmailLock.count({ where: { email } })).toBe(0);
     const reclaimed = await call("POST", "/admin/users", superAdmin, {
       name_arabic: `${TAG} صاحبة بريد جديد`,
       email,

@@ -404,6 +404,44 @@ describe('Account deletion — the account goes, and her own history with it (R1
     ).toBe(0);
     const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
     expect(after.preProvisionedEmail).toBeNull();
+    // Codex B4 — the plaintext lock row for HER address does not outlive the
+    // authentication it used to serialize; nothing recoverable about the
+    // deleted person's email survives in `normalized_email_lock` either.
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
+  });
+
+  it('B4 · the released address is genuinely reusable — no stale lock row blocks or reserves it', async () => {
+    const p = await beneficiaryWithHistory();
+    const address = p.email;
+    await closeAccount(p.id);
+
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: address } })).toBeNull();
+
+    // A second, unrelated person claims the SAME normalized address — exactly
+    // R133(5)'s "registers normally... no matching to deleted records" — and
+    // this must succeed rather than colliding with a residual lock row nobody
+    // owns any more.
+    const other = await prisma.user.create({
+      data: { sex: 'female', nameArabic: `${TAG} أخرى ${counter}`, accountStatus: 'active' },
+    });
+    createdUserIds.push(other.id);
+    await expect(
+      prisma.userIdentity.create({
+        data: { userId: other.id, provider: 'google', providerSubjectId: `${TAG}-reuse`, email: address, isActive: true },
+      }),
+    ).resolves.toMatchObject({ email: address });
+  });
+
+  it('B4 · repeating the permanent deletion is still idempotent with the lock row already gone', async () => {
+    const p = await beneficiaryWithHistory();
+    await closeAccount(p.id);
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
+
+    // The retry's own `releasedAddresses` is empty (both channels are already
+    // cleared), so the cleanup loop is a no-op rather than erroring on a row
+    // that is already gone.
+    await expect(purgeUserAccount(prisma, await actorFor(prisma, superAdmin), p.id)).resolves.toBeUndefined();
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
   });
 
   it('7/8 · sessions and refresh tokens cannot restore access', async () => {

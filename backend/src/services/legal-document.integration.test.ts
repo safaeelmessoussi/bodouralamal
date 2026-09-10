@@ -240,6 +240,166 @@ describe('a document version that has been in force is immutable', () => {
   });
 });
 
+/**
+ * **Codex B6 — a concurrent edit cannot outrun a concurrent activation.**
+ *
+ * `updateDocument` used to read `status`/`version` with a plain `SELECT`, decide
+ * in application code, then write unconditionally by id — no lock on the
+ * governing row. Fired concurrently against `activateDocument` on the SAME
+ * draft, the edit's in-memory check could pass (row still `draft` when IT
+ * read), then `activateDocument` commits first, and the edit's own `UPDATE`
+ * — carrying no `WHERE status = 'draft'` guard — silently overwrote the
+ * now-active row's wording underneath it.
+ *
+ * The two legitimate outcomes of a true race are BOTH acceptable: the edit
+ * commits first (activation then activates the edited wording — a coherent
+ * sequential order the scheduler happened to pick) or activation commits
+ * first (the edit is then refused, seeing the row already active). What must
+ * NEVER happen is what activation's own returned row said was made active
+ * ceasing to match what is actually in the database afterward — that
+ * mismatch is the exact defect, and it is real `Promise.all` concurrency, not
+ * sequential calls, that can expose it.
+ */
+describe('Codex B6 — concurrent edit vs. concurrent activation cannot mutate the active version', () => {
+  /**
+   * **The deterministic proof.** A `Promise.all` race between two whole
+   * service calls is a coin flip on real hardware — one transaction routinely
+   * finishes before the other's first query even lands, so a bare race can
+   * pass whether or not the fix exists, proving nothing either way. Postgres
+   * itself also means a NAKED holder of `FOR UPDATE` — one that does nothing
+   * else — blocks a conflicting `UPDATE` regardless of whether the SERVICE
+   * ever takes that lock explicitly, so that alone would not discriminate
+   * either (an early version of this test made exactly that mistake).
+   *
+   * What actually distinguishes the fix: this manually-driven transaction
+   * takes the row's lock, DOES the activation (status → active, exactly what
+   * `activateDocument` would have committed) and only then releases — the
+   * precise position a concurrent `activateDocument` would be in. A
+   * concurrent `updateDocument`, racing against it, can only avoid overwriting
+   * that activation if ITS OWN first act is also to take the same lock —
+   * which is exactly what `lockLegalDocumentRow` adds. Without it,
+   * `updateDocument`'s plain `SELECT` reads the row before the holder commits
+   * (a plain `SELECT` never blocks on `FOR UPDATE`), decides `draft` is
+   * editable, and its own `UPDATE` — no `WHERE status = 'draft'` guard —
+   * still succeeds once the holder's lock releases, silently overwriting the
+   * now-active row. This is the reproduction; asserting the edit is REFUSED
+   * is what a regression would flip.
+   */
+  it('a concurrent updateDocument sees the activation that committed while it waited on the SAME row lock, and refuses rather than overwriting it', async () => {
+    const row = await draft('privacy_policy', 'lock-block');
+
+    let releaseHold: () => void = () => undefined;
+    const holdGate = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    let activated = false;
+
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "legal_document" WHERE "id" = ${row.id}::uuid FOR UPDATE`;
+      await tx.legalDocument.update({
+        where: { id: row.id },
+        data: {
+          status: 'active',
+          activatedAt: new Date(),
+          activatedById: superId,
+          version: { increment: 1 },
+        },
+      });
+      activated = true;
+      await holdGate;
+    });
+
+    // The holder has committed nothing yet — it is deliberately paused right
+    // after taking the lock and deciding to activate, before releasing.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(activated).toBe(true);
+
+    let editSettled = false;
+    const editPromise = updateDocument(
+      prisma,
+      await superAdmin(),
+      row.id,
+      { versionLabel: `${TAG} lock-block-edit`, bodyArabic: WORDING_B },
+      row.version,
+    ).finally(() => {
+      editSettled = true;
+    });
+
+    // Still pending — with the fix, `updateDocument`'s OWN first act is the
+    // same row lock, so it cannot even have read the row yet.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(editSettled).toBe(false);
+
+    releaseHold();
+    await holder;
+
+    await expect(editPromise).rejects.toMatchObject({
+      code: expect.stringMatching(/^(STATE_CONFLICT|VERSION_CONFLICT)$/) as unknown as string,
+    });
+
+    const fresh = await prisma.legalDocument.findUniqueOrThrow({ where: { id: row.id } });
+    expect(fresh.status).toBe('active');
+    // The wording the activation committed survives untouched — this is the
+    // exact assertion the pre-fix code could not make.
+    expect(fresh.bodyArabic).toBe(WORDING_A);
+  });
+
+  /**
+   * **The observable-outcome proof, alongside the mechanism proof above.** A
+   * true `Promise.all` race between the two real service calls: on real
+   * hardware either order can win, and both are legitimate — what must NEVER
+   * happen is a mismatch between what activation itself reported as made
+   * active and what the database shows immediately afterward, which is
+   * exactly the shape of the defect Codex reproduced.
+   */
+  it('an edit racing an activation on the SAME draft never produces a torn state', async () => {
+    const row = await draft('privacy_policy', 'race');
+
+    const [editResult, activateResult] = await Promise.allSettled([
+      updateDocument(
+        prisma,
+        await superAdmin(),
+        row.id,
+        { versionLabel: `${TAG} race`, bodyArabic: WORDING_B },
+        row.version,
+      ),
+      activateDocument(prisma, await superAdmin(), row.id),
+    ]);
+
+    // Nothing here may ever reach the caller as an uncoded crash — a refusal
+    // is a normal, typed outcome of losing the race, never a 500.
+    expect(activateResult.status).toBe('fulfilled');
+    if (editResult.status === 'rejected') {
+      expect(editResult.reason).toMatchObject({
+        code: expect.stringMatching(/^(STATE_CONFLICT|VERSION_CONFLICT)$/) as unknown as string,
+      });
+    }
+
+    const activated = activateResult as PromiseFulfilledResult<
+      Awaited<ReturnType<typeof activateDocument>>
+    >;
+    const fresh = await prisma.legalDocument.findUniqueOrThrow({ where: { id: row.id } });
+
+    // **The assertion that actually catches the bug.** Before the fix, the
+    // edit could commit its overwrite AFTER activation had already committed
+    // and returned — activation's own answer said one wording was made
+    // active, and the database, read fresh right afterward, showed another.
+    expect(fresh.bodyArabic).toBe(activated.value.body_arabic);
+    expect(fresh.status).toBe('active');
+
+    if (editResult.status === 'fulfilled') {
+      // The edit won the race and committed BEFORE activation read the row —
+      // a legitimate sequential order, so activation correctly activated the
+      // EDITED wording rather than the original.
+      expect(fresh.bodyArabic).toBe(WORDING_B);
+    } else {
+      // Activation won — the original wording is what went into force, and
+      // the edit was correctly refused rather than silently accepted.
+      expect(fresh.bodyArabic).toBe(WORDING_A);
+    }
+  });
+});
+
 /* ── 4. Exactly one active version PER KIND ─────────────────────────────── */
 
 describe('exactly one version is in force PER KIND', () => {

@@ -154,19 +154,35 @@ export async function assertCoherent(
   tx: Prisma.TransactionClient,
   input: Pick<
     PhysicalExamInput,
-    'levelId' | 'subjectId' | 'academicYearId' | 'branchId' | 'roomId' | 'administrativeGroupId'
-  >,
+    'levelId' | 'branchId' | 'roomId' | 'administrativeGroupId'
+  > & {
+    /**
+     * **Nullable here, unlike `PhysicalExamInput`'s own field.** A
+     * source-backed physical occurrence's content may genuinely carry no
+     * Subject/Academic Year (`AssessmentInput` — بناء الاختبارات authors
+     * content, not scheduling facts); the room/branch/group coherence below
+     * is still owed to every physical occurrence regardless, so this widens
+     * to accept that case rather than forcing every caller through a second,
+     * subject-required check function for the same room/branch invariant.
+     */
+    subjectId: string | null;
+    academicYearId: string | null;
+  },
 ): Promise<void> {
-  await assertSubjectTaughtAtLevel(tx, input.levelId, input.subjectId);
+  if (input.subjectId !== null) {
+    await assertSubjectTaughtAtLevel(tx, input.levelId, input.subjectId);
+  }
 
   const [year, room] = await Promise.all([
-    tx.academicYear.findFirst({
-      where: { id: input.academicYearId, deletedAt: null },
-      select: { id: true },
-    }),
+    input.academicYearId === null
+      ? null
+      : tx.academicYear.findFirst({
+          where: { id: input.academicYearId, deletedAt: null },
+          select: { id: true },
+        }),
     tx.room.findFirst({ where: { id: input.roomId, deletedAt: null }, select: { branchId: true } }),
   ]);
-  if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
+  if (input.academicYearId !== null && !year) throw new AppError('NOT_FOUND', 'no such academic year');
   if (!room) throw new AppError('NOT_FOUND', 'no such room');
 
   // A room belongs to a branch (§7); a sitting booked into a room at another

@@ -1159,11 +1159,14 @@ async function eligible(
    * manually opens it, or a timestamp already computed at scheduling time
    * (R136 clause 9/10) — a UUID alone was never enough to reach a paper before
    * the audience check above; it is not enough to reach one before its own
-   * clock, either. No background job flips anything: this reads the column at
-   * the instant somebody asks, which is what makes `now >= availableFrom`
+   * clock, either. `NULL` is the `manual` policy's default and never becomes
+   * reachable on its own (R136 clause 5) — it is not merely "no timestamp yet
+   * set", it is "never opened", so it refuses exactly like a still-future
+   * timestamp does. No background job flips anything: this reads the column
+   * at the instant somebody asks, which is what makes `now >= availableFrom`
    * correct without one.
    */
-  if (exam.availableFrom !== null && exam.availableFrom.getTime() > Date.now()) {
+  if (exam.availableFrom === null || exam.availableFrom.getTime() > Date.now()) {
     return false;
   }
 

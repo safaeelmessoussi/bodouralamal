@@ -423,9 +423,19 @@ export async function deleteUserAccountSystem(
  */
 export async function deIdentifyAccount(
   prisma: PrismaClient,
-  actor: { userId: string; activeRole?: string | null },
+  /**
+   * **`userId: null` means the calendar did it** — same convention as
+   * `softDelete`/`deleteUserAccountSystem` (R133 §14). `audit.write`'s own
+   * `actorUserId` is `string | null` for exactly this reason.
+   */
+  actor: { userId: string | null; activeRole?: string | null },
   targetId: string,
 ): Promise<void> {
+  // Codex B4 — captured so the addresses this account released can have their
+  // `NormalizedEmailLock` rows retired once de-identification has committed;
+  // see the loop after the transaction below for why that happens separately.
+  let releasedAddresses: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     // Read only the email coordinates first because the global authentication
     // hierarchy is Email -> User. The complete row is re-read only after both
@@ -455,6 +465,7 @@ export async function deIdentifyAccount(
     for (const address of addresses) {
       await users.lockNormalizedEmail(tx, address);
     }
+    releasedAddresses = addresses;
 
     // Global lock order for lifecycle mutations is PlatformOwner -> User. This
     // follows the email locks here because transfer never takes an email lock,
@@ -671,6 +682,64 @@ export async function deIdentifyAccount(
       });
     }
   });
+
+  /**
+   * **Codex B4 — retire the plaintext `NormalizedEmailLock` row for every
+   * address this account just released.**
+   *
+   * The lock row itself is not personal data about a *live* claim — it names
+   * no owner — but once neither authoritative channel (`preProvisionedEmail`,
+   * `UserIdentity`) claims the address any more, the row is nothing but a
+   * bare copy of the deleted person's email address with no purpose left
+   * (R133(3) — "her authentication" is part of what permanent deletion
+   * removes). `emailClaimingUserIds` is empty for every address here on a
+   * fresh run (the transaction above just cleared both channels) and stays
+   * empty on an idempotent retry (`releasedAddresses` is empty then, so this
+   * loop is a no-op) — this never removes a row a live account still needs.
+   *
+   * **Deliberately its own transaction, per address, AFTER the one above
+   * commits** — not folded into it. That transaction already holds each row
+   * locked for the full de-identification (every table `destroyEducationalRecord`
+   * touches); a concurrent registration blocked on the SAME row would then
+   * wait for the entire purge rather than a small, separate check-and-delete.
+   * `lockNormalizedEmail` is the SAME existing serialization primitive
+   * registration/provisioning/binding all use — reused here, not duplicated —
+   * so this still cannot race a concurrent claimant: whichever of the two
+   * acquires the row's lock first is the one whose view of
+   * `emailClaimingUserIds` the other waits behind.
+   */
+  for (const address of releasedAddresses) {
+    await prisma.$transaction(async (tx) => {
+      await users.lockNormalizedEmail(tx, address);
+      const claimants = await users.emailClaimingUserIds(tx, address);
+      if (claimants.length === 0) {
+        await tx.normalizedEmailLock.delete({ where: { email: address } });
+      }
+    });
+  }
+}
+
+/**
+ * **Codex B5 — the calendar completes R133's OWN lifecycle for a User too.**
+ *
+ * `purgeExpiredEntries` (`trash.service.ts`) never had a way to reach this: a
+ * User is deliberately absent from `PURGEABLE` (R54 — the generic per-row
+ * purge would DELETE the row, which a safeguarding platform's own audit trail
+ * may never lose), so every expired `Trash` row naming a User fell into that
+ * refusal — `ACCOUNTABILITY_RECORD` — and the automatic sweep counted it
+ * `unsupported` and left it alone forever. **The right operation for a User
+ * was never "delete the row" — it is exactly this function**, the same one a
+ * Super Admin's manual `DELETE /admin/users/{id}?permanent=true` already
+ * calls; the calendar was simply never wired to call it too. Same convention
+ * as `deleteUserAccountSystem` beside it: `null` where a person would be, not
+ * reachable from a route, no role assertion because there is no caller to
+ * authorise.
+ */
+export async function deIdentifyAccountSystem(
+  prisma: PrismaClient,
+  targetId: string,
+): Promise<void> {
+  await deIdentifyAccount(prisma, { userId: null }, targetId);
 }
 
 /**

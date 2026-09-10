@@ -155,6 +155,7 @@ export async function scheduleExam(
     let resolvedLevelId: string;
     let resolvedSubjectId: string | null;
     let resolvedAcademicYearId: string | null;
+    let resolvedAdministrativeGroupId: string | null;
 
     if (input.sourceExamId) {
       // `loadForAuthor` locks nothing itself, but every write below re-derives
@@ -207,6 +208,7 @@ export async function scheduleExam(
       resolvedLevelId = source.levelId;
       resolvedSubjectId = source.subjectId;
       resolvedAcademicYearId = source.academicYearId;
+      resolvedAdministrativeGroupId = target.administrativeGroupId;
     } else {
       // **Bare physical — the existing, unchanged, content-free path** (R136
       // §19/clause 14): scheduling without ever having selected authored
@@ -217,24 +219,6 @@ export async function scheduleExam(
         levelId: bare.levelId,
         target: input.target,
         ...(input.date === undefined ? {} : { date: input.date }),
-      });
-      await assertScope(
-        tx,
-        actor,
-        {
-          branchId: input.branchId!,
-          levelId: bare.levelId,
-          subjectId: bare.subjectId,
-          administrativeGroupId: target.administrativeGroupId,
-        },
-      );
-      await assertCoherent(tx, {
-        levelId: bare.levelId,
-        subjectId: bare.subjectId,
-        academicYearId: bare.academicYearId,
-        branchId: input.branchId!,
-        roomId: input.roomId!,
-        administrativeGroupId: target.administrativeGroupId,
       });
       occurrence = await tx.exam.create({
         data: {
@@ -258,10 +242,39 @@ export async function scheduleExam(
       resolvedLevelId = bare.levelId;
       resolvedSubjectId = bare.subjectId;
       resolvedAcademicYearId = bare.academicYearId;
+      resolvedAdministrativeGroupId = target.administrativeGroupId;
     }
 
     // ── Physical-only occurrence facts: place, clock window, staff. ────────
     if (input.mode === 'physical') {
+      // **Codex B2/B3 — the branch/room authorization and coherence checks
+      // apply to EVERY physical occurrence, source-backed or bare.** Before
+      // this, `assertScope`/`assertCoherent` ran only on the bare (content-
+      // free) path; a source-backed physical exam skipped straight from
+      // `assertMayAuthor` (which authorizes the CONTENT/audience, deliberately
+      // `branchId: null` — it knows nothing about physical placement) to
+      // writing `input.branchId`/`input.roomId` onto the row with no check
+      // that the actor may schedule there, nor that the room belongs to that
+      // branch. One shared call, after both branches above have resolved a
+      // target and a Level/Subject/Academic Year, closes both gaps at once.
+      await assertScope(tx, actor, {
+        branchId: input.branchId as string,
+        levelId: resolvedLevelId,
+        // `''` is `assertScope`'s own sentinel for "no Subject filter" (see
+        // `assertExamInTeacherScope`) — a source's content may genuinely
+        // carry no Subject, and this is not a second spelling of that rule.
+        subjectId: resolvedSubjectId ?? '',
+        administrativeGroupId: resolvedAdministrativeGroupId,
+      });
+      await assertCoherent(tx, {
+        levelId: resolvedLevelId,
+        subjectId: resolvedSubjectId,
+        academicYearId: resolvedAcademicYearId,
+        branchId: input.branchId as string,
+        roomId: input.roomId as string,
+        administrativeGroupId: resolvedAdministrativeGroupId,
+      });
+
       if (input.schedulingTypeId) {
         await assertTypeOfKind(tx, input.schedulingTypeId, ['exam'] as const);
       }

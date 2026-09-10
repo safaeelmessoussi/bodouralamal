@@ -55,6 +55,16 @@ const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const YEAR = new Date().getUTCFullYear();
 const TODAY = day(`${YEAR}-06-15`);
 const ISO_TODAY = `${YEAR}-06-15`;
+/**
+ * **Codex B1/B2/B3 fixtures deliberately do NOT use `TODAY`.**
+ * `listAssessments`'s unfiltered library read orders `[{date:'desc'},{id:'desc'}]`
+ * with a 25-row default page; nearly every fixture in this file shares
+ * `TODAY`, so adding more same-dated drafts can silently push an unrelated
+ * test's own row off the page it expects. An earlier date in the SAME
+ * academic year (still inside `currentPeriodId`'s Jan–Dec span, so audience
+ * resolution is unaffected) sorts strictly after every `TODAY` row instead.
+ */
+const OTHER_DATE = day(`${YEAR}-01-02`);
 
 let superAdminId = '';
 let teacherId = '';
@@ -269,6 +279,7 @@ beforeAll(async () => {
       data: { name: `${TAG} مستوى محلي`, categoryId: category.id, genderRestriction: 'any' },
     })
   ).id;
+  await prisma.levelSubject.create({ data: { levelId: localOnlyLevelId, subjectId } });
 
   teachingGroupId = (
     await prisma.teachingGroup.create({
@@ -890,6 +901,146 @@ describe('16–21 · the student', () => {
     const mine = inbox.rows.find((r) => r.studentId === alice);
     expect(mine?.state).toBe('submitted');
     expect(mine?.gradeStatus).toBeNull();
+  });
+});
+
+describe('R136 clause 5 · a `manual` occurrence never becomes reachable on its own (Codex B1)', () => {
+  /**
+   * `eligible()` (`assessment.service.ts`) gates `studentPaper`, `saveResponses`
+   * and `assessmentsForStudent` alike — one shared predicate, fixed once here
+   * rather than at each call site. `manual` leaves `availableFrom` `NULL`
+   * forever: this revision adds no HTTP route to open one, so "opened" below
+   * is simulated exactly the way any future opening route would act — writing
+   * a past `availableFrom` onto the row — not a shortcut around the fix.
+   *
+   * `localOnlyLevelId`/`bob` rather than the file's usual `levelId`/`alice`:
+   * scheduling here (deliberately, per the case below) leaves the DRAFT
+   * listed in the library forever (R136), and the shared `levelId` already
+   * has pagination-sensitive assertions elsewhere in this file that count or
+   * order its rows — this suite must not change what those see.
+   */
+  async function unopenedManualExam(): Promise<{ examId: string; questionId: string }> {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} يدوي مغلق`,
+      maxGrade: 20,
+      levelId: localOnlyLevelId,
+      subjectId,
+      academicYearId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'اسمك؟' });
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      availability: { policy: 'manual' },
+    });
+    // Scheduling COPIES the question onto the occurrence (R136 clause 3/4) —
+    // a different row, with a different id, from the one `addQuestion` above
+    // returned on the draft.
+    const question = await prisma.examQuestion.findFirstOrThrow({
+      where: { examId: occurrenceId },
+      select: { id: true },
+    });
+    return { examId: occurrenceId, questionId: question.id };
+  }
+
+  it('an unopened manual exam cannot be read — no submission exists yet, so it is 404 like it never existed', async () => {
+    const { examId } = await unopenedManualExam();
+    await expect(studentPaper(prisma, student(bob), examId, bob)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('cannot be saved', async () => {
+    const { examId, questionId } = await unopenedManualExam();
+    await expect(
+      saveResponses(prisma, student(bob), examId, bob, [{ questionId, text: 'محاولة' }], {
+        submit: false,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('cannot be submitted — this is the exact bypass Codex reproduced', async () => {
+    const { examId, questionId } = await unopenedManualExam();
+    await expect(
+      saveResponses(prisma, student(bob), examId, bob, [{ questionId, text: 'محاولة' }], {
+        submit: true,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('a still-future `custom` timestamp refuses exactly the same way — the fix did not special-case NULL differently from "not yet"', async () => {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} مؤجّل`,
+      maxGrade: 20,
+      levelId: localOnlyLevelId,
+      subjectId,
+      academicYearId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'اسمك؟' });
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const { id: examId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      availability: { policy: 'custom', at: future },
+    });
+    await expect(studentPaper(prisma, student(bob), examId, bob)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('once manually opened (an Admin sets `availableFrom` in the past), the same occurrence reads, saves and submits normally', async () => {
+    const { examId, questionId } = await unopenedManualExam();
+    await prisma.exam.update({ where: { id: examId }, data: { availableFrom: new Date(0) } });
+
+    const paper = await studentPaper(prisma, student(bob), examId, bob);
+    expect(paper.submission).toBeNull();
+
+    const saved = await saveResponses(
+      prisma,
+      student(bob),
+      examId,
+      bob,
+      [{ questionId, text: 'إجابة بوب' }],
+      { submit: false },
+    );
+    expect(saved.state).toBe('in_progress');
+
+    const submitted = await saveResponses(
+      prisma,
+      student(bob),
+      examId,
+      bob,
+      [{ questionId, text: 'إجابة بوب' }],
+      { submit: true },
+    );
+    expect(submitted.state).toBe('submitted');
+  });
+
+  it('an already-open, already-scheduled `custom` past-timestamp paper (the fixture every other test above relies on) is unaffected by the fix', async () => {
+    const examId = await publishedPaper({ kind: 'level' }, localOnlyLevelId);
+    const question = await prisma.examQuestion.findFirstOrThrow({
+      where: { examId },
+      select: { id: true },
+    });
+    const paper = await studentPaper(prisma, student(bob), examId, bob);
+    expect(paper.submission).toBeNull();
+    const saved = await saveResponses(
+      prisma,
+      student(bob),
+      examId,
+      bob,
+      [{ questionId: question.id, text: 'إجابة بوب' }],
+      { submit: true },
+    );
+    expect(saved.state).toBe('submitted');
   });
 });
 
@@ -2153,6 +2304,163 @@ describe('R136 (Codex B1) — scheduling is atomic: a late failure leaves nothin
       // let one transaction's insert bleed into the other's row).
       expect(questions).toHaveLength(2);
     }
+  });
+});
+
+/**
+ * **Codex B2/B3 — a source-backed physical occurrence gets the SAME
+ * branch-authorization and room/branch coherence the bare (content-free)
+ * physical path already had.** Before the fix, `scheduleExam`'s
+ * `sourceExamId` branch for `mode: 'physical'` authorized only the exam's
+ * CONTENT/audience (`assertMayAuthor`, deliberately `branchId: null` — it
+ * knows nothing about physical placement) and then wrote `input.branchId`/
+ * `input.roomId` straight onto the row: no check that the actor may schedule
+ * INTO that branch, and no check that the room belongs to it. `localOnlyLevelId`
+ * is used throughout so the AUDIENCE check (`assertMayAuthor`, R125) always
+ * passes on its own — isolating these cases to the PLACEMENT gap alone.
+ */
+describe('Codex B2/B3 · source-backed physical scheduling: branch authorization and room/branch coherence', () => {
+  async function room(branch: string): Promise<string> {
+    return (
+      await prisma.room.create({ data: { name: `${TAG} قاعة ${branch}`, branchId: branch } })
+    ).id;
+  }
+
+  async function physicalSource(): Promise<string> {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} ورقة فيزيائية مصدرية`,
+      maxGrade: 20,
+      levelId: localOnlyLevelId,
+      subjectId,
+      academicYearId,
+      mode: 'physical',
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+    return id;
+  }
+
+  it('B2 — a branch-scoped Admin cannot source-schedule a physical exam into a branch she does not hold', async () => {
+    const sourceId = await physicalSource();
+    const farRoom = await room(otherBranchId);
+    await expect(
+      scheduleExam(prisma, scopedAdmin(), {
+        mode: 'physical',
+        sourceExamId: sourceId,
+        target: { kind: 'level' },
+        date: OTHER_DATE,
+        branchId: otherBranchId,
+        roomId: farRoom,
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // Direct IDs buy nothing — the same call, entirely by UUID, is refused
+    // exactly the same way, not merely blocked by a picker never offering it.
+    expect(typeof otherBranchId).toBe('string');
+    expect(typeof farRoom).toBe('string');
+  });
+
+  it('B2 — the SAME source-schedule succeeds once targeted at a branch she does hold', async () => {
+    const sourceId = await physicalSource();
+    const ownRoom = await room(branchId);
+    const { id: occurrenceId } = await scheduleExam(prisma, scopedAdmin(), {
+      mode: 'physical',
+      sourceExamId: sourceId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      branchId,
+      roomId: ownRoom,
+      startTime: new Date('1970-01-01T09:00:00.000Z'),
+      endTime: new Date('1970-01-01T11:00:00.000Z'),
+    });
+    const occurrence = await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } });
+    expect(occurrence.branchId).toBe(branchId);
+    expect(occurrence.status).toBe('published');
+  });
+
+  it('B2 — a Super Admin is unaffected: still reaches any branch', async () => {
+    const sourceId = await physicalSource();
+    const farRoom = await room(otherBranchId);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'physical',
+      sourceExamId: sourceId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      branchId: otherBranchId,
+      roomId: farRoom,
+      startTime: new Date('1970-01-01T09:00:00.000Z'),
+      endTime: new Date('1970-01-01T11:00:00.000Z'),
+    });
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } })).branchId).toBe(
+      otherBranchId,
+    );
+  });
+
+  it('B3 — a room at another branch is refused, even when the branch itself is authorized', async () => {
+    const sourceId = await physicalSource();
+    const wrongRoom = await room(otherBranchId);
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'physical',
+        sourceExamId: sourceId,
+        target: { kind: 'level' },
+        date: OTHER_DATE,
+        // The BRANCH named is authorized (Super Admin reaches both, and this
+        // is the branch the Level audience lives at) — only the ROOM is at
+        // the other one. Isolates B3 from B2: this must fail on room/branch
+        // coherence alone.
+        branchId,
+        roomId: wrongRoom,
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { reason: 'ROOM_BRANCH_MISMATCH' },
+    });
+  });
+
+  it('B3 — a same-branch room is accepted', async () => {
+    const sourceId = await physicalSource();
+    const ownRoom = await room(branchId);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'physical',
+      sourceExamId: sourceId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      branchId,
+      roomId: ownRoom,
+      startTime: new Date('1970-01-01T09:00:00.000Z'),
+      endTime: new Date('1970-01-01T11:00:00.000Z'),
+    });
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } })).roomId).toBe(
+      ownRoom,
+    );
+  });
+
+  it('the existing bare (content-free) physical path is unchanged: branch and room checks still apply there too', async () => {
+    const wrongRoom = await room(otherBranchId);
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'physical',
+        bare: {
+          title: `${TAG} عارية`,
+          maxGrade: 20,
+          levelId: localOnlyLevelId,
+          subjectId,
+          academicYearId,
+        },
+        target: { kind: 'level' },
+        date: OTHER_DATE,
+        branchId,
+        roomId: wrongRoom,
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'ROOM_BRANCH_MISMATCH' } });
   });
 });
 

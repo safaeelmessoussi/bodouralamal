@@ -150,6 +150,24 @@ export async function listConsentTexts(
   return rows.map(toRow);
 }
 
+/**
+ * **Codex B6 — serializes a concurrent edit against a concurrent activation
+ * of the SAME version.** Same defect and same fix as `legal-document.service.ts`'s
+ * `lockLegalDocumentRow`: `updateConsentText` and `activateConsentText` each
+ * read `status`/`version` with a plain `SELECT`, decided in application code,
+ * then wrote unconditionally by id — a check-then-write with no lock on the
+ * governing row (§20 rule 12), so an edit that read the row as a draft could
+ * still overwrite it after a concurrent activation committed. Acquired FIRST,
+ * before the read that decides anything, exactly as `lockExamRow`
+ * (`assessment.service.ts`) already does for the same class of race.
+ */
+async function lockLegalConsentTextRow(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  id: string,
+): Promise<void> {
+  await prisma.$queryRaw`SELECT "id" FROM "legal_consent_text" WHERE "id" = ${id}::uuid FOR UPDATE`;
+}
+
 /* ── Writes ─────────────────────────────────────────────────────────────── */
 
 export interface CreateConsentTextInput {
@@ -264,6 +282,7 @@ export async function updateConsentText(
   const { versionLabel, bodyArabic } = normalize(input);
 
   return prisma.$transaction(async (tx) => {
+    await lockLegalConsentTextRow(tx, id);
     const existing = await tx.legalConsentText.findUnique({
       where: { id },
       select: { id: true, status: true, version: true, activatedAt: true },
@@ -346,6 +365,7 @@ export async function activateConsentText(
   );
 
   return prisma.$transaction(async (tx) => {
+    await lockLegalConsentTextRow(tx, id);
     const target = await tx.legalConsentText.findUnique({
       where: { id },
       select: { id: true, status: true },

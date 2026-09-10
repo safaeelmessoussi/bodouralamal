@@ -122,6 +122,28 @@ export async function listDocuments(
   return rows.map(toRow);
 }
 
+/**
+ * **Codex B6 — serializes a concurrent edit against a concurrent activation
+ * of the SAME version.** Both `updateDocument` and `activateDocument` used to
+ * read the row's `status`/`version` with a plain `SELECT`, decide in
+ * application code, then write unconditionally by id — a check-then-write with
+ * no lock on the governing row (§20 rule 12). Two requests racing on the same
+ * draft — one activating it, one editing the wording it read a moment
+ * earlier — could both pass their own check before either committed, and the
+ * edit's `UPDATE` carried no `WHERE status = 'draft'` guard, so it silently
+ * overwrote the now-active row's wording after activation. Same fix as
+ * `assessment.service.ts`'s `lockExamRow` (§16.2's sanctioned raw-SQL row-lock
+ * exception): acquire this FIRST, before the read that decides anything, so a
+ * concurrent writer on the same id always waits and then sees this
+ * transaction's committed result rather than racing it.
+ */
+async function lockLegalDocumentRow(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  id: string,
+): Promise<void> {
+  await prisma.$queryRaw`SELECT "id" FROM "legal_document" WHERE "id" = ${id}::uuid FOR UPDATE`;
+}
+
 /* ── Writes ─────────────────────────────────────────────────────────────── */
 
 export interface CreateDocumentInput {
@@ -225,6 +247,7 @@ export async function updateDocument(
   const { versionLabel, bodyArabic } = normalize(input);
 
   return prisma.$transaction(async (tx) => {
+    await lockLegalDocumentRow(tx, id);
     const existing = await tx.legalDocument.findUnique({
       where: { id },
       select: { id: true, kind: true, status: true, version: true, activatedAt: true },
@@ -295,6 +318,7 @@ export async function activateDocument(
   );
 
   return prisma.$transaction(async (tx) => {
+    await lockLegalDocumentRow(tx, id);
     const target = await tx.legalDocument.findUnique({
       where: { id },
       select: { id: true, kind: true, status: true },

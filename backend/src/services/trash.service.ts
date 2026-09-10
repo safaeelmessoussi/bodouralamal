@@ -7,6 +7,7 @@ import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
+import { deIdentifyAccountSystem } from './account-deletion.service.js';
 
 /**
  * The Trash — **soft-deleted records, browsable; restorable where restoration is
@@ -1090,6 +1091,22 @@ async function purgeTrashEntry(
  * **An unexpected error propagates.** A sweep that swallowed everything would
  * report success while destroying nothing, and TD-7's retry would never fire.
  *
+ * ## Codex B5 — a `User` entry dispatches to R133's OWN lifecycle, not the plan
+ *
+ * `User` is deliberately absent from `PURGEABLE` (R54 — the row itself is an
+ * accountability record and may never be DELETEd, only de-identified), so
+ * routing it through `purgeTrashEntry` like everything else would only ever
+ * reach `ACCOUNTABILITY_RECORD` and leave the entry stranded forever — exactly
+ * the bug Codex reproduced. `deIdentifyAccountSystem` is the SAME function a
+ * Super Admin's manual `DELETE /admin/users/{id}?permanent=true` already
+ * calls, so the destruction, the Trash cleanup and the audit row are identical
+ * either way; it deletes the `Trash` row itself as part of de-identifying, so
+ * there is nothing left here for `purgeTrashEntry` to do for this entity.
+ * `NOT_DELETED` (restored since) and `NOT_FOUND` (a concurrent manual purge
+ * already won) are the SAME two `AppError` shapes `deIdentifyAccount` throws
+ * as the generic path, so the existing catch below handles both without
+ * change.
+ *
  * ## Ordering, and what a crash leaves behind
  *
  * Per entry: the transaction destroys children, record and tombstone together
@@ -1108,14 +1125,18 @@ export async function purgeExpiredEntries(
     // Strictly before: on the boundary instant the window has not elapsed. The
     // same strictness as the two application clocks and the ten-year one.
     where: { purgeAfter: { lt: now } },
-    select: { id: true },
+    select: { id: true, targetEntity: true, targetId: true },
     orderBy: { purgeAfter: 'asc' },
   });
 
   const counts = { purged: 0, blocked: 0, unsupported: 0, stale: 0 };
-  for (const { id } of due) {
+  for (const entry of due) {
     try {
-      await purgeTrashEntry(prisma, null, id);
+      if (entry.targetEntity === 'User') {
+        await deIdentifyAccountSystem(prisma, entry.targetId);
+      } else {
+        await purgeTrashEntry(prisma, null, entry.id);
+      }
       counts.purged += 1;
     } catch (error) {
       const reason =

@@ -14,6 +14,7 @@ import {
   unassignSurahFromLevel,
 } from './reference-data.service.js';
 import { createSchedulingType, deleteSchedulingType } from './scheduling-type.service.js';
+import { deleteUserAccount } from './account-deletion.service.js';
 import { deleteSubject } from './taxonomy.service.js';
 import {
   listTrash,
@@ -687,6 +688,138 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
     // without a reader having to infer it from a null column.
     expect(row.actorUserId).toBeNull();
     expect(JSON.stringify(row.detail)).toContain('"system":true');
+  });
+
+  /**
+   * **Codex B5 — a User is deliberately absent from `PURGEABLE`** (R54: the
+   * row itself may never be DELETEd, only de-identified), so before this fix
+   * every expired User Trash entry fell into the SAME `unsupported` bucket as
+   * the synthetic `NoSuchEntityForThisTest` row above and stayed there
+   * forever — the automatic sweep never completed R133's lifecycle for a
+   * deleted person. These pin the dispatch to `deIdentifyAccountSystem`
+   * instead.
+   */
+  describe('a User entry — dispatched to de-identification, not the generic plan', () => {
+    // De-identification overwrites `nameArabic` away from `${TAG}`'s own
+    // prefix (the same reason `account-closure.integration.test.ts` tracks its
+    // own ids), so the outer `cleanup()`'s tag-based lookup would never find
+    // these rows again — tracked explicitly instead.
+    const deidentifiedUserIds: string[] = [];
+
+    afterEach(async () => {
+      if (deidentifiedUserIds.length === 0) return;
+      // `user.delete`, `user.deidentify` and `trash.permanent_delete` all
+      // target the victim's id — none carry her as `actorUserId` (deletion
+      // and de-identification here are Super-Admin- and system-initiated
+      // respectively, never self-service), so the outer `cleanup()`'s
+      // actor-scoped lookup never reaches them either.
+      await prisma.auditLog.deleteMany({ where: { targetId: { in: deidentifiedUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: deidentifiedUserIds } } });
+      deidentifiedUserIds.length = 0;
+    });
+
+    async function expiredUserTrash(): Promise<{ trashId: string; userId: string }> {
+      const victim = await prisma.user.create({
+        data: { nameArabic: `${TAG} مستفيدة منتهية`, sex: 'female', accountStatus: 'active' },
+      });
+      deidentifiedUserIds.push(victim.id);
+      await prisma.userIdentity.create({
+        data: {
+          userId: victim.id,
+          provider: 'google',
+          providerSubjectId: `${TAG}-b5-${victim.id}`,
+          email: `b5-${victim.id}@example.test`,
+        },
+      });
+      await deleteUserAccount(prisma, superAdmin(), victim.id);
+      const entry = await prisma.trash.findFirstOrThrow({
+        where: { targetEntity: 'User', targetId: victim.id },
+      });
+      await prisma.trash.update({ where: { id: entry.id }, data: { purgeAfter: LONG_AGO } });
+      return { trashId: entry.id, userId: victim.id };
+    }
+
+    it('a User Trash entry younger than the window is left alone, exactly like any other entity', async () => {
+      const victim = await prisma.user.create({
+        data: { nameArabic: `${TAG} مستفيدة حديثة`, sex: 'female', accountStatus: 'active' },
+      });
+      await deleteUserAccount(prisma, superAdmin(), victim.id);
+
+      const counts = await purgeExpiredEntries(prisma, LATER);
+
+      expect(counts.purged).toBe(0);
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: victim.id } });
+      expect(after.nameArabic).not.toBe('حساب محذوف');
+      await prisma.trash.deleteMany({ where: { targetEntity: 'User', targetId: victim.id } });
+      await prisma.user.delete({ where: { id: victim.id } });
+    });
+
+    it('an expired User Trash entry is de-identified AND its own Trash row is purged — the exact gap Codex reproduced', async () => {
+      const { trashId, userId } = await expiredUserTrash();
+
+      const counts = await purgeExpiredEntries(prisma, LATER);
+
+      expect(counts.purged).toBeGreaterThanOrEqual(1);
+      expect(counts.unsupported).toBe(0);
+      // The row itself survives (R54 — twenty-six live foreign keys, and
+      // de-identification is the whole point), de-identified rather than gone.
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(after.nameArabic).toBe('حساب محذوف');
+      expect(await prisma.userIdentity.count({ where: { userId } })).toBe(0);
+      // `deIdentifyAccount` deletes its OWN Trash row as part of the same
+      // transaction — nothing left for the generic path to purge separately.
+      expect(await prisma.trash.count({ where: { id: trashId } })).toBe(0);
+      expect(await prisma.trash.count({ where: { targetEntity: 'User', targetId: userId } })).toBe(
+        0,
+      );
+    });
+
+    it('permanent deletion of an expired User runs exactly once — a second sweep finds nothing left to do', async () => {
+      await expiredUserTrash();
+
+      const first = await purgeExpiredEntries(prisma, LATER);
+      const second = await purgeExpiredEntries(prisma, LATER);
+
+      expect(first.purged).toBeGreaterThanOrEqual(1);
+      expect(second.purged).toBe(0);
+    });
+
+    it('a restored User is NOT subsequently purged by stale sweep work', async () => {
+      const { trashId, userId } = await expiredUserTrash();
+      // Somebody restored her within the window, since — `deIdentifyAccount`'s
+      // own guard, not a new one this test invents.
+      await prisma.user.update({ where: { id: userId }, data: { deletedAt: null } });
+
+      const counts = await purgeExpiredEntries(prisma, LATER);
+
+      expect(counts.stale).toBe(1);
+      expect(counts.purged).toBe(0);
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(after.nameArabic).toBe(`${TAG} مستفيدة منتهية`);
+      expect(await prisma.userIdentity.count({ where: { userId } })).toBe(1);
+
+      await prisma.trash.deleteMany({ where: { id: trashId } });
+      await prisma.userIdentity.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+    });
+
+    it('immediate access disable is unchanged by the dispatch fix — set at soft-delete, well before the sweep ever runs or even becomes eligible', async () => {
+      // Access is refused the instant `deleted_at` is set — `assertFreshActive`
+      // filters on it — which happens inside `deleteUserAccount`/`softDelete`,
+      // a function this fix does not touch. This dispatch fix only changes
+      // what the SWEEP does with an already-expired entry, days later; it must
+      // not become a precondition for the existing immediate disable.
+      const victim = await prisma.user.create({
+        data: { nameArabic: `${TAG} مستفيدة جلسة`, sex: 'female', accountStatus: 'active' },
+      });
+      await deleteUserAccount(prisma, superAdmin(), victim.id);
+
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: victim.id } });
+      expect(after.deletedAt).not.toBeNull();
+
+      await prisma.trash.deleteMany({ where: { targetEntity: 'User', targetId: victim.id } });
+      await prisma.user.delete({ where: { id: victim.id } });
+    });
   });
 });
 

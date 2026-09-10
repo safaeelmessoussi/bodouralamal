@@ -7369,3 +7369,248 @@ No Staging or Production action taken; only the local dev container and
 database were touched, through the repository's own documented, safe
 workflow (`docs/development/getting-started.md`), and only to apply
 already-written migrations and rebuild from already-committed source.
+
+## Codex remediation pass — six confirmed production blockers, B1–B6
+## (2026-09-10)
+
+A targeted fix pass against six findings an independent Codex audit
+dynamically reproduced, scoped to exactly these six — no broader refactor,
+no unrelated cleanup, adjacent findings recorded below rather than fixed.
+Starting HEAD `5e69b93` (this entry's own predecessor). No SRS revision:
+every fix corrects an implementation defect against an already-ratified
+requirement; none invents policy.
+
+### B1 — a manually-controlled remote exam accepted a submission before
+being opened
+
+`eligible()` (`assessment.service.ts`), the single predicate `studentPaper`,
+`saveResponses` and the assessments listing all call, inverted R136 clause
+5's own rule: `if (exam.availableFrom !== null && ... > Date.now())
+return false` is false whenever `availableFrom` is `NULL` — the `manual`
+policy's default — so the function fell through to the audience check
+alone instead of refusing. Confirmed exactly as Codex described: a never-
+opened manual exam was reachable by any eligible student. Fixed by
+inverting the predicate to `availableFrom === null || ... > Date.now()`,
+so `NULL` refuses exactly like a still-future timestamp — one line, in the
+one shared gate, closing read/save/submit/listing at once rather than
+patching the submit endpoint alone. The function's own doc comment (which
+already stated the correct rule) is otherwise unchanged. Every
+`eligible()` caller already filters `mode: 'online'` before loading a row,
+so physical scheduling — which R136(5) says this gate never applies to —
+is structurally unreachable and unaffected.
+
+Six new regression tests (`assessment.integration.test.ts`, its own
+`localOnlyLevelId`/`bob` fixtures rather than the file's shared `levelId`/
+`alice`, to avoid perturbing unrelated pagination-sensitive tests):
+unopened manual exam refuses read/save/submit; a still-future `custom`
+timestamp refuses the same way; once manually opened (simulated the only
+way currently possible — an Admin writing `availableFrom` directly, since
+this revision adds no HTTP route to open one) read/save/submit all
+succeed; the pre-existing `custom`-past-timestamp fixture every other test
+in the file already relies on is unaffected.
+
+### B2/B3 — a branch-scoped Admin could source-schedule a physical exam
+into another branch, with a room/branch mismatch alongside it
+
+`scheduleExam` (`exam-scheduling.service.ts`) authorized a source-backed
+physical occurrence's CONTENT/audience (`assertMayAuthor`, deliberately
+`branchId: null` — it knows nothing about physical placement) and then
+wrote `input.branchId`/`input.roomId` straight onto the row with no
+authorization check on that branch and no check that the room belonged to
+it. The bare (content-free) physical path already called `assertScope`
+(branch authorization) and `assertCoherent` (room/branch/group coherence,
+`ROOM_BRANCH_MISMATCH`) — the source-backed path, added later, never
+picked either up. Both confirmed exactly: a branch-scoped Admin could
+source-schedule into a branch she does not hold, and a room at the wrong
+branch was accepted whenever a source was named.
+
+Fixed by moving both checks out of the bare-only branch to run
+unconditionally for every physical occurrence, source-backed or bare,
+once both branches above have resolved a Level/Subject/Academic
+Year/target (`exam-scheduling.service.ts`). `assertCoherent`
+(`exam.service.ts`) widened to accept a `null` Subject/Academic Year —
+genuinely possible for a source-backed exam's content, never for the bare
+path's required fields — skipping just the two checks that need one,
+never the mandatory room/branch/group checks. No permission was widened;
+both checks already existed and applied to the bare path exactly as
+before.
+
+Six new tests (`assessment.integration.test.ts`, a dedicated
+`localOnlyLevelId`-scoped audience so B2's own case is isolated from the
+audience-authorization the source's own content check already covers):
+branch-scoped Admin refused into an unauthorized branch (direct IDs, no
+picker to hide behind); the same call succeeds once targeted at her own
+branch; Super Admin unaffected; a room at another branch refused even
+when the branch itself is authorized; a same-branch room accepted; the
+pre-existing bare/content-free path's own checks confirmed unchanged.
+
+### B4 — permanent deletion cleared the User's email but left it in
+`normalized_email_lock`
+
+Inspected before changing anything, per the task's own instruction.
+`NormalizedEmailLock.email` is a **plain, un-hashed, normalized email
+string** — no `EMAIL_LOCK_KEY` or other cryptographic secret exists in
+this codebase under that or any name; Codex's phrasing is corrected here
+rather than coded against literally. The row's declared purpose
+(`user.repository.ts`) is serializing concurrent ownership decisions
+during the LIVE-account period; `deIdentifyAccount` already clears both
+authoritative ownership channels (`preProvisionedEmail`, `UserIdentity`)
+on permanent deletion but never touched this row, by original design
+("the stable lock row remains available to serialize the next
+claimant") — which is correct for an account still claiming an address,
+and simply never revisited for one that no longer does. Confirmed:
+the plaintext address survived indefinitely after permanent deletion,
+contradicting R133(3)'s "her authentication" among what permanent
+deletion removes.
+
+Fixed in `deIdentifyAccount` (`account-deletion.service.ts`): the
+addresses released are now retired in a short, separate transaction
+per address, AFTER the main de-identification transaction commits —
+reusing the existing `lockNormalizedEmail`/`emailClaimingUserIds`
+primitives rather than a new mechanism, re-confirming under the SAME lock
+that nothing claims the address before deleting its row (protecting a
+registration that legitimately claimed it in the gap between the two
+transactions). Deliberately not folded into the main transaction: that
+one already holds each address's lock for the full de-identification
+(every table `destroyEducationalRecord` touches), and a concurrent
+claimant blocked on the same row should wait for a small check-and-delete,
+not the whole purge. No change to `EMAIL_LOCK_KEY`, secret handling, or
+any cryptographic code — none exists here to weaken.
+
+Three new tests plus one corrected (`account-closure.integration.test.ts`):
+the released address's lock row is gone after permanent deletion; the
+address is genuinely reusable — a second identity binds to it with no
+residue in the way; a repeated (idempotent) permanent deletion is
+unaffected by the row already being gone.
+`user-management.http.integration.test.ts`'s own pre-existing assertion
+that the row "remains to serialize the next claimant" (`toBe(1)`) has
+been corrected to the new, intended post-deletion state (`toBe(0)`) — it
+had encoded the defect as expected behaviour; the same test's own
+reclaim-by-HTTP assertion, already present, continues to prove reuse
+works.
+
+### B5 — expired User Trash entries were never automatically purged
+
+`purgeExpiredEntries` (`trash.service.ts`), BR-15's automatic sweep,
+dispatches every expired entry through one generic `purgeTrashEntry`, whose
+`PURGEABLE` plan registry deliberately has no entry for `User` (R54 — the
+row is an accountability record and may only be de-identified, never
+row-deleted). Every expired User Trash entry therefore hit
+`PURGE_BLOCKED_REASON.User = 'ACCOUNTABILITY_RECORD'`, was counted
+`unsupported`, and was left alone — forever, since nothing else ever
+revisits an `unsupported` entry. Confirmed exactly: R133's seven-day
+permanent-deletion lifecycle never completed for a deleted person; manual
+permanent deletion (`DELETE /admin/users/{id}?permanent=true`) already
+worked correctly and was unaffected.
+
+Fixed by dispatching a `targetEntity === 'User'` entry to
+`deIdentifyAccountSystem` — a new, thin wrapper (`account-deletion
+.service.ts`, symmetric with the existing `deleteUserAccountSystem`:
+`userId: null` for the calendar, not reachable from a route, no role
+assertion because there is no caller to authorise) around the SAME
+`deIdentifyAccount` a Super Admin's manual permanent deletion already
+calls — no parallel deletion subsystem. `deIdentifyAccount`'s actor type
+widened to accept `userId: string | null` (audit's own `actorUserId` was
+already nullable for exactly this reason); every existing caller still
+passes a real id. `deIdentifyAccount` deletes its own Trash row as part of
+de-identifying, so nothing is left for `purgeTrashEntry` to do for this
+entity — the dispatch is exclusive, not additive. The existing
+`NOT_DELETED` (restored since) and `NOT_FOUND` (a concurrent manual purge
+already won) `AppError` shapes are identical to the generic path's, so the
+sweep's own counting logic needed no change.
+
+Five new tests (`trash-lifecycle.integration.test.ts`): a User entry
+younger than the window is left alone; an expired one is de-identified
+AND its own Trash row purged in the same pass; a second sweep finds
+nothing left to do (idempotent); a User restored within the window is not
+subsequently purged by stale work; immediate access disable (`deleted_at`
+set at soft-delete) is confirmed unchanged and independent of the sweep
+ever running.
+
+### B6 — concurrent edits could mutate an activated LegalDocument or
+LegalConsentText
+
+Both `updateDocument`/`updateConsentText` and `activateDocument`/
+`activateConsentText` read `status`/`version` with a plain `SELECT`,
+decided in application code (`assertEditable`, the `expectedVersion`
+check), then wrote unconditionally by id — a check-then-write with no
+lock on the governing row (§20 rule 12). Two requests racing the SAME
+draft — one activating it, one editing the wording it read a moment
+earlier — could each pass their own in-memory check before either
+committed; the edit's `UPDATE` carried no `WHERE status = 'draft'` guard,
+so it could still succeed after a concurrent activation committed,
+silently overwriting the now-active/public wording. Confirmed by
+deterministic reproduction (below), not merely by inspection.
+
+Fixed identically in both files: a `SELECT ... FOR UPDATE` row lock
+(`lockLegalDocumentRow` / `lockLegalConsentTextRow`), acquired FIRST,
+before the read that decides anything — the same §16.2-sanctioned
+raw-SQL exception `assessment.service.ts`'s pre-existing `lockExamRow`
+already uses for the identical class of race. A concurrent writer on the
+same row now always waits behind it and then reads this transaction's
+already-committed result rather than racing it; as a side effect this
+also closes a second, related gap (two concurrent EDITS of the same draft
+silently last-write-wins, since the version check alone was never
+enforced at the write). No new lifecycle, no elaborate CMS — the two
+implementations were inspected and fixed separately, and neither's own
+product rules (draft/active/superseded; immutable once active; consent
+evidence semantics) were touched.
+
+Two tests per file (`legal-document.integration.test.ts`,
+`legal-consent-text.integration.test.ts`). The deterministic one is the
+real proof: a plain `Promise.all` race between the two whole service
+calls was verified NOT to reliably discriminate fixed from unfixed code
+on this fast local Postgres (both orders were observed to complete safely
+either way, fix or no fix) — so each test instead manually drives a held
+transaction that takes the row lock and performs the activation itself
+before releasing, then asserts a concurrent edit against the SAME draft
+correctly refuses once unblocked rather than overwriting it. Both
+deterministic tests were confirmed, by temporarily reverting the fix, to
+fail exactly as the pre-fix code would behave (the edit silently
+succeeded and overwrote the active wording) — then to pass again once
+restored. A second, `Promise.allSettled`-based test races the two real
+service calls and asserts the observable invariant that must hold
+regardless of which order wins: what activation itself reports as made
+active must match what the database shows immediately afterward.
+
+### Newly discovered issues (not fixed — out of scope for this pass)
+
+- `listAssessments(prisma, actor, {})` (`assessment.service.ts`), the
+  unfiltered library read used by at least one pre-existing test, orders
+  `[{date:'desc'},{id:'desc'}]` under a 25-row default page with no
+  narrowing filter; nearly every fixture in `assessment.integration.test
+  .ts` shares one literal date, so enough same-dated drafts anywhere in
+  the shared test database can silently push an unrelated test's own row
+  off the page it expects. Worked around for this pass only by giving
+  B1/B2/B3's own new fixtures a distinct date rather than the shared one
+  (`OTHER_DATE`, same academic year, so audience resolution is
+  unaffected) — the underlying fragility in the unfiltered read itself
+  was not otherwise touched, since fixing test-suite-wide pagination
+  brittleness is outside these six findings.
+- `LegalDocument`/`LegalConsentText` activation still permits two DIFFERENT
+  drafts of the SAME kind to race each other to become active
+  simultaneously; this is already caught by the database's own partial
+  unique index (`legal_document_one_active_per_kind`,
+  `legal_consent_text_one_active`), which is a different, already-correct
+  invariant from B6's edit-vs-activation race and was not modified.
+
+### Verification
+
+Backend lint/typecheck/build clean; 38 files/334 unit tests. Full
+disposable-stack integration suite: 109 files, 2,505 tests passed, 17
+pre-existing skips, 0 failures — including every new B1–B6 regression
+test and the full pre-existing suite unchanged. All `check-*.sh` guards,
+`check-doc-links.sh` and `git diff --check` clean. No OpenAPI/TD-3
+change — no route was added, removed or reshaped; `check-openapi-current
+.sh` confirms no drift. No migration authored — no schema change was
+needed for any of the six fixes. No frontend code touched, so no
+frontend gate applies. Each concurrency and authorization fix was, in
+addition to the suite above, individually verified by temporarily
+reverting it and confirming its own new test fails exactly as the
+original defect would behave, then restoring it and confirming the suite
+is green again. No Owner-populated data was read, mutated or reset at any
+point; every fixture used is this pass's own, disposable and tagged.
+
+No Staging or Production action taken. These six fixes do not constitute
+production approval: the independent Codex production-readiness audit is
+still in progress and further findings (F7 onward) remain under review.

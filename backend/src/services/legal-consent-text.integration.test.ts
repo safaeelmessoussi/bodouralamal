@@ -268,6 +268,135 @@ describe('wording that has been in force is immutable', () => {
   });
 });
 
+/**
+ * **Codex B6 — a concurrent edit cannot outrun a concurrent activation.**
+ * Identical defect and identical fix to `legal-document.integration.test.ts`'s
+ * own suite of this name: `updateConsentText` read `status`/`version` with a
+ * plain `SELECT`, decided in application code, then wrote unconditionally by
+ * id — no lock on the governing row. See that file's own comment for why a
+ * bare `Promise.all` race does not reliably discriminate fixed from unfixed
+ * code on fast local hardware, and why this instead holds the row's lock on a
+ * manually-driven transaction that performs the activation itself before
+ * releasing.
+ */
+describe('Codex B6 — concurrent edit vs. concurrent activation cannot mutate the active wording', () => {
+  it('a concurrent updateConsentText sees the activation that committed while it waited on the SAME row lock, and refuses rather than overwriting it', async () => {
+    const row = await draft('lock-block');
+
+    let releaseHold: () => void = () => undefined;
+    const holdGate = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    let activated = false;
+
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "legal_consent_text" WHERE "id" = ${row.id}::uuid FOR UPDATE`;
+      // `LegalConsentText` has no `kind` — exactly one active row globally
+      // (`legal_consent_text_one_active`) — so activating this draft first
+      // requires superseding whatever is active now, exactly as
+      // `activateConsentText` itself does before its own incoming write.
+      const outgoing = await tx.legalConsentText.findFirst({
+        where: { status: 'active' },
+        select: { id: true },
+      });
+      if (outgoing) {
+        await tx.legalConsentText.update({
+          where: { id: outgoing.id },
+          data: { status: 'superseded', supersededAt: new Date(), version: { increment: 1 } },
+        });
+      }
+      await tx.legalConsentText.update({
+        where: { id: row.id },
+        data: {
+          status: 'active',
+          activatedAt: new Date(),
+          activatedById: superId,
+          version: { increment: 1 },
+        },
+      });
+      activated = true;
+      await holdGate;
+    });
+
+    // The holder has committed nothing yet — paused right after taking the
+    // lock and deciding to activate, before releasing.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(activated).toBe(true);
+
+    let editSettled = false;
+    const editPromise = updateConsentText(
+      prisma,
+      await superAdmin(),
+      row.id,
+      { versionLabel: `${TAG} lock-block-edit`, bodyArabic: WORDING_B },
+      row.version,
+    ).finally(() => {
+      editSettled = true;
+    });
+
+    // Still pending — with the fix, `updateConsentText`'s own first act is
+    // the same row lock, so it cannot even have read the row yet.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(editSettled).toBe(false);
+
+    releaseHold();
+    await holder;
+
+    await expect(editPromise).rejects.toMatchObject({
+      code: expect.stringMatching(/^(STATE_CONFLICT|VERSION_CONFLICT)$/) as unknown as string,
+    });
+
+    const fresh = await prisma.legalConsentText.findUniqueOrThrow({ where: { id: row.id } });
+    expect(fresh.status).toBe('active');
+    // The wording the activation committed survives untouched — this is the
+    // exact assertion the pre-fix code could not make.
+    expect(fresh.bodyArabic).toBe(WORDING_A);
+  });
+
+  /**
+   * The observable-outcome proof, alongside the mechanism proof above: a true
+   * `Promise.all` race between the two real service calls. Either order is
+   * legitimate; what must never happen is a mismatch between what activation
+   * itself reported as made active and what the database shows immediately
+   * afterward.
+   */
+  it('an edit racing an activation on the SAME draft never produces a torn state', async () => {
+    const row = await draft('race');
+
+    const [editResult, activateResult] = await Promise.allSettled([
+      updateConsentText(
+        prisma,
+        await superAdmin(),
+        row.id,
+        { versionLabel: `${TAG} race`, bodyArabic: WORDING_B },
+        row.version,
+      ),
+      activateConsentText(prisma, await superAdmin(), row.id),
+    ]);
+
+    expect(activateResult.status).toBe('fulfilled');
+    if (editResult.status === 'rejected') {
+      expect(editResult.reason).toMatchObject({
+        code: expect.stringMatching(/^(STATE_CONFLICT|VERSION_CONFLICT)$/) as unknown as string,
+      });
+    }
+
+    const activated = activateResult as PromiseFulfilledResult<
+      Awaited<ReturnType<typeof activateConsentText>>
+    >;
+    const fresh = await prisma.legalConsentText.findUniqueOrThrow({ where: { id: row.id } });
+
+    expect(fresh.bodyArabic).toBe(activated.value.body_arabic);
+    expect(fresh.status).toBe('active');
+
+    if (editResult.status === 'fulfilled') {
+      expect(fresh.bodyArabic).toBe(WORDING_B);
+    } else {
+      expect(fresh.bodyArabic).toBe(WORDING_A);
+    }
+  });
+});
+
 /* ── 4. Exactly one active version ──────────────────────────────────────── */
 
 describe('exactly one wording is in force', () => {
