@@ -3172,3 +3172,56 @@ schedule she is about to create.
       own doc comment already describes this exact intended behaviour; this
       corrects `library.tsx` to actually reach it, it does not establish a
       new rule.
+
+### §5/§6 — Teacher Hifz/exam grades, and dialog-based attendance: verified already built, no code change
+
+Both confirmed by the pre-implementation audit as already fully built;
+this pass is confirmatory only, per rule 5 (reuse, never a second
+implementation of something that already exists).
+
+- [x] **§5** — `assertCanManageQuranProgress` (`roster-resolution.ts`) and
+      `grade.service.ts`'s teacher arm already scope both to
+      `studentsTaughtBy`, already tested for both allowed and forbidden
+      cross-scope access (`grade.http.integration.test.ts`: "a Teacher may
+      create a sitting inside the scope they staff" / "refuses a level the
+      Teacher does not teach" / "refuses a branch the Teacher does not
+      staff" / "a Teacher outside their scope cannot read/enter/publish";
+      `roster-resolution.integration.test.ts`: "a teacher reaches exactly
+      the students of the schedules they staff" / "a teacher with no
+      schedules reaches nobody"). Actor provenance already recorded:
+      `QuranProgressLog.loggedById`/`loggedAt` per entry;
+      `grade.service.ts`'s `audit.write('grade.enter'|'grade.publish'|
+      'grade.republish', actorUserId: ...)` per sheet save. `/teacher/quran`
+      and `/teacher/exams` are already in her menu (R106), the former gated
+      on `teachesQuran`. Confirmed live against the real running local stack
+      with a real single-role Teacher account (`0a6c7dcb-…`): both screens
+      render correctly with the platform's own honest empty state
+      («لا توجد عناصر بعد.») rather than a blank page or a crash.
+- [x] **§6** — `AttendancePanel` already sits at the bottom of
+      `EventDetailsDialog` (R123), already gated on
+      `attendance_mode`/`attendance_marking` so a vacation/party shows
+      nothing (`attendance.integration.test.ts` §1–2), already implements
+      exactly the two roles named in this request: `تسجيل حضوري`-equivalent
+      self-confirm for a Woman student only where her Category permits it,
+      enforced server-side and hidden entirely otherwise
+      (`attendance-ui.test.ts`: "hides it entirely unless the SERVER says
+      her Category permits it"), and a staff roster sheet with bulk
+      completion, a picker for one sheet rather than a directory
+      (`attendance.integration.test.ts` §20), and corrections recorded as
+      staff work with one honest history (§24). Role/branch boundaries
+      (§17), the occurrence-date-scoped roster (§15–16) and the audit
+      record (§18) are already tested. On the request's own stop-condition:
+      §4.7 carries no timing/finalization rule beyond "whoever staffs that
+      occurrence on its date" — confirmed by direct SRS reading, nothing to
+      invent, no Owner question outstanding.
+- [x] Verification: backend lint/typecheck clean, 38 files/334 unit tests;
+      full disposable-stack integration suite — **107 files/2,446 tests
+      (17 pre-existing unrelated skips), all-table isolation intact** —
+      including `attendance.integration.test.ts`,
+      `grade.http.integration.test.ts`,
+      `roster-resolution.integration.test.ts`,
+      `quran-entry.integration.test.ts`, `quran.integration.test.ts`, all
+      green; frontend suite (1,230 tests) already green from §4's run,
+      including `attendance-ui.test.ts`'s 12 cases. No code changed, so no
+      migration, no OpenAPI/TD-3 change, no new commit beyond this
+      documentation entry.

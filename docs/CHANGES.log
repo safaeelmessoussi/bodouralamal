@@ -6971,3 +6971,44 @@ comment already describes this exact intended behaviour; §4 corrects
 `library.tsx` to actually reach it rather than establishing a new rule. No
 Staging or Production action taken. Remaining sections (§5/§6 verification,
 §1, §3, §2) continue in subsequent commits.
+
+## Owner revision, §5/§6 — Teacher Hifz/exam grades and dialog-based
+## attendance verified already built (2026-09-10)
+
+No code change. §5 (`إدخال الحفظ`/`نقاط الامتحانات` for Teachers) and §6
+(attendance inside event dialogs) were both confirmed, exhaustively, as
+already-built and already-tested — implementing either would have been a
+competing second implementation of something that already exists (rule 5).
+
+**§5**: `assertCanManageQuranProgress` and `grade.service.ts`'s teacher arm
+both already scope to `studentsTaughtBy`; `grade.http.integration.test.ts`
+already tests allowed and forbidden cross-scope access by level, branch and
+whole-Level overreach; `roster-resolution.integration.test.ts` tests the
+same for Quran. Actor provenance is already recorded —
+`QuranProgressLog.loggedById`/`loggedAt` per entry, `grade.service.ts`'s
+`audit.write('grade.enter'|'grade.publish'|'grade.republish',
+actorUserId: ...)` per sheet save. `/teacher/quran`/`/teacher/exams` are
+already in her menu (R106). Confirmed live against the real running local
+stack with a real single-role Teacher account: both screens render
+correctly with the platform's own honest empty state, not a blank page.
+
+**§6**: `AttendancePanel` already sits at the bottom of
+`EventDetailsDialog` (R123) — gated on `attendance_mode`/`attendance_marking`
+so a vacation/party shows nothing; self-confirm for a Woman student only
+where her Category permits it, enforced server-side; a staff roster sheet
+with bulk completion and corrections recorded as staff work with one
+honest history. `attendance.integration.test.ts` (24 numbered cases) and
+`attendance-ui.test.ts` (12 cases) already cover every property this
+request names, including role/branch boundaries and the occurrence-dated
+roster. On the request's own stop-condition: §4.7 carries no
+timing/finalization rule beyond "whoever staffs that occurrence on its
+date" — confirmed by direct reading, nothing to invent, no Owner question
+outstanding.
+
+Verification: backend lint/typecheck clean, 38 files/334 unit tests; full
+disposable-stack integration suite — 107 files/2,446 tests (17 pre-existing
+unrelated skips), all-table isolation intact — including every file named
+above; frontend suite (1,230 tests, already green from §4) includes
+`attendance-ui.test.ts`'s 12 cases. No migration, no OpenAPI/TD-3 change, no
+SRS change. No Staging or Production action taken. Remaining sections (§1,
+§3, §2) continue in subsequent commits.
