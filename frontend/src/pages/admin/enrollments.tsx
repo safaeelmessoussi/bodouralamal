@@ -652,6 +652,28 @@ function EnrolDialog({
    */
   const derivedBranchId = groups.find((g) => g.id === groupId)?.branch_id ?? branchOfStudent(student);
 
+  /**
+   * **A stale "you must choose X" notice must not survive X being chosen**
+   * (Owner-reported defect, screenshot). `submit()` below sets `notice` the
+   * instant حفظ is pressed before all three of Level/branch/period are
+   * answered, and used to clear it in exactly one place: the start of a
+   * SUBSEQUENT successful submit. That left a real gap — the R122 default
+   * period arrives asynchronously (`listAcademicPeriods` above), and a
+   * reader who pressed حفظ in the moment before it resolved saw
+   * *«يرجى اختيار الفصل الدراسي قبل الحفظ»*, watched the field fill itself
+   * in correctly a beat later, and the refusal stayed on screen anyway —
+   * now describing a state that was no longer true. Rule AH's *"a form
+   * never declines in silence"* has a mirror half this closes: a refusal
+   * that has stopped being true must not go on being shown as if it still
+   * were. Effective only once all three are answered — `submit()`'s own
+   * checks are sequential (Level, then branch, then period), so the period
+   * notice is never showing unless Level and branch were already fine, and
+   * clearing here can never race ahead of a still-genuine refusal.
+   */
+  useEffect(() => {
+    if (levelId && derivedBranchId && periodId) setNotice(null);
+  }, [levelId, derivedBranchId, periodId]);
+
 
   // **The list is loaded once, on open; search NARROWS it in the control.** It
   // used to be gated on two typed characters, so the dialog opened with an empty

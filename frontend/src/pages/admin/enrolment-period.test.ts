@@ -54,6 +54,25 @@ describe('the placement form asks which semester', () => {
   });
 });
 
+describe('a stale "choose the semester" notice does not survive the semester being chosen', () => {
+  // Owner-reported defect (screenshot, 2026-09-10): the R122 default period
+  // arrives asynchronously; a reader who pressed حفظ in the moment before it
+  // resolved saw «يرجى اختيار الفصل الدراسي قبل الحفظ», watched the field
+  // fill itself in correctly a beat later, and the refusal stayed on screen
+  // anyway. `submit()` only ever cleared `notice` at the START of a
+  // subsequent successful save — nothing watched the fields it complained
+  // about actually being answered.
+  it('clears the notice once Level, branch and period are all answered', () => {
+    expect(source).toContain('if (levelId && derivedBranchId && periodId) setNotice(null);');
+  });
+
+  it('watches exactly the three fields submit() itself gates on, in an effect', () => {
+    expect(source).toMatch(
+      /useEffect\(\(\) => \{\s*if \(levelId && derivedBranchId && periodId\) setNotice\(null\);\s*\}, \[levelId, derivedBranchId, periodId\]\);/,
+    );
+  });
+});
+
 describe('the table shows whether a placement is still running', () => {
   it('renders the period and a current/ended badge per enrolment', () => {
     expect(source).toContain("t('admin.enrollments.periodColumn')");
