@@ -29,6 +29,7 @@ if any required variable is missing.**
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 | `JWT_SIGNING_KEY` | Access-token signing. Rotatable |
 | `ONBOARDING_TOKEN_KEY` | Onboarding-token signing — **must be distinct** from the JWT key |
+| `EMAIL_LOCK_KEY` | Required dedicated email-lock HMAC secret, at least 32 bytes and distinct from both signing keys. No fallback; never stored in the database |
 | `MINIO_ENDPOINT` | Internal S3 API endpoint |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Storage credentials |
 | `PUBLIC_BASE_URL` | The canonical origin. Also what the refresh endpoint validates `Origin` against |
@@ -68,6 +69,24 @@ they need to back up.
 
 Secrets never appear in logs, error payloads, or the API contract. A CI guard fails the
 build if an `.env` file is ever committed.
+
+### Email-lock rollout and rotation
+
+The B3 migration is **not a rolling upgrade**. Stop every email-ownership writer,
+including API instances and seed/bootstrap processes, before applying
+`20260911100000_deletion_generation_identity_minimization`. Provision the same
+operator-generated `EMAIL_LOCK_KEY` for every writer before restarting the new code.
+The migration discards ownerless plaintext lock coordinates, not User/UserIdentity
+ownership. It also minimizes copied claim credentials for audit-proven permanent
+deletions; it does not purge recoverable accounts. Never roll back to the old binary
+against the new schema, or restore a pre-erasure backup just to downgrade.
+
+Rotation or key loss requires the same stopped-writer maintenance boundary and
+truncation of the **lock table only**, followed by one new shared key. No online
+mixed-key rollout, raw fallback, automatic key generation or computed backfill is
+supported. See the [ratified design and acceptance status](../development/email-lock-keying.md).
+No Localhost/Staging/Production secret has been provisioned by this code-only batch;
+operator provisioning remains a prerequisite for deploying it.
 
 The checked-in template defaults to `NODE_ENV=development` for Local Development. Release
 hosts do not trust that editable default: `docker-compose.production.yml` forces

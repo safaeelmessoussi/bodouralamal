@@ -1928,6 +1928,119 @@ sets `overridden` precisely so that cannot happen. **A fixture that writes rows
 the application would have written differently is testing a state the
 application cannot reach.**
 
+## B2/B3/B7 account-lifecycle acceptance (2026-09-11)
+
+Acceptance requires disposable runtime proof, not unit/static checks alone. The new
+`backend/src/services/deletion-generation.integration.test.ts` uses real Prisma
+transactions and explicit barriers at the sweep read/User lock, not sleep-based
+interleavings. It covers immediate disable, deadline refusal, restore/re-delete
+generation binding, duplicate erasure, pending/rejected/approved claim minimization,
+claim-vs-purge serialization and the SQL digest shape. The future sweep clock is
+explicit so fixtures need not wait seven days. Existing account-closure,
+trash-lifecycle, email-ownership, auth/session-serialization, registration/approval,
+user-management and self-management suites remain part of acceptance.
+
+Use only the [disposable CI integration harness](../../scripts/ci/test-integration.sh),
+with its dedicated synthetic `EMAIL_LOCK_KEY`; never source Owner-populated localhost
+for these destructive lifecycle checks. It must apply all migrations to an empty
+database, run the focused suites first, then the full suite with all-table isolation.
+Exact fixture-owned digest cleanup replaces plaintext-prefix cleanup.
+
+A separate representative **pre-batch disposable** upgrade includes existing
+plaintext lock rows, live/recoverable claim states, and audit-proven permanently
+erased claim states. Stop all ownership writers; apply the one new migration with
+bounded lock/statement and outer shell timeouts. Assert:
+
+- only `email_digest`/`created_at` remain in the lock table; malformed coordinates
+  fail its CHECK and newly claimed addresses use the shared HMAC primitive;
+- old lock coordinates are removed without touching ownership, unrelated Users,
+  current Trash or recoverable claims;
+- proven erased claims/snapshots lose credentials, but approved transition facts
+  still prevent former-guardian authority; live pending claims require both
+  credential fields and partial-null writes fail;
+- the real pre-provision/bind/re-register races still yield one authoritative
+  owner, retained digest rows are stable across deletion/retry, and wrong/missing
+  deployment-key configuration is refused before service startup.
+
+The earlier Docker execution block was resolved without using the shared database.
+Reproduce the focused and populated checks from the repository root (commands are
+bounded; the upgrade script owns its PostgreSQL container and temporary schema file):
+
+```bash
+timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
+  src/services/deletion-generation.integration.test.ts \
+  src/services/email-ownership.integration.test.ts \
+  src/services/self-managed-claim.integration.test.ts \
+  src/policies/self-management.integration.test.ts \
+  src/services/account-closure.integration.test.ts \
+  src/services/trash-lifecycle.integration.test.ts \
+  src/controllers/user-management.http.integration.test.ts
+(cd backend && timeout --kill-after=10s 240s node --import tsx ../scripts/test/verify-deletion-upgrade.mjs)
+timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
+```
+
+Focused result: **159/159**, isolation clean; after strengthening the combined
+delete/restore/re-delete/stale-purge/final-erasure and retained-identifier search,
+the lifecycle suite passed **8/8**, isolation clean. The first focused run passed
+156/159: a purge test barrier also paused the newly locked restore, contaminating
+its successor on timeout; another test expected a minimized/withdrawn claim to
+remain eligible for a detailed refusal. The barrier now pauses only the purge;
+the latter asserts `NOT_FOUND`, null credentials and no resurrected identity.
+
+Fresh `prisma migrate deploy`: **94/94**. Populated replay: 93 old migrations then
+the exact new file, 11 Users/10 claim states/two recovery windows, with ownership,
+User Trash, FamilyLink and audit rows unchanged; only three proven-erased claims
+and their snapshots minimized. Live/recoverable/unproven-deleted claims remain
+byte-equivalent. HMAC locks converge after transition, CHECKs/PK/indexes/defaults
+pass, and both changed Prisma models match. A broad Prisma comparison initially
+returned exit 2: **26 pre-existing SQL/Prisma table differences** are reproduced
+byte-for-byte against committed `a4174b1` before the upgrade. The rehearsal asserts
+no new divergence; it does not claim global zero drift or change unrelated schema.
+Its initial readiness race (temporary Unix-socket PostgreSQL initialization server)
+and enum-parameter fixture error were corrected; the final bounded run passes.
+
+Full-suite and final gate evidence is recorded in [TASKS](../TASKS.md) and
+[CHANGES](../CHANGES.log). No Owner database, real environment key or deployment
+was changed. This batch is not Production approval.
+
+**Final repository-boundary checkpoint:** the first full run passed 2,512 tests,
+failed one, and skipped 17; its real-edge browser check passed 193/193. The failure
+was `trash-coverage.integration.test.ts`'s ordinary-read assertion identifying
+`account-deletion.service.ts:638 selfManagedClaim.findMany`. That erasure query
+must include deleted claims, so adding a live-only filter would retain copied PII.
+It now lives in `user.repository.ts` as `minimizeSelfManagedClaimIdentity`, using
+the caller's transaction and already-held User lock. No guard change, exception,
+or auth-reader widening was made. Post-move lint/typecheck and the **exact unchanged
+source-only ordinary-read assertion** pass; this does not substitute for integration.
+The initial ten-suite disposable retry was rejected **before execution** by the
+approval service usage limit. Once execution allowance was restored, the unchanged
+current-code retry below passed **220/220 across ten files**, including **8/8**
+lifecycle cases and the ordinary-read guard, with all-table isolation clean.
+The final current-code full run then passed **2,513 tests / 17 skipped** across
+110 passing files / two skipped, with all-table isolation clean (390.39 s).
+Its required real-edge browser probe passed **193/193** and its fresh database
+applied **94/94** migrations plus both seeds. The ordinary-read guard is unchanged;
+no further implementation or migration edits followed. The unchanged populated
+93→94 rehearsal evidence above was reused, not rerun. Reproduction commands:
+
+```bash
+timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
+  src/services/deletion-generation.integration.test.ts \
+  src/services/email-ownership.integration.test.ts \
+  src/services/self-managed-claim.integration.test.ts \
+  src/policies/self-management.integration.test.ts \
+  src/services/account-closure.integration.test.ts \
+  src/services/trash-lifecycle.integration.test.ts \
+  src/controllers/user-management.http.integration.test.ts \
+  src/services/trash-coverage.integration.test.ts \
+  src/services/auth.integration.test.ts \
+  src/services/user.integration.test.ts
+timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
+```
+
+Do not rerun against Owner-populated localhost, bypass the execution rejection,
+or report the earlier passing version as proof of the final repository move.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

@@ -1,5 +1,56 @@
 # Tasks — بذور الأمل Platform
 
+## B2 + B3 + B7 recovery — 2026-09-11 (local engineering acceptance complete)
+
+- [x] Close only the inherited batch above `a4174b1102fb38e7aa889287700d7201099accb8`;
+  preserve its unrelated fixes. B2 binds automatic User erasure to the exact
+  observed Trash generation and enforces the restore deadline under the User lock.
+  B3 implements the [ratified keyed lock](development/email-lock-keying.md), keeping
+  digest rows and removing post-commit plaintext retirement. B7 minimizes claim
+  credentials/snapshots while preserving approved self-management authority.
+- [x] Fresh and representative populated disposable migration,
+  barrier-controlled deletion/restore/re-delete races, claim lifecycle/races,
+  ownership/re-registration integration and all-table isolation passed. The existing
+  migration was corrected during inherited recovery, not duplicated; the final
+  continuation required no further migration edits. Before the final repository move,
+  focused **159/159**,
+  strengthened cross-lifecycle **8/8**, each isolation-clean; fresh **94/94** migrations.
+  [Populated rehearsal](../scripts/test/verify-deletion-upgrade.mjs): 11 Users,
+  10 claim states, two recovery windows, preserved ownership/family/audit/Trash,
+  valid HMAC locking and preserved approved authority. Both changed Prisma models
+  match; no new schema divergence against the committed pre-batch baseline.
+- [x] Rerun affected disposable suites and full integration after the final B7
+  repository correction. First full run: **2,512 passed / 1 failed / 17 skipped**,
+  plus **193/193** real-edge browser checks. The unchanged ordinary-read guard
+  found the erasure-only claim enumeration in `account-deletion.service.ts`.
+  `users.minimizeSelfManagedClaimIdentity(tx, ...)` now owns that exact data access
+  within the existing User-locked transaction, including deleted claims. The guard
+  itself is unchanged. The current-code ten-suite retry passes **220/220**,
+  including **8/8** lifecycle cases and the ordinary-read guard; all-table isolation
+  is clean. Final current-code full run: **2,513 passed / 17 skipped**, 110 files
+  passed / two skipped, all-table isolation clean; required real-edge browser
+  checks **193/193**. Fresh **94/94** migrations and both seeds passed again.
+  No further implementation, schema, migration or guard edits were necessary.
+- Final current-code gates: backend units **341/341** (39 files), lint, exact
+  typecheck, Prisma format/validate/generate, build, all 30 non-link repository
+  guards, **1,029/1,029** documentation links (120 files), shell/Node syntax and
+  diff checks passed. OpenAPI is unchanged (175 paths / 226 operations); TD-3
+  remains 226/234 with eight pending and zero undocumented endpoints. Earlier stale test
+  adaptations and upgrade-fixture failures, followed by their passing retries,
+  are recorded in [testing](development/testing.md#b2b3b7-account-lifecycle-acceptance-2026-09-11)
+  and CHANGES; no gate was weakened.
+- The earlier execution-allowance rejection is resolved for this continuation;
+  the documented retry ran on disposable data only. One new local commit is
+  authorized at this green boundary; **no push/deployment**. B2/B3/B7 are closed
+  for this bounded local engineering batch, not for operational rollout.
+  Real `EMAIL_LOCK_KEY` provisioning and a stopped-writer cutover remain separately
+  authorized operational prerequisites; no real environment or secret was changed.
+- Separate finding, **record only**: whole-schema comparison reports 26 unrelated
+  SQL/Prisma table differences, reproduced byte-for-byte at `a4174b1` before the
+  migration. Named indexes, raw-SQL FKs/types and defaults need a separate review;
+  this batch introduces none and does not claim globally zero schema drift.
+- B1/B4/B5/B6/B8 and HIGH findings remain outside scope. This is not Production approval.
+
 ## Repository simplification — 2026-09-08
 
 - [x] Reviewed the inherited removal of seven unreferenced frontend exports:
@@ -1894,15 +1945,14 @@ was hiding behind it: the run went green on the first attempt.
   digest is a lookup key, and recomputing one needs the plaintext this design stops
   storing). The migration is forward-only and truncates rather than backfilling, for
   the same reason. `deIdentifyAccount` still must **not** delete lock rows.
-  - [ ] **BLOCKED ON ONE OPERATIONAL PRECONDITION — the secret must exist before the
-        code does.** `EMAIL_LOCK_KEY` joins `REQUIRED_ENV_VARS`, and a missing required
-        variable **throws at boot** by design (TD-13 gives secrets no defaults), so
-        shipping first would break the next Staging deploy — a mutation this work is
-        not authorised to make, with a secret it must not invent. **Making the variable
-        optional is the one worse option**: a raw-email fallback produces two key spaces
-        and breaks the invariant in whichever environment fell back. **Order: generate
-        and install `EMAIL_LOCK_KEY` in Localhost and Staging, then implement.**
-        Everything else is ready and testable in one pass.
+  - [x] **IMPLEMENTED AND LOCALLY VERIFIED; ROLLOUT REQUIRES PROVISIONING.** The later
+        B2/B3/B7 instruction authorises code and disposable verification without
+        installing real secrets or shipping. The original secret-before-code stopping
+        point is superseded only for that local engineering work. `EMAIL_LOCK_KEY`
+        remains required at boot, without a raw/default fallback; every writer must
+        receive the same operator-managed key before the stopped-writer migration and
+        restart. No real environment has been changed. See the current recovery entry
+        at the top of this file and the linked runtime evidence.
 - [x] **TEST ISOLATION (2026-09-03) — the refresh-token suite destroyed audit rows it did not
   own.** Its cleanup deleted `auditLog` where `{ targetEntity: 'User', actorUserId: null }`
   **with no ownership term at all**, so every run swept every system-written User audit row in

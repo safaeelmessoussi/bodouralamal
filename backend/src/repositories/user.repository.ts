@@ -2,6 +2,7 @@ import type { Prisma, User } from '../generated/prisma/client.js';
 
 import { rolesOf, toRoleScopes, type RoleScope } from '../policies/branch-scope.js';
 import type { Db } from './audit.repository.js';
+import { emailLockDigest } from '../lib/email-lock.js';
 
 /**
  * User and identity lookups for the §4.1b login flow (§16.2 — the sole
@@ -77,14 +78,15 @@ export async function lockNormalizedEmail(
   tx: Prisma.TransactionClient,
   email: string,
 ): Promise<void> {
+  const emailDigest = emailLockDigest(email);
   await tx.normalizedEmailLock.createMany({
-    data: [{ email }],
+    data: [{ emailDigest }],
     skipDuplicates: true,
   });
-  const rows = await tx.$queryRaw<Array<{ email: string }>>`
-    SELECT "email"
+  const rows = await tx.$queryRaw<Array<{ email_digest: string }>>`
+    SELECT "email_digest"
     FROM "normalized_email_lock"
-    WHERE "email" = ${email}
+    WHERE "email_digest" = ${emailDigest}
     FOR UPDATE`;
   if (rows.length !== 1) {
     throw new Error('normalized email lock row was not established');
@@ -112,6 +114,40 @@ export async function emailClaimingUserIds(db: Db, email: string): Promise<strin
       ...preProvisioned.map((row) => row.id),
       ...identities.map((row) => row.userId),
     ]),
+  ];
+}
+
+/**
+ * Permanent account erasure only, under the beneficiary's governing User lock.
+ * Deliberately includes tombstoned claims: rejected/withdrawn rows and their
+ * snapshots still hold copied credentials. Ordinary pending-list readers must
+ * continue excluding them. Approved status remains the structural authority fact.
+ */
+export async function minimizeSelfManagedClaimIdentity(
+  tx: Prisma.TransactionClient,
+  beneficiaryId: string,
+  deletedAt: Date,
+  actorUserId: string | null,
+): Promise<Prisma.BatchPayload[]> {
+  const claims = await tx.selfManagedClaim.findMany({
+    where: { beneficiaryId },
+    select: { id: true },
+  });
+  return [
+    await tx.selfManagedClaim.updateMany({
+      where: { beneficiaryId, status: 'pending', deletedAt: null },
+      data: { deletedAt, deletedById: actorUserId },
+    }),
+    await tx.selfManagedClaim.updateMany({
+      where: { beneficiaryId, OR: [
+        { email: { not: null } }, { providerSubjectId: { not: null } },
+        { decisionReason: { not: null } },
+      ] },
+      data: { email: null, providerSubjectId: null, decisionReason: null },
+    }),
+    await tx.trash.deleteMany({
+      where: { targetEntity: 'SelfManagedClaim', targetId: { in: claims.map((claim) => claim.id) } },
+    }),
   ];
 }
 

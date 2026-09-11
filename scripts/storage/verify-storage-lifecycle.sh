@@ -27,6 +27,7 @@ export GOOGLE_CLIENT_ID='storage-lifecycle-fixture'
 export GOOGLE_CLIENT_SECRET='storage-lifecycle-fixture'
 export JWT_SIGNING_KEY='storage-lifecycle-fixture-signing-key-with-more-than-thirty-two-bytes'
 export ONBOARDING_TOKEN_KEY='storage-lifecycle-fixture-onboarding-key-with-more-than-thirty-two-bytes'
+export EMAIL_LOCK_KEY='email-lock-isolated-fixture-key-at-least-32-bytes'
 export MINIO_ENDPOINT="http://127.0.0.1:${minio_port}"
 export MINIO_ACCESS_KEY='lifecycle-drill-access'
 export MINIO_SECRET_KEY='lifecycle-drill-secret-password'

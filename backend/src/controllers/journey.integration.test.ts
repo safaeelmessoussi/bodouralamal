@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { issueAccessToken } from '../lib/access-token.js';
@@ -293,7 +294,7 @@ async function clear(): Promise<void> {
   await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
   // Registration locks the applicant's email (user.repository.ts's
   // `lockNormalizedEmail`) — nothing else in that flow removes the row.
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'journey-' } } });
+  await clearOwnedEmailLocks(prisma, owned.issuedEmails);
   await clearOwnedConsumedTokens(prisma, owned);
 }
 

@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
@@ -34,6 +35,8 @@ import { isSelfManaged } from './self-management.js';
  * Option A            → removes authentication, removes NO authority
  * ```
  */
+const ownedEmails = new Set<string>();
+function trackEmail(email: string): string { ownedEmails.add(email); return email; }
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = '[self-mgmt-test]';
@@ -77,7 +80,7 @@ async function makeUser(
         userId: user.id,
         provider: 'google',
         providerSubjectId: `sm-subject-${Date.now()}-${counter}`,
-        email: `sm-${Date.now()}-${counter}@example.com`,
+        email: trackEmail(`sm-${Date.now()}-${counter}@example.com`),
         isActive: true,
       },
     });
@@ -93,7 +96,7 @@ async function approveTransition(beneficiaryId: string): Promise<void> {
       beneficiaryId,
       provider: 'google',
       providerSubjectId: `sm-claim-${Date.now()}-${counter}`,
-      email: `sm-claim-${Date.now()}-${counter}@example.com`,
+      email: trackEmail(`sm-claim-${Date.now()}-${counter}@example.com`),
       status: 'approved',
       decidedAt: new Date(),
       decidedById: superAdmin,
@@ -121,7 +124,7 @@ async function clear(): Promise<void> {
   // `deIdentifyAccount` (via `purgeUserAccount`) locks the identity's email —
   // a row nothing else in that flow removes, by design (the lock persists to
   // serialize a future claimant); this suite's own copies must still go.
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'sm-' } } });
+  await clearOwnedEmailLocks(prisma, ownedEmails);
   if (ids.length === 0) return;
   // BOTH sides: `decided_by` is Restrict too, so a claim this suite's Super
   // Admin decided pins her even when its beneficiary was already swept.
@@ -193,7 +196,7 @@ describe('what does and does not establish durable authority', () => {
         beneficiaryId: pending,
         provider: 'google',
         providerSubjectId: `sm-p-${Date.now()}`,
-        email: `sm-p-${Date.now()}@example.com`,
+        email: trackEmail(`sm-p-${Date.now()}@example.com`),
         status: 'pending',
       },
     });
@@ -205,7 +208,7 @@ describe('what does and does not establish durable authority', () => {
         beneficiaryId: refused,
         provider: 'google',
         providerSubjectId: `sm-r-${Date.now()}`,
-        email: `sm-r-${Date.now()}@example.com`,
+        email: trackEmail(`sm-r-${Date.now()}@example.com`),
         status: 'rejected',
         decidedAt: new Date(),
         decidedById: superAdmin,
@@ -254,7 +257,7 @@ describe('the authority SURVIVES what authentication does not', () => {
         userId: adult,
         provider: 'google',
         providerSubjectId: `sm-again-${Date.now()}-${counter}`,
-        email: `sm-again-${Date.now()}-${counter}@example.com`,
+        email: trackEmail(`sm-again-${Date.now()}-${counter}@example.com`),
         isActive: true,
       },
     });

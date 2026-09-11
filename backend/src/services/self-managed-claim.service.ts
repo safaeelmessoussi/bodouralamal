@@ -122,8 +122,15 @@ export async function requestSelfManagedClaim(
       });
     }
 
-    const beneficiary = await tx.user.findFirst({
+    const locator = await tx.user.findFirst({
       where: { referenceCode, deletedAt: null },
+      select: { id: true },
+    });
+    if (!locator || !(await users.lockUser(tx, locator.id))) throw claimUnavailable();
+    // Deletion and a new claim serialize on the beneficiary, not on a stale
+    // reference-code lookup. A purge cannot be followed by copied credentials.
+    const beneficiary = await tx.user.findFirst({
+      where: { id: locator.id, referenceCode, deletedAt: null },
       select: {
         id: true,
         accountStatus: true,
@@ -225,7 +232,9 @@ export async function approveSelfManagedClaim(
       },
     });
     // Already decided, withdrawn, or never existed — one answer (§20 rule 17).
-    if (!claim) throw new AppError('NOT_FOUND', 'no such pending claim');
+    if (!claim || claim.email === null || claim.providerSubjectId === null) {
+      throw new AppError('NOT_FOUND', 'no such pending claim');
+    }
 
     // The global ownership hierarchy is Email → User, exactly as registration,
     // provisioning and binding take it. Skipping it here would let a concurrent
@@ -234,6 +243,12 @@ export async function approveSelfManagedClaim(
     if (!(await users.lockUser(tx, claim.beneficiaryId))) {
       throw new AppError('NOT_FOUND', 'no such pending claim');
     }
+    const currentClaim = await tx.selfManagedClaim.findFirst({
+      where: { id: claimId, status: 'pending', deletedAt: null,
+        email: claim.email, providerSubjectId: claim.providerSubjectId },
+      select: { id: true },
+    });
+    if (!currentClaim) throw new AppError('NOT_FOUND', 'no such pending claim');
 
     const beneficiary = await tx.user.findFirst({
       where: { id: claim.beneficiaryId, deletedAt: null },
@@ -349,6 +364,12 @@ export async function rejectSelfManagedClaim(
     });
     if (!claim) throw new AppError('NOT_FOUND', 'no such pending claim');
 
+    await users.lockUser(tx, claim.beneficiaryId);
+    const currentClaim = await tx.selfManagedClaim.findFirst({
+      where: { id: claimId, status: 'pending', deletedAt: null }, select: { id: true },
+    });
+    if (!currentClaim) throw new AppError('NOT_FOUND', 'no such pending claim');
+
     const now = new Date();
     await tx.selfManagedClaim.update({
       where: { id: claim.id },
@@ -400,12 +421,17 @@ export async function listPendingClaims(
    * a credential coordinate and is never published; the birth date decided
    * eligibility before the row existed and is not re-litigated here.
    */
-  return rows.map((row) => ({
-    id: row.id,
-    beneficiaryId: row.beneficiary.id,
-    beneficiaryName: row.beneficiary.nameArabic,
-    referenceCode: row.beneficiary.referenceCode,
-    email: row.email,
-    createdAt: row.createdAt,
-  }));
+  return rows.map((row) => {
+    // The SQL identity CHECK guarantees this for live pending rows; never
+    // fabricate an address if an inconsistent database is encountered.
+    if (row.email === null) throw new Error('pending claim has no identity');
+    return {
+      id: row.id,
+      beneficiaryId: row.beneficiary.id,
+      beneficiaryName: row.beneficiary.nameArabic,
+      referenceCode: row.beneficiary.referenceCode,
+      email: row.email,
+      createdAt: row.createdAt,
+    };
+  });
 }

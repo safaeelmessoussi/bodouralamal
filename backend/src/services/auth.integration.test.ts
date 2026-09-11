@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -11,6 +12,8 @@ import { resolveLogin } from "./auth.service.js";
  * The routing condition is an access-control boundary, so every terminal status
  * is exercised rather than assumed.
  */
+const ownedEmails = new Set<string>();
+function trackEmail(email: string): string { ownedEmails.add(email); return email; }
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
@@ -37,7 +40,7 @@ async function makeUser(opts: {
 }
 
 function uniqueEmail(): string {
-  return `user-${randomUUID().slice(0, 8)}@example.com`;
+  return trackEmail(`user-${randomUUID().slice(0, 8)}@example.com`);
 }
 
 async function clear(): Promise<void> {
@@ -48,7 +51,7 @@ async function clear(): Promise<void> {
     where: { user: { nameArabic: { startsWith: TAG } } },
   });
   await prisma.user.deleteMany({ where: { nameArabic: { startsWith: TAG } } });
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'user-' } } });
+  await clearOwnedEmailLocks(prisma, ownedEmails);
 }
 
 beforeEach(clear);

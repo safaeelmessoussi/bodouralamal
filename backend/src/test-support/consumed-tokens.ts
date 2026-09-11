@@ -26,6 +26,7 @@ import {
  */
 export interface OwnedOnboardingTokens {
   readonly issuedJtis: Set<string>;
+  readonly issuedEmails: Set<string>;
   issue(
     identity: { email: string; providerSubjectId: string },
     key: string,
@@ -35,11 +36,14 @@ export interface OwnedOnboardingTokens {
 
 export function ownedOnboardingTokens(): OwnedOnboardingTokens {
   const issuedJtis = new Set<string>();
+  const issuedEmails = new Set<string>();
   return {
     issuedJtis,
+    issuedEmails,
     issue(identity, key, now) {
       const issued = issueOnboardingToken(identity, key, now);
       issuedJtis.add(issued.claims.jti);
+      issuedEmails.add(identity.email);
       return issued;
     },
   };

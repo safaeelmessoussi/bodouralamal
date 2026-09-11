@@ -1,3 +1,5 @@
+import { emailLockDigest } from '../lib/email-lock.js';
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -50,7 +52,7 @@ let counter = 0;
 const identity = () => {
   counter += 1;
   return {
-    email: `closure-${Date.now()}-${counter}@example.com`,
+    email: (() => { const email = `closure-${Date.now()}-${counter}@example.com`; owned.issuedEmails.add(email); return email; })(),
     providerSubjectId: `closure-subject-${Date.now()}-${counter}`,
   };
 };
@@ -226,7 +228,7 @@ async function clear(): Promise<void> {
   // `approveSelfManagedClaim` locks the claimed email (user.repository.ts's
   // `lockNormalizedEmail`) before rebinding it — a row this suite's identities
   // always leave behind, since nothing else in the approve flow removes it.
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'closure-' } } });
+  await clearOwnedEmailLocks(prisma, owned.issuedEmails);
   await clearOwnedConsumedTokens(prisma, owned);
 }
 
@@ -404,23 +406,21 @@ describe('Account deletion — the account goes, and her own history with it (R1
     ).toBe(0);
     const after = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
     expect(after.preProvisionedEmail).toBeNull();
-    // Codex B4 — the plaintext lock row for HER address does not outlive the
-    // authentication it used to serialize; nothing recoverable about the
-    // deleted person's email survives in `normalized_email_lock` either.
-    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
+    // B3: the stable keyed coordinate survives; ownership and recoverable
+    // authentication do not. The lock does not reserve the address.
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { emailDigest: emailLockDigest(p.email) } })).not.toBeNull();
   });
 
-  it('B4 · the released address is genuinely reusable — no stale lock row blocks or reserves it', async () => {
+  it('B3 · the released address is reusable while its keyed lock remains', async () => {
     const p = await beneficiaryWithHistory();
     const address = p.email;
     await closeAccount(p.id);
 
-    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: address } })).toBeNull();
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { emailDigest: emailLockDigest(address) } })).not.toBeNull();
 
     // A second, unrelated person claims the SAME normalized address — exactly
     // R133(5)'s "registers normally... no matching to deleted records" — and
-    // this must succeed rather than colliding with a residual lock row nobody
-    // owns any more.
+    // this succeeds because a lock coordinate is not an ownership record.
     const other = await prisma.user.create({
       data: { sex: 'female', nameArabic: `${TAG} أخرى ${counter}`, accountStatus: 'active' },
     });
@@ -432,16 +432,15 @@ describe('Account deletion — the account goes, and her own history with it (R1
     ).resolves.toMatchObject({ email: address });
   });
 
-  it('B4 · repeating the permanent deletion is still idempotent with the lock row already gone', async () => {
+  it('B3 · repeating permanent deletion is idempotent with the keyed lock retained', async () => {
     const p = await beneficiaryWithHistory();
     await closeAccount(p.id);
-    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
+    const lock = await prisma.normalizedEmailLock.findUniqueOrThrow({ where: { emailDigest: emailLockDigest(p.email) } });
 
-    // The retry's own `releasedAddresses` is empty (both channels are already
-    // cleared), so the cleanup loop is a no-op rather than erroring on a row
-    // that is already gone.
+    // Both ownership channels are already cleared. No post-commit retirement
+    // work exists to lose, and no waiter loses its governing row.
     await expect(purgeUserAccount(prisma, await actorFor(prisma, superAdmin), p.id)).resolves.toBeUndefined();
-    expect(await prisma.normalizedEmailLock.findUnique({ where: { email: p.email } })).toBeNull();
+    expect(await prisma.normalizedEmailLock.findUnique({ where: { emailDigest: emailLockDigest(p.email) } })).toEqual(lock);
   });
 
   it('7/8 · sessions and refresh tokens cannot restore access', async () => {
@@ -634,7 +633,7 @@ describe('Account deletion — a guardian-only account, and a self-managed adult
         beneficiaryId: adult.id,
         provider: 'google',
         providerSubjectId: `closure-sm-${Date.now()}`,
-        email: `closure-sm-${Date.now()}@example.com`,
+        email: (() => { const email = `closure-sm-${Date.now()}@example.com`; owned.issuedEmails.add(email); return email; })(),
         status: 'approved',
         decidedAt: new Date(),
         decidedById: superAdmin,
@@ -730,7 +729,11 @@ describe('Account deletion — a pending self-managed claim cannot resurrect a l
 
     await expect(
       approveSelfManagedClaim(prisma, await actorFor(prisma, superAdmin), claim.id),
-    ).rejects.toMatchObject({ details: { reason: 'BENEFICIARY_INELIGIBLE' } });
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    // Permanent erasure withdrew and minimized the pending request itself;
+    // no copied credential survives merely so approval can name a refusal reason.
+    expect(await prisma.selfManagedClaim.findUnique({ where: { id: claim.id } }))
+      .toMatchObject({ email: null, providerSubjectId: null, deletedAt: expect.any(Date) });
     // The whole point: no identity was created on a closed account.
     expect(await prisma.userIdentity.count({ where: { userId: person.id } })).toBe(0);
   });

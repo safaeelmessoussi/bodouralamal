@@ -12,6 +12,7 @@ services:
       GOOGLE_CLIENT_SECRET: production-drill-client-secret
       JWT_SIGNING_KEY: production-drill-jwt-signing-key-with-more-than-thirty-two-bytes
       ONBOARDING_TOKEN_KEY: production-drill-onboarding-key-with-more-than-thirty-two-bytes
+      EMAIL_LOCK_KEY: email-lock-isolated-fixture-key-at-least-32-bytes
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: production-drill-access-key
       MINIO_SECRET_KEY: production-drill-secret-password

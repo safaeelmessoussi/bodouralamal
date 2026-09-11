@@ -1,3 +1,4 @@
+import { emailLockDigest } from '../lib/email-lock.js';
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -85,7 +86,7 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.normalizedEmailLock.deleteMany({
-    where: { email: { in: [...ownedEmails] } },
+    where: { emailDigest: { in: ([...ownedEmails]).map((email) => emailLockDigest(email)) } },
   });
   ownedEmails.clear();
   // Branches created for the scope filter tests.

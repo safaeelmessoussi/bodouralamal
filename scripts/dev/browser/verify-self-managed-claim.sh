@@ -16,6 +16,8 @@ export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 
 STAMP="$(date +%s)"
 export ONBOARDING_EMAIL="smc-verify-${STAMP}@example.com"
+EMAIL_LOCK_DIGEST="$(cd backend && timeout 30s node --import tsx --input-type=module -e 'import { emailLockDigest } from "./src/lib/email-lock.ts"; process.stdout.write(emailLockDigest(process.env.ONBOARDING_EMAIL));')"
+[[ "$EMAIL_LOCK_DIGEST" =~ ^[0-9a-f]{64}$ ]] || { echo 'FAIL: invalid fixture email-lock coordinate' >&2; exit 1; }
 export ONBOARDING_SUBJECT="smc-subject-${STAMP}"
 export ONBOARDING_TOKEN="$(bash scripts/dev/issue-dev-onboarding.sh "$ONBOARDING_EMAIL" "$ONBOARDING_SUBJECT")"
 export ADMIN_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
@@ -43,7 +45,7 @@ cleanup() {
     "DELETE FROM audit_log WHERE target_id IN (SELECT id::text::uuid FROM self_managed_claim WHERE beneficiary_id = '${BENEFICIARY_ID}');" \
     "DELETE FROM self_managed_claim WHERE beneficiary_id = '${BENEFICIARY_ID}';" \
     "DELETE FROM user_identity WHERE user_id = '${BENEFICIARY_ID}' OR email = '${ONBOARDING_EMAIL}';" \
-    "DELETE FROM normalized_email_lock WHERE email = '${ONBOARDING_EMAIL}';" \
+    "DELETE FROM normalized_email_lock WHERE email_digest = '${EMAIL_LOCK_DIGEST}';" \
     "DELETE FROM audit_log WHERE target_id = '${BENEFICIARY_ID}' OR actor_user_id = '${BENEFICIARY_ID}';" \
     "DELETE FROM \"user\" WHERE id = '${BENEFICIARY_ID}';"
   do

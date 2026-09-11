@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
@@ -145,7 +146,7 @@ async function clear(): Promise<void> {
   // `approveSelfManagedClaim` locks the claimed email (user.repository.ts's
   // `lockNormalizedEmail`) before rebinding it — a row this suite's identities
   // always leave behind, since nothing else in the approve flow removes it.
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'smc-' } } });
+  await clearOwnedEmailLocks(prisma, owned.issuedEmails);
   await clearOwnedConsumedTokens(prisma, owned);
 }
 

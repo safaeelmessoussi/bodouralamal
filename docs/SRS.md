@@ -2295,6 +2295,7 @@ All runtime configuration flows through environment variables (docker-compose `.
 | `GOOGLE_CLIENT_SECRET` | Yes | — | `GOCSPX-…` | OAuth client secret |
 | `JWT_SIGNING_KEY` | Yes | — | `openssl rand -base64 48` output | Access-token signing (TD-12); rotatable |
 | `ONBOARDING_TOKEN_KEY` | Yes | — | `openssl rand -base64 48` output | Onboarding-token signing (§4.1b); distinct from JWT key |
+| `EMAIL_LOCK_KEY` | Yes | — | `openssl rand -base64 48` output | Owner-ratified email-lock keying: dedicated secret (at least 32 bytes), distinct from JWT/onboarding keys; `HMAC-SHA-256(key, "bodour.email-lock.v1\|" + email.trim().toLowerCase())`, lowercase hex. No raw/default fallback; retain digest lock rows after account deletion. Identical key for every ownership writer; migration/rotation/loss requires stopped-writer maintenance truncate/re-key, never a dual-key lookup or digest backfill. See [ratified design](development/email-lock-keying.md) |
 | `MINIO_ENDPOINT` | Yes | — | `http://minio:9000` | Internal S3 API endpoint |
 | `MINIO_ACCESS_KEY` | Yes | — | `bodour-app` | MinIO credential |
 | `MINIO_SECRET_KEY` | Yes | — | `openssl rand -base64 32` output | MinIO credential |

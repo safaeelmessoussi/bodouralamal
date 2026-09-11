@@ -17,6 +17,7 @@ function validEnv(
     GOOGLE_CLIENT_SECRET: "fixture-client-secret",
     JWT_SIGNING_KEY: "fixture-jwt-signing-key",
     ONBOARDING_TOKEN_KEY: "fixture-onboarding-token-key",
+    EMAIL_LOCK_KEY: 'email-lock-isolated-fixture-key-at-least-32-bytes',
     MINIO_ENDPOINT: "http://localhost:9000",
     MINIO_ACCESS_KEY: "fixture-access-key",
     MINIO_SECRET_KEY: "fixture-secret-key",
@@ -41,6 +42,13 @@ function productionEnv(
 }
 
 describe("loadConfig (TD-13 fail-fast)", () => {
+  it('requires a dedicated email-lock key in Production with no fallback', () => {
+    expect(() => loadConfig(productionEnv({ EMAIL_LOCK_KEY: undefined }))).toThrow(/EMAIL_LOCK_KEY/);
+    expect(() => loadConfig(productionEnv({ EMAIL_LOCK_KEY: 'short' }))).toThrow(/EMAIL_LOCK_KEY/);
+    const shared = 'same-key-for-two-purposes-is-not-permitted';
+    expect(() => loadConfig(productionEnv({ EMAIL_LOCK_KEY: shared, JWT_SIGNING_KEY: shared })))
+      .toThrow(/EMAIL_LOCK_KEY/);
+  });
   it("returns the typed config when every required variable is present", () => {
     const config = loadConfig(validEnv());
     expect(config.DATABASE_URL).toContain("bodour_test");

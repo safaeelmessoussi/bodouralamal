@@ -2,11 +2,18 @@
 
 # Keying the normalized-email lock — design
 
-**Status: RATIFIED DESIGN — NOT IMPLEMENTED. AWAITING ONE OPERATIONAL
-PRECONDITION.** The Owner authorised implementation in the same session *only if*
-six conditions held. **Condition 5 does not hold** — see
-[The blocker](#the-blocker) — so this is the design, and the migration is not
-written.
+**Status: RATIFIED DESIGN — IMPLEMENTED AND LOCALLY VERIFIED (2026-09-11).**
+The Owner subsequently authorised the bounded B2/B3/B7 code-and-disposable-test
+batch without any environment/secret mutation (2026-09-11). Real PostgreSQL
+fresh/populated migration, HMAC ownership concurrency, re-registration and retained
+lock-row lifecycle checks pass. After the B7 repository-boundary correction,
+affected disposable suites pass 220/220 and full integration passes 2,513 tests
+with 17 skipped; both are all-table isolation-clean. The unchanged ordinary-read
+guard passes, and the full run's real-edge browser probe passes 193/193.
+Final static, unit, build, contract and documentation gates also pass.
+See [runtime evidence](testing.md#b2b3b7-account-lifecycle-acceptance-2026-09-11).
+This is not rollout approval. See
+[the operational prerequisite](#the-blocker) and [TASKS](../TASKS.md).
 
 ---
 
@@ -28,8 +35,8 @@ ownership transaction commits.
 
 ## The problem
 
-**The primary key is the raw lowercased email address, and the row has no
-owner.** After a permanent de-identification the ownership channels are cleared
+**Before the B3 migration, the primary key is the raw lowercased email address,
+and the row has no owner.** After a permanent de-identification the ownership channels are cleared
 and a genuinely new registration can reclaim the address — proven by test — but
 the lock row **remains**, holding the exact former address, with no purpose
 statement and no retention rule.
@@ -76,7 +83,8 @@ reason breaks the other. Reusing `JWT_SIGNING_KEY` would couple session-key
 rotation — a routine, expected operation — to the integrity of every email lock,
 which is exactly the coupling to avoid.
 
-It is **required, never optional**. An optional key with a raw-email fallback
+It is **required, never optional**: at least 32 bytes, with operators generating
+an independent high-entropy secret (TD-13). An optional key with a raw-email fallback
 would produce two different key spaces in two environments and silently break the
 invariant in the one that fell back.
 
@@ -125,16 +133,29 @@ which would be the same exposure written twice.
 **Truncate and re-key**, on the same reasoning as rotation: the rows are
 disposable, ownership is elsewhere, and any address still in use re-establishes
 its lock on the next claim. Concretely: truncate, drop the `email` primary key,
-add `email_digest CHAR(64) PRIMARY KEY`. A fresh database gets the new shape
-directly; an existing one loses only rows that carry nothing.
+add `email_digest CHAR(64) PRIMARY KEY` and a lowercase-hex CHECK. A fresh database
+replays the earlier plaintext migration then this transition; an existing one
+loses only ownerless lock coordinates. All ownership writers must be stopped;
+an online old/new binary overlap is unsupported.
+
+The single migration is
+`20260911100000_deletion_generation_identity_minimization`. It also implements
+B7's paired nullable claim credentials and removes their copies/snapshots only
+for already permanently erased accounts proven by `user.deidentify` audit,
+absent credentials and absent User Trash. Soft deletion alone is not erasure
+evidence. Its transaction has bounded SQL timeouts. B2 reuses the existing
+Trash generation and User lock and requires no extra column. Neither migration
+application nor a rollback has been performed on Owner-populated data in this batch.
+The schema transition is forward-only: do not run an old binary against it, and
+do not restore erased personal data as a rollback technique.
 
 ### Account deletion
 
-`deIdentifyAccount` changes in exactly one respect: it locks each address by
-**digest** rather than by address. It still does **not** delete the lock row —
-that reasoning is unchanged and remains correct. After the migration the row it
-leaves behind holds a keyed digest rather than a person's address, which is the
-whole point.
+`deIdentifyAccount` locks each address by **digest** rather than by address and
+does **not** delete the lock row. B3 removes the post-commit plaintext-retirement
+loop introduced in `a4174b1`: failure after ownership erasure could leave an
+undiscoverable plaintext row, and deletion could invalidate another writer's
+wait target. Stable keyed coordinates remove that retirement obligation entirely.
 
 ### Tests the implementation must carry
 
@@ -154,10 +175,12 @@ whole point.
 
 ## The blocker
 
-The Owner's condition 5 was *"no staging/prod secret needs to be invented or
-mutated."* **It does.**
+The original Owner condition 5 was *"no staging/prod secret needs to be invented
+or mutated."* That blocked the original implement-and-ship sequence. The later
+B2/B3/B7 instruction permits implementation and isolated test secrets **without
+shipping or touching real environments**. It does not waive secret provisioning.
 
-`EMAIL_LOCK_KEY` must join `REQUIRED_ENV_VARS`, and a missing required variable
+`EMAIL_LOCK_KEY` is in `REQUIRED_ENV_VARS`, and a missing required variable
 **throws `MissingRequiredEnvError` at boot** — by design, since TD-13 gives
 secrets no defaults. So the next Staging deploy would fail until the secret is
 set there, which is a Staging mutation this session is forbidden to perform and a
@@ -165,10 +188,11 @@ secret it must not invent. Making the variable optional to avoid that is the one
 thing that would be worse: two key spaces, one invariant, silently broken in
 whichever environment fell back.
 
-**Everything else is ready.** The design is unambiguous, the migration is
-forward-only and safe, no authentication behaviour is weakened, and the section
-is completable and testable in one pass **once the secret exists in every
-environment that will run the new code**.
-
-**The order is: generate and install `EMAIL_LOCK_KEY` in Localhost and Staging →
-then implement.** Not the other way round.
+**Current order:** complete disposable verification → commit the bounded batch
+without pushing/deploying → obtain separate operational authority → stop all
+ownership writers, install the shared key and apply the migration → restart only
+the matching new code and verify. Localhost, Staging and Production secrets/data
+remain untouched. The earlier execution-service usage-limit rejection prevented
+the first post-correction attempt from starting; once execution was available,
+both required current-code disposable reruns passed. No Owner-data substitution
+or required-key weakening occurred. Operational provisioning remains outstanding.

@@ -128,12 +128,9 @@ DELETE FROM audit_log;
 -- People last, and never the Super Admin.
 DELETE FROM user_identity WHERE user_id NOT IN (SELECT id FROM keep_user);
 DELETE FROM user_branch_role WHERE user_id NOT IN (SELECT id FROM keep_user);
-DELETE FROM normalized_email_lock
- WHERE email NOT IN (
-   SELECT lower(email) FROM user_identity
-   UNION
-   SELECT lower(pre_provisioned_email) FROM "user" WHERE pre_provisioned_email IS NOT NULL
- );
+-- Keyed lock rows own no account and contain no plaintext address. Retain the
+-- stable concurrency coordinates; only a stopped-writer maintenance re-key
+-- may clear this table (docs/development/email-lock-keying.md).
 DELETE FROM "user" WHERE id NOT IN (SELECT id FROM keep_user);
 
 -- ── Test and probe residue in the PRESERVED tables ────────────────────────

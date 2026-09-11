@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
@@ -200,7 +201,7 @@ async function clear(): Promise<void> {
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "staffreg-" } } });
+  await clearOwnedEmailLocks(prisma, suiteTokens.issuedEmails);
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // **Last, not first.** `intended_branch_id` and `intended_category_id` are
   // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by

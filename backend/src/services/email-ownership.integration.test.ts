@@ -1,3 +1,4 @@
+import { emailLockDigest } from '../lib/email-lock.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
@@ -112,7 +113,7 @@ async function clearOwnedRows(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { jti: { in: [...usedJtis] } } });
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { in: [...usedEmails] } } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { emailDigest: { in: ([...usedEmails]).map((email) => emailLockDigest(email)) } } });
   usedEmails.clear();
   usedJtis.clear();
 }
@@ -233,7 +234,7 @@ describe('normalized-email ownership serialization', () => {
       reason: { code: 'DUPLICATE', details: { reason: 'EMAIL_ALREADY_CLAIMED' } },
     });
     expect(await distinctOwners(google.email)).toHaveLength(1);
-    expect(await prisma.normalizedEmailLock.count({ where: { email: google.email } })).toBe(1);
+    expect(await prisma.normalizedEmailLock.count({ where: { emailDigest: emailLockDigest(google.email) } })).toBe(1);
     const registrationWon = await prisma.userIdentity.count({ where: { email: google.email } });
     expect(await prisma.consumedToken.count({ where: { jti: issued.jti } })).toBe(
       registrationWon === 1 ? 1 : 0,
@@ -281,7 +282,7 @@ describe('normalized-email ownership serialization', () => {
         email: google.email,
       }),
     ).rejects.toThrow('forced ownership transaction failure');
-    expect(await prisma.normalizedEmailLock.count({ where: { email: google.email } })).toBe(0);
+    expect(await prisma.normalizedEmailLock.count({ where: { emailDigest: emailLockDigest(google.email) } })).toBe(0);
     expect(await distinctOwners(google.email)).toEqual([]);
 
     writeSpy.mockRestore();

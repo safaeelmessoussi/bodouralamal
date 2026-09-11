@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import type { Actor } from '../policies/actor.js';
 import { deleteLevel } from './level.service.js';
 import { deletePartner } from './partner.service.js';
@@ -705,6 +706,7 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
     // own ids), so the outer `cleanup()`'s tag-based lookup would never find
     // these rows again — tracked explicitly instead.
     const deidentifiedUserIds: string[] = [];
+    const deidentifiedEmails = new Set<string>();
 
     afterEach(async () => {
       if (deidentifiedUserIds.length === 0) return;
@@ -715,6 +717,7 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
       // actor-scoped lookup never reaches them either.
       await prisma.auditLog.deleteMany({ where: { targetId: { in: deidentifiedUserIds } } });
       await prisma.user.deleteMany({ where: { id: { in: deidentifiedUserIds } } });
+      await clearOwnedEmailLocks(prisma, deidentifiedEmails);
       deidentifiedUserIds.length = 0;
     });
 
@@ -723,6 +726,7 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
         data: { nameArabic: `${TAG} مستفيدة منتهية`, sex: 'female', accountStatus: 'active' },
       });
       deidentifiedUserIds.push(victim.id);
+      deidentifiedEmails.add(`b5-${victim.id}@example.test`);
       await prisma.userIdentity.create({
         data: {
           userId: victim.id,

@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -163,7 +164,7 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await clearOwnedConsumedTokens(prisma, suiteTokens);
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "reg-" } } });
+  await clearOwnedEmailLocks(prisma, suiteTokens.issuedEmails);
   // After the users, never before: `intended_branch_id` is ON DELETE RESTRICT,
   // so a branch still referenced by a registration refuses to go — which is the
   // guarantee, working.

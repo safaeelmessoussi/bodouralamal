@@ -1,3 +1,4 @@
+import { emailLockDigest } from '../lib/email-lock.js';
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -239,7 +240,7 @@ async function clear(): Promise<void> {
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
   if (createdEmails.length > 0) {
-    await prisma.normalizedEmailLock.deleteMany({ where: { email: { in: createdEmails } } });
+    await prisma.normalizedEmailLock.deleteMany({ where: { emailDigest: { in: (createdEmails).map((email) => emailLockDigest(email)) } } });
   }
   await prisma.recurringCourseSchedule.deleteMany({
     where: { title: { startsWith: TAG } },
@@ -1357,7 +1358,7 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
     await grant(id, "student", branchId);
     const email = `restore-${id}@example.test`;
     createdEmails.push(email);
-    await prisma.normalizedEmailLock.createMany({ data: [{ email }], skipDuplicates: true });
+    await prisma.normalizedEmailLock.createMany({ data: [{ emailDigest: emailLockDigest(email) }], skipDuplicates: true });
     await prisma.userIdentity.create({
       data: {
         userId: id,
@@ -1714,7 +1715,7 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
         loggedById: parent,
       },
     });
-    await prisma.normalizedEmailLock.createMany({ data: [{ email }], skipDuplicates: true });
+    await prisma.normalizedEmailLock.createMany({ data: [{ emailDigest: emailLockDigest(email) }], skipDuplicates: true });
     await prisma.userIdentity.create({
       data: {
         userId: victim,
@@ -1799,11 +1800,9 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
     expect(await prisma.refreshToken.count({ where: { userId: victim } })).toBe(0);
     expect(await prisma.refreshSession.count({ where: { userId: victim } })).toBe(0);
     expect(await prisma.rateLimitCounter.count({ where: { userId: victim } })).toBe(0);
-    // Codex B4 — once both ownership channels release the address, the lock
-    // row that served them is retired too: it is a bare copy of her deleted
-    // email with no live claim left to serialize, and R133(3) counts "her
-    // authentication" among what permanent deletion removes.
-    expect(await prisma.normalizedEmailLock.count({ where: { email } })).toBe(0);
+    // B3: ownership is released, but the keyed concurrency coordinate remains
+    // stable for the next claimant. No plaintext address is stored in it.
+    expect(await prisma.normalizedEmailLock.count({ where: { emailDigest: emailLockDigest(email) } })).toBe(1);
     const reclaimed = await call("POST", "/admin/users", superAdmin, {
       name_arabic: `${TAG} صاحبة بريد جديد`,
       email,
@@ -1892,7 +1891,9 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
     const reachedUserLock = deferred();
     const allowPurgeToContinue = deferred();
     const realLock = userRepository.lockUser;
-    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(
+    // Pause only the purge; restore now correctly takes the SAME User lock.
+    // Pausing every call would block the test's restoration behind its own barrier.
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementationOnce(
       async (tx, id) => {
         if (id === victim) {
           reachedUserLock.resolve();

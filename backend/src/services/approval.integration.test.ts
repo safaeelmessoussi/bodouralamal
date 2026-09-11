@@ -1,3 +1,4 @@
+import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -176,7 +177,7 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await clearOwnedConsumedTokens(prisma, suiteTokens);
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "appr-" } } });
+  await clearOwnedEmailLocks(prisma, suiteTokens.issuedEmails);
   // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
   // still referenced refuses to go.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });

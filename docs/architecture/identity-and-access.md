@@ -120,9 +120,9 @@ routing condition's job: **one rule instead of two half-rules** (Revision 20).
 
 ### Account deletion is a recoverable tombstone before it is de-identified
 
-R111 separates the login from the institutional record. `DELETE /profile` (the account
+R133 supersedes R111's earlier retention window. `DELETE /profile` (the account
 owner) and `DELETE /admin/users/{id}` (Super Admin) first stamp `deleted_at`, revoke every
-refresh session, and write a three-day Trash snapshot in one transaction. They remove no
+refresh session, and write a seven-day Trash snapshot in one transaction. They remove no
 identity, role, family, enrolment or staffing-history row during that window. The Trash
 restore action can therefore restore the complete same account by clearing the tombstone;
 revoked credentials remain revoked and the person signs in again.
@@ -134,14 +134,16 @@ identifiers, Google binding, roles, live credentials, quota rows, notifications,
 case-file detail and teaching-planning rows are cleared. The recoverable snapshot is deleted
 in the same transaction: leaving the original name, phone and email in Trash would make the
 erasure cosmetic. Removing the two ownership facts releases the address and re-registration is
-tested. The current concurrency design retains the stable normalized-email lock row so the next
-claim remains serialized, but the row still contains the exact lowercased former address even
-though it carries no owner. R111 says the lock is released and identifying fields are cleared;
-it does not explicitly authorize retaining that ownerless raw coordinate. This is therefore an
-**Owner/legal retention decision before real users**, not an engineering inference: either give
-the coordinate an explicit purpose/access/retention basis, or require an erasable or
-non-reversible serialization design. Until decided, do not describe the tombstone as containing
-no surviving personal coordinate.
+tested. The Owner-ratified [keyed-lock design](../development/email-lock-keying.md) retains
+only a stable HMAC coordinate, not the address, so the next claimant remains serialized.
+No post-commit lock-retirement loop remains. The User repository's erasure-only
+`minimizeSelfManagedClaimIdentity` operation receives the existing User-locked
+transaction and includes tombstoned claims. Claim credentials (`email`, provider subject
+and decision text) are cleared in that transaction, including related Trash snapshots;
+an approved claim retains its structural self-management fact so removing authentication
+cannot restore guardian authority. Pending claims are withdrawn. Claim request/decision
+writers take the beneficiary User lock and re-read state before writing. Ordinary
+pending-list/decision reads remain live-only; erasure returns counts, not claim records.
 
 Live responsibilities and the last active Super Admin still block the first step. The check is
 time-aware: ended schedule/assignment periods and past occurrences are history, while live or
@@ -170,13 +172,18 @@ and the purge removes its deletable satellite, or the purge commits first and th
 refuses/omits it. An already-published upload remains institutional history and its retry remains
 idempotently readable.
 
-De-identification follows normalized-email → User lock order and then re-reads the tombstone. If
+De-identification follows email → PlatformOwner → User lock order and then re-reads the tombstone. If
 Trash restoration committed first, it refuses with `NOT_DELETED` instead of erasing the restored
 live account. A converged retry is a no-op: it preserves the already rotated QR coordinate and
-does not manufacture a second `user.deidentify` audit event.
+does not manufacture a second `user.deidentify` audit event. Automatic work also names the
+exact `Trash.id` observed by the sweep: under the User lock it revalidates target, current
+deletion and expiry of that exact generation. Restore/re-delete therefore makes old work
+stale even when the same User is deleted again. User restoration takes the same lock,
+re-reads the exact Trash entry and refuses at/after its deadline without waiting for a sweep.
 
-Historical educational, consent, safeguarding and accountability relations keep pointing at the
-non-identifying tombstone, which is the reason the row itself is never hard-deleted.
+R133 destroys the beneficiary's own educational/personal record and FamilyLinks at permanent
+purge. Required consent/audit and shared institutional accountability keep pointing at the
+tombstone; the User row itself is never hard-deleted. This is not an educational archive.
 
 ### The onboarding token
 
@@ -223,15 +230,16 @@ completed binding by `UserIdentity.email`. The two same-table unique indexes can
 the **absent-row race** between those channels: registration and staff pre-provisioning could
 both observe no owner and insert into different tables.
 
-`NormalizedEmailLock` is the shared transaction boundary. It contains only the lowercased
-email and creation time — deliberately **no owner id**. Ownership remains in the two SRS
+`NormalizedEmailLock` is the shared transaction boundary. It contains only a domain-separated
+keyed digest of the normalized email and creation time — deliberately **no owner id**. Ownership remains in the two SRS
 fields above; the extra row supplies the stable target that PostgreSQL can lock even when
 neither ownership row existed when the transactions began. On first use, `INSERT … ON
 CONFLICT DO NOTHING` establishes the row and `SELECT … FOR UPDATE` holds it through the
 authoritative cross-table re-read and write.
 
-Four production writers participate: onboarding registration, staff pre-provisioning,
-first-login identity binding, and Super Admin bootstrap. Their order is email lock first,
+Production writers participate through one repository primitive: onboarding registration,
+staff pre-provisioning, first-login identity binding, self-managed claim approval and
+Super Admin bootstrap. Their order is email lock first,
 then the existing User lock where binding or account-state serialization also applies. A
 callback's ten-minute onboarding token is therefore a routing snapshot, not a reservation:
 if staff provision the address before submission, registration returns the existing duplicate
@@ -241,15 +249,15 @@ OAuth attempt follows the ordinary pre-provisioned binding path.
 A persisted owner/claim row was rejected because it would duplicate which User the two SRS
 fields already name. A transaction advisory lock was rejected because it would hash an
 unbounded email into PostgreSQL's finite advisory-key space and depart from the repository
-row-lock convention. The dedicated row is collision-free, inspectable, and released by
-ordinary transaction rollback.
+row-lock convention. A hypothetical HMAC collision merely serializes two addresses on the
+same lock; the actual ownership re-read still distinguishes them. Row locks release at
+transaction end, failed inserts roll back, and committed digest rows remain stable.
 
-That concurrency rationale does not itself settle privacy retention. The ownerless row is not an
-email **claim** and does not block OD-07 re-registration, but its primary key is still the raw
-normalized email. The exact Owner/legal choice is recorded in the
-[readiness ledger](../operations/deployment-readiness.md#blocks-real-users); deleting rows ad hoc
-would reintroduce an absent-row race, while retaining them indefinitely needs authority R111 does
-not currently state.
+The Owner resolved the former plaintext-lock question through the
+[ratified keyed-lock design](../development/email-lock-keying.md). The retained digest
+is not an email **claim** and does not block OD-07 re-registration. Do not delete
+lock rows during account erasure; operational migration/rotation uses the design's
+stopped-writer maintenance boundary, with a shared operator-provisioned key.
 
 ---
 

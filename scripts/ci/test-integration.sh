@@ -21,6 +21,7 @@ export GOOGLE_CLIENT_ID='integration-client-id.apps.example.com'
 export GOOGLE_CLIENT_SECRET='integration-client-secret'
 export JWT_SIGNING_KEY='integration-jwt-signing-key-with-more-than-thirty-two-bytes'
 export ONBOARDING_TOKEN_KEY='integration-onboarding-key-with-more-than-thirty-two-bytes'
+export EMAIL_LOCK_KEY='email-lock-isolated-fixture-key-at-least-32-bytes'
 export MINIO_ENDPOINT="http://127.0.0.1:${minio_port}"
 export MINIO_ACCESS_KEY='integration-access-key'
 export MINIO_SECRET_KEY='integration-secret-password'

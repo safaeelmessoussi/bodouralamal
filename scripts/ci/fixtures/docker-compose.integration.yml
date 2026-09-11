@@ -12,6 +12,7 @@ services:
       GOOGLE_CLIENT_SECRET: integration-client-secret
       JWT_SIGNING_KEY: integration-jwt-signing-key-with-more-than-thirty-two-bytes
       ONBOARDING_TOKEN_KEY: integration-onboarding-key-with-more-than-thirty-two-bytes
+      EMAIL_LOCK_KEY: email-lock-isolated-fixture-key-at-least-32-bytes
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: integration-access-key
       MINIO_SECRET_KEY: integration-secret-password

@@ -12,6 +12,7 @@ const CONFIG: AppConfig = {
   GOOGLE_CLIENT_SECRET: 'secret',
   JWT_SIGNING_KEY: 'test-jwt-signing-key-at-least-32-chars-long',
   ONBOARDING_TOKEN_KEY: 'test-onboarding-key',
+  EMAIL_LOCK_KEY: 'email-lock-isolated-fixture-key-at-least-32-bytes',
   MINIO_ENDPOINT: 'http://127.0.0.1:1',
   MINIO_ACCESS_KEY: 'unused',
   MINIO_SECRET_KEY: 'unused',

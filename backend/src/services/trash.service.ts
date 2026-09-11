@@ -4,6 +4,7 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { lockUser } from '../repositories/user.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
@@ -717,6 +718,20 @@ export async function restoreEntry(
     });
   }
   return prisma.$transaction(async (tx) => {
+    if (entry.targetEntity === 'User') {
+      // Same governing lock as soft/permanent deletion. Re-read the exact
+      // generation AFTER waiting; a stale restore must not revive a tombstone.
+      await lockUser(tx, entry.targetId);
+      const current = await tx.trash.findFirst({
+        where: { id, targetEntity: 'User', targetId: entry.targetId },
+      });
+      if (!current) throw new AppError('NOT_FOUND', 'no such trash entry');
+      if (current.purgeAfter <= new Date()) {
+        throw new AppError('STATE_CONFLICT', 'the restoration window has expired', {
+          reason: 'RESTORATION_EXPIRED',
+        });
+      }
+    }
     const delegate = tx[plan.model] as unknown as {
       findUnique: (a: unknown) => Promise<Record<string, unknown> | null>;
       update: (a: unknown) => Promise<unknown>;
@@ -1133,7 +1148,7 @@ export async function purgeExpiredEntries(
   for (const entry of due) {
     try {
       if (entry.targetEntity === 'User') {
-        await deIdentifyAccountSystem(prisma, entry.targetId);
+        await deIdentifyAccountSystem(prisma, entry.targetId, entry.id, now);
       } else {
         await purgeTrashEntry(prisma, null, entry.id);
       }
@@ -1144,7 +1159,7 @@ export async function purgeExpiredEntries(
           ? ((error.details as { reason?: string } | undefined)?.reason ?? null)
           : null;
       if (reason === 'DEPENDENTS_EXIST') counts.blocked += 1;
-      else if (reason === 'NOT_DELETED') counts.stale += 1;
+      else if (reason === 'NOT_DELETED' || reason === 'STALE_DELETION') counts.stale += 1;
       else if (error instanceof AppError && error.code === 'STATE_CONFLICT') {
         counts.unsupported += 1;
       } else if (error instanceof AppError && error.code === 'NOT_FOUND') {

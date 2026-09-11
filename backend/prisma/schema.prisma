@@ -771,20 +771,20 @@ model User {
   childLinks  FamilyLink[] @relation("FamilyLinkChild")
 
   /// R62 — child applications, in each of the four roles a User can play on one.
-  childApplicationsAsParent   ChildApplication[]    @relation("ChildApplicationParent")
-  childApplicationsAsChild    ChildApplication[]    @relation("ChildApplicationChild")
-  childApplicationsAsMatch    ChildApplication[]    @relation("ChildApplicationMatch")
-  childApplicationsAsDecider  ChildApplication[]    @relation("ChildApplicationDecider")
+  childApplicationsAsParent  ChildApplication[] @relation("ChildApplicationParent")
+  childApplicationsAsChild   ChildApplication[] @relation("ChildApplicationChild")
+  childApplicationsAsMatch   ChildApplication[] @relation("ChildApplicationMatch")
+  childApplicationsAsDecider ChildApplication[] @relation("ChildApplicationDecider")
   /// R132 — her own claim to manage her account, and the claims she decided.
-  selfManagedClaims           SelfManagedClaim[]    @relation("SelfManagedClaimBeneficiary")
-  selfManagedClaimsDecided    SelfManagedClaim[]    @relation("SelfManagedClaimDecider")
+  selfManagedClaims          SelfManagedClaim[] @relation("SelfManagedClaimBeneficiary")
+  selfManagedClaimsDecided   SelfManagedClaim[] @relation("SelfManagedClaimDecider")
   /// R123 — presence, and presence somebody else recorded. Two relations
   /// because one person is both: a مؤطِّرة marks a roster and, if she also
   /// studies, is marked on one.
   /// R124 — assessments published to this beneficiary alone.
-  targetedExams               Exam[]                @relation("ExamTargetStudent")
-  attendance                  Attendance[]          @relation("AttendanceStudent")
-  attendanceMarked            Attendance[]          @relation("AttendanceMarkedBy")
+  targetedExams              Exam[]             @relation("ExamTargetStudent")
+  attendance                 Attendance[]       @relation("AttendanceStudent")
+  attendanceMarked           Attendance[]       @relation("AttendanceMarkedBy")
 
   quranLogs                  QuranProgressLog[]      @relation("QuranLogStudent")
   quranLogsAuthored          QuranProgressLog[]      @relation("QuranLogLoggedBy")
@@ -864,8 +864,8 @@ model UserIdentity {
 /// serialize an email that had no row in either ownership channel when their
 /// transactions began.
 model NormalizedEmailLock {
-  email     String   @id
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  emailDigest String   @id @map("email_digest") @db.Char(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("normalized_email_lock")
 }
@@ -2034,9 +2034,10 @@ model SelfManagedClaim {
   /// subject is stored because binding must attach exactly the identity that was
   /// proven — and it is never published to any surface.
   provider          AuthProvider
-  providerSubjectId String       @map("provider_subject_id")
+  /// Cleared with email on permanent account deletion; approved status remains authority.
+  providerSubjectId String?      @map("provider_subject_id")
   /// Lowercased before every write; a CHECK backstops it as on `UserIdentity`.
-  email             String
+  email             String?
 
   status SelfManagedClaimStatus @default(pending)
 

@@ -16,6 +16,7 @@ export const REQUIRED_ENV_VARS = [
   'GOOGLE_CLIENT_SECRET',
   'JWT_SIGNING_KEY',
   'ONBOARDING_TOKEN_KEY',
+  'EMAIL_LOCK_KEY',
   'MINIO_ENDPOINT',
   'MINIO_ACCESS_KEY',
   'MINIO_SECRET_KEY',
@@ -68,6 +69,8 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   JWT_SIGNING_KEY: z.string().min(1),
   ONBOARDING_TOKEN_KEY: z.string().min(1),
+  EMAIL_LOCK_KEY: z.string().refine((value) => Buffer.byteLength(value) >= 32,
+    'EMAIL_LOCK_KEY must contain at least 32 bytes'),
   MINIO_ENDPOINT: z.string().min(1),
   MINIO_ACCESS_KEY: z.string().min(1),
   MINIO_SECRET_KEY: z.string().min(1),
@@ -216,6 +219,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     boundaryIssues.push(
       'ONBOARDING_TOKEN_KEY: must be distinct from JWT_SIGNING_KEY (TD-12, TD-13)',
     );
+  }
+  if ([parsed.data.JWT_SIGNING_KEY, parsed.data.ONBOARDING_TOKEN_KEY].includes(parsed.data.EMAIL_LOCK_KEY)) {
+    throw new InvalidEnvValueError(['EMAIL_LOCK_KEY must be distinct from authentication signing keys']);
   }
 
   if (boundaryIssues.length > 0) {

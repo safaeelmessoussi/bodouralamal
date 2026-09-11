@@ -7614,3 +7614,186 @@ point; every fixture used is this pass's own, disposable and tagged.
 No Staging or Production action taken. These six fixes do not constitute
 production approval: the independent Codex production-readiness audit is
 still in progress and further findings (F7 onward) remain under review.
+
+## 2026-09-11 — B2/B3/B7 interrupted batch recovered (WIP, not accepted/committed)
+
+Recovered develop at a4174b1102fb38e7aa889287700d7201099accb8, one commit ahead
+of origin/develop 5e69b9341de2050eedcb28086950a8aec39ce78d. The inherited
+35-file uncommitted slice was reviewed file-by-file; no reset/stash/recreation.
+Preserved the single pending migration and the original commit's unrelated fixes.
+
+B2: sweep work now carries exact Trash.id into permanent User de-identification;
+the governing User lock protects the re-read of generation, target, deletion and
+expiry. Restore takes that lock and rejects an expired window itself. No new
+generation column or background queue was invented.
+
+B3: shared email locking uses the ratified domain-separated HMAC-SHA-256 under
+required EMAIL_LOCK_KEY, retaining 64-character lowercase digest rows. Removed
+the post-commit plaintext-retirement loop rather than retrying lost raw addresses.
+Boot/preflight reject missing, short or shared signing keys; templates contain no
+usable secret. Disposable fixtures have an explicit test-only key. Test cleanup
+uses owned exact digest coordinates, not plaintext prefixes. The two browser
+fixture helpers were adapted without running them; the legacy reset helper no
+longer refers to the removed email column or retires stable lock rows (not run).
+
+B7: permanent erasure clears SelfManagedClaim email/provider subject/decision
+text and related Trash snapshots, withdrawing pending requests but preserving
+approved structural self-management authority. Request/decision writers share
+the beneficiary User lock and re-read state, preventing post-erasure writes.
+The existing uncommitted 20260911100000_deletion_generation_identity_minimization
+migration was corrected in place: maintenance-only truncate/re-key, paired-null
+claim credentials with SQL CHECK, and repair only for audit-proven permanently
+erased accounts. Current recovery entries are not treated as erased. No committed
+migration was changed and no migration ran during this recovery session.
+
+Recovery fixes: remaining lock-deletion expectations changed to retained-digest
+assertions; tracked fixture emails survive identity erasure for exact cleanup;
+the new reference-code fixture respects VARCHAR(16); the immediate-disable test
+first proves access while active rather than passing an empty required-role list;
+the controlled sweep hook uses an awaited Promise view of Prisma's query. Its
+initial PrismaPromise typing failure was corrected. No runtime failure was hidden.
+
+Documentation: TD-13 now records the already-ratified EMAIL_LOCK_KEY requirement;
+database/identity/configuration/keying pages describe the implementation and
+stopped-writer migration/rotation requirement. TASKS/testing explicitly retain
+the real-verification blocker, not completion. Ratified history is not rewritten;
+no external route/API shape, frontend or other blocker was changed.
+
+Verified locally: focused units 4 files/24 assertions; backend units 39 files/341
+assertions; exact backend typecheck, lint and build; Prisma generate/format/validate;
+migration presence/drop-rename/order guards (94 migrations), no-db-push, env,
+no-PII, Prisma mass-write and Compose operations guards. OpenAPI currency remains
+175 paths/226 operations; TD-3 remains 226/234 with the same eight pending routes
+and zero undocumented routes. CI portability, contract-DTO and migration-order
+self-tests passed; 1,024 relative links across 120 documentation files passed.
+Changed shell files pass bash syntax checks and git diff --check is clean.
+No API artifact change was needed.
+
+BLOCKED, not waived: Docker access escalation was rejected before execution by
+the approval service: "You've hit your usage limit." The rejected bounded
+docker-ps command did not start a container or SQL operation. No indirect retry,
+Owner-database substitution or deployment occurred. Fresh/populated migration,
+the new eight real-DB lifecycle cases, affected/full disposable integration with
+isolation, and Docker-dependent preflight verification remain outstanding. The
+new commit is intentionally withheld until those pass. No push. Baseline remains
+26e8a96b6f975e050d802f1851332216a424577b. B1/B4/B5/B6/B8 and HIGH findings are
+outside this batch; this is not Production approval.
+
+## 2026-09-11 — B2/B3/B7 disposable proof; final erasure-repository retry blocked
+
+Continued the inherited 46 modified tracked files and five new files above
+a4174b1102fb38e7aa889287700d7201099accb8, index empty. Added one intentional
+disposable migration-rehearsal script, not another migration. No reset/recreation,
+unrelated fix, Owner-data cleanup, secret provisioning, push or deployment.
+
+Real disposable evidence obtained once execution approval became available:
+- Fresh PostgreSQL: actual Prisma migrate deploy applied all 94 migrations;
+  production seed and synthetic fixtures passed; PostgreSQL/MinIO/pg-boss/API/Nginx
+  ran in the unique disposable integration project.
+- Populated upgrade: scripts/test/verify-deletion-upgrade.mjs replayed the 93
+  pre-batch SQL migrations, created 11 Users, ten pending/rejected/approved claim
+  cases and two User recovery windows, then applied the exact pending migration.
+  User/identity/family/audit rows and both User Trash windows were unchanged;
+  seven live/recoverable/unproven claim cases stayed byte-equivalent. Only three
+  proven permanently erased claims lost credentials/decision text and snapshots;
+  pending ones were withdrawn, approved authority remained. SQL CHECKs, PK/indexes,
+  nullability/defaults and post-upgrade production-repository concurrency passed.
+- The ratified email-lock transition is STOPPED-WRITER TRUNCATE/RE-KEY, not a
+  cryptographic backfill. Eleven plaintext coordinates disappeared, ownership did
+  not; equivalent normalized addresses subsequently converged on one HMAC row and
+  the existing owner. No key is substituted into SQL or generated for a real host.
+- Focused seven-suite retry: 159/159, all-table isolation clean. Strengthened
+  cross-lifecycle suite: 8/8, isolation clean, including delete -> restore ->
+  re-delete -> stale purge refusal -> final erasure and searches over retained
+  User/claim/audit columns for the fixture's email and provider subject.
+
+Failed attempts are evidence, not hidden: first focused run was 156/159. An old
+purge barrier intercepted restoration's newly required User lock too, timed out,
+and contaminated its successor; it now pauses only the purge. A claim test expected
+an ineligible-beneficiary detail after permanent erasure had correctly withdrawn
+and minimized the pending claim; it now asserts NOT_FOUND, null credentials and
+no restored identity. The upgrade probe first connected to the image's temporary
+initialization server (fixed by TCP readiness), then failed on an ambiguous enum
+parameter in its synthetic INSERT (explicit enum cast fixed). Both bounded retries
+removed their disposable containers. The final populated rehearsal passes.
+
+Whole-schema comparison returned exit 2. Baseline comparison against the exact
+committed a4174b1 schema reproduces the SAME 26 SQL/Prisma table differences before
+and after migration; both models changed by this batch match exactly. The script
+asserts byte-identical baseline drift, not global zero drift. Named indexes,
+raw-SQL FKs/types and defaults remain a separate review item, not repaired here.
+
+First full disposable suite: 109 files passed, one failed, two skipped;
+2,512 tests passed, one failed, 17 skipped. Its required real-edge browser probe
+passed 193/193. The sole failure was the unchanged ordinary-read guard naming
+account-deletion.service.ts:638 selfManagedClaim.findMany. Permanent erasure must
+see tombstoned claims, so adding a deletedAt:null predicate would retain copied
+PII. The exact operation now belongs to user.repository.ts's narrow
+minimizeSelfManagedClaimIdentity(tx, beneficiaryId, deletedAt, actorUserId).
+It retains the same caller transaction/User lifecycle lock and selection/write
+semantics, returns only affected counts, and is called only from permanent
+de-identification. No ordinary-read guard change, broad exception, auth widening,
+or migration change was made. This also follows the existing repository boundary
+rather than granting an exception to ordinary service reads.
+
+After that move: lint, exact typecheck, Prisma format/validate/generate, backend
+units 39 files/341 tests and build pass. The exact unchanged ordinary-read
+assertion also passes when evaluated source-only without integration imports,
+hooks or DB calls; that is explicitly NOT real integration proof. Before the move,
+all 30 non-link repository guards and 1,029 documentation links passed; affected
+source/security/contract checks and final documentation validation are rerun at
+the stopping boundary. Generated OpenAPI remains 175 paths/226 operations, TD-3
+226/234 with the same eight pending entries and no undocumented routes.
+
+Final non-Docker rechecks passed: migration presence/drop/order/self-test,
+no-db-push, environment inventory, no-PII, mass-write and DTO guards; TD-3;
+1,029/1,029 documentation links across 120 files; shell/Node syntax and diff
+checks. The OpenAPI guard's tsx CLI wrapper hit local IPC listen EPERM; running
+the same read-only generator using `node --import tsx scripts/generate-openapi.ts
+--check` passed without the CLI IPC server. No Docker approval was bypassed.
+
+The required post-move ten-suite disposable retry was rejected BEFORE EXECUTION:
+the approval service reported "You've hit your usage limit." No indirect retry
+or Owner-database substitution followed. The exact retry command is recorded in
+docs/development/testing.md. Required next: that affected run, then the full
+disposable suite with isolation, followed by final changed-surface/diff checks.
+Until those pass, B2/B3/B7 remain NOT ACCEPTED and no new commit is created.
+The entire worktree is preserved; no push. Staging/Production/Owner data untouched,
+baseline/pre-codex-r100 remains 26e8a96b6f975e050d802f1851332216a424577b.
+This is not Production approval; B1/B4/B5/B6/B8 and HIGH findings stay out of scope.
+
+## 2026-09-11 — B2/B3/B7 current-code verification and local closure
+
+Recovered the same a4174b1102fb38e7aa889287700d7201099accb8 worktree: 46 modified
+tracked files, six intentional new files, empty index. Rechecked the inherited
+implementation and final repository correction; no further production code,
+test, schema or migration changes were needed. Completion/status documentation
+now reflects the final evidence and replaces stale raw-lock/retention wording
+in the identity handbook with the already-ratified keyed-lock/R133 behavior.
+
+Current-code disposable ten-suite retry: 220/220, including all eight combined
+lifecycle cases and the unchanged ordinary-read guard; all-table isolation clean.
+Final full disposable integration: 110 test files passed, two skipped;
+2,513 tests passed, 17 skipped, zero failures (390.39 seconds). All-table isolation
+passed. Its real-edge browser probe passed 193/193. Each fresh disposable stack
+applied all 94 migrations and both seeds. The earlier populated 93-to-94 upgrade
+proof (11 Users, ten claim cases, two recovery windows) remains applicable and
+was reused, not rerun; its schema/migration files are unchanged. The previous
+2,512-pass/one-failure full result is resolved by the existing User repository
+boundary, not a guard exemption. Earlier failed attempts remain recorded above.
+
+Final gates: backend lint, exact typecheck, 39 unit files/341 assertions, build,
+Prisma format/validate/generate; all 30 non-link repository guards; documentation
+links 1,029/1,029 across 120 files; changed-shell syntax, upgrade-script Node syntax
+and git diff checks pass. Generated OpenAPI remains unchanged at 175 paths/226
+operations; TD-3 remains 226/234, eight pending and zero undocumented endpoints.
+Constitution review: reused the existing User repository, governing transaction
+and locks, shared key helper and fixture ownership tracking; no new exception,
+client-side business logic, endpoint or frontend change.
+
+B2/B3/B7 are locally accepted at this green boundary for one new coherent commit
+above a4174b1. No push, hosted CI or deployment is part of this closure. Real
+EMAIL_LOCK_KEY provisioning and stopped-writer migration require separate
+operational authority. The 26 proven pre-existing SQL/Prisma differences and
+B1/B4/B5/B6/B8/HIGH findings remain outside scope. No Owner data, Localhost runtime,
+Staging or Production was changed. This is not Production approval.

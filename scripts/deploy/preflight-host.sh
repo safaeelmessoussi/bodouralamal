@@ -72,7 +72,7 @@ api_env = api.get("environment", {})
 db_env = db.get("environment", {})
 required = (
     "DATABASE_URL", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "JWT_SIGNING_KEY",
-    "ONBOARDING_TOKEN_KEY", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
+    "ONBOARDING_TOKEN_KEY", "EMAIL_LOCK_KEY", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
     "PUBLIC_BASE_URL", "STORAGE_BASE_URL",
 )
 if any(not api_env.get(name) for name in required):
@@ -102,6 +102,10 @@ if minio_init.get("environment", {}).get("MC_HOST_local") != expected_mc_host:
     raise SystemExit("MinIO policy initializer credentials do not match application credentials")
 if api_env["JWT_SIGNING_KEY"] == api_env["ONBOARDING_TOKEN_KEY"]:
     raise SystemExit("access and onboarding signing keys must be distinct")
+if len(api_env["EMAIL_LOCK_KEY"].encode()) < 32 or api_env["EMAIL_LOCK_KEY"] in (
+    api_env["JWT_SIGNING_KEY"], api_env["ONBOARDING_TOKEN_KEY"]
+):
+    raise SystemExit("EMAIL_LOCK_KEY must be a dedicated key of at least 32 bytes")
 
 database = urlparse(api_env["DATABASE_URL"])
 if database.scheme not in {"postgres", "postgresql"} or (

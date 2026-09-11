@@ -1,3 +1,4 @@
+import { emailLockDigest } from '../lib/email-lock.js';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -146,7 +147,7 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.normalizedEmailLock.deleteMany({ where: { email: { in: emails } } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { emailDigest: { in: (emails).map((email) => emailLockDigest(email)) } } });
 }
 
 beforeEach(clear);

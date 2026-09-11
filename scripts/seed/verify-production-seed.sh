@@ -33,6 +33,7 @@ export GOOGLE_CLIENT_ID='production-seed-fixture'
 export GOOGLE_CLIENT_SECRET='production-seed-fixture'
 export JWT_SIGNING_KEY='production-seed-fixture-signing-key-with-more-than-thirty-two-bytes'
 export ONBOARDING_TOKEN_KEY='production-seed-fixture-onboarding-key-with-more-than-thirty-two-bytes'
+export EMAIL_LOCK_KEY='email-lock-isolated-fixture-key-at-least-32-bytes'
 export MINIO_ENDPOINT="http://127.0.0.1:${minio_port}"
 export MINIO_ACCESS_KEY='production-seed-fixture'
 export MINIO_SECRET_KEY='production-seed-fixture-secret'

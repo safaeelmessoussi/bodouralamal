@@ -10,6 +10,7 @@ services:
       GOOGLE_CLIENT_SECRET: preflight-client-secret
       JWT_SIGNING_KEY: preflight-jwt-signing-key-more-than-thirty-two-bytes
       ONBOARDING_TOKEN_KEY: preflight-onboarding-key-more-than-thirty-two-bytes
+      EMAIL_LOCK_KEY: email-lock-isolated-fixture-key-at-least-32-bytes
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: preflight-access
       MINIO_SECRET_KEY: preflight-secret-password

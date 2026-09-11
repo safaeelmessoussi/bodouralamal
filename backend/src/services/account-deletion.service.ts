@@ -430,12 +430,8 @@ export async function deIdentifyAccount(
    */
   actor: { userId: string | null; activeRole?: string | null },
   targetId: string,
+  automatic?: { trashId: string; now: Date },
 ): Promise<void> {
-  // Codex B4 — captured so the addresses this account released can have their
-  // `NormalizedEmailLock` rows retired once de-identification has committed;
-  // see the loop after the transaction below for why that happens separately.
-  let releasedAddresses: string[] = [];
-
   await prisma.$transaction(async (tx) => {
     // Read only the email coordinates first because the global authentication
     // hierarchy is Email -> User. The complete row is re-read only after both
@@ -465,7 +461,6 @@ export async function deIdentifyAccount(
     for (const address of addresses) {
       await users.lockNormalizedEmail(tx, address);
     }
-    releasedAddresses = addresses;
 
     // Global lock order for lifecycle mutations is PlatformOwner -> User. This
     // follows the email locks here because transfer never takes an email lock,
@@ -511,6 +506,20 @@ export async function deIdentifyAccount(
       throw new AppError('STATE_CONFLICT', 'the account is not deleted', {
         reason: 'NOT_DELETED',
       });
+    }
+
+    // The User lock also governs restoration/re-deletion. An old sweep may
+    // name this User but never authorizes destruction of a NEW Trash generation.
+    if (automatic) {
+      const generation = await tx.trash.findFirst({
+        where: { id: automatic.trashId, targetEntity: 'User', targetId },
+        select: { purgeAfter: true },
+      });
+      if (!generation || generation.purgeAfter >= automatic.now) {
+        throw new AppError('STATE_CONFLICT', 'the deletion work has been superseded or is not due', {
+          reason: 'STALE_DELETION',
+        });
+      }
     }
 
     const trashBefore = await tx.trash.count({
@@ -623,6 +632,11 @@ export async function deIdentifyAccount(
       await tx.notification.deleteMany({ where: { userId: targetId } }),
     ];
 
+    // Approval is durable authority, not a second store of login credentials.
+    // Pending claims are withdrawn, not falsely marked approved or rejected.
+    // Claim writers take this same User lock and re-read their pending state.
+    removed.push(...await users.minimizeSelfManagedClaimIdentity(tx, targetId, user.deletedAt, actor.userId));
+
     /**
      * **Her own educational record goes with the account** (Revision 133).
      *
@@ -682,41 +696,6 @@ export async function deIdentifyAccount(
       });
     }
   });
-
-  /**
-   * **Codex B4 — retire the plaintext `NormalizedEmailLock` row for every
-   * address this account just released.**
-   *
-   * The lock row itself is not personal data about a *live* claim — it names
-   * no owner — but once neither authoritative channel (`preProvisionedEmail`,
-   * `UserIdentity`) claims the address any more, the row is nothing but a
-   * bare copy of the deleted person's email address with no purpose left
-   * (R133(3) — "her authentication" is part of what permanent deletion
-   * removes). `emailClaimingUserIds` is empty for every address here on a
-   * fresh run (the transaction above just cleared both channels) and stays
-   * empty on an idempotent retry (`releasedAddresses` is empty then, so this
-   * loop is a no-op) — this never removes a row a live account still needs.
-   *
-   * **Deliberately its own transaction, per address, AFTER the one above
-   * commits** — not folded into it. That transaction already holds each row
-   * locked for the full de-identification (every table `destroyEducationalRecord`
-   * touches); a concurrent registration blocked on the SAME row would then
-   * wait for the entire purge rather than a small, separate check-and-delete.
-   * `lockNormalizedEmail` is the SAME existing serialization primitive
-   * registration/provisioning/binding all use — reused here, not duplicated —
-   * so this still cannot race a concurrent claimant: whichever of the two
-   * acquires the row's lock first is the one whose view of
-   * `emailClaimingUserIds` the other waits behind.
-   */
-  for (const address of releasedAddresses) {
-    await prisma.$transaction(async (tx) => {
-      await users.lockNormalizedEmail(tx, address);
-      const claimants = await users.emailClaimingUserIds(tx, address);
-      if (claimants.length === 0) {
-        await tx.normalizedEmailLock.delete({ where: { email: address } });
-      }
-    });
-  }
 }
 
 /**
@@ -738,8 +717,10 @@ export async function deIdentifyAccount(
 export async function deIdentifyAccountSystem(
   prisma: PrismaClient,
   targetId: string,
+  trashId: string,
+  now: Date = new Date(),
 ): Promise<void> {
-  await deIdentifyAccount(prisma, { userId: null }, targetId);
+  await deIdentifyAccount(prisma, { userId: null }, targetId, { trashId, now });
 }
 
 /**

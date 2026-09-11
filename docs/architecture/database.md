@@ -89,14 +89,26 @@ awaiting its first binding is represented by `pre_provisioned_email` and nothing
 
 `User.pre_provisioned_email` and active `UserIdentity.email` are separate representations of
 one normalized-address claim. Their indexes cannot constrain one another and cannot lock an
-address absent from both tables. `NormalizedEmailLock(email, created_at)` supplies one stable
-row per address for the production ownership writers to lock before deciding.
+address absent from both tables. `NormalizedEmailLock(email_digest, created_at)` supplies one
+stable row per address for the production ownership writers to lock before deciding. The
+64-character lowercase hex coordinate is a domain-separated HMAC under `EMAIL_LOCK_KEY`,
+not a raw email or a bare hash. Its SQL CHECK rejects malformed coordinates. The
+[ratified keying design](../development/email-lock-keying.md) owns the exact input,
+stopped-writer migration/rotation procedure and current acceptance status.
 
 It deliberately has no User foreign key. Adding one would make it a third ownership record
 that could disagree with the two SRS fields; deleting it on account lifecycle changes would
 also reopen the race. Rows may therefore outlive an active claim and remain harmless lock
 targets. The availability decision always comes from an under-lock re-read of the actual
 ownership channels.
+
+`SelfManagedClaim` retains the approved transition fact needed by `SELF_MANAGED`,
+not a second credential archive. Permanent account erasure clears its `email`,
+`provider_subject_id` and decision text, and removes related Trash snapshots.
+Pending requests are withdrawn via `deleted_at`, not fabricated as approved/rejected.
+The two credential columns are nullable together; a SQL CHECK requires both on a
+live pending claim. The migration repairs only audit-proven permanent deletions,
+leaving recoverable accounts and their claims intact.
 
 ### `UserBranchRole` — the whole authorization model
 
@@ -640,6 +652,15 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260905100000_drop_account_return_request
 20260905110000_drop_full_deletion_request
 20260905120000_account_status_decided_at
+20260908090000_r134_exam_source_id
+20260908100000_r136_exam_available_from
+20260909090000_r137_exam_question_points
+20260909090100_r137_academic_year_soft_delete
+20260909090200_r137_class_recurrence_none
+20260909100000_r137_academic_year_label_live_unique
+20260909120000_r138_session_title
+20260909132600_r138_legal_documents
+20260911100000_deletion_generation_identity_minimization
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -663,12 +684,25 @@ R102 is a forward-only enum extension only. It adds the durable `rejection` attr
 the application transaction performs each actual Pending → Rejected revocation, so rerunning
 `migrate deploy` has no session side effect.
 
-The normalized-email migration creates and backfills only lock targets; it does not choose an
+The original plaintext normalized-email migration creates and backfills only lock targets; it does not choose an
 owner. Before backfill it checks the union of retained pre-provisioned addresses and active
 identities and aborts if one email already names more than one User. Automatically clearing a
 pre-provisioned address or merging people would destroy provenance and make a person-level
 decision in migration SQL. Reconcile such rows explicitly using the deployment runbook, then
 rerun `migrate deploy`; a clean retry is forward-only and backfill is idempotent.
+
+The B3 transition above replaces those ownerless plaintext coordinates with the
+[ratified HMAC key space](../development/email-lock-keying.md), using a stopped-writer
+truncate/re-key, not a digest backfill. The same migration makes claim identity
+fields nullable as a pair and minimizes audit-proven permanently erased claims;
+current User Trash and recoverable claims are preserved. The
+[disposable upgrade rehearsal](../../scripts/test/verify-deletion-upgrade.mjs)
+checks row preservation and SQL constraints plus actual repository reads/locks.
+Both changed models match the migrated DB. Whole-schema comparison reports the
+same 26 unrelated SQL/Prisma table differences before and after this batch (named
+indexes, defaults, raw-SQL FKs/types); it is **not** a globally empty schema diff.
+Those existing differences require separate review, not a generated corrective
+migration or `db push` here.
 
 ### Filename order is apply order — and it bit us
 

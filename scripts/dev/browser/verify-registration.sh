@@ -16,6 +16,8 @@ export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 # repeatable and leaves one identifiable applicant rather than colliding.
 STAMP="$(date +%s)"
 export ONBOARDING_EMAIL="reg-verify-${STAMP}@example.com"
+EMAIL_LOCK_DIGEST="$(cd backend && timeout 30s node --import tsx --input-type=module -e 'import { emailLockDigest } from "./src/lib/email-lock.ts"; process.stdout.write(emailLockDigest(process.env.ONBOARDING_EMAIL));')"
+[[ "$EMAIL_LOCK_DIGEST" =~ ^[0-9a-f]{64}$ ]] || { echo 'FAIL: invalid fixture email-lock coordinate' >&2; exit 1; }
 export ONBOARDING_TOKEN="$(bash scripts/dev/issue-dev-onboarding.sh "$ONBOARDING_EMAIL" "dev-subject-${STAMP}")"
 export ADMIN_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
 
@@ -41,7 +43,7 @@ cleanup() {
   local USER_TBL='"user"' 
   OWNER_ID="$($sql "SELECT user_id FROM user_identity WHERE email = '${ONBOARDING_EMAIL}';" 2>/dev/null | tr -d '\r ' || true)"
 
-  $sql "DELETE FROM normalized_email_lock WHERE email = '${ONBOARDING_EMAIL}';" >/dev/null || echo "cleanup: lock delete failed" >&2
+  $sql "DELETE FROM normalized_email_lock WHERE email_digest = '${EMAIL_LOCK_DIGEST}';" >/dev/null || echo "cleanup: lock delete failed" >&2
   $sql "DELETE FROM user_identity WHERE email = '${ONBOARDING_EMAIL}';" >/dev/null || echo "cleanup: identity delete failed" >&2
 
   if [[ -n "${OWNER_ID:-}" ]]; then
@@ -83,7 +85,7 @@ STATE="$(docker compose exec -T db psql -U app -d bodour -At -F '|' -c "
 WITH owner AS (SELECT user_id FROM user_identity WHERE email = '${ONBOARDING_EMAIL}')
 SELECT (SELECT count(*) FROM \"user\" u JOIN owner o ON o.user_id = u.id)          AS users,
        (SELECT count(*) FROM user_identity WHERE email = '${ONBOARDING_EMAIL}')     AS identities,
-       (SELECT count(*) FROM normalized_email_lock WHERE email = '${ONBOARDING_EMAIL}') AS email_locks,
+       (SELECT count(*) FROM normalized_email_lock WHERE email_digest = '${EMAIL_LOCK_DIGEST}') AS email_locks,
        (SELECT u.account_status::text FROM \"user\" u JOIN owner o ON o.user_id = u.id LIMIT 1) AS state,
        (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id) AS children,
        (SELECT count(*) FROM child_application c JOIN owner o ON o.user_id = c.parent_id WHERE c.status = 'pending') AS pending_children,
