@@ -342,9 +342,10 @@ export async function approveSelfManagedClaim(
  * Refuses a claim — recorded, then withdrawn from the live set.
  *
  * R128's shape, for R128's reason: a refusal that stays live is a refusal that
- * blocks the corrected request for ever. The decision and its reason survive on
- * the row and in the audit trail; only the pending slot is released, so she may
- * ask again — as a NEW claim with its own history, never by reopening this one.
+ * blocks the corrected request for ever. R141 keeps the human reason on the
+ * claim only until its authorized erasure; the audit retains structural evidence.
+ * The pending slot is released so she may ask again as a NEW claim, never by
+ * reopening this one.
  */
 export async function rejectSelfManagedClaim(
   prisma: PrismaClient,
@@ -390,7 +391,9 @@ export async function rejectSelfManagedClaim(
       actionType: 'selfmanaged.reject',
       targetEntity: 'SelfManagedClaim',
       targetId: claim.id,
-      detail: { beneficiary_id: claim.beneficiaryId, reason: reason.trim() },
+      // R141: arbitrary rationale may identify the beneficiary. Never copy it
+      // into permanent audit; action/target/actor/time already record the decision.
+      detail: { beneficiary_id: claim.beneficiaryId },
     });
   });
 }

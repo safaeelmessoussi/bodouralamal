@@ -284,6 +284,14 @@ commit. It deliberately does not reinterpret required reason/justification text;
 the TD-8/TD-14 policy reconciliation for that governed evidence remains explicit
 in `TASKS.md`.
 
+For self-managed claim rejection, R141 resolves that question narrowly: the
+human rationale lives only on the claim until permanent erasure, while the
+audit event records structural accountability. Its explicit historical
+exception removes copied rejection-reason fields from `selfmanaged.reject`
+audit detail without deleting rows or changing other events. Ordinary audit
+writes stay append-only; this is not a generic free-text sanitizer or an
+exception for any other action's mandated justification.
+
 The same atomicity applies at login. Successful `auth.login`, the new refresh anchor/token,
 and the authoritative account/role read share one User-locked transaction. If its mandatory
 audit write fails, the new session rolls back and no cookie or access token is returned. A

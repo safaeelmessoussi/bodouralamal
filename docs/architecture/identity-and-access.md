@@ -145,6 +145,12 @@ cannot restore guardian authority. Pending claims are withdrawn. Claim request/d
 writers take the beneficiary User lock and re-read state before writing. Ordinary
 pending-list/decision reads remain live-only; erasure returns counts, not claim records.
 
+R141 also prohibits copying self-managed rejection rationale into audit detail:
+only the claim stores that text. The rejected event retains claim/beneficiary
+ids, actor, timestamp and event type. A data-only migration removes historical
+reason copies under the narrow TD-8 append-only exception, including records
+whose claim/beneficiary is already gone; it preserves all other audit evidence.
+
 Live responsibilities and the last active Super Admin still block the first step. The check is
 time-aware: ended schedule/assignment periods and past occurrences are history, while live or
 future schedules, Sessions, responsible Events and Exams must be reassigned. Event liveness is

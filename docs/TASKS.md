@@ -1,5 +1,30 @@
 # Tasks — بذور الأمل Platform
 
+## R141 — B7 rejection-audit follow-up (2026-09-11; local acceptance complete)
+
+- [x] Owner resolved the R132/TD-8 conflict: self-managed rejection audit is
+  structural only; human rationale stays on the claim until authorized erasure.
+  The exception for historical audit copies removes only rejection-reason fields,
+  preserving rows and all other permitted evidence. No general audit-edit path.
+- [x] Reproduced the missed case on disposable data: **7/8** lifecycle assertions
+  passed; the identifying rejection marker survived in audit detail after erasure.
+  Prior B7 acceptance below is superseded by this additional closure requirement.
+- [x] Focused disposable verification: **140/140**, eight suites, all-table
+  isolation clean. Covers the identifying-reason lifecycle and exact historical
+  SQL migration, including idempotency, attribution, unchanged claim rationale
+  and unrelated-row preservation. Fresh **95/95** migrations and both seeds pass.
+- [x] Final full disposable integration: **2,514 passed / 17 skipped**, 111 files
+  passed / two skipped, all-table isolation clean; real-edge browser **193/193**.
+  Lint, exact typecheck, backend units **341/341**, build, all 30 non-link guards,
+  **1,031/1,031** documentation links and final diff checks pass. B7's identifying
+  free-text regression now closes the local engineering gap; real-host migration
+  remains pending. One new local commit only; no push/deployment. See
+  [R141 evidence](development/testing.md#r141-self-managed-rejection-audit-follow-up).
+- B2 remains closed and B3 technically closed. The stale readiness entry now
+  distinguishes its settled keyed-HMAC design from outstanding real-key
+  provisioning and stopped-writer rollout. No Owner/Localhost/Staging/Production
+  data mutation is authorized by this code-and-disposable-verification task.
+
 ## B2 + B3 + B7 recovery — 2026-09-11 (local engineering acceptance complete)
 
 - [x] Close only the inherited batch above `a4174b1102fb38e7aa889287700d7201099accb8`;

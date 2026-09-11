@@ -7797,3 +7797,59 @@ EMAIL_LOCK_KEY provisioning and stopped-writer migration require separate
 operational authority. The 26 proven pre-existing SQL/Prisma differences and
 B1/B4/B5/B6/B8/HIGH findings remain outside scope. No Owner data, Localhost runtime,
 Staging or Production was changed. This is not Production approval.
+
+## 2026-09-11 — R141 self-managed rejection audit privacy correction
+
+Owner resolved R132(9)'s ids-only rule versus TD-8's former requirement to retain
+selfmanaged.reject free-text rationale. R141 records the structural-only audit
+rule and a narrow historical append-only exception; R132/R133 history, ordinary
+audit immutability and the purge allowlist remain unchanged. Attribution for
+this event means who rejected which claim and when, not permanent free text.
+
+rejectSelfManagedClaim now stores rationale only on SelfManagedClaim, not audit
+detail. Request/approval events already used ids only. The existing User-locked
+erasure repository still clears claim credentials/reason and Trash snapshots,
+withdraws pending claims, and preserves approved self-management authority.
+B2 generation/restore and B3 keying implementations are untouched, as are the
+shared audit repository, PII guard and ordinary-read guard. No generic scrubber.
+
+The new data-only migration 20260911110000_selfmanaged_rejection_audit_minimization
+removes reason and four explicit equivalent rejection-reason keys only from
+selfmanaged.reject detail, irrespective of whether a value looks identifying.
+Rows, actors, timestamps, targets and other structural fields remain intact;
+other event types are untouched. It is atomic/idempotent and reaches orphan
+history too. Old writers must be stopped before migration and restart must use
+the corrected release; no existing host/data was migrated by this task.
+
+The strengthened lifecycle test failed against the unchanged writer: seven
+passed, one failed specifically because the identifying rejection marker remained
+in audit detail after permanent erasure. After correction, eight focused suites
+pass 140/140 with all-table isolation clean, including all eight lifecycle cases.
+Fresh migration 95/95 and both seeds pass. The historical test executes the exact
+SQL against synthetic old records, checks structural and unrelated-row equality,
+claim-rationale preservation, all explicit reason aliases and second-run no-op;
+its transaction ALWAYS rolls back, avoiding the historical audit-fixture hazard.
+
+B3's stale readiness row now distinguishes the ratified keyed-HMAC design from
+outstanding real EMAIL_LOCK_KEY provisioning/stopped-writer rollout. No Production
+readiness is implied. The optional lockUser boolean-return tidy-up is deliberately
+untouched to avoid expanding this correction.
+
+Final full disposable run: 111 test files passed / two skipped; 2,514 assertions
+passed / 17 skipped / zero failures (467.44 seconds), all-table isolation clean.
+Required real-edge browser 193/193; fresh migrations 95/95 and both seeds passed
+again. Final gates: lint, exact typecheck, backend units 39 files/341 assertions,
+build, all 30 non-link guards, documentation links 1,031/1,031 across 120 files
+and diff checks passed. OpenAPI remains 175 paths/226 operations, TD-3 226/234
+with eight pending/zero undocumented. Prisma schema and generated contract are
+unchanged; container generation succeeded, no additional local format/rebuild
+or separate browser rerun was necessary. Constitution reviewed: existing service
+transaction/audit repository reused; the only new exception is the explicitly
+Owner-ratified historical data minimization, not a generic application API.
+
+B2 remains closed; B3 technically closed; B7's identifying-reason regression
+now closes the local engineering gap. One follow-up local commit above 6dd41e7,
+never amended/squashed; no push/deployment. No Owner data, Staging or Production
+was changed. Historical real-host reason removal, real EMAIL_LOCK_KEY provisioning
+and stopped-writer rollout remain separately authorized operational work. B1/B4/
+B5/B6/B8 remain unresolved and HIGH findings outside scope. Not Production approval.

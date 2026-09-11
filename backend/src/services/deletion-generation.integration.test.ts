@@ -136,8 +136,13 @@ describe('B2/B3/B7 — one generation-safe account lifecycle', () => {
     const user = await person(); const parent = await person();
     await prisma.familyLink.create({ data: { parentId: parent.id, studentId: user.id, status: 'approved' } });
     const claim = await pending(user);
+    const rejectionReason = `b7-rejection-pii:${claim.id} البريد المؤكد هو ${claim.email}`;
     if (status === 'approved') await approveSelfManagedClaim(prisma, actor, claim.id);
-    if (status === 'rejected') await rejectSelfManagedClaim(prisma, actor, claim.id, 'fixture refusal');
+    if (status === 'rejected') {
+      await rejectSelfManagedClaim(prisma, actor, claim.id, rejectionReason);
+      expect(await prisma.selfManagedClaim.findUniqueOrThrow({ where: { id: claim.id } }))
+        .toMatchObject({ decisionReason: rejectionReason, status: 'rejected', deletedAt: expect.any(Date) });
+    }
     expect(await isSelfManaged(prisma, user.id)).toBe(status === 'approved');
     await deleteUserAccount(prisma, actor, user.id);
     await expect(assertFreshActive(prisma, user.id, ['student'])).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -151,7 +156,8 @@ describe('B2/B3/B7 — one generation-safe account lifecycle', () => {
       .rejects.toMatchObject({ details: { reason: 'STALE_DELETION' } });
     expect((await prisma.selfManagedClaim.findUniqueOrThrow({ where: { id: claim.id } })).email).toBe(claim.email);
     await prisma.trash.create({ data: { targetEntity: 'SelfManagedClaim', targetId: claim.id,
-      snapshot: { email: claim.email, provider_subject_id: claim.providerSubjectId }, purgeAfter: current.purgeAfter } });
+      snapshot: { email: claim.email, provider_subject_id: claim.providerSubjectId,
+        decisionReason: status === 'rejected' ? rejectionReason : null }, purgeAfter: current.purgeAfter } });
     await deIdentifyAccountSystem(prisma, user.id, current.id, new Date(current.purgeAfter.getTime() + 1));
     const minimized = await prisma.selfManagedClaim.findUniqueOrThrow({ where: { id: claim.id } });
     expect(minimized).toMatchObject({ email: null, providerSubjectId: null, decisionReason: null, status });
@@ -167,8 +173,16 @@ describe('B2/B3/B7 — one generation-safe account lifecycle', () => {
     // payloads, not merely the now-null credential columns. Related snapshots
     // and UserIdentity rows are asserted absent above.
     const retained = JSON.stringify({ erasedUser, minimized, history });
+    expect(retained).not.toContain(rejectionReason);
     expect(retained).not.toContain(claim.email);
     expect(retained).not.toContain(claim.providerSubjectId);
+    if (status === 'rejected') {
+      const decisionAudit = history.find((row) => row.actionType === 'selfmanaged.reject');
+      expect(decisionAudit).toMatchObject({ actorUserId: admin.id, targetId: claim.id,
+        targetEntity: 'SelfManagedClaim', createdAt: expect.any(Date),
+        detail: { beneficiary_id: user.id } });
+      expect(decisionAudit?.detail).not.toHaveProperty('reason');
+    }
     if (status === 'approved') {
       expect(await prisma.normalizedEmailLock.findUnique({ where: { emailDigest: emailLockDigest(claim.email) } })).not.toBeNull();
     }

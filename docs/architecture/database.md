@@ -661,6 +661,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260909120000_r138_session_title
 20260909132600_r138_legal_documents
 20260911100000_deletion_generation_identity_minimization
+20260911110000_selfmanaged_rejection_audit_minimization
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -703,6 +704,16 @@ same 26 unrelated SQL/Prisma table differences before and after this batch (name
 indexes, defaults, raw-SQL FKs/types); it is **not** a globally empty schema diff.
 Those existing differences require separate review, not a generated corrective
 migration or `db push` here.
+
+R141's subsequent data-only migration removes only the top-level `reason`,
+`decisionReason`/`decision_reason` and `rejectionReason`/`rejection_reason`
+fields on `selfmanaged.reject` audit events. The implemented writer historically
+used `reason`; the explicit aliases cover equivalent rejection-reason keys.
+No value-content/PII guessing, row deletion, unrelated action rewrite or schema
+change occurs. The update is atomic and idempotent, and does not require a live
+claim or beneficiary to exist. Stop old writers before applying it and restart
+only the corrected release so an old binary cannot reintroduce reason copies.
+Live-host execution remains a separately authorized operation.
 
 ### Filename order is apply order — and it bit us
 

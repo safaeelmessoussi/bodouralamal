@@ -2041,6 +2041,42 @@ timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
 Do not rerun against Owner-populated localhost, bypass the execution rejection,
 or report the earlier passing version as proof of the final repository move.
 
+## R141 self-managed rejection audit follow-up
+
+The prior B7 lifecycle fixture used a non-identifying refusal and missed the
+second copy in audit detail. It now rejects with `b7-rejection-pii:` plus a
+fixture-specific identifier and email, confirms rationale is retained on the
+claim before erasure, then searches retained User/claim/audit data after the
+delete/restore/re-delete/final-erasure sequence. Claim Trash also contains the
+reason and must disappear. Actor/claim/beneficiary/time evidence survives; the
+approved case still proves structural self-management authority.
+
+Before the writer correction, the exact disposable lifecycle suite failed at
+the post-erasure marker assertion (**7 passed / 1 failed**). This is independent
+of the earlier ordinary-read guard failure; that guard remains unchanged.
+
+`self-managed-audit-migration.integration.test.ts` executes the exact R141
+data-only SQL migration over synthetic historical events. It checks all five
+explicit reason keys, identifying and ordinary values, orphan targets, actor and
+timestamp preservation, unrelated action preservation, unchanged claim rationale
+and a second-run no-op. The entire test transaction is **always rolled back**:
+the platform-wide migration must never persist fixture or ambient audit updates
+in a test. Lock/statement/transaction timeouts bound it. No value-based PII scrubber
+or generic audit-mutation API is introduced.
+
+Focused current-code proof: **140/140 across eight suites**, all-table isolation
+clean; the fresh disposable stack applied **95/95** migrations and both seeds.
+The eight suites were deletion-generation, self-managed-claim, self-management,
+account-closure, user-management HTTP, trash-coverage, audit-purge and
+self-managed-audit-migration. The exact ordinary-read guard and shared audit
+repository/PII guard are unchanged. Final full disposable integration passed
+**2,514 tests / 17 skipped**, 111 files passed / two skipped (467.44 s), with
+all-table isolation clean and **193/193** real-edge browser checks. The fresh
+stack again applied **95/95** migrations and both seeds. Backend lint, exact
+typecheck, **341/341** units, build, all 30 non-link guards, **1,031/1,031** doc
+links and diff checks pass. No shared-audit, ordinary-read-guard, B2/B3, frontend
+or API-contract implementation changed. This is local verification, not rollout.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its
