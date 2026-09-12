@@ -2077,6 +2077,156 @@ typecheck, **341/341** units, build, all 30 non-link guards, **1,031/1,031** doc
 links and diff checks pass. No shared-audit, ordinary-read-guard, B2/B3, frontend
 or API-contract implementation changed. This is local verification, not rollout.
 
+## B4/B5/B6 storage retirement and Event scope (2026-09-12)
+
+The parent visibility move copied to a shared destination and deleted that same
+coordinate on an optimistic-lock loss. The new barrier-controlled regression
+requires one winner, an unchanged byte stream at its fresh canonical key, and a
+safe same-visibility retry. Real-store cases cover post-copy publication failure,
+lost copy response, exact orphan cleanup and stale retirement of a live canonical
+coordinate. No parent commit was reverted to manufacture a negative proof.
+
+`storage-retirement.integration.test.ts` drives the production worker catalog
+against PostgreSQL/MinIO/pg-boss: duplicate delivery while active, fixed-code
+failure evidence beyond five attempts, disappearance of execution history,
+reconciliation, lost delete response, legacy import and queue-absence rollback.
+The queue fixture always rolls back, including if the expected failure stops
+occurring. Fixture teardown removes only explicitly owned content obligations;
+the all-table guard includes the new table, without exemptions.
+
+Consent tests preserve the globally ordered shared-Session locking assertion and
+add revocation immediately before/after stale migration completion. Completion
+must recheck under the Content lock, and a later authorized transition must renew
+an old completed obligation. The existing isolated storage-lifecycle drill adds
+the equivalent later-purge case and passes **5/5**, including real worker restart,
+replacement quarantine failure, missing queue, strict staging GC and exact-key
+ambiguous deletion. Its fixture now uses a valid same-origin configuration and
+inserts the exact signed-ticket staging object internally; it does **not** claim
+an Nginx proof. The separate content suite continues real presigned PUTs through
+the production edge.
+
+B6 tests send crafted mixed/foreign branches through HTTP, check total rollback,
+retain explicit all-permitted-branch expansion and reject PATCH scope keys.
+Service tests pin foreign/mixed groups and recurrence; Teacher definition tests
+distinguish complete own-group authority, live responsibility, unrelated global
+definitions, hidden assistants and date filtering. Public calendar code is unchanged.
+
+Current focused proof: **189/189 across eight suites**, clean all-table isolation,
+**193/193** real-edge browser checks, fresh **96/96** migrations and both seeds.
+The populated **95→96** rehearsal preserves a legacy User and exact failed-job
+payload byte-for-byte, imports idempotently, removes only its fixture job and
+proves the obligation/locator survives; the SQL locator constraint fails closed.
+
+Earlier checkpoints are not acceptance of the final code: 176/177 exposed duplicate
+wakeup accounting; a later 180/182 run exposed the queue fixture's schedule FK and
+the added hidden-assistant exclusion; 181/182 still exposed wakeup duplication
+behind an active job. Obligations now own initial/renewal wakeups, with explicit
+backlog recovery. The interrupted affected-only retry finished **97/97**, clean,
+before the final revocation/purge renewal cases above. The standalone drill first
+failed configuration validation, then passed 4/4 and finally the expanded 5/5.
+No guard or authorization boundary was weakened to resolve these failures.
+
+The first full run passed **2,529**, failed one and skipped 18 (111 passing
+files / one failing / two skipped), with clean all-table isolation and browser
+**193/193**. The calendar operational-boundary fixture attempted creation before
+its sole branch was operational. It now enters that historical Event after the
+branch opens, preserving every read assertion and the real creation policy.
+Final review also serialized concurrent retirement wakeups on their own row:
+ordinary pg-boss queues do not uniquely constrain `singleton_key`. The outbox
+suppresses active exact-operation duplicates while ordinary full-recompute queues
+retain their followup semantics. Reconciliation/import releases each record's
+transaction before the next, avoiding multi-record lock cycles with publication.
+The affected five-suite retry passed **129/129**, isolation clean and browser
+**193/193**, including explicit concurrent/active wakeup coverage.
+
+Bounded reproduction (disposable infrastructure only):
+
+```bash
+timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
+  src/services/content.integration.test.ts \
+  src/services/storage-retirement.integration.test.ts \
+  src/services/consent-safeguarding.integration.test.ts \
+  src/services/event.integration.test.ts \
+  src/services/event-list.integration.test.ts \
+  src/services/event-staff.integration.test.ts \
+  src/controllers/event.http.integration.test.ts \
+  src/services/trash-coverage.integration.test.ts
+timeout --kill-after=15s 300s bash scripts/storage/verify-storage-lifecycle.sh
+(cd backend && timeout --kill-after=15s 240s node --import tsx \
+  ../scripts/test/verify-storage-retirement-upgrade.mjs)
+timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
+```
+
+The pre-late-copy-fix full run completed successfully: **2,531 passed / 18 skipped**,
+**112 files passed / two skipped**, **258.36 seconds**, all-table isolation clean,
+browser **193/193**, fresh **96/96** migrations and both seeds. Its start was
+2026-09-12 09:33:19 Africa/Casablanca; the then-current runtime files predated that
+start (latest retirement repository change: 09:31:52). The recovered command
+exited zero. Final lint/typecheck/build and all **30 non-link guards** also passed;
+backend units remain **341/341**. OpenAPI remains 175 paths / 226 operations;
+TD-3 remains **226/234**, eight pending, zero undocumented endpoints.
+
+Final review then identified a missing ordering: DB locks could expire while a
+remote COPY was still pending; cleanup could clear an absent destination's only
+locator before late bytes appeared. The original copy-then-error test did not
+cover it. The first continuation stopped without committing when the command
+approval service exhausted capacity (links then **1,037/1,037**); that interruption
+is not acceptance of the later code.
+
+The next continuation **reproduced the defect before changing production code**:
+one targeted assertion failed because the intent already had `completedAt` while
+the copy was still held behind a barrier (68 other assertions skipped). The
+barrier models an accepted request's delayed remote effect; real MinIO performs
+the COPY only after caller failure and absent cleanup. This is deterministic
+failure injection, not a claim that a real network timeout was induced.
+
+The correction adds only `copy_settled` to the existing, still-uncommitted
+migration 96. Publication uses a one-attempt S3 client, verified by the regression;
+normal storage/presigning clients are unchanged. Unknown absence stays pending.
+Positive settlement commits before destructive I/O, and SQL rejects completion
+while the flag is false. The delayed-copy regression removes its own job history,
+reconciles while absent, releases the real copy, publishes a fresh winning key,
+then proves late-orphan retirement without deleting the winner. Additional real
+tests prove confirmed settlement survives a lost delete response, unknown absence
+cannot complete, and positive no-dispatch evidence permits absent completion.
+
+The two affected suites pass **77/77**, all-table isolation clean, browser
+**193/193**. The lifecycle drill passes **5/5** again; populated **95→96** passes
+with the new SQL copy-state check and unchanged legacy data. Exact typecheck
+initially found the unit fixture's missing new client property; that fixture was
+adapted without changing its behavior. No arbitrary grace period, cancellation assumption,
+second cleanup system or new destruction policy was introduced.
+
+Final affected batch: **193/193 across eight suites**, clean isolation and browser
+**193/193**. Final exact-code full disposable gate: **2,534 passed / 18 skipped /
+zero failures**, **112 files passed / two skipped**, **299.42 seconds** (start:
+2026-09-12 10:17:34 Africa/Casablanca), browser **193/193**, all-table isolation
+clean. Fresh **96/96** migrations and both seeds passed. The interrupted command
+exited zero; the next continuation matched the tracked runtime diff hash and all
+six intended new-file hashes before reusing the result. No code changed afterward.
+
+Final gates: backend lint, exact typecheck, **341/341** units (39 files), build,
+Prisma format/validate/generate, **30 non-link guards**, shell/Node syntax,
+**1,038/1,038** documentation links and diff checks passed. The first guard
+invocation hit a sandbox `tsx` IPC-socket denial, not a code failure; the approved
+retry passed without changing a gate. OpenAPI remains 175 paths / 226 operations,
+TD-3 **226/234** with the same eight pending and zero undocumented endpoints.
+
+Independent read-only Docker/process inventory found no disposable test containers,
+project volumes/networks/images or active test processes. Remaining anonymous
+volumes predate this batch (latest 2026-09-09); none was removed. All six new
+files are implementation/migration/test support, not generated residue. The
+complete diff was reviewed for scope, migration ordering, canonical protection,
+PII, fixture ownership and guard weakening. The new operational state stays in
+the shared repository/service lifecycle; no UI/API/audit framework was duplicated,
+no SRS or frontend contract changed, and no new constitution exception is required.
+B4/B5/B6 are locally accepted at this boundary; one local commit, no push.
+
+[Pre-maintenance legacy import](../operations/runbooks.md#b5-retirement-backlog-and-rollout)
+remains a separately authorized operational prerequisite. Unobservable copy
+outcomes retain their operational locator; a healthy worker is not a claim that
+the domain backlog is empty. This evidence is not Production approval.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

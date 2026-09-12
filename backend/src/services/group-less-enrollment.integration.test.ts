@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
+import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
@@ -84,6 +85,7 @@ async function clear(): Promise<void> {
   await prisma.recurringCourseSchedule.deleteMany({
     where: { id: { in: sids } },
   });
+  await clearTestContentRetirements(prisma, { title: { startsWith: TAG } });
   await prisma.educationalContent.deleteMany({
     where: { title: { startsWith: TAG } },
   });

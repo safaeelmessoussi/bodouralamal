@@ -47,26 +47,32 @@ export const JOB_QUEUES = {
    * efficiency, not the guarantee.
    */
   sessionRecordingIngest: 'session-recording-ingest',
-  /** Manual R59.1 permanent-delete storage retirement. The same TD-7 queue is
-   * reserved for age-based BR-15 destruction, but automatic retention remains
-   * disabled until the Document Owner authorises it (R59.4). */
+  /** Exact authorized storage retirement and backlog reconciliation. Age-based
+   * Trash selection belongs to its separate ratified retention queue. */
   contentQuarantinePurge: 'content.quarantine-purge',
   /** TD-7's bounded abandoned browser/server-finalization staging collector. */
   uploadGc: 'upload.gc',
 } as const;
 
+/** A pre-existing obligation must not hide missing execution infrastructure. */
+export async function assertQueueRegistered(tx: Prisma.TransactionClient, queue: string): Promise<void> {
+  const rows = await tx.$queryRaw<{ present: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM pgboss.queue WHERE name = ${queue}) AS present
+  `;
+  if (rows[0]?.present !== true) throw new Error(`pg-boss queue is not registered: ${queue}`);
+}
+
 /**
- * Enqueues a job inside the caller's transaction.
- *
- * `singletonKey` implements TD-7's *"singleton per group"* rule: several changes
- * affecting one group collapse into a single pending job, which is safe because
- * the handler is a full, idempotent recompute rather than a delta.
+ * Enqueues a job inside the caller's transaction. A singleton deduplicates
+ * pending work while permitting one follow-up behind an active full recompute.
  */
 export async function enqueue(
   tx: Prisma.TransactionClient,
   queue: string,
   data: Record<string, unknown>,
   singletonKey?: string,
+  delaySeconds = 0,
+  deduplicateActive = false,
 ): Promise<boolean> {
   // pg-boss 12 intentionally keeps execution policy on the QUEUE row and its
   // own `send()` copies those values into each job. A three-column raw INSERT
@@ -82,6 +88,7 @@ export async function enqueue(
       name,
       data,
       singleton_key,
+      start_after,
       expire_seconds,
       deletion_seconds,
       keep_until,
@@ -97,6 +104,7 @@ export async function enqueue(
       q.name,
       ${JSON.stringify(data)}::jsonb,
       ${singletonKey ?? null},
+      now() + ${delaySeconds} * interval '1 second',
       q.expire_seconds,
       q.deletion_seconds,
       now() + q.retention_seconds * interval '1 second',
@@ -113,7 +121,8 @@ export async function enqueue(
          SELECT 1 FROM pgboss.job existing
          WHERE existing.name = q.name
            AND existing.singleton_key = ${singletonKey ?? null}
-           AND existing.state IN ('created', 'retry')
+           AND (existing.state IN ('created', 'retry') OR
+                (${deduplicateActive} AND existing.state = 'active'))
        )
     RETURNING 1
     )
@@ -158,4 +167,17 @@ export async function ensureDurableLegacyFollowup(
     await enqueue(tx, queue, data, singletonKey);
     return true;
   });
+}
+
+/** B5 rollout: enumerate exact historical execution payloads before retention
+ * can remove their only locator. Kept at the pg-boss repository boundary. */
+export async function legacyStorageJobs(prisma: PrismaClient, cursor?: string) {
+  return prisma.$queryRaw<{ id: string; data: Prisma.JsonObject }[]>`
+    SELECT id, data FROM pgboss.job
+    WHERE name IN ('content.quarantine-purge', 'content.bucket-migrate')
+      AND data->>'content_id' IS NOT NULL
+      AND (data->>'storage_key' IS NOT NULL OR data->>'source_key' IS NOT NULL)
+      AND (${cursor ?? null}::uuid IS NULL OR id > ${cursor ?? null}::uuid)
+    ORDER BY id LIMIT 250
+  `;
 }

@@ -205,12 +205,48 @@ export async function createEvent(
   return prisma.$transaction(async (tx) => {
     await assertMayScope(tx, actor, input);
 
-    // An Admin may only attach branches inside their own scope; a global event
-    // from a branch-scoped Admin means "all of MY operational branches".
+    // Authorize the requested set BEFORE the operational-date projection.
+    // Filtering foreign branches could turn a refused request into Global.
+    const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+    if (isAdmin(actor) && reachable !== null &&
+        input.branchIds?.some((id) => !reachable.includes(id))) {
+      throw new AppError('NOT_FOUND', 'branch not found');
+    }
+    if (input.global && input.branchIds?.length) {
+      throw new AppError('VALIDATION_FAILED', 'choose explicit branches or all permitted branches');
+    }
     let branchIds = await resolveBranches(tx, input, today);
-    if (!isSuperAdmin(actor)) {
-      const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
-      if (reachable !== null) branchIds = branchIds.filter((b) => reachable.includes(b));
+    if (input.global && reachable !== null) {
+      // R139 explicitly defines global:true as all MY permitted branches for
+      // a scoped Admin. This is expansion of an explicit choice, not silently
+      // dropping part of a requested set.
+      branchIds = branchIds.filter((b) => reachable.includes(b));
+    }
+    if ((input.global || input.branchIds?.length) && branchIds.length === 0) {
+      throw new AppError('NOT_FOUND', 'no operational branch in the requested scope');
+    }
+    if (input.branchIds?.length) {
+      const live = await tx.branch.count({
+        where: { id: { in: [...new Set(input.branchIds)] }, deletedAt: null },
+      });
+      if (live !== new Set(input.branchIds).size) throw new AppError('NOT_FOUND', 'branch not found');
+    }
+    const [categories, levels, groups] = await Promise.all([
+      tx.category.count({ where: { id: { in: input.categoryIds ?? [] }, deletedAt: null } }),
+      tx.level.count({ where: { id: { in: input.levelIds ?? [] }, deletedAt: null } }),
+      tx.administrativeGroup.findMany({
+        where: { id: { in: input.groupIds ?? [] }, deletedAt: null },
+        select: { id: true, branchId: true },
+      }),
+    ]);
+    if (categories !== new Set(input.categoryIds ?? []).size ||
+        levels !== new Set(input.levelIds ?? []).size ||
+        groups.length !== new Set(input.groupIds ?? []).size ||
+        (isAdmin(actor) && reachable !== null && groups.some((g) => !reachable.includes(g.branchId)))) {
+      throw new AppError('NOT_FOUND', 'event scope not found');
+    }
+    if (isAdmin(actor) && reachable !== null && branchIds.length === 0 && groups.length === 0) {
+      throw new AppError('FORBIDDEN', 'an explicit permitted branch scope is required');
     }
 
     // R110 — checked before the row is written, so a bad type is a coded
@@ -940,6 +976,24 @@ export async function listEvents(
   }
 
   const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+  const teacherScope = !isAdmin(actor) ? await teacherEventScope(prisma, actor.userId) : null;
+
+  const authorization: Prisma.EventWhereInput = teacherScope === null
+    ? (reachable === null ? {} : {
+        OR: [{ branchScopes: { none: {} } }, { branchScopes: { some: { branchId: { in: reachable } } } }],
+      })
+    : {
+        OR: [
+          { staff: { some: { userId: actor.userId, deletedAt: null } } },
+          {
+            branchScopes: { none: {} }, categoryScopes: { none: {} }, levelScopes: { none: {} },
+            administrativeGroupScopes: {
+              some: { administrativeGroupId: { in: teacherScope.administrativeGroupIds } },
+              every: { administrativeGroupId: { in: teacherScope.administrativeGroupIds } },
+            },
+          },
+        ],
+      };
 
   const where: Prisma.EventWhereInput = {
     deletedAt: null,
@@ -959,12 +1013,14 @@ export async function listEvents(
         }
       : {}),
     // **Applied last so an explicit filter NARROWS a scoped caller's reach and
-    // never widens it** — the same discipline `listCourseSchedules` uses. A
-    // Global event (no branch join at all) is visible to everyone, because it
-    // belongs to every branch rather than to none (§4.4).
-    ...(reachable === null
-      ? {}
-      : { OR: [{ branchScopes: { none: {} } }, { branchScopes: { some: { branchId: { in: reachable } } } }] }),
+    // never widens it** — the same discipline `listCourseSchedules` uses.
+    // Global definitions remain in the Admin projection. Teacher definitions
+    // require their own group/responsibility boundary, and R109 excludes hidden
+    // items unless they are the responsible person (never merely an assistant).
+    AND: [authorization, ...(teacherScope === null ? [] : [{ OR: [
+      { visibility: { not: 'hidden' as const } },
+      { staff: { some: { userId: actor.userId, deletedAt: null, position: 'responsible' as const } } },
+    ] }])],
   };
 
   const window = pageWindow(filters);

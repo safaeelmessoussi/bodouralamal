@@ -15,6 +15,7 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  listEvents,
   updateEvent,
   type EventInput,
 } from "./event.service.js";
@@ -220,13 +221,9 @@ describe("§4.4 — scope joins are materialised at creation", () => {
 
   it("a not-yet-operational branch named explicitly is still excluded", async () => {
     const future = await makeBranch("أكادير", day("2026-12-01"));
-    const created = await createEvent(
-      prisma,
-      superAdmin(),
-      eventInput({ branchIds: [future] }),
-      TODAY,
-    );
-    expect(created.attached.branches).toBe(0);
+    await expect(createEvent(prisma, superAdmin(), eventInput({ branchIds: [future] }), TODAY))
+      .rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await prisma.event.count({ where: { title: { startsWith: TAG } } })).toBe(0);
   });
 
   it("duplicate scope ids collapse rather than duplicating rows", async () => {
@@ -315,6 +312,37 @@ describe("§4.4 — recurrence is stored and validated", () => {
 });
 
 describe("TD-2 — who may schedule", () => {
+  it('B6: Teacher definition reads use the complete own-group boundary, not audience intersection', async () => {
+    const branchId = await makeBranch('تعريفات');
+    const mine = await makeGroup(branchId);
+    const foreign = await makeGroup(branchId);
+    const teacherId = await teacherUser('تعريفات');
+    await staffSchedule(prisma, contexts.get(mine)!, teacherId);
+    const teacher: Actor = { userId: teacherId, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] };
+    const own = await createEvent(prisma, teacher, eventInput({ groupIds: [mine] }), TODAY);
+    const mixed = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine, foreign] }), TODAY);
+    const wider = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine], branchIds: [branchId] }), TODAY);
+    const ids = (await listEvents(prisma, teacher, {})).data.map((event) => event.id);
+    expect(ids).toContain(own.event.id);
+    expect(ids).not.toContain(mixed.event.id);
+    expect(ids).not.toContain(wider.event.id);
+    await expect(createEvent(prisma, teacher, eventInput({ groupIds: [mine, foreign] }), TODAY))
+      .rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('B6: foreign/mixed group scope is refused atomically for a branch-scoped Admin', async () => {
+    const branchId = await makeBranch('مسموح');
+    const foreignBranch = await makeBranch('خارج النطاق');
+    const mine = await makeGroup(branchId);
+    const foreign = await makeGroup(foreignBranch);
+    for (const groupIds of [[foreign], [mine, foreign]]) {
+      await expect(createEvent(prisma, admin([branchId]), eventInput({ groupIds }), TODAY))
+        .rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
+    expect(await prisma.event.count({ where: { title: { startsWith: TAG } } })).toBe(0);
+    expect((await createEvent(prisma, admin([branchId]), eventInput({ groupIds: [mine] }), TODAY)).attached.groups).toBe(1);
+  });
+
   it("a Teacher may create an event scoped to their OWN group, hidden included", async () => {
     const branchId = await makeBranch("مراكش");
     const groupId = await makeGroup(branchId);

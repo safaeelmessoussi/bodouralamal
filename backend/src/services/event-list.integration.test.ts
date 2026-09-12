@@ -153,6 +153,27 @@ describe("the date window filters by OVERLAP", () => {
 });
 
 describe("branch narrowing (TD-2)", () => {
+  it('B6: Teacher definitions require own groups or live EventStaff, not merely a Teacher role', async () => {
+    const unrelated = await makeEvent('unrelated global definition', '2026-09-01');
+    const mine = await makeEvent('my responsibility', '2026-09-01');
+    await prisma.eventStaff.create({ data: { eventId: mine, userId: actorId, position: 'responsible' } });
+    const teacher = actorOf([{ role: 'teacher', branches: null }]);
+    const result = await listEvents(prisma, teacher, {});
+    expect(result.data.map((e) => e.id)).toContain(mine);
+    expect(result.data.map((e) => e.id)).not.toContain(unrelated);
+    await prisma.event.update({ where: { id: mine }, data: { visibility: 'hidden' } });
+    expect((await listEvents(prisma, teacher, {})).data.map((e) => e.id)).toContain(mine);
+    await prisma.eventStaff.updateMany({ where: { eventId: mine }, data: { position: 'assistant' } });
+    expect((await listEvents(prisma, teacher, {})).data.map((e) => e.id)).not.toContain(mine);
+    await prisma.eventStaff.updateMany({ where: { eventId: mine }, data: { deletedAt: new Date() } });
+    expect((await listEvents(prisma, teacher, {})).data.map((e) => e.id)).not.toContain(mine);
+  });
+
+  it('B6: branch authorization cannot overwrite the date-window predicate', async () => {
+    const past = await makeEvent('ended scoped definition', '2020-01-01', { branchIds: [branchA] });
+    const result = await listEvents(prisma, scopedAdmin(branchA), { from: new Date('2026-01-01') });
+    expect(result.data.map((e) => e.id)).not.toContain(past);
+  });
   it("shows a scoped Admin their own branch and not another", async () => {
     await makeEvent("في أ", "2026-09-01", { branchIds: [branchA] });
     await makeEvent("في ب", "2026-09-01", { branchIds: [branchB] });

@@ -144,6 +144,7 @@ async function makeAdminGroup(branchId: string): Promise<string> {
 async function makeEvent(
   visibility: "public" | "private" | "hidden",
   over: Record<string, unknown> = {},
+  today = TODAY,
 ): Promise<string> {
   const created = await createEvent(
     prisma,
@@ -155,7 +156,7 @@ async function makeEvent(
       recurrenceType: "none",
       ...over,
     } as never,
-    TODAY,
+    today,
   );
   return created.event.id;
 }
@@ -578,7 +579,7 @@ describe("§4.4 — operational boundary and range guards", () => {
     await makeEvent("public", {
       startDate: day("2026-06-02"),
       branchIds: [branchId],
-    });
+    }, day("2026-06-15")); // Entered after opening; historical read still excludes pre-opening dates.
 
     const rows = await readCalendar(
       prisma,

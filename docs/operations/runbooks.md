@@ -165,18 +165,15 @@ explicit leaf plans. Parent Level/Subject purges use only child ids captured in 
 snapshot; they never issue a broad delete by foreign key.
 
 The deliberate action is storage-durable for `EducationalContent`: its transaction inserts an
-exact `content.quarantine-purge` obligation before deleting the content row and Trash locator.
+exact `StorageRetirement` record and `content.quarantine-purge` wakeup before deleting the content row and Trash locator.
 If the queue is absent the whole transaction rolls back; a storage outage or lost delete
-response retries under TD-7. Operators must not manually remove a failed job, because after
-the row is gone that payload is the durable record of the two possible object leftovers.
+response retries under TD-7. After B5 migration/import, pg-boss history is execution evidence,
+not the sole object locator. Never delete an unresolved retirement row to make a dashboard green.
 
-> **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION.** Revisions 52 and 53 state
-> that `content.quarantine-purge` closes BR-15 after 90 days, while R59.4 reserves activating
-> automatic Production destruction to the Document Owner. The queue now processes explicit
-> replacement/deletion/manual-purge coordinates, but it is deliberately not scheduled against
-> `purge_after`; expired Trash remains until a Super Admin acts. Take the object-store and
-> backup/retention decisions and complete a Production-scale restore drill before authorising
-> the automatic arm.
+The B5 reconciliation cron authorizes **no additional destruction**. It retries already
+recorded exact obligations. Age-based Trash selection belongs to the separate ratified
+`trash.retention-purge` lifecycle, with its existing deadlines and exceptions unchanged;
+this is not a new scan of quarantined objects or permission for live-data cleanup.
 
 ---
 
@@ -407,7 +404,9 @@ For `content.bucket-migrate`, inspect `content_id` and the current row before re
 - `consent_forced_private = true`, `visibility = public`, `storage_bucket = public` is a valid
   pending safeguard. Public application reads and Nginx's stable object URL are already
   closed; only the network-internal public-bucket copy remains until migration succeeds.
-- Inspect `source_key` and `operation` in the job payload. An ordinary consent migration must
+- Resolve the job's `retirement_id` to its `StorageRetirement` record. Legacy jobs alone
+  still carry `source_key`; they must be imported before retention can remove them.
+  An ordinary consent migration must
   name the row's current canonical key. `operation = retire_public` is an exact obsolete-key
   obligation after replacement/deletion and must never be rewritten to the current key.
 - A private destination with a server SHA-256 and a missing public source is the supported
@@ -416,8 +415,46 @@ For `content.bucket-migrate`, inspect `content_id` and the current row before re
   ambiguous successful delete response. Do not recreate it or delete the replacement key.
 - Never manually set visibility to private before confirming the public object is gone, never
   delete the private canonical object, and never use `upload.gc` for this exact transition.
-- A terminal failure remains in pg-boss after five attempts. Restore MinIO/repair the named
-  inconsistency, then redrive; do not enqueue a general bucket sweep.
+- A terminal job failure does not complete the domain obligation. Restore MinIO/repair the
+  named inconsistency, then reconcile pending records; do not enqueue a general bucket sweep.
+
+### B5 retirement backlog and rollout
+
+Stop old writers/workers, take the ordinary validated backup, apply migration 96, and
+run `importLegacyRetirements` from the built storage-retirement repository **before starting
+pg-boss maintenance on the upgraded host**. It uses the existing queue tables and the same
+transactional enqueue implementation; do not start a parallel worker for this step. Normal
+API startup repeats import and reconciliation idempotently. The early import matters because
+retention may already be due on old failed jobs. Already-expired legacy coordinates cannot be
+reconstructed from hashed audit metadata; investigate any pre-upgrade inventory separately
+under explicit authorization, never guess deletion targets. No live rollout occurred in the
+local B4/B5/B6 verification.
+
+Read pending work without exporting filenames/locators:
+
+```sql
+SELECT id, content_id, operation, bucket, copy_settled, attempts, last_error_code,
+       created_at, next_attempt_at
+FROM storage_retirement
+WHERE completed_at IS NULL
+ORDER BY next_attempt_at, id
+LIMIT 250;
+```
+
+`STORAGE_OPERATION_FAILED` retains the exact operational key for retry; successful
+resolution clears it. The existing quarantine queue's `{operation: 'reconcile'}` handler
+re-enqueues due records in bounded pages, at startup and daily. A healthy worker registry
+does not prove this backlog is empty. Check both, and retain unresolved rows across job
+expiry, terminal failure, restart and backup/restore. The supported handler rechecks current
+canonical authority before any deletion; never replace its coordinate with a newer key.
+
+`COPY_OUTCOME_UNKNOWN` means the placement request may still take effect remotely.
+Do not mark it complete merely because HEAD reports absence, the worker is green,
+or an arbitrary delay elapsed. Normal reconciliation observes a late copy,
+durably records settlement and retires it under canonical-reference protection.
+If no object ever appears and no positive no-dispatch/completion evidence survives,
+the unresolved row is intentional; keep its locator and investigate the specific
+operation rather than inventing an age-based deletion/metadata-expiry rule.
 
 If backup replication has failed twice consecutively, escalate to the owner.
 

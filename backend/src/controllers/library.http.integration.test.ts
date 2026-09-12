@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
+import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
 
@@ -171,6 +172,7 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const levelIds = levels.map((l) => l.id);
+  await clearTestContentRetirements(prisma, { levelId: { in: levelIds } });
   await prisma.educationalContent.deleteMany({
     where: { levelId: { in: levelIds } },
   });

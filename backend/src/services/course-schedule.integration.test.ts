@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
+import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import type { Actor } from "../policies/actor.js";
@@ -137,6 +138,7 @@ async function cleanup(): Promise<void> {
   // Revision 43.4: sessions carry their own staffing snapshot, RESTRICT against
   // Session (TD-5), so it goes before them.
   await prisma.sessionStaff.deleteMany({ where: { session: scheduleWhere } });
+  await clearTestContentRetirements(prisma, { title: { startsWith: TAG } });
   await prisma.educationalContent.deleteMany({
     where: { title: { startsWith: TAG } },
   });

@@ -61,7 +61,7 @@ duplicate concurrent runs.
 | `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
 | `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
-| `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge | Moves one immutable old key to quarantine or retires the two exact possible leftovers. The automatic daily `purge_after` scan remains unscheduled pending the R59.4 Owner decision |
+| `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge; daily reconciliation | Moves one immutable old key to quarantine or retires exact leftovers. Its daily trigger retries existing `StorageRetirement` records only; Trash retention authorization remains with `trash.retention-purge` |
 | `upload.gc` | Daily cron | Deletes browser/server-finalization staging **strictly older than 48 h** in bounded durable pages — never younger, and never provider recording staging |
 | `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
@@ -111,22 +111,55 @@ health neither implements them nor invents running handlers for them.
 
 ### Storage lifecycle jobs — bounded sweep versus exact obligation
 
+**B5:** `StorageRetirement` is the authoritative PostgreSQL record for exact work;
+pg-boss is only execution/wakeup. Domain mutations create both transactionally,
+before losing a content/Trash locator. The table deliberately has no FK to a
+purgeable Content row. Job payloads carry structural IDs, never the raw key.
+Completion clears the operational locator while preserving the coordinate digest,
+operation and timestamps. An error retains the locator, increments attempts and
+records a fixed error code; it does not retain the object-store error message.
+An unconfirmed placement with no visible object remains pending with
+`COPY_OUTCOME_UNKNOWN`; that observation may complete its execution job but not
+the domain obligation. Reconciliation keeps revisiting it. Positive copy
+settlement is persisted before deletion, as described in the
+[storage lifecycle](storage.md#exact-retirement-authority-b4b5); a timer never
+stands in for evidence that an in-flight remote operation has stopped.
+
+Startup imports extant legacy exact-key jobs in UUID pages, then re-enqueues due
+unresolved records before readiness. The existing `content.quarantine-purge`
+daily cron performs **only reconciliation of those already-authorized records**,
+not a Trash/object age scan. Five ordinary execution attempts still exhaust the
+pg-boss job; the domain record survives indefinitely unresolved and is eligible
+for later reconciliation. Operators inspect pending records, attempts and fixed
+failure codes and may rerun the same reconciliation handler after recovery.
+Deleting failed pg-boss history does not resolve or erase the obligation. Stop old
+writers and workers for rollout: already-expired pre-upgrade jobs cannot be
+reconstructed from hashed audit coordinates, and any historical orphan inventory
+requires a separately authorized investigation rather than inferred deletion.
+
+Each retirement wakeup locks its authoritative row before inspecting execution
+history, so concurrent reconcilers cannot both insert the same wakeup. Active
+exact-operation work is not duplicated. Page entries use separate transactions;
+they never accumulate retirement locks across unrelated content. Ordinary
+`consent.reevaluate` full-recompute followups keep their existing queue semantics.
+
 `upload.gc` is the age-based collector. Each execution lists at most 250 objects under one of
 the fixed staging scopes, deletes only `LastModified < cutoff`, and enqueues the next opaque
 continuation transactionally. Retrying a page is safe because delete is idempotent. A provider
 recording never enters these prefixes and retains its R100 exact job instead.
 
-`content.quarantine-purge` currently accepts only two explicit operations. A replacement or
-soft deletion transaction enqueues `quarantine_retired_object` with its old bucket/key before
-the row can point elsewhere. A deliberate Super Admin permanent deletion enqueues
+The quarantine worker executes the persisted operation. A replacement or
+soft deletion transaction records `quarantine_retired_object` with its old bucket/key before
+the row can point elsewhere, and enqueues only its retirement ID. A deliberate Super Admin permanent deletion records
 `manual_permanent_delete` before the record and Trash locator disappear. Both validate the
 canonical `content/{content_id}/…` coordinate; the first copies to its deterministic
 quarantine key before deleting the old canonical object, while the second idempotently deletes
-both possible leftovers. After a quarantine move, the worker rechecks whether the content row
-still exists; if a concurrent permanent purge already committed, it immediately retires both
-old coordinates so a late stale quarantine job cannot recreate retained bytes. Storage
-exceptions escape the handler and consume the ordinary TD-7 retry budget. No scheduler or
-handler selects `Trash.purge_after`.
+both possible leftovers. The worker holds the Content lock before the retirement-row lock,
+rechecks the current canonical coordinate and skips deletion of live canonical bytes. If
+permanent purge already committed, it retires both old coordinates so a late stale quarantine
+job cannot recreate retained bytes. Storage
+exceptions escape the handler and consume the ordinary TD-7 retry budget. No storage
+handler selects `Trash.purge_after`; the separate ratified Trash lifecycle does.
 
 Container shutdown is part of the same durability boundary. SIGTERM closes the HTTP listener and
 stops pg-boss polling concurrently, so no new handler starts while requests drain. Active handlers

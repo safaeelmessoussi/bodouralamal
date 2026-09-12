@@ -67,6 +67,9 @@ export interface StorageClients {
   /** Internal client — server-side operations that never leave the network
    *  (ranged GET for magic bytes, HEAD for size, delete). */
   readonly internal: S3Client;
+  /** Placement COPY only: one physical request per unique destination. A
+   * failed request may still finish remotely; never automatically resend it. */
+  readonly singleAttemptInternal: S3Client;
   /** Public-origin client — used ONLY to compute presigned URLs handed to
    *  browsers, so the signature matches what the proxy receives. */
   readonly publicOrigin: S3Client;
@@ -85,6 +88,7 @@ export function createStorageClients(config: AppConfig): StorageClients {
 
   return {
     internal: new S3Client({ ...common, endpoint: config.MINIO_ENDPOINT }),
+    singleAttemptInternal: new S3Client({ ...common, endpoint: config.MINIO_ENDPOINT, maxAttempts: 1 }),
     publicOrigin: new S3Client({ ...common, endpoint: origin }),
     storagePrefix: prefix,
   };

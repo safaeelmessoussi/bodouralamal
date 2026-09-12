@@ -63,6 +63,24 @@ Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSet
 
 ## Entities that carry a design decision
 
+### `StorageRetirement` — operational authority beyond job retention
+
+B4/B5 adds this minimal outbox in migration
+[`20260911130000_durable_storage_retirement`](../../backend/prisma/migrations/20260911130000_durable_storage_retirement/migration.sql).
+It has no FK to purgeable content: the exact deletion coordinate must survive
+the content and Trash rows. SQL constrains operations, buckets, nonnegative
+attempts and pending/resolved locator states. A pending record requires its
+content-prefixed key; completion clears that key. `copy_settled` is false only
+for an unresolved placement attempt; SQL prohibits completing such a record.
+This single additional bit distinguishes an absent object from proof that its
+possible late write has settled. Non-placement/legacy records default true.
+The unique domain-separated
+coordinate/operation digest makes replays idempotent. Only a new authorized,
+Content-locked transition may renew a completed obligation for reused restored
+bytes. See [storage lifecycle jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation)
+for reconciliation and rollout constraints. This is operational state, not a
+new durable audit payload or a new job catalog.
+
 ### `User` — one table, several kinds of person
 
 Staff, parents, adult students, and minors are all `User` rows. What differs is what hangs

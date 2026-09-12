@@ -60,6 +60,8 @@ function fakeRunner() {
 
 function fakePrisma() {
   return {
+    $queryRaw: vi.fn(async () => []),
+    storageRetirement: { findMany: vi.fn(async () => []) },
     session: { findMany: vi.fn(async () => []) },
   } as unknown as PrismaClient;
 }
@@ -140,9 +142,10 @@ describe('job runner startup readiness', () => {
     expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
     expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
     expect(boss.schedule).toHaveBeenCalledWith(QUEUES.uploadGc, '30 3 * * *');
-    expect(boss.schedule).not.toHaveBeenCalledWith(
+    expect(boss.schedule).toHaveBeenCalledWith(
       QUEUES.contentQuarantinePurge,
-      expect.anything(),
+      '30 3 * * *',
+      { operation: 'reconcile' },
     );
   });
 

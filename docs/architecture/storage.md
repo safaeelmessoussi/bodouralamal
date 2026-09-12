@@ -398,6 +398,46 @@ compatible — it is a drop-in change to the upload path only.
 
 ## Keys
 
+### Exact retirement authority (B4/B5)
+
+Visibility moves mint a fresh immutable destination key per attempt; they never
+reuse a destination another request can adopt. A `StorageRetirement` placement
+intent commits before the copy. Publication and cleanup serialize on the Content
+row then that intent, so a completed cleanup cannot subsequently be adopted. The
+winning transaction resolves its intent and commits the exact old-coordinate
+retirement. Failures leave an actionable obligation, not a guessed object scan.
+The same-bucket metadata path remains copy-free.
+
+Each placement intent starts with `copy_settled = false`, durably **before** any
+write. Its destination has one possible writer: a single-attempt internal COPY
+client, with SDK retries disabled for this operation only. A request failure,
+process death or database lock loss cannot prove that remote COPY stopped.
+An absent object therefore leaves the intent pending as `COPY_OUTCOME_UNKNOWN`;
+neither elapsed time nor repeated absence clears its locator.
+
+Settlement requires positive evidence: the original callback finished without
+dispatching a COPY, that COPY returned success, or a later HEAD observes its
+unique destination. This relies on the store's atomic single-object COPY and
+strong read-after-write semantics, not a cancellation assumption. The observed
+settlement is committed **before** deletion, so a lost delete response can safely
+converge on a later absent-object retry. Publication still adopts under the
+Content/intent locks; cleanup rechecks canonical authority after settlement.
+Retrying publication always creates a new intent/key, never resends the old COPY.
+
+The one-attempt setting follows the [SDK retry contract](https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html);
+the storage requirement is the [atomic CopyObject contract](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html).
+It does not select a new vendor. An unknown write that never appears remains an
+actionable operational record, not falsely completed work. See the
+[deterministic race proof](../development/testing.md#b4b5b6-storage-retirement-and-event-scope-2026-09-12).
+
+The domain record, not pg-boss history, owns required retirement after replacement,
+deletion or purge. Pending records retain the exact operational locator needed to
+act; completed records clear that locator and retain structural identifiers and a
+coordinate digest. Neither filenames nor raw keys are copied into audit detail or
+new job payloads. See [background jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation)
+for retries, legacy import and reconciliation. This is not permission to inspect
+or delete unclassified objects on an existing host.
+
 ```
 content/{content_id}/{version-segment}/{original-filename-slugified}.{ext}
 staging/content/{content_id}/{unguessable-nonce}/{original-filename-slugified}.{ext}

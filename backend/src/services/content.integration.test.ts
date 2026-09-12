@@ -9,6 +9,7 @@ import { issueNewSession } from './refresh-token.service.js';
 
 import {
   DeleteObjectCommand,
+  CopyObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -50,6 +51,9 @@ import {
   staff,
 } from "../test-support/educational-fixture.js";
 import { MD5_COLLISION_PDFS } from "../test-support/md5-collision-pdf.js";
+import { clearTestRetirements } from '../test-support/storage-retirement.js';
+import { requireRetirement, reconcileRetirements } from '../repositories/storage-retirement.repository.js';
+import { executeRetirement } from './storage-retirement.service.js';
 import {
   abortUpload,
   completeUpload,
@@ -268,6 +272,7 @@ async function clear(): Promise<void> {
       quarantineKeyFor(content.id, content.storageKey),
     );
   }
+  await clearTestRetirements(prisma, [...createdContentIds, ...contents.map((c) => c.id)]);
   for (const object of objectsToClean.values()) {
     await deleteObject(clients, object.bucket, object.key);
   }
@@ -829,14 +834,133 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
       select: { visibility: true, storageBucket: true, storageKey: true },
     });
     expect(after.visibility).toBe("public");
-    // B-02 — the bucket followed the database, and the key is unchanged (TD-9:
-    // the key never carries visibility).
+    // B4: the new immutable placement belongs to this operation alone. The
+    // key carries no visibility, and canonical bytes remain unchanged.
     expect(after.storageBucket).toBe(BUCKETS.public);
-    expect(after.storageKey).toBe(before.storageKey);
+    expect(after.storageKey).not.toBe(before.storageKey);
 
     // The object is readable at its new placement, and gone from the old one.
     expect(await statObjectStrict(clients, BUCKETS.public, after.storageKey)).not.toBeNull();
     expect(await statObjectStrict(clients, BUCKETS.private, before.storageKey)).toBeNull();
+  });
+
+  it('B4: a barrier-controlled losing visibility update cannot delete the winner', async () => {
+    const { id } = await uploadPdf(admin(), 'B4 immutable placement', { visibility: 'private' });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const source = await clients.internal.send(new GetObjectCommand({ Bucket: before.storageBucket, Key: before.storageKey }));
+    const bytes = await source.Body!.transformToByteArray();
+    const afterSnapshot = twoPartyBarrier();
+    const outcomes = await Promise.allSettled([1, 2].map(() =>
+      updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' }, { afterSnapshot })));
+    expect(outcomes.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find((r) => r.status === 'rejected')).toMatchObject({ reason: { code: 'VERSION_CONFLICT' } });
+    const winner = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const object = await clients.internal.send(new GetObjectCommand({ Bucket: winner.storageBucket, Key: winner.storageKey }));
+    expect(await object.Body!.transformToByteArray()).toEqual(bytes);
+    expect(winner.storageKey).not.toBe(before.storageKey);
+    await updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' });
+    expect((await prisma.educationalContent.findUniqueOrThrow({ where: { id } })).storageKey).toBe(winner.storageKey);
+  });
+
+  it('B4: a failure after copy leaves the original canonical and retires the exact orphan', async () => {
+    const { id } = await uploadPdf(admin(), 'B4 rollback', { visibility: 'private' });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    await expect(updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' }, {
+      beforePublish: async () => { throw new Error('simulated database publication failure'); },
+    })).rejects.toThrow('simulated database publication failure');
+    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id } })).toEqual(before);
+    expect(await statObjectStrict(clients, before.storageBucket, before.storageKey)).not.toBeNull();
+    expect(await keysUnder(BUCKETS.public, `content/${id}/`)).toHaveLength(0);
+    const intent = await prisma.storageRetirement.findFirstOrThrow({ where: { contentId: id, operation: 'placement_attempt' } });
+    expect(intent.completedAt).not.toBeNull();
+    expect(intent.storageKey).toBeNull();
+  });
+
+  it('B4: ambiguous copy success is retired without damaging the source; a retry publishes fresh bytes safely', async () => {
+    const { id } = await uploadPdf(admin(), 'B4 ambiguous copy', { visibility: 'private' });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const ambiguous = { ...clients, singleAttemptInternal: { send: async (command: unknown) => {
+      const result = await clients.singleAttemptInternal.send(command as never);
+      if (command instanceof CopyObjectCommand) throw new Error('synthetic lost copy response');
+      return result;
+    } } as unknown as StorageClients['internal'] };
+    await expect(updateContentMetadata(prisma, ambiguous, admin(), id, { visibility: 'public' }))
+      .rejects.toThrow('synthetic lost copy response');
+    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id } })).toEqual(before);
+    expect(await keysUnder(BUCKETS.public, `content/${id}/`)).toHaveLength(0);
+    await updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' });
+    const after = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    expect(await statObjectStrict(clients, after.storageBucket, after.storageKey)).not.toBeNull();
+  });
+
+  it('B4/B5: a late copy after caller failure remains actionable through absent cleanup and job-history loss', async () => {
+    expect(await clients.singleAttemptInternal.config.maxAttempts()).toBe(1);
+    const { id } = await uploadPdf(admin(), 'B4 late copy', { visibility: 'private' });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    let late: Promise<unknown> | undefined;
+    let destinationKey: string | undefined;
+    let started = false;
+    const delayed = { send: async (command: unknown) => {
+      if (command instanceof CopyObjectCommand) {
+        started = true;
+        destinationKey = command.input.Key!;
+        // Model an accepted remote request whose effect outlives the caller.
+        // The actual MinIO COPY is released only AFTER absent cleanup runs.
+        late = barrier.then(() => clients.singleAttemptInternal.send(command));
+        throw new Error('synthetic timeout with copy still in flight');
+      }
+      return clients.internal.send(command as never);
+    } } as unknown as StorageClients['internal'];
+    const delayedClients = { ...clients, internal: delayed, singleAttemptInternal: delayed };
+    try {
+      await expect(updateContentMetadata(prisma, delayedClients, admin(), id, { visibility: 'public' }))
+        .rejects.toThrow('copy still in flight');
+      expect(started).toBe(true);
+      expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id } })).toEqual(before);
+      expect(await statObjectStrict(clients, BUCKETS.public, destinationKey!)).toBeNull();
+      const intent = await prisma.storageRetirement.findFirstOrThrow({ where: { contentId: id, operation: 'placement_attempt' } });
+      expect(intent.completedAt).toBeNull();
+      expect(intent.storageKey).toBe(destinationKey);
+      // A restart with no job history must still rediscover the unknown copy.
+      await prisma.$executeRaw`DELETE FROM pgboss.job WHERE name='content.quarantine-purge'
+        AND data->>'retirement_id'=${intent.id}`;
+      await prisma.storageRetirement.update({ where: { id: intent.id }, data: { nextAttemptAt: new Date(0) } });
+      await reconcileRetirements(prisma);
+      await executeRetirement(prisma, clients, intent.id);
+      expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: intent.id } })).storageKey).toBe(destinationKey);
+      release();
+      await late;
+      expect(await statObjectStrict(clients, BUCKETS.public, destinationKey!)).not.toBeNull();
+      // A fresh caller wins at its own key; cleanup still targets only the loser.
+      await updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' });
+      const winner = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+      expect(winner.storageKey).not.toBe(destinationKey);
+      await executeRetirement(prisma, clients, intent.id);
+      expect(await statObjectStrict(clients, BUCKETS.public, destinationKey!)).toBeNull();
+      expect(await statObjectStrict(clients, winner.storageBucket, winner.storageKey)).not.toBeNull();
+      expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: intent.id } })).storageKey).toBeNull();
+    } finally {
+      release();
+      await late;
+      if (destinationKey) await deleteObject(clients, BUCKETS.public, destinationKey);
+    }
+  });
+
+  it('B4/B5: stale exact retirement cannot delete a committed canonical coordinate', async () => {
+    const { id } = await uploadPdf(admin(), 'B4 canonical authority', { visibility: 'private' });
+    const current = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const obligation = await prisma.$transaction((tx) => requireRetirement(tx, {
+      contentId: id, bucket: current.storageBucket, storageKey: current.storageKey, operation: 'discard_unreferenced',
+    }));
+    await executeRetirement(prisma, clients, obligation.id);
+    expect(await statObjectStrict(clients, current.storageBucket, current.storageKey)).not.toBeNull();
+    expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).completedAt).not.toBeNull();
+    // A later authorized transition must renew that resolved exact-coordinate
+    // obligation; otherwise deduplication would strand the retired source.
+    await updateContentMetadata(prisma, clients, admin(), id, { visibility: 'public' });
+    expect(await statObjectStrict(clients, current.storageBucket, current.storageKey)).toBeNull();
   });
 
   it("private ↔ hidden changes a column and moves nothing", async () => {

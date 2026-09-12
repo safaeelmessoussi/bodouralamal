@@ -296,6 +296,23 @@ operation on the class; it is who the item belongs to, and each kind's responsib
 is named explicitly. `EventStaff` already draws exactly this line: both positions see, only
 `responsible` may edit.
 
+### Event definition authorization (B6)
+
+**B6 — Event management definitions are not public occurrences.** `GET /events`
+allows a Teacher only group-only definitions whose complete group set she teaches,
+or definitions with her live `EventStaff` assignment; R109 still excludes hidden
+items unless she is responsible. Date filters are combined with authorization,
+never overwritten by its `OR`. Public calendar visibility is unchanged.
+
+Creation authorizes the complete explicit branch/group request before applying
+the operational-branch filter. A foreign ID refuses the whole request, and an
+empty resolved branch request cannot silently become global. R139's explicit
+`global:true` still expands to all operational branches permitted to the Admin;
+it is distinct from a mixed explicit request. Category/Level/group joins retain
+their intersection semantics. R71/R72 still restrict Teacher-created Events to
+their own groups. PATCH still refuses scope keys; this does not invent a scope
+editing or series-splitting route.
+
 ### One main teacher per DATE, not per series
 
 R91 withdrew `@@unique([scheduleId, userId])`, so one schedule holds several

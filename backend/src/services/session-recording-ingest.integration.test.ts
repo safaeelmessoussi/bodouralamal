@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { TD7_RETRY_POLICY } from "../jobs/runner.js";
 import { loadConfig } from "../lib/config.js";
+import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
   createStorageClients,
@@ -313,6 +314,7 @@ async function cleanup(): Promise<void> {
   await prisma.sessionStaff.deleteMany({ where: { session: scheduleWhere } });
   await prisma.notification.deleteMany({ where: { session: scheduleWhere } });
   await prisma.session.deleteMany({ where: scheduleWhere });
+  await clearTestContentRetirements(prisma, { subject: tagged });
   await prisma.educationalContent.deleteMany({ where: { subject: tagged } });
   await prisma.courseScheduleStaff.deleteMany({
     where: { schedule: { subject: tagged } },

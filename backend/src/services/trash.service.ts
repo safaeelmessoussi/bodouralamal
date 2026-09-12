@@ -5,7 +5,8 @@ import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import { lockUser } from '../repositories/user.repository.js';
-import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
+import { requireRetirement } from '../repositories/storage-retirement.repository.js';
+import { lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import { deIdentifyAccountSystem } from './account-deletion.service.js';
@@ -951,6 +952,9 @@ async function purgeTrashEntry(
         delete: (a: unknown) => Promise<unknown>;
       };
 
+      if (entry.targetEntity === 'EducationalContent') {
+        await lockEducationalContent(tx, [entry.targetId]);
+      }
       const row = await delegate.findUnique({ where: { id: entry.targetId } });
 
       // **The record is already gone and only the tombstone remains.** Removing
@@ -1225,17 +1229,7 @@ async function enqueueContentStorageRetirement(
   if (typeof bucket !== 'string' || typeof storageKey !== 'string') {
     throw new Error('EducationalContent purge has no exact storage coordinate');
   }
-  await enqueue(
-    tx,
-    JOB_QUEUES.contentQuarantinePurge,
-    {
-      operation: 'manual_permanent_delete',
-      content_id: contentId,
-      bucket,
-      storage_key: storageKey,
-    },
-    `manual-purge:${contentId}`,
-  );
+  await requireRetirement(tx, { operation: 'manual_permanent_delete', contentId, bucket, storageKey }, true);
 }
 
 /**

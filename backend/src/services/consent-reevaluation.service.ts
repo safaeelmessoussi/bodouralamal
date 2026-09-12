@@ -16,6 +16,7 @@ import {
   lockLiveSessions,
 } from '../repositories/consent-safeguarding.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
+import { requireRetirement } from '../repositories/storage-retirement.repository.js';
 
 /**
  * BR-2 safeguarding and its durable storage transition (SRS §4.1a, §4.9,
@@ -110,16 +111,7 @@ export async function enqueueConsentContentMigration(
   contentId: string,
   sourceKey: string,
 ): Promise<boolean> {
-  return enqueue(
-    tx,
-    JOB_QUEUES.contentBucketMigrate,
-    {
-      content_id: contentId,
-      target_bucket: BUCKETS.private,
-      source_key: sourceKey,
-    },
-    contentMigrationSingletonKey(contentId, sourceKey),
-  );
+  return (await requireRetirement(tx, { contentId, storageKey: sourceKey, bucket: BUCKETS.public, operation: 'consent_migrate' }, true)).enqueued;
 }
 
 /** Nginx auth-subrequest decision for an anonymous public object read. */
@@ -138,17 +130,7 @@ export async function enqueueConsentPublicRetirement(
   contentId: string,
   sourceKey: string,
 ): Promise<boolean> {
-  return enqueue(
-    tx,
-    JOB_QUEUES.contentBucketMigrate,
-    {
-      content_id: contentId,
-      target_bucket: BUCKETS.private,
-      operation: 'retire_public',
-      source_key: sourceKey,
-    },
-    contentMigrationSingletonKey(contentId, sourceKey),
-  );
+  return (await requireRetirement(tx, { contentId, storageKey: sourceKey, bucket: BUCKETS.public, operation: 'retire_public' }, true)).enqueued;
 }
 
 /**

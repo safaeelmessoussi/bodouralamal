@@ -19,6 +19,7 @@ import {
 function clients(send: ReturnType<typeof vi.fn>): StorageClients {
   return {
     internal: { send } as never,
+    singleAttemptInternal: { send } as never,
     publicOrigin: {} as never,
     storagePrefix: '/storage',
   };

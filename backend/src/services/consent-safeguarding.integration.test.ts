@@ -26,6 +26,9 @@ import {
   JOB_QUEUES,
 } from '../repositories/jobs.repository.js';
 import * as audit from '../repositories/audit.repository.js';
+import { clearTestRetirements } from '../test-support/storage-retirement.js';
+import { requireRetirement } from '../repositories/storage-retirement.repository.js';
+import { executeRetirement } from './storage-retirement.service.js';
 import {
   clearTeachingContext,
   createTeachingContext,
@@ -431,6 +434,7 @@ function boss(): PgBoss {
 
 async function cleanup(): Promise<void> {
   const contentIds = [...trackedContentIds];
+  await clearTestRetirements(prisma, contentIds);
   const userIds = [...trackedUserIds];
   if (contentIds.length > 0) {
     await prisma.$executeRaw`
@@ -556,6 +560,36 @@ afterAll(async () => {
 });
 
 describe('B-01 consent safeguarding', () => {
+  it.each(['before_completion', 'after_completion'] as const)(
+    'B5: a new revocation %s cannot be lost behind an old stale migration', async (timing) => {
+      const s = await scenario(`durable-regrant-${timing}`);
+      const obligation = await prisma.$transaction(async (tx) => {
+        const row = await requireRetirement(tx, { contentId: s.contentId, bucket: BUCKETS.public,
+          storageKey: s.key, operation: 'consent_migrate' });
+        await tx.$executeRaw`UPDATE pgboss.job SET start_after=now()+interval '1 hour'
+          WHERE name='content.bucket-migrate' AND data->>'retirement_id'=${row.id}`;
+        return row;
+      });
+      const revoke = async () => {
+        await decide(s, false);
+        await reevaluateSessionConsent(prisma, s.fixture.sessionId);
+      };
+      if (timing === 'before_completion') {
+        await expect(executeRetirement(prisma, clients, obligation.id, { afterConsentMigration: revoke }))
+          .rejects.toThrow('not yet converged');
+        expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).completedAt).toBeNull();
+      } else {
+        await executeRetirement(prisma, clients, obligation.id);
+        expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).completedAt).not.toBeNull();
+        await revoke();
+      }
+      await executeRetirement(prisma, clients, obligation.id);
+      expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }))
+        .toMatchObject({ visibility: 'private', consentForcedPrivate: true, storageBucket: 'private' });
+      expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+      expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).storageKey).toBeNull();
+    });
+
   it('allows only exact public reads and signed PUTs at the production Nginx origin', async () => {
     const s = await scenario('nginx-public-allowlist');
     const canonicalUrl = proxiedPublicObjectUrl(s.key);
@@ -1351,18 +1385,21 @@ describe('B-01 consent safeguarding', () => {
       ).status,
     ).toBe(302);
 
+    const obligation = await prisma.storageRetirement.findFirstOrThrow({
+      where: { contentId: s.contentId, operation: 'retire_public' },
+    });
     const retireJobs = await prisma.$queryRaw<
-      { source_key: string | null; singleton_key: string | null }[]
+      { retirement_id: string | null; singleton_key: string | null }[]
     >`
-      SELECT data->>'source_key' AS source_key, singleton_key
+      SELECT data->>'retirement_id' AS retirement_id, singleton_key
       FROM pgboss.job
       WHERE name = ${JOB_QUEUES.contentBucketMigrate}
         AND data->>'content_id' = ${s.contentId}
         AND data->>'operation' = 'retire_public'
     `;
     expect(retireJobs).toContainEqual({
-      source_key: s.key,
-      singleton_key: `${s.contentId}:consent:${s.key}`,
+      retirement_id: obligation.id,
+      singleton_key: `retirement:${obligation.id}`,
     });
 
     await runProductionJob(

@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
+import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
   describeProtection,
@@ -126,6 +127,7 @@ afterAll(async () => {
   await prisma.sessionContent.deleteMany({
     where: { session: { scheduleId } },
   });
+  await clearTestContentRetirements(prisma, { title: { startsWith: TAG } });
   await prisma.educationalContent.deleteMany({
     where: { title: { startsWith: TAG } },
   });

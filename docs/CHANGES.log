@@ -7853,3 +7853,77 @@ never amended/squashed; no push/deployment. No Owner data, Staging or Production
 was changed. Historical real-host reason removal, real EMAIL_LOCK_KEY provisioning
 and stopped-writer rollout remain separately authorized operational work. B1/B4/
 B5/B6/B8 remain unresolved and HIGH findings outside scope. Not Production approval.
+
+2026-09-12 — B4/B5/B6 storage retirement and Event scope (verification in progress).
+Visibility moves use unique attempt keys, locked canonical adoption and exact
+retirement, instead of loser cleanup targeting the winner's shared destination.
+Migration 96 adds the minimal StorageRetirement operational outbox, independent
+of Content/Trash and pg-boss history; pending exact locators survive failures,
+completion clears them, and jobs carry structural IDs. Initial/renewed obligations
+own wakeups, legacy import is idempotent, and existing queues reconcile due work.
+Purge shares the Content lock; new consent revocation before/after an old stale
+migration cannot disappear behind its completion. Event creation rejects whole
+foreign/mixed scopes and empty resolved branch requests; R139 all-permitted scope
+and intersection semantics remain. Teacher definitions require their own complete
+group scope or live EventStaff, with R109 hidden-responsible exclusion and date
+predicates preserved. No public-calendar or frontend implementation changes.
+Focused current code: 189/189 (8 suites), isolation clean, browser 193/193. Fresh
+96/96 migrations and both seeds; populated 95→96 preserves User/legacy job data,
+imports idempotently and retains obligations after job removal. Dedicated lifecycle
+drill 5/5. Lint, exact typecheck, 341/341 units, build, Prisma checks and all 30
+non-link guards pass; OpenAPI unchanged, TD-3 226/234 with the same eight pending.
+Full integration and final documentation checks remain acceptance prerequisites.
+Runbooks document pre-maintenance legacy import and unresolved-backlog inspection;
+expired pre-upgrade jobs cannot be reconstructed from audit digests. No new
+destruction policy, broker, audit PII, or live-host operation. B2/B3/B7 preserved;
+B1/B8 and unrelated HIGH findings remain outside scope. No push; not Production approval.
+
+2026-09-12 — B4/B5/B6 continuation: recovered final full-run result, not closure.
+The interrupted final disposable command exited zero: 2,531 passed / 18 skipped,
+112 files passed / two skipped, 258.36 seconds, browser 193/193 and all-table
+isolation clean; fresh 96/96 migrations and both seeds passed. Changed runtime
+files predate the run. Final 30 non-link guards and lint/typecheck/build pass;
+341/341 unit evidence reused. No expensive full rerun was performed.
+Source review identified an unverified in-flight-copy/DB-lock-loss ordering:
+cleanup could resolve an absent destination and clear its locator before a late
+remote copy completes. Existing copy-then-error tests do not exercise that order.
+B4/B5 remain unaccepted pending deterministic disposable verification/correction;
+no dynamic reproduction is claimed. The command approval service's usage limit
+also blocked the read-only disposable-resource check; no workaround or repeated
+attempt was made. Existing work preserved, no staging/commit/push or live changes.
+Final continuation documentation links: 1,037/1,037 across 120 files; shell/Node
+syntax and diff checks pass. Only completion/review documentation changed during
+this continuation; the runtime code remains the recovered full-run snapshot.
+
+2026-09-12 — B4/B5/B6 local closure after deterministic late-copy correction.
+The pre-fix regression failed because absent cleanup completed the intent while
+the delayed remote effect was still held. The corrected single-attempt placement
+COPY and copy_settled flag retain unknown outcomes until positive settlement;
+settlement commits before deletion, so ambiguous delete retries remain safe.
+The flag/check extend only this batch's uncommitted migration 96. Canonical
+adoption, fresh-key retry, exact retirement, job-loss recovery and renewal share
+the existing PostgreSQL authority; no new broker, age policy or blind delay.
+Late-copy failure injection uses a barrier plus real MinIO, not a claim of induced
+network failure. Targeted 77/77, lifecycle 5/5, populated 95→96 and final affected
+193/193 across eight suites pass, with clean isolation and browser 193/193.
+
+Final exact-code full disposable run: 2,534 passed / 18 skipped / zero failures,
+112 files passed / two skipped, 299.42 seconds; browser 193/193, all-table
+isolation clean, fresh 96/96 migrations and both seeds. Recovered exit-zero run
+reused after matching source hashes. Lint/typecheck/build, 341/341 units, Prisma
+checks, 30 non-link guards, 1,038/1,038 documentation links and shell/Node/diff
+checks pass. Guard retry required approved local IPC access only. OpenAPI is
+unchanged (175 paths/226 operations); TD-3 226/234, eight pending/zero undocumented.
+Independent Docker/process inventory confirms no disposable project residue;
+pre-existing anonymous volumes and all Owner services/data were left intact.
+
+B4 CLOSED locally: unique immutable adoption and late-orphan retirement protect
+the canonical winner. B5 CLOSED locally: obligations survive execution history,
+unknown outcomes remain actionable, positive settlement permits terminal cleanup,
+and later authorized retirement can renew completed work. B6 CLOSED locally:
+complete unauthorized scopes fail atomically and Teacher/assistant definitions
+remain bounded. B2 remains CLOSED, B3 technically CLOSED, B7 CLOSED locally.
+One new local commit only; no push, deployment, Owner-data/Staging/Production/DNS
+changes. Pre-maintenance legacy import and real-host rollout remain separately
+authorized operational prerequisites. B1/B8 and unrelated HIGH findings remain
+outside scope. This is not Production approval.

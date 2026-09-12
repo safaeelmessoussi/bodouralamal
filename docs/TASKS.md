@@ -1,5 +1,38 @@
 # Tasks — بذور الأمل Platform
 
+## B4/B5/B6 — storage retirement and Event authorization (local acceptance complete)
+
+- [x] Close unique visibility-placement adoption/rollback and durable exact-key
+  retirement together, preserving B2/B3/B7. No parallel cleanup mechanism.
+- [x] Reject the complete unauthorized Event scope; preserve R139 explicit
+  all-permitted-branches and R71/R72 Teacher group/responsibility boundaries.
+- [x] Focused real-stack regressions, populated migration proof, full final gates,
+  clean isolation and final diff review before one local commit. No push or live
+  data/infrastructure changes; B1/B8 and unrelated HIGH findings remain separate.
+- Earlier interrupted run recovered: **2,531 passed / 18 skipped**, 112 passing
+  files / two skipped, browser **193/193**, all-table isolation clean. Current
+  runtime sources then predated that run. The later narrow correction invalidates
+  it for final acceptance. See [evidence](development/testing.md#b4b5b6-storage-retirement-and-event-scope-2026-09-12).
+- [x] Reproduce the late-copy ordering before fixing it: absent cleanup falsely
+  completed the intent while the delayed COPY was still held. `copy_settled`,
+  single-attempt placement COPY and durable positive settlement now retain unknown
+  outcomes, retire late bytes and protect a fresh winner without a grace timer.
+  Targeted **77/77**, then affected batch **193/193** (eight suites), both
+  isolation-clean with browser **193/193**. Lifecycle **5/5**, updated populated
+  **95→96**, lint/typecheck/build, **341/341** units and 30 non-link guards pass.
+- [x] Final exact-code full run: **2,534 passed / 18 skipped / zero failed**,
+  **112 files passed / two skipped**, **299.42 seconds**, browser **193/193**,
+  all-table isolation clean, fresh **96/96** migrations and both seeds. Recovered
+  exit-zero result reused after matching runtime/source hashes; no redundant sweep.
+- [x] Final review and independent Docker inventory: no disposable containers,
+  project volumes/networks/images or test processes remain. Existing anonymous
+  volumes all predate this batch and were untouched. Documentation links
+  **1,038/1,038**, shell/Node syntax and diff checks pass. B4, B5 and B6 are
+  **CLOSED for local engineering acceptance**, not operational rollout.
+- Earlier command-approval exhaustion is resolved; no workaround was used.
+  One new local commit only, no push/live rollout. Existing B2/B3/B7 acceptance
+  remains intact; B1/B8 and unrelated HIGH findings remain outside this batch.
+
 ## R141 — B7 rejection-audit follow-up (2026-09-11; local acceptance complete)
 
 - [x] Owner resolved the R132/TD-8 conflict: self-managed rejection audit is

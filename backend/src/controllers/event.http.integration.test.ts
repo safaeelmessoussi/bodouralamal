@@ -179,6 +179,34 @@ const payload = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("POST /events — R110's type, over real HTTP", () => {
+  it('B6: crafted mixed/foreign scope is rejected atomically, never filtered into Global', async () => {
+    const allowed = await makeBranch('B6 allowed');
+    const foreign = await makeBranch('B6 foreign');
+    const id = await withRole('B6 admin', 'admin');
+    await prisma.userBranchRole.updateMany({ where: { userId: id }, data: { branchId: allowed } });
+    const token = issueAccessToken({ userId: id, accountStatus: 'active',
+      roleScopes: [{ role: 'admin', branches: [allowed] }] }, config.JWT_SIGNING_KEY).token;
+    for (const branch_ids of [[foreign], [allowed, foreign]]) {
+      const res = await call('POST', '/events', token, payload({ branch_ids,
+        recurrence_type: 'weekly', recurrence_end_date: '2026-12-31' }));
+      expect(res.status).toBe(404);
+      expect(res.body.error?.code).toBe('NOT_FOUND');
+    }
+    expect(await prisma.event.count({ where: { title: { startsWith: TAG } } })).toBe(0);
+    const explicit = await call('POST', '/events', token, payload({ global: true }));
+    expect(explicit.status).toBe(201);
+    const eventId = explicit.body.id;
+    if (!eventId) throw new Error('created Event has no id');
+    expect(await prisma.eventBranch.findMany({ where: { eventId }, select: { branchId: true } }))
+      .toEqual([{ branchId: allowed }]);
+    const rejectedEdit = await call('PATCH', `/events/${explicit.body.id}`, token,
+      { version: 0, branch_ids: [foreign], title: 'must not persist' });
+    expect(rejectedEdit.status).toBe(400);
+    expect((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).title).toBe(payload().title);
+    const unscoped = await call('POST', '/events', token, payload());
+    expect(unscoped.status).toBe(403);
+  });
+
   it("refuses a body that names no scheduling type", async () => {
     // Required at the boundary (R35). Without this the form could keep writing
     // activities whose type is recorded nowhere a query can reach — the exact

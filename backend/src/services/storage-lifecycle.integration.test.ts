@@ -21,6 +21,9 @@ import {
 } from '../lib/storage.js';
 import type { Actor } from '../policies/actor.js';
 import { JOB_QUEUES } from '../repositories/jobs.repository.js';
+import { verifyUploadTicket } from '../lib/upload-token.js';
+import { requireRetirement } from '../repositories/storage-retirement.repository.js';
+import { executeRetirement } from './storage-retirement.service.js';
 import {
   collectAbandonedUploadPage,
   type UploadGcPayload,
@@ -269,6 +272,27 @@ describe.skipIf(!enabled)('P0.3 durable storage lifecycle on disposable PostgreS
     await boss.updateQueue(JOB_QUEUES.contentQuarantinePurge, TD7_RETRY_POLICY);
   });
 
+  it('a later authorized purge renews an old completed obligation for protected canonical bytes', async () => {
+    const fixture = await contentFixture('resolved-then-purge');
+    await put(BUCKETS.private, fixture.storageKey, 'retained canonical');
+    // Represent a restored row when an old exact-key job was delivered.
+    await prisma.educationalContent.update({ where: { id: fixture.contentId }, data: { deletedAt: null } });
+    const old = await prisma.$transaction((tx) => requireRetirement(tx, {
+      contentId: fixture.contentId, bucket: BUCKETS.private,
+      storageKey: fixture.storageKey, operation: 'manual_permanent_delete',
+    }));
+    await executeRetirement(prisma, storage, old.id);
+    expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: old.id } })).completedAt).not.toBeNull();
+    expect(await statObjectStrict(storage, BUCKETS.private, fixture.storageKey)).not.toBeNull();
+    // The new tombstone authorizes a new purge, not replay of that old job.
+    await prisma.educationalContent.update({ where: { id: fixture.contentId }, data: { deletedAt: new Date() } });
+    await purgeEntry(prisma, actor, fixture.trashId);
+    expect(await prisma.storageRetirement.findUniqueOrThrow({ where: { id: old.id } }))
+      .toMatchObject({ completedAt: null, storageKey: fixture.storageKey });
+    await executeRetirement(prisma, storage, old.id);
+    expect(await statObjectStrict(storage, BUCKETS.private, fixture.storageKey)).toBeNull();
+  });
+
   it('turns replacement quarantine failure into an exact durable retry without touching the new canonical key', async () => {
     const contentId = randomUUID();
     const oldKey = `content/${contentId}/old/file.pdf`;
@@ -302,12 +326,15 @@ describe.skipIf(!enabled)('P0.3 durable storage lifecycle on disposable PostgreS
         replacesContentId: contentId,
       },
     });
-    const putResponse = await fetch(initiated.putUrl, {
-      method: 'PUT',
-      body: replacementBytes,
-      headers: { 'content-type': 'application/pdf' },
-    });
-    expect(putResponse.status).toBe(200);
+    // This isolated lifecycle drill has no edge/browser. Seed only the exact
+    // staging coordinate from the real ticket; content.integration.test.ts
+    // separately proves the genuine presigned PUT through production Nginx.
+    const ticket = verifyUploadTicket(initiated.uploadId, config.JWT_SIGNING_KEY);
+    if (!ticket.valid) throw new Error('fixture upload ticket did not verify');
+    await storage.internal.send(new PutObjectCommand({
+      Bucket: ticket.claims.bucket, Key: ticket.claims.key,
+      Body: replacementBytes, ContentType: 'application/pdf',
+    }));
 
     const failedFastPath: StorageClients = {
       ...storage,
@@ -344,9 +371,11 @@ describe.skipIf(!enabled)('P0.3 durable storage lifecycle on disposable PostgreS
     expect(await jobRow(contentId)).toMatchObject({
       state: 'created',
       operation: 'quarantine_retired_object',
-      storage_key: oldKey,
+      storage_key: null,
       retry_limit: TD7_RETRY_POLICY.retryLimit,
     });
+    expect(await prisma.storageRetirement.findFirstOrThrow({ where: { contentId } }))
+      .toMatchObject({ storageKey: oldKey, completedAt: null, operation: 'quarantine_retired_object' });
 
     const worker = createWorkerCatalog(prisma, storage, () => undefined).find(
       (candidate) => candidate.name === JOB_QUEUES.contentQuarantinePurge,

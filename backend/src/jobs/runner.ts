@@ -9,8 +9,6 @@ import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
 import {
   collectAbandonedUploadPage,
-  quarantineRetiredContentObject,
-  retirePurgedContentObjects,
   uploadGcContinuationSingletonKey,
   type UploadGcPayload,
 } from '../services/storage-lifecycle.service.js';
@@ -26,6 +24,8 @@ import {
   purgeElapsedRejectedRegistrations,
 } from '../services/application-retention.service.js';
 import { purgeExpiredEntries } from '../services/trash.service.js';
+import { executeRetirement } from '../services/storage-retirement.service.js';
+import { importLegacyRetirement, importLegacyRetirements, reconcileRetirements } from '../repositories/storage-retirement.repository.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
   enqueue,
@@ -277,6 +277,8 @@ export function createWorkerCatalog(
     {
       name: QUEUES.contentBucketMigrate,
       handler: async ([job]) => {
+        const durableId = (job?.data as { retirement_id?: string } | undefined)?.retirement_id;
+        if (durableId) return executeRetirement(prisma, storage, durableId);
         const payload = (job?.data ?? {}) as {
           content_id?: string;
           target_bucket?: string;
@@ -288,6 +290,10 @@ export function createWorkerCatalog(
         }
         if (payload.operation === 'retire_public' && !payload.source_key) {
           throw new Error('content.bucket-migrate retire_public requires source_key');
+        }
+        if (payload.source_key) {
+          const record = await prisma.$transaction((tx) => importLegacyRetirement(tx, payload));
+          return executeRetirement(prisma, storage, record.id);
         }
         const durablePayload = {
           content_id: payload.content_id,
@@ -325,6 +331,13 @@ export function createWorkerCatalog(
     {
       name: QUEUES.contentQuarantinePurge,
       handler: async ([job]) => {
+        const durable = job?.data as { retirement_id?: string; operation?: string } | undefined;
+        if (durable?.retirement_id) return executeRetirement(prisma, storage, durable.retirement_id);
+        if (durable?.operation === 'reconcile') {
+          await importLegacyRetirements(prisma);
+          await reconcileRetirements(prisma);
+          return;
+        }
         const payload = (job?.data ?? {}) as {
           operation?: string;
           content_id?: string;
@@ -336,30 +349,8 @@ export function createWorkerCatalog(
             'content.quarantine-purge requires an exact content coordinate',
           );
         }
-        const coordinates = {
-          contentId: payload.content_id,
-          bucket: payload.bucket,
-          storageKey: payload.storage_key,
-        };
-        if (payload.operation === 'manual_permanent_delete') {
-          await retirePurgedContentObjects(storage, coordinates);
-        } else if (payload.operation === 'quarantine_retired_object') {
-          await quarantineRetiredContentObject(storage, coordinates);
-          // A pending quarantine move and a later manual purge may overlap.
-          // Re-read only the content identity after storage: if permanent purge
-          // has committed, make the destructive state monotonic by retiring
-          // both old coordinates again. If the row still exists (live after
-          // replacement, or soft-deleted), quarantine remains recoverable.
-          const retained = await prisma.educationalContent.findUnique({
-            where: { id: payload.content_id },
-            select: { id: true },
-          });
-          if (retained === null) {
-            await retirePurgedContentObjects(storage, coordinates);
-          }
-        } else {
-          throw new Error('content.quarantine-purge operation is unsupported');
-        }
+        const record = await prisma.$transaction((tx) => importLegacyRetirement(tx, payload));
+        await executeRetirement(prisma, storage, record.id);
         log(QUEUES.contentQuarantinePurge, {
           operation: payload.operation,
           content_id: payload.content_id,
@@ -474,6 +465,8 @@ export async function startJobRunner(
     // Deployment/bootstrap reconciliation runs before any handler can consume
     // work. Readiness stays `starting` until every live recording-linked Session
     // has an ordinary durable reevaluation obligation.
+    await importLegacyRetirements(prisma);
+    await reconcileRetirements(prisma);
     const sweep = await enqueueConsentSafeguardingSweep(prisma);
     log('consent.safeguarding-sweep', {
       sessions_scanned: sweep.sessionsScanned,
@@ -495,11 +488,9 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.rejectedRegistrationPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
-    // **`content.quarantine-purge` is still not scheduled, and that is correct.**
-    // R59.4 is closed (Owner, 2026-09-04) but it authorised expiring the TRASH
-    // ENTRY, which `trash.retention-purge` above does — and that purge enqueues
-    // the object retirement with an exact coordinate. This queue destroys a
-    // named object; a schedule would give it no coordinate to act on.
+    // Reconcile already-authorized exact obligations, never select objects or
+    // Trash by age. pg-boss retry exhaustion cannot erase the domain backlog.
+    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' });
     
     readiness.ready();
   } catch (error) {

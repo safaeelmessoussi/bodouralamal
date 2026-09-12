@@ -8,7 +8,6 @@ import {
   buildUploadStagingKey,
   isUploadableMime,
   mimeEssence,
-  quarantineKeyFor,
   sizeCapFor,
   storageCoordinateId,
   type AcceptedMime,
@@ -22,7 +21,6 @@ import {
 import {
   BUCKETS,
   copyObject,
-  deleteObject,
   presignGetUrl,
   presignPutUrl,
   statObjectStrict,
@@ -38,7 +36,6 @@ import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
-import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { visibleContentIds } from './library.service.js';
@@ -47,9 +44,10 @@ import {
   enqueueConsentPublicRetirement,
   enqueueConsentReevaluationForSessions,
   recordingContentRequiresSafeguardUnderLocks,
-  retireConsentPublicObject,
 } from './consent-reevaluation.service.js';
-import { lockLiveSessions } from '../repositories/consent-safeguarding.repository.js';
+import { lockLiveSessions, lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
+import { requireRetirement, lockRetirement, findRetirement, completeRetirement, settlePlacementCopy } from '../repositories/storage-retirement.repository.js';
+import { executeRetirement, acknowledgePlacementCopy } from './storage-retirement.service.js';
 
 /**
  * Educational content storage — the TD-3.5 upload flow and the presigned-GET
@@ -888,10 +886,13 @@ export async function completeUpload(
       if (publication.published) {
         if (publication.retireOldPublic) {
           try {
-            await retireConsentPublicObject(
+            await settleRetiredObject(
+              prisma,
               clients,
               claims.cid,
+              BUCKETS.public,
               replacement.storageKey,
+              'retire_public',
             );
           } catch {
             // The exact-key TD-7 obligation committed with the replacement.
@@ -900,6 +901,7 @@ export async function completeUpload(
           }
         } else {
           await quarantineObject(
+            prisma,
             clients,
             replacement.storageBucket,
             replacement.storageKey,
@@ -1158,38 +1160,32 @@ async function enqueueQuarantineTransition(
   bucket: string,
   storageKey: string,
 ): Promise<boolean> {
-  const coordinateHash = storageCoordinateId(bucket, storageKey);
-  return enqueue(
-    tx,
-    JOB_QUEUES.contentQuarantinePurge,
-    {
-      operation: 'quarantine_retired_object',
-      content_id: contentId,
-      bucket,
-      storage_key: storageKey,
-    },
-    `quarantine:${contentId}:${coordinateHash}`,
-  );
+  await requireRetirement(tx, { operation: 'quarantine_retired_object', contentId, bucket, storageKey }, true);
+  return true;
 }
 
 async function quarantineObject(
+  prisma: PrismaClient,
   clients: StorageClients,
   bucket: string,
   key: string,
   contentId: string,
 ): Promise<void> {
-  const target = quarantineKeyFor(contentId, key);
   try {
-    // The shared primitive, which URI-encodes the source — this call used to
-    // build `CopySource` by interpolation, and a TD-9 key carries a slug of a
-    // filename a person chose.
-    await copyObject(clients, { bucket, key }, { bucket, key: target });
-    await deleteObject(clients, bucket, key);
+    await settleRetiredObject(prisma, clients, contentId, bucket, key, 'quarantine_retired_object');
   } catch {
     // The row, audit and exact-key TD-7 obligation are already committed.
     // Failing the request here would lie about publication; the worker retries
     // the same copy-before-delete transition and never derives a current key.
   }
+}
+
+async function settleRetiredObject(
+  prisma: PrismaClient, clients: StorageClients, contentId: string, bucket: string,
+  storageKey: string, operation: 'retire_public' | 'quarantine_retired_object',
+): Promise<void> {
+  const record = await prisma.$transaction((tx) => requireRetirement(tx, { contentId, bucket, storageKey, operation }));
+  await executeRetirement(prisma, clients, record.id);
 }
 
 /**
@@ -1266,8 +1262,10 @@ export async function updateContentMetadata(
   actor: Actor,
   contentId: string,
   patch: ContentMetadataPatch,
+  hooks: { afterSnapshot?: () => Promise<void>; beforePublish?: () => Promise<void> } = {},
 ): Promise<void> {
   const existing = await loadWritableContent(prisma, actor, contentId);
+  await hooks.afterSnapshot?.();
 
   if (
     patch.visibility === 'public' &&
@@ -1323,65 +1321,72 @@ export async function updateContentMetadata(
     return;
   }
 
-  // **Copy first, and prove it.** Nothing is committed and nothing is removed
-  // until the destination is confirmed byte-identical to the source.
-  const source = await statObjectStrict(clients, existing.storageBucket, existing.storageKey);
-  if (source === null) {
-    throw new AppError('STATE_CONFLICT', 'the stored object is missing', {
-      reason: 'OBJECT_MISSING',
-    });
+  // Each attempt owns a fresh immutable key, never a shared destination. Its
+  // orphan obligation commits BEFORE storage writes. An unconfirmed COPY
+  // retains that locator even if DB locks expire before its remote effect.
+  const destinationKey = `content/${contentId}/${randomUUID().replaceAll('-', '')}/${existing.storageKey.split('/').at(-1)!}`;
+  const attempt = await prisma.$transaction((tx) => requireRetirement(tx, {
+    contentId, bucket: targetBucket, storageKey: destinationKey, operation: 'placement_attempt',
+  }));
+  let sourceRetirementId: string | undefined;
+  let copyStarted = false;
+  let copySucceeded = false;
+  let callbackFinished = false;
+  try {
+    await prisma.$transaction(async (tx) => {
+      try {
+        await lockEducationalContent(tx, [contentId]);
+        await lockRetirement(tx, attempt.id);
+        const intent = await findRetirement(tx, attempt.id);
+        const current = await tx.educationalContent.findUnique({ where: { id: contentId } });
+        if (intent?.completedAt !== null || !current || current.deletedAt !== null ||
+            current.version !== existing.version || current.storageKey !== existing.storageKey ||
+            current.storageBucket !== existing.storageBucket) {
+          throw new AppError('VERSION_CONFLICT', 'content changed during edit', { reason: 'CONCURRENT_MODIFICATION' });
+        }
+        const source = await statObjectStrict(clients, existing.storageBucket, existing.storageKey);
+        if (source === null) throw new AppError('STATE_CONFLICT', 'the stored object is missing', { reason: 'OBJECT_MISSING' });
+        copyStarted = true;
+        await copyObject({ ...clients, internal: clients.singleAttemptInternal },
+          { bucket: existing.storageBucket, key: existing.storageKey },
+          { bucket: targetBucket, key: destinationKey }, undefined,
+          source.etag === null ? {} : { sourceIfMatch: source.etag });
+        copySucceeded = true;
+        const destination = await statObjectStrict(clients, targetBucket, destinationKey);
+        if (destination === null || destination.sizeBytes !== source.sizeBytes ||
+            (source.sha256 !== null && destination.sha256 !== source.sha256)) {
+          throw new AppError('STATE_CONFLICT', 'the object could not be moved', { reason: 'STORAGE_MOVE_FAILED' });
+        }
+        await hooks.beforePublish?.();
+        await tx.educationalContent.update({ where: { id: contentId }, data: {
+          ...(patch.title !== undefined ? { title: patch.title } : {}),
+          ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
+          ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+          visibility: nextVisibility as never,
+          ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
+          storageBucket: targetBucket, storageKey: destinationKey, version: { increment: 1 },
+        } });
+        await settlePlacementCopy(tx, attempt.id);
+        await completeRetirement(tx, attempt.id); // canonical adoption, not deletion
+        sourceRetirementId = (await requireRetirement(tx, {
+          contentId, bucket: existing.storageBucket, storageKey: existing.storageKey, operation: 'discard_unreferenced',
+        }, true)).id;
+      } finally {
+        callbackFinished = true;
+      }
+    }, { timeout: 120_000, maxWait: 10_000 });
+  } catch (error) {
+    // Never mistake cancellation of the DB wrapper for cancellation of a still
+    // running callback/remote write. Unknown outcomes stay discoverable.
+    if (callbackFinished && (!copyStarted || copySucceeded)) {
+      await acknowledgePlacementCopy(prisma, attempt.id).catch(() => undefined);
+    }
+    // Best-effort latency optimization only; the committed outbox remains the
+    // authority even if storage or the DB is unavailable here.
+    await executeRetirement(prisma, clients, attempt.id).catch(() => undefined);
+    throw error;
   }
-  await copyObject(
-    clients,
-    { bucket: existing.storageBucket, key: existing.storageKey },
-    { bucket: targetBucket, key: existing.storageKey },
-    undefined,
-    source.etag === null ? {} : { sourceIfMatch: source.etag },
-  );
-  const destination = await statObjectStrict(clients, targetBucket, existing.storageKey);
-  if (
-    destination === null ||
-    destination.sizeBytes !== source.sizeBytes ||
-    (source.sha256 !== null && destination.sha256 !== source.sha256)
-  ) {
-    // The copy is the disposable half: remove it and leave the original alone.
-    await discardObject(clients, targetBucket, existing.storageKey);
-    throw new AppError('STATE_CONFLICT', 'the object could not be moved', {
-      reason: 'STORAGE_MOVE_FAILED',
-    });
-  }
-
-  const written = await prisma.educationalContent.updateMany({
-    where: {
-      id: contentId,
-      deletedAt: null,
-      version: existing.version,
-      storageBucket: existing.storageBucket,
-      storageKey: existing.storageKey,
-    },
-    data: {
-      ...(patch.title !== undefined ? { title: patch.title } : {}),
-      ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
-      ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
-      visibility: nextVisibility as never,
-      ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
-      storageBucket: targetBucket,
-      version: { increment: 1 },
-    },
-  });
-  if (written.count === 0) {
-    // Somebody else changed the row while the bytes were being copied. The
-    // database is the authority (B-02), so the COPY is what gets discarded.
-    await discardObject(clients, targetBucket, existing.storageKey);
-    throw new AppError('VERSION_CONFLICT', 'content changed during edit', {
-      reason: 'CONCURRENT_MODIFICATION',
-    });
-  }
-
-  // Committed. The old placement now contradicts the authority, so it goes —
-  // last, deliberately: a failure here leaves a duplicate object rather than an
-  // unreadable row, and the duplicate is visible to the storage lifecycle.
-  await discardObject(clients, existing.storageBucket, existing.storageKey);
+  if (sourceRetirementId) await executeRetirement(prisma, clients, sourceRetirementId).catch(() => undefined);
 }
 
 export async function deleteContent(
@@ -1463,13 +1468,13 @@ export async function deleteContent(
 
   if (retireOldPublic) {
     try {
-      await retireConsentPublicObject(clients, contentId, existing.storageKey);
+      await settleRetiredObject(prisma, clients, contentId, BUCKETS.public, existing.storageKey, 'retire_public');
     } catch {
       // The delete and its exact-key job are already committed. A transient
       // storage failure is retried by the existing TD-7 placement worker.
     }
   } else {
-    await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
+    await quarantineObject(prisma, clients, existing.storageBucket, existing.storageKey, contentId);
   }
 }
 

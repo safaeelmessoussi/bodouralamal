@@ -3430,6 +3430,29 @@ model AuditLog {
   @@map("audit_log")
 }
 
+/// Exact storage work outlives content/Trash and pg-boss history. No FK to a
+/// purgeable row. The operational locator is cleared on resolution; metadata
+/// retains only structural IDs, the coordinate digest and fixed error codes.
+model StorageRetirement {
+  id            String    @id @default(uuid()) @db.Uuid
+  dedupKey      String    @unique @map("dedup_key") @db.VarChar(64)
+  contentId     String    @map("content_id") @db.Uuid
+  operation     String    @db.VarChar(40)
+  bucket        String    @db.VarChar(20)
+  storageKey    String?   @map("storage_key") @db.Text
+  /// False only while a single-attempt placement COPY may still take effect.
+  copySettled   Boolean   @default(true) @map("copy_settled")
+  attempts      Int       @default(0)
+  lastErrorCode String?   @map("last_error_code") @db.VarChar(40)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@index([completedAt, nextAttemptAt, id])
+  @@index([contentId])
+  @@map("storage_retirement")
+}
+
 /// JSON snapshot of any soft-deleted record, for restoration (§4.10, BR-15).
 /// MVP restoration runs through the locked CLI script, never ad-hoc psql.
 /// The 90-day window is enforced by `content.quarantine-purge` (TD-7).

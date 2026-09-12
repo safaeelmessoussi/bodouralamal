@@ -19,9 +19,12 @@ done
 
 grep -Fq 'await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);' "$runner" ||
   fail 'upload.gc is not scheduled daily'
-if grep -nE 'boss\.schedule\(QUEUES\.contentQuarantinePurge' "$runner" | grep -q .; then
-  fail 'automatic quarantine destruction was enabled without the Owner decision'
-fi
+scheduled=$(grep -E 'boss\.schedule\(QUEUES\.contentQuarantinePurge' "$runner" || true)
+[[ "$scheduled" == "    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' });" ]] ||
+  fail 'the quarantine cron may only reconcile existing exact obligations, never authorize age-based destruction'
+grep -Fq "durable?.operation === 'reconcile'" "$runner" || fail 'reconciliation handler missing'
+grep -Fq 'await reconcileRetirements(prisma);' "$runner" || fail 'durable backlog is not reconciled'
+grep -Fq 'model StorageRetirement {' "$repo_root/backend/prisma/schema.prisma" || fail 'durable retirement authority missing'
 
 [[ "$(grep -Fc "prefix: 'staging/content/'" "$lifecycle")" -eq 2 ]] ||
   fail 'upload.gc must cover public/private browser staging exactly'
