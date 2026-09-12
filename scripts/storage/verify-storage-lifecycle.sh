@@ -18,9 +18,10 @@ trap cleanup EXIT INT TERM
 
 export STORAGE_LIFECYCLE_DB_PORT="$db_port"
 export STORAGE_LIFECYCLE_MINIO_PORT="$minio_port"
+export MINIO_ACCESS_KEY='lifecycle-drill-access'
+export MINIO_SECRET_KEY='lifecycle-drill-secret-password'
 docker compose --project-name "$project" --file "$compose_file" up -d \
   --wait db minio
-docker compose --project-name "$project" --file "$compose_file" run --rm minio-init
 
 export DATABASE_URL="postgresql://app:lifecycle-drill-password@127.0.0.1:${db_port}/bodour"
 export GOOGLE_CLIENT_ID='storage-lifecycle-fixture'
@@ -39,6 +40,9 @@ export STORAGE_LIFECYCLE_DESTRUCTIVE_FIXTURE='1'
 
 (
   cd "$repo_root/backend"
+  # Resolve AWS SDK from the existing backend dependency tree; the exact shared
+  # initializer is also used in Production's one-shot container.
+  node --input-type=module < <(sed "s|'./policy.mjs'|'../scripts/storage/policy.mjs'|" "$repo_root/scripts/storage/initialize.mjs")
   npx prisma migrate deploy
   npx vitest run --config vitest.integration.config.ts \
     src/services/storage-lifecycle.integration.test.ts

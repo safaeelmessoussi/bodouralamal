@@ -2,23 +2,78 @@
 
 # Storage
 
-The current implementation uses MinIO OSS, self-hosted in a container. Production requires
-a maintained S3-compatible object store on Moroccan infrastructure; the final vendor/product
-selection is an Owner decision recorded below.
+Production Compose selects self-hosted SeaweedFS on Moroccan infrastructure. Existing
+Local/Staging deployments retain their separate MinIO volumes and configuration until an
+explicitly authorized migration. Service/DNS and TD-13 `MINIO_*` names remain compatibility
+names, not a vendor assertion. Selection and rollout boundaries are recorded below.
 
 > **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
 > recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
 > consent-forced public → private `content.bucket-migrate` arm are built and tested. Bounded
-> abandoned-upload GC and exact replacement/deletion retirement are also implemented. General
-> visibility editing and automatic 90-day destruction remain open and are called out below
-> rather than implied by the implemented safeguarding flow.
+> abandoned-upload GC, exact replacement/deletion retirement and general visibility placement
+> are also implemented. Automatic 90-day destruction still requires the separate Owner policy;
+> this object-store change does not authorize it.
 
 ## OWNER DECISION REQUIRED — OBJECT STORE
 
-The image is pinned to `minio/minio:RELEASE.2025-09-07T16-13-09Z`. MinIO's
+Historical heading retained for existing links. The later Owner-authorized engineering
+selection below resolves the replacement choice; live provisioning/migration is separate.
+
+### B1 candidate verification checkpoint
+
+The Owner authorized engineering selection/evaluation of a maintained replacement
+on the planned single Moroccan VPS. **SeaweedFS 4.46 is the selected B1 replacement,
+not authorization to deploy Production.** Its [official release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.46)
+was published on 2026-09-08; the [security policy](https://github.com/seaweedfs/seaweedfs/security)
+targets the latest release. Upstream's [single-node guide](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini)
+documents the all-in-one process and credential-enabled S3 access. The candidate
+pin is `chrislusf/seaweedfs:4.46@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62`.
+This is maintenance evidence, not a claim that the software has no vulnerabilities.
+Garage's [own compatibility matrix](https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/)
+reports no S3 bucket-policy API, making it a larger integration change here.
+
+The shared `docker-compose.storage.yml` overlay preserves `minio:9000` and TD-13 setting names to avoid a
+wire-contract rewrite, but uses a **new `${COMPOSE_PROJECT_NAME}_seaweedfs-data`
+physical volume**, never a MinIO-format mount. `volume.nocopy` prevents image scaffolding
+from populating an empty restore target. Backup tools resolve the physical name from Compose
+labels, preserving the logical `minio-data` recovery manifest coordinate. The overlay disables
+telemetry, Admin UI, WebDAV, Iceberg/Lance endpoints and embedded IAM. No storage host port is added.
+Container liveness is not acceptance: the API still checks authenticated access
+to all three buckets. The explicit initializer checks policies and refuses
+versioning/lifecycle/Object Lock drift rather than silently clearing it. Public policy permits
+only `GetObject` on `public/*`; private and recording-staging buckets have no anonymous policy.
+Repeat initialization accepts S3's equivalent singleton Action/Resource serialization, not
+additional grants or conditions. The one-shot initializer uses the exact API image's SDK;
+it does not require a vendor administration CLI or run from ordinary API startup.
+
+The isolated bucket probe passed. The first real-edge run found that optional
+SDK checksum defaults put CRC32(empty) into bodyless presigned PUT requests;
+SeaweedFS rejected nonempty browser payloads with `BadDigest`. Restricting only
+the **public-origin presigning client** to required checksums fixes this; internal
+server writes retain optional checksum calculation and completion still hashes
+the entire accepted stream. Truncated input may fail at transport level or reach
+`VALIDATION_FAILED/OBJECT_CHANGED_DURING_STREAM`; both refuse publication. Tests now cover
+short-body and explicit transport-error paths, absent DB/canonical state, cleaned server
+staging, retained browser staging and a successful same-capability retry of the original bytes.
+
+The explicit source-error regression also exposed Smithy's Node chunked encoder awaiting its
+checksum promise only on stream `end`, leaving a rejection unobserved when the source errors.
+The shared internal client observes that rejection and returns the **same rejecting promise**;
+it does not suppress pipeline errors, invent a digest or disable checksums. Unit and real-stack
+coverage require the error to remain a refusal without an unhandled rejection.
+See [B1 verification](../development/testing.md#b1-seaweedfs-compatibility-and-recovery).
+
+**No live switch is authorized by local acceptance.** Fresh Production has no historical
+objects to migrate. A future
+authorized populated Local/Staging switch requires stopped writers, a validated
+backup, separately initialized storage, explicit S3 object copy with full-byte
+checksum/metadata/count comparison, and rollback retention. Never mount raw
+MinIO data in SeaweedFS or delete a source solely because copying returned success.
+
+The legacy Local/Staging image remains `minio/minio:RELEASE.2025-09-07T16-13-09Z`. MinIO's
 [GHSA-hv4r-mvr4-25vw advisory](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw)
 states that this final OSS line is affected and identifies a fix only in the maintained AIStor
-release line. Production **must not launch on the current pin**: an edge filter reduces one
+release line. Production **must not launch on that legacy pin**: an edge filter reduces one
 known request shape but cannot turn an unsupported, affected object-store release into a
 maintained production dependency.
 
@@ -35,17 +90,18 @@ Safe replacement categories are:
 3. a maintained managed S3-compatible service only if the Owner and legal review establish
    Moroccan data residency, backup location, contractual controls and acceptable cost.
 
-The lowest migration-risk recommendation is to evaluate the patched AIStor line first,
-subject to licensing/support approval. If that is unsuitable, compare maintained alternatives
-with a disposable compatibility proof before copying any real object. The replacement must
+The earlier recommendation was to evaluate AIStor first, subject to licensing/support approval.
+The subsequent Owner-authorized self-hosted selection above is SeaweedFS, with disposable
+compatibility proof rather than copying real objects. Any future replacement must
 support path-style SigV4 presigning through the same-origin `/storage` prefix (including an
 exact non-default Host port), ranged GET and HEAD, PUT, copy, delete, conditional reads/copies,
 object metadata, object-atomic writes, idempotent deletion, the three existing bucket policy
 shapes, the AWS SDK client, internal-only networking, authenticated `HeadBucket` for all three
 required buckets, and Moroccan primary and backup residency. The application `/healthz` now
 uses those S3 bucket checks with the same credentials as real work; it no longer depends on
-MinIO's private `/minio/health/live` URL. The container-level healthcheck, initializer and raw
-volume export remain vendor integration points and must be adapted after selection.
+MinIO's private `/minio/health/live` URL. Container liveness, explicit initialization and the
+raw-volume format are vendor integration points; only an identical store/version may restore
+its raw volume. Cross-vendor migration uses S3 bytes/metadata, never raw-volume reuse.
 
 Bucket versioning, lifecycle and retention defaults are part of acceptance, not harmless
 provider settings. The current immutable-key model expects **versioning disabled**: it does not
@@ -59,7 +115,7 @@ vendor must prove these bucket settings from its real administrative API as well
 application behavior suite. Enabling versioning later requires an explicit design for exact
 version coordinates, deletion, restore and legal erasure; it is not a deployment toggle.
 
-After the Owner selects and pins a supported replacement, first prove all three buckets exist,
+For each future accepted replacement/update, first prove all three buckets exist,
 authenticated `HeadBucket` succeeds, versioning is disabled, no unapproved lifecycle/Object
 Lock rule exists, and the replacement container's own healthcheck is truthful. Then rerun:
 `nginx -t` and `nginx -T`;
@@ -98,10 +154,11 @@ combination `consent_forced_private = true`, `visibility = public`, `storage_buc
 application reads fail closed while visibility and bucket continue to describe the physical
 source honestly. A check equating the flag with private placement would reject that safe
 state; a check changing visibility first would claim privacy while anonymous bytes still
-exist. General visibility editing remains unbuilt and cannot use this safeguarding-only arm
-as a publication path.
+exist. General visibility editing uses the separate placement intent/adoption path with unique
+destination keys and durable loser retirement; it cannot use the safeguarding arm as a
+publication path or automatically lift `consent_forced_private`.
 
-The public bucket's anonymous S3 policy is not the production access boundary. MinIO is
+The public bucket's anonymous S3 policy is not the production access boundary. The S3 service is
 network-internal; Nginx is the only published object origin. Every canonical public GET/HEAD
 asks the API whether one undeleted row still names that exact key as public/public with
 `consent_forced_private = false`. A committed flag, replacement or deletion therefore closes
@@ -116,7 +173,7 @@ capabilities until their one-hour expiry. Current code never mints a browser wri
 canonical key, and legacy replacements are still refused at completion when their ticket
 lacks the required compare-and-swap version.
 
-As temporary defence in depth for the blocked current pin, every Nginx path that can proxy to
+As retained defence in depth, every Nginx path that can proxy to
 the object store shares one filter rejecting the advisory-named
 `STREAMING-UNSIGNED-PAYLOAD-TRAILER` content-hash mode before upstream. It does not match the
 signed streaming mode or ordinary presigned GET/PUT requests. This is not a substitute for a

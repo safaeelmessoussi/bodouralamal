@@ -3,9 +3,25 @@
 # The checked-in template deliberately defaults to Development for safe local
 # fixture work. A Production host must not depend on an operator remembering to
 # change that line: this overlay makes the runtime tier structural. It contains
-# no secret and changes no routing, port, storage, or resource policy.
+# no secret. The maintained store uses a distinct physical volume; existing
+# MinIO deployments require the explicit migration runbook, never an in-place swap.
 
 services:
   api:
     environment:
       NODE_ENV: production
+
+  minio:
+    extends:
+      file: docker-compose.storage.yml
+      service: minio
+
+  minio-init:
+    extends:
+      file: docker-compose.storage.yml
+      service: minio-init
+    image: ${BODOUR_STORAGE_INIT_IMAGE:-ghcr.io/safaeelmessoussi/bodouralamal-api:${BODOUR_RELEASE_TAG:-unset}}
+
+volumes:
+  minio-data:
+    name: ${COMPOSE_PROJECT_NAME:?compose project required}_seaweedfs-data

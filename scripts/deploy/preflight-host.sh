@@ -51,12 +51,14 @@ require_private_file() {
 
 validate_resolved_compose() {
   local tier="$1" domain="$2" release="$3" expected_node_env="$4" deployment_state="$5"
+  local storage_image
+  storage_image="$(awk '/^    image: chrislusf\/seaweedfs:/ { print $2 }' "$(dirname "${BASH_SOURCE[0]}")/../../docker-compose.storage.yml")"
   python3 -c '
 import json
 import sys
 from urllib.parse import unquote, urlparse
 
-tier, domain, release, expected_node_env, deployment_state = sys.argv[1:]
+tier, domain, release, expected_node_env, deployment_state, storage_image = sys.argv[1:]
 model = json.load(sys.stdin)
 services = model.get("services", {})
 expected_services = {"api", "certbot", "db", "minio", "minio-init", "nginx"}
@@ -92,13 +94,34 @@ if api_env["STORAGE_BASE_URL"] != f"https://{domain}/storage":
     raise SystemExit("STORAGE_BASE_URL is not the exact same-origin storage path")
 if api_env["MINIO_ENDPOINT"] != "http://minio:9000":
     raise SystemExit("MINIO_ENDPOINT must remain internal-only")
-if minio.get("environment", {}).get("MINIO_ROOT_USER") != api_env["MINIO_ACCESS_KEY"] or \
+if tier == "production":
+    if not storage_image or minio.get("image") != storage_image:
+        raise SystemExit("Production requires the accepted pinned object store")
+    if model.get("volumes", {}).get("minio-data", {}).get("name") != model.get("name", "") + "_seaweedfs-data":
+        raise SystemExit("Production must not mount legacy MinIO data")
+    data_mounts = [mount for mount in minio.get("volumes", []) if mount.get("target") == "/data"]
+    if len(data_mounts) != 1 or data_mounts[0].get("source") != "minio-data" or \
+       data_mounts[0].get("volume", {}).get("nocopy") is not True:
+        raise SystemExit("Production storage requires an empty, separately named restore target")
+    command = " ".join(minio.get("command", []))
+    for flag in ("-master.telemetry=false", "-admin.ui=false", "-webdav=false", "-s3.port.iceberg=0", "-s3.port.lance=0", "-s3.iam=false"):
+        if flag not in command:
+            raise SystemExit("Production storage exposes an unsupported auxiliary service")
+    if minio.get("environment", {}).get("AWS_ACCESS_KEY_ID") != api_env["MINIO_ACCESS_KEY"] or \
+       minio.get("environment", {}).get("AWS_SECRET_ACCESS_KEY") != api_env["MINIO_SECRET_KEY"]:
+        raise SystemExit("object-store bootstrap credentials do not match application credentials")
+    init_env = minio_init.get("environment", {})
+    if any(init_env.get(key) != api_env[key] for key in ("MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")):
+        raise SystemExit("S3 initializer credentials do not match application credentials")
+    if minio_init.get("image") != api.get("image"):
+        raise SystemExit("S3 initializer must use the exact accepted API image")
+elif minio.get("environment", {}).get("MINIO_ROOT_USER") != api_env["MINIO_ACCESS_KEY"] or \
    minio.get("environment", {}).get("MINIO_ROOT_PASSWORD") != api_env["MINIO_SECRET_KEY"]:
     raise SystemExit("MinIO bootstrap credentials do not match application credentials")
 expected_mc_host = "http://{}:{}@minio:9000".format(
     api_env["MINIO_ACCESS_KEY"], api_env["MINIO_SECRET_KEY"]
 )
-if minio_init.get("environment", {}).get("MC_HOST_local") != expected_mc_host:
+if tier != "production" and minio_init.get("environment", {}).get("MC_HOST_local") != expected_mc_host:
     raise SystemExit("MinIO policy initializer credentials do not match application credentials")
 if api_env["JWT_SIGNING_KEY"] == api_env["ONBOARDING_TOKEN_KEY"]:
     raise SystemExit("access and onboarding signing keys must be distinct")
@@ -137,7 +160,7 @@ for name in ("api", "certbot", "db", "minio", "nginx"):
         raise SystemExit(f"long-running service lacks reboot recovery: {name}")
 if set(model.get("volumes", {})) != {"db-data", "minio-data", "certbot-conf", "certbot-www"}:
     raise SystemExit("persistent volume catalogue differs from the recovery-point contract")
-' "$tier" "$domain" "$release" "$expected_node_env" "$deployment_state"
+' "$tier" "$domain" "$release" "$expected_node_env" "$deployment_state" "$storage_image"
 }
 
 main() {
@@ -281,7 +304,14 @@ main() {
   [[ "$available_bytes" =~ ^[0-9]+$ && "$available_bytes" -ge "$minimum_free_bytes" ]] ||
     fail "Docker data filesystem has ${available_gib:-unknown} GiB free; approved floor is $minimum_free_gib GiB"
 
-  for volume in bodour_db-data bodour_minio-data bodour_certbot-conf bodour_certbot-www; do
+  local object_volume='bodour_minio-data'
+  if [[ "$tier" == production ]]; then
+    object_volume='bodour_seaweedfs-data'
+    if docker volume inspect bodour_minio-data >/dev/null 2>&1; then
+      fail 'legacy MinIO volume found; finish the authorized storage migration review first'
+    fi
+  fi
+  for volume in bodour_db-data "$object_volume" bodour_certbot-conf bodour_certbot-www; do
     if docker volume inspect "$volume" >/dev/null 2>&1; then
       existing_volume_count=$((existing_volume_count + 1))
     fi

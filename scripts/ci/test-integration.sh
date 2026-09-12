@@ -16,6 +16,7 @@ export BODOUR_INTEGRATION_MINIO_PORT="$minio_port"
 export BODOUR_INTEGRATION_HTTP_PORT="$http_port"
 export BODOUR_INTEGRATION_API_IMAGE="$api_image"
 export BODOUR_INTEGRATION_WEB_IMAGE="$web_image"
+export BODOUR_STORAGE_INIT_IMAGE="$api_image"
 export DATABASE_URL="postgresql://app:integration-stack-password@127.0.0.1:${db_port}/bodour"
 export GOOGLE_CLIENT_ID='integration-client-id.apps.example.com'
 export GOOGLE_CLIENT_SECRET='integration-client-secret'
@@ -61,6 +62,7 @@ compose=(
   docker compose
   --project-name "$project"
   --file "$repo_root/docker-compose.yml"
+  --file "$repo_root/docker-compose.storage.yml"
   --file "$overlay"
 )
 

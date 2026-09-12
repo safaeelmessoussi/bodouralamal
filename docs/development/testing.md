@@ -2227,6 +2227,73 @@ remains a separately authorized operational prerequisite. Unobservable copy
 outcomes retain their operational locator; a healthy worker is not a claim that
 the domain backlog is empty. This evidence is not Production approval.
 
+## B1 SeaweedFS compatibility and recovery
+
+The [selected object store](../architecture/storage.md#b1-candidate-verification-checkpoint)
+is tested in isolated Compose projects, not against Owner Localhost or Staging. The shared
+Production store definition is used by `scripts/ci/test-integration.sh`, the Production-mode
+bootstrap/recovery drill and the focused storage-lifecycle drill. No live data was copied.
+
+Compatibility defects found and proved before acceptance:
+
+- The bodyless browser presigner attached CRC32(empty). `WHEN_REQUIRED` applies only to
+  the public-origin client; internal checksums remain `WHEN_SUPPORTED`, placement COPY stays
+  single-attempt, and completion still checks the entire stream's SHA-256. The new unit test
+  checks the signature, non-default host port, absence of an invented body checksum and
+  retention of a rejecting internal checksum promise.
+- The old truncated-stream test expected MinIO's transport refusal. SeaweedFS instead reached
+  the application's explicit length-mismatch refusal. The parameterized real-stack regression
+  accepts only those precise failures for a short body, requires a transport failure to remain
+  a 503, proves no DB row/canonical object, cleans server staging, retains browser staging,
+  and then completes the same upload ticket and compares the full original bytes.
+- Explicit source failure exposed an unobserved Smithy checksum-promise rejection. A narrow
+  observation in the shared internal client preserves the same rejecting promise and pipeline
+  refusal. Before correction the real-edge run had 107 passing assertions **and an unhandled
+  rejection**, so it was not accepted. After correction: **108/108 across four suites**,
+  browser **193/193**, clean all-table isolation and exit zero. The standalone transport
+  probe also changed from caught-plus-unhandled to caught-only.
+- SeaweedFS serializes singleton policy Action/Resource values as strings. The shared
+  initializer accepts only that equivalent representation; its policy unit rejects added
+  grants, broad resources, conditions and `NotAction`. No policy is silently cleared.
+- Production recreation exposed a logical/physical volume-name assumption in the drill;
+  it now uses the existing label-based resolver. Restore then correctly refused an image
+  scaffold directory copied into a fresh volume. `volume.nocopy` prevents that copy-up;
+  the empty-target refusal itself is unchanged. Preflight negative cases cover wrong image
+  digest, reuse of the legacy physical volume and removal of `nocopy`.
+
+The focused four-suite run includes real Nginx signed PUT/GET, private Range 206, MIME and
+signed Content-Disposition, public canonical/stale/restricted/deleted-coordinate checks,
+public-staging denials and method/root normalization policy. Existing tests inspect the
+loaded Nginx configuration; the edge and authorization code were not modified. Content,
+recording ingest and durable retirement cover immutable winner protection, barrier-controlled
+late COPY, ambiguous copy/delete, retry and job-history-loss recovery on SeaweedFS. The
+standalone lifecycle drill passes **5/5**, including bounded GC and strict staging safety.
+
+Final exact-code full disposable run: **2,536 passed / 18 skipped / zero failed**, **112
+files passed / two skipped**, **433.40 seconds** (2026-09-12 20:35:41 Africa/Casablanca).
+Browser **193/193**, fresh **96/96** migrations, both seeds and all-table isolation pass.
+The Production-mode drill passes repeat bucket/seed initialization, **15/15** browser
+checks, dependency-down/readiness recovery, durable queue work, independent service restart,
+full stop/start, force-recreate with stable volume identities and encrypted raw-volume
+restore into empty targets. Post-restore private bytes and DB canaries revert to the recovery
+point, exact locally built image identities remain stable, and migration history is unchanged.
+These images were built from the uncommitted B1 worktree and labelled with its parent HEAD;
+this is local exact-image reuse evidence, not a hosted publication or release acceptance.
+
+Backend lint, exact typecheck, build and **342/342 units across 40 files** pass. The same
+30 non-link repository guards pass; OpenAPI remains **175 paths / 226 operations**, TD-3
+**226/234**, with the same eight pending and zero undocumented endpoints. No schema,
+migration, route, frontend behavior or SRS changes are part of B1.
+
+Final shell/Node syntax, diff and documentation-link checks pass (**1,046/1,046**).
+Independent Docker/process inventory finds no disposable containers, project volumes,
+networks, uniquely tagged test images or test processes. The temporary policy probe was
+removed; the pinned dependency image remains cached. All remaining anonymous volumes predate
+this batch, and the running legacy MinIO still mounts only `bodour_minio-data`.
+Complete diff review found no unrelated code, secrets, debug instrumentation or weakened
+guard. The change reuses shared S3 clients, initialization, retirement and recovery helpers;
+no additional constitution exception is needed. B1 is locally closed, not deployed.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

@@ -16,7 +16,7 @@ deliberately narrow:
 | Runtime | Docker Engine from Docker's official Ubuntu repository, local rootful system daemon enabled at boot; Docker Compose **2.24.4 or newer** |
 | Operator | One dedicated non-root deployment account, SSH public-key access only, member of `docker`, with non-interactive root authority for the read-only `/usr/sbin/sshd -T -C …` preflight inspection; no shared login |
 | Checkout | `/opt/bodour`, owned by that account, not group/world-writable; approved commit checked out detached and clean |
-| State | Docker named volumes `bodour_db-data`, `bodour_minio-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage |
+| State | Docker named volumes `bodour_db-data`, `bodour_seaweedfs-data` (Production; legacy Staging uses `bodour_minio-data`), `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage |
 | Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; only SSH and TCP 80/443 admitted externally |
 | Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics |
 | Secrets | `.env` and `infra.env` are regular, deployment-user-owned mode-`0600` files; an optional Docker credential file is held to the same rule |
@@ -32,6 +32,14 @@ Preflight distinguishes a fresh host (none of the four named volumes exists) fro
 (all four exist). A partial set is neither and stops for recovery review. On a fresh host it
 also requires the bootstrap Super Admin email and sex; an upgrade may omit those seed-only
 values once the database is authoritative.
+
+Production now selects the [B1 object store](../architecture/storage.md#b1-candidate-verification-checkpoint).
+Preflight refuses a legacy `bodour_minio-data` volume: this pipeline is not a cross-vendor
+migration. Keep existing Local/Staging MinIO untouched until the separately authorized
+backup/S3-copy/verification/rollback process described there is approved. Restore only
+same-vendor raw volumes; the logical recovery name remains `minio-data`, resolved through
+Compose labels to the distinct physical name. Do not remove the `volume.nocopy` setting:
+image scaffolding would otherwise make a fresh restore target non-empty before startup.
 
 The `docker` group is **root-equivalent**. Restrict it to the deployment account and treat that
 account's SSH key as a host-root credential. Do not expose the Docker API over TCP.
@@ -167,9 +175,10 @@ export EXPECTED_PUBLIC_IPV4='<provider-approved-public-ipv4>'
 export MINIMUM_FREE_GIB='<Owner-approved-primary-disk-floor>'
 bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PUBLIC_IPV4" "$MINIMUM_FREE_GIB"
 
-# 4  Pull the two exact-commit artifacts. A missing image stops deployment.
+# 4  Pull the exact-commit artifacts and pinned object-store image.
+#    A missing image stops deployment; minio-init uses the same exact API image.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml pull api nginx
+  -f docker-compose.production.yml pull api nginx minio minio-init
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
@@ -181,7 +190,12 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml stop nginx api
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml up --no-build -d db minio
+  -f docker-compose.production.yml up --no-build -d --wait db minio
+
+#    Explicit, repeatable bucket bootstrap. Refuses unexpected policies,
+#    versioning, lifecycle or retention; never silently clears existing settings.
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml run --rm --no-deps minio-init
 
 # 6  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
@@ -463,7 +477,7 @@ Four committed pieces make release hosts reproducible from Git, and none holds a
 | File | What it is |
 |---|---|
 | `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
-| `docker-compose.production.yml` | Forces the Production runtime tier instead of trusting `.env.example`'s safe Development default |
+| `docker-compose.production.yml` | Forces the Production tier and selects the pinned SeaweedFS service/explicit initializer from `docker-compose.storage.yml`; distinct physical storage volume, no public storage port |
 | `docker-compose.staging.yml` | Selects the fixture-permitting tier value required by Revision 104 and adds hard container memory ceilings for a small VPS. It publishes no port, relaxes no limit and substitutes no security setting; `NODE_ENV` controls only the three Revision-104 behaviours named above |
 | `scripts/deploy/enable-tls.sh` | Generates only the ignored host-specific TLS block, refuses to run before the certificate exists, and recreates Nginx through the same exact-release plus environment overlays; the committed release HTTP block already preserves ACME and redirects everything else |
 

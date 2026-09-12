@@ -1680,7 +1680,7 @@ describe("B-03 — immutable upload finalization", () => {
     expect(await statObject(clients, ticket.bucket, ticket.key)).not.toBeNull();
   });
 
-  it("a truncated source stream publishes no row or canonical object and keeps staging retryable", async () => {
+  it.each(['short-body', 'transport-error'] as const)("an incomplete source (%s) cannot publish and remains retryable", async (failureMode) => {
     const bytes = Buffer.concat([Buffer.from("%PDF-1.7\n"), randomBytes(4096)]);
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
       filename: "source-read-failure.pdf",
@@ -1704,7 +1704,10 @@ describe("B-03 — immutable upload finalization", () => {
             ...args
           )) as unknown as GetObjectCommandOutput;
           const stored = Buffer.from(await response.Body!.transformToByteArray());
-          const broken = Readable.from([stored.subarray(0, 1024)], {
+          const broken = Readable.from((async function* () {
+            yield stored.subarray(0, 1024);
+            if (failureMode === 'transport-error') throw new Error('controlled source transport failure');
+          })(), {
             objectMode: false,
           });
           return { ...response, Body: broken } as never;
@@ -1719,10 +1722,16 @@ describe("B-03 — immutable upload finalization", () => {
         description: null,
       }),
     );
-    expect(e).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      details: { reason: "STORAGE_VERIFICATION_FAILED" },
-    });
+    // MinIO may refuse the truncated destination PUT at transport level;
+    // SeaweedFS lets the verifier reach its full-stream length check. Neither
+    // is successful completion. Accept only those two precise refusal paths,
+    // never an arbitrary error that could hide a broken fixture or service.
+    const refusal = e as { code: string; status: number; details: { reason: string } };
+    const allowed = [{ code: 'SERVICE_UNAVAILABLE', status: 503, reason: 'STORAGE_VERIFICATION_FAILED' }];
+    if (failureMode === 'short-body') {
+      allowed.push({ code: 'VALIDATION_FAILED', status: 409, reason: 'OBJECT_CHANGED_DURING_STREAM' });
+    }
+    expect(allowed).toContainEqual({ code: refusal.code, status: refusal.status, reason: refusal.details.reason });
     sourceFailure.mockRestore();
     expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
     expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toEqual([]);
@@ -1733,6 +1742,15 @@ describe("B-03 — immutable upload finalization", () => {
         `staging/server-finalization/${ticket.cid}/`,
       ),
     ).toEqual([]);
+    // Retry means actual recoverability, not merely retaining a key: after the
+    // fault is removed the same capability must publish the full original bytes.
+    const completed = await completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+      title: `${TAG} إعادة القراءة`, description: null,
+    });
+    createdContentIds.add(completed.id);
+    const canonical = await prisma.educationalContent.findUniqueOrThrow({ where: { id: completed.id } });
+    const recovered = await clients.internal.send(new GetObjectCommand({ Bucket: canonical.storageBucket, Key: canonical.storageKey }));
+    expect(Buffer.from(await recovered.Body!.transformToByteArray())).toEqual(bytes);
   });
 
   it("rolls back audit/DB failure and removes the unreferenced canonical copy", async () => {

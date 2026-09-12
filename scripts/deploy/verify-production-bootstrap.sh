@@ -34,6 +34,7 @@ export BODOUR_PRODUCTION_DRILL_LETSENCRYPT_DIR="$letsencrypt_dir"
 export BODOUR_PRODUCTION_DRILL_WWW_DIR="$www_dir"
 export BODOUR_PRODUCTION_DRILL_API_IMAGE="$api_image"
 export BODOUR_PRODUCTION_DRILL_WEB_IMAGE="$web_image"
+export BODOUR_STORAGE_INIT_IMAGE="$api_image"
 # Base Compose expands these before overlay merging. Explicit synthetic values
 # keep an operator's repository .env out of this drill.
 export MINIO_ACCESS_KEY='production-drill-access-key'
@@ -238,19 +239,33 @@ restart_seed_snapshot="$after_seed"
 migration_snapshot="$(migration_digest)"
 [[ -n "$migration_snapshot" ]] || fail 'migration-history snapshot is empty'
 
-policy_output="$(
-  "${compose[@]}" run --rm --no-deps --entrypoint /bin/sh minio-init -c \
-    'mc anonymous get local/public; mc anonymous get local/private; mc anonymous get local/recordings-staging'
-)"
-grep -Fq 'download' <<<"$policy_output" || fail 'public bucket is not anonymous-download'
-[[ "$(grep -Fc 'private' <<<"$policy_output")" -eq 2 ]] ||
-  fail 'private and recording-staging buckets are not anonymous-deny'
+# Repeat the generic S3 initializer: verifies exact policies and disabled
+# versioning/lifecycle/Object Lock without replacing existing configuration.
+"${compose[@]}" run --rm --no-deps minio-init
 
-canary_key='restart-drill/persistence-canary.txt'
+s3_canary() {
+  "${compose[@]}" run --rm -T --no-deps --entrypoint node minio-init \
+    --input-type=module -e '
+      import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+      const client = new S3Client({ endpoint: process.env.MINIO_ENDPOINT,
+        region: "us-east-1", forcePathStyle: true, maxAttempts: 1,
+        credentials: { accessKeyId: process.env.MINIO_ACCESS_KEY, secretAccessKey: process.env.MINIO_SECRET_KEY } });
+      try {
+        const target = { Bucket: "private", Key: "restart-drill/persistence-canary.txt" };
+        if (process.argv[1] === "put") {
+          const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+          await client.send(new PutObjectCommand({ ...target, Body: Buffer.concat(chunks) }), { abortSignal: AbortSignal.timeout(15000) });
+        } else {
+          const result = await client.send(new GetObjectCommand(target), { abortSignal: AbortSignal.timeout(15000) });
+          process.stdout.write(await result.Body.transformToString());
+        }
+      } finally { client.destroy(); }
+    ' "$1"
+}
+
 canary_value='bodour-production-restart-canary-v1'
 printf '%s' "$canary_value" |
-  "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
-    -c "mc pipe local/private/$canary_key >/dev/null"
+  s3_canary put
 
 minio_container="$("${compose[@]}" ps -q minio)"
 [[ -n "$minio_container" ]] || fail 'the MinIO container is missing'
@@ -281,8 +296,7 @@ wait_for_https_status() {
 
 assert_canary() {
   local actual
-  actual="$("${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
-    -c "mc cat local/private/$canary_key")"
+  actual="$(s3_canary get)"
   [[ "$actual" == "$canary_value" ]] || fail 'private object did not survive restart/recreation'
 }
 
@@ -498,7 +512,7 @@ before_minio="$(container_id minio)"
 before_nginx="$(container_id nginx)"
 before_volumes="$(for volume in db-data minio-data; do
   "${compose[@]}" config --volumes | grep -Fxq "$volume" || fail "logical volume is missing: $volume"
-  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "${project}_$volume"
+  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "$(backup_resolve_volume "$project" "$volume")"
 done)"
 
 "${compose[@]}" up --no-build -d --force-recreate --wait --wait-timeout 150 \
@@ -511,7 +525,7 @@ after_nginx="$(container_id nginx)"
    "$after_minio" != "$before_minio" && "$after_nginx" != "$before_nginx" ]] ||
   fail 'force-recreate did not replace every long-running application container'
 after_volumes="$(for volume in db-data minio-data; do
-  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "${project}_$volume"
+  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "$(backup_resolve_volume "$project" "$volume")"
 done)"
 [[ "$after_volumes" == "$before_volumes" ]] || fail 'named volume identity changed during recreation'
 [[ "$(docker inspect --format '{{json .Config.Cmd}}' "$after_api")" == '["node","dist/src/index.js"]' ]] ||
@@ -571,8 +585,7 @@ assert_release_identity
 # must remove these later values rather than merely proving that old data exists.
 sql "UPDATE production_recovery_drill SET value = 'state-after-recovery-point' WHERE id = 1;"
 printf 'object-after-recovery-point' |
-  "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
-    -c "mc pipe local/private/$canary_key >/dev/null"
+  s3_canary put
 assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
   'state-after-recovery-point' 'post-recovery-point database mutation'
 

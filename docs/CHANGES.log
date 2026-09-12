@@ -7927,3 +7927,53 @@ One new local commit only; no push, deployment, Owner-data/Staging/Production/DN
 changes. Pre-maintenance legacy import and real-host rollout remain separately
 authorized operational prerequisites. B1/B8 and unrelated HIGH findings remain
 outside scope. This is not Production approval.
+
+2026-09-12 — B1 candidate checkpoint, NOT acceptance (uncommitted)
+SeaweedFS 4.46 official release/security/single-node evidence and separate-volume
+candidate recorded in architecture/storage.md. Synthetic S3 probe verified all
+three authenticated buckets, public-read policy and disabled versioning/lifecycle/
+Object Lock. First real Nginx run: 44 passed / 62 failed / 5 skipped; bodyless SDK
+presigning incorrectly attached the empty-body checksum. Public-origin-only
+WHEN_REQUIRED correction leaves internal checksums and SHA-256 completion intact;
+new deterministic unit 1/1. Focused retry: 105 passed / 1 failed, four suites,
+48.57 seconds. Remaining truncated-stream test expected a storage transport error;
+the replacement instead reached the explicit application length-mismatch refusal.
+No runtime guard or assertion was weakened. Production overlay/bootstrap changes
+remain unverified. Read-only host-preflight guard invocation was rejected by the
+approval service with usage-limit exhaustion; no indirect retry. Shell/Node syntax
+and diff checks pass; documentation links 1,039/1,039 pass. Final independent Docker
+inventory and remaining real-stack/final gates are pending. No commit/push/deployment or Owner,
+Staging, Production/DNS mutation. B1 remains in progress; B8/HIGH/CNDP not started.
+
+2026-09-12 — B1 local object-store closure, no live rollout
+Selected digest-pinned SeaweedFS 4.46 through the Owner-authorized engineering
+boundary. Shared Production/disposable Compose uses a separate physical volume;
+legacy Local/Staging MinIO data/configuration is unchanged. Generic S3 initialization
+checks all three buckets and refuses policy/versioning/lifecycle/retention drift.
+Equivalent singleton policy serialization is accepted, additional grants are not.
+Public-origin presigning no longer invents CRC32(empty); internal checksums and
+full-stream SHA-256 publication validation remain. Truncated/transport regressions
+prove refusal, no canonical/DB publication, staging cleanup and full-byte retry.
+The transport test exposed an unhandled Smithy digest rejection; the narrow shared
+client observation retains the same rejecting promise and does not mask failure.
+Focused exact code: 108/108, browser 193/193, clean isolation; lifecycle 5/5.
+Production restart/recreate/restore exposed two integration assumptions: physical
+volume names now use the existing resolver, and nocopy prevents image scaffolding
+from making empty restore targets non-empty. No restore safeguard was weakened.
+Final rehearsal passes repeat initialization, browser 15/15, worker/dependency
+recovery, restarts, recreation and encrypted recovery-point rollback of DB/private
+bytes without startup migrations or seed mutation. These are disposable local
+images, not a published release. Full exact-code integration: 2,536 passed / 18
+skipped / zero failed, 112 passing files / two skipped, 433.40 seconds; browser
+193/193, 96/96 fresh migrations, both seeds and clean all-table isolation.
+Lint/typecheck/build, 342/342 backend units and all 30 non-link guards pass.
+Storage/deployment/configuration/environment/CI/testing/readiness documentation
+records the new vendor and safe migration boundary. No SRS/schema/API/frontend
+change, new retention policy, push or deployment. B1 CLOSED for local engineering;
+B8, HIGH findings, CNDP, real keys/migration/host rollout remain separate.
+Final shell/Node/diff checks and 1,046/1,046 documentation links pass. Independent
+Docker/process inventory confirms no disposable project resources remain; all
+remaining anonymous volumes predate B1. The pinned dependency image stays cached.
+Legacy Owner MinIO retains its original image and data mount. Complete scope/
+security review found no secrets/debug code, unrelated refactor or weakened gate;
+no new engineering-constitution exception. One new local commit only, no push.

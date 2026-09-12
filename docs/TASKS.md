@@ -1,5 +1,39 @@
 # Tasks — بذور الأمل Platform
 
+## B1 — maintained object store (local engineering acceptance complete)
+
+- [x] Recover clean `99a4d3552f96c28da19d529201e302284f5bb94f`; preserve
+  B2–B7 local acceptance. No push, live data, Staging or Production operations.
+- [x] Select SeaweedFS 4.46 from current official release/security evidence;
+  [pin and selection](architecture/storage.md#b1-candidate-verification-checkpoint).
+  Separate physical volume; legacy Local/Staging MinIO configuration unchanged.
+- [x] Real Nginx compatibility exposed SDK signing of CRC32(empty) before the
+  browser body exists. Public-origin presigning now uses `WHEN_REQUIRED`;
+  internal checksums, single-attempt COPY and full SHA-256 verification unchanged.
+  New deterministic unit assertion passes **1/1**.
+- [x] Replace the vendor-specific truncated-stream expectation with both exact
+  refusal paths; retain publication/staging assertions and prove successful
+  full-byte retry. Explicit transport failure exposed an unobserved SDK checksum
+  rejection; the internal client now observes, but does not replace or resolve,
+  that rejecting promise. Final focused **108/108**, browser **193/193**, clean isolation.
+- [x] Production Compose/preflight, repeat initialization, restart/recreate and
+  encrypted recovery-point rollback pass. Resolve physical volume names through
+  the existing helper; prevent image scaffold copy-up with `nocopy` rather than
+  weakening the empty-restore-target rule. Lifecycle **5/5**; B4/B5 winner,
+  late-copy, ambiguous-delete and durable-obligation coverage retained.
+- [x] Final exact-code full disposable gate: **2,536 passed / 18 skipped / zero
+  failures**, **112 files passed / two skipped**, **433.40 seconds**, browser
+  **193/193**, all-table isolation clean, fresh **96/96** migrations and both seeds.
+  Lint/typecheck/build, **342/342** units and all **30 non-link guards** pass.
+  [Detailed compatibility/recovery evidence](development/testing.md#b1-seaweedfs-compatibility-and-recovery).
+- [x] Final scope/security review, shell/Node syntax, diff and documentation-link
+  checks pass (**1,046/1,046**). Independent Docker/process inventory confirms
+  no disposable project resources remain; pre-existing volumes are untouched.
+- [x] Complete B1 locally before any B8/HIGH/CNDP/release work. No push,
+  deployment, Owner-data or live-infrastructure changes. Future populated
+  MinIO migration and real-host provisioning require separate authorization;
+  this local engineering acceptance is not Production approval.
+
 ## B4/B5/B6 — storage retirement and Event authorization (local acceptance complete)
 
 - [x] Close unique visibility-placement adoption/rollback and durable exact-key
@@ -1786,7 +1820,9 @@ was hiding behind it: the run went green on the first attempt.
   repository-side artifact gap, not the open
   host/access, object-store, backup, or clean-host rehearsal blockers in the
   [readiness ledger](operations/deployment-readiness.md).
-- [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;
+- [x] **P0.1 / B1 object-store security — local engineering complete** — the affected final
+  MinIO OSS pin remains prohibited for Production; the selected SeaweedFS replacement and
+  full compatibility/recovery proof are recorded in the B1 section above.
   Nginx now applies the vendor-advised unsigned-trailer defence at every storage proxy path
   without weakening valid presigned GET/PUT. Application readiness is now provider-independent:
   it performs authenticated S3 `HeadBucket` against public, private and recording staging with
@@ -1794,9 +1830,9 @@ was hiding behind it: the run went green on the first attempt.
   The replacement contract also requires versioning disabled and refuses unapproved lifecycle
   or Object Lock behavior because exact-key deletion carries no storage version ID. The Compose
   image, initializer, container probe and raw-volume backup remain vendor integration points.
-  **OWNER DECISION REQUIRED — OBJECT STORE:** select
-  and fund a maintained patched replacement, then run the full compatibility/safeguarding/
-  retention/backup regression listed in [Storage](architecture/storage.md#owner-decision-required--object-store)
+  These integration points are adapted and verified locally; live provisioning and any
+  populated migration require separate authorization. See
+  [Storage](architecture/storage.md#owner-decision-required--object-store).
 - [ ] **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require
   terminal job failures, queue lag, backup failure and TLS expiry to surface on the Admin
   dashboard. The implementation has no such read, TD-3 names no route, and R77–R93 deliberately
@@ -1817,8 +1853,8 @@ was hiding behind it: the run went green on the first attempt.
   REQUIRED — BACKUP TARGET AND RETENTION:** provision the second Moroccan SFTP location,
   escrow keys/password, and set retention. Still release-blocking: `backup.replicate` nightly
   pg-boss automation (an unmonitored cron substitute is explicitly not implemented), critical
-  alert/staleness visibility, object-volume adaptation after the
-  P0.1 vendor decision, and realistic Production-host RTO drill
+  alert/staleness visibility and realistic Production-host RTO drill. The B1 object-volume
+  adaptation and disposable SeaweedFS recovery proof are complete; no live rollout occurred.
 - [~] **P0.3 permanent purge and staging lifecycle** — independently solvable safety work is
   complete: exact replacement/deletion obligations are transactionally durable; manual content
   purge cannot erase its last storage coordinates; retry after ambiguous delete is idempotent;
@@ -2295,7 +2331,8 @@ verification.**
 
 ### Production blockers — STILL OPEN, not closed by this batch
 
-object-store replacement · backup target/retention · backup automation/alerting · Production
+Historical list at that batch boundary; B1 object-store replacement is now locally closed
+above, with live rollout still pending. Remaining here: backup target/retention · backup automation/alerting · Production
 RTO drill · automatic quarantine destruction · ~~P1.2 test isolation~~ **CLOSED 2026-08-27** ·
 manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production undeployed.**
 

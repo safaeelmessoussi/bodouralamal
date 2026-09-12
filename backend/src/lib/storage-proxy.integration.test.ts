@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -50,6 +52,29 @@ beforeAll(async () => {
 });
 
 describe("signed PUT + signed GET round-trip through the Nginx /storage proxy (§3.1, §18)", () => {
+  it('preserves range, MIME and signed content disposition without exposing private bytes', async () => {
+    const key = `test/metadata-${randomBytes(8).toString('hex')}.pdf`;
+    const payload = Buffer.from('%PDF-1.7\nprivate-range-fixture');
+    try {
+      await clients.internal.send(new PutObjectCommand({ Bucket: BUCKETS.private, Key: key,
+        Body: payload, ContentType: 'application/pdf' }));
+      const signed = new URL(await getSignedUrl(clients.publicOrigin, new GetObjectCommand({
+        Bucket: BUCKETS.private, Key: key, ResponseContentDisposition: 'attachment; filename="fixture.pdf"',
+      }), { expiresIn: 60 }));
+      signed.pathname = `${clients.storagePrefix}${signed.pathname}`;
+      const response = await fetch(signed, { headers: { Range: 'bytes=0-7' }, signal: AbortSignal.timeout(10000) });
+      expect(response.status).toBe(206);
+      expect(response.headers.get('content-range')).toBe(`bytes 0-7/${payload.length}`);
+      expect(response.headers.get('content-type')).toBe('application/pdf');
+      expect(response.headers.get('content-disposition')).toBe('attachment; filename="fixture.pdf"');
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(payload.subarray(0, 8));
+      const anonymous = await fetch(`${config.STORAGE_BASE_URL}/private/${key}`, { redirect: 'manual', signal: AbortSignal.timeout(10000) });
+      expect(anonymous.status).toBeGreaterThanOrEqual(300);
+      expect(await anonymous.text()).not.toContain('private-range-fixture');
+    } finally {
+      await clients.internal.send(new DeleteObjectCommand({ Bucket: BUCKETS.private, Key: key }));
+    }
+  });
   it("stops the unsupported unsigned streaming-trailer mode at Nginx", async () => {
     // This is a defensive boundary assertion, not a vulnerability
     // reproduction: it sends neither credentials nor a streaming/chunked

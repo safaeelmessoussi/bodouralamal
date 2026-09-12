@@ -85,11 +85,29 @@ export function createStorageClients(config: AppConfig): StorageClients {
   // `<bucket>.<host>` and never reach the proxy.
   const common = { region: 'us-east-1', forcePathStyle: true, credentials } as const;
   const { origin, prefix } = splitStorageBaseUrl(config.STORAGE_BASE_URL);
+  const internal = new S3Client({ ...common, endpoint: config.MINIO_ENDPOINT });
+  // This backend uses the SDK's Node runtime, never its browser Blob hasher.
+  type NodeStreamHasher = (hash: Parameters<S3Client['config']['streamHasher']>[0], stream: Readable) => Promise<Uint8Array>;
+  const streamHasher = internal.config.streamHasher as NodeStreamHasher;
+  internal.config.streamHasher = (hash: Parameters<NodeStreamHasher>[0], stream: Readable) => {
+    const digest = streamHasher(hash, stream);
+    // Smithy's chunked encoder awaits this only on stream `end`. A source
+    // error instead rejects it without `end`, after our pipeline has already
+    // aborted the request. Observe that rejection, but return the SAME promise:
+    // checksum failures still reject every caller that awaits the digest.
+    // Do not turn a failed digest into a value or disable internal checksums.
+    void digest.catch(() => undefined);
+    return digest;
+  };
 
   return {
-    internal: new S3Client({ ...common, endpoint: config.MINIO_ENDPOINT }),
+    internal,
     singleAttemptInternal: new S3Client({ ...common, endpoint: config.MINIO_ENDPOINT, maxAttempts: 1 }),
-    publicOrigin: new S3Client({ ...common, endpoint: origin }),
+    // The presigner does not possess the future browser body. SDK-default
+    // optional checksums otherwise sign CRC32(empty), which a conforming store
+    // rejects for a non-empty upload. Internal writes retain SDK checksums;
+    // completion still validates the exact accepted stream with full SHA-256.
+    publicOrigin: new S3Client({ ...common, endpoint: origin, requestChecksumCalculation: 'WHEN_REQUIRED' }),
     storagePrefix: prefix,
   };
 }

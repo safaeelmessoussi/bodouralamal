@@ -180,7 +180,8 @@ The one coupling to remember: **the password in `infra.env` must match the one e
 |---|---|
 | Node | `24.11.0`, pinned in `.nvmrc` and the base image |
 | PostgreSQL | `postgres:18.4` — the Debian variant, because **ICU is required** for Arabic collation |
-| MinIO | `RELEASE.2025-09-07T16-13-09Z` |
+| Production S3 | SeaweedFS `4.46`, digest-pinned in `docker-compose.storage.yml`; [selection and compatibility](../architecture/storage.md#b1-candidate-verification-checkpoint) |
+| Legacy Local/Staging MinIO | `RELEASE.2025-09-07T16-13-09Z`; not a supported Production choice, no live switch performed |
 | Nginx | `stable-alpine` |
 
 One PostgreSQL detail that will waste an afternoon if unknown: **PG 18+ images require the

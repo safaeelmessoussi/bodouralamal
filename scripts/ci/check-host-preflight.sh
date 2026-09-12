@@ -60,6 +60,21 @@ if printf '%s' "$resolved" |
   validate_resolved_compose production preflight.invalid "$release" production fresh 2>/dev/null; then
   fail 'resolved-topology validator did not reject a host-published API port'
 fi
+# Replacement storage must not be a tag-only substitution or reuse MinIO bytes.
+for mutation in image volume copy; do
+  if printf '%s' "$resolved" |
+    python3 -c 'import json,sys; value=json.load(sys.stdin)
+if sys.argv[1] == "image": value["services"]["minio"]["image"] = "chrislusf/seaweedfs:4.46@sha256:" + "0" * 64
+elif sys.argv[1] == "volume": value["volumes"]["minio-data"]["name"] = "bodour_minio-data"
+else:
+    for mount in value["services"]["minio"]["volumes"]:
+        if mount["target"] == "/data": mount["volume"]["nocopy"] = False
+json.dump(value,sys.stdout)' "$mutation" |
+    validate_resolved_compose production preflight.invalid "$release" production fresh 2>/dev/null; then
+    fail "resolved-topology validator did not reject unsafe storage $mutation"
+  fi
+done
+node --test "$repo_root/scripts/storage/policy.test.mjs"
 unset resolved
 
 resolved="$({
