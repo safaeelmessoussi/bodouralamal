@@ -8116,3 +8116,74 @@ out factually — no CNDP/privacy interpretation was added or extended. No
 SRS/schema/migration/route/frontend/OpenAPI edit. One new local commit only;
 nothing pushed or deployed. Owner data, Staging, Production, DNS and live
 infrastructure remained untouched throughout.
+
+2026-09-13 — H3 CLOSED (Owner decision): explicit manual exam opening
+Implemented the Owner's ratified H3 contract: a manual remote exam is opened
+explicitly by an already-authorized teacher or administrator through an «فتح
+الاختبار» action, never by the scheduled start time arriving on its own
+(SRS Revision 142). No schema or migration change: `Exam.available_from`
+(R136 clause 5) already documented an explicit staff "open now" act as
+legitimate; `openAssessment`/`POST /assessments/{id}/open` is that one missing
+write, mirroring `closeAssessment`/`POST /assessments/{id}/close` exactly —
+the governing `lockExamRow` acquired first, a fresh re-read of state and
+authority inside the same transaction, `assertMayAuthor` unchanged (never its
+branch-only subset, the exact H2 regression the prior HIGH-continuation
+commit fixed), then one `audit.write`. Mode/status/already-open are refused
+together as one `STATE_CONFLICT`/`INVALID_TRANSITION`, `closeAssessment`'s own
+coded conflict — non-idempotent by design, proven by an audit-count assertion
+showing repeat-Open and genuinely concurrent Opens each leave exactly one
+event. Frontend: one primary «فتح الاختبار» action on `/admin/assessments`,
+beside «إغلاق الاختبار», behind the same `ConfirmDialog`/`busy`/`act()` state
+machine already used there — no new pending-state logic — visible only for a
+still-unopened `online`/`published` paper (display only, rule O; the backend
+remains authoritative), with a neutral «لم يُفتح بعد» status badge. The DTO
+gains `available_from` (previously computed but never serialized) on the
+shared author/student/submission paper representation.
+
+The service test that previously simulated opening with a direct
+`prisma.exam.update` now calls the real action; 13 new focused integration
+tests were added covering Admin, a genuine `entire_level`-staffed Teacher, an
+exact-Session-only Teacher (and its refusal to expand to a Level target), R91
+date-bounded authority (an ended assignment still authorizes an exam dated
+inside its old window and refuses one dated outside it), a branch-scoped
+Admin refused on a Level spanning another branch, an outsider Teacher and the
+student herself refused, a `physical` and a still-`draft` row both refused,
+repeat/concurrent Open each leaving one audit row, the audit event's actor/
+target, and the student's `NOT_FOUND` before Open versus reachable paper
+after it through the real action alone — plus one proof that opening does not
+bypass an unrelated student's own Level-eligibility refusal. First run of
+the new tests found two authoring mistakes in the TESTS themselves, not the
+implementation: the Level/administrative-group teacher-scope fallback answers
+`FORBIDDEN` not `NOT_FOUND` (`assertExamInTeacherScope`'s own established
+taxonomy), and several new fixtures dated `TODAY` collided with this file's
+own documented pagination-sensitive convention — corrected to `OTHER_DATE`,
+no assertion weakened. Corrected rerun: 128/128 in this file.
+
+Full disposable-stack run: 2,563 passed / 18 skipped, 0 failed, 112 passing
+files / 2 skipped, real-edge browser probe 193/193, clean all-table
+isolation. Backend lint/typecheck/build and unit suite (342/342, 40 files)
+unaffected. Frontend lint/typecheck/build clean; frontend unit suite 1,263
+passed across 106 files, including 13 new source-guard assertions in
+`assessment-ui.test.ts` proving the action's visibility condition, confirm
+dialog, shared busy/confirm state and absence of any auto-open timer — this
+screen's established static-guard convention, not a DOM render test. All 9
+checked non-link repository guards and `git diff --check` pass. TD-3 registry
+conformance: 227/235 (one more implemented, same eight still-pending
+endpoints, zero undocumented). `docs/openapi.json` regenerated and current:
+176 paths, 227 operations, reconciled against the live router. Independent
+Docker inventory after the final run shows no disposable
+`bodour-ci-integration-*` resources remain; the pre-existing persistent local
+dev stack was untouched throughout.
+
+Documentation: SRS gains Revision 142 (the ratified contract, in the
+document's own established revision-log convention — TD-2's role-permission
+matrix and the SRS's own TD-3 section list representative actions, not every
+route, matching how `close`/`schedule`/`copy` were already recorded, so no
+new table row was added there); `scripts/ci/td3-routes.txt` gains one line;
+`docs/development/testing.md` gains a dated H3 checkpoint;
+`docs/operations/deployment-readiness.md`'s H3 finding and release-checklist
+step 1 are updated to CLOSED; `docs/TASKS.md` ticks H3 and records the HIGH
+continuation (H1–H6) as fully closed locally. No CNDP/privacy work begun; no
+other HIGH finding, B1–B8 item or unrelated refactor touched. One new local
+commit only; nothing pushed or deployed. Owner data, Staging, Production, DNS
+and live infrastructure remained untouched throughout.

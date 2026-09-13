@@ -18,6 +18,7 @@ import {
   createAssessment,
   listAssessments,
   listSubmissions,
+  openAssessment,
   readSubmission,
   removeQuestion,
   reorderQuestions,
@@ -1020,9 +1021,13 @@ describe('R136 clause 5 · a `manual` occurrence never becomes reachable on its 
    * `eligible()` (`assessment.service.ts`) gates `studentPaper`, `saveResponses`
    * and `assessmentsForStudent` alike — one shared predicate, fixed once here
    * rather than at each call site. `manual` leaves `availableFrom` `NULL`
-   * forever: this revision adds no HTTP route to open one, so "opened" below
-   * is simulated exactly the way any future opening route would act — writing
-   * a past `availableFrom` onto the row — not a shortcut around the fix.
+   * forever absent an explicit opening act. H3 (Owner decision 2026-09-13,
+   * below) adds exactly that supported act, `openAssessment` /
+   * `POST /assessments/{id}/open` — proven here through the same
+   * `prisma.exam.update` a future reader might otherwise mistake for a
+   * shortcut, so this suite keeps proving `eligible()`'s own refusal without
+   * also re-deriving H3's authorization, which the describe block below
+   * proves against the real action instead.
    *
    * `localOnlyLevelId`/`bob` rather than the file's usual `levelId`/`alice`:
    * scheduling here (deliberately, per the case below) leaves the DRAFT
@@ -1107,9 +1112,9 @@ describe('R136 clause 5 · a `manual` occurrence never becomes reachable on its 
     });
   });
 
-  it('once manually opened (an Admin sets `availableFrom` in the past), the same occurrence reads, saves and submits normally', async () => {
+  it('once opened through the supported action, the same occurrence reads, saves and submits normally', async () => {
     const { examId, questionId } = await unopenedManualExam();
-    await prisma.exam.update({ where: { id: examId }, data: { availableFrom: new Date(0) } });
+    await openAssessment(prisma, superAdmin(), examId);
 
     const paper = await studentPaper(prisma, student(bob), examId, bob);
     expect(paper.submission).toBeNull();
@@ -1152,6 +1157,254 @@ describe('R136 clause 5 · a `manual` occurrence never becomes reachable on its 
       { submit: true },
     );
     expect(saved.state).toBe('submitted');
+  });
+});
+
+describe('H3 · explicit manual exam opening (Owner decision 2026-09-13)', () => {
+  /**
+   * **The Owner's contract**: a manual remote exam is opened explicitly by an
+   * already-authorized teacher or administrator, never by the scheduled start
+   * time arriving on its own. No new state — `available_from` (R136 clause 5)
+   * already carries *never opened* as `NULL`; `openAssessment` is the one
+   * write that sets it, reusing `assertMayAuthor` unchanged (H2), never its
+   * branch-only subset, and the same governing lock/re-read H5 established.
+   */
+  let wholeLevelTeacher = '';
+
+  beforeAll(async () => {
+    wholeLevelTeacher = await person('H3 كامل المستوى');
+    await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة كامل المستوى`,
+        subjectId,
+        teachingMode: 'entire_level',
+        levelId: localOnlyLevelId,
+        branchId,
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T10:00:00.000Z'),
+        recurrence: 'weekly',
+        weekdays: ['wednesday'],
+        anchorDate: TODAY,
+        academicYearId,
+        staff: { create: [{ userId: wholeLevelTeacher, position: 'teacher' }] },
+      },
+    });
+  });
+
+  async function unopenedManual(
+    target: NonNullable<Parameters<typeof createAssessment>[2]['target']>,
+    levelOverride = localOnlyLevelId,
+  ): Promise<string> {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} فتح`,
+      maxGrade: 20,
+      levelId: levelOverride,
+      subjectId,
+      academicYearId,
+      target,
+      ...(target.kind === 'session' ? {} : { date: OTHER_DATE }),
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target,
+      ...(target.kind === 'session' ? {} : { date: OTHER_DATE }),
+      availability: { policy: 'manual' },
+    });
+    return occurrenceId;
+  }
+
+  const availableFrom = (examId: string) =>
+    prisma.exam.findUniqueOrThrow({ where: { id: examId }, select: { availableFrom: true } })
+      .then((r) => r.availableFrom);
+
+  it('an authorized administrator opens a valid manual remote exam', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await openAssessment(prisma, scopedAdmin(), examId);
+    expect(await availableFrom(examId)).not.toBeNull();
+  });
+
+  it('an authorized whole-Level teacher opens an exam within scope', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await openAssessment(prisma, actorOf(wholeLevelTeacher, 'teacher'), examId);
+    expect(await availableFrom(examId)).not.toBeNull();
+  });
+
+  it('an authorized exact-Session teacher opens an exam within scope, but exact-Session authority does not expand to the whole Level', async () => {
+    const cover = await person('H3 تغطية الحصة');
+    await prisma.sessionStaff.create({ data: { sessionId, userId: cover, position: 'assistant' } });
+    const actor = actorOf(cover, 'teacher');
+
+    const sessionExam = await unopenedManual({ kind: 'session', id: sessionId });
+    await openAssessment(prisma, actor, sessionExam);
+    expect(await availableFrom(sessionExam)).not.toBeNull();
+
+    // The SAME cover, over a Level target — never staffed, never authorized.
+    // (The Level/administrative-group fallback answers FORBIDDEN, not
+    // NOT_FOUND — `assertExamInTeacherScope`'s own established taxonomy,
+    // unchanged by H3 and reused exactly as `assertMayAuthor` already does.)
+    const levelExam = await unopenedManual({ kind: 'level' });
+    await expect(openAssessment(prisma, actor, levelExam)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await availableFrom(levelExam)).toBeNull();
+  });
+
+  it('date-bounded teacher authority uses the exam’s own date, not today’s staffing', async () => {
+    const ended = await person('H3 إسناد منتهٍ');
+    const endedSchedule = await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة منتهية`,
+        subjectId,
+        teachingMode: 'entire_level',
+        levelId: localOnlyLevelId,
+        branchId,
+        startTime: new Date('1970-01-01T08:00:00.000Z'),
+        endTime: new Date('1970-01-01T09:00:00.000Z'),
+        recurrence: 'weekly',
+        weekdays: ['thursday'],
+        anchorDate: new Date(TODAY.getTime() - 200 * 86_400_000),
+        academicYearId,
+      },
+      select: { id: true },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: {
+        scheduleId: endedSchedule.id,
+        userId: ended,
+        position: 'teacher',
+        effectiveFrom: new Date(TODAY.getTime() - 200 * 86_400_000),
+        effectiveUntil: new Date(TODAY.getTime() - 100 * 86_400_000),
+      },
+    });
+    const actor = actorOf(ended, 'teacher');
+
+    // Dated inside her now-ended assignment's window: R91 judges authority on
+    // the EXAM's date, so her lapsed assignment still covers it.
+    const insideWindow = await unopenedManual(
+      { kind: 'level' },
+      localOnlyLevelId,
+    );
+    await prisma.exam.update({
+      where: { id: insideWindow },
+      data: { date: new Date(TODAY.getTime() - 150 * 86_400_000) },
+    });
+    await openAssessment(prisma, actor, insideWindow);
+    expect(await availableFrom(insideWindow)).not.toBeNull();
+
+    // Dated at TODAY — outside the window her assignment ever covered.
+    const outsideWindow = await unopenedManual({ kind: 'level' });
+    await prisma.exam.update({ where: { id: outsideWindow }, data: { date: TODAY } });
+    await expect(openAssessment(prisma, actor, outsideWindow)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(await availableFrom(outsideWindow)).toBeNull();
+  });
+
+  it('wrong branch is rejected for a branch-scoped Admin', async () => {
+    // `levelId` (unlike `localOnlyLevelId`) spans `otherBranchId` through
+    // `farStudent` — outside `scopedAdmin`'s reach (`branchId` only).
+    const examId = await unopenedManual({ kind: 'level' }, levelId);
+    await expect(openAssessment(prisma, scopedAdmin(), examId)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: { reason: 'TARGET_OUTSIDE_BRANCH_SCOPE' },
+    });
+    expect(await availableFrom(examId)).toBeNull();
+  });
+
+  it('unauthorized roles and the student herself are rejected', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await expect(openAssessment(prisma, outsider(), examId)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(openAssessment(prisma, student(bob), examId)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await availableFrom(examId)).toBeNull();
+  });
+
+  it('a physical exam cannot use this action — remote-only', async () => {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} حضوري`,
+      maxGrade: 20,
+      levelId: localOnlyLevelId,
+      subjectId,
+      academicYearId,
+      mode: 'physical',
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+    });
+    await expect(openAssessment(prisma, superAdmin(), id)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'INVALID_TRANSITION' },
+    });
+  });
+
+  it('a draft, never scheduled, cannot be opened', async () => {
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} مسودة`,
+      maxGrade: 20,
+      levelId: localOnlyLevelId,
+      subjectId,
+      academicYearId,
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+    });
+    await expect(openAssessment(prisma, superAdmin(), id)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'INVALID_TRANSITION' },
+    });
+  });
+
+  it('repeating Open against an already-open exam is refused, not silently accepted, with no duplicate audit event', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await openAssessment(prisma, superAdmin(), examId);
+    await expect(openAssessment(prisma, superAdmin(), examId)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'INVALID_TRANSITION' },
+    });
+    const opens = await prisma.auditLog.count({
+      where: { actionType: 'assessment.open', targetEntity: 'Exam', targetId: examId },
+    });
+    expect(opens).toBe(1);
+  });
+
+  it('concurrent opening is serialized by the governing Exam lock: exactly one wins, one audit event', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    const results = await Promise.allSettled([
+      openAssessment(prisma, superAdmin(), examId),
+      openAssessment(prisma, superAdmin(), examId),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const opens = await prisma.auditLog.count({
+      where: { actionType: 'assessment.open', targetEntity: 'Exam', targetId: examId },
+    });
+    expect(opens).toBe(1);
+  });
+
+  it('a successful opening produces the expected audit event', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await openAssessment(prisma, superAdmin(), examId);
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'assessment.open', targetEntity: 'Exam', targetId: examId },
+    });
+    expect(entry.actorUserId).toBe(superAdminId);
+    expect(entry.targetId).toBe(examId);
+  });
+
+  it('the exam is unavailable to the student before opening, and reachable through the supported action afterward', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await expect(studentPaper(prisma, student(bob), examId, bob)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await openAssessment(prisma, superAdmin(), examId);
+    const paper = await studentPaper(prisma, student(bob), examId, bob);
+    expect(paper.submission).toBeNull();
+  });
+
+  it('opening does not bypass unrelated eligibility — a student outside the target Level stays blocked', async () => {
+    const examId = await unopenedManual({ kind: 'level' });
+    await openAssessment(prisma, superAdmin(), examId);
+    // `carol` is enrolled in `otherLevelId`, never `localOnlyLevelId`.
+    await expect(studentPaper(prisma, student(carol), examId, carol)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
   });
 });
 

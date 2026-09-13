@@ -7,6 +7,7 @@ import {
   createAssessment,
   listAssessments,
   listSubmissions,
+  openAssessment,
   readAuthorPaper,
   readSubmission,
   removeQuestion,
@@ -518,7 +519,7 @@ function OnePaper({
   // means the dialog is closed, `AssessmentQuestion` means it is open on
   // that row.
   const [editingQuestion, setEditingQuestion] = useState<AssessmentQuestion | null>(null);
-  const [confirm, setConfirm] = useState<'close' | null>(null);
+  const [confirm, setConfirm] = useState<'close' | 'open' | null>(null);
   const [viewing, setViewing] = useState<AssessmentPaper | null>(null);
 
   const load = useCallback(async () => {
@@ -545,6 +546,12 @@ function OnePaper({
    */
   const frozen = rows.some((r) => r.state !== 'in_progress');
   const editable = canWrite && paper?.status === 'draft' && !frozen;
+  // H3 (Owner decision 2026-09-13) — a manual remote exam only, still
+  // unopened. Client-side only for display (rule O — the calendar's own
+  // `ExamAccessAction` discipline): the server's `assertMayAuthor` remains
+  // the actual authority check, so hiding this button is never the boundary.
+  const openable =
+    canWrite && paper?.mode === 'online' && paper.status === 'published' && paper.available_from === null;
 
   async function act(action: () => Promise<void>, failure: string): Promise<void> {
     setBusy(true);
@@ -622,6 +629,11 @@ function OnePaper({
                 {t('assessments.scheduleAction')}
               </Button>
             ) : null}
+            {openable ? (
+              <Button variant="primary" disabled={busy} onClick={() => setConfirm('open')}>
+                {t('assessments.openExam')}
+              </Button>
+            ) : null}
             {paper.status === 'published' ? (
               <Button variant="secondary" disabled={busy} onClick={() => setConfirm('close')}>
                 {t('assessments.close')}
@@ -642,6 +654,9 @@ function OnePaper({
             <Badge tone={paper.status === 'published' ? 'ok' : 'neutral'}>
               {t(`assessments.${paper.status}`)}
             </Badge>{' '}
+            {paper.mode === 'online' && paper.status === 'published' && paper.available_from === null ? (
+              <Badge tone="neutral">{t('assessments.notYetOpen')}</Badge>
+            ) : null}{' '}
             <span className="muted">{t(TARGET_LABELS[paper.target_kind])}</span>
           </p>
           {paper.source_exam_id ? (
@@ -815,6 +830,15 @@ function OnePaper({
         confirmLabel={t('assessments.close')}
         busy={busy}
         onConfirm={() => void act(() => closeAssessment(examId, token), t('assessments.saveFailed'))}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === 'open'}
+        title={t('assessments.openExam')}
+        body={t('assessments.openExamConfirm')}
+        confirmLabel={t('assessments.openExam')}
+        busy={busy}
+        onConfirm={() => void act(() => openAssessment(examId, token), t('assessments.saveFailed'))}
         onCancel={() => setConfirm(null)}
       />
       </>

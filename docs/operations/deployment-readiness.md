@@ -20,7 +20,7 @@ not proof that this newer source is deployed or accepted there.
 |---|---|
 | H1 room/branch PATCH | **CLOSED locally.** Authoritative transaction reuses creation coherence; focused HTTP cross-branch room/group refusal passed in the full corrected run |
 | H2 authority/date | **CLOSED locally.** Physical create/schedule/PATCH and individual grading/authoring use the exam date; ended-assignment PATCH regression passed. Verification found and fixed a real gap: the publish-time re-check used the branch-only authorization subset instead of the full per-arm rule, wrongly refusing a Teacher's own exact-Session/Teaching-Group/student target. See the [checkpoint](../development/testing.md#high-readiness-checkpoint-2026-09-13) for the exact root cause and fix |
-| H3 manual opening | **OWNER/SPEC DECISION REQUIRED, unchanged.** R136(5) requires one-way manual opening, but no route/body/permission contract or UI implements it. `assessment.integration.test.ts` opens via direct fixture SQL, not an application workflow. Ratify the smallest manual-open route/body/roles and UI action; do not ship this path as complete or invent a pg-boss job |
+| H3 manual opening | **CLOSED locally (Owner decision 2026-09-13, SRS Revision 142).** `POST /assessments/{id}/open` sets the existing `available_from` (R136 clause 5) explicitly, reusing `assertMayAuthor`/H5's lock unchanged; one-way and non-idempotent, matching `close`'s own convention. No migration. Frontend gains one confirmed «فتح الاختبار» action. See the [checkpoint](../development/testing.md#h3-readiness-checkpoint-2026-09-13) |
 | H4 time | **CLOSED locally.** Wall-clock availability shares the online-class conversion; cron explicitly passes the IANA timezone. Seasonal scheduling and runner assertions pass in the final corrected run |
 | H5 grade races | **CLOSED locally.** Shared Exam lock before fresh reads in save/publish/PATCH/delete; existing grades require version. Three deterministic PostgreSQL lock-order scenarios passed. The same version-fixture gap was also found and fixed in one further, previously unaudited test file outside the original six-suite set |
 | H6 retag safeguarding | **CLOSED locally, runtime verified.** Session→Content locking, atomic consent flag and exact-key obligation commit together even without a bucket move; B4/B5 copy/winner protocol retained with no regression |
@@ -139,10 +139,10 @@ smoke. A later `develop` commit never inherits an earlier commit's Staging accep
 This is the one execution-order checklist; the linked runbooks own the commands.
 Every unchecked step is a prerequisite, not authorization to act in this task.
 
-1. **Engineering:** finish current HIGH focused/storage/concurrency tests and
-   final consolidated CI-equivalent gates; resolve H3's missing contract. Review
-   the complete diff, commit locally, then obtain separate authority to push and
-   require hosted CI/exact-image publication for that exact SHA.
+1. **Engineering:** HIGH focused/storage/concurrency tests, final consolidated
+   CI-equivalent gates and H3's manual-opening contract are complete and
+   committed locally (H1–H6). Obtain separate authority to push and require
+   hosted CI/exact-image publication for that exact SHA.
 2. **Legal/Owner:** complete the [CNDP packet](../compliance/personal-data-audit.md#current-filing-preparation--2026-09-13),
    filing regime/Google-transfer review, association/signatory facts and required
    approvals/receipts. Approve and activate the exact privacy/terms/consent versions

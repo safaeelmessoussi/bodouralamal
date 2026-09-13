@@ -1143,6 +1143,65 @@ export async function closeAssessment(
   });
 }
 
+/**
+ * `POST /assessments/{id}/open` — H3 (Owner decision 2026-09-13): a manual
+ * remote exam is opened explicitly by an already-authorized teacher or
+ * administrator, never by the scheduled start time arriving on its own.
+ *
+ * **No new state.** `available_from` (R136 clause 5) already carries exactly
+ * this fact — `NULL` under the `manual` policy means *never opened*, and
+ * `eligible()` refuses on that column alone, at read time, with no scheduler.
+ * This is the one write this revision was missing: setting it explicitly,
+ * instead of only ever computing it at scheduling time. One-way, like every
+ * other policy: once set, it is never returned to `NULL` and never moved.
+ *
+ * **The governing lock, then the fresh, re-read authority (H5's pattern):**
+ * acquired before either the state or the authorization read, so a concurrent
+ * open/close/PATCH on the same row serializes rather than racing.
+ * `assertMayAuthor` — the one per-arm authority rule H2 restored, never its
+ * branch-only subset — decides who may act, exactly as it does at authoring
+ * and at scheduling.
+ */
+export async function openAssessment(
+  prisma: PrismaClient,
+  actor: Actor,
+  examId: string,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, examId);
+    const exam = await tx.exam.findFirst({
+      where: { id: examId, deletedAt: null },
+      select: ASSESSMENT_SELECT,
+    });
+    if (!exam) throw new AppError('NOT_FOUND', 'no such assessment');
+    await assertMayAuthor(tx, actor, { ...exam, date: exam.date });
+    // A physical sitting has no separate access gate (R136 clause 5); a
+    // draft was never scheduled; a closed occurrence has already finished;
+    // and a paper already opened does not open again (one-way, above) —
+    // all four are the same coded refusal `closeAssessment` already uses
+    // for its own invalid-transition case, not a parallel error taxonomy.
+    if (exam.mode !== 'online' || exam.status !== 'published' || exam.availableFrom !== null) {
+      throw new AppError(
+        'STATE_CONFLICT',
+        'this assessment cannot be opened from its current state',
+        { reason: 'INVALID_TRANSITION' },
+      );
+    }
+    await tx.exam.update({
+      where: { id: examId },
+      data: { availableFrom: new Date() },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'assessment.open',
+      targetEntity: 'Exam',
+      targetId: examId,
+      detail: {},
+    });
+  });
+}
+
 /* ── Eligibility, and the student's paper ─────────────────────────────────── */
 
 /**

@@ -11,6 +11,7 @@ import {
   createAssessment,
   listAssessments,
   listSubmissions,
+  openAssessment,
   readSubmission,
   removeQuestion,
   reorderQuestions,
@@ -154,6 +155,15 @@ export function reorder(prisma: PrismaClient) {
 export function close(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await closeAssessment(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(204).end();
+  };
+}
+
+/** `POST /assessments/{id}/open` — H3 (Owner decision 2026-09-13): explicit
+ * manual opening by an already-authorized teacher or administrator. */
+export function open(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await openAssessment(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
   };
 }

@@ -1,6 +1,6 @@
 # Tasks — بذور الأمل Platform
 
-## HIGH continuation — 2026-09-13 (H1/H2/H4/H5/H6 CLOSED locally; committed, not pushed)
+## HIGH continuation — 2026-09-13 (H1–H6 CLOSED locally; committed, not pushed)
 
 - [x] Preserve `develop` at `45cf1f063d14073feb04ee190817535f011fe2db`
   (six ahead, zero behind); B1–B8 acceptance remains unchanged. No push or live actions.
@@ -26,13 +26,32 @@
   Lint, exact typecheck, build, units/guards, TD-3 and **OpenAPI currency** (now
   passing; the earlier sandbox blocker did not recur) are tracked in the
   [verification checkpoint](development/testing.md#high-readiness-checkpoint-2026-09-13).
-- **H3 — OWNER/SPEC DECISION REQUIRED:** R136(5) describes one-way manual opening,
-  but the application has no opening route/body/permission/UI contract. The test's
-  direct DB update is not a supported workflow. Document Owner must ratify the
-  minimum opening contract; do not invent an endpoint/job.
-- Latest Owner scope is **HIGH completion only**. Earlier uncommitted privacy,
-  configuration and release-checklist drafts are preserved, not extended or accepted.
-  Do not begin the next section; no claim that the whole programme is ready.
+- [x] **H3 CLOSED (Owner decision 2026-09-13, SRS Revision 142).** A manual
+  remote exam is opened explicitly through `POST /assessments/{id}/open` by an
+  already-authorized teacher or administrator, never by the scheduled start
+  time on its own. No new state or migration: sets the existing
+  `Exam.available_from` (R136 clause 5) once, under the same governing lock
+  and re-read H5 established, through `assertMayAuthor` unchanged (H2) — never
+  its branch-only subset. One-way and non-idempotent, matching
+  `POST /assessments/{id}/close`'s own established convention: repeating it,
+  or calling it on a `draft`/`closed`/`physical` row, is refused
+  `409 STATE_CONFLICT`/`INVALID_TRANSITION`. The frontend gains one «فتح
+  الاختبار» action on `/admin/assessments`, confirmed and state-gated exactly
+  like «إغلاق الاختبار», the backend the sole authority. The service test
+  that previously simulated opening with a direct `prisma.exam.update` now
+  calls the real action; 13 new focused integration tests cover Admin/whole-
+  Level/exact-Session teacher authority (and its non-expansion), R91 date-
+  bounded authority, wrong branch, unauthorized roles/student, non-remote/
+  non-published/already-open refusal, concurrency, the audit event, and
+  before/after student availability. Full suite after the fix:
+  **2,563 passed / 18 skipped, 0 failed**; browser **193/193**; TD-3
+  **227/235** (same eight pending, zero undocumented); OpenAPI regenerated and
+  current. See the [checkpoint](development/testing.md#high-readiness-checkpoint-2026-09-13).
+- **HIGH continuation (H1–H6) is now fully closed locally.** Latest Owner scope
+  was HIGH completion; earlier uncommitted privacy, configuration and
+  release-checklist drafts remain preserved, not extended or accepted. Do not
+  begin the next section from this alone; no claim that the whole programme
+  is release-ready.
 
 ## B8 — same-VPS backup/recovery (local engineering acceptance complete)
 

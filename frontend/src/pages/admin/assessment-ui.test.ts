@@ -266,3 +266,36 @@ describe('R136 — بناء الاختبارات authors content for either deli
     expect(adapter).not.toMatch(/interface AssessmentListFilters \{\s*status/);
   });
 });
+
+describe('H3 — explicit manual exam opening (Owner decision 2026-09-13)', () => {
+  it('the adapter calls the one supported action route, never a raw column write', () => {
+    expect(adapter).toContain('/assessments/${examId}/open');
+    expect(adapter).not.toContain('availableFrom');
+  });
+
+  it('the action is offered only for an unopened published remote exam', () => {
+    // Client-side display only (rule O) — the server's `assertMayAuthor`
+    // remains the actual boundary, never this condition.
+    expect(builder).toMatch(
+      /paper\?\.mode === 'online' && paper\.status === 'published' && paper\.available_from === null/,
+    );
+  });
+
+  it('asks for confirmation through the shared dialog before opening, like close does', () => {
+    expect(builder).toContain("confirm === 'open'");
+    expect(builder).toContain('assessments.openExamConfirm');
+    expect(builder).toContain('openAssessment(examId, token)');
+  });
+
+  it('shares the one busy/confirm state machine with close — no separate pending flag', () => {
+    // `act()` sets `busy`, clears `confirm` in its `finally`, and reloads the
+    // paper on success; a second click of an already-busy button is a no-op
+    // because the button is disabled, not because a second code path exists.
+    expect(builder).toMatch(/useState<'close' \| 'open' \| null>/);
+    expect(builder).toContain('onClick={() => setConfirm(\'open\')}');
+  });
+
+  it('never automatically opens on a schedule/date/timer', () => {
+    expect(builder).not.toMatch(/setInterval|setTimeout/);
+  });
+});

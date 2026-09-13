@@ -52,6 +52,10 @@ export interface AssessmentPaper {
   max_grade: string;
   /** TD-15 optimistic-locking coordinate. */
   version: number;
+  /** R136 clause 5 / H3 — `null` until scheduling computed it or a staff
+   *  "open now" act (`POST /assessments/{id}/open`) set it explicitly.
+   *  Always `null` for a `physical` sitting. */
+  available_from: string | null;
   /** R134 — provenance only, present only on the author's own read. */
   source_exam_id?: string | null;
   source_exam_title?: string | null;
@@ -169,6 +173,11 @@ export async function reorderQuestions(
 
 export async function closeAssessment(examId: string, token: string | null): Promise<void> {
   await api<void>(`/assessments/${examId}/close`, { method: 'POST', body: {}, token });
+}
+
+/** H3 (Owner decision 2026-09-13) — explicit manual opening only. */
+export async function openAssessment(examId: string, token: string | null): Promise<void> {
+  await api<void>(`/assessments/${examId}/open`, { method: 'POST', body: {}, token });
 }
 
 export async function listSubmissions(

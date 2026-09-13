@@ -755,6 +755,9 @@ export function createApp(
   guarded.patch('/assessments/:id/questions/:questionId', assessments.patchQuestion(prisma));
   guarded.delete('/assessments/:id/questions/:questionId', assessments.deleteQuestion(prisma));
   guarded.post('/assessments/:id/close', assessments.close(prisma));
+  // H3 (Owner decision 2026-09-13) — explicit manual opening only; never
+  // triggered by the scheduled start time arriving on its own.
+  guarded.post('/assessments/:id/open', assessments.open(prisma));
   guarded.post('/assessments/:id/copy', assessments.copy(prisma));
   guarded.get('/assessments/:id/submissions', assessments.submissions(prisma));
   guarded.get('/assessments/:id/submissions/:studentId', assessments.submission(prisma));

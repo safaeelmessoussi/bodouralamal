@@ -2588,6 +2588,10 @@ export interface AssessmentPaperDto {
   max_grade: string;
   /** TD-15 — required by `PATCH /assessments/{id}/target`. */
   version: number;
+  /** R136 clause 5 / H3 — `null` until scheduling computed it or a staff
+   *  "open now" act (`POST /assessments/{id}/open`) set it explicitly.
+   *  Always `null` for a `physical` sitting. */
+  available_from: string | null;
   /** R134 — provenance only, present only on the author's own read. */
   source_exam_id?: string | null;
   source_exam_title?: string | null;
@@ -2632,6 +2636,8 @@ export function assessmentPaperDto(row: {
      *  `PATCH /assessments/{id}/target`); kept for optimistic-locking
      *  consistency with every other versioned entity (TD-15.1). */
     version: number;
+    /** R136 clause 5 / H3 — see the schema comment on `Exam.availableFrom`. */
+    availableFrom: Date | null;
     /**
      * R134 — provenance only, and present ONLY on the author's own read
      * (`GET /assessments/{id}`, via `loadForAuthor`'s wider select).
@@ -2674,6 +2680,7 @@ export function assessmentPaperDto(row: {
     date: row.exam.date.toISOString().slice(0, 10),
     max_grade: row.exam.maxGrade.toString(),
     version: row.exam.version,
+    available_from: row.exam.availableFrom === null ? null : row.exam.availableFrom.toISOString(),
     ...(row.exam.sourceExamId === undefined
       ? {}
       : {

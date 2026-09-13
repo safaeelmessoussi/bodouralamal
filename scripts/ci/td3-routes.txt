@@ -187,6 +187,7 @@ PATCH /assessments/{id}/questions/order       # §4.6 R124; the WHOLE sequence (
 PATCH /assessments/{id}/questions/{questionId} # §4.6 R124; wording, justification, options; TD-15
 DELETE /assessments/{id}/questions/{questionId} # §4.6 R124, TD-5; the order closes up
 POST /assessments/{id}/close                  # §4.6 R124; an OCCURRENCE'S published → closed (a source is never published)
+POST /assessments/{id}/open                   # §4.6 R136 clause 5, H3 (Owner 2026-09-13); explicit manual open, never automatic
 POST /assessments/{id}/copy                   # §4.6 R124; «نسخ كمسودة» — the wording, never the answers or the marks
 GET /assessments/{id}/submissions             # §4.6 R124; who answered, and where their grade is
 GET /assessments/{id}/submissions/{studentId} # §4.6 R124; one submitted paper

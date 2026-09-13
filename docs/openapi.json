@@ -10013,6 +10013,67 @@
         }
       }
     },
+    "/assessments/{id}/open": {
+      "post": {
+        "summary": "Open a manual remote exam",
+        "description": "**§4.6, R136 clause 5; H3 (Owner decision 2026-09-13).** Explicit staff act, never the scheduled start time arriving on its own: sets `available_from` to now on a `published`, `online`, still-`NULL` occurrence, the same one-way column scheduling already computes for the other availability policies. Authorization reuses `assertMayAuthor` unchanged — the same exact-Session/Teaching-Group/student/Level/branch rule authoring and scheduling already enforce; a student can never call this. Repeating it against an already-open, physical, draft or closed exam is refused, not silently accepted.",
+        "responses": {
+          "204": {
+            "description": "Opened."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason INVALID_TRANSITION.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/assessments/{id}/submissions": {
       "get": {
         "summary": "Who answered",

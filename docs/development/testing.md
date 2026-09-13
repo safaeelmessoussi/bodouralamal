@@ -77,6 +77,81 @@ Docker inventory after the final full run shows no disposable
 pre-existing persistent local dev stack (`bodour-api-1` etc.) was untouched
 throughout.
 
+## H3 readiness checkpoint 2026-09-13
+
+**CLOSED locally; committed, not pushed.** Base `5eabe63` (the H1/H2/H4/H5/H6
+commit above), one further local commit. Owner decision: a manual remote exam
+is opened explicitly by an already-authorized teacher or administrator through
+an «فتح الاختبار» action, never by the scheduled start time arriving on its
+own — see [SRS Revision 142](../SRS.md).
+
+**No schema/migration change.** `Exam.available_from` (R136 clause 5) already
+documented *"once by an explicit staff 'open now' act"* as a legitimate way to
+set it; `openAssessment` (`assessment.service.ts`) is that one missing write —
+`POST /assessments/{id}/open`, mirroring `POST /assessments/{id}/close`'s own
+established shape exactly: the governing `lockExamRow` acquired first, a fresh
+re-read of state and authority inside the same transaction, `assertMayAuthor`
+unchanged (never its branch-only subset — the exact regression this same
+checkpoint's H2 section above records and fixes), then one `audit.write`. Mode/
+status/already-open are checked together and refused as a single
+`STATE_CONFLICT`/`INVALID_TRANSITION`, the same coded conflict `closeAssessment`
+already uses — **non-idempotent by design**: repeating Open against an
+already-open exam is refused, not silently accepted, proven by an audit-count
+assertion showing no duplicate event.
+
+Focused command (added to `assessment.integration.test.ts`, run standalone
+first):
+
+```bash
+bash scripts/ci/test-integration.sh src/services/assessment.integration.test.ts
+```
+
+First run surfaced two authoring mistakes in the new tests themselves (not the
+implementation): the Level/administrative-group teacher-scope fallback answers
+`FORBIDDEN`, not `NOT_FOUND` (`assertExamInTeacherScope`'s own established
+taxonomy, unchanged); and several new fixtures dated `TODAY` collided with this
+file's own documented pagination-sensitive convention (`OTHER_DATE` exists
+precisely so new same-dated rows do not push another test's expected row off
+its page) — corrected to `OTHER_DATE`, no assertion weakened. Rerun:
+**128/128** in this file, 13 new: Admin opens; a genuine `entire_level`-staffed
+Teacher opens; an exact-Session-only Teacher opens her session but is refused
+`FORBIDDEN` on a Level target (no expansion); an R91-dated ended assignment
+still authorizes an exam dated inside its old window and refuses one dated
+outside it; a branch-scoped Admin is refused `FORBIDDEN`/`TARGET_OUTSIDE_BRANCH_SCOPE`
+on a Level spanning another branch; an outsider Teacher and the student herself
+are refused; a `physical` and a still-`draft` row both refuse
+`STATE_CONFLICT`/`INVALID_TRANSITION`; repeat-Open and two genuinely concurrent
+Opens (`Promise.allSettled`, real row lock, not a mocked barrier) each leave
+exactly one audit row; a successful Open's audit event names the actor and
+target; the student is `NOT_FOUND` before Open and reads her paper after it,
+through `openAssessment` alone; and opening does not bypass an unrelated
+student's own Level-eligibility refusal.
+
+Full disposable-stack run after both test corrections: **2,563 passed / 18
+skipped, 0 failed**, 112 passing files / 2 skipped, real-edge browser probe
+**193/193**, clean all-table isolation. Backend lint/typecheck/build and unit
+suite (**342/342, 40 files**) unaffected. Frontend lint/typecheck/build clean;
+frontend unit suite **1,263 passed, 106 files** (13 new source-guard assertions
+in `assessment-ui.test.ts`, none rendering the DOM — this screen's own
+established convention: a decision about what is offered, not styling).
+
+All 9 checked non-link repository guards pass, plus `git diff --check` and
+documentation links (see the `CHANGES.log` entry for the exact count). TD-3
+registry conformance: **227/235** (one more implemented — `/assessments/{id}/open`
+— same eight still-pending endpoints, zero undocumented). OpenAPI regenerated
+(`npm --prefix backend run openapi:generate`) and current: **176 paths, 227
+operations**, reconciled against the live router. Independent Docker inventory
+after the final run shows no disposable `bodour-ci-integration-*` resources
+left; the pre-existing persistent local dev stack was untouched.
+
+The frontend gains one action, `openable` (client-side display only, rule O —
+the calendar's own `ExamAccessAction` discipline; the server remains the actual
+boundary): a primary «فتح الاختبار» button beside «إغلاق الاختبار», visible
+only for a still-unopened `online`/`published` paper the caller may write to,
+behind the same shared `ConfirmDialog`/`busy`/`act()` state machine `close`
+already uses — no new pending-state or duplicate-submission logic. A neutral
+«لم يُفتح بعد» badge marks the state next to the status badge.
+
 Four layers, each testing something the others structurally cannot.
 
 | Layer | Scope | Tooling | Gate |
