@@ -28,6 +28,7 @@ import {
   updateQuestion,
 } from './assessment.service.js';
 import { scheduleExam } from './exam-scheduling.service.js';
+import type { PrismaClient } from '../generated/prisma/client.js';
 
 /**
  * **The assessment builder, end to end** (SRS §4.6 as extended by R124).
@@ -65,6 +66,116 @@ const ISO_TODAY = `${YEAR}-06-15`;
  * resolution is unaffected) sorts strictly after every `TODAY` row instead.
  */
 const OTHER_DATE = day(`${YEAR}-01-02`);
+
+describe('HIGH exam/grade serialization and clock regressions', () => {
+  async function blankSheet() {
+    return createAssessment(prisma, superAdmin(), {
+      title: `${TAG} HIGH concurrency`, maxGrade: 20, levelId, subjectId,
+      academicYearId, target: { kind: 'student', id: bob }, date: OTHER_DATE,
+    });
+  }
+
+  it.each(['save/save', 'publish/save', 'save/publish'] as const)(
+    '%s is serialized before reading grade state', async (order) => {
+      const { id } = await blankSheet();
+      await saveGradeDraft(prisma, superAdmin(), id, [{ studentId: bob, score: 10, absent: false }]);
+      const before = await prisma.grade.findFirstOrThrow({ where: { examId: id } });
+      let signalRead!: () => void;
+      let releaseRead!: () => void;
+      const read = new Promise<void>(resolve => { signalRead = resolve; });
+      const release = new Promise<void>(resolve => { releaseRead = resolve; });
+      let held = false;
+      const paused = prisma.$extends({ query: { grade: { async findMany({ args, query }) {
+        const rows = await query(args);
+        if (!held && args.where?.examId === id) {
+          held = true;
+          signalRead();
+          await release;
+        }
+        return rows;
+      } } } }) as unknown as PrismaClient;
+      const entry = { studentId: bob, score: 11, absent: false, version: before.version };
+      const first = (order === 'publish/save'
+        ? publishGrades(paused, superAdmin(), id)
+        : saveGradeDraft(paused, superAdmin(), id, [entry])).then(
+          value => ({ value }), error => ({ error }),
+        );
+      let second: Promise<unknown> | undefined;
+      try {
+        await expect.poll(() => held, { timeout: 2500 }).toBe(true);
+        await read;
+        second = (order === 'save/publish'
+          ? publishGrades(prisma, superAdmin(), id)
+          : saveGradeDraft(prisma, superAdmin(), id, [{ ...entry, score: 12 }])).then(
+            value => ({ value }), error => ({ error }),
+          );
+        // Real PostgreSQL wait, not a timing sleep or mocked lock assertion.
+        await expect.poll(async () => {
+          const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+            SELECT count(*) AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+              AND query LIKE '%exam%'`;
+          return Number(rows[0]!.n);
+        }, { timeout: 2500 }).toBeGreaterThan(0);
+      } finally {
+        releaseRead();
+        await first;
+      }
+      expect(await first).toHaveProperty('value');
+      if (order === 'save/publish') {
+        expect(await second).toHaveProperty('value');
+      } else {
+        expect(await second).toMatchObject({ error: { code: 'VERSION_CONFLICT' } });
+      }
+      const after = await prisma.grade.findFirstOrThrow({ where: { examId: id } });
+      expect(after.score.toNumber()).toBe(order === 'publish/save' ? 10 : 11);
+      expect(after.status).toBe(order === 'save/save' ? 'draft' : 'published');
+    },
+  );
+
+  it('requires the existing grade version, but permits first insertion', async () => {
+    const { id } = await blankSheet();
+    const entry = { studentId: bob, score: 10, absent: false };
+    await saveGradeDraft(prisma, superAdmin(), id, [entry]);
+    await expect(saveGradeDraft(prisma, superAdmin(), id, [entry]))
+      .rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('an exact-Session cover may schedule that Session, never the whole Level', async () => {
+    const cover = await person('HIGH exact cover');
+    await prisma.sessionStaff.create({ data: { sessionId, userId: cover, position: 'assistant' } });
+    const actor = actorOf(cover, 'teacher');
+    const { id } = await createAssessment(prisma, superAdmin(), {
+      title: `${TAG} HIGH exact Session`, maxGrade: 20, levelId, subjectId,
+      academicYearId, target: { kind: 'session', id: sessionId },
+    });
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+    await expect(scheduleExam(prisma, actor, {
+      mode: 'online', sourceExamId: id, target: { kind: 'session', id: sessionId },
+    })).resolves.toMatchObject({ id: expect.any(String) });
+    await expect(scheduleExam(prisma, actor, {
+      mode: 'online', sourceExamId: id, target: { kind: 'level' }, date: TODAY,
+    })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it.each([
+    ['2026-02-20', '2026-02-20T09:00:00.000Z'], // Ramadan UTC+0
+    ['2026-07-20', '2026-07-20T08:00:00.000Z'], // UTC+1
+  ])('scheduling %s interprets availability on the Moroccan wall clock', async (date, expected) => {
+    const { id } = await blankSheet();
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+    for (const availability of [{ policy: 'at_start' } as const,
+      { policy: 'offset_minutes', minutes: 30 } as const]) {
+      const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+        mode: 'online', sourceExamId: id, target: { kind: 'student', id: bob },
+        date: day(date!), startTime: new Date('1970-01-01T09:00:00Z'), availability,
+      });
+      const row = await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } });
+      const offset = availability.policy === 'at_start' ? 0 : 30 * 60_000;
+      expect(row.availableFrom?.toISOString()).toBe(new Date(Date.parse(expected!) + offset).toISOString());
+    }
+  });
+});
 
 let superAdminId = '';
 let teacherId = '';

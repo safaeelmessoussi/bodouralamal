@@ -418,6 +418,19 @@ describe("and nothing else — the list agrees with assertExamInTeacherScope", (
  * constraint at all.
  */
 describe("R106 — group scope follows the exam's date, not today's staffing", () => {
+  it("authorizes editing at the sitting date and refuses rescheduling beyond that authority", async () => {
+    const id = exams["pastGroupExam"]!;
+    const before = await prisma.exam.findUniqueOrThrow({ where: { id } });
+    const patch = (body: unknown) => httpCall(BASE, "PATCH", `/exams/${id}`, {
+      token: endedTeacherToken, body,
+    });
+    expect((await patch({ version: before.version, title: before.title })).status).toBe(204);
+    const current = await prisma.exam.findUniqueOrThrow({ where: { id } });
+    const refused = await patch({ version: current.version, date: day(60).toISOString().slice(0, 10) });
+    expect(refused.status).toBe(403);
+    expect(await prisma.exam.findUniqueOrThrow({ where: { id } })).toEqual(current);
+  });
+
   it("shows a past group-scoped exam to a مؤطِّرة whose assignment has since ENDED", async () => {
     const ids = await idsFor(endedTeacherToken);
     expect(ids).toContain(exams["pastGroupExam"]);

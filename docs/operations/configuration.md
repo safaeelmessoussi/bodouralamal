@@ -11,7 +11,7 @@ Nothing is hardcoded.
 |---|---|---|
 | Changed by | An operator editing `.env`, then restarting | A Super Admin, in the application |
 | Requires | A restart | Nothing |
-| Holds | Connection strings, secrets, origins, tiers | Branding, legal text versions, category default visibilities, grading scale |
+| Holds | Connection strings, secrets, origins, tiers | Branding and platform settings; legal documents/consent versions and category defaults have their own domain records |
 | Validated | **At boot, fail-fast** | At write time |
 
 ## The variable inventory
@@ -49,6 +49,7 @@ two separately scoped credential boundaries.
 |---|---|
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only.** See below |
 | `BACKUP_TARGET_SSH` | Production-only nonempty legacy setting; B8 temporarily permits `/var/lib/bodour-backups/bodour`. Host backup paths/key/floor belong to the separate root-only [operator configuration](recovery.md#before-enabling-anything-on-an-authorized-host), not the API |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Optional as a complete group; half-configuration refuses boot. `LIVEKIT_API_URL` optionally supplies the server-side endpoint. Without the group, media actions fail closed, not the whole API. Production media processing requires its own approved Moroccan location/contract |
 
 ### Optional, with defaults
 
@@ -57,6 +58,37 @@ two separately scoped credential boundaries.
 | `TZ` | `Africa/Casablanca` | Container wall-clock alignment |
 | `PORT` | `3000` | API listen port behind Nginx |
 | `LOG_LEVEL` | `info` | `info` \| `debug`. **`debug` is prohibited in production** |
+| `RECORDING_STAGING_BUCKET` | `recordings-staging` | Provider-ingest staging, never a public content bucket |
+
+### Exact-release host inventory
+
+This is a provisioning checklist, **not a command to provision this workspace**.
+Derivation: [`config.ts`](../../backend/src/lib/config.ts),
+[`infra.env.example`](../../infra.env.example), the root Compose overlays and
+the [B8 root-only environment](recovery.md#before-enabling-anything-on-an-authorized-host).
+
+- Application `.env` and bootstrap `infra.env` remain operator-owned mode `0600`.
+  `POSTGRES_PASSWORD` must match the URL-encoded password in `DATABASE_URL` for
+  internal host `db`, database `bodour`, user `app`. No externally published DB port.
+- Generate independent random signing/onboarding/email-lock and storage credentials
+  directly into private host files, never command arguments, chat, shell recordings,
+  Git or printed resolved Compose. The existing guidance is 48 random bytes encoded
+  as base64; preserve special-character escaping in environment/URL formats.
+  Record secure retrieval/rotation custody, not values, in the private operator record.
+- `MINIO_*` names stay for compatibility with SeaweedFS, internal `http://minio:9000`;
+  AWS aliases in Production Compose resolve from the same secrets. Do not run the
+  legacy MinIO image or attach its populated physical volume to SeaweedFS.
+- `PUBLIC_BASE_URL=https://bodouralamal.com` and `STORAGE_BASE_URL` exactly that
+  origin plus `/storage`; Google redirect exactly
+  `https://bodouralamal.com/api/v1/auth/google/callback`, scopes `openid email`.
+  **OWNER INPUT REQUIRED:** separately authorized Production OAuth client/domain
+  configuration, final privacy URL/text and transfer review; no console change here.
+- `COMPOSE_PROJECT_NAME` and full `BODOUR_RELEASE_TAG` identify the exact accepted
+  checkout/images. Keep `TZ=Africa/Casablanca`, `PORT=3000`, `LOG_LEVEL=info` and
+  the Production overlay's `NODE_ENV=production`; no developer auth mechanism.
+- Seed-only Owner values below are not recurring credentials. Restic key, repository
+  pin, backup floor and timers belong only to B8 host configuration, never the API.
+  No shared Production/Staging secrets or backup key committed to the checkout.
 
 ## Secrets have no defaults, by design
 
@@ -125,19 +157,11 @@ the ordinary role-management workflow. The database remains the source of truth.
 
 ## Runtime settings
 
-Held in `SystemSetting`, editable by a Super Admin:
-
-- Branding assets
-- Legal and consent **text versions** — which consent records reference, so a version is
-  never retroactively rewritten
-- Per-category default content visibility
-- **`grading.display_scale = 20`** and **`grading.passing_grade_bp = 5000`** — the
-  association's /20 scale with a 10/20 pass, expressed in basis points so the comparison
-  stays integer-only end to end
-
-Per-level grading overrides are **settings rows, not columns**. The level and category
-entities carry only a name, display order, and (for level) the sex restriction — adding a
-passing-grade column to them is explicitly non-compliant.
+Branding uses `SystemSetting`; per-category visibility uses the Category record.
+Consent wording uses `LegalConsentText`, while privacy/terms use `LegalDocument`
+(R119/R138): published versions are not rewritten. No production legal wording is
+invented by the seed. Grades use each Exam's `maxGrade` (R81), not the obsolete
+global basis-point scale or invented per-level passing-grade settings.
 
 ## Rate limits
 

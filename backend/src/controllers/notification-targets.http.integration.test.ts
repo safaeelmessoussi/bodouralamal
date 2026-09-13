@@ -850,9 +850,13 @@ describe("a published grade notifies the student it is about (R82.4)", () => {
       data: { readAt: new Date() },
     });
 
-    await call("PUT", `/exams/${examId}/grades`, adminToken, {
-      entries: [{ student_id: studentA, score: 17, absent: false }],
+    const grade = await prisma.grade.findUniqueOrThrow({
+      where: { examId_studentId: { examId, studentId: studentA } },
     });
+    const put = await call("PUT", `/exams/${examId}/grades`, adminToken, {
+      entries: [{ student_id: studentA, score: 17, absent: false, version: grade.version }],
+    });
+    expect(put.status).toBe(200);
     const res = await call("POST", `/exams/${examId}/grades/publish`, adminToken);
     expect(res.status).toBe(200);
     expect((res.body.data as { notified: number }).notified).toBe(1);

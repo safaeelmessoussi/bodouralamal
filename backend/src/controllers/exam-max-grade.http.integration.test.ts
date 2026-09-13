@@ -254,15 +254,21 @@ describe("a score is bounded by ITS OWN exam's maximum", () => {
     });
     expect(onB.status).toBe(400);
 
+    const grade = await prisma.grade.findUniqueOrThrow({
+      where: { examId_studentId: { examId: examOutOf20, studentId } },
+    });
     const onA = await call("PUT", `/exams/${examOutOf20}/grades`, superToken, {
-      entries: [{ student_id: studentId, score: 11, absent: false }],
+      entries: [{ student_id: studentId, score: 11, absent: false, version: grade.version }],
     });
     expect(onA.status).toBe(200);
   });
 
   it("H · accepts a decimal score, exactly as given", async () => {
+    const grade = await prisma.grade.findUniqueOrThrow({
+      where: { examId_studentId: { examId: examOutOf20, studentId } },
+    });
     const res = await call("PUT", `/exams/${examOutOf20}/grades`, superToken, {
-      entries: [{ student_id: studentId, score: 15.25, absent: false }],
+      entries: [{ student_id: studentId, score: 15.25, absent: false, version: grade.version }],
     });
     expect(res.status).toBe(200);
     const sheet = await call("GET", `/exams/${examOutOf20}/grades`, superToken);
@@ -286,8 +292,11 @@ describe("a score is bounded by ITS OWN exam's maximum", () => {
       [examOutOf20, 20],
       [examOutOf10, 10],
     ] as const) {
+      const grade = await prisma.grade.findUniqueOrThrow({
+        where: { examId_studentId: { examId: exam, studentId } },
+      });
       const res = await call("PUT", `/exams/${exam}/grades`, superToken, {
-        entries: [{ student_id: studentId, score: value, absent: false }],
+        entries: [{ student_id: studentId, score: value, absent: false, version: grade.version }],
       });
       expect(res.status).toBe(200);
     }

@@ -17,10 +17,12 @@ for queue in content.quarantine-purge upload.gc; do
   grep -Fq "'$queue'" "$jobs" || fail "$queue is absent from transactional enqueue names"
 done
 
-grep -Fq 'await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);' "$runner" ||
+grep -Fq 'const dailyOptions = { tz: config.TZ };' "$runner" ||
+  fail 'daily storage jobs must use the configured timezone explicitly'
+grep -Fq 'await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330, {}, dailyOptions);' "$runner" ||
   fail 'upload.gc is not scheduled daily'
 scheduled=$(grep -E 'boss\.schedule\(QUEUES\.contentQuarantinePurge' "$runner" || true)
-[[ "$scheduled" == "    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' });" ]] ||
+[[ "$scheduled" == "    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' }, dailyOptions);" ]] ||
   fail 'the quarantine cron may only reconcile existing exact obligations, never authorize age-based destruction'
 grep -Fq "durable?.operation === 'reconcile'" "$runner" || fail 'reconciliation handler missing'
 grep -Fq 'await reconcileRetirements(prisma);' "$runner" || fail 'durable backlog is not reconciled'

@@ -535,6 +535,16 @@ Retained live occurrences remain affected after their recurring schedule is soft
 startup scans live recording links in bounded batches for older backlog. Every path enqueues
 the same full current-state job for the affected occurrence.
 
+The H6 metadata path also checks linked audiences when adding **or removing** the
+recording marker, even with no visibility/bucket change. Ordered Session anchors
+precede the Content lock; metadata CAS, an owed monotonic flag, structural audit
+and exact-current-key migration obligation commit together. A missing queue/audit
+failure rolls the edit back. Graph growth, including a first link after an empty
+discovery, refuses the transaction rather than evaluating unlocked audiences.
+It reuses B4/B5 placement/retirement; it neither re-uploads canonical bytes nor
+lifts a prior restriction. [Real-stack acceptance passed](../development/testing.md#high-readiness-checkpoint-2026-09-13),
+including the rollback and first-link race regressions, with no B4/B5 regression.
+
 A recording published while everyone consented **flips to private** when a non-consenting
 student later enrols.
 

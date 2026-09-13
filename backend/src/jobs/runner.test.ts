@@ -141,11 +141,16 @@ describe('job runner startup readiness', () => {
     const firstWorker = boss.work.mock.invocationCallOrder[0];
     expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
     expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
-    expect(boss.schedule).toHaveBeenCalledWith(QUEUES.uploadGc, '30 3 * * *');
+    expect(boss.schedule).toHaveBeenCalledTimes(9);
+    for (const call of boss.schedule.mock.calls as unknown[][]) {
+      expect(call[3]).toEqual({ tz: 'Africa/Casablanca' });
+    }
+    expect(boss.schedule).toHaveBeenCalledWith(QUEUES.uploadGc, '30 3 * * *', {}, { tz: 'Africa/Casablanca' });
     expect(boss.schedule).toHaveBeenCalledWith(
       QUEUES.contentQuarantinePurge,
       '30 3 * * *',
       { operation: 'reconcile' },
+      { tz: 'Africa/Casablanca' },
     );
   });
 

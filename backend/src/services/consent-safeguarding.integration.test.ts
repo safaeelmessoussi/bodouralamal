@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { PrismaClient } from '../generated/prisma/client.js';
 
 import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PgBoss } from 'pg-boss';
@@ -45,6 +46,7 @@ import {
   completeUpload,
   deleteContent,
   initiateUpload,
+  updateContentMetadata,
 } from './content.service.js';
 import { deleteCourseSchedule } from './course-schedule.service.js';
 import { visibleContentIds } from './library.service.js';
@@ -560,6 +562,73 @@ afterAll(async () => {
 });
 
 describe('B-01 consent safeguarding', () => {
+  it('rolls metadata, safeguard and jobs back when the mandatory retag audit fails', async () => {
+    const s = await scenario('h6-retag-rollback');
+    await prisma.educationalContent.update({ where: { id: s.contentId }, data: { origin: 'uploaded' } });
+    await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+    const jobsBefore = await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId);
+    vi.spyOn(audit, 'write').mockRejectedValueOnce(new Error('controlled retag audit failure'));
+    try {
+      await expect(updateContentMetadata(prisma, clients, adminActor(s), s.contentId,
+        { origin: 'session_recording' })).rejects.toThrow('controlled retag audit failure');
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } })).toEqual(before);
+    expect(await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId)).toBe(jobsBefore);
+    expect(await prisma.storageRetirement.count({ where: { contentId: s.contentId } })).toBe(0);
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
+  });
+
+  it('refuses a retag if the first Session link commits between discovery and Content locking', async () => {
+    const s = await scenario('h6-first-link');
+    await prisma.educationalContent.update({ where: { id: s.contentId }, data: { origin: 'uploaded' } });
+    await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
+    await prisma.sessionContent.deleteMany({ where: { contentId: s.contentId } });
+    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+    let inserted = false;
+    const racing = prisma.$extends({ query: { sessionContent: { async findMany({ args, query }) {
+      const rows = await query(args);
+      if (!inserted && args.where?.contentId === s.contentId) {
+        inserted = true;
+        expect(rows).toHaveLength(0);
+        // A real second connection commits after the actual discovery query.
+        await prisma.sessionContent.create({ data: { contentId: s.contentId, sessionId: s.fixture.sessionId } });
+      }
+      return rows;
+    } } } }) as unknown as PrismaClient;
+    await expect(updateContentMetadata(racing, clients, adminActor(s), s.contentId,
+      { origin: 'session_recording' })).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+    expect(inserted).toBe(true);
+    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } })).toEqual(before);
+  });
+
+  it.each(['session_recording', 'uploaded'] as const)(
+    'retagging to %s commits the owed safeguard without a bucket move', async (origin) => {
+      const s = await scenario(`h6-retag-${origin}`);
+      // Establish a linked file whose consent is missing, without enqueueing a
+      // worker first: the metadata transaction itself must close the read gate.
+      await prisma.educationalContent.update({ where: { id: s.contentId }, data: {
+        origin: origin === 'session_recording' ? 'uploaded' : 'session_recording',
+      } });
+      await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
+      await updateContentMetadata(prisma, clients, adminActor(s), s.contentId, { origin });
+      const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+      expect(row.origin).toBe(origin);
+      expect(row.consentForcedPrivate).toBe(true);
+      // The worker may already have converged; either way public access is gone.
+      expect(await visibleContentIds(prisma, null, [s.contentId])).not.toContain(s.contentId);
+      expectConvergedMigration(await migrateConsentForcedContent(prisma, clients, s.contentId, s.key));
+      const final = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+      track(final.storageBucket, final.storageKey);
+      expect(final).toMatchObject({ visibility: 'private', storageBucket: 'private', consentForcedPrivate: true });
+      expect(await hashStoredObject(clients, BUCKETS.private, final.storageKey))
+        .toMatchObject({ sha256: createHash('sha256').update(s.bytes).digest('hex') });
+      expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+    },
+  );
+
   it.each(['before_completion', 'after_completion'] as const)(
     'B5: a new revocation %s cannot be lost behind an old stale migration', async (timing) => {
       const s = await scenario(`durable-regrant-${timing}`);

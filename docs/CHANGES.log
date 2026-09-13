@@ -8011,3 +8011,108 @@ No new constitution exception. B8 CLOSED for temporary local engineering, not la
 Actual host installation, floor/key provisioning, attended alerts and realistic-size restore
 remain operational prerequisites. One new local commit only; nothing pushed/deployed. Owner data,
 Staging, Production, DNS and live infrastructure untouched. No HIGH/CNDP slice started.
+
+2026-09-13 — HIGH continuation, UNCOMMITTED / NOT ACCEPTED. Preserve develop 45cf1f0
+and the six existing local commits. H1 physical PATCH reuses creation coherence;
+H2 authoring/grading/scheduling uses the exam date and retains exact-Session versus
+whole-Level authority; H4 shares Moroccan wall-clock conversion and explicitly passes
+pg-boss timezone; H5 locks the Exam before fresh mutation/grade state and requires
+the existing Grade version. Initial disposable exam/grade run: 207 passed / 4 failed,
+five files passed / one failed, 17.25 seconds; 96 migrations and both seeds completed.
+Three existing-grade fixture updates lacked versions; their dependent final-score
+assertion was the fourth failure. Fixture corrected, rerun still REQUIRED.
+H6 metadata retag now locks Sessions before Content and commits the monotonic flag,
+structural audit and exact-key obligation with metadata, including no bucket move.
+Review additionally found empty discovery could miss a first committed Session link;
+it now refuses with VERSION_CONFLICT, not HTTP 500. Retag/migration, audit rollback
+and first-link race regressions added but NOT runtime verified. B4/B5 canonical,
+late-copy and retirement regressions still required against these changed paths.
+Local lint, exact typecheck, build and 342/342 default assertions (40 files) pass.
+28 non-link repository guards pass; the storage-lifecycle guard first rejected the
+new cron call shape and was narrowly updated to require explicit timezone options,
+preserving exact reconcile-only payload enforcement. TD-3 stays 226/234, same eight
+pending/zero undocumented endpoints. Documentation links 1080/1080; shell syntax and
+diff checks pass. Host-preflight/Docker inventory blocked by approval-service usage;
+OpenAPI currency blocked by sandbox tsx IPC-listener EPERM. Neither is waived or
+circumvented. Original test process exited 1; cleanup trap is not independent proof
+of resource cleanup. No final integration/browser/isolation acceptance is claimed.
+H3 remains OWNER/SPEC DECISION REQUIRED: R136 manual opening lacks a supported
+route/body/role/UI contract; fixture SQL is not a product workflow. H7/H8 retain B8
+acceptance, with operational/catalog/dashboard prerequisites unchanged. Earlier
+privacy/configuration/release drafts are preserved from the broader request, not
+extended after the Owner narrowed this turn to HIGH completion. TASKS/testing,
+teaching-authority/storage and findings records distinguish pending work explicitly.
+No SRS/schema/migration/route/frontend/OpenAPI edit; no guard weakening or new audit
+PII. Reuse existing policies, row-lock repository, CAS and safeguarding/retirement
+mechanisms; no new infrastructure or generic mutation layer. Work remains unstaged;
+no commit until required correctness evidence is green. Nothing pushed/deployed;
+Owner data, Staging, Production, DNS and live infrastructure untouched.
+
+2026-09-13 — HIGH continuation CLOSED (H1/H2/H4/H5/H6), local commit only
+Independent verification-and-closure pass over the inherited, uncommitted HIGH
+batch (H1 physical-exam PATCH room/branch coherence; H2 exam-date authority with
+exact-Session/Teaching-Group/student authority preserved; H4 Moroccan wall-clock
+conversion and explicit pg-boss cron timezone; H5 shared Exam lock before
+authoritative reads plus mandatory current Grade version; H6 atomic content-retag
+safeguarding). H3 remains untouched: R136 manual exam opening has no ratified
+route/body/permission/UI contract; test-only SQL stays a test fixture, not a
+workflow, per the Document Owner decision already recorded.
+
+The corrected nine-suite focused command (the six-suite checkpoint plus H6's
+consent-safeguarding, storage-retirement and storage-lifecycle suites) first
+returned 244/250 passed (1 failed, 5 skipped): `an exact-Session cover may
+schedule that Session, never the whole Level` failed FORBIDDEN
+TARGET_OUTSIDE_BRANCH_SCOPE. Root cause: `publishOccurrenceTx`'s publish-time
+re-check (R125 — authorization is re-asserted at author AND at publish, inside
+the same transaction) called `assertAudienceWithinBranchScope` directly — the
+branch-only subset `assertMayAuthor` uses solely inside its own `admin`-gated
+arm — instead of the full per-arm rule. A Teacher holding no `admin` scope was
+read by `reachableBranches` as zero reachable branches rather than "not
+applicable," so a session/teaching_group/student target `assertMayAuthor`
+correctly authorized moments earlier, at scheduling, was wrongly refused again
+at publish. Fixed by calling `assertMayAuthor` itself at publish in
+`assessment.service.ts`. This path is reachable only for `mode: 'online'`
+occurrences, which `exam_online_has_no_room_check` always gives `branchId:
+null`, so the admin arm's `assertCanActOnBranch` addition is a guaranteed
+no-op there: no behavior change for Admin/Super Admin, only the Teacher path
+is corrected. Rerun: 245/250 passed, 5 skipped, 0 failed.
+
+The same investigation surfaced a second, identically-shaped gap outside the
+nine-suite set, in `notification-targets.http.integration.test.ts` — "re-
+publishing after the score CHANGED makes the notice unread again" — whose `PUT
+/exams/:id/grades` fixture omitted the grade version H5 now unconditionally
+requires, so the update silently no-opped (server-side VERSION_CONFLICT, not
+asserted by the test) and the subsequent republish saw no real change,
+returning `notified: 0` instead of the expected `1`. Fixed the fixture to
+supply the grade's current version — the same correction the inherited batch
+had already applied to `exam-max-grade.http.integration.test.ts`. No assertion
+was weakened in either fix; both are the smallest change that makes the
+authorization/version rule the code already enforces observable correctly.
+
+Full disposable-stack run after both fixes: 2,549 passed / 18 skipped, 0
+failed, 112 passing files / 2 skipped, real-edge browser probe 193/193, 96
+migrations, both seeds, clean all-table isolation. Backend lint, exact
+typecheck, build and default unit suite (342/342, 40 files) pass. All 9
+checked non-link repository guards pass, including the storage-lifecycle
+guard's four-argument cron-registration requirement. `git diff --check` and
+documentation links (1,082/1,082 across 121 files) pass. TD-3 registry
+conformance: 226/234, same eight pending endpoints, zero undocumented routes.
+OpenAPI currency (`scripts/ci/check-openapi-current.sh`) now passes cleanly —
+175 paths / 226 operations reconciled against the live router — where the
+prior session's attempt hit a sandbox `tsx` IPC-listener EPERM; that blocker
+did not recur this run and no control was circumvented to get past it.
+
+Independent Docker inventory after the final run: no disposable
+`bodour-ci-integration-*` containers, volumes or networks remain; the
+pre-existing persistent local dev stack was untouched throughout. Reviewed the
+complete inherited diff (schema-unrelated: exam.service.ts, grade.service.ts,
+content.service.ts, consent-reevaluation.service.ts, online-class.ts,
+runner.ts, the new wall-clock.ts/exam.repository.ts, and the affected docs) for
+debug code, weak assertions, secrets, unrelated refactor and doc/code drift;
+found none beyond the two gaps above and the stale "pending"/"not yet verified"
+status lines in testing.md, TASKS.md, deployment-readiness.md,
+personal-data-audit.md and storage.md, which this entry's doc updates close
+out factually — no CNDP/privacy interpretation was added or extended. No
+SRS/schema/migration/route/frontend/OpenAPI edit. One new local commit only;
+nothing pushed or deployed. Owner data, Staging, Production, DNS and live
+infrastructure remained untouched throughout.

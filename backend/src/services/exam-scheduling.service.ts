@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { wallClockInstant } from '../lib/wall-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
 import {
@@ -95,17 +96,7 @@ function computeAvailableFrom(
   // `at_start`/`offset_minutes` both need a real clock start to anchor on —
   // refused earlier, at input validation, when one is absent.
   const start = startTime as Date;
-  const anchor = new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      start.getUTCHours(),
-      start.getUTCMinutes(),
-      0,
-      0,
-    ),
-  );
+  const anchor = wallClockInstant(date, start);
   if (policy.policy === 'at_start') return anchor;
   return new Date(anchor.getTime() + policy.minutes * 60_000);
 }
@@ -156,6 +147,7 @@ export async function scheduleExam(
     let resolvedSubjectId: string | null;
     let resolvedAcademicYearId: string | null;
     let resolvedAdministrativeGroupId: string | null;
+    let resolvedDate: Date;
 
     if (input.sourceExamId) {
       // `loadForAuthor` locks nothing itself, but every write below re-derives
@@ -181,6 +173,7 @@ export async function scheduleExam(
         target: input.target,
         ...(input.date === undefined ? {} : { date: input.date }),
       });
+      resolvedDate = target.date;
       await assertMayAuthor(tx, actor, {
         levelId: source.levelId,
         subjectId: source.subjectId,
@@ -220,6 +213,7 @@ export async function scheduleExam(
         target: input.target,
         ...(input.date === undefined ? {} : { date: input.date }),
       });
+      resolvedDate = target.date;
       occurrence = await tx.exam.create({
         data: {
           mode: 'physical',
@@ -265,6 +259,7 @@ export async function scheduleExam(
         // carry no Subject, and this is not a second spelling of that rule.
         subjectId: resolvedSubjectId ?? '',
         administrativeGroupId: resolvedAdministrativeGroupId,
+        date: resolvedDate,
       });
       await assertCoherent(tx, {
         levelId: resolvedLevelId,

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
 import { quarantineKeyFor } from '../lib/file-types.js';
 import { hashStoredObject } from '../lib/object-verification.js';
 import {
@@ -424,6 +425,67 @@ export async function recordingContentRequiresSafeguardUnderLocks(
   return (await unsafeRecordingContentIds(tx, [contentId], lockedSessionIds)).has(contentId);
 }
 
+/** Metadata corrections can make an already-linked file a recording. The caller
+ * holds all live Session anchors before the Content lock and invokes this after
+ * the metadata CAS, so both the flag and exact-key obligation commit with it.
+ * Also check removal of the recording marker: it cannot outrun an owed safeguard. */
+export async function safeguardRetaggedRecordingUnderLocks(
+  tx: Prisma.TransactionClient,
+  contentId: string,
+  lockedSessionIds: readonly string[],
+): Promise<void> {
+  try {
+    // Empty discovery is still a snapshot: a first link may have committed
+    // before the caller acquired Content. Never skip graph validation merely
+    // because there were no Session anchors in that earlier snapshot.
+    if (lockedSessionIds.length === 0 && (await linkedSessionIdsForContent(tx, [contentId])).length > 0) {
+      throw new ConsentGraphChangedError('recording link graph changed while acquiring locks');
+    }
+    if (!(await recordingContentRequiresSafeguardUnderLocks(tx, contentId, lockedSessionIds))) return;
+  } catch (error) {
+    // Workers retry graph discovery internally; an interactive metadata edit
+    // must instead expose the ordinary coded conflict, never an HTTP 500.
+    if (error instanceof ConsentGraphChangedError) {
+      throw new AppError('VERSION_CONFLICT', 'content links changed during edit', {
+        reason: 'CONCURRENT_MODIFICATION',
+      });
+    }
+    throw error;
+  }
+  const content = await tx.educationalContent.findFirst({
+    where: { id: contentId, deletedAt: null },
+    select: { id: true, visibility: true, consentForcedPrivate: true, storageKey: true },
+  });
+  if (content) await forceContentSafeguard(tx, content);
+}
+
+async function forceContentSafeguard(
+  tx: Prisma.TransactionClient,
+  content: { id: string; visibility: string; consentForcedPrivate: boolean; storageKey: string },
+  sourceSessionId?: string,
+): Promise<{ forced: boolean; enqueued: boolean }> {
+  if (!content.consentForcedPrivate) {
+    await tx.educationalContent.update({
+      where: { id: content.id },
+      data: { consentForcedPrivate: true, version: { increment: 1 } },
+    });
+    await audit.write(tx, {
+      actorUserId: null,
+      actionType: 'content.visibility_change',
+      targetEntity: 'EducationalContent', targetId: content.id,
+      detail: {
+        reason: 'consent_gate', old_visibility: content.visibility, new_visibility: content.visibility,
+        old_consent_forced_private: false, new_consent_forced_private: true,
+        bucket_migration_pending: content.visibility === 'public',
+        ...(sourceSessionId === undefined ? {} : { source_session_id: sourceSessionId }),
+      },
+    });
+  }
+  const enqueued = content.visibility === 'public' &&
+    await enqueueConsentContentMigration(tx, content.id, content.storageKey);
+  return { forced: !content.consentForcedPrivate, enqueued };
+}
+
 async function reevaluateSessionConsentOnce(
   prisma: PrismaClient,
   sessionId: string,
@@ -493,38 +555,12 @@ async function reevaluateSessionConsentOnce(
         );
       }
 
-      if (!content.consentForcedPrivate) {
-        await tx.educationalContent.update({
-          where: { id: content.id },
-          data: { consentForcedPrivate: true, version: { increment: 1 } },
-        });
-        await audit.write(tx, {
-          actorUserId: null,
-          actionType: 'content.visibility_change',
-          targetEntity: 'EducationalContent',
-          targetId: content.id,
-          detail: {
-            reason: 'consent_gate',
-            old_visibility: content.visibility,
-            new_visibility: content.visibility,
-            old_consent_forced_private: false,
-            new_consent_forced_private: true,
-            bucket_migration_pending: content.visibility === 'public',
-            source_session_id: sessionId,
-          },
-        });
-        recordingsForced += 1;
-      }
-
       // Re-enqueue even when the flag was already true. The exact source key
       // makes a stale retry safe across replacement/deletion, while the public
       // proxy gate above already denies this coordinate after COMMIT.
-      if (
-        content.visibility === 'public' &&
-        await enqueueConsentContentMigration(tx, content.id, content.storageKey)
-      ) {
-        migrationsEnqueued += 1;
-      }
+      const result = await forceContentSafeguard(tx, content, sessionId);
+      if (result.forced) recordingsForced += 1;
+      if (result.enqueued) migrationsEnqueued += 1;
     }
 
     return {

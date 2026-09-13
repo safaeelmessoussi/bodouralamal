@@ -8,6 +8,34 @@ when evidence changes; do not turn an unperformed drill into a green row.
 
 ## Evidence baseline
 
+**Current local preparation (2026-09-13):** `develop` began at `45cf1f0`, six local
+commits ahead of origin, plus one further local commit closing H1/H2/H4/H5/H6 below.
+B1–B8 local acceptance is retained. Nothing was pushed, deployed, or touched on any
+host or live-data system. Older dated Staging/CI rows below are historical evidence,
+not proof that this newer source is deployed or accepted there.
+
+### HIGH finding disposition
+
+| Finding | Current disposition and evidence |
+|---|---|
+| H1 room/branch PATCH | **CLOSED locally.** Authoritative transaction reuses creation coherence; focused HTTP cross-branch room/group refusal passed in the full corrected run |
+| H2 authority/date | **CLOSED locally.** Physical create/schedule/PATCH and individual grading/authoring use the exam date; ended-assignment PATCH regression passed. Verification found and fixed a real gap: the publish-time re-check used the branch-only authorization subset instead of the full per-arm rule, wrongly refusing a Teacher's own exact-Session/Teaching-Group/student target. See the [checkpoint](../development/testing.md#high-readiness-checkpoint-2026-09-13) for the exact root cause and fix |
+| H3 manual opening | **OWNER/SPEC DECISION REQUIRED, unchanged.** R136(5) requires one-way manual opening, but no route/body/permission contract or UI implements it. `assessment.integration.test.ts` opens via direct fixture SQL, not an application workflow. Ratify the smallest manual-open route/body/roles and UI action; do not ship this path as complete or invent a pg-boss job |
+| H4 time | **CLOSED locally.** Wall-clock availability shares the online-class conversion; cron explicitly passes the IANA timezone. Seasonal scheduling and runner assertions pass in the final corrected run |
+| H5 grade races | **CLOSED locally.** Shared Exam lock before fresh reads in save/publish/PATCH/delete; existing grades require version. Three deterministic PostgreSQL lock-order scenarios passed. The same version-fixture gap was also found and fixed in one further, previously unaudited test file outside the original six-suite set |
+| H6 retag safeguarding | **CLOSED locally, runtime verified.** Session→Content locking, atomic consent flag and exact-key obligation commit together even without a bucket move; B4/B5 copy/winner protocol retained with no regression |
+| H7 restore selection | **Already fixed by B8**: project/repository/exact-image pin, foreign-snapshot refusal and real restore proof; backup sources unchanged |
+| H8 operator failure visibility | **Already fixed locally by B8** for backup/disk/storage/workers and obligation backlog including unknown-copy/no-job. Host installation, attended response, TLS review and realistic-size restore remain external prerequisites; dashboard/catalog reconciliation is explicitly unresolved |
+
+Final corrected gate: **245/245** (5 skipped) on the nine-suite focused command; full
+disposable-stack run **2,549 passed / 18 skipped, 0 failed**, browser **193/193**.
+No failing check was waived; two real gaps were found by this verification pass and
+fixed with the smallest necessary correction (see checkpoint). Independent Docker
+inventory after the final run confirms no disposable resources remain. OpenAPI
+currency, previously blocked by a sandbox `EPERM`, passed cleanly this run. See
+[testing checkpoint](../development/testing.md#high-readiness-checkpoint-2026-09-13)
+for exact commands and counts.
+
 The audit began from clean, synchronized `develop` at
 `85b9ae1573b5509804ce960f35526483fb033825`. The four Compose variants parse successfully:
 base, Production profile, Staging overlay, and Local Development overlay.
@@ -83,11 +111,11 @@ Staging and current `develop` are different facts:
 
 | Status | Blocker | Authority / evidence |
 |---|---|---|
-| **DOCUMENT OWNER DECISION REQUIRED** | R111 promises automatic de-identification after three days, but TD-7 has no account-purge job and older clauses still contradict the ratified design | Recorded in [`TASKS.md`](../TASKS.md#m7--hardening--launch-data); manual permanent de-identification remains the implemented path |
+| **IMPLEMENTED — R133/B2** | Automatic User de-identification uses the existing Trash-retention worker; expired restore is refused synchronously | Exact Trash generation/deadline and User lock protect delete/restore/redelete; the older R111 missing-job note is superseded, not an instruction to add another worker |
 | **DESIGN RATIFIED; OPERATIONAL PROVISIONING REQUIRED** | The [keyed-HMAC design](../development/email-lock-keying.md) replaces plaintext email-lock coordinates; B3 is technically closed | Required `EMAIL_LOCK_KEY`, domain-separated HMAC-SHA-256 and retained digest lock rows are settled. Real secret provisioning and the stopped-writer truncate/re-key rollout remain outstanding; no online mixed-key/old-writer rollout or Production-readiness claim is authorized |
 | **DOCUMENT OWNER DECISION REQUIRED** | Audit identity email, exact content-coordinate wording, and required free-text evidence conflict with the current no-redundant-PII boundary | Recorded once in [`TASKS.md`](../TASKS.md#m7--hardening--launch-data); current code stays fail-closed |
 | **DOCUMENT OWNER ACTION REQUIRED** | TD-14/TD-16 require terminal-job, queue-lag, backup and TLS alarms on the Admin dashboard, but TD-3 has no operational-alert read and the existing Notification model is domain-only | Define the smallest route/DTO and storage/projection boundary; until then failures are durable and runbook-visible, not Admin-dashboard-visible |
-| **OWNER / LEGAL INPUT REQUIRED** | Final privacy/terms content and Moroccan retention choices cannot be invented by engineering | Legal placeholders remain visibly non-final; no launch claim may treat them as approved |
+| **OWNER / LEGAL INPUT REQUIRED** | Final privacy/terms, CNDP regime/filing and Google transfer facts cannot be invented | Current [filing preparation](../compliance/personal-data-audit.md#current-filing-preparation--2026-09-13) distinguishes required DOB, explicit 18+ transition, R133/B7 erasure/history and same-VPS backups. R138 legal pages require actual Owner-activated text; live content was not inspected |
 | **OWNER OPERATION REQUIRED** | Branches, rooms, groups, and the real roster are intentionally absent from the Production seed | Enter through the authorised application flow after infrastructure acceptance; never import them into Staging |
 | **BLOCKED WITH DEPLOYMENT** | B1 object storage and the temporary B8 same-VPS backup must be installed/verified on the selected host; real-size restore, attended monitoring and incident readiness remain | Close the corresponding host rows before real personal data is introduced. No offsite protection is claimed under the temporary Owner decision |
 
@@ -105,6 +133,58 @@ Staging and current `develop` are different facts:
 
 One commit moves through Local verification → clean CI → Staging acceptance → Production
 smoke. A later `develop` commit never inherits an earlier commit's Staging acceptance.
+
+## Ordered release checklist
+
+This is the one execution-order checklist; the linked runbooks own the commands.
+Every unchecked step is a prerequisite, not authorization to act in this task.
+
+1. **Engineering:** finish current HIGH focused/storage/concurrency tests and
+   final consolidated CI-equivalent gates; resolve H3's missing contract. Review
+   the complete diff, commit locally, then obtain separate authority to push and
+   require hosted CI/exact-image publication for that exact SHA.
+2. **Legal/Owner:** complete the [CNDP packet](../compliance/personal-data-audit.md#current-filing-preparation--2026-09-13),
+   filing regime/Google-transfer review, association/signatory facts and required
+   approvals/receipts. Approve and activate the exact privacy/terms/consent versions
+   before real users. No launch claim follows from having a draft packet.
+3. **Provider:** obtain **Hostoweb** written evidence using the existing
+   [provider matrix](provider-acceptance.md): all disks, snapshots, backups,
+   replicas/DR copies physically Morocco; legal supplier/subprocessors, access and
+   incident/exit terms. Confirm 4 vCPU/8 GiB/~200-GB plan and realistic growth;
+   obtain actual approved deployment **and backup** free-disk floors. Do not reuse
+   the Staging 20-GiB value or turn the 50-GiB recommendation into approval.
+4. **Authorized host setup:** [deployment preflight](deployment.md) on the exact
+   detached release, root-controlled supported Ubuntu/Docker/Compose, key-only SSH,
+   safe rescue access, boot-enabled services/NTP, bounded logs and security updates.
+   Firewall exposes only approved SSH and Nginx 80/443; DB/S3/console/filer/metrics
+   stay internal. Validate actual public DNS/TLS only after separate authorization.
+5. **Secrets/OAuth:** complete the [exact-release inventory](configuration.md#exact-release-host-inventory)
+   privately on-host, distinct keys plus escrow, same-origin URLs and exact Google
+   callback. No Production values in chat/Git/command output. Keep optional media
+   disabled unless its real infrastructure and residency are separately accepted.
+6. **Empty bootstrap:** use [the pipeline](deployment.md#the-pipeline), exact GHCR
+   images/no host build, B1 SeaweedFS initializer with separate volume, migrations
+   (current repository **96**) then minimal Production seed only, idempotency and
+   singleton Owner proof. Never fixture-seed/import development data. Respect all
+   legacy migration preflights for any populated upgrade and B3 stopped-writer keying.
+7. **Acceptance:** exact image IDs/labels, TLS/security headers, real Nginx public/
+   private storage, browser smoke and first legitimate Google Owner binding;
+   prove no duplicate identity, global role/Owner invariants, registration, scoped
+   scheduling, grades, upload/read and safeguarding with expressly authorized UAT
+   fixtures. Health must include the complete expected worker catalog and cron tz.
+8. **Recovery/response:** install only when authorized, following [B8](recovery.md):
+   root encrypted repository on the same VPS, independent key escrow, disk
+   preflight, create→full-data verify→scoped two-generation prune, exact snapshot
+   pin. Measure realistic-volume PostgreSQL **and SeaweedFS** restore/RTO on
+   disposable Moroccan targets; never destroy live data for proof. Assign an
+   operator to attend backup failures, worker/retirement backlog, disk and TLS
+   expiry/renewal signals; a timer is not a person or an external host-death alarm.
+9. **Rollback/go-live:** retain exact prior images and validated recovery metadata;
+   follow [fresh-host/restore](recovery.md#restore-and-fresh-host-recovery) only with
+   writers stopped and empty targets, never downgrade incompatible migrated data
+   in place. Restoring older data may revive later erasures: resolve before public
+   traffic. Obtain explicit launch authorization only after all mandatory evidence
+   is recorded. Same-VPS backup still cannot recover total VPS/provider/disk loss.
 
 ---
 

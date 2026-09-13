@@ -60,7 +60,7 @@ duplicate concurrent runs.
 | `consent.reevaluate` | Roster/Teaching-Group change · consent change · recording import/replacement · Session-content link · R92 occurrence-audience change | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
 | `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
 | `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
-| `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
+| `backup.replicate` | TD-7 legacy catalog reference, **not registered** | Current approved B8 execution is the [monthly same-VPS host procedure](../operations/recovery.md); Document Owner must reconcile TD-7 execution/dashboard wording. No phantom healthy worker or nightly/offsite claim |
 | `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge; daily reconciliation | Moves one immutable old key to quarantine or retires exact leftovers. Its daily trigger retries existing `StorageRetirement` records only; Trash retention authorization remains with `trash.retention-purge` |
 | `upload.gc` | Daily cron | Deletes browser/server-finalization staging **strictly older than 48 h** in bounded durable pages — never younger, and never provider recording staging |
 | `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
@@ -71,13 +71,17 @@ duplicate concurrent runs.
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
 
-> **DOCUMENT OWNER ACTION REQUIRED — R111 catalog reconciliation.** The ratified R111 design
-> requires a durable, idempotent pg-boss de-identification after the three-day restoration
-> window, but TD-7 contains no account-purge row and the implementation has no such handler.
-> The interface must not pretend a scheduler exists: manual `?permanent=true` works, while an
-> untouched soft-deleted account remains recoverable and identifiable past `purge_after`.
-> Add the queue's normative name, trigger, payload and singleton rule to TD-7 before it is
-> implemented; registering an invented queue would violate §20.
+R133/B2 supersedes the older R111 catalog-gap note: `trash.retention-purge` invokes
+`purgeExpiredEntries` and the exact-generation User de-identification lifecycle;
+restore refuses an expired User window even before that sweep runs. It is not a
+new account-purge queue. Application/rejected-registration retention handlers are
+also part of the current runtime catalog in `jobs/runner.ts`.
+
+All nine daily application cron registrations explicitly pass `tz: config.TZ`
+(`Africa/Casablanca`); pg-boss otherwise defaults to UTC even in a correctly
+configured container. This differs from B8's deliberately UTC host backup timer.
+Recording metadata corrections join consent reevaluation and commit the public
+read safeguard/exact migration obligation even when no bucket move is requested.
 
 ## Runtime worker health
 

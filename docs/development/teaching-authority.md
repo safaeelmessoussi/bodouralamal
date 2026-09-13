@@ -66,6 +66,18 @@ teacher that day** — exactly what R91 §6 forbids.
 | R90 candidate conflicts | **the proposed class's period** | a finished assignment is not a clash |
 | `readableScope` — which class DEFINITIONS she may read | **any period** | hiding a class she taught last term would hide her own history and grant nobody anything |
 
+Physical create/schedule and PATCH pass the resolved exam date to the scope helper;
+PATCH checks both the existing target/date and any proposed target/date. Individual
+exam authoring/grading passes that same date to `studentsTaughtBy`, not its ordinary
+today default. Exact-Session cover authority does not become whole-Level authority.
+
+Exam mutation and grade save/publish share `repositories/exam.repository.ts`'s
+governing row lock with paper/submission writes. Authority, version, maximum and
+publication state are read inside that transaction after locking. TD-15 requires
+the current version for an existing Grade; omission is not permission to overwrite.
+See the [current verification status](testing.md#high-readiness-checkpoint-2026-09-13)
+before treating the HIGH continuation as accepted.
+
 ## History is never rewritten
 
 The rule R91 states as non-negotiable, and the mechanism that keeps it:

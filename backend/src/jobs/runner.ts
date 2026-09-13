@@ -480,17 +480,19 @@ export async function startJobRunner(
       readiness.workerRegistered(worker.name);
     }
 
-    await boss.schedule(QUEUES.sessionMaterialize, DAILY_AT_0330);
-    await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.rejectedRegistrationPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330);
-    await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
+    // pg-boss defaults to UTC regardless of the process/container TZ.
+    const dailyOptions = { tz: config.TZ };
+    await boss.schedule(QUEUES.sessionMaterialize, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.applicationRetentionPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.rejectedRegistrationPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330, {}, dailyOptions);
     // Reconcile already-authorized exact obligations, never select objects or
     // Trash by age. pg-boss retry exhaustion cannot erase the domain backlog.
-    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' });
+    await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' }, dailyOptions);
     
     readiness.ready();
   } catch (error) {

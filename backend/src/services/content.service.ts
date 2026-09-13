@@ -44,6 +44,7 @@ import {
   enqueueConsentPublicRetirement,
   enqueueConsentReevaluationForSessions,
   recordingContentRequiresSafeguardUnderLocks,
+  safeguardRetaggedRecordingUnderLocks,
 } from './consent-reevaluation.service.js';
 import { lockLiveSessions, lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import { requireRetirement, lockRetirement, findRetirement, completeRetirement, settlePlacementCopy } from '../repositories/storage-retirement.repository.js';
@@ -1205,9 +1206,9 @@ export interface ContentMetadataPatch {
    * R99.12's `origin` marker — *«هذا تسجيل حصة»*. The authoritative field
    * already on the row; no second boolean is introduced for the same concept.
    *
-   * A plain column with **no storage meaning**: correcting it moves no object
-   * and re-uploads nothing, exactly like `title`. Consent evaluation is
-   * unchanged and is not re-run from here.
+   * No re-upload is needed. Changing this marker does, however, re-evaluate
+   * linked audiences: an owed consent restriction commits with the metadata
+   * and can require an exact-key private migration.
    */
   origin?: 'uploaded' | 'session_recording';
 }
@@ -1300,24 +1301,42 @@ export async function updateContentMetadata(
   const nextVisibility = patch.visibility ?? existing.visibility;
   const targetBucket = bucketFor(nextVisibility);
   const mustMove = targetBucket !== existing.storageBucket;
+  const recordingMetadata = existing.origin === 'session_recording' || patch.origin === 'session_recording';
+
+  // Recording metadata writes follow the same Session -> Content lock order
+  // as linking/replacement/consent reevaluation. Queue absence rolls back the
+  // edit rather than committing an unrepresented safeguarding obligation.
+  const lockRecordingSessions = async (tx: Prisma.TransactionClient): Promise<string[]> => {
+    if (!recordingMetadata) return [];
+    const links = await tx.sessionContent.findMany({
+      where: { contentId, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    return enqueueConsentReevaluationForSessions(tx, links.map(link => link.sessionId));
+  };
 
   if (!mustMove) {
-    const written = await prisma.educationalContent.updateMany({
-      where: { id: contentId, deletedAt: null, version: existing.version },
-      data: {
-        ...(patch.title !== undefined ? { title: patch.title } : {}),
-        ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
-        ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
-        ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
-        ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
-        version: { increment: 1 },
-      },
-    });
-    if (written.count === 0) {
-      throw new AppError('VERSION_CONFLICT', 'content changed during edit', {
-        reason: 'CONCURRENT_MODIFICATION',
+    await prisma.$transaction(async (tx) => {
+      const sessions = await lockRecordingSessions(tx);
+      await lockEducationalContent(tx, [contentId]);
+      const written = await tx.educationalContent.updateMany({
+        where: { id: contentId, deletedAt: null, version: existing.version },
+        data: {
+          ...(patch.title !== undefined ? { title: patch.title } : {}),
+          ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
+          ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+          ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
+          ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
+          version: { increment: 1 },
+        },
       });
-    }
+      if (written.count === 0) {
+        throw new AppError('VERSION_CONFLICT', 'content changed during edit', {
+          reason: 'CONCURRENT_MODIFICATION',
+        });
+      }
+      if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
+    });
     return;
   }
 
@@ -1335,6 +1354,7 @@ export async function updateContentMetadata(
   try {
     await prisma.$transaction(async (tx) => {
       try {
+        const sessions = await lockRecordingSessions(tx);
         await lockEducationalContent(tx, [contentId]);
         await lockRetirement(tx, attempt.id);
         const intent = await findRetirement(tx, attempt.id);
@@ -1366,6 +1386,7 @@ export async function updateContentMetadata(
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
           storageBucket: targetBucket, storageKey: destinationKey, version: { increment: 1 },
         } });
+        if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
         await settlePlacementCopy(tx, attempt.id);
         await completeRetirement(tx, attempt.id); // canonical adoption, not deletion
         sourceRetirementId = (await requireRetirement(tx, {

@@ -11,6 +11,7 @@ import {
 } from '../policies/roster-resolution.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as audit from '../repositories/audit.repository.js';
+import { lockExamRow } from '../repositories/exam.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import {
@@ -91,14 +92,14 @@ export function assertCanManage(actor: Actor): void {
 export async function assertScope(
   tx: Prisma.TransactionClient,
   actor: Actor,
-  spec: { branchId: string; levelId: string; subjectId: string; administrativeGroupId: string | null },
+  spec: { branchId: string; levelId: string; subjectId: string; administrativeGroupId: string | null; date?: Date },
   notFoundMessage = 'no such branch',
 ): Promise<void> {
   if (isAdminish(actor)) {
     scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, spec.branchId, notFoundMessage);
     return;
   }
-  await assertExamInTeacherScope(tx as unknown as PrismaClient, actor.userId, spec);
+  await assertExamInTeacherScope(tx as unknown as PrismaClient, actor.userId, spec, spec.date);
 }
 
 export interface ExamStaffInput {
@@ -244,6 +245,7 @@ export async function createPhysicalExam(
       levelId: input.levelId,
       subjectId: input.subjectId,
       administrativeGroupId: input.administrativeGroupId ?? null,
+      date: input.date,
     });
     await assertCoherent(tx, input);
     /** R110, Owner 2026-09-02 — see the identical guard on update. */
@@ -364,67 +366,81 @@ export async function updatePhysicalExam(
 ): Promise<void> {
   assertCanManage(actor);
 
-  const existing = await prisma.exam.findFirst({
-    where: { id, deletedAt: null },
-    select: {
-      title: true,
-      date: true,
-      startTime: true,
-      endTime: true,
-      roomId: true,
-      visibility: true,
-      branchId: true,
-      levelId: true,
-      subjectId: true,
-      administrativeGroupId: true,
-      mode: true,
-      version: true,
-      staff: {
-        where: { deletedAt: null },
-        select: { userId: true, position: true },
+  await prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, id);
+    const existing = await tx.exam.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        title: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        roomId: true,
+        visibility: true,
+        branchId: true,
+        levelId: true,
+        subjectId: true,
+        academicYearId: true,
+        administrativeGroupId: true,
+        mode: true,
+        version: true,
+        staff: {
+          where: { deletedAt: null },
+          select: { userId: true, position: true },
+        },
       },
-    },
-  });
-  if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
-  if (existing.mode !== 'physical') {
-    throw new AppError('STATE_CONFLICT', 'only a physical exam is editable', {
-      reason: 'ONLINE_NOT_AVAILABLE',
     });
-  }
-  // **The exam AS IT STANDS**, not as the caller wants it: authority to edit is
-  // decided by what is there, and the fields that could move it out of scope
-  // (`mode`, `level_id`, `subject_id`, `branch_id`) are all uneditable by the
-  // validator anyway. A named group IS editable, and is re-checked below.
-  await assertScope(
-    prisma as unknown as Prisma.TransactionClient,
-    actor,
-    {
-      branchId: existing.branchId ?? '',
-      levelId: existing.levelId,
-      subjectId: existing.subjectId ?? '',
-      administrativeGroupId: existing.administrativeGroupId,
-    },
-    'no such exam',
-  );
-  if (input.administrativeGroupId !== undefined) {
+    if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
+    if (existing.mode !== 'physical') {
+      throw new AppError('STATE_CONFLICT', 'only a physical exam is editable', {
+        reason: 'ONLINE_NOT_AVAILABLE',
+      });
+    }
+    // **The exam AS IT STANDS**, not as the caller wants it: authority to edit is
+    // decided by what is there, and the fields that could move it out of scope
+    // (`mode`, `level_id`, `subject_id`, `branch_id`) are all uneditable by the
+    // validator anyway. A named group IS editable, and is re-checked below.
     await assertScope(
-      prisma as unknown as Prisma.TransactionClient,
+      tx,
       actor,
       {
         branchId: existing.branchId ?? '',
         levelId: existing.levelId,
         subjectId: existing.subjectId ?? '',
-        administrativeGroupId: input.administrativeGroupId,
+        administrativeGroupId: existing.administrativeGroupId,
+        date: existing.date,
       },
       'no such exam',
     );
-  }
-  // TD-15: a stale version is a coded conflict, never a silent overwrite.
-  if (existing.version !== input.version) {
-    throw new AppError('VERSION_CONFLICT', 'this exam was changed by someone else');
-  }
+    if (input.administrativeGroupId !== undefined || input.date !== undefined) {
+      await assertScope(
+        tx,
+        actor,
+        {
+          branchId: existing.branchId ?? '',
+          levelId: existing.levelId,
+          subjectId: existing.subjectId ?? '',
+          administrativeGroupId: input.administrativeGroupId === undefined
+            ? existing.administrativeGroupId : input.administrativeGroupId,
+          date: input.date ?? existing.date,
+        },
+        'no such exam',
+      );
+    }
+    // TD-15: a stale version is a coded conflict, never a silent overwrite.
+    if (existing.version !== input.version) {
+      throw new AppError('VERSION_CONFLICT', 'this exam was changed by someone else');
+    }
 
-  await prisma.$transaction(async (tx) => {
+    await assertCoherent(tx, {
+      branchId: existing.branchId ?? '',
+      levelId: existing.levelId,
+      subjectId: existing.subjectId,
+      academicYearId: existing.academicYearId,
+      roomId: input.roomId ?? existing.roomId ?? '',
+      administrativeGroupId: input.administrativeGroupId === undefined
+        ? existing.administrativeGroupId : input.administrativeGroupId,
+    });
     /**
      * **Lowering the maximum below a mark already recorded is refused, not
      * clamped** (R81).
@@ -617,25 +633,26 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
   if (!isAdminish(actor)) {
     throw new AppError('FORBIDDEN', 'deleting an exam requires admin (TD-2, R70.4)');
   }
-  const existing = await prisma.exam.findFirst({
-    where: { id, deletedAt: null },
-    select: {
-      branchId: true,
-      levelId: true,
-      administrativeGroupId: true,
-      visibility: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
-    },
-  });
-  if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
-  scope.assertCanActOnBranch(
-    actor.roleScopes,
-    MANAGING_ROLE,
-    existing.branchId ?? '',
-    'no such exam',
-  );
-
   await prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, id);
+    const existing = await tx.exam.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        branchId: true,
+        levelId: true,
+        administrativeGroupId: true,
+        visibility: true,
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      },
+    });
+    if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      existing.branchId ?? '',
+      'no such exam',
+    );
+
     /**
      * **Student educational evidence forbids deletion** (Owner decision,
      * 2026-09-03).

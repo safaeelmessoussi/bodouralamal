@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { notifyOnlineExamScheduled } from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import { lockExamRow } from '../repositories/exam.repository.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 
@@ -113,7 +114,8 @@ export async function assertMayAuthor(
    * somebody else is not hers.
    */
   if (exam.targetKind === 'student' && exam.studentId != null) {
-    const taught = await studentsTaughtBy(prisma as PrismaClient, actor.userId);
+    const taught = await studentsTaughtBy(prisma as PrismaClient, actor.userId,
+      exam.date === undefined ? {} : { on: exam.date });
     const reaches = await (prisma as PrismaClient).user.count({
       where: { AND: [taught, { id: exam.studentId, deletedAt: null }] },
     });
@@ -174,9 +176,7 @@ export async function assertMayAuthor(
   // before this exam's date — or began after it — was checked against
   // whoever staffs the schedule *today* instead. R91's whole point is that
   // authority is judged at the exam's own instant; the `student`/`session`
-  // arms above already carry no such gap because they resolve straight
-  // through `studentsTaughtBy`/`staffsSession`, neither of which defaults a
-  // date away from the row being addressed.
+  // arms above use the exam date / exact Session snapshot respectively.
   await assertExamInTeacherScope(
     prisma as PrismaClient,
     actor.userId,
@@ -411,12 +411,7 @@ export async function loadForAuthor(
  * and a first submission for one exam always serialize on this row rather
  * than on timing. §16.2's sanctioned raw-SQL exception (row locks).
  */
-export async function lockExamRow(
-  prisma: PrismaClient | Prisma.TransactionClient,
-  examId: string,
-): Promise<void> {
-  await prisma.$queryRaw`SELECT "id" FROM "exam" WHERE "id" = ${examId}::uuid FOR UPDATE`;
-}
+// The governing lock is shared with sitting/grade writes in exam.repository.
 
 async function assertNotFrozen(
   prisma: PrismaClient | Prisma.TransactionClient,
@@ -1001,8 +996,19 @@ export async function publishOccurrenceTx(
    * **Re-checked at publish, and that is the Owner's word — «author or
    * publish»** (R125), inside the SAME transaction that assigned the target —
    * never a second, later read of a row that could have moved on.
+   *
+   * **The full per-arm rule, not the branch-only subset.** `assertMayAuthor`
+   * is the one definition of who may address this target (§4.4c); calling
+   * only `assertAudienceWithinBranchScope` here asked every non-super-admin
+   * actor the Admin question — *are you branch-scoped over this audience* —
+   * which a مؤطِّرة staffing an exact Session or Teaching Group, or teaching
+   * a named student, is not and was never meant to answer. She holds no
+   * `admin` scope, so `reachableBranches` read as zero reachable branches
+   * rather than "not applicable", and a legitimately staffed online exam was
+   * refused at publish having just been authorized moments earlier by the
+   * scheduling step's own `assertMayAuthor` call against this same target.
    */
-  await assertAudienceWithinBranchScope(tx, actor, exam);
+  await assertMayAuthor(tx, actor, exam);
 
   const questions = await tx.examQuestion.findMany({
     where: { examId: exam.id, deletedAt: null },

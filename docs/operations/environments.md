@@ -76,7 +76,9 @@ every environment and never returns a stack trace, an SQL fragment or an interna
 The specification used to list *"error verbosity"* among what `NODE_ENV` controls. That
 described a branch which never existed, and [Revision 104](../SRS.md) corrects it.
 
-Production data, backups, and restores exist only on the **two Moroccan locations**.
+Production data, backups, and restores remain physically in Morocco. The Owner's
+temporary [B8 same-VPS decision](recovery.md) supersedes the older two-location
+prerequisite; it provides no recovery from total VPS/provider/disk loss.
 
 > Recorded as Risk R-10.
 

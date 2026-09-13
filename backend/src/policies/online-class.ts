@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { wallClockInstant } from '../lib/wall-clock.js';
 
 import type { OnlineMediaMode } from "../generated/prisma/client.js";
 
@@ -136,15 +137,7 @@ export function joinWindowFor(occurrence: {
   startTime: Date;
   endTime: Date;
 }): JoinWindow {
-  const at = (time: Date): Date =>
-    new Date(
-      occurrence.date.getUTCFullYear(),
-      occurrence.date.getUTCMonth(),
-      occurrence.date.getUTCDate(),
-      time.getUTCHours(),
-      time.getUTCMinutes(),
-      time.getUTCSeconds(),
-    );
+  const at = (time: Date): Date => wallClockInstant(occurrence.date, time);
 
   const start = at(occurrence.startTime);
   const end = at(occurrence.endTime);

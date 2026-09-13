@@ -1,5 +1,39 @@
 # Tasks — بذور الأمل Platform
 
+## HIGH continuation — 2026-09-13 (H1/H2/H4/H5/H6 CLOSED locally; committed, not pushed)
+
+- [x] Preserve `develop` at `45cf1f063d14073feb04ee190817535f011fe2db`
+  (six ahead, zero behind); B1–B8 acceptance remains unchanged. No push or live actions.
+- [x] Review inherited H1/H2/H4/H5 fixes and correct existing-grade fixtures to
+  supply the current TD-15 version. Stale/missing versions remain conflicts.
+- [x] Implement H6 retag safeguarding under Session→Content locks, including
+  first-link graph growth and same-transaction failure rollback; add regressions.
+- [x] Rerun corrected exam/grade suites and new exact-Session/seasonal cases:
+  **245/245** (5 skipped). Verification found and fixed one real H2 gap —
+  `publishOccurrenceTx`'s publish-time re-check used the branch-only subset of
+  authorization instead of the full per-arm `assertMayAuthor` rule, wrongly
+  refusing a Teacher's own exact-Session/Teaching-Group/student target that had
+  just been authorized moments earlier at scheduling. See the
+  [checkpoint](development/testing.md#high-readiness-checkpoint-2026-09-13) for
+  the exact root cause and fix, and a second, same-shaped fixture gap found and
+  corrected outside the nine-suite set (`notification-targets.http.integration.test.ts`).
+- [x] Ran H6 and affected B4/B5 storage/lifecycle regressions, then final
+  integration/isolation gates and independent disposable-resource cleanup inventory.
+  Full suite: **2,549 passed / 18 skipped, 0 failed**; browser **193/193**; Docker
+  inventory confirms no disposable resources remain.
+- [x] Final verified local commit made after all required gates passed green,
+  including a rerun of every gate touched by the two additional corrections above.
+  Lint, exact typecheck, build, units/guards, TD-3 and **OpenAPI currency** (now
+  passing; the earlier sandbox blocker did not recur) are tracked in the
+  [verification checkpoint](development/testing.md#high-readiness-checkpoint-2026-09-13).
+- **H3 — OWNER/SPEC DECISION REQUIRED:** R136(5) describes one-way manual opening,
+  but the application has no opening route/body/permission/UI contract. The test's
+  direct DB update is not a supported workflow. Document Owner must ratify the
+  minimum opening contract; do not invent an endpoint/job.
+- Latest Owner scope is **HIGH completion only**. Earlier uncommitted privacy,
+  configuration and release-checklist drafts are preserved, not extended or accepted.
+  Do not begin the next section; no claim that the whole programme is ready.
+
 ## B8 — same-VPS backup/recovery (local engineering acceptance complete)
 
 - Owner decision (2026-09-12): encrypted backups may stay on the same Production VPS

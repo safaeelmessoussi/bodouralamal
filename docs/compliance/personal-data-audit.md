@@ -2,7 +2,89 @@
 
 # Personal Data & CNDP Readiness Audit
 
-**Date:** 2026-08-11 · **Scope:** the live `develop` architecture, before R62
+**Historical audit:** 2026-08-11, before R62. The current preparation addendum below
+supersedes historical inventory/filing suggestions, not the preserved evidence.
+
+## Current filing preparation — 2026-09-13
+
+**Preparation only; not legal advice, filing, receipt or approval.** Reviewed from
+local source at B8 commit `45cf1f0` plus the uncommitted HIGH fixes. No live legal
+document, account, provider console or Production host was read or changed.
+Owner/legal review must settle the filing regime and supply the missing facts.
+
+### Current processing annex
+
+| Purpose / people | Verified implementation and material limits |
+|---|---|
+| Accounts, registration, staff/guardian/beneficiary relationships | `User`, `Identity`, roles, memberships, applications and `FamilyLink`; split names, contact, sex and **beneficiary DOB**. DOB is required by the current model, unlike the historical audit below. Turning 18 does not automatically grant independent control: the explicit self-managed claim/approval transition remains required (R132) |
+| Educational administration | Enrollment, attendance, Quran progress, exams, answers and grades; assigned staff/audience scope, not a public learner directory. Required historical records survive account de-identification under structural IDs, which must not be described as guaranteed anonymous data |
+| Recordings and publications | `EducationalContent`, Session links and optional online recording ingest. Public/private/hidden placement, fresh authorization and media-consent safeguarding apply. Public publication is a disclosure; the filing must cover it, not just internal storage. H6 retagging remediation passed real-stack acceptance |
+| Security/accountability | Local refresh state, OAuth binding, consent/legal versions and structural audit. Authentication audit retention is 12 months; business audit/consent history is retained according to TD-8/TD-14. Free-text settings/reasons outside the specific R141 rejection minimization still require the recorded policy decisions, not a generic scrubber |
+| Erasure and recovery | R133/B2 exact-generation User Trash deadline, then de-identification with retained required history; B7 removes claim rationale and authorized historical rejection-audit copies. Monthly encrypted backup, at most two generations after verified rotation, no per-account archive rewrite or deletion replay. A restored point may contain later-erased data; reconcile before reopening access under an authorized incident decision |
+| Hosting and authentication | B1 SeaweedFS + PostgreSQL on a Moroccan host; B8 encrypted backups temporarily on that same VPS. Google OAuth requests `openid email`, verifies identity/email, and refresh is local. Google interaction still involves identity/network data and potential foreign processing. Optional LiveKit configuration must not silently activate an unreviewed foreign media processor |
+
+Sources: [schema](../../backend/prisma/schema.prisma),
+[identity/access](../architecture/identity-and-access.md),
+[OAuth implementation](../../backend/src/lib/oauth.ts),
+[storage](../architecture/storage.md), [recovery consequences](../operations/resilience.md).
+There is no `StudentSocialProfile`, `User.notes`, generic health/CIN collection or
+implicit birthday-based control transfer to resurrect from the older tables below.
+
+### Filing regime and transfer decision
+
+The CNDP lists normal declaration **F211**, prior authorization **F112**, and
+foreign transfer **F118**. Ordinary declaration is not a safe blanket conclusion
+here: Quran participation/progress may reveal religious convictions (**inference
+requiring review**). The Article 12(1)(a) nonprofit exemption is conditional, not
+"all associations are exempt": qualifying purpose, members/regular contacts and
+limits on third-party disclosure/express consent must all be evidenced. Confirm
+the association's actual status and public-recording practices before choosing.
+See [CNDP notification guidance](https://www.cndp.ma/notifier-un-traitement/) and
+[Law 09-08, Articles 1 and 12](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf).
+
+**OWNER INPUT REQUIRED — filing regime:** authorized signatory/legal adviser to
+confirm F211 versus F112 and any applicable exemption, including minors, Quran
+progress, recordings and retained accountability evidence. Do not assume F214/F113
+simplification applies. No application has been submitted by this task.
+
+**OWNER INPUT REQUIRED — Google/other transfers:** document actual recipient legal
+entities, destination countries, processor/controller roles, contractual basis and
+transfer safeguards. Moroccan database hosting does not answer this question.
+Prepare F118 alongside the base-processing file if applicable; the CNDP says
+transfer authorization depends on approval of the underlying processing. No
+adequacy status or Google-specific exemption is presumed.
+See [CNDP procedures](https://www.cndp.ma/procedures-de-notification-process/).
+
+### Submission packet — fill privately, never in Git
+
+| Material | Ready engineering input / missing Owner input |
+|---|---|
+| Responsible controller and signatory | **OWNER INPUT REQUIRED:** exact registered association name, status, address, registration evidence, signatory authority and contact for rights. Keep statutes/identity documents and completed forms outside Git |
+| Processing purpose / categories / recipients | Use the current annex above; confirm real processing volumes, staff audiences, public media and optional online teaching. Do not reuse the old audit's "no DOB" or withdrawn health fields |
+| Collection notices and consent proof | Produce synthetic screenshots of the accepted release's forms; attach approved processing/media wording, privacy and terms versions. **OWNER INPUT REQUIRED:** authorized final Arabic wording and actual activation evidence |
+| Retention justification | Explain R133/B2/B7, educational/consent/audit history and monthly two-generation backup. Two generations is not a promise of erasure within two months during failed backups/verification; failures must be attended and escalated. **OWNER INPUT REQUIRED:** legal justification/approval for retained historical evidence, plus unresolved free-text rules |
+| Hosting/subcontracting | **OWNER INPUT REQUIRED:** Hostoweb contract, actual Moroccan data-center location, subcontractors/support access, snapshots/replicas/backups and incident terms. Marketing/brand nationality does not prove data residence |
+| Security annex | Branch/Teacher scope, exact public-object DB gate, private signed access, encryption/escrow, bounded logs, worker/retirement alarms and restore proof; list HIGH items still unverified and the same-VPS total-loss limitation honestly |
+| Transfer annex and filing evidence | **OWNER INPUT REQUIRED:** F118 facts/basis if applicable and, later, actual receipts/approvals. No invented numbers, signatures, dates, provider commitments or proof of filing |
+
+CNDP procedure materials require notices/consent or other basis, relevant
+subcontracting confidentiality evidence and signatory authority. The public site
+must explain controller, purposes, recipients, obligatory/optional fields and
+rights/contact, with actual CNDP references when issued:
+[CNDP website conformity](https://www.cndp.ma/conformite-des-sites-web/).
+
+### Public-text release check
+
+Since R138, `/privacy` and `/terms` show activated `LegalDocument` rows, **not** the
+old hardcoded text. Production seed invents neither; missing configuration is
+explicit. Registration uses separately versioned `LegalConsentText`. Source review
+cannot establish what the Owner has activated on a live environment. Before real
+users, export/review the actual approved versions privately and match every annex
+claim above; then verify anonymous rendering and the registration consent snapshot.
+No legal text is activated by this engineering task. Follow the single
+[release checklist](../operations/deployment-readiness.md#ordered-release-checklist).
+
+## Historical audit — retained provenance
 
 > ## ⚠️ THIS IS A DATED AUDIT, NOT THE CURRENT INVENTORY
 >

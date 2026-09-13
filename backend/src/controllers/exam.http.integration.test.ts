@@ -438,6 +438,21 @@ describe("POST /exams", () => {
 });
 
 describe("PATCH /exams/{id}", () => {
+  it("refuses foreign-branch room/group edits atomically", async () => {
+    const id = await createExam();
+    const before = await fetchExam(id);
+    for (const change of [{ room_id: roomB }, { administrative_group_id: groupB }]) {
+      const result = await call("PATCH", `/exams/${id}`, superAdmin, {
+        version: before["version"], ...change,
+      });
+      expect(result.status).toBe(400);
+      expect(result.body.error?.details?.["reason"]).toBe(
+        "room_id" in change ? "ROOM_BRANCH_MISMATCH" : "BRANCH_MISMATCH",
+      );
+      expect(await fetchExam(id)).toEqual(before);
+    }
+  });
+
   it("renames and re-times the sitting — verified by READING THE ROW", async () => {
     const id = await createExam();
     const before = await fetchExam(id);

@@ -2,6 +2,81 @@
 
 # Testing
 
+## HIGH readiness checkpoint 2026-09-13
+
+**H1/H2/H4/H5/H6 CLOSED for local engineering; committed, not pushed.** Base
+`45cf1f0`, six commits ahead of origin. H3 remains an unresolved Owner/spec
+decision (below) and was not touched.
+
+The corrected nine-suite focused run (six inherited suites plus the H6/B4/B5
+suites named below) passed **245/245** (5 skipped) on first rerun after the
+maximum-grade fixture correction, but exposed one genuine gap: `an exact-Session
+cover may schedule that Session, never the whole Level` failed with `FORBIDDEN
+TARGET_OUTSIDE_BRANCH_SCOPE`. Command:
+
+```bash
+timeout --signal=TERM --kill-after=30s 1800 bash scripts/ci/test-integration.sh \
+  src/controllers/exam.http.integration.test.ts \
+  src/controllers/teacher-exam-scope.http.integration.test.ts \
+  src/controllers/grade.http.integration.test.ts \
+  src/controllers/exam-max-grade.http.integration.test.ts \
+  src/services/assessment.integration.test.ts \
+  src/services/exam-deletion.integration.test.ts \
+  src/services/consent-safeguarding.integration.test.ts \
+  src/services/storage-retirement.integration.test.ts \
+  src/services/storage-lifecycle.integration.test.ts
+```
+
+**Root cause (H2 gap, fixed):** `publishOccurrenceTx`'s re-check at publish
+(R125 — "author or publish", same transaction) called
+`assertAudienceWithinBranchScope` directly, the branch-only subset `assertMayAuthor`
+uses solely inside its own `admin`-gated arm. A مؤطِّرة holding no `admin` scope was
+read by `reachableBranches` as zero reachable branches rather than "not applicable",
+so a session/teaching_group/student target she was correctly authorized for
+moments earlier (by `assertMayAuthor`, at scheduling) was wrongly refused at
+publish. Fixed in `assessment.service.ts` by calling `assertMayAuthor` itself at
+publish — the one per-arm authority definition — instead of its branch-only
+subset. Reachable only for `mode: 'online'` occurrences, which the
+`exam_online_has_no_room_check` constraint always gives `branchId: null`, so the
+admin arm's added `assertCanActOnBranch` is a guaranteed no-op there: no change
+for Admin/Super Admin, only the Teacher path is corrected. Rerun: **245/245**.
+
+This also surfaced a second, same-shaped fixture gap outside the nine-suite set:
+`notification-targets.http.integration.test.ts` › *"re-publishing after the score
+CHANGED makes the notice unread again"* silently no-opped its `PUT
+/exams/:id/grades` (H5's now-unconditional current-version requirement rejected
+the versionless update), so the republish saw no real change and `notified: 0`
+instead of `1`. Fixed the fixture to supply the grade's current version, the same
+correction already applied to the maximum-grade suite. Not an assertion weakened.
+
+H6's `consent-safeguarding.integration.test.ts` additions — retagging in both
+directions without a bucket move, immediate anonymous denial, immutable-byte
+private migration, mandatory-audit rollback and the first-link/discovery race —
+all passed. B4/B5 storage-retirement and storage-lifecycle regressions passed
+unchanged: canonical-winner, late-copy retirement, immutable exact keys, staging
+cleanup and object-retirement durability show no H6 regression.
+
+Full disposable-stack run (all files, after both fixes): **2,549 passed / 18
+skipped, 0 failed**, 112 passing files / 2 skipped, real-edge browser probe
+**193/193**, 96 migrations, both seeds, clean all-table isolation.
+
+Final permitted local checks: `npm --prefix backend run lint`, `run typecheck`,
+`test` and `run build` all pass; default tests **342/342, 40 files**. The
+storage-lifecycle source guard's four-argument cron-registration requirement
+(explicit timezone options, reconcile-only payload preserved) passes. No runtime
+gate was weakened. SRS, routes, schema and migration files are unchanged.
+
+All 9 checked non-link repository guards pass, plus `git diff --check`.
+Documentation links: current count in the same `CHANGES.log` entry. TD-3
+registry conformance: **226/234**, same eight pending endpoints, zero
+undocumented routes. **OpenAPI currency now passes** (`scripts/ci/check-openapi-current.sh`
+regenerated and reconciled 175 paths / 226 operations against the live router) —
+the earlier sandbox `tsx` IPC-listener `EPERM` did not recur this run. Independent
+Docker inventory after the final full run shows no disposable
+`bodour-ci-integration-*` containers, volumes or networks left behind; the
+pre-existing persistent local dev stack (`bodour-api-1` etc.) was untouched
+throughout.
+
 Four layers, each testing something the others structurally cannot.
 
 | Layer | Scope | Tooling | Gate |

@@ -14,6 +14,7 @@ import {
   studentsTaughtBy,
 } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
+import { lockExamRow } from '../repositories/exam.repository.js';
 
 /**
  * **Per-exam grading (§4.6, BR-7, BR-8, BR-12; M5a, SRS Revision 70).**
@@ -260,7 +261,7 @@ async function loadForGrading(
    * different answers for one exam.
    */
   if (sitting.targetKind === 'student' && sitting.studentId != null) {
-    const taught = await studentsTaughtBy(prisma, actor.userId);
+    const taught = await studentsTaughtBy(prisma, actor.userId, { on: sitting.date });
     const reaches = await prisma.user.count({
       where: { AND: [taught, { id: sitting.studentId, deletedAt: null }] },
     });
@@ -545,16 +546,16 @@ export async function saveGradeDraft(
   examId: string,
   entries: GradeEntry[],
 ): Promise<{ saved: number; initialised: number }> {
-  const exam = await loadForGrading(prisma, actor, examId);
-
   return prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, examId);
+    const exam = await loadForGrading(tx as PrismaClient, actor, examId);
     // The audience at the moment of the save. Everything below is checked
     // against it, so a student who left the Level between page load and save
     // cannot be marked.
     const audience = await tx.user.findMany({
       // Redundant with `audienceWhere`'s own `deletedAt: null`, and written
       // anyway for the reason given in `readGradeSheet`.
-      where: { ...(await audienceOf(prisma, exam)), deletedAt: null },
+      where: { ...(await audienceOf(tx, exam)), deletedAt: null },
       select: { id: true },
     });
     const inAudience = new Set(audience.map((s) => s.id));
@@ -606,7 +607,7 @@ export async function saveGradeDraft(
           },
         });
       } else {
-        if (entry.version !== undefined && current.version !== entry.version) {
+        if (current.version !== entry.version) {
           throw new AppError('VERSION_CONFLICT', 'this grade was changed by someone else', {
             student_id: entry.studentId,
           });
@@ -673,9 +674,9 @@ export async function publishGrades(
   actor: Actor,
   examId: string,
 ): Promise<{ published: number; republished: boolean; notified: number }> {
-  await loadForGrading(prisma, actor, examId);
-
   return prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, examId);
+    await loadForGrading(tx as PrismaClient, actor, examId);
     const rows = await tx.grade.findMany({
       where: { examId },
       select: { id: true, status: true, publishedAt: true, studentId: true },
