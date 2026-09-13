@@ -7,6 +7,12 @@ other Moroccan-hosting quotation. It turns the residency rule in SRS §2.2, the 
 in §6, and the deployment pipeline in §19.1 into evidence the Owner can collect. It does **not**
 select a provider, and an unchecked or verbally answered row is not acceptance.
 
+**Temporary B8 exception (Owner, 2026-09-12):** the offsite row/gate and second-location
+drill below are deferred for the first couple of months in favor of
+[encrypted same-VPS backup](recovery.md). This does not waive Moroccan residency and
+does not provide total-host-loss recovery. R133 already fixes monthly/max-two retention;
+it is not an open choice of arbitrary provider retention tiers.
+
 Record the quotation reference, date, legal supplier name, service location and named responder
 before assessing it. Keep the quotation and written answers with the private procurement record;
 do not commit prices, contacts, credentials or contract documents to this repository.
@@ -100,8 +106,9 @@ Before an empty deployment is accepted on the selected host:
 6. record the provider evidence and Owner/legal approvals without placing secrets or personal
    data in Git.
 
-Provider selection does not resolve the separate TD-7 question of who schedules and represents
-the host-scoped nightly backup without granting the API Docker-host authority.
+Provider selection does not resolve TD-7's representation of backup work. The temporary B8
+host timer schedules monthly recovery points/daily retry without API Docker-host authority;
+formal catalog/dashboard reconciliation remains separate.
 
 ---
 

@@ -541,7 +541,7 @@ assert_release_identity
 # outage behavior. This phase proves the other boundary: a recovery point from
 # the actual Production-mode graph restores into empty volumes, boots the exact
 # same release images, becomes healthy, and rolls back later DB/object writes.
-mkdir -p "$backup_repository"
+install -d -m 700 "$backup_repository"
 umask 077
 printf 'production-drill-restic-password-with-sufficient-entropy\n' > "$backup_password_file"
 printf 'NODE_ENV=production\nrelease_commit=%s\n' "$release_commit" > "$recovery_config"
@@ -580,6 +580,10 @@ before_recovery_ids="$(running_container_ids)"
   fail 'recovery-point creation replaced a Production-mode container'
 wait_for_https_status 200 90 'recovery-point restart readiness'
 assert_release_identity
+operator_args=(--project "$project" --compose-file "$repo_root/docker-compose.yml"
+  --compose-file "$overlay" --compose-file "$repo_root/docker-compose.production.yml"
+  --repository "$backup_repository" --password-file "$backup_password_file" --minimum-free-gib 1)
+bash "$repo_root/scripts/backup/check-readiness.sh" "${operator_args[@]}"
 
 # Make both durable stores newer than the recovery point. Restoring the snapshot
 # must remove these later values rather than merely proving that old data exists.
@@ -590,6 +594,9 @@ assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
   'state-after-recovery-point' 'post-recovery-point database mutation'
 
 "${compose[@]}" down --volumes --remove-orphans
+repository_id="$(docker run --rm --env RESTIC_PASSWORD_FILE=/key \
+  --volume "$backup_password_file:/key:ro" --volume "$backup_repository:/repository" \
+  "$RESTIC_IMAGE" --repo /repository cat config | backup_repository_id)"
 "$repo_root/scripts/backup/restore-recovery-point.sh" \
   --allow-fixtures \
   --project "$project" \
@@ -599,6 +606,7 @@ assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
   --repository "$backup_repository" \
   --password-file "$backup_password_file" \
   --recovered-config-dir "$recovered_config" \
+  --repository-id "$repository_id" \
   --volume db-data \
   --volume minio-data
 
@@ -617,5 +625,21 @@ assert_sql "SELECT value FROM production_recovery_drill WHERE id = 1;" \
   'state-at-recovery-point' 'database rollback state'
 [[ "$(migration_digest)" == "$migration_snapshot" ]] ||
   fail 'ordinary post-restore startup changed migration history'
+bash "$repo_root/scripts/backup/check-readiness.sh" "${operator_args[@]}"
+
+# A healthy worker catalog must not hide a durable obligation without a job.
+# This is a synthetic future-due row in this uniquely owned disposable database;
+# it deliberately never represents an actual object and is removed exactly.
+probe_retirement='00000000-0000-4000-8000-00000000b008'
+sql "INSERT INTO storage_retirement (id, dedup_key, content_id, operation, bucket,
+      storage_key, copy_settled, next_attempt_at)
+     VALUES ('$probe_retirement', repeat('8',64), '$probe_retirement', 'placement_attempt',
+       'private', 'content/$probe_retirement/b8-operator-probe', false, now() + interval '1 day');"
+if bash "$repo_root/scripts/backup/check-readiness.sh" "${operator_args[@]}" >"$drill_root/expected-backlog-alert.log" 2>&1; then
+  fail 'healthy workers concealed an unresolved durable copy obligation'
+fi
+grep -q 'COPY_OUTCOME_UNKNOWN' "$drill_root/expected-backlog-alert.log" || fail 'operator alert omitted unresolved copy'
+sql "DELETE FROM storage_retirement WHERE id = '$probe_retirement';"
+bash "$repo_root/scripts/backup/check-readiness.sh" "${operator_args[@]}"
 
 printf 'Production bootstrap drill: bootstrap, failure recovery, exact-release restart/recreation and healthy recovery-point rollback passed\n'

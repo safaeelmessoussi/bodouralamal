@@ -17,16 +17,19 @@ do when something breaks.
 | [Observability](observability.md) | Health checks, structured logs, what is alerted |
 | [Resilience](resilience.md) | Backup, restore, and behaviour when a dependency is down |
 | [Runbooks](runbooks.md) | Step-by-step procedures for the things that actually happen |
+| [Same-VPS recovery](recovery.md) | Temporary B8 encrypted backup, host scheduling, operator signals and safe recovery |
 
 ## The operational picture in one paragraph
 
 Everything runs as **one `docker-compose` stack on a single Moroccan VPS**: Nginx, the Node
-API (with job workers in-process), PostgreSQL, MinIO, and Certbot. Nginx is the only
+API (with job workers in-process), PostgreSQL, S3 storage, and Certbot. Nginx is the only
 container publishing host ports. Exact-commit API and web images are built in CI after the
 existing gates pass and pulled through the release overlay; the server never compiles them.
 Configuration is environment variables that the application validates at boot,
-failing fast and by name. Backups run nightly to a **second Moroccan location**, and the
-restore procedure is drilled before launch rather than trusted.
+failing fast and by name. R133 backups are monthly, with at most two generations after
+verified rotation. The Owner temporarily permits an encrypted **same-VPS** repository;
+this cannot recover total VPS/provider/disk loss. The host schedule and operator checks
+must be installed explicitly, and realistic-size restore is drilled before launch.
 
 ## Three things that will bite you if you skip them
 

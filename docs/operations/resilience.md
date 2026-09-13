@@ -8,29 +8,27 @@ Backup, restore, and what the platform does while a dependency is down.
 
 | | Target |
 |---|---|
-| **What** | Nightly `pg_dump`, plus Docker volume backups |
-| **Where** | Replicated **offsite to a second Moroccan location** via `restic` over SSH |
-| **RPO** | **≤ 24 hours** (nightly) |
-| **RTO** | **< 1 hour** |
+| **What** | Monthly coherent `pg_dump` plus stopped PostgreSQL/SeaweedFS/TLS volumes and config; at most two generations after verified rotation (R133) |
+| **Where** | Encrypted restic repository on the **same Moroccan Production VPS**, temporarily authorized by the Owner for the first couple of months (B8, 2026-09-12) |
+| **RPO** | Last successful monthly point; **not ≤ 24 hours** |
+| **RTO** | **< 1 hour target**, real-volume host drill still required |
 | **Proof** | A **documented, periodically tested restore procedure** — a launch requirement |
 
-Both locations are inside Morocco, because backups are personal data and
-[`BR-18`](../reference/business-rules.md#br-18) makes no exception for them.
+Backup residency remains subject to [`BR-18`](../reference/business-rules.md#br-18).
+The temporary same-VPS Owner decision supersedes the earlier offsite prerequisite, not
+residency. **Total disk/VPS/provider loss is not recoverable from the sole same-host copy.**
+Root compromise can destroy both copies. This is logical/application recovery, not full DR.
 
-The required steady state is a nightly run, a critical Admin-visible failure signal, and Owner
-escalation after two consecutive failures. **That scheduler/alert is not implemented yet.** TD-7
-names `backup.replicate` as a pg-boss job, while the coherent recovery operation must stop
-Compose services and read host volumes; granting the API Docker-host authority is rejected.
-The Document Owner must reconcile the execution boundary before launch. The host-scoped tool is
-ready and fails before writer outage when its encrypted target/credential preflight is invalid;
-an unmonitored cron entry is not represented here as the missing job.
-
-> Running without offsite backup is an accepted emergency state measured in **days, not
-> weeks**.
+The [host schedule and operator procedure](recovery.md) implements daily retry of a monthly
+backup, full-data verification before rotation, private status, and five-minute checks combining
+backup/disk, worker health and durable storage-retirement backlog. Two consecutive failures
+require operator escalation to the Owner. It does not implement dashboard alerts, external
+notification delivery or `backup.replicate` inside pg-boss. TD-7/TD-14/TD-16 reconciliation
+remains explicit; the API never receives Docker-host authority.
 
 ### The restore target is asserted against real size
 
-The RTO is not aspirational arithmetic. It is asserted against a database carrying the
+Production RTO must be measured against a database carrying the
 projected audit footprint — **~0.6–0.7 GB at launch, ~3–3.75 GB at ceiling** — and the
 12-month authentication-row retention is what keeps that figure flat instead of growing
 every year.
@@ -48,7 +46,7 @@ An untested backup is a belief, not a backup. The restore drill is:
 ### Rotation: monthly, at most two generations (Revision 133)
 
 **One backup a month, two generations alive.** The older one is pruned **only
-after the new one has been written and verified** — `restic check` runs first,
+after the new one has been written and verified** — `restic check --read-data` runs first,
 and a failed backup or a failed check aborts before the prune, so a bad night can
 never be the reason the last good generation disappears. The ordering is guarded
 in `check-backup-tooling.sh`.
@@ -92,7 +90,7 @@ data loss.
 | **MinIO** | Uploads, downloads, previews, bucket migrations | Those return `503`; content pages render their error state with retry. **Everything else — scheduling, grading, Quran, approvals — continues fully.** Migration jobs retry; the database row remains the source of truth, so **no window of wrong exposure opens** |
 | **PostgreSQL** | Everything | Total API outage. Health returns `503`; Nginx serves the static client shell and maps API failures to a friendly maintenance interstitial — **never a raw 502 page.** There is no read-only or cached mode |
 | **Job workers** (database up, workers down) | Background latency only | Health returns `503` with `queue: ok`, `jobs: down`, and a stable runner reason. **Enqueues keep succeeding** — they are database inserts inside application transactions. Jobs are **delayed, never lost**, and drain on restart. Queue-lag alarm past 10 minutes |
-| **Backup target** | Backup redundancy only | Critical alert; production continues; nightly retry |
+| **Backup target** | Recovery capability | Critical host status/journal; production continues if preflight fails; daily retry of the monthly point, operator escalation after two failures |
 | **Let's Encrypt renewal** | Future TLS validity | Alert at **21 days remaining** |
 
 ### Two rows worth dwelling on
@@ -136,8 +134,8 @@ requires the exact image IDs plus whole-platform health to return on the earlier
 recovery manifest must name repository HEAD, so a green restore cannot be detached from its code.
 
 The remaining host row in the readiness ledger is intentionally narrower: a real host reboot,
-resource and disk pressure, GHCR pull/public TLS, the supported replacement object store and remote
-Moroccan backup target, and realistic-volume RTO still need to be observed on the selected VPS.
+resource and disk pressure, GHCR pull/public TLS, the B1 SeaweedFS store and temporary same-VPS
+encrypted repository, and realistic-volume RTO still need to be observed on the selected VPS.
 
 ## Concurrency failures are expected, not exceptional
 

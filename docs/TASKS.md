@@ -1,5 +1,35 @@
 # Tasks — بذور الأمل Platform
 
+## B8 — same-VPS backup/recovery (local engineering acceptance complete)
+
+- Owner decision (2026-09-12): encrypted backups may stay on the same Production VPS
+  for the first couple of months. No new provider; no claim of recovery from total
+  disk/VPS/provider loss. R133 monthly/max-two policy remains. [Runbook](operations/recovery.md).
+- [x] Preserve B1 commit `d9c25e6a0e7f993d4308012fa7bbfa60c5c0f85f` and inherited
+  backup edits; no push, deployment or Owner/live-data operations.
+- [x] Project/repository/image-pinned exact restore; full-data verification before
+  scoped rotation; explicit disk floor; host serialization and durable failure state.
+- [x] Root host timer templates and aggregate backup/disk/worker/retirement checks.
+  H7 unsafe latest selection and H8 host-level visibility addressed here; no dashboard
+  endpoint/job-catalog invention. TD-7 execution wording and TD-14/TD-16 dashboard
+  surface remain Document Owner work, not silently represented as implemented.
+- [x] Focused metadata/monitor **12/12** and real PostgreSQL/SeaweedFS encrypted
+  recovery/negative-safety drill pass (**150 seconds**).
+- [x] Frozen-source Production-mode recovery/operator drill passes: **96/96**
+  migrations, repeat seed, browser **15/15**, exact-image restart/recreate/rollback,
+  healthy aggregate probes and unknown-copy alert despite healthy workers/no job.
+  An initial private-directory fixture error was corrected without weakening the guard;
+  a later concurrent help-text edit interrupted Bash, so only the final hash-matched
+  exit-zero run is accepted. No source changed during that final run.
+- [x] All **30** repository guards, systemd template validation, bounded utility
+  timeout/cleanup, final scope/privacy review, docs links and diff checks pass.
+  Disposable containers/volumes/networks/images/processes and temporary recovery
+  directories are gone; existing localhost resources remain untouched.
+- B8 is **CLOSED for the Owner-approved temporary local-engineering boundary**,
+  not full disaster recovery or Production approval. One local commit only.
+  Real-host installation, key escrow, disk-floor selection, attended alerts and
+  realistic-size restore remain operational prerequisites. No push/deployment.
+
 ## B1 — maintained object store (local engineering acceptance complete)
 
 - [x] Recover clean `99a4d3552f96c28da19d529201e302284f5bb94f`; preserve

@@ -34,80 +34,35 @@ VPS. The current executable tooling does not make that trade.
 
 ### OWNER DECISION REQUIRED — BACKUP TARGET AND RETENTION
 
-Before Production, the Owner must provision an SFTP/SSH repository at a **second Moroccan
-location**, pin its host key in a dedicated `known_hosts`, escrow a strong restic password and
-SSH recovery key separately, and choose a retention schedule. Safe target categories are a
-second association-controlled Moroccan VPS or a contracted Moroccan-resident SFTP service;
-an overseas service is prohibited even when encrypted. The recommendation is a separately
-administered Moroccan SFTP target whose credentials cannot modify the primary VPS.
+**Historical heading retained for links; resolved for the temporary B8 architecture.**
+R133 already fixes monthly backups and at most two generations. The Owner's B8 decision
+(2026-09-12) permits encrypted backups on the **same Production VPS for the first couple of
+months**, without another provider. This supersedes the earlier offsite prerequisite for that
+limited period. It does **not** provide recovery from total VPS, provider or disk loss.
+There is no claim of a 24-hour RPO with monthly copies. No extra infrastructure is implied.
 
-The SRS fixes the nightly RPO and sub-hour RTO but does not set the destructive snapshot
-retention horizon. Until the Owner chooses one, the tooling runs no `forget` or `prune` at
-all. A reasonable decision set to evaluate is daily/weekly/monthly tiers (for example 7 daily,
-5 weekly and 12 monthly) versus a longer legal/operational horizon; cost, erasure obligations
-and the recovery window differ, so the repository does not pick between them.
+The executable [same-VPS recovery procedure](recovery.md) covers root-only key escrow,
+explicit disk floor, daily host scheduling of the monthly operation, five-minute operator
+checks, safe snapshot selection, and fresh-host recovery **only if repository bytes survive**.
+Create → full `restic check --read-data` → scoped prune retains at most two generations
+after success; a failed verification never prunes old points and may temporarily leave extra
+unverified snapshots until repair. No previous-generation deletion replay is introduced.
 
-Create a Production recovery point from `/opt/bodour`:
+The tools use the B1 SeaweedFS volume and pin repository ID, source Compose project, exact
+snapshot ID, logical volume set and PostgreSQL/object-store image IDs before restore targets
+are created. Raw cross-vendor restore is prohibited. Portable `pg_dump` is verified separately.
+Old manifests missing these identity fields fail closed and require deliberate operator review;
+there is no automatic compatibility bypass or rewrite of historical repositories.
 
-```bash
-sudo scripts/backup/create-recovery-point.sh \
-  --repository "$BACKUP_TARGET_SSH" \
-  --password-file /root/bodour-backup/restic-password \
-  --ssh-dir /root/bodour-backup/ssh \
-  --config-file /opt/bodour/.env \
-  --config-file /opt/bodour/infra.env
-```
+The focused proof is `bash scripts/backup/verify-backup-restore.sh`; the actual Production-mode
+API/worker/Nginx/SeaweedFS rollback proof is
+`bash scripts/deploy/verify-production-bootstrap.sh`. Both own and remove disposable resources.
+Neither proves realistic-volume Production RTO, installs the timers, or changes a live host.
 
-`BACKUP_TARGET_SSH` may be the TD-13 spelling `user@host:/path`; the tool normalizes it to
-restic's SFTP backend. Production refuses a local repository. Conversely,
-`--allow-fixtures` refuses SFTP, so a disposable drill cannot copy fixtures externally.
-The initial snapshot may take longer than incremental nights because all four volumes are
-new; measure the maintenance window on the production VPS before launch.
-
-Restore only onto fresh, empty named volumes. The tool refuses a running project, refuses a
-non-empty volume, requires an exact Production confirmation, verifies the logical dump's
-SHA-256, restores the raw volumes, writes the dump, manifest and recovered `.env`/`infra.env`
-into a new root-only directory for comparison, and deliberately leaves services stopped:
-
-```bash
-sudo scripts/backup/restore-recovery-point.sh \
-  --repository "$BACKUP_TARGET_SSH" \
-  --password-file /root/bodour-backup/restic-password \
-  --ssh-dir /root/bodour-backup/ssh \
-  --recovered-config-dir /root/bodour-recovered-config \
-  --confirm-production-restore RESTORE_TO_EMPTY_PRODUCTION_VOLUMES
-```
-
-Compare/install the recovered configuration, start the exact recorded commit, then verify
-PostgreSQL migrations and row counts, all object buckets, `/healthz`, worker readiness, signed
-private GET/PUT, the public exact-coordinate gate, and one application journey. Never restore
-a Production snapshot into Local, Preview or Staging.
-
-The custom-format PostgreSQL dump is portable. The raw PostgreSQL and object-store volume
-copies are deliberately the fast, exact same-version disaster path and are **not** a claim of
-cross-vendor object portability. After the Owner selects the supported object store, update
-the backed-up volume set/export format, then repeat the compatibility and restore suite before
-Production. Do not restore a MinIO volume under a different vendor or unverified release.
-
-The destructive disposable proof is:
-
-```bash
-bash scripts/backup/verify-backup-restore.sh
-```
-
-It creates uniquely named PostgreSQL/MinIO volumes and a local encrypted repository, records
-known database and object values, snapshots, destroys both volumes, restores into empty
-volumes, reads both values back, and executes the portable dump into a second clean PostgreSQL
-database rather than treating a readable catalog as proof of restore. It also proves recovery
-creation preserves the exact container identities and that a wrong repository credential fails
-before stopping them. The accepted run on 2026-08-30 completed in **under one minute**,
-inside the one-hour RTO. It proves the tooling; only a drill on the selected Moroccan target
-with realistic data volume proves Production's RTO.
-
-**Still open:** the nightly `backup.replicate` pg-boss automation, critical Admin-visible
-failure/staleness alert, remote Moroccan target, chosen retention, and production-host drill.
-Production remains blocked until those exist. Do not substitute an unmonitored host cron or a
-Docker-socket mount and call the job complete.
+The current execution boundary is a root-owned **host systemd timer**, not a pg-boss handler
+with a Docker socket. TD-7's `backup.replicate` wording and the TD-14/TD-16 dashboard-alert
+contract still need Document Owner reconciliation; no job or API route was invented. Host
+status, nonzero operator checks and service journals are implemented, **not dashboard alerts**.
 
 ---
 

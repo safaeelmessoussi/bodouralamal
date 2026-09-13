@@ -7977,3 +7977,37 @@ remaining anonymous volumes predate B1. The pinned dependency image stays cached
 Legacy Owner MinIO retains its original image and data mount. Complete scope/
 security review found no secrets/debug code, unrelated refactor or weakened gate;
 no new engineering-constitution exception. One new local commit only, no push.
+
+## 2026-09-13 — B8 temporary same-VPS backup/recovery acceptance
+
+Continued the inherited B8 edits from B1 commit d9c25e6a0e7f993d4308012fa7bbfa60c5c0f85f.
+Owner authorizes encrypted backups on the Production VPS for the first couple of months;
+this explicitly cannot recover total disk/VPS/provider loss and does not add an offsite service.
+Retain R133 monthly/max-two policy. Restore now pins repository/source-project/full snapshot
+and data-image/volume manifest before empty-target creation, then verifies restored bytes and
+the portable dump. Full restic read-data verification precedes project-scoped rotation across
+path sets. Add disk floor/working-space preflight, serialized operations, durable failure state,
+correct failure-preserving service restart and bounded utility cleanup. Root host timer templates
+and aggregate read-only backup/disk/dependency/worker/retirement checks provide operator signals,
+including unknown-copy obligations without jobs. H7/H8 addressed at this host boundary only;
+TD-7 catalog wording and TD-14/TD-16 dashboard contract remain Document Owner work, not invented
+jobs, endpoints or messaging. Runbook covers scheduling, key escrow, secure recovery and the
+same-host/RPO/RTO limits; previous offsite/retention wording is explicitly superseded for B8.
+
+Evidence: 12/12 metadata/operator unit tests; expanded real PostgreSQL/SeaweedFS/restic drill
+passed in 150 seconds (raw and logical restore, object/config bytes, foreign repository/snapshot
+refusal, corruption/no-prune failure, repaired retry, two-generation retention across path sets,
+monthly skip, low disk, lock and credential refusal, visible consecutive failures). Final
+unchanged-source Production-mode drill passes 96/96 migrations, repeat seed, browser 15/15,
+exact-image restart/recreation and DB/object rollback, plus real healthy and unknown-copy
+operator paths. The earlier 0700 fixture correction preserves the guard; a concurrent help edit
+interrupted an earlier Bash run, which is not used as acceptance evidence. SHA-256 hashes match
+the final exit-zero source. All 30 guards, OpenAPI/TD-3 226/234 (same eight pending), systemd
+template validation, bounded timeout/cleanup and diff checks pass. Documentation links validated.
+No backend/frontend/schema/API/SRS changes or runtime-suite weakening; B1's unchanged expensive
+application evidence is reused. Independent inventory confirms fixture containers, volumes,
+networks, images, processes and temporary recovery directories removed, existing resources intact.
+No new constitution exception. B8 CLOSED for temporary local engineering, not launch approval.
+Actual host installation, floor/key provisioning, attended alerts and realistic-size restore
+remain operational prerequisites. One new local commit only; nothing pushed/deployed. Owner data,
+Staging, Production, DNS and live infrastructure untouched. No HIGH/CNDP slice started.

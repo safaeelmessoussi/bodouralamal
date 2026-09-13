@@ -166,8 +166,11 @@ binding TD-14/TD-16 target, not a description of current behaviour:
 | Job queue lag past 10 minutes | An alarm on the Admin dashboard |
 | TLS renewal failing | Alert at **21 days remaining** — never discovered as a browser error |
 
-**Backup failure is treated as critical** because running without offsite backup is *"an
-accepted emergency state measured in days, not weeks."*
+**Backup failure is treated as critical** even under the Owner-authorized temporary same-VPS
+architecture. B8's [host monitor](recovery.md#operator-signals-not-an-invented-dashboard) now
+combines backup failure/staleness, disk, workers and durable retirement backlog using aggregate
+read-only checks. It exits nonzero and journals stable codes; two failures emit `ESCALATE_OWNER`.
+It is not an Admin dashboard or automatic email alert, and cannot detect death of its own VPS.
 
 > **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require the
 > dashboard outcomes above, but TD-3 defines no operational-alert read, and the existing

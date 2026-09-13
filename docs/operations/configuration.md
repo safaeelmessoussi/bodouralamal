@@ -48,7 +48,7 @@ two separately scoped credential boundaries.
 | Variable | When |
 |---|---|
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only.** See below |
-| `BACKUP_TARGET_SSH` | Production only — the offsite Moroccan backup target |
+| `BACKUP_TARGET_SSH` | Production-only nonempty legacy setting; B8 temporarily permits `/var/lib/bodour-backups/bodour`. Host backup paths/key/floor belong to the separate root-only [operator configuration](recovery.md#before-enabling-anything-on-an-authorized-host), not the API |
 
 ### Optional, with defaults
 

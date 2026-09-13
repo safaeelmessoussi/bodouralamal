@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Bodour recovery and worker state every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=bodour-recovery-monitor.service
+
+[Install]
+WantedBy=timers.target

@@ -5,7 +5,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=scripts/backup/common.sh
 source "$repo_root/scripts/backup/common.sh"
 compose_file="$repo_root/scripts/backup/fixtures/docker-compose.yml"
-project='bodour-backup-drill'
+project="bodour-backup-drill-$$"
+export MINIO_ACCESS_KEY='backup-drill-access'
+export MINIO_SECRET_KEY='backup-drill-secret-password'
 workdir="$(mktemp -d /tmp/bodour-backup-drill.XXXXXXXX)"
 repository="$workdir/repository"
 password_file="$workdir/restic-password"
@@ -48,6 +50,11 @@ container_ids() {
 docker compose --project-name "$project" --file "$compose_file" up -d
 
 before_ids="$(container_ids)"
+create_args=(--allow-fixtures --project "$project" --compose-file "$compose_file"
+  --repository "$repository" --password-file "$password_file" --database-user app
+  --database-name bodour --stop-timeout 3 --volume db-data --volume minio-data
+  --config-file "$fixture_config")
+create_point() { bash "$repo_root/scripts/backup/create-recovery-point.sh" "${create_args[@]}" "$@"; }
 
 "$repo_root/scripts/backup/create-recovery-point.sh" \
   --allow-fixtures \
@@ -65,6 +72,24 @@ before_ids="$(container_ids)"
 after_ids="$(container_ids)"
 [[ "$after_ids" == "$before_ids" ]] ||
   { printf 'backup drill: recovery-point creation recreated a running container\n' >&2; exit 1; }
+restic_run=(docker run --rm --env RESTIC_PASSWORD_FILE=/key --volume "$password_file:/key:ro"
+  --volume "$repository:/repository" "$RESTIC_IMAGE" --repo /repository)
+repository_id="$("${restic_run[@]}" cat config | backup_repository_id)"
+own_snapshots() { "${restic_run[@]}" snapshots --json --host "$project" --tag bodour; }
+own_count() { own_snapshots | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'; }
+if create_point --minimum-free-gib 999999 >"$workdir/disk-failure.log" 2>&1; then
+  backup_die 'impossible disk floor unexpectedly passed'
+fi
+grep -q 'DISK_LOW' "$workdir/disk-failure.log"
+[[ "$(backup_status_value "${repository}.${project}.status" state)" == failed ]]
+[[ "$(container_ids)" == "$before_ids" ]]
+# A second invocation must refuse the host lock, not race verification/pruning.
+(
+  exec 8>"${repository}.operation.lock"
+  flock -n 8
+  if create_point >"$workdir/lock-failure.log" 2>&1; then exit 1; fi
+  grep -q 'another backup/restore operation' "$workdir/lock-failure.log"
+)
 
 # Repository failure is an operational alert, not an application outage. The
 # probe occurs before the writer stop, so a wrong password against the existing
@@ -88,11 +113,63 @@ fi
   { printf 'backup drill: repository failure was not visible\n' >&2; exit 1; }
 [[ "$(container_ids)" == "$before_ids" ]] ||
   { printf 'backup drill: repository preflight failure stopped or recreated a service\n' >&2; exit 1; }
+[[ "$(backup_status_value "${repository}.${project}.status" consecutive_failures)" == 2 ]]
+
+# Legacy path sets must not evade the two-generation cap. A foreign project's
+# newer snapshot must survive rotation and must never become our restore source.
+restic_input=(docker run --rm --env RESTIC_PASSWORD_FILE=/key --volume "$password_file:/key:ro"
+  --volume "$repository:/repository" --volume "$fixture_config:/different-path:ro"
+  "$RESTIC_IMAGE" --repo /repository)
+"${restic_input[@]}" backup --host "$project" --tag bodour /different-path >/dev/null
+"${restic_input[@]}" backup --host "${project}-foreign" --tag bodour /different-path >/dev/null
+[[ "$(own_count)" == 2 ]]
+before_failure="$(own_snapshots | python3 -c 'import json,sys; print("\n".join(sorted(r["id"] for r in json.load(sys.stdin))))')"
+# Corrupt ONE pack in this disposable repository, preserving its bytes privately
+# for repair. A new successful write is insufficient: full read-data must fail,
+# all previous snapshots must remain, and services must already be restarted.
+pack="$(docker run --rm --entrypoint /bin/sh --volume "$repository:/repository:ro" "$RESTIC_IMAGE" \
+  -c 'find /repository/data -type f | head -1')"
+[[ "$pack" == /repository/data/* ]]
+docker run --rm --entrypoint /bin/sh --volume "$repository:/repository" --volume "$workdir:/work" \
+  "$RESTIC_IMAGE" -c 'cp "$1" /work/saved-pack; truncate -s 0 "$1"' sh "$pack"
+if create_point >"$workdir/corrupt-failure.log" 2>&1; then
+  backup_die 'corrupt encrypted pack unexpectedly passed full verification'
+fi
+[[ "$(backup_status_value "${repository}.${project}.status" phase)" == verify ]]
+[[ "$(own_count)" == 3 ]]
+after_failure="$(own_snapshots | python3 -c 'import json,sys; print("\n".join(sorted(r["id"] for r in json.load(sys.stdin))))')"
+while IFS= read -r id; do grep -Fxq "$id" <<< "$after_failure"; done <<< "$before_failure"
+[[ "$(container_ids)" == "$before_ids" ]]
+docker run --rm --entrypoint /bin/sh --volume "$repository:/repository" --volume "$workdir:/work" \
+  "$RESTIC_IMAGE" -c 'cp /work/saved-pack "$1"' sh "$pack"
+create_point
+[[ "$(own_count)" == 2 ]]
+verified_snapshot="$(backup_status_value "${repository}.${project}.status" snapshot_id)"
+create_point --monthly
+[[ "$(own_count)" == 2 ]]
+[[ "$(backup_status_value "${repository}.${project}.status" snapshot_id)" == "$verified_snapshot" ]]
+"${restic_input[@]}" backup --host "${project}-foreign" --tag bodour /different-path >/dev/null
+foreign_snapshot="$("${restic_run[@]}" snapshots --json --host "${project}-foreign" |
+  python3 "$repo_root/scripts/backup/recovery-metadata.py" select "${project}-foreign" latest)"
+printf 'backup drill: disk/lock/credential refusal, visible failures, full-data corruption refusal, verify-before-prune, two-generation cap and monthly skip PASS\n'
 
 # Simulate total loss of both named data volumes. These are uniquely named
 # disposable fixtures and are removed by the trap even if an assertion fails.
 docker compose --project-name "$project" --file "$compose_file" \
   down --volumes --remove-orphans
+
+restore_args=(--allow-fixtures --project "$project" --compose-file "$compose_file"
+  --repository "$repository" --password-file "$password_file" --recovered-config-dir "$recovered_config"
+  --volume db-data --volume minio-data)
+for kind in repository snapshot; do
+  refusal_args=(--repository-id "$repository_id" --snapshot "$foreign_snapshot")
+  [[ "$kind" != repository ]] || refusal_args=(--repository-id "$(printf '0%.0s' {1..64})")
+  if bash "$repo_root/scripts/backup/restore-recovery-point.sh" "${restore_args[@]}" "${refusal_args[@]}" >"$workdir/refuse-$kind.log" 2>&1; then
+    backup_die 'foreign repository/snapshot unexpectedly authorized restore'
+  fi
+  [[ -z "$(docker volume ls --filter "label=com.docker.compose.project=$project" -q)" ]]
+  [[ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$project")" ]]
+done
 
 "$repo_root/scripts/backup/restore-recovery-point.sh" \
   --allow-fixtures \
@@ -101,10 +178,13 @@ docker compose --project-name "$project" --file "$compose_file" \
   --repository "$repository" \
   --password-file "$password_file" \
   --recovered-config-dir "$recovered_config" \
+  --repository-id "$repository_id" \
   --volume db-data \
   --volume minio-data
+[[ "$("${restic_run[@]}" snapshots --json --host "${project}-foreign" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" == 2 ]]
+printf 'backup drill: exact repository/project selection and foreign-snapshot refusal before target creation PASS\n'
 
-docker compose --project-name "$project" --file "$compose_file" up -d db minio
+docker compose --project-name "$project" --file "$compose_file" up -d --wait --wait-timeout 90 db minio
 
 database_value="$(docker compose --project-name "$project" --file "$compose_file" \
   exec -T db psql -U app -d bodour -Atc 'SELECT value FROM backup_drill WHERE id = 1')"

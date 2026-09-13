@@ -19,10 +19,12 @@ volume_names=()
 config_files=()
 required_services=()
 writer_services=()
+minimum_free_gib=''
+monthly=false
 
 usage() {
   cat <<'USAGE'
-Usage: create-recovery-point.sh --repository <absolute-path|user@host:/path>
+Usage: create-recovery-point.sh --repository <absolute-local-path>
        --password-file <root-only-file> [options]
 
 Options:
@@ -32,11 +34,13 @@ Options:
   --config-file <path>              Repeatable encrypted config input
   --required-service <name>         Repeatable; defaults to api, db, minio
   --writer-service <name>           Stop/drain before storage; default: api
-  --ssh-dir <path>                  Required for an SFTP repository
+  --ssh-dir <path>                  Legacy argument; current same-VPS policy rejects SFTP
   --database-service <name>         Default: db
   --database-user <name>            Default: app
   --database-name <name>            Default: bodour
   --stop-timeout <seconds>          Default: 120
+  --minimum-free-gib <GiB>          Required reserve after estimated working space
+  --monthly                        Skip only a still-present verified success this UTC month
   --allow-fixtures                   Local disposable drills only; forbids SFTP
 USAGE
 }
@@ -56,6 +60,8 @@ while (($#)); do
     --database-user) database_user="${2:-}"; shift 2 ;;
     --database-name) database_name="${2:-}"; shift 2 ;;
     --stop-timeout) stop_timeout="${2:-}"; shift 2 ;;
+    --minimum-free-gib) minimum_free_gib="${2:-}"; shift 2 ;;
+    --monthly) monthly=true; shift ;;
     --allow-fixtures) allow_fixtures=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; backup_die "unknown argument: $1" ;;
@@ -64,6 +70,9 @@ done
 
 backup_require_command docker
 backup_require_command git
+backup_require_command python3
+backup_require_command flock
+backup_validate_project "$project"
 [[ "$stop_timeout" =~ ^[1-9][0-9]*$ ]] || backup_die '--stop-timeout must be a positive integer'
 [[ -n "$repository" ]] || backup_die '--repository is required'
 [[ -n "$password_file" ]] || backup_die '--password-file is required'
@@ -72,12 +81,47 @@ repository="$(backup_normalize_repository "$repository")"
 
 if $allow_fixtures; then
   backup_assert_fixture_repository "$repository"
+  minimum_free_gib="${minimum_free_gib:-1}"
 else
   backup_assert_production_repository "$repository"
-  [[ -d "$ssh_dir" ]] || backup_die '--ssh-dir is required for the Production SFTP target'
-  [[ -f "$ssh_dir/known_hosts" ]] ||
-    backup_die 'the SSH directory must pin the backup host in known_hosts'
 fi
+[[ "$minimum_free_gib" =~ ^[1-9][0-9]{0,5}$ ]] || backup_die '--minimum-free-gib is required'
+backup_lock_repository "$repository"
+status_file="${repository}.${project}.status"
+last_success="$(backup_status_value "$status_file" last_success)"
+last_snapshot="$(backup_status_value "$status_file" snapshot_id)"
+failures="$(backup_status_value "$status_file" consecutive_failures)"
+previous_state="$(backup_status_value "$status_file" state)"
+[[ "$failures" =~ ^[0-9]+$ ]] || failures=0
+phase='preflight'
+workdir=''
+quiesced=false
+restarted=false
+running_services=()
+restart_services() {
+  $quiesced || return 0
+  $restarted && return 0
+  timeout 180s "${compose[@]}" start "${running_services[@]}" || return 1
+  restarted=true
+}
+cleanup() {
+  local rc=$?
+  trap - EXIT INT TERM
+  if ! restart_services; then
+    printf 'backup: CRITICAL — failed to restore the pre-backup service set\n' >&2
+    rc=1
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    backup_write_status "$status_file" failed "$((failures + 1))" "$last_success" "$last_snapshot" "$phase"
+    printf 'backup: CRITICAL — phase=%s consecutive_failures=%s; operator action required\n' "$phase" "$((failures + 1))" >&2
+  fi
+  [[ -z "$workdir" ]] || backup_safe_remove_workdir "$workdir"
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+backup_write_status "$status_file" running "$failures" "$last_success" "$last_snapshot" "$phase"
 
 ((${#compose_files[@]})) || compose_files+=("$repo_root/docker-compose.yml")
 ((${#volume_names[@]})) || volume_names+=(db-data minio-data certbot-conf certbot-www)
@@ -100,13 +144,34 @@ done
 
 declare -A actual_volumes=()
 for logical in "${volume_names[@]}"; do
+  [[ "$logical" =~ ^[a-z0-9][a-z0-9_-]+$ ]] || backup_die 'invalid logical volume'
   actual_volumes["$logical"]="$(backup_resolve_volume "$project" "$logical")"
+done
+
+# Reserve a full new generation plus dump/repack headroom without assuming
+# deduplication/compression. This is a conservative estimate, not a quota.
+estimated_bytes=0
+for logical in "${volume_names[@]}"; do
+  used_kib="$(backup_docker_run 120s --entrypoint /bin/sh --volume "${actual_volumes[$logical]}:/measure:ro" \
+    "$RESTIC_IMAGE" -c 'du -sk /measure' | cut -f1)"
+  [[ "$used_kib" =~ ^[0-9]+$ ]] || backup_die 'cannot estimate source volume size'
+  estimated_bytes=$((estimated_bytes + used_kib * 1024 * 2))
+done
+backup_require_space "$repository" "$minimum_free_gib" "$estimated_bytes"
+backup_require_space /tmp "$minimum_free_gib" "$estimated_bytes"
+declare -A config_basenames=()
+for config_file in "${config_files[@]}"; do
+  [[ -f "$config_file" ]] || backup_die 'required recovery configuration is missing'
+  [[ "$(realpath "$config_file")" != "$(realpath "$password_file")" ]] || backup_die 'never include the backup key in its own snapshot'
+  name="$(basename "$config_file")"
+  [[ -z "${config_basenames[$name]:-}" ]] || backup_die 'recovery config basenames must be unique'
+  config_basenames[$name]=1
 done
 
 # Prove the encrypted repository and credentials before taking any service out
 # of rotation. A dead remote target must fail the operation without creating an
 # avoidable application outage.
-restic_base=(docker run --rm
+restic_base=(backup_docker_run 1800s
   --env RESTIC_PASSWORD_FILE=/run/secrets/restic-password
   --volume "$password_file:/run/secrets/restic-password:ro")
 restic_repository="$repository"
@@ -117,41 +182,29 @@ else
   restic_base+=(--volume "$repository:/repository")
   restic_repository='/repository'
 fi
-if ! "${restic_base[@]}" "$RESTIC_IMAGE" \
-  --repo "$restic_repository" snapshots --no-lock >/dev/null 2>&1; then
+if [[ ! -f "$repository/config" ]]; then
   "${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" init
+fi
+snapshots="$("${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" snapshots --no-lock --json --host "$project" --tag bodour)"
+repository_id="$("${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" cat config | backup_repository_id)"
+if $monthly && [[ "$previous_state" == ok && "$last_success" =~ ^[0-9]+$ ]] && \
+  [[ "$(date -u -d "@$last_success" +%Y-%m)" == "$(date -u +%Y-%m)" ]] && \
+  printf '%s' "$snapshots" | python3 "$repo_root/scripts/backup/recovery-metadata.py" select "$project" "$last_snapshot" >/dev/null; then
+  backup_write_status "$status_file" ok 0 "$last_success" "$last_snapshot" complete
+  printf 'backup: this UTC month already has a verified recovery point; no new snapshot\n'
+  exit 0
 fi
 
 umask 077
 workdir="$(mktemp -d /tmp/bodour-backup.XXXXXXXX)"
 snapshot_dir="$workdir/snapshot"
 mkdir -p "$snapshot_dir/config"
-restarted=false
-
-restart_services() {
-  $restarted && return 0
-  # Start the exact containers that were running before the snapshot. `up -d`
-  # is a reconciliation command: with a missing release/tier overlay it can
-  # recreate Production from a different image or configuration.
-  "${compose[@]}" start "${running_services[@]}"
-  restarted=true
-}
-
-cleanup() {
-  local rc=$?
-  trap - EXIT INT TERM
-  if ! restart_services; then
-    printf 'backup: CRITICAL — failed to restore the pre-backup service set\n' >&2
-    rc=1
-  fi
-  backup_safe_remove_workdir "$workdir"
-  exit "$rc"
-}
-trap cleanup EXIT INT TERM
 
 # Drain application writers while storage remains available. Stopping MinIO in
 # the same Compose call as the API would sever a worker mid-copy instead of
 # letting the API's SIGTERM handler drain pg-boss first.
+phase='quiesce'
+quiesced=true
 "${compose[@]}" stop --timeout "$stop_timeout" "${writer_services[@]}"
 for writer in "${writer_services[@]}"; do
   if "${compose[@]}" ps --services --status running | grep -Fxq "$writer"; then
@@ -180,9 +233,11 @@ remaining="$("${compose[@]}" ps --services --status running)"
 # The portable logical dump and the raw, cleanly-shut-down volume belong to the
 # same write-quiesced point. The dump is also the forward-migration rollback
 # artifact; the volume is the fastest same-version disaster restore.
-"${compose[@]}" exec -T "$database_service" \
+phase='dump'
+timeout --foreground 1800s "${compose[@]}" exec -T -e PGOPTIONS='-c lock_timeout=15000 -c statement_timeout=1800000' "$database_service" \
   pg_dump --username "$database_user" --dbname "$database_name" \
   --format=custom --no-owner --no-privileges > "$snapshot_dir/postgres.dump"
+timeout --foreground 60s "${compose[@]}" exec -T "$database_service" pg_restore --list < "$snapshot_dir/postgres.dump" >/dev/null
 (
   cd "$snapshot_dir"
   sha256sum postgres.dump > postgres.dump.sha256
@@ -198,13 +253,16 @@ for config_file in "${config_files[@]}"; do
 done
 
 recovery_point="$(date -u +'%Y%m%dT%H%M%SZ')"
-commit="$(git -C "$repo_root" rev-parse HEAD)"
+commit="$(git -c safe.directory="$repo_root" -C "$repo_root" rev-parse HEAD)"
 {
   printf 'format=bodour-recovery-point-v1\n'
   printf 'created_at=%s\n' "$recovery_point"
   printf 'git_commit=%s\n' "$commit"
   printf 'compose_project=%s\n' "$project"
   printf 'database=%s\n' "$database_name"
+  printf 'repository_id=%s\n' "$repository_id"
+  printf 'database_image_id=%s\n' "$(docker inspect --format '{{.Image}}' "$("${compose[@]}" ps -aq "$database_service")")"
+  printf 'storage_image_id=%s\n' "$(docker inspect --format '{{.Image}}' "$("${compose[@]}" ps -aq minio)")"
   printf 'volumes=%s\n' "$(IFS=,; printf '%s' "${volume_names[*]}")"
 } > "$snapshot_dir/manifest.env"
 
@@ -215,14 +273,17 @@ for logical in "${volume_names[@]}"; do
   backup_paths+=("/volumes/$logical")
 done
 
-"${restic_backup[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" backup \
+phase='create'
+"${restic_backup[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" backup --json \
   --host "$project" --tag bodour --tag "recovery-point:$recovery_point" \
-  "${backup_paths[@]}"
+  "${backup_paths[@]}" > "$workdir/created.json"
+created_snapshot="$(python3 "$repo_root/scripts/backup/recovery-metadata.py" created < "$workdir/created.json")"
 
 # Data services return before the repository verification. A slow remote check
 # must not extend the write outage after the immutable snapshot is complete.
 restart_services
-"${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" check
+phase='verify'
+"${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" check --read-data
 
 printf 'backup: recovery point %s complete and verified\n' "$recovery_point"
 
@@ -240,9 +301,12 @@ printf 'backup: recovery point %s complete and verified\n' "$recovery_point"
 #
 # `--prune` reclaims the space in the same pass; without it the data stays in the
 # repository and "at most two generations" would be true of the index only.
+phase='rotate'
 "${restic_base[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" forget \
-  --host "$project" --tag bodour \
+  --host "$project" --tag bodour --group-by host \
   --keep-last "$BACKUP_KEEP_GENERATIONS" --prune
+
+backup_write_status "$status_file" ok 0 "$(date -u +%s)" "$created_snapshot" complete
 
 printf 'backup: rotation complete — at most %s generations retained\n' "$BACKUP_KEEP_GENERATIONS"
 printf 'backup: a live deletion does NOT modify an existing generation; deleted data may remain in the older one until it rotates out\n'

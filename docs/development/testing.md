@@ -146,14 +146,48 @@ parsers and pins every host/configuration invariant, while the actual VPS invoca
 daemon, filesystem, DNS, secret modes, resolved release graph and exact GHCR manifests. Passing
 it still means only *ready to deploy*: no container, migration, certificate or backup has run.
 
-The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
+The backup drill is not a source-text assertion. It writes a PostgreSQL row and SeaweedFS object,
 creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
 restores them into empty replacements, reads both values back, then executes the portable dump
 into a second clean PostgreSQL database. It also pins the running container IDs across recovery
 creation and proves a wrong repository credential fails visibly before any service stops.
 Fixture mode structurally refuses SFTP so the drill cannot send local data to an external target.
-Its local under-one-minute result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
-Moroccan target and realistic Production volume still require the launch drill.
+The original under-one-minute MinIO proof is historical. The expanded B8 SeaweedFS proof
+below verifies the current recovery mechanism; realistic Production volume still requires
+the launch drill. Tiny fixtures do not prove Production RTO.
+
+### B8 same-VPS backup and recovery
+
+The Owner temporarily authorizes same-VPS encrypted storage, **not full VPS-loss DR**;
+[operator setup and recovery](../operations/recovery.md). No runtime application, schema,
+API or job catalog is changed by this slice.
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/backup -p 'test_*.py'`:
+  **12/12** metadata and aggregate-alert assertions. Missing/mismatched repository/project/image
+  identity fails closed; green worker counts do not hide retirement failure or an unknown copy.
+- `bash scripts/backup/verify-backup-restore.sh`: **passed in 150 seconds** against real
+  PostgreSQL, B1 SeaweedFS and pinned encrypted restic. Tests raw and separately executed logical
+  dump restore, object/config bytes, exact container identities, low-space/wrong-key/overlap
+  refusal before outage, durable repeated failures, corruption of a saved disposable data pack
+  causing full verification failure without pruning old snapshots, repaired retry, exactly two
+  project generations across differing paths, foreign-project preservation, monthly skip and
+  repository/foreign-snapshot refusal **before target creation**. A newer foreign snapshot does
+  not become the default source. Restore waits for real data-service health before reading.
+- `bash scripts/deploy/verify-production-bootstrap.sh`: **passed**, from frozen source verified
+  by SHA-256 before/after the run, with **96/96** migrations and browser **15/15**. Exercises the actual Production-mode
+  graph and the new read-only operator command before/after raw rollback. Its isolated synthetic
+  future-due unknown-copy row must be reported despite healthy workers and no associated job;
+  the exact probe row is removed before final health acceptance.
+- All **30** non-link repository guards pass (OpenAPI/TD-3 remains **226/234**, eight pending,
+  zero undocumented). Systemd template validation and a real one-second utility timeout with
+  exact container cleanup pass. Final inventory finds no disposable containers, project volumes,
+  networks, images, processes or temporary recovery directories. Templates were never installed.
+
+The same B1 runtime source retains its accepted **2,536 passed / 18 skipped**, browser
+**193/193**, **342/342** units, **96/96** migrations and clean isolation. No repeated full
+application suite is justified by host scripts/docs alone. Both recovery drills remove only
+their uniquely named resources. No timer is installed, no external host is contacted and no
+live dataset is used by these checks.
 
 The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL
 and MinIO volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every

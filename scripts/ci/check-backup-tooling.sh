@@ -12,13 +12,14 @@ fail() {
   exit 1
 }
 
-bash -n "$common" "$create" "$restore" "$backup_dir/verify-backup-restore.sh"
+for script in "$backup_dir"/*.sh; do bash -n "$script"; done
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$backup_dir" -p 'test_*.py'
 
 digest='restic/restic@sha256:39d9072fb5651c80d75c7a811612eb60b4c06b32ffe87c2e9f3c7222e1797e76'
 [[ "$(grep -rF --include='*.sh' "$digest" "$backup_dir" | wc -l)" -eq 1 ]] ||
   fail 'restic must have one immutable, shared image digest'
 grep -Fq 'backup_assert_production_repository "$repository"' "$create" ||
-  fail 'Production backup must require an SFTP repository'
+  fail 'Production backup must enforce the Owner-approved same-VPS boundary'
 grep -Fq 'backup_assert_fixture_repository "$repository"' "$create" ||
   fail 'fixture drills must refuse an external repository'
 grep -Fq "RESTORE_TO_EMPTY_PRODUCTION_VOLUMES" "$restore" ||
@@ -65,8 +66,14 @@ grep -Fq -- '--keep-last "$BACKUP_KEEP_GENERATIONS" --prune' "$create" ||
   fail 'rotation must keep exactly the shared generation count, and reclaim the space'
 grep -Fq 'readonly BACKUP_KEEP_GENERATIONS=2' "$common" ||
   fail 'R133 fixes the retained generations at two'
-grep -Fq -- '--host "$project" --tag bodour \' "$create" ||
+grep -Fq -- '--host "$project" --tag bodour --group-by host' "$create" ||
   fail 'forget must be scoped to this project, or it discards another history'
+grep -Fq 'check --read-data' "$create" || fail 'verification must read every stored data pack'
+grep -Fq 'backup_require_space "$repository"' "$create" || fail 'backup requires a disk floor'
+grep -Fq 'backup_write_status "$status_file" failed' "$create" || fail 'backup failure must be durable'
+grep -Fq 'repository identity differs from the operator pin' "$restore" || fail 'restore must pin the repository'
+grep -Fq '"$selected_snapshot" --verify' "$restore" || fail 'restore must use and verify the resolved exact ID'
+grep -Fq 'default_transaction_read_only=on' "$backup_dir/check-readiness.sh" || fail 'operator DB probe must be read only'
 
 "$create" --help >/dev/null
 "$restore" --help >/dev/null

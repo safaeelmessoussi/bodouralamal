@@ -10,6 +10,8 @@ repository=''
 password_file=''
 ssh_dir=''
 snapshot='latest'
+source_project=''
+expected_repository_id=''
 allow_fixtures=false
 production_confirmation=''
 compose_files=()
@@ -18,7 +20,7 @@ recovered_config_dir=''
 
 usage() {
   cat <<'USAGE'
-Usage: restore-recovery-point.sh --repository <absolute-path|user@host:/path>
+Usage: restore-recovery-point.sh --repository <absolute-local-path>
        --password-file <root-only-file> --recovered-config-dir <empty-dir>
        [options]
 
@@ -31,7 +33,9 @@ Options:
   --compose-file <path>             Repeatable; default: docker-compose.yml
   --volume <logical-compose-name>   Repeatable; defaults to all four data volumes
   --snapshot <id|latest>            Default: latest
-  --ssh-dir <path>                  Required for an SFTP repository
+  --source-project <name>           Default: target project; explicit for a fresh differently named host
+  --repository-id <64-hex-ID>       Required operator-pinned repository identity
+  --ssh-dir <path>                  Legacy argument; current same-VPS policy rejects SFTP
   --allow-fixtures                   Local disposable drills only; forbids SFTP
 USAGE
 }
@@ -43,6 +47,8 @@ while (($#)); do
     --password-file) password_file="${2:-}"; shift 2 ;;
     --ssh-dir) ssh_dir="${2:-}"; shift 2 ;;
     --snapshot) snapshot="${2:-}"; shift 2 ;;
+    --source-project) source_project="${2:-}"; shift 2 ;;
+    --repository-id) expected_repository_id="${2:-}"; shift 2 ;;
     --compose-file) compose_files+=("${2:-}"); shift 2 ;;
     --volume) volume_names+=("${2:-}"); shift 2 ;;
     --recovered-config-dir) recovered_config_dir="${2:-}"; shift 2 ;;
@@ -54,6 +60,12 @@ while (($#)); do
 done
 
 backup_require_command docker
+backup_require_command python3
+backup_require_command flock
+source_project="${source_project:-$project}"
+backup_validate_project "$project"
+backup_validate_project "$source_project"
+[[ "$expected_repository_id" =~ ^[0-9a-f]{64}$ ]] || backup_die '--repository-id must pin the expected full repository ID'
 [[ -n "$repository" ]] || backup_die '--repository is required'
 [[ -n "$password_file" ]] || backup_die '--password-file is required'
 [[ -n "$recovered_config_dir" ]] || backup_die '--recovered-config-dir is required'
@@ -66,9 +78,8 @@ else
   backup_assert_production_repository "$repository"
   [[ "$production_confirmation" == 'RESTORE_TO_EMPTY_PRODUCTION_VOLUMES' ]] ||
     backup_die 'the exact Production restore confirmation is required'
-  [[ -d "$ssh_dir" && -f "$ssh_dir/known_hosts" ]] ||
-    backup_die 'a pinned SSH directory is required for Production restore'
 fi
+backup_lock_repository "$repository"
 
 ((${#compose_files[@]})) || compose_files+=("$repo_root/docker-compose.yml")
 ((${#volume_names[@]})) || volume_names+=(db-data minio-data certbot-conf certbot-www)
@@ -84,20 +95,6 @@ done
 [[ ! -e "$recovered_config_dir" ]] ||
   backup_die 'recovered config destination must not already exist'
 
-# `create` materializes named empty volumes without starting any data process.
-"${compose[@]}" create >/dev/null
-
-declare -A actual_volumes=()
-for logical in "${volume_names[@]}"; do
-  actual="$(backup_resolve_volume "$project" "$logical")"
-  actual_volumes["$logical"]="$actual"
-  if ! docker run --rm --entrypoint /bin/sh \
-    --volume "$actual:/check:ro" "$RESTIC_IMAGE" \
-    -c 'test -z "$(find /check -mindepth 1 -print -quit)"'; then
-    backup_die "restore target volume is not empty: $project/$logical"
-  fi
-done
-
 umask 077
 workdir="$(mktemp -d /tmp/bodour-restore.XXXXXXXX)"
 recovered_snapshot="$workdir/snapshot"
@@ -108,9 +105,11 @@ cleanup() {
   backup_safe_remove_workdir "$workdir"
   exit "$rc"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-restic_docker=(docker run --rm
+restic_docker=(backup_docker_run 1800s
   --env RESTIC_PASSWORD_FILE=/run/secrets/restic-password
   --volume "$password_file:/run/secrets/restic-password:ro")
 restic_repository="$repository"
@@ -122,18 +121,50 @@ else
   restic_docker+=(--volume "$repository:/repository")
   restic_repository='/repository'
 fi
+
+# Resolve an exact ID from project-filtered metadata. Even an explicitly supplied
+# ID must belong to that source project; never pass generic `latest` to restore.
+repository_id="$("${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" cat config | backup_repository_id)"
+[[ "$repository_id" == "$expected_repository_id" ]] || backup_die 'repository identity differs from the operator pin'
+selected_snapshot="$("${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" \
+  snapshots --json --host "$source_project" --tag bodour |
+  python3 "$repo_root/scripts/backup/recovery-metadata.py" select "$source_project" "$snapshot")"
+"${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" dump \
+  "$selected_snapshot" /snapshot/manifest.env > "$workdir/manifest.env"
+mapfile -t data_images < <("${compose[@]}" config --format json | python3 -c \
+  'import json,sys; s=json.load(sys.stdin)["services"]; print(s["db"]["image"]); print(s["minio"]["image"])')
+[[ "${#data_images[@]}" == 2 ]] || backup_die 'cannot resolve target data images'
+database_image_id="$(docker image inspect --format '{{.Id}}' "${data_images[0]}")"
+storage_image_id="$(docker image inspect --format '{{.Id}}' "${data_images[1]}")"
+python3 "$repo_root/scripts/backup/recovery-metadata.py" manifest "$source_project" \
+  "$(IFS=,; printf '%s' "${volume_names[*]}")" "$database_image_id" "$storage_image_id" "$repository_id" < "$workdir/manifest.env"
+
+# Only matched metadata authorizes creating empty targets. No image pull, wipe,
+# service start or target-data write occurs before this identity check.
+"${compose[@]}" create >/dev/null
+declare -A actual_volumes=()
+for logical in "${volume_names[@]}"; do
+  actual="$(backup_resolve_volume "$project" "$logical")"
+  actual_volumes["$logical"]="$actual"
+  if ! docker run --rm --entrypoint /bin/sh \
+    --volume "$actual:/check:ro" "$RESTIC_IMAGE" \
+    -c 'test -z "$(find /check -mindepth 1 -print -quit)"'; then
+    backup_die "restore target volume is not empty: $project/$logical"
+  fi
+done
 restic_docker+=(--volume "$recovered_snapshot:/restore-root/snapshot")
 for logical in "${volume_names[@]}"; do
   restic_docker+=(--volume "${actual_volumes[$logical]}:/restore-root/volumes/$logical")
 done
 
 "${restic_docker[@]}" "$RESTIC_IMAGE" --repo "$restic_repository" restore \
-  "$snapshot" --tag bodour --target /restore-root
+  "$selected_snapshot" --verify --target /restore-root
 
 [[ -f "$recovered_snapshot/manifest.env" ]] ||
   backup_die 'snapshot is missing the recovery-point manifest'
 grep -Fxq 'format=bodour-recovery-point-v1' "$recovered_snapshot/manifest.env" ||
   backup_die 'snapshot recovery-point format is unsupported'
+cmp -s "$workdir/manifest.env" "$recovered_snapshot/manifest.env" || backup_die 'restored manifest differs from the selected snapshot'
 (
   cd "$recovered_snapshot"
   sha256sum --check postgres.dump.sha256

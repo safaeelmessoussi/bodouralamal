@@ -44,10 +44,12 @@ image scaffolding would otherwise make a fresh restore target non-empty before s
 The `docker` group is **root-equivalent**. Restrict it to the deployment account and treat that
 account's SSH key as a host-root credential. Do not expose the Docker API over TCP.
 
-Production additionally requires a second Moroccan location for offsite backups, domain/DNS
-control for Let's Encrypt, Google OAuth credentials, and read access to the repository's GHCR
-packages. Use the single [Moroccan-provider evidence matrix](provider-acceptance.md) for the host,
-storage and backup quotation. Engineering recommends a 50-GiB deployment floor for the planned
+Production requires domain/DNS control for Let's Encrypt, Google OAuth credentials and GHCR
+read access. The Owner's temporary B8 decision permits [encrypted same-VPS backups](recovery.md)
+for the first couple of months, with no total-VPS-loss protection; the earlier second-location
+prerequisite is deferred for this bounded arrangement. Use the single
+[Moroccan-provider evidence matrix](provider-acceptance.md) for the host and storage quotation.
+Engineering recommends a 50-GiB deployment floor for the planned
 ~200-GB disk, with a warning at 60 GiB, but that is not approved and does not replace the SRS's
 recording/week and average-size estimate. Select and pass the Owner-approved whole-GiB floor to
 preflight; never turn the recommendation into a convenient code default.

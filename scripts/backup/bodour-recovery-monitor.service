@@ -1,0 +1,11 @@
+[Unit]
+Description=Bodour backup, disk, worker and retirement operator checks
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/bodour
+UMask=0077
+ExecStart=/bin/bash /opt/bodour/scripts/backup/run-scheduled.sh monitor
+TimeoutStartSec=90

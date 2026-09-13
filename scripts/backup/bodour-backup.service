@@ -1,0 +1,13 @@
+[Unit]
+Description=Bodour encrypted same-VPS monthly recovery point
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/bodour
+UMask=0077
+ExecStart=/bin/bash /opt/bodour/scripts/backup/run-scheduled.sh backup
+TimeoutStartSec=2h
+TimeoutStopSec=180

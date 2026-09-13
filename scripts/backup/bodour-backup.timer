@@ -1,0 +1,10 @@
+[Unit]
+Description=Check monthly recovery point daily; retry failures without extra successful monthly copies
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+Unit=bodour-backup.service
+
+[Install]
+WantedBy=timers.target
