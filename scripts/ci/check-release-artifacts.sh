@@ -63,7 +63,7 @@ if grep -Fq 'docker compose build api' "$deployment" ||
   fail 'the deployment runbook must not contain target-host build commands'
 fi
 
-grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)' "$tls_activation" ||
+grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.storage.yml -f docker-compose.production.yml)' "$tls_activation" ||
   fail 'TLS activation must recreate Production Nginx through the release overlay'
 grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)' "$tls_activation" ||
   fail 'TLS activation must retain the Staging resource overlay'

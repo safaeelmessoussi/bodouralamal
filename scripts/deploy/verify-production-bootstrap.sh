@@ -42,11 +42,18 @@ export MINIO_SECRET_KEY='production-drill-secret-password'
 export RECORDING_STAGING_BUCKET='recordings-staging'
 export TZ='Africa/Casablanca'
 
+# docker-compose.storage.yml is passed explicitly, never left to
+# docker-compose.production.yml's own `extends:` — confirmed against the
+# hosted CI runner's exact Compose (2.38.2) that `extends` silently drops an
+# !override-tagged environment/volumes map when merged over a base file that
+# already declares the same service key. Explicit --file puts the override
+# through ordinary multi-file merging, which resolves correctly everywhere.
 compose=(
   docker compose
   --project-name "$project"
   --file "$repo_root/docker-compose.yml"
   --file "$overlay"
+  --file "$repo_root/docker-compose.storage.yml"
   --file "$repo_root/docker-compose.production.yml"
 )
 
@@ -566,6 +573,7 @@ before_recovery_ids="$(running_container_ids)"
   --project "$project" \
   --compose-file "$repo_root/docker-compose.yml" \
   --compose-file "$overlay" \
+  --compose-file "$repo_root/docker-compose.storage.yml" \
   --compose-file "$repo_root/docker-compose.production.yml" \
   --repository "$backup_repository" \
   --password-file "$backup_password_file" \
@@ -581,7 +589,8 @@ before_recovery_ids="$(running_container_ids)"
 wait_for_https_status 200 90 'recovery-point restart readiness'
 assert_release_identity
 operator_args=(--project "$project" --compose-file "$repo_root/docker-compose.yml"
-  --compose-file "$overlay" --compose-file "$repo_root/docker-compose.production.yml"
+  --compose-file "$overlay" --compose-file "$repo_root/docker-compose.storage.yml"
+  --compose-file "$repo_root/docker-compose.production.yml"
   --repository "$backup_repository" --password-file "$backup_password_file" --minimum-free-gib 1)
 bash "$repo_root/scripts/backup/check-readiness.sh" "${operator_args[@]}"
 
@@ -602,6 +611,7 @@ repository_id="$(docker run --rm --env RESTIC_PASSWORD_FILE=/key \
   --project "$project" \
   --compose-file "$repo_root/docker-compose.yml" \
   --compose-file "$overlay" \
+  --compose-file "$repo_root/docker-compose.storage.yml" \
   --compose-file "$repo_root/docker-compose.production.yml" \
   --repository "$backup_repository" \
   --password-file "$backup_password_file" \

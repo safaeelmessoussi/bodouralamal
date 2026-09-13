@@ -8187,3 +8187,65 @@ continuation (H1–H6) as fully closed locally. No CNDP/privacy work begun; no
 other HIGH finding, B1–B8 item or unrelated refactor touched. One new local
 commit only; nothing pushed or deployed. Owner data, Staging, Production, DNS
 and live infrastructure remained untouched throughout.
+
+2026-09-13 — CI fix: production storage override lost through `extends`
+First-ever hosted CI run of the pushed HIGH-continuation commits (3171a47)
+failed two jobs: "SRS guard checks" (`Clean release hosts fail preflight
+before runtime mutation`, message "Production storage requires an empty,
+separately named restore target") and "Production — anonymous browser +
+restart/recovery smoke" (`verify-production-bootstrap.sh`, the `minio`
+container crash-looping with exit 1). Both green in local verification before
+push; both are the same root cause, confirmed empirically rather than
+assumed: `docker-compose.production.yml`'s `minio`/`minio-init` services pull
+`docker-compose.storage.yml` in via Compose's `extends:` keyword. Fetched and
+tested the exact Docker Compose release the hosted `ubuntu-latest` runner
+ships (2.38.2, confirmed from GitHub's own runner-images manifest) side by
+side with the local sandbox's newer build: on 2.38.2, an `!override`-tagged
+`environment`/`volumes` map arriving through `extends` is silently DROPPED
+entirely (not merged, not kept) whenever the base file being merged over
+already declares the same service key — so `AWS_ACCESS_KEY_ID`/
+`AWS_SECRET_ACCESS_KEY` and the `nocopy: true` restore-target guarantee never
+reached the container, and the object-store credential test inside its
+entrypoint failed closed exactly as designed. Not a Compose-version-floor gap
+(2.38.2 exceeds this repository's own documented `MIN_COMPOSE_VERSION`,
+2.24.4) and not a product/security defect — the credential-separation and
+`nocopy` safety properties are correct in design and were never weakened; the
+delivery mechanism chosen to express them (`extends`) does not reliably
+survive this specific, real Compose version.
+
+Verified the fix empirically before applying it anywhere: passing
+`docker-compose.storage.yml` as an explicit, ordinary `--file`/`--compose-file`
+argument (immediately before `docker-compose.production.yml`, the same
+position `scripts/ci/test-integration.sh` already used successfully all
+along) resolves `environment` and `volumes` correctly on both the sandbox's
+Compose and the real 2.38.2 binary — full replacement, not a partial/union
+artifact, actually stricter than the `extends` path's own accidental
+behavior on the newer engine (which had silently left stale `MINIO_ROOT_USER`/
+`MINIO_ROOT_PASSWORD` keys alongside the real ones). Applied this exact,
+mechanical, one-line-per-call-site change everywhere the same
+`docker-compose.production.yml` + `extends` combination is composed for the
+production tier: `scripts/ci/check-host-preflight.sh`,
+`scripts/deploy/verify-production-bootstrap.sh` (all four of its compose
+invocations — the main bootstrap plus the create/check/restore-recovery-point
+calls), `scripts/deploy/preflight-host.sh` and `scripts/deploy/enable-tls.sh`
+(the real host entry points, unchanged in every other respect — no live host
+was touched), `scripts/backup/run-scheduled.sh`, and the matching exact-string
+guard in `scripts/ci/check-release-artifacts.sh`. `docker-compose.production.yml`
+itself is untouched — its `extends:` blocks are now redundant but harmless,
+since every caller supplies the same configuration directly.
+
+Re-ran `verify-production-bootstrap.sh` end to end against the real 2.38.2
+binary (via a local shim substituting it for `docker compose`): bootstrap,
+failure recovery, exact-release restart/recreation and the healthy
+recovery-point rollback all pass, matching the existing local-sandbox
+evidence exactly. Re-ran all 28 non-link "SRS guard checks" locally,
+including `check-host-preflight.sh`, `check-release-artifacts.sh` and
+`check-storage-lifecycle.sh` (whose own fixture uses the same `extends`
+pattern but is not exercised by hosted CI and was left unchanged — a known,
+separately-scoped follow-up, not blocking this fix). `bash -n` on every
+touched script and `git diff --check` pass. No backend/frontend/schema/
+migration/route change; no test, assertion, or security control weakened —
+this raises the strictness of the production credential/volume override,
+it does not lower it. No Owner/Staging/Production/DNS/live-infrastructure
+action was taken; the real 2.38.2 binary was fetched only to test file
+resolution locally, never pointed at any real host.

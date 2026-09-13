@@ -16,6 +16,7 @@ set +a
 args=(--project bodour --repository "$BACKUP_REPOSITORY" --password-file "$BACKUP_PASSWORD_FILE"
   --minimum-free-gib "$BACKUP_MINIMUM_FREE_GIB"
   --compose-file "$repo_root/docker-compose.yml" --compose-file "$repo_root/docker-compose.release.yml"
+  --compose-file "$repo_root/docker-compose.storage.yml"
   --compose-file "$repo_root/docker-compose.production.yml")
 case "${1:-}" in
   backup) exec bash "$repo_root/scripts/backup/create-recovery-point.sh" "${args[@]}" --monthly ;;

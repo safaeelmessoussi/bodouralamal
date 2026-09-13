@@ -330,7 +330,14 @@ main() {
     fail 'IPv4-only launch host must not publish an unverified AAAA record'
 
   if [[ "$tier" == 'production' ]]; then
-    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)
+    # docker-compose.storage.yml MUST be an explicit -f here, never left to
+    # docker-compose.production.yml's own `extends:` — `extends` silently
+    # drops an !override-tagged environment/volumes map when merged over a
+    # base file that already declares the same service key (confirmed against
+    # real Compose 2.38.2, well above this file's own MIN_COMPOSE_VERSION
+    # floor). An explicit -f puts the override through ordinary multi-file
+    # merging, which resolves correctly.
+    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.storage.yml -f docker-compose.production.yml)
   else
     compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)
   fi

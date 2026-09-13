@@ -38,6 +38,14 @@ if valid_public_ipv4 127.0.0.1 || valid_public_ipv4 10.0.0.1; then
 fi
 
 release='ffffffffffffffffffffffffffffffffffffffff'
+# docker-compose.storage.yml MUST be an explicit top-level --file here, never
+# left to docker-compose.production.yml's own `extends:`. Confirmed against
+# both the sandbox's Compose and the hosted runner's exact 2.38.2: `extends`
+# silently drops an !override-tagged map (environment/volumes) when the base
+# file being merged over already declares the same key — a real Compose
+# defect/incompatibility, not a version floor issue (2.38.2 exceeds
+# MIN_COMPOSE_VERSION). Passing this file directly puts the override through
+# ordinary multi-file merging, which resolves correctly on both.
 resolved="$({
   MINIO_ACCESS_KEY=preflight-access \
   MINIO_SECRET_KEY=preflight-secret-password \
@@ -45,6 +53,7 @@ resolved="$({
     docker compose \
       --file "$repo_root/docker-compose.yml" \
       --file "$repo_root/docker-compose.release.yml" \
+      --file "$repo_root/docker-compose.storage.yml" \
       --file "$repo_root/docker-compose.production.yml" \
       --file "$fixture" \
       --profile production config --format json
