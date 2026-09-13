@@ -43,9 +43,8 @@ Migrations are forward-only in production — the dump *is* the rollback point, 
 match the pre-migration state exactly.
 
 **Never weaken cookie attributes to make an environment work.** `HttpOnly; Secure;
-SameSite=Lax` is identical in every tier. **Preview's** cross-origin cookie behaviour is by
-design, not a bug ([why](environments.md#the-preview-authentication-boundary)); **Staging**
-is same-origin like Production, so the cookie flows there normally.
+SameSite=Lax` is identical in every tier ([why](environments.md#cookie-attributes-are-identical-in-every-environment)).
+**Staging** is same-origin like Production, so the cookie flows there normally.
 
 ---
 

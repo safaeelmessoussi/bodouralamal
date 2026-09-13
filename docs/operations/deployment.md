@@ -179,8 +179,11 @@ bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PU
 
 # 4  Pull the exact-commit artifacts and pinned object-store image.
 #    A missing image stops deployment; minio-init uses the same exact API image.
+#    docker-compose.storage.yml is always its own explicit -f from here on —
+#    never left to docker-compose.production.yml's own `extends:`, which a real
+#    Compose release can silently fail to merge (confirmed 2.38.2, fixed 4e43697).
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml pull api nginx minio minio-init
+  -f docker-compose.storage.yml -f docker-compose.production.yml pull api nginx minio minio-init
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
@@ -190,14 +193,14 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 #    R101's next migration invalidates every live refresh session. The old API
 #    must not mint another narrow-path cookie after that one-time sweep.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml stop nginx api
+  -f docker-compose.storage.yml -f docker-compose.production.yml stop nginx api
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml up --no-build -d --wait db minio
+  -f docker-compose.storage.yml -f docker-compose.production.yml up --no-build -d --wait db minio
 
 #    Explicit, repeatable bucket bootstrap. Refuses unexpected policies,
 #    versioning, lifecycle or retention; never silently clears existing settings.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml run --rm --no-deps minio-init
+  -f docker-compose.storage.yml -f docker-compose.production.yml run --rm --no-deps minio-init
 
 # 6  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
@@ -206,22 +209,22 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 #    already assigns one address to two Users. Follow the migration runbook;
 #    never clear or merge an identity merely to make deploy green.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml \
+  -f docker-compose.storage.yml -f docker-compose.production.yml \
   run --rm api npx prisma migrate deploy
 
 # 7  Seed — idempotent, safe to re-run
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml \
+  -f docker-compose.storage.yml -f docker-compose.production.yml \
   run --rm api npm run seed:production
 
 # 8  Start the rest
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml \
+  -f docker-compose.storage.yml -f docker-compose.production.yml \
   --profile production up --no-build -d      # api, nginx, certbot
 
 #    FIRST DEPLOYMENT ONLY: issue the certificate through the live ACME path.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml \
+  -f docker-compose.storage.yml -f docker-compose.production.yml \
   run --rm --entrypoint certbot certbot certonly \
   --webroot -w /var/www/certbot -d <domain>
 
@@ -342,7 +345,7 @@ inference exactly. Nothing is fabricated.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml down
+  -f docker-compose.storage.yml -f docker-compose.production.yml down
 # restore the latest complete recovery point per the runbook
 ```
 
@@ -429,7 +432,7 @@ Run it explicitly with the same release overlay; it is never part of deploy:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml \
+  -f docker-compose.storage.yml -f docker-compose.production.yml \
   run --rm api npx tsx scripts/reconcile-reference-data.ts
 ```
 
@@ -446,13 +449,11 @@ happened to sort first. Production still gets no seeded branches or rooms.
 | `pg_dump` before migrating | Not applicable | **Mandatory** |
 | Restore drill | **Before go-live** | Periodically |
 
-## Preview and Staging
+## Staging
 
-Two different environments since [SRS Revision 104](../SRS.md); see
-[Environments](environments.md).
-
-**Preview** — pushing to `develop` triggers an automatic Vercel build of the frontend, in a
-**fixture-pointing configuration only**. It calls no real backend.
+See [Environments](environments.md). The Vercel-based Preview tier described in earlier
+revisions is retired (Owner decision, 2026-09-13); Staging is the only pre-production
+rehearsal tier.
 
 **Staging** — a real, full-stack, production-shaped deployment on its own VPS, currently
 `https://staging.bodouralamal.com`. It runs **this same pipeline**, with two differences and
@@ -466,8 +467,10 @@ no others:
 
 `NODE_ENV=development` changes **no** security behaviour — see
 [Environments § `NODE_ENV`](environments.md#node_env-does-not-change-security-behaviour).
-For every Compose command in the pipeline, replace `-f docker-compose.production.yml` with
-`-f docker-compose.staging.yml`; never combine the two tier overlays. Step 6 is then followed
+For every Compose command in the pipeline, replace **both** `-f docker-compose.storage.yml
+-f docker-compose.production.yml` with `-f docker-compose.staging.yml` — Staging keeps the
+plain MinIO service `docker-compose.yml` already defines and never touches the pinned
+SeaweedFS storage overlay at all; never combine tier overlays. Step 6 is then followed
 by `npm run seed:fixtures`, which is the only added operation.
 
 **Never copy a development database or its storage objects into Staging.** A developer's
@@ -479,7 +482,7 @@ Four committed pieces make release hosts reproducible from Git, and none holds a
 | File | What it is |
 |---|---|
 | `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
-| `docker-compose.production.yml` | Forces the Production tier and selects the pinned SeaweedFS service/explicit initializer from `docker-compose.storage.yml`; distinct physical storage volume, no public storage port |
+| `docker-compose.production.yml` | Forces the Production tier; distinct physical storage volume, no public storage port. **Always pass `docker-compose.storage.yml` alongside it as its own explicit `-f`/`--compose-file`** — never rely on this file's own `extends:` reference to it, which a real Compose release can silently fail to merge (confirmed on 2.38.2, fixed `4e43697`) |
 | `docker-compose.staging.yml` | Selects the fixture-permitting tier value required by Revision 104 and adds hard container memory ceilings for a small VPS. It publishes no port, relaxes no limit and substitutes no security setting; `NODE_ENV` controls only the three Revision-104 behaviours named above |
 | `scripts/deploy/enable-tls.sh` | Generates only the ignored host-specific TLS block, refuses to run before the certificate exists, and recreates Nginx through the same exact-release plus environment overlays; the committed release HTTP block already preserves ACME and redirects everything else |
 

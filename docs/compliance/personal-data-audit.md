@@ -7,17 +7,50 @@ supersedes historical inventory/filing suggestions, not the preserved evidence.
 
 ## Current filing preparation — 2026-09-13
 
-**Preparation only; not legal advice, filing, receipt or approval.** Reviewed from
-local source at B8 commit `45cf1f0` plus the uncommitted HIGH fixes. No live legal
-document, account, provider console or Production host was read or changed.
-Owner/legal review must settle the filing regime and supply the missing facts.
+**Preparation only; not legal advice, filing, receipt or approval.** Reconciled
+2026-09-13 against repository HEAD `4e43697` — H1–H6 and H3 closed locally, the
+`docker-compose.storage.yml` deploy fix applied, hosted CI green — superseding the
+earlier review taken from B8 commit `45cf1f0` plus the then-uncommitted HIGH
+fixes; nothing in this reconciliation pass changed the annex's substance, since
+H3 (explicit manual exam opening) adds an authorization/audit event, not a new
+personal-data category, and the deploy fix touched only Compose file wiring. No
+live legal document, account, provider console or Production host was read or
+changed. Owner/legal review must settle the filing regime and supply the
+missing facts.
+
+**Label legend, used throughout this section:** `VERIFIED FROM REPOSITORY` —
+confirmed by reading current source/config, not asserted; `OWNER INPUT
+REQUIRED` — a decision or fact only the Owner (or an authorized signatory) can
+supply; `PROVIDER EVIDENCE REQUIRED` — a fact Hostoweb (or another
+subprocessor) must supply in writing, not inferable from marketing or brand
+nationality; `LEGAL/CNDP CONFIRMATION REQUIRED` — a determination that needs a
+qualified adviser or the CNDP itself; `MUST COMPLETE BEFORE PRODUCTION` — real
+beneficiary data must not be introduced until this item closes. A row may carry
+more than one tag.
+
+**CNDP primary sources, verified live on 2026-09-13** (all returned HTTP 200 at
+that access date): [notification guidance](https://www.cndp.ma/notifier-un-traitement/)
+lists exactly the declaration/authorization forms this document cites —
+**F214** (déclaration simplifiée), **F211** (déclaration normale), **F113**
+(autorisation simplifiée), **F112** (autorisation normale), **F118** (transfert
+à l'étranger), and **F115** (désignation du responsable de traitement, a
+related registry filing this document does not yet address — `LEGAL/CNDP
+CONFIRMATION REQUIRED`, add to the packet if the signatory determines it
+applies); [procedures](https://www.cndp.ma/procedures-de-notification-process/);
+[website conformity](https://www.cndp.ma/conformite-des-sites-web/); [Law
+09-08 text](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf). Re-verify before
+actual submission — a live source can change between this access date and
+filing.
 
 ### Current processing annex
+
+**`VERIFIED FROM REPOSITORY`** — every row below is read from current source,
+schema and configuration, not asserted from memory or an older audit.
 
 | Purpose / people | Verified implementation and material limits |
 |---|---|
 | Accounts, registration, staff/guardian/beneficiary relationships | `User`, `Identity`, roles, memberships, applications and `FamilyLink`; split names, contact, sex and **beneficiary DOB**. DOB is required by the current model, unlike the historical audit below. Turning 18 does not automatically grant independent control: the explicit self-managed claim/approval transition remains required (R132) |
-| Educational administration | Enrollment, attendance, Quran progress, exams, answers and grades; assigned staff/audience scope, not a public learner directory. Required historical records survive account de-identification under structural IDs, which must not be described as guaranteed anonymous data |
+| Educational administration | Enrollment, attendance, Quran progress, exams, answers and grades; assigned staff/audience scope, not a public learner directory. Required historical records survive account de-identification under structural IDs, which must not be described as guaranteed anonymous data. A manual remote exam is now opened by an explicit, audited teacher/administrator action (H3, `POST /assessments/{id}/open`) rather than a timer — an authorization/audit-trail change, not a new personal-data category |
 | Recordings and publications | `EducationalContent`, Session links and optional online recording ingest. Public/private/hidden placement, fresh authorization and media-consent safeguarding apply. Public publication is a disclosure; the filing must cover it, not just internal storage. H6 retagging remediation passed real-stack acceptance |
 | Security/accountability | Local refresh state, OAuth binding, consent/legal versions and structural audit. Authentication audit retention is 12 months; business audit/consent history is retained according to TD-8/TD-14. Free-text settings/reasons outside the specific R141 rejection minimization still require the recorded policy decisions, not a generic scrubber |
 | Erasure and recovery | R133/B2 exact-generation User Trash deadline, then de-identification with retained required history; B7 removes claim rationale and authorized historical rejection-audit copies. Monthly encrypted backup, at most two generations after verified rotation, no per-account archive rewrite or deletion replay. A restored point may contain later-erased data; reconcile before reopening access under an authorized incident decision |
@@ -42,12 +75,14 @@ the association's actual status and public-recording practices before choosing.
 See [CNDP notification guidance](https://www.cndp.ma/notifier-un-traitement/) and
 [Law 09-08, Articles 1 and 12](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf).
 
-**OWNER INPUT REQUIRED — filing regime:** authorized signatory/legal adviser to
+**`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED` — filing regime,
+`MUST COMPLETE BEFORE PRODUCTION`:** authorized signatory/legal adviser to
 confirm F211 versus F112 and any applicable exemption, including minors, Quran
 progress, recordings and retained accountability evidence. Do not assume F214/F113
 simplification applies. No application has been submitted by this task.
 
-**OWNER INPUT REQUIRED — Google/other transfers:** document actual recipient legal
+**`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED` — Google/other
+transfers, `MUST COMPLETE BEFORE PRODUCTION`:** document actual recipient legal
 entities, destination countries, processor/controller roles, contractual basis and
 transfer safeguards. Moroccan database hosting does not answer this question.
 Prepare F118 alongside the base-processing file if applicable; the CNDP says
@@ -59,13 +94,13 @@ See [CNDP procedures](https://www.cndp.ma/procedures-de-notification-process/).
 
 | Material | Ready engineering input / missing Owner input |
 |---|---|
-| Responsible controller and signatory | **OWNER INPUT REQUIRED:** exact registered association name, status, address, registration evidence, signatory authority and contact for rights. Keep statutes/identity documents and completed forms outside Git |
-| Processing purpose / categories / recipients | Use the current annex above; confirm real processing volumes, staff audiences, public media and optional online teaching. Do not reuse the old audit's "no DOB" or withdrawn health fields |
-| Collection notices and consent proof | Produce synthetic screenshots of the accepted release's forms; attach approved processing/media wording, privacy and terms versions. **OWNER INPUT REQUIRED:** authorized final Arabic wording and actual activation evidence |
-| Retention justification | Explain R133/B2/B7, educational/consent/audit history and monthly two-generation backup. Two generations is not a promise of erasure within two months during failed backups/verification; failures must be attended and escalated. **OWNER INPUT REQUIRED:** legal justification/approval for retained historical evidence, plus unresolved free-text rules |
-| Hosting/subcontracting | **OWNER INPUT REQUIRED:** Hostoweb contract, actual Moroccan data-center location, subcontractors/support access, snapshots/replicas/backups and incident terms. Marketing/brand nationality does not prove data residence |
-| Security annex | Branch/Teacher scope, exact public-object DB gate, private signed access, encryption/escrow, bounded logs, worker/retirement alarms and restore proof; list HIGH items still unverified and the same-VPS total-loss limitation honestly |
-| Transfer annex and filing evidence | **OWNER INPUT REQUIRED:** F118 facts/basis if applicable and, later, actual receipts/approvals. No invented numbers, signatures, dates, provider commitments or proof of filing |
+| Responsible controller and signatory | **`OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** exact registered association name, status, address, registration evidence, signatory authority and contact for rights. Keep statutes/identity documents and completed forms outside Git |
+| Processing purpose / categories / recipients | **`VERIFIED FROM REPOSITORY`** — use the current annex above; confirm real processing volumes, staff audiences, public media and optional online teaching. Do not reuse the old audit's "no DOB" or withdrawn health fields |
+| Collection notices and consent proof | Produce synthetic screenshots of the accepted release's forms; attach approved processing/media wording, privacy and terms versions. **`OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** authorized final Arabic wording and actual activation evidence |
+| Retention justification | **`VERIFIED FROM REPOSITORY`** for the mechanism — R133/B2/B7, educational/consent/audit history and monthly two-generation backup. Two generations is not a promise of erasure within two months during failed backups/verification; failures must be attended and escalated. **`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`:** legal justification/approval for retained historical evidence, plus unresolved free-text rules |
+| Hosting/subcontracting | **`PROVIDER EVIDENCE REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** Hostoweb contract, actual Moroccan data-center location, subcontractors/support access, snapshots/replicas/backups and incident terms, in writing from Hostoweb. Marketing/brand nationality does not prove data residence, and this cannot be supplied by engineering |
+| Security annex | **`VERIFIED FROM REPOSITORY`** — Branch/Teacher scope, exact public-object DB gate, private signed access, encryption/escrow, bounded logs, worker/retirement alarms and restore proof. H1–H6 and H3 are closed locally (see [deployment readiness](../operations/deployment-readiness.md)); B1's object store and B8's backup are engineering-complete but **not host-installed** — state the same-VPS total-loss limitation honestly regardless |
+| Transfer annex and filing evidence | **`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** F118 facts/basis if applicable and, later, actual receipts/approvals. No invented numbers, signatures, dates, provider commitments or proof of filing |
 
 CNDP procedure materials require notices/consent or other basis, relevant
 subcontracting confidentiality evidence and signatory authority. The public site
@@ -83,6 +118,36 @@ users, export/review the actual approved versions privately and match every anne
 claim above; then verify anonymous rendering and the registration consent snapshot.
 No legal text is activated by this engineering task. Follow the single
 [release checklist](../operations/deployment-readiness.md#ordered-release-checklist).
+
+### Shortest Owner/legal/provider checklist to close this package
+
+Every engineering-side fact above is already `VERIFIED FROM REPOSITORY`. What
+remains is entirely external and cannot be produced by this task:
+
+1. **`OWNER`** — confirm the association's exact registered name, status,
+   address, registration evidence and an authorized signatory.
+2. **`OWNER` + `LEGAL/CNDP`** — instruct a qualified adviser (or the CNDP
+   directly) to determine the filing route: **F211** (normal declaration) vs.
+   **F112** (prior authorization), whether the Article 12(1)(a) nonprofit
+   exemption genuinely applies, and whether **F115** (responsible-party
+   registration) is separately required. Do not pre-select a form without
+   this confirmation.
+3. **`OWNER` + `LEGAL/CNDP`** — document Google's actual recipient
+   entity/country/role and decide, with the adviser, whether **F118**
+   (transfer authorization) must accompany the base filing.
+4. **`PROVIDER`** — obtain written Hostoweb confirmation of the exact
+   Moroccan data-center location, subcontractors with access, and
+   backup/incident terms (see the [provider-acceptance matrix](../operations/provider-acceptance.md)
+   if present, or the release checklist's provider step).
+5. **`OWNER`** — approve and activate the final Arabic `/privacy`, `/terms`
+   and registration-consent wording as live `LegalDocument`/`LegalConsentText`
+   rows, then re-verify anonymous rendering.
+6. **`OWNER` + `LEGAL/CNDP`** — approve the retention/erasure justification
+   (R133/B2/B7, monthly two-generation same-VPS backup) in writing before
+   real beneficiary data exists.
+7. Only after 1–6: assemble the populated packet privately (never in Git) and
+   file with the CNDP. This task neither selects a final form nor submits
+   anything.
 
 ## Historical audit — retained provenance
 

@@ -8,11 +8,14 @@ when evidence changes; do not turn an unperformed drill into a green row.
 
 ## Evidence baseline
 
-**Current local preparation (2026-09-13):** `develop` began at `45cf1f0`, six local
-commits ahead of origin, plus one further local commit closing H1/H2/H4/H5/H6 below.
-B1–B8 local acceptance is retained. Nothing was pushed, deployed, or touched on any
-host or live-data system. Older dated Staging/CI rows below are historical evidence,
-not proof that this newer source is deployed or accepted there.
+**Current state (2026-09-13):** `develop` closed H1–H6 (`5eabe63`) then H3
+(`3171a47`), pushed, and hosted CI ran green on `3171a47` (run `34774455994` failed
+two jobs on a real Compose-version incompatibility unrelated to product code; the
+narrow fix `4e43697` was pushed and hosted CI re-ran fully green, run `34776047322`).
+`develop` and `origin/develop` are equal at `4e43697`. B1–B8 local acceptance is
+retained. Nothing has been deployed, and no host or live-data system has been
+touched. Older dated Staging/CI rows below are historical evidence, not proof that
+this newer source is deployed or accepted there.
 
 ### HIGH finding disposition
 
@@ -167,11 +170,32 @@ Every unchecked step is a prerequisite, not authorization to act in this task.
    (current repository **96**) then minimal Production seed only, idempotency and
    singleton Owner proof. Never fixture-seed/import development data. Respect all
    legacy migration preflights for any populated upgrade and B3 stopped-writer keying.
-7. **Acceptance:** exact image IDs/labels, TLS/security headers, real Nginx public/
-   private storage, browser smoke and first legitimate Google Owner binding;
-   prove no duplicate identity, global role/Owner invariants, registration, scoped
-   scheduling, grades, upload/read and safeguarding with expressly authorized UAT
-   fixtures. Health must include the complete expected worker catalog and cron tz.
+7. **Acceptance — exact image IDs/labels, TLS/security headers, real Nginx public/
+   private storage, and first legitimate Google Owner binding**, then the shortest
+   representative smoke pass using only synthetic/UAT-authorized accounts created
+   through the supported application flows (registration, admin creation) —
+   **never real beneficiary data, and never a fixture seed on Production**:
+   - **Auth:** register/login, token refresh, logout, and a suspended-account
+     login refusal.
+   - **Scoping:** branch/level/session creation, and one cross-branch/role
+     boundary refusal (§20 rule 17 — refused and nonexistent must read alike).
+   - **Attendance:** mark and read one session's attendance.
+   - **Exams:** author, schedule a manual remote exam, confirm the student is
+     refused before opening, **open it through `POST /assessments/{id}/open`
+     (H3)**, then confirm the student can reach it and answer.
+   - **Grades:** save a draft, publish it, confirm the student sees only the
+     published mark.
+   - **Materials:** upload, then download through a signed URL; confirm a
+     private object is refused anonymously.
+   - **Recordings/safeguarding:** tag content as a session recording without
+     full consent and confirm it privatizes (H6 path).
+   - **Workers:** confirm the full expected pg-boss worker catalog and cron
+     timezone are healthy on `/healthz`.
+   - **Backup:** trigger one manual recovery-point creation and verify it
+     (step 8), rather than waiting for the first scheduled run.
+   Delete every smoke-test account/record afterward through the supported
+   deletion mechanism (never a direct database statement) before real users
+   are introduced.
 8. **Recovery/response:** install only when authorized, following [B8](recovery.md):
    root encrypted repository on the same VPS, independent key escrow, disk
    preflight, create→full-data verify→scoped two-generation prune, exact snapshot
@@ -179,12 +203,44 @@ Every unchecked step is a prerequisite, not authorization to act in this task.
    disposable Moroccan targets; never destroy live data for proof. Assign an
    operator to attend backup failures, worker/retirement backlog, disk and TLS
    expiry/renewal signals; a timer is not a person or an external host-death alarm.
-9. **Rollback/go-live:** retain exact prior images and validated recovery metadata;
-   follow [fresh-host/restore](recovery.md#restore-and-fresh-host-recovery) only with
-   writers stopped and empty targets, never downgrade incompatible migrated data
-   in place. Restoring older data may revive later erasures: resolve before public
-   traffic. Obtain explicit launch authorization only after all mandatory evidence
-   is recorded. Same-VPS backup still cannot recover total VPS/provider/disk loss.
+9. **Rollback and recovery decision:**
+   - **Application-only rollback is sufficient** when the failure is in the
+     released code/image and no migration in the failed release has run
+     destructively against data (`docker compose ... down`, then redeploy the
+     prior accepted `BODOUR_RELEASE_TAG` per [Rollback](deployment.md#rollback)).
+     No down-migration path exists; a release that already migrated data
+     forward cannot simply be "rolled back" onto an older schema.
+   - **Database/object restoration is required** when a migration corrupted or
+     destroyed data, when the application-only rollback does not resolve the
+     fault, or when data must return to a known-good point — always via the
+     [recovery-point restore](recovery.md#restore-and-fresh-host-recovery),
+     never a partial manual fix. Preserve the failed state and its logs before
+     touching anything further; do not overwrite evidence to "clean up" fast.
+   - **Exact order:** stop public traffic/writers → preserve failed-state
+     evidence → decide application-only vs. restore → execute the one chosen
+     path → verify (migrations, seed/Owner invariants, object bytes, a browser
+     journey) → reopen traffic only after that verification passes.
+   - Restoring an earlier point may **revive data erased since that point**
+     (R133); resolve this under an explicit operational decision before
+     reopening access. Same-VPS backup recovers logical/application failure
+     only — it does not recover total VPS, provider, or disk loss.
+   - **The Owner (or their explicitly delegated release authority) makes the
+     go/no-go call** to reopen traffic after either path; an operator does not
+     unilaterally decide the incident is closed.
+10. **After launch:**
+    - **Immediately:** watch `/healthz`, the worker catalog, error rate, and the
+      TLS certificate validity window through the first hour of real traffic.
+    - **First day:** confirm the first scheduled backup timer fires and its
+      recovery point verifies (`recovery.md`'s operator signals); review
+      pg-boss job/queue health and disk headroom on both filesystems; review
+      the audit log for anything unexpected.
+    - **First week:** repeat the disk/job/backup checks daily; review error
+      logs for patterns invisible in a single day; confirm no smoke-test
+      account or record remains.
+    - **Incident escalation:** two consecutive backup failures, a failed
+      restore verification, or an unresolved `ESCALATE_OWNER` signal notifies
+      the Owner immediately per [recovery.md](recovery.md#operator-signals-not-an-invented-dashboard) —
+      it is never left for the next scheduled check.
 
 ---
 

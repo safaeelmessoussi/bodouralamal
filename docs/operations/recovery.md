@@ -137,13 +137,17 @@ an authorized operator may recover it onto a clean **Moroccan** host:
    `compose create`; missing legacy identity metadata requires a separate reviewed recovery plan.
 3. Use an empty target Compose project and a nonexistent private recovered-config directory.
    The command refuses running services/nonempty target volumes; it never deletes them for you.
-   Obtain values below from the verified inventory/operator configuration, not guesswork:
+   Obtain values below from the verified inventory/operator configuration, not guesswork.
+   `docker-compose.storage.yml` is an explicit `--compose-file`, never left to
+   `docker-compose.production.yml`'s own `extends:` — required since the Compose-version
+   incompatibility fix (`4e43697`); omitting it silently drops the SeaweedFS credential/
+   `nocopy` override on some Compose versions:
 
    ```sh
    sudo bash scripts/backup/restore-recovery-point.sh \
      --project bodour --source-project bodour \
      --compose-file docker-compose.yml --compose-file docker-compose.release.yml \
-     --compose-file docker-compose.production.yml \
+     --compose-file docker-compose.storage.yml --compose-file docker-compose.production.yml \
      --repository /var/lib/bodour-backups/bodour \
      --password-file /root/bodour-recovery/restic-password \
      --repository-id "$EXPECTED_REPOSITORY_ID" --snapshot "$EXPECTED_SNAPSHOT_ID" \

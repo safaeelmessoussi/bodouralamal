@@ -90,6 +90,32 @@ the [B8 root-only environment](recovery.md#before-enabling-anything-on-an-author
   pin, backup floor and timers belong only to B8 host configuration, never the API.
   No shared Production/Staging secrets or backup key committed to the checkout.
 
+### Secret rotation and installation, at a glance
+
+Every value below is generated independently (`openssl rand -base64 48` unless noted),
+written directly into the operator's private `.env`/`infra.env`/root-only recovery
+config — **never** a command argument, chat message, ticket, or printed resolved
+Compose — and installed only on the target host. A placeholder shown here is a
+**format example, never a usable value.**
+
+| Variable | Secret? | Generation | Restart required to take effect? |
+|---|---|---|---|
+| `DATABASE_URL` password component | Secret | Random, matched to `POSTGRES_PASSWORD` in `infra.env` | `db` + `api` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Secret (Owner/Google Cloud Console) | Issued by Google Cloud Console, not generated locally | `api`; live OAuth users are unaffected until Google itself revokes the old value |
+| `JWT_SIGNING_KEY` | Secret | Random ≥32 bytes | `api`; every access token signed with the old key is invalidated immediately, every refresh token is unaffected (hashed, not signed by this key) |
+| `ONBOARDING_TOKEN_KEY` | Secret | Random ≥32 bytes, distinct from `JWT_SIGNING_KEY` | `api`; only in-flight onboarding tokens are invalidated |
+| `EMAIL_LOCK_KEY` | Secret | Random ≥32 bytes, distinct from both keys above | `api`, plus the [stopped-writer truncate/re-key migration](../development/email-lock-keying.md) — never a live rotation |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Secret | Random, shared identically between the `api`, `minio` (SeaweedFS) and `minio-init` services | `minio` + `minio-init` + `api`; a mismatch after rotation fails the S3 initializer's own credential-match preflight |
+| Backup repository encryption password | Secret, **escrowed separately from the host** | Random ≥32 bytes, written directly on the host (never through this application) | Not a live-restart concern — see [recovery.md](recovery.md#before-enabling-anything-on-an-authorized-host); rotation is a new-key procedure, never an overwrite |
+| `PUBLIC_BASE_URL` / `STORAGE_BASE_URL` | Public (not secret) | Fixed by the accepted domain | `api`; changes what the refresh endpoint accepts as `Origin` and what presigned URLs are signed against |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | Sensitive, one-time only | Fixed values, not generated | Read only by the seed before the Owner singleton exists; ignored forever after |
+| `BODOUR_RELEASE_TAG` | Public (a commit SHA, not a secret) | Set to the exact accepted 40-character commit | Every Compose command in the pipeline |
+
+Logging/monitoring destinations and required alerts are **not** environment variables in
+this codebase — there is currently no external log/metrics sink and no Admin-visible
+alert surface; see [Observability](observability.md#required-alerts--not-implemented-yet)
+for the exact gap and the interim host-level [operator signal](recovery.md#operator-signals-not-an-invented-dashboard).
+
 ## Secrets have no defaults, by design
 
 > **A secret that silently defaults is a vulnerability, not a convenience.**

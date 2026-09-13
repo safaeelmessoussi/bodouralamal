@@ -263,8 +263,11 @@ The target host must pull that exact tag through `docker-compose.release.yml`, s
 one of the Production/Staging tier overlays, and use `--no-build`; the frontend build's ~2 GB
 peak remains the reason host compilation is prohibited.
 
-Pushing to `develop` triggers an automatic **Vercel** build of the frontend in a
-fixture-pointing configuration that calls no real backend.
+The Vercel-based frontend Preview build that ran here in the project's early development is
+retired (Owner decision, 2026-09-13) — see
+[Vercel retirement](../operations/environments.md#vercel-retirement--owner-action-required)
+for the exact external action still needed to stop it triggering. Nothing in this pipeline
+depends on it; the GHCR publish above is the sole automated consequence of a `develop` push.
 
 ## Adding a guard
 

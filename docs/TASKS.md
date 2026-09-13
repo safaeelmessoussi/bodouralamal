@@ -52,6 +52,59 @@
   release-checklist drafts remain preserved, not extended or accepted. Do not
   begin the next section from this alone; no claim that the whole programme
   is release-ready.
+- [x] **Pushed H1–H6/H3, then hosted CI green.** `develop`/`origin/develop`
+  equal at `4e43697`. First hosted run (`34774455994`, SHA `3171a47`) failed
+  two jobs on a real Docker Compose version incompatibility (`extends:` and an
+  `!override`-tagged map, unrelated to product code) — diagnosed empirically
+  against the exact runner Compose release, fixed narrowly (`4e43697`), and
+  hosted CI re-ran fully green (`34776047322`).
+
+## Production-readiness documentation reconciliation — 2026-09-13
+
+- [x] **Vercel/Preview retired (Owner decision).** SRS Revision 143 records the
+  three-tier topology (Local Development, Staging, Production); no
+  `vercel.json` or Vercel config existed to remove. Retired Preview-specific
+  language from `docs/operations/environments.md`, `deployment.md` and
+  `docs/development/ci-cd.md`. Exact Owner action to stop automatic Vercel
+  builds recorded in [environments.md](operations/environments.md#vercel-retirement--owner-action-required);
+  not performed here (external, requires separate authorization).
+- [x] **CNDP/privacy package reconciled** against HEAD `4e43697` in
+  `docs/compliance/personal-data-audit.md`: relabeled every requirement with
+  the exact `VERIFIED FROM REPOSITORY` / `OWNER INPUT REQUIRED` /
+  `PROVIDER EVIDENCE REQUIRED` / `LEGAL/CNDP CONFIRMATION REQUIRED` /
+  `MUST COMPLETE BEFORE PRODUCTION` taxonomy (the prior pass used only
+  `OWNER INPUT REQUIRED` for some genuinely provider- or legal-owned items);
+  added H3 to the educational-administration annex row; re-verified all four
+  CNDP source citations live (200 OK, 2026-09-13) and confirmed the exact form
+  codes (F211/F214/F112/F113/F118/F115) directly from the primary source;
+  added a seven-item shortest Owner/legal/provider closing checklist. No form
+  is selected, no filing is made, no legal conclusion is asserted.
+- [x] **Configuration inventory completed**: added a secret-by-secret
+  rotation/installation-at-a-glance table to `docs/operations/configuration.md`
+  covering every required secret's generation, restart requirement, and
+  installation boundary; cross-referenced the known TD-14/TD-16 monitoring/
+  alert gap from `observability.md` rather than restating it.
+- [x] **Release/rollback checklist finished** in
+  `docs/operations/deployment-readiness.md`: expanded the acceptance step into
+  a named fixture-only smoke-test list (auth, scoping, attendance, exams
+  including H3's manual opening, grades, materials, safeguarding, workers,
+  backup), added explicit rollback-trigger criteria (app-only vs.
+  database/object restore, exact ordering, go/no-go authority), and added a
+  new after-launch step (immediate/first-day/first-week checks, incident
+  escalation).
+- [x] **Concrete Compose-order defect found and fixed in documentation**:
+  `docs/operations/recovery.md`'s restore command and the entire
+  `docs/operations/deployment.md` pipeline (11 invocations) omitted the
+  now-required explicit `docker-compose.storage.yml` file, reproducing in
+  prose the exact bug `4e43697` fixed in scripts. Corrected every occurrence
+  to the verified order (`docker-compose.yml` → `docker-compose.release.yml`
+  → `docker-compose.storage.yml` → `docker-compose.production.yml`); no
+  script changed, since the scripts themselves were already correct.
+- [x] Documentation links (1,094), the release/host-preflight/backup/
+  storage-lifecycle/env-not-committed guards, and `git diff --check` all pass
+  on the changed documentation. No backend/frontend/integration suite was
+  rerun — no source code changed this pass, and hosted CI on `4e43697`
+  already proved that evidence green.
 
 ## B8 — same-VPS backup/recovery (local engineering acceptance complete)
 

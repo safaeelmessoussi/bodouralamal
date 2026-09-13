@@ -8249,3 +8249,102 @@ this raises the strictness of the production credential/volume override,
 it does not lower it. No Owner/Staging/Production/DNS/live-infrastructure
 action was taken; the real 2.38.2 binary was fetched only to test file
 resolution locally, never pointed at any real host.
+
+2026-09-13 — Production-readiness documentation reconciliation
+Reconciled operational/legal documentation against the current, hosted-CI-green
+repository (H1–H6/H3 closed, pushed and green at `4e43697`; the Compose
+incompatibility fix already applied). No backend/frontend/schema/route/script
+change; documentation only, verified with focused guards rather than a full
+suite rerun since no source changed.
+
+Vercel/Preview retirement (Owner decision, 2026-09-13): added SRS Revision 143
+recording the three-tier environment topology (Local Development, Staging,
+Production), following the established revision-log convention rather than
+rewriting the historical Revision 6/104/10/12 text those supersede. No
+`vercel.json` or Vercel-specific configuration existed in the repository to
+remove — there was nothing on the code side. Retired the Preview-specific
+narrative from `docs/operations/environments.md` (four-tier table, the
+"Preview authentication boundary" section — its general cookie-uniformity
+rule was kept, its Vercel-specific cross-origin framing was not), `deployment.md`
+and `docs/development/ci-cd.md`, and recorded the exact external Owner action
+still required (disconnect the Vercel project's Git integration, or remove
+this repository from Vercel's installed GitHub App) to stop future automatic
+builds — an external action, not performed here. A green/successful Vercel
+commit status is recorded as a legacy artifact of the retired integration,
+never evidence of the actual VPS/Hostoweb launch decision.
+
+CNDP/privacy reconciliation: `docs/compliance/personal-data-audit.md`'s
+"Current filing preparation" section was reconciled against HEAD `4e43697` and
+relabeled with the exact requested taxonomy — `VERIFIED FROM REPOSITORY`,
+`OWNER INPUT REQUIRED`, `PROVIDER EVIDENCE REQUIRED`, `LEGAL/CNDP CONFIRMATION
+REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION` — correcting several items the
+prior pass had all marked "OWNER INPUT REQUIRED" when some (Hostoweb hosting/
+subcontracting facts) are actually provider evidence and others (filing
+regime, transfer basis) need a qualified adviser or the CNDP, not only an
+Owner decision. Added H3 (explicit manual exam opening) to the educational-
+administration annex row as an authorization/audit-trail change, not a new
+personal-data category. Re-verified all four CNDP source citations live
+(https://www.cndp.ma/notifier-un-traitement/, /procedures-de-notification-
+process/, /conformite-des-sites-web/, and the Law 09-08 PDF — all HTTP 200 on
+2026-09-13) and confirmed the exact form codes directly from the primary
+source text: F214 (déclaration simplifiée), F211 (déclaration normale), F113
+(autorisation simplifiée), F112 (autorisation normale), F118 (transfert à
+l'étranger), and F115 (désignation du responsable de traitement, not
+previously named — flagged for the signatory to determine applicability).
+Added a seven-item shortest Owner/legal/provider checklist to close the
+package. No filing type is selected, no receipt/authorization/filing date is
+invented, no association or signatory fact is asserted, and nothing was
+submitted to CNDP or any third party.
+
+Production configuration inventory: added a secret-by-secret rotation and
+installation table to `docs/operations/configuration.md` (generation method,
+whether a restart is required, which services must agree after rotation) for
+every required secret, reconciling rather than duplicating the existing
+per-secret prose. Cross-referenced the already-documented TD-14/TD-16
+monitoring/alert gap in `observability.md` instead of restating it. No real
+secret was requested, generated, or exposed.
+
+Release/rollback checklist: `docs/operations/deployment-readiness.md`'s
+ordered release checklist gained a named, fixture-only smoke-test list
+(authentication/refresh/logout, branch/role scoping, attendance, exams
+including H3's manual opening, grades, materials, recording safeguarding,
+worker/cron health, a manual backup verification), explicit rollback-decision
+criteria (when application-only rollback suffices versus when database/object
+restoration is required, the exact order, evidence preservation, and that the
+Owner or an explicitly delegated release authority makes the go/no-go call),
+and a new after-launch step (immediate, first-day and first-week checks, and
+the exact incident-escalation trigger already defined in `recovery.md`).
+
+Concrete inconsistency found and fixed, not merely documented: `recovery.md`'s
+restore command and the entire deployment pipeline in `deployment.md` (eleven
+Compose invocations) still showed `docker-compose.production.yml` without the
+now-required explicit `docker-compose.storage.yml`, reproducing in
+documentation the exact Compose `extends:` incompatibility `4e43697` fixed in
+the actual scripts. Corrected every occurrence to the verified working order
+(`docker-compose.yml` → `docker-compose.release.yml` → `docker-compose.storage.yml`
+→ `docker-compose.production.yml`), including the table describing what each
+Compose file does and the Staging-substitution instruction (Staging correctly
+does not need `docker-compose.storage.yml`, confirmed against
+`docker-compose.staging.yml`, which defines its own plain MinIO service and
+never extends the SeaweedFS overlay). No script required a change — the
+scripts were already correct from the prior session.
+
+Final focused review found no other contradiction requiring a fix: SeaweedFS
+versus MinIO terminology is already correct throughout (Local Development and
+Staging genuinely still run real MinIO; only Production runs SeaweedFS);
+same-VPS backup limitations, GHCR-publish-versus-deployment, and retention/
+deletion statements are consistent across `recovery.md`, `environments.md`,
+`ci-cd.md` and the compliance doc; `preflight-host.sh`'s documented invocation
+signature matches its actual positional arguments; `ci-cd.md`'s guard counts
+(28 dependency-free guards, 31 total `check-*.sh` scripts) were verified
+against the actual script directory and match exactly.
+
+Verification: documentation links (1,094 across 121 files), and the release-
+artifacts/host-preflight/compose-operations/backup-tooling/storage-lifecycle/
+env-not-committed guards (plus all 31 `scripts/ci/check-*.sh` scripts run
+individually) all pass; `git diff --check` clean; a scan of the diff for
+committed secrets/API-key patterns found none. No backend, frontend, schema,
+migration, route, or script change; the green hosted-CI evidence from
+`4e43697` was reused rather than rerun, since no source it covers changed.
+Local commit(s) only; nothing pushed or deployed. Owner data, Staging,
+Production, DNS and live infrastructure remained untouched throughout.

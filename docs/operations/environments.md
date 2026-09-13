@@ -2,25 +2,28 @@
 
 # Environments
 
-Four tiers, and the boundary between them is a **legal** boundary as much as a technical
+Three tiers, and the boundary between them is a **legal** boundary as much as a technical
 one.
+
+**Vercel/"Preview" is retired (Owner decision, 2026-09-13).** It was used only in the
+project's early development for frontend-only visual review against MSW mocks and calling
+no real backend; it was never a rehearsal of the real stack and is no longer part of the
+architecture, testing strategy, Staging environment, or Production plan. A green/successful
+Vercel status on any GitHub commit is a legacy artifact of that retired integration, not
+evidence of the actual VPS/Hostoweb deployment path — see [Vercel retirement](#vercel-retirement--owner-action-required)
+below for the exact external action still needed to stop it triggering automatically.
 
 | Tier | Frontend | Backend / DB / storage | Data | Residency |
 |---|---|---|---|---|
 | **Local Development** | Local Vite dev server | Developer's machine, inside the same containerized architecture with locally built app images | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
-| **Preview** | **Vercel**, auto-deployed from `develop` | — **calls no real backend** | **Fixture mocks only**; stores nothing | Vercel is outside Morocco — acceptable *only* because it holds no data at all |
 | **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | Synthetic fixtures plus exactly the R115-authorised Owner staff identity for controlled OAuth UAT | Currently OVH France. No real beneficiary/educational/content or other staff data is permitted |
 | **Production** | Served by Nginx from the **Moroccan VPS**, same origin as the API | Same VPS: the full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
 
-## Why "Preview" and "Staging" are two different words
+## Staging is the one pre-production rehearsal tier
 
-One word used to name both, and it hid a real gap. The Vercel deployment was called
-*Staging*, and it **calls no backend at all** — so nothing was ever staged on it. There was a
-name, and no tier behind the name, for the environment that actually rehearses the platform.
-
-Since [SRS Revision 104](../SRS.md) the Vercel tier is **Preview** — frontend and demo
-validation, nothing more — and **Staging** is a real, full-stack, production-shaped
-deployment with its own database and object storage.
+With Preview retired, **Staging** is the only tier besides Local Development that exists
+before Production, and it is a real, full-stack, production-shaped deployment with its own
+database and object storage — never a frontend-only mock review.
 
 > **Staging is not a relaxed environment. It is Production-shaped controlled UAT:**
 > synthetic data plus exactly `safae.elmessoussi@gmail.com` as the authorised Platform
@@ -45,11 +48,11 @@ pipeline.
 
 The hard rule, enforced as [`BR-18`](../reference/business-rules.md#br-18):
 
-> **No real beneficiary, educational or content data ever enters Local Development,
-> Preview or Staging.** Staging's only real-person exception is the exact Owner staff
-> identity authorised by R115 for OAuth UAT.
+> **No real beneficiary, educational or content data ever enters Local Development or
+> Staging.** Staging's only real-person exception is the exact Owner staff identity
+> authorised by R115 for OAuth UAT.
 
-Four mechanisms hold it, not one:
+Three mechanisms hold it, not one:
 
 1. **The fixtures seed refuses to run when `NODE_ENV=production`.** The same guard that
    stops fixtures polluting production is the residency firewall in the other direction.
@@ -60,7 +63,6 @@ Four mechanisms hold it, not one:
 3. **The development database and its MinIO objects are never copied into Staging.** A
    developer's database is not fixture data: it accumulates real addresses and real
    experiments, and it is exactly the thing that looks harmless to copy.
-4. **The Preview frontend build must not embed production URLs.**
 
 The controlled-UAT exception grants no latitude to add another real identity. Any expansion
 requires a new explicit Owner decision and a residency/compliance review.
@@ -82,28 +84,17 @@ prerequisite; it provides no recovery from total VPS/provider/disk loss.
 
 > Recorded as Risk R-10.
 
-## The Preview authentication boundary
+## Cookie attributes are identical in every environment
 
-This is the part that looks broken and is not, so it is worth stating plainly.
+Authenticated flows — login, sessions, cookie refresh, end-to-end journeys — are exercised
+only against a **same-origin compose stack**: Local Development, Staging, or the production
+rehearsal, each serving the identical built frontend through Nginx exactly as production
+does. No tier ever calls the API cross-origin, so no tier ever needs a CORS exception or a
+relaxed cookie.
 
-The Vercel origin and any backend are **cross-origin**. The `SameSite=Lax` refresh
-cookie **will not flow between them** — **by design, and this is not a bug to fix.**
-
-Therefore:
-
-- **Authenticated flows are never tested through the Preview origin.** Login, sessions,
-  cookie refresh, and end-to-end journeys run against a **same-origin compose stack** —
-  Local Development, **Staging**, or the production rehearsal — each of which serves the
-  identical built frontend through Nginx exactly as production does.
-- **The Preview deployment exists for UI and visual review against mocks only.** It calls no
-  real backend, which is what deletes the last CORS exception that would otherwise exist
-  anywhere in the system.
-
-And the rule that follows:
-
-> **Cookie attributes are identical in every environment. Environment-conditional
-> downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS with credentials — are
-> prohibited.**
+> **Cookie attributes are identical in every environment ([SRS Revision 104](../SRS.md)).
+> Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS
+> with credentials — are prohibited.**
 >
 > An agent "fixing" staging cookies by weakening them is introducing a CSRF vulnerability,
 > not fixing a bug.
@@ -111,6 +102,28 @@ And the rule that follows:
 Local development terminates at HTTP on `localhost`, which browsers treat as a **secure
 context** — so the `Secure` cookie is delivered normally without weakening a single
 attribute. The problem simply does not arise there.
+
+## Vercel retirement — Owner action required
+
+The frontend-only Preview tier that ran on Vercel is retired (Owner decision, 2026-09-13).
+No `vercel.json` or Vercel-specific configuration exists in this repository — there was
+never anything to remove on the code side. What remains is **external, GitHub/Vercel-side
+state this task cannot and must not touch**:
+
+- Vercel's own GitHub App integration (installed against this repository, not represented in
+  this codebase) still auto-triggers a build on every push to `develop`. **Exact Owner action
+  to stop it permanently:** in the Vercel dashboard, open the project connected to this
+  repository → **Settings → Git** → disconnect/remove the repository connection (or delete
+  the project, once separately authorized) — **or**, from GitHub itself, **Settings →
+  Integrations → Applications → Installed GitHub Apps → Vercel → Configure**, and remove this
+  repository from the app's repository access list. Either action independently stops future
+  automatic deployments; doing both is not required.
+- Any commit-status check or deployment marked "Vercel" (past or future, on any commit,
+  including a successful/green one) is a **legacy artifact of the retired integration** —
+  it is not evidence of, and has no bearing on, the actual Production launch decision, which
+  depends solely on the VPS/Hostoweb path in [Deployment](deployment.md).
+- This task does not delete the Vercel project, its historical deployments, or the external
+  integration — that requires separate, explicit Owner authorization, as instructed.
 
 The development overlay therefore **replaces** the release edge's published-port list with
 exactly `127.0.0.1:80 → nginx:80` and `[::1]:80 → nginx:80`. Both are host loopback;
@@ -216,8 +229,8 @@ fixtures, and the deployment is reproducible from Git plus regenerated secrets.
 
 ## The dress rehearsal still runs on the real VPS
 
-Staging exercises a great deal that Preview never could — TLS automation, the memory ceiling
-of a small box, the real deployment pipeline. It still does **not** exercise Moroccan
+Staging exercises a great deal — TLS automation, the memory ceiling of a small box, the
+real deployment pipeline. It still does **not** exercise Moroccan
 residency, TLS on the production domain, or the backup pipeline. So the integration dress
 rehearsal runs **on the production VPS itself**, before launch, and Staging does not replace
 it.
