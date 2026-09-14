@@ -24,6 +24,7 @@ import {
 } from './exams.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
 import { STRUCTURAL_KIND_SPECS } from './scheduling-types.js';
+import { listSchedulingTypes } from './scheduling-catalogue.js';
 
 /**
  * **The one place that knows there are separate models** (SRS Revision 56).
@@ -323,10 +324,24 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
  * **Exported for its own test.** The mapping is pure and it is where a stored
  * `visibility` either reaches the edit form or is silently dropped — which it
  * was, turning every edit of a private نشاط into a widening (NEW B §A).
+ *
+ * **`holidayTypeIds` decides `'activity'` vs `'holiday'`** (Owner-reported,
+ * 2026-09-14). `EventDefinitionWire` carries only `scheduling_type_id`, never
+ * `structural_kind` itself — the catalogue is the one place that fact lives
+ * (`SchedulingTypeRow.structural_kind`, already `'holiday'`-aware:
+ * `SchedulingStructuralKind` has four values, not three). Without this, every
+ * Event — عطلة included — was hardcoded `'activity'`, so `تعديل العنصر` on a
+ * vacation opened the ordinary activity form (staff assignment and all) no
+ * matter what catalogue row it actually was.
  */
-export function fromEvent(row: EventDefinitionWire): SchedulingItem {
+export function fromEvent(
+  row: EventDefinitionWire,
+  holidayTypeIds: ReadonlySet<string> = new Set(),
+): SchedulingItem {
   return {
-    type: 'activity',
+    type: row.scheduling_type_id !== null && holidayTypeIds.has(row.scheduling_type_id)
+      ? 'holiday'
+      : 'activity',
     id: row.id,
     attendanceMarking: row.attendance_marking ?? 'staff_only',
     title: row.title,
@@ -456,7 +471,7 @@ export async function listSchedulingItems(
   const wantsActivities = all || filters.type === 'activity';
   const wantsExams = all || filters.type === 'exam';
 
-  const [classes, activities, exams] = await Promise.all([
+  const [classes, activities, exams, catalogue] = await Promise.all([
     wantsClasses
       ? listCourseSchedules(token, 1, {
           ...(filters.branchId ? { branch_id: filters.branchId } : {}),
@@ -480,12 +495,23 @@ export async function listSchedulingItems(
           ...(filters.branchId ? { branch_id: filters.branchId } : {}),
         })
       : Promise.resolve({ data: [] as Exam[], meta: { total: 0 } }),
+    // **Which catalogue rows are عطلة** (Owner-reported, 2026-09-14): an Event
+    // row carries only its `scheduling_type_id`, never `structural_kind`
+    // itself, so `fromEvent` needs this lookup to tell a vacation apart from
+    // an ordinary activity. Skipped with the rest when activities were not
+    // asked for — nothing would read it either way.
+    wantsActivities ? listSchedulingTypes(token) : Promise.resolve([]),
   ]);
+  const holidayTypeIds = new Set(
+    catalogue.filter((t) => t.structural_kind === 'holiday').map((t) => t.id),
+  );
 
   // A class filtered by subject or year excludes activities entirely — the
   // filter is about something an Event does not have, so an Event cannot match.
   const activityRows =
-    filters.subjectId || filters.academicYearId ? [] : activities.data.map(fromEvent);
+    filters.subjectId || filters.academicYearId
+      ? []
+      : activities.data.map((row) => fromEvent(row, holidayTypeIds));
 
   // An exam carries a subject and a year, so those filters narrow it honestly
   // rather than excluding it the way they must exclude an activity.
@@ -812,6 +838,18 @@ export async function saveSchedulingItem(
           source_exam_id: input.examSourceId!,
           target: input.examTarget!,
           ...(input.examTarget?.kind === 'session' ? {} : { date: input.startDate }),
+          /**
+           * **The `at_start`/`offset_minutes` anchor, dropped before this fix**
+           * (Owner-reported, 2026-09-14). No target — not even `session`, which
+           * carries only a date — supplies a time of day server-side
+           * (`resolveTarget`), so `at_start`/`offset_minutes` anchor on exactly
+           * this field, the same wall-clock start the form already collects and
+           * the physical branch below already sends. Its absence here made
+           * every online exam refuse those two policies with
+           * `AVAILABILITY_NEEDS_START_TIME`, regardless of target kind.
+           */
+          start_time: input.startTime ?? '',
+          end_time: input.endTime ?? '',
           ...(input.schedulingTypeId !== undefined
             ? { scheduling_type_id: input.schedulingTypeId }
             : {}),

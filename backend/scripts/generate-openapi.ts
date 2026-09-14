@@ -522,6 +522,13 @@ const document = {
         { '200': 'Every visible partner, in order.' },
       ),
     },
+    '/programs': {
+      get: op(
+        'The public programme overview',
+        'TD-3.16 (Revision 144) — **PUBLIC and unauthenticated**, §5.1\'s landing-page programme section, placed before «أين تجدنا» (the branch directory). Every Category, each Category\'s Levels, and each Level\'s Subjects (مواد المستوى) and حفظ القرآن curriculum (مقرر الحفظ) — the same four admin screens already manage, read here for the first time by an anonymous visitor. Served by a dedicated `public-program.service.ts`, never the admin taxonomy/reference-data services — the same audience-separation TD-3.9 states for branches. **The projection is a fixed allowlist**: per Category, `id`/`name`/`description`/`levels`; per Level, `id`/`name`/`description`/`subjects`/`surahs`; per Subject, `id`/`name`; per Surah, `id`/`name` (Arabic). **Never**: `enrollment_count`, `gender_restriction`, `display_order`, `default_visibility`, `version`, or any operational/beneficiary data. Soft-deleted Categories, Levels and Subjects are excluded throughout. Levels are ordered within their Category by `display_order`; Subjects by their own `display_order`; Surahs by Mushaf order (`surah_id` ascending) — the same orders an admin already sees, never insertion order. A Level with no Subjects or Surahs assigned yet renders that honestly as an empty list. **Not paginated** (TD-10 does not apply): bounded by the domain, the same reasoning TD-3.10\'s calendar bootstrap already states (3 Categories, ~21 Levels, a handful of Subjects/Surahs per Level).',
+        { '200': 'Every live Category with its Levels, Subjects and Surahs.' },
+      ),
+    },
     '/admin/partners': {
       get: op(
         'List partners for management',

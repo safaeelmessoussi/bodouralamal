@@ -3949,3 +3949,46 @@ the Owner's own report named.
 - [ ] **Owner action still needed**: record an `AcademicPeriod` covering
       the current date on Staging — the semester-select fix makes the empty
       state honest, it cannot supply real academic-calendar dates.
+
+## Six Owner-reported/requested items — 2026-09-14 (continued)
+
+- [x] **Approval refusal message fixed** (not the refusal logic — analysed
+      and confirmed correct per R122). `NO_CURRENT_ACADEMIC_PERIOD` now
+      shows a real remedy instead of "already decided," and leaves the
+      dialog open since the item still needs deciding. New tests in
+      `approvals.test.tsx`.
+- [x] **عطلة edit form fixed**: `fromEvent` now classifies `type: 'holiday'`
+      correctly via the scheduling-type catalogue instead of hardcoding
+      `'activity'` for every Event. New tests in `scheduling-visibility.test.ts`.
+- [x] **Online exam `at_start`/`offset_minutes` scheduling fixed**: the
+      online branch of `saveSchedulingItem` now forwards `start_time`/
+      `end_time`, matching the physical branch (was silently dropped —
+      stale "Physical only" doc comment was the likely cause). New tests
+      in `scheduling-exam-availability.test.tsx`.
+- [x] **Pending-approval screen no longer a dead end**: wrapped in the
+      ordinary site header/footer (reaches no further than an anonymous
+      visitor already can — TD-1's server-side denial is unchanged). New
+      tests in `pending-guard.test.tsx`.
+- [x] **Scope picker redesigned** into independent, always-visible
+      dimension selectors (فروع/فئات/مستويات/مجموعات + a separate
+      association-wide checkbox), per Owner preference — structurally
+      eliminates the "select away and back" display bug as a side effect.
+      `class-section.tsx`, `scheduling.tsx` rewritten; three test files
+      updated/rewritten to match.
+- [x] **New public homepage section** «برامجنا التعليمية» (SRS Revision 144,
+      TD-3.16): `GET /programs`, public/anonymous, Categories→Levels→
+      Subjects/Surahs, fixed allowlist projection. New backend service/
+      controller/integration tests, frontend adapter/component/styles,
+      inserted before «أين تجدنا» on the landing page. Required adding
+      `/programs` to `pending-denial.http.integration.test.ts`'s
+      known-public-routes exemption list (found by the full suite run).
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,281/1,281; full disposable-stack
+      integration 2,571/2,571 non-flaky (one already-known transient flake,
+      unrelated, not re-investigated); all 31 guards, doc-links and
+      `git diff --check` pass; TD-3/OpenAPI regenerated and reconciled
+      (228/236 implemented).
+- [ ] Push, hosted CI, and Staging deployment — in progress.
+- [ ] **Owner action still outstanding**: record an `AcademicPeriod`
+      covering the current date on Staging (now confirmed to block both
+      registration AND approval, not only the enrollment form).

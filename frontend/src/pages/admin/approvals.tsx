@@ -347,25 +347,45 @@ export function ApprovalsPage(): ReactNode {
         ),
       );
     } catch (error) {
+      /**
+       * **R122 — no academic period covers today** (Owner-reported, 2026-09-14).
+       * A 409 `STATE_CONFLICT` here does not mean somebody else already decided
+       * it — `enrolAtPlacement` refused because approval enrols as of TODAY
+       * (§4.1) and no `AcademicPeriod` row's dates include it. Falling through
+       * to «تم تعديل هذا العنصر... يرجى تحديث الصفحة» told the reader to
+       * refresh a page that would show the exact same refusal forever, since
+       * nothing about the ITEM had changed. Checked before the generic `gone`
+       * branch, which the same 409 status would otherwise match.
+       */
+      const noPeriod =
+        error instanceof ApiError && error.details['reason'] === 'NO_CURRENT_ACADEMIC_PERIOD';
       // Someone else decided it first: the item is gone from the queue, so
       // reloading is the honest response — the administrator needs to see that
       // it is no longer theirs to decide.
-      const gone = error instanceof ApiError && (error.status === 404 || error.status === 409);
+      const gone =
+        !noPeriod && error instanceof ApiError && (error.status === 404 || error.status === 409);
       // A refused privilege grant is its own message: an Admin cannot create an
       // administrator through approval any more than through the Users screen.
       const forbidden = error instanceof ApiError && error.status === 403;
       setNotice(
         t(
-          forbidden
-            ? 'admin.approvals.roleForbidden'
-            : gone
-              ? 'admin.approvals.alreadyDecided'
-              : 'admin.approvals.decisionFailed',
+          noPeriod
+            ? 'admin.approvals.noCurrentPeriod'
+            : forbidden
+              ? 'admin.approvals.roleForbidden'
+              : gone
+                ? 'admin.approvals.alreadyDecided'
+                : 'admin.approvals.decisionFailed',
         ),
       );
-      setDeciding(null);
-      setStaffApproval(null);
-      setPlacing(null);
+      // A missing period is not "gone from the queue" — the item is still
+      // exactly where it was and still needs deciding, so the dialog stays
+      // open rather than closing onto a notice that explains nothing further.
+      if (!noPeriod) {
+        setDeciding(null);
+        setStaffApproval(null);
+        setPlacing(null);
+      }
       if (gone) await load();
     } finally {
       setBusy(false);

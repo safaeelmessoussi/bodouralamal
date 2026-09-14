@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { useSession } from '../contexts/session.js';
 import { t } from '../i18n/index.js';
+import { ApplicationHeader } from './header/application-header.js';
+import { SiteFooter } from './site-footer.js';
 import { LoadingState } from './states.js';
 
 /**
@@ -10,11 +12,21 @@ import { LoadingState } from './states.js';
  * Intercepts any user whose `account_status` is `Pending` (from `GET /me`) and
  * shows the approval-status screen **before any authenticated route renders** —
  * a Pending user must never glimpse empty skeletons, sidebars, or loading
- * shells of the application.
+ * shells of the APPLICATION (the admin/teacher/student portals themselves).
+ *
+ * **The site header and footer are not that shell** (Owner-reported, 2026-09-14):
+ * they were withheld too, leaving the screen a dead end with no way back to
+ * anything — not even the public site a signed-out visitor already reaches
+ * freely. `ApplicationHeader`'s own navigation is `useNavigation`'s three public
+ * links (Home/Calendar/Resources) in every state; a Pending session's "Dashboard"
+ * button leads right back to this same screen (every portal route is wrapped in
+ * this same guard), and "Sign out" is exactly what an impatient reader needs.
+ * Nothing here reaches further than an anonymous visitor already can — the
+ * server-side denial (TD-1: no endpoint beyond `GET /me` and logout for a
+ * Pending session) is unchanged and is what actually enforces the boundary.
  *
  * This is a **UX layer only**. The server-side denial is the security
- * enforcement (TD-1: no endpoint beyond `GET /me` and logout returns data to a
- * Pending session), and the two are tested independently (§19.2).
+ * enforcement, and the two are tested independently (§19.2).
  */
 export function PendingGuard({ children }: { children: ReactNode }): ReactNode {
   const { status, me } = useSession();
@@ -23,10 +35,14 @@ export function PendingGuard({ children }: { children: ReactNode }): ReactNode {
 
   if (me?.account_status === 'pending') {
     return (
-      <main className="status-screen" role="status">
-        <h1>{t('auth.pendingTitle')}</h1>
-        <p>{t('auth.pendingBody')}</p>
-      </main>
+      <>
+        <ApplicationHeader />
+        <main id="main" className="status-screen" role="status">
+          <h1>{t('auth.pendingTitle')}</h1>
+          <p>{t('auth.pendingBody')}</p>
+        </main>
+        <SiteFooter />
+      </>
     );
   }
 

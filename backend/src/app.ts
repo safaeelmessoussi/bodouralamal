@@ -17,6 +17,7 @@ import * as hijri from './controllers/hijri-calendar.controller.js';
 import * as calendarBootstrap from './controllers/calendar-bootstrap.controller.js';
 import * as partners from './controllers/partner.controller.js';
 import * as publicBranches from './controllers/public-branch.controller.js';
+import * as publicPrograms from './controllers/public-program.controller.js';
 import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import * as administrativeGroups from './controllers/administrative-group.controller.js';
@@ -328,6 +329,12 @@ export function createApp(
   // NEW N — §5.1's partners section. Public and unauthenticated, exactly as the
   // branch directory is: the landing page renders what the table holds.
   api.get('/partners', partners.listPublic(prisma));
+  // Owner-reported, 2026-09-14: the homepage's programme overview — every
+  // Category, its Levels, and each Level's مواد المستوى/مقرر الحفظ. Public
+  // and unauthenticated, on the same reasoning as /branches and /partners
+  // immediately above: the landing page renders what the admin taxonomy
+  // screens already hold, nothing beyond it.
+  api.get('/programs', publicPrograms.list(prisma));
 
   // TD-3.13 (Revision 43): the Educational Library is PUBLIC. Mounted before the
   // guarded router with OPTIONAL authentication, exactly as /calendar is — a

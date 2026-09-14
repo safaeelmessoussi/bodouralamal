@@ -191,3 +191,41 @@ describe('the §A dirty semantics hold for a حصة as well (§D)', () => {
     expect(isDirty({ ...pristine, visibility: 'public' }, pristine)).toBe(true);
   });
 });
+
+/**
+ * **A عطلة (vacation) opened as an ordinary نشاط** (Owner-reported,
+ * 2026-09-14). `EventDefinitionWire` carries only `scheduling_type_id`,
+ * never `structural_kind` — that fact lives in the catalogue
+ * (`SchedulingTypeRow.structural_kind`, one of `class`|`activity`|`exam`|
+ * `holiday`). Before this fix `fromEvent` hardcoded `type: 'activity'`
+ * unconditionally, so `تعديل العنصر` on ANY vacation opened the ordinary
+ * activity form — staff assignment included — regardless of what it
+ * actually was. `fromEvent` now takes the set of catalogue ids whose
+ * `structural_kind` is `holiday` and classifies against it.
+ */
+describe('a عطلة is classified as holiday, not activity', () => {
+  const HOLIDAY_TYPE_ID = 'type-holiday';
+  const ACTIVITY_TYPE_ID = 'type-activity';
+  const holidayTypeIds = new Set([HOLIDAY_TYPE_ID]);
+
+  const row = (schedulingTypeId: string | null) => ({
+    ...eventRow('public'),
+    scheduling_type_id: schedulingTypeId,
+  });
+
+  it('classifies a row whose catalogue type is holiday as type "holiday"', () => {
+    expect(fromEvent(row(HOLIDAY_TYPE_ID) as never, holidayTypeIds).type).toBe('holiday');
+  });
+
+  it('classifies every other catalogue type as the ordinary "activity"', () => {
+    expect(fromEvent(row(ACTIVITY_TYPE_ID) as never, holidayTypeIds).type).toBe('activity');
+  });
+
+  it('classifies a row with no catalogue type (predating it) as "activity", never a guess', () => {
+    expect(fromEvent(row(null) as never, holidayTypeIds).type).toBe('activity');
+  });
+
+  it('defaults to "activity" when no holiday set is supplied at all (backward compatible)', () => {
+    expect(fromEvent(row(HOLIDAY_TYPE_ID) as never).type).toBe('activity');
+  });
+});

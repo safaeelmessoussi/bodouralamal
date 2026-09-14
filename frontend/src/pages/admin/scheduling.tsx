@@ -41,9 +41,10 @@ import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js'
 import { EventDetailsDialog } from '../../components/calendar/event-details-dialog.js';
 import {
   ActivitySection,
-  HOLIDAY_SCOPE_KINDS,
+  ALL_SCOPE_DIMENSIONS,
   ClassSection,
-  TEACHER_SCOPE_KINDS,
+  HOLIDAY_SCOPE_DIMENSIONS,
+  TEACHER_SCOPE_DIMENSIONS,
 } from '../../components/scheduling/class-section.js';
 import type {
   DeliveryMode,
@@ -1208,9 +1209,20 @@ export function SchedulingDialog({
   const [attendanceMarking, setAttendanceMarking] = useState<AttendanceMarking>(
     item?.attendanceMarking ?? 'staff_only',
   );
-  const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
-  // R139 — several, not one; see `ActivitySection`'s own doc comment.
-  const [scopeIds, setScopeIds] = useState<string[]>([]);
+  /**
+   * **Each dimension independent, none defaulted to a value the caller's own
+   * `dimensions` list may not even contain** (Owner-reported, 2026-09-14 —
+   * the prior single `scopeKind` state defaulted to `'global'`/`'group'`
+   * regardless of type, which is not an option عطلة's dimensions ever
+   * offer, and produced a select control showing its first option while
+   * state disagreed until the reader reselected it). See `ActivitySection`'s own
+   * doc comment for the full R139 union semantics.
+   */
+  const [global, setGlobal] = useState(false);
+  const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [levelIds, setLevelIds] = useState<string[]>([]);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -1284,8 +1296,11 @@ export function SchedulingDialog({
     visibility: item?.visibility ?? 'public',
     // Mirrors the initialiser above — the pair §A proved has to agree.
     schedulingTypeId: item?.ids.schedulingTypeId ?? null,
-    scopeKind: canAssignStaff ? 'global' : 'group',
-    scopeIds: [] as string[],
+    global: false,
+    branchIds: [] as string[],
+    categoryIds: [] as string[],
+    levelIds: [] as string[],
+    groupIds: [] as string[],
     // Mirrors the initialiser above — a pristine baseline that disagreed with
     // it is what kept `dirty` false while the value was wrong (§A).
     attendanceMarking: item?.attendanceMarking ?? 'staff_only',
@@ -1313,11 +1328,14 @@ export function SchedulingDialog({
       supervisorId,
       responsibleId,
       visibility,
-      scopeKind,
+      global,
       // Order is not a choice (rule U's own reasoning for `assistantIds`
-      // above) — sorted so re-picking the same set in a different order does
-      // not report the form as dirty.
-      scopeIds: [...scopeIds].sort(),
+      // above) — sorted so re-picking the same set in a different dimension's
+      // order does not report the form as dirty.
+      branchIds: [...branchIds].sort(),
+      categoryIds: [...categoryIds].sort(),
+      levelIds: [...levelIds].sort(),
+      groupIds: [...groupIds].sort(),
       attendanceMarking,
     },
     pristine,
@@ -1656,6 +1674,21 @@ export function SchedulingDialog({
       ) {
         return t('scheduling.exam.customRequired');
       }
+      /**
+       * **Matches the server's own guard** (`AVAILABILITY_NEEDS_START_TIME`,
+       * Owner-reported 2026-09-14): `at_start`/`offset_minutes` anchor on the
+       * form's own start time regardless of target kind (no target derives one
+       * server-side, `session` included), so a reader who cleared it — the
+       * field is shown but easy to overlook for a remote sitting — gets a
+       * client-side message instead of only the server's refusal.
+       */
+      if (
+        (examSource.availabilityChoice === 'at_start' ||
+          examSource.availabilityChoice === 'offset_minutes') &&
+        startTime === ''
+      ) {
+        return t('scheduling.invalid.times');
+      }
       return null;
     }
     if (type === 'exam') {
@@ -1708,14 +1741,25 @@ export function SchedulingDialog({
        * **Never on edit** (R139, found while widening this exact check to an
        * array): the scope picker is `locked` and hidden once editing — §4.4
        * populates the four-way joins at creation, and re-pointing them later
-       * would silently change who has been seeing the event — so `scopeIds`
-       * is never seeded from the item being edited. Without this guard a
-       * مؤطرة (whose default `scopeKind` is `'group'`, never `'global'`)
+       * would silently change who has been seeing the event — so none of the
+       * dimension arrays are ever seeded from the item being edited. Without
+       * this guard a مؤطرة (whose only dimension is `group`, never `global`)
        * could not save ANY edit to her own event, including one touching
        * nothing about its scope — the same `!editing` shape the item-type
        * and start-date checks above already use for the identical reason.
+       *
+       * **Every dimension the caller may fill, independently** (2026-09-14 —
+       * replacing the single `scopeKind`/`scopeIds` pair): at least ONE of
+       * them must carry a choice, or `global` must be checked where offered.
        */
-      if (!editing && scopeKind !== 'global' && scopeIds.length === 0) {
+      if (
+        !editing &&
+        !global &&
+        branchIds.length === 0 &&
+        categoryIds.length === 0 &&
+        levelIds.length === 0 &&
+        groupIds.length === 0
+      ) {
         return scopeOptionsEmpty
           ? t('scheduling.invalid.noScopeForYou')
           : t('scheduling.invalid.scope');
@@ -1796,19 +1840,27 @@ export function SchedulingDialog({
            * the screen could only say «تعذّر الحفظ» about a scope the reader
            * had never been offered. `undefined` omits the key, and the form's
            * own completeness rule below names the missing choice instead.
+           *
+           * **Every non-empty dimension, together** (2026-09-14 — replacing
+           * the single-dimension ternary chain): `EventScopes` has always
+           * accepted an independent array per dimension and UNIONs them on
+           * read (`OR`, `calendar.service.ts`), so "these branches AND that
+           * category" is a real, single request now rather than a choice
+           * between the two.
            */
-          scope:
-            scopeKind === 'global'
-              ? { global: true }
-              : scopeIds.length === 0
-                ? undefined
-                : scopeKind === 'branch'
-                  ? { branchIds: scopeIds }
-                  : scopeKind === 'category'
-                    ? { categoryIds: scopeIds }
-                    : scopeKind === 'group'
-                      ? { groupIds: scopeIds }
-                      : { levelIds: scopeIds },
+          scope: global
+            ? { global: true }
+            : branchIds.length === 0 &&
+                categoryIds.length === 0 &&
+                levelIds.length === 0 &&
+                groupIds.length === 0
+              ? undefined
+              : {
+                  ...(branchIds.length > 0 ? { branchIds } : {}),
+                  ...(categoryIds.length > 0 ? { categoryIds } : {}),
+                  ...(levelIds.length > 0 ? { levelIds } : {}),
+                  ...(groupIds.length > 0 ? { groupIds } : {}),
+                },
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
@@ -2130,17 +2182,51 @@ export function SchedulingDialog({
           </>
         ) : (
           <ActivitySection
-            scopeKind={scopeKind}
-            onScopeKind={(next) => {
-              // **A dimension's own ids do not survive switching dimensions**
-              // (R139). A branch's UUID left sitting in state after switching
-              // to «مستوى» would be submitted as `levelIds` on the next
-              // save — the wrong table entirely, not merely a stale choice.
-              setScopeKind(next);
-              setScopeIds([]);
+            // عطلة first: it is the narrowest, and a Teacher never reaches it
+            // (creating one is an administrative act).
+            dimensions={
+              type === 'holiday'
+                ? HOLIDAY_SCOPE_DIMENSIONS
+                : canAssignStaff
+                  ? ALL_SCOPE_DIMENSIONS
+                  : TEACHER_SCOPE_DIMENSIONS
+            }
+            allowGlobal={type !== 'holiday' && canAssignStaff}
+            global={global}
+            onGlobal={setGlobal}
+            values={{
+              branch: {
+                selected: branchIds,
+                onChange: setBranchIds,
+                options: scope.options.branchId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              category: {
+                selected: categoryIds,
+                onChange: setCategoryIds,
+                options: scope.options.categoryId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              level: {
+                selected: levelIds,
+                onChange: setLevelIds,
+                options: scope.options.levelId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              /**
+               * **Her own groups, from the read that answers her** (R93).
+               *
+               * The Admin chain builds these from `/admin/levels` and
+               * `/admin/academic-years`, both **403** for a مؤطرة — so her
+               * group selector was empty and the form let her fill
+               * everything in before failing on save. An Admin's options
+               * (`scope.options.groupId`) are unchanged.
+               */
+              group: {
+                selected: groupIds,
+                onChange: setGroupIds,
+                options: canAssignStaff
+                  ? scope.options.groupId.map((o) => ({ id: o.value, name: o.label }))
+                  : teacherScopes,
+              },
             }}
-            scopeIds={scopeIds}
-            onScopeIds={setScopeIds}
             /**
              * **A مؤطرة is offered only herself as responsible** (2026-08-20).
              *
@@ -2163,34 +2249,6 @@ export function SchedulingDialog({
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}
-            scopeKinds={
-              // عطلة first: it is the narrowest, and a Teacher never reaches it
-              // (creating one is an administrative act).
-              type === 'holiday'
-                ? HOLIDAY_SCOPE_KINDS
-                : canAssignStaff
-                  ? undefined
-                  : TEACHER_SCOPE_KINDS
-            }
-            /**
-             * **Her own groups, from the read that answers her** (R93).
-             *
-             * The Admin chain builds these from `/admin/levels` and
-             * `/admin/academic-years`, both **403** for a مؤطرة — so her group
-             * selector was empty and the form let her fill everything in before
-             * failing on save. An Admin's options are unchanged.
-             */
-            scopeOptions={
-              !canAssignStaff
-                ? teacherScopes
-                : scopeKind === 'branch'
-                  ? scope.options.branchId.map((o) => ({ id: o.value, name: o.label }))
-                  : scopeKind === 'category'
-                    ? scope.options.categoryId.map((o) => ({ id: o.value, name: o.label }))
-                    : scopeKind === 'group'
-                      ? scope.options.groupId.map((o) => ({ id: o.value, name: o.label }))
-                      : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
-            }
             locked={editing}
             hideStaffing={type === 'holiday'}
           />

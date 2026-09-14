@@ -8645,3 +8645,119 @@ state honest; only the Owner can supply the actual semester dates.
 Local worktree/index clean; nothing pushed beyond this session's commits; Staging still
 holds only synthetic fixtures plus the one authorized Owner identity; no Production action
 of any kind.
+
+2026-09-14 (cont.) — Six Owner-reported Staging defects/requests, fixed and prepared for deploy
+All six items from the Owner's live-Staging follow-up session, fixed, verified and readied
+for push/deploy per continued explicit Owner authorization.
+
+**1. Approving a registration failed with a misleading "already decided" message.**
+`STATE_CONFLICT`/`NO_CURRENT_ACADEMIC_PERIOD` is thrown by `enrolAtPlacement`
+(`approval.service.ts`) when no `AcademicPeriod` covers today — the SAME root data gap
+already identified in the previous session's `تسجيل مستفيدة` fix, now confirmed to ALSO
+block approval, a more urgent path. Analysis (as explicitly requested): this refusal is
+deliberate and correct — R122 exists precisely so no enrolment is open-ended, and approval
+enrols "as of today" rather than from a form-chosen period, so it correctly has no period
+to fall back on when none covers today. The defect was purely in how the frontend reported
+it: `approvals.tsx`'s `confirmDecision` treated this 409 the same as "somebody else already
+decided it" (`alreadyDecided`), a message that is factually wrong here (nothing was
+modified) and closes the dialog on a refusal that will recur identically until the Owner
+acts. Fixed: the specific reason is checked before the generic 409 branch, shows a clear,
+actionable message naming the remedy, and — since the item genuinely still needs deciding —
+leaves the dialog open rather than closing onto a dead-end notice. **Owner action still
+required**: record an `AcademicPeriod` covering the current date (same outstanding item as
+the previous session).
+
+**2. Editing a عطلة (vacation) opened the ordinary activity form, staff assignment
+included.** Root cause: `fromEvent` (`adapters/scheduling.ts`) hardcoded `type: 'activity'`
+for every Event row — `EventDefinitionWire` carries only `scheduling_type_id`, never
+`structural_kind` itself, and `structural_kind` is a four-value enum
+(`class`/`activity`/`exam`/`holiday`) with `holiday` already fully wired downstream
+(`hideStaffing={type === 'holiday'}` and others) — it simply never received it. Fixed:
+`listSchedulingItems` now also fetches the scheduling-type catalogue (already fetched
+elsewhere in the page, just not here) and passes the set of holiday-classified catalogue
+ids into `fromEvent`, which classifies each row correctly. Four new unit tests in
+`scheduling-visibility.test.ts` (one pinned to fail without the fix, confirmed via a
+temporary revert).
+
+**3. Scheduling an online exam with "عند بداية الاختبار" (`at_start`) always refused
+`AVAILABILITY_NEEDS_START_TIME`.** Root cause: `exam-scheduling.service.ts` anchors
+`at_start`/`offset_minutes` on the request's own `start_time` for EVERY target kind — no
+target (session included) derives a time of day server-side — but the online branch of
+`saveSchedulingItem` (`adapters/scheduling.ts`) never forwarded `start_time`/`end_time` at
+all, even though the shared form already collects and defaults them (09:00–10:00) for
+every exam, physical or online. A stale doc comment (`/** Physical only. */` on
+`ScheduleExamInput.start_time`/`end_time` in `adapters/exams.ts`) is the likely reason the
+omission shipped and went unnoticed. Fixed: the online branch now sends both fields,
+matching the physical branch exactly; the stale comment is corrected; a matching
+client-side check was added (`scheduling.tsx`) so a cleared start time refuses with a named
+field client-side rather than only via the server's error. Confirmed target-kind-agnostic
+by direct code trace (not merely the reported level-target case) — a session-target online
+exam with `at_start` was equally broken. Three new tests, confirmed to fail without the fix.
+
+**4. The post-registration "pending approval" screen was a dead end** — a bare message with
+no header or footer, no way to reach anything else on the platform. `PendingGuard`
+(§14.4, Revision 8) deliberately withholds the AUTHENTICATED application shell (admin/
+teacher/student portal sidebars) from a Pending account — that boundary is correct and
+untouched. But it also withheld the ordinary SITE header/footer, which reaches no further
+than an anonymous visitor already can: `ApplicationHeader`'s navigation is exactly the
+three public links (Home/Calendar/Resources) in every session state, "Dashboard" loops
+back to this same screen (every portal route is wrapped in the same guard), and "Sign out"
+is what an impatient reader needs. Fixed: wrapped the Pending screen in
+`ApplicationHeader`/`SiteFooter`, the same shell `Landing` uses. The server-side denial
+(TD-1: no endpoint beyond `GET /me` and logout for a Pending session) is unchanged and is
+what actually enforces the boundary — this is a UX-layer fix only. Two new tests.
+
+**5. The النطاق (scope) picker for عطلة/حفل sometimes showed no sub-picker until reselected,
+and only ever allowed ONE dimension (branch OR category OR level OR group) at a time.**
+Root cause of the display bug: `scopeKind` defaulted to `'global'`/`'group'` regardless of
+the caller's actual allowed dimension list (`HOLIDAY_SCOPE_KINDS` never included `'global'`
+at all), so the `<select>` showed a value absent from its own options — the exact native
+fallback-to-first-option behaviour already fixed once this session for `تسجيل مستفيدة`'s
+semester field. Per the Owner's explicit preference, this was not patched in place but
+redesigned: `EventScopes` (`event.service.ts`) has always accepted an independent array per
+dimension and UNIONs them on read (`OR`, `calendar.service.ts`) — "these branches AND that
+category" was always a coherent request the platform could serve, only the form forced a
+choice between them. `ActivitySection` (`class-section.tsx`) now renders one independent,
+always-visible `MultiSelectField` per dimension the caller may fill (`ALL_SCOPE_DIMENSIONS`/
+`HOLIDAY_SCOPE_DIMENSIONS`/`TEACHER_SCOPE_DIMENSIONS`, replacing the single-select
+`*_SCOPE_KINDS` lists), plus a separate "association-wide" checkbox where applicable —
+structurally eliminating the display bug as a side effect, since there is no longer a
+shared default value that might not match a caller's options. `scheduling.tsx`'s state,
+validation and save-payload construction were rewritten to match (`global`/`branchIds`/
+`categoryIds`/`levelIds`/`groupIds`, combined into one payload object from whichever are
+non-empty). Both affected test files (`class-section.scope.test.tsx`,
+`class-section.holiday.test.tsx`) and `scheduling-scope.test.ts` were rewritten for the new
+API; full frontend suite (1,281/1,281) confirms no other caller broke.
+
+**6. New: a public "برامجنا التعليمية" (our programmes) section on the homepage**, placed
+before «أين تجدنا», giving an anonymous visitor an overview of every Category, its Levels,
+and each Level's Subjects (مواد المستوى) and حفظ القرآن curriculum (مقرر الحفظ) — the same
+four admin screens already manage, read here for the first time by someone who has not
+signed in. New public, anonymous `GET /programs` (SRS Revision 144, TD-3.16), mounted
+before the guarded router exactly as `/branches`/`/partners` already are, served by a
+dedicated `public-program.service.ts` (never the admin taxonomy/reference-data services —
+the same audience-separation Revision 35 already states for branches) with a fixed
+allowlist projection (id/name/description only; never enrolment counts, gender
+restriction, display-order internals or versions). Soft-deleted rows excluded throughout;
+Levels ordered by their own `display_order` within their Category, Subjects by their own
+`display_order`, Surahs by Mushaf order. `docs/SRS.md` gained Revision 144 and TD-3.16;
+`scripts/ci/td3-routes.txt` and the generated `docs/openapi.json` were updated together
+(228/236 TD-3 endpoints now implemented). New frontend adapter (`adapters/programs.ts`),
+component (`components/programs-section.tsx`, following `BranchesSection`'s three-state
+loading/error/empty pattern — an empty catalogue is treated as a fault, unlike
+`PartnersSection`'s silent-empty convention, since the association always teaches
+something) and a small dedicated stylesheet. Six new backend integration tests
+(`public-program.http.integration.test.ts`, matching `public-branch`'s own rigor: the
+allowlist projection is asserted by exact key set, not merely by presence). Also required —
+found only by running the full suite — adding `/programs` to
+`pending-denial.http.integration.test.ts`'s known-public-routes exemption list, exactly as
+`/branches`/`/partners` already are; without it the guard correctly treats a new route as
+guarded-by-default until stated otherwise here.
+
+Verification: backend and frontend typecheck/lint/build clean throughout; full backend
+unit suite 342/342; full frontend unit suite 1,281/1,281 (was 1,258 at the start of this
+session); full disposable-stack integration run 2,571/2,571 non-flaky (2,590 total minus
+the one already-confirmed-transient `assessment.integration.test.ts` pagination flake from
+earlier this session, unrelated to anything touched here — not re-investigated, same root
+cause already documented); all 31 `scripts/ci/check-*.sh` guards, the documentation-link
+guard and `git diff --check` all pass.

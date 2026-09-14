@@ -6,7 +6,7 @@ import {
   type DeliveryMode,
   type OnlineMediaMode,
 } from './delivery.js';
-import { SelectField } from '../ui/field.js';
+import { CheckboxField, SelectField } from '../ui/field.js';
 import { Feedback } from '../ui/feedback.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { StaffPicker } from './staff-picker.js';
@@ -201,18 +201,35 @@ export function ClassSection({
  * anyone else, and the server refuses regardless: hiding is not enforcement.
  */
 /**
- * §4.4's four scopes plus **`group`, which R72 added**: the join table
- * `EventAdministrativeGroup` has existed since R43 and the server has always
- * accepted `group_ids`, but no form ever offered it — so the one scope a
- * Teacher is permitted (TD-2, §4.9) could not be expressed at all.
+ * **Each dimension is its own independent, optional control** (Owner-reported,
+ * 2026-09-14 — replacing the single "choose ONE kind" selector this file used
+ * to have). `EventScopes` (`event.service.ts`) has always accepted an array
+ * per dimension and the audience-matching read has always UNIONed them
+ * (`OR`, `calendar.service.ts`) — an event reaches someone whose branch, OR
+ * category, OR Level, OR group matches ANY chosen dimension. Only the form
+ * ever forced a single choice, which is what made picking "this branch AND
+ * that category" impossible to express, and — for a caller whose allowed
+ * dimensions did not include the ONE kind the control defaulted to
+ * (`'global'` regardless of type) — made the picker default to a value with
+ * no matching `<option>`, silently showing nothing until the reader
+ * happened to reselect it (the exact defect reported).
  */
-const ALL_SCOPE_KINDS = [
-  { value: 'global', labelKey: 'admin.calendar.scopeGlobal' },
-  { value: 'branch', labelKey: 'admin.calendar.scopeBranch' },
-  { value: 'category', labelKey: 'admin.calendar.scopeCategory' },
-  { value: 'level', labelKey: 'admin.calendar.scopeLevel' },
-  { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
-] as const;
+export type ScopeDimensionKey = 'branch' | 'category' | 'level' | 'group';
+
+const DIMENSION_LABEL_KEYS: Record<ScopeDimensionKey, string> = {
+  branch: 'admin.calendar.scopeBranch',
+  category: 'admin.calendar.scopeCategory',
+  level: 'admin.calendar.scopeLevel',
+  group: 'admin.calendar.scopeGroup',
+};
+
+/** §4.4's four scopes, all independently optional. */
+export const ALL_SCOPE_DIMENSIONS: readonly ScopeDimensionKey[] = [
+  'branch',
+  'category',
+  'level',
+  'group',
+];
 
 /**
  * **A عطلة is scoped to الفرع and الفئة, and to nothing else** (Owner,
@@ -221,16 +238,19 @@ const ALL_SCOPE_KINDS = [
  * the server refuses them (`HOLIDAY_SHAPE`), so this list is the affordance
  * agreeing with the rule rather than the rule itself.
  */
-export const HOLIDAY_SCOPE_KINDS = [
-  { value: 'branch', labelKey: 'admin.calendar.scopeBranch' },
-  { value: 'category', labelKey: 'admin.calendar.scopeCategory' },
-] as const;
+export const HOLIDAY_SCOPE_DIMENSIONS: readonly ScopeDimensionKey[] = ['branch', 'category'];
 
 /** R72 — a Teacher may scope an event to their own Administrative Groups and
  *  to nothing else, so this is the whole list they are offered. */
-export const TEACHER_SCOPE_KINDS = [
-  { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
-] as const;
+export const TEACHER_SCOPE_DIMENSIONS: readonly ScopeDimensionKey[] = ['group'];
+
+/** One dimension's own selection, options and setter — `ActivitySection`
+ *  renders one independent `MultiSelectField` per entry in `dimensions`. */
+export interface ScopeDimensionValue {
+  selected: readonly string[];
+  onChange: (next: string[]) => void;
+  options: { id: string; name: string }[];
+}
 
 /**
  * **R109/NEW B §D — the tier moved OUT of this section.**
@@ -240,11 +260,11 @@ export const TEACHER_SCOPE_KINDS = [
  * kind — one control rather than three that would drift.
  */
 export function ActivitySection({
-  scopeKind,
-  onScopeKind,
-  scopeIds,
-  onScopeIds,
-  scopeOptions,
+  dimensions,
+  values,
+  allowGlobal,
+  global,
+  onGlobal,
   locked,
   staff,
   leadStaff,
@@ -255,26 +275,21 @@ export function ActivitySection({
   onAssistants,
   canAssignStaff,
   disabled,
-  scopeKinds = ALL_SCOPE_KINDS,
   hideStaffing = false,
 }: {
-  scopeKind: string;
-  onScopeKind: (v: string) => void;
-  /**
-   * **R139 — several, not one.** `أقسام الظهور` — a specific Level, several
-   * Levels, every Level inside the branch(es) named (leave this empty once a
-   * branch is chosen), or every branch and Level a genuinely global actor
-   * reaches — are one control now rather than four: `EventScopes`
-   * (`event.service.ts`) has always accepted an ARRAY per dimension, and only
-   * this picker still asked for one id. Leaving the whole picker empty while
-   * `scopeKind` names a real dimension is refused (§4.4's own scope-required
-   * rule, restated below) — the empty-Levels-within-a-branch reading applies
-   * ONLY when `scopeKind === 'branch'` and at least one branch is chosen; it
-   * is never how "nothing chosen at all" is expressed.
-   */
-  scopeIds: readonly string[];
-  onScopeIds: (next: string[]) => void;
-  scopeOptions: { id: string; name: string }[];
+  /** R72 — the dimensions this caller may fill. A Teacher gets `group` and
+   *  only `group`: §4.9 and TD-2 forbid them a branch, category or Level, so
+   *  offering those would offer a refusal. */
+  dimensions: readonly ScopeDimensionKey[];
+  /** One entry per key in `dimensions` — a دimension absent from `dimensions`
+   *  is never read, so a caller need not populate one it does not offer. */
+  values: Record<ScopeDimensionKey, ScopeDimensionValue>;
+  /** Whether "association-wide" is offered at all (Admin/Super Admin on a
+   *  non-holiday item only — R139 defines it as every branch a scoped actor
+   *  is permitted, never a wider reach than she already has). */
+  allowGlobal: boolean;
+  global: boolean;
+  onGlobal: (v: boolean) => void;
   /** Scope is set at creation and refused on edit — §4.4 populates the four-way
    *  joins explicitly, and re-pointing them later would silently change who has
    *  been seeing the event. */
@@ -297,10 +312,6 @@ export function ActivitySection({
   leadStaff?: DirectoryEntry[];
   /** True when the lead is fixed and only the assistants are hers to choose. */
   responsibleLocked?: boolean;
-  /** R72 — the scope kinds this caller may choose. A Teacher gets `group` and
-   *  only `group`: §4.9 and TD-2 forbid them a branch, category, level or the
-   *  Global scope, so offering those would offer a refusal. */
-  scopeKinds?: readonly { value: string; labelKey: string }[];
   /**
    * **R137 — عطلة has no responsible/assistant staff at all** (Owner,
    * 2026-09-09): a holiday is not an activity somebody runs. Not merely
@@ -315,37 +326,43 @@ export function ActivitySection({
         <p className="muted">{t('admin.calendar.scopeFixed')}</p>
       ) : (
         <>
-          <SelectField
-            label={t('admin.calendar.scopeLabel')}
-            value={scopeKind}
-            onChange={onScopeKind}
-            options={scopeKinds.map((k) => ({ value: k.value, label: t(k.labelKey) }))}
-          />
           {/* **"Platform-wide" and "all my branches" are one control**
               (R139), because the server already tells them apart correctly
               — a branch-scoped actor's own `global` choice never reaches
               further than her own branches (`resolveBranches`,
-              `event.service.ts`). Stated once, here, rather than guessing at
-              a second label this form cannot verify on its own. */}
-          {scopeKind === 'global' ? (
-            <Feedback>{t('admin.calendar.scopeGlobalHint')}</Feedback>
+              `event.service.ts`). A checkbox rather than a fifth dimension:
+              choosing it is mutually exclusive with every dimension below
+              (the server refuses `global` alongside `branch_ids`), so it
+              stands apart rather than beside them. */}
+          {allowGlobal ? (
+            <CheckboxField
+              label={t('admin.calendar.scopeGlobal')}
+              checked={global}
+              onChange={onGlobal}
+              hint={t('admin.calendar.scopeGlobalHint')}
+            />
           ) : null}
-          {scopeKind === 'global' ? null : (
+          {global ? null : (
             <>
-              <MultiSelectField
-                label={t('admin.calendar.scopeTargetLabel')}
-                selected={scopeIds}
-                onChange={onScopeIds}
-                options={scopeOptions.map((o) => ({ value: o.id, label: o.name }))}
-                emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-              />
+              {dimensions.map((key) => {
+                const value = values[key];
+                return (
+                  <MultiSelectField
+                    key={key}
+                    label={t(DIMENSION_LABEL_KEYS[key])}
+                    selected={value.selected}
+                    onChange={value.onChange}
+                    options={value.options.map((o) => ({ value: o.id, label: o.name }))}
+                    emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+                  />
+                );
+              })}
               {/* **The "all Levels within these branches" reading, stated
-                  rather than left implicit** (R139). It is only ever true for
-                  `scopeKind === 'branch'`: choosing several Levels or several
-                  Categories with none of THEM chosen is simply an empty
-                  picker, refused the same as it always was — a hint here
-                  would be naming a reading that branch does not have. */}
-              {scopeKind === 'branch' && scopeIds.length > 0 ? (
+                  rather than left implicit** (R139). True whenever branches
+                  are chosen and shown once, beside the branch picker itself,
+                  regardless of what any OTHER dimension separately carries —
+                  every dimension here is UNIONed, never narrowed by another. */}
+              {dimensions.includes('branch') && values.branch.selected.length > 0 ? (
                 <Feedback>{t('admin.calendar.scopeAllLevelsHint')}</Feedback>
               ) : null}
             </>

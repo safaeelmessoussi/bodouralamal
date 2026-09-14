@@ -92,6 +92,9 @@ GET /admin/partners                           # R113; Super Admin only; every li
 POST /admin/partners                          # R113; Super Admin only
 PATCH /admin/partners/{id}                    # R113; Super Admin only; TD-15
 DELETE /admin/partners/{id}                   # R113; Super Admin only; TD-5 soft delete (nothing references a Partner)
+
+# ── Public programme overview (Revision 144) — §5.1 landing section
+GET /programs                                 # TD-3.16; PUBLIC; Categories→Levels→Subjects/Surahs, fixed allowlist
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
 GET /admin/self-managed-claims                # R132 — pending claims awaiting the association-side identity match; Super Admin
 POST /admin/self-managed-claims/{id}/approve  # R132 — binds the verified identity to the EXISTING beneficiary User; Super Admin

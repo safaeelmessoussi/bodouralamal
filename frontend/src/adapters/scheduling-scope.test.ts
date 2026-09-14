@@ -38,17 +38,24 @@ describe('the event scope payload speaks snake_case', () => {
  * It is also the ONLY one a Teacher may use (TD-2, §4.9), so without it R72's
  * capability would have been a control that could only be refused.
  */
-describe('the activity form offers the group scope', () => {
-  it('lists it among the kinds', () => {
-    expect(code(ACTIVITY)).toContain("value: 'group'");
+describe('the activity form offers the group dimension', () => {
+  it('lists it among the caller\'s independent dimensions', () => {
+    expect(code(ACTIVITY)).toContain("'group'");
   });
 
-  it('gives a Teacher that kind and no other', () => {
-    const teacherKinds = code(ACTIVITY).match(/TEACHER_SCOPE_KINDS = \[([\s\S]*?)\] as const/);
-    expect(teacherKinds).not.toBeNull();
-    expect(teacherKinds![1]).toContain("value: 'group'");
-    for (const forbidden of ['global', 'branch', 'category', 'level']) {
-      expect(teacherKinds![1]).not.toContain(`value: '${forbidden}'`);
+  it('gives a Teacher that dimension and no other', () => {
+    // Redesigned 2026-09-14: each dimension is now its own independent,
+    // always-visible control (`ActivitySection`'s own doc comment) rather
+    // than one of a single "choose ONE kind" select's options — but a
+    // Teacher's own allowance is still exactly `['group']`, on the same
+    // R72/§4.9 authority.
+    const teacherDimensions = code(ACTIVITY).match(
+      /TEACHER_SCOPE_DIMENSIONS: readonly ScopeDimensionKey\[\] = \[([\s\S]*?)\];/,
+    );
+    expect(teacherDimensions).not.toBeNull();
+    expect(teacherDimensions![1]).toContain("'group'");
+    for (const forbidden of ['branch', 'category', 'level']) {
+      expect(teacherDimensions![1]).not.toContain(`'${forbidden}'`);
     }
   });
 });

@@ -221,7 +221,15 @@ export interface ScheduleExamInput {
   target: ScheduleExamTarget;
   /** Refused on a `session` target — R122, the occurrence's own date. */
   date?: string;
-  /** Physical only. */
+  /**
+   * **Not physical only** (corrected 2026-09-14 — the prior comment here was
+   * wrong and cost an online exam's `at_start`/`offset_minutes` availability
+   * every time: this is exactly the wall-clock anchor `ExamAvailabilityPolicy`
+   * above describes those two policies as needing, and no target kind derives
+   * one server-side, `session` included. Required for `online` whenever the
+   * chosen policy is `at_start` or `offset_minutes`; harmless to send
+   * otherwise.
+   */
   start_time?: string;
   end_time?: string;
   branch_id?: string;

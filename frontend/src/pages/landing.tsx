@@ -4,6 +4,7 @@ import { ApplicationHeader } from '../components/header/application-header.js';
 import { SignInButton } from '../components/header/auth-buttons.js';
 import { BranchesSection } from '../components/branches-section.js';
 import { PartnersSection } from '../components/partners-section.js';
+import { ProgramsSection } from '../components/programs-section.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { Container } from '../components/ui/container.js';
 import { useNavigation } from '../hooks/use-navigation.js';
@@ -46,6 +47,12 @@ export function Landing(): ReactNode {
             elsewhere on the platform (§14), so nothing about their own
             definitions changes — only this page's use of them. */}
 
+        {/* **§5.1 programme overview (Revision 144, Owner-reported 2026-09-14).**
+            Placed before أين تجدنا: a visitor decides what the institute
+            teaches before where to find it. Entirely data-driven from
+            `GET /programs`, on the same footing `BranchesSection` already
+            has for the branch directory below it. */}
+        <ProgramsSection />
         <BranchesSection />
         <PartnersSection />
       </main>

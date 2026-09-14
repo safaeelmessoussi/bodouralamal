@@ -13,12 +13,18 @@ import SCHEDULING_SOURCE from '../../pages/admin/scheduling.tsx?raw';
  * the tree, not merely disabled, so there is nothing stale for a switch back
  * and forth to leave behind.
  */
+const emptyDimension = { selected: [], onChange: () => {}, options: [] };
 const baseProps = {
-  scopeKind: 'branch',
-  onScopeKind: () => {},
-  scopeIds: [],
-  onScopeIds: () => {},
-  scopeOptions: [],
+  dimensions: ['branch', 'category'] as const,
+  allowGlobal: false,
+  global: false,
+  onGlobal: () => {},
+  values: {
+    branch: emptyDimension,
+    category: emptyDimension,
+    level: emptyDimension,
+    group: emptyDimension,
+  },
   locked: false,
   staff: [],
   responsibleId: '',

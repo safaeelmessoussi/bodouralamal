@@ -186,6 +186,10 @@ const EXEMPT = new Set([
   // guarded until somebody states otherwise here, so making something public is
   // a deliberate line in this file rather than an omission somewhere else.
   "/partners",
+  // Revision 144 (TD-3.16): the §5.1 landing-page programme overview,
+  // anonymous — Categories, Levels, Subjects and حفظ القرآن curriculum, the
+  // same surface and the same reasoning as `/branches`/`/partners` beside it.
+  "/programs",
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   "/calendar/bootstrap",
   // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
