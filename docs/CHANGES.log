@@ -8761,3 +8761,22 @@ the one already-confirmed-transient `assessment.integration.test.ts` pagination 
 earlier this session, unrelated to anything touched here — not re-investigated, same root
 cause already documented); all 31 `scripts/ci/check-*.sh` guards, the documentation-link
 guard and `git diff --check` all pass.
+
+2026-09-14 (cont.) — Staging deployment: 74631b7 (the six Owner-reported items)
+Deployed the exact green commit `74631b7` to `staging.bodouralamal.com`, upgrading from
+`791b517`, per continued explicit Owner authorization to push/deploy without stopping. No
+new migrations in this diff; host preflight passed cleanly, no host-state issues. Checkout
+verified, exact-commit GHCR image revision labels confirmed on both containers, `prisma
+migrate deploy` correctly reported nothing pending, `api`/`nginx` recreated, `/healthz`
+green (4/4 components, 12/12 workers) within seconds. The new `GET /api/v1/programs`
+endpoint verified live and anonymous, returning real Staging catalogue data (المرأة →
+وميض الأمل → أحكام التجويد/الفقه/تفسير القرآن/حفظ القرآن, الفاتحة/البقرة) — confirming the
+whole new feature end to end on the real environment. TLS/HSTS/CSP headers reconfirmed; no
+leftover disposable containers.
+
+Still outstanding, Owner-only, not performed here: recording an `AcademicPeriod` covering
+the current date on Staging (now confirmed to block registration approval as well as the
+enrollment form — see the fix entry above).
+
+Local worktree/index clean; Staging still holds only synthetic fixtures plus the one
+authorized Owner identity; no Production action of any kind.

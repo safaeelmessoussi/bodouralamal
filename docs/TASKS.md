@@ -3988,7 +3988,10 @@ the Owner's own report named.
       unrelated, not re-investigated); all 31 guards, doc-links and
       `git diff --check` pass; TD-3/OpenAPI regenerated and reconciled
       (228/236 implemented).
-- [ ] Push, hosted CI, and Staging deployment — in progress.
+- [x] Pushed as `74631b7`; hosted CI green on the first run, all 7 jobs
+      (run `34901759632`); deployed to Staging, no new migrations, no host
+      issues, `/healthz` and the new public `/programs` endpoint both
+      verified live returning real data. Full detail in CHANGES.log.
 - [ ] **Owner action still outstanding**: record an `AcademicPeriod`
       covering the current date on Staging (now confirmed to block both
       registration AND approval, not only the enrollment form).
