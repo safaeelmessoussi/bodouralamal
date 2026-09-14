@@ -3942,5 +3942,10 @@ the Owner's own report named.
 - [x] Verification: backend/frontend typecheck/lint/build clean; backend
       unit 342/342; frontend unit 1,269/1,269; full disposable-stack
       integration 2,566/2,566; all 31 guards and doc-links pass.
-- [ ] Push, hosted CI, and Staging deployment for this fix — in progress,
-      per explicit Owner authorization to proceed without stopping.
+- [x] Pushed as `791b517`; hosted CI green on the first run, all 7 jobs
+      (run `34825423221`); deployed to Staging (`staging.bodouralamal.com`),
+      no new migrations, `/healthz` green within seconds of recreation, no
+      new host-state issues. Full detail in CHANGES.log.
+- [ ] **Owner action still needed**: record an `AcademicPeriod` covering
+      the current date on Staging — the semester-select fix makes the empty
+      state honest, it cannot supply real academic-calendar dates.

@@ -8625,3 +8625,23 @@ Verification: backend and frontend typecheck/lint/build clean; full backend unit
 disposable-stack integration run 2,566/2,566 (was 2,565), all-table isolation intact; all 31
 `scripts/ci/check-*.sh` guards and the documentation-link guard pass; `git diff --check`
 clean.
+
+2026-09-14 (cont.) — Staging deployment: 791b517 (the three Owner-reported fixes)
+Deployed the exact green commit `791b517` to `staging.bodouralamal.com`, upgrading from
+`ad76612`, per explicit Owner authorization to push/deploy without stopping while away. No
+new migrations in this diff (confirmed before deploying); host preflight passed cleanly with
+no new host-state issues this time. Checkout verified, exact-commit GHCR image revision
+labels confirmed on both containers, `prisma migrate deploy` correctly reported nothing
+pending, `api`/`nginx` recreated, `/healthz` green (4/4 components, 12/12 workers) within
+seconds. TLS/HSTS/CSP headers reconfirmed; no leftover disposable containers. The originally
+reported exam (`6da80eef-e95e-4e1e-bcb3-3789d98ea5e3`) is confirmed still present and
+undeleted (as expected — every prior attempt 500'd) and is now deletable through the fixed
+code path; not deleted here, left for the Owner's own action.
+
+Outstanding, Owner-only, not performed here: recording an `AcademicPeriod` covering the
+current date on Staging (see the fix entry above) — the code fix makes the empty-selection
+state honest; only the Owner can supply the actual semester dates.
+
+Local worktree/index clean; nothing pushed beyond this session's commits; Staging still
+holds only synthetic fixtures plus the one authorized Owner identity; no Production action
+of any kind.
