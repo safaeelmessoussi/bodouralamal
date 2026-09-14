@@ -1271,7 +1271,9 @@ export async function approvalReviewRecipients(
 interface ExamNoticeSpec {
   levelId: string;
   administrativeGroupId: string | null;
-  branchId: string;
+  /** Null for a branch-less exam (an online sitting, or legacy data predating
+   *  a since-tightened requirement) — see `examStudentRecipients`. */
+  branchId: string | null;
   visibility: 'public' | 'private' | 'hidden';
 }
 
@@ -1302,21 +1304,39 @@ async function examStudentRecipients(
   if (spec.visibility === 'hidden') return [];
   const where =
     spec.administrativeGroupId === null
-      ? audienceWhere({
-          teachingMode: 'entire_level',
-          levelId: spec.levelId,
-          administrativeGroupId: null,
-          teachingGroupId: null,
-          branchId: spec.branchId,
-          // Period-blind: recipients are who the exam concerns (R123).
-          on: null,
-        })
+      ? // **`examAudienceWhere`'s own level-default case, mirrored.** An
+        // exam whose `branch_id` is null (an online sitting, or a physical
+        // one predating a since-tightened requirement) has no branch to
+        // bind an audience to — R66's branch-bound entire-Level rule
+        // presupposes one, so `audienceWhere` must never be asked with an
+        // empty-string placeholder standing in for "none": that is not a
+        // branch id, it is invalid UUID input, and the database refuses it
+        // rather than silently matching nothing.
+        spec.branchId === null
+        ? {
+            deletedAt: null,
+            levelEnrollments: {
+              some: { deletedAt: null, levelId: spec.levelId },
+            },
+          }
+        : audienceWhere({
+            teachingMode: 'entire_level',
+            levelId: spec.levelId,
+            administrativeGroupId: null,
+            teachingGroupId: null,
+            branchId: spec.branchId,
+            // Period-blind: recipients are who the exam concerns (R123).
+            on: null,
+          })
       : audienceWhere({
           teachingMode: 'administrative_group',
           levelId: null,
           administrativeGroupId: spec.administrativeGroupId,
           teachingGroupId: null,
-          branchId: spec.branchId,
+          // Never read by `audienceWhere`'s `administrative_group` arm — the
+          // group IS at one branch, so this placeholder cannot leak into the
+          // query the way the `entire_level` arm's real branch id does.
+          branchId: spec.branchId ?? '',
           // Period-blind: recipients are who the exam concerns (R123).
           on: null,
         });

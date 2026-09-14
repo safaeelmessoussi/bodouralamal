@@ -93,6 +93,37 @@ async function makeExam(
   return row.id;
 }
 
+/**
+ * **An unplaced physical sitting — `exam_physical_place_all_or_none_check`'s
+ * OTHER branch.** `mode = 'physical'` permits `branch_id`/`room_id`/
+ * `start_time`/`end_time` either all set or all null; a level-target exam
+ * with none of them assigned is a real, permitted database state, not
+ * corrupted data (the write boundary requires all four for a NEW physical
+ * exam — this shape predates that requirement or was never placed).
+ */
+async function makeUnplacedLevelExam(label: string): Promise<string> {
+  const row = await prisma.exam.create({
+    data: {
+      title: `${TAG} ${label}`,
+      schedulingTypeId: examTypeId,
+      levelId,
+      administrativeGroupId: null,
+      targetKind: 'level',
+      subjectId,
+      academicYearId,
+      branchId: null,
+      roomId: null,
+      startTime: null,
+      endTime: null,
+      date: DATE,
+      maxGrade: 20,
+      status: 'published',
+      publishedAt: new Date(),
+    },
+  });
+  return row.id;
+}
+
 async function clear(): Promise<void> {
   const exams = await prisma.exam.findMany({
     where: { title: { startsWith: TAG } },
@@ -233,6 +264,22 @@ describe('exam deletion — publication does not block, student evidence does', 
   it('deletes a PUBLISHED assessment that nobody sat — publishing creates no student record', async () => {
     const examId = await makeExam('منشور بلا أوراق', { status: 'published' });
     await deleteExam(prisma, await actorFor(prisma, adminAId), examId);
+    await expectDeleted(examId);
+  });
+
+  it('deletes an UNPLACED level-target exam — no branch to bind a student-notice audience to', async () => {
+    // Regression: notifyExamCancelled resolves the audience via
+    // examStudentRecipients, whose entire_level arm used to coalesce a null
+    // branchId to '' before handing it to audienceWhere — an empty string is
+    // not a branch id, and Postgres refuses it as invalid UUID input,
+    // surfacing as an unhandled 500 on an otherwise-ordinary delete.
+    //
+    // A Super Admin, deliberately: a branch-scoped Admin has no branch to
+    // hold authority over a branchless exam through and is correctly refused
+    // NOT_FOUND before reaching the code this test targets — a different,
+    // already-correct behaviour, not the one under test here.
+    const examId = await makeUnplacedLevelExam('غير محدد المكان');
+    await deleteExam(prisma, await actorFor(prisma, superAdminId), examId);
     await expectDeleted(examId);
   });
 

@@ -73,6 +73,23 @@ describe('a stale "choose the semester" notice does not survive the semester bei
   });
 });
 
+describe('an unselected semester is never visually mistaken for a chosen one', () => {
+  // Owner-reported defect (2026-09-14): with no explicit empty option, a
+  // native <select> whose bound value matches no option still renders its
+  // FIRST real option as selected — so whenever no period covers today (the
+  // default-to-current lookup found none), the control looked exactly like a
+  // semester was already chosen, «حفظ» refused with the very message that
+  // contradicted the screen, and nothing explained why.
+  it('gives the period control an explicit placeholder — never a silent first-option default', () => {
+    expect(source).toContain("t('admin.enrollments.periodPlaceholder')");
+  });
+
+  it('explains, distinctly from the empty-list case, when periods exist but none covers today', () => {
+    expect(source).toContain("t('admin.enrollments.periodNoneCurrent')");
+    expect(source).toMatch(/periods\.length === 0[\s\S]{0,40}periodNone[\s\S]{0,40}periodId === ''/);
+  });
+});
+
 describe('the table shows whether a placement is still running', () => {
   it('renders the period and a current/ended badge per enrolment', () => {
     expect(source).toContain("t('admin.enrollments.periodColumn')");

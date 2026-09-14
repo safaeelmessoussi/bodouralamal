@@ -87,6 +87,7 @@ import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
 import { t } from '../../i18n/index.js';
 import { sortRows } from '../../lib/sort-rows.js';
 import { ApiError } from '../../lib/api.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import { Feedback } from '../../components/ui/feedback.js';
 
 /**
@@ -316,6 +317,10 @@ export function SchedulingPage(): ReactNode {
     return kind === 'session' && id !== null ? { id } : null;
   });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
+  /** Set only for a genuinely blocked deletion (rule AZ.1): the dialog stays
+   *  open and explains why, rather than closing onto an unrelated notice — or,
+   *  worse, sitting open with no explanation at all. */
+  const [deleteBlocked, setDeleteBlocked] = useState<ReactNode | null>(null);
   /** The saved Event change awaiting the send-or-not decision (R82.5). */
   const [notifying, setNotifying] = useState<{
     id: string;
@@ -533,7 +538,16 @@ export function SchedulingPage(): ReactNode {
        */
       available: (r) => r.type !== 'exam' || r.ids.examMode !== 'online',
     },
-    { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
+    {
+      label: t('common.delete'),
+      danger: true,
+      onSelect: (r) => {
+        // A stale block from a PREVIOUS item's refusal must not paint over
+        // this one's fresh confirmation.
+        setDeleteBlocked(null);
+        setDeleting(r);
+      },
+    },
   ];
 
   async function confirmDelete(): Promise<void> {
@@ -556,18 +570,33 @@ export function SchedulingPage(): ReactNode {
        * **The refusal names what holds the assessment** (Owner decision,
        * 2026-09-03). An exam carrying a student submission or a Grade is no
        * longer deletable, and «تعذّر الحذف» alone is true and unactionable —
-       * the administrator reads it and clicks the same button again. The server
-       * reports the two counts, so the sentence can say what is there. Any
-       * other failure keeps the previous wording: less helpful, never wrong.
+       * the administrator reads it and clicks the same button again.
+       *
+       * **Fixed (2026-09-14): stays open and explains, the same rule every
+       * other blocked deletion follows (rule AZ.1), instead of leaving the
+       * SAME "are you sure" prompt on screen with the explanation posted as an
+       * unrelated notice elsewhere on the page — which read as the dialog
+       * never having closed at all, and invited exactly the repeat click the
+       * server refuses again.
        */
       const details = error instanceof ApiError ? error.details : undefined;
-      setNotice(
-        details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS'
-          ? t('scheduling.deleteBlockedEvidence')
-              .replace('{submissions}', String(details['submissions'] ?? 0))
-              .replace('{grades}', String(details['grades'] ?? 0))
-          : t('common.deleteFailed'),
-      );
+      if (details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS') {
+        setDeleteBlocked(
+          t('scheduling.deleteBlockedEvidence')
+            .replace('{submissions}', String(details['submissions'] ?? 0))
+            .replace('{grades}', String(details['grades'] ?? 0)),
+        );
+        setBusy(false);
+        return;
+      }
+      // Every other outcome — already gone, a version conflict, or a genuinely
+      // unknown failure — closes the dialog: there is nothing further to
+      // decide inside it, only a notice to read (`classifyDeletion`, shared
+      // with every other delete screen).
+      const outcome = classifyDeletion(error);
+      setDeleting(null);
+      if (outcome.kind === 'already-gone') await load();
+      setNotice(deletionNotice(outcome));
     } finally {
       setBusy(false);
     }
@@ -738,13 +767,17 @@ export function SchedulingPage(): ReactNode {
 
       <ConfirmDialog
         open={deleting !== null}
+        {...(deleteBlocked ? { blocked: deleteBlocked } : {})}
         title={t('scheduling.deleteTitle')}
         body={t('scheduling.deleteBody').replace('{title}', deleting?.title ?? '')}
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
         onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setDeleteBlocked(null);
+        }}
       />
     </AdminLayout>
   );

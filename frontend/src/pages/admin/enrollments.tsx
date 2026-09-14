@@ -945,12 +945,24 @@ function EnrolDialog({
 
       {/* **R122 — the semester this placement is for.** Above the group
           because it is the more consequential answer: it is what makes the
-          enrolment end on its own instead of running forever. */}
+          enrolment end on its own instead of running forever.
+
+          **`placeholder` is load-bearing, not decoration** (Owner-reported
+          defect, 2026-09-14). Without an explicit empty option, a native
+          `<select>` whose bound `value` matches none of its options still
+          renders its FIRST real option as visually selected — so whenever no
+          period actually covers today (the default-to-current lookup found
+          none), the control looked exactly like a semester was already
+          chosen, «حفظ» refused with the very message that contradicted what
+          the reader was looking at, and nothing on screen explained why. The
+          placeholder makes "nothing is actually selected" impossible to
+          mistake for a choice. */}
       <SelectField
         label={t('admin.enrollments.periodLabel')}
         value={periodId}
         onChange={setPeriodId}
         required
+        placeholder={t('admin.enrollments.periodPlaceholder')}
         options={periods.map((p) => ({
           value: p.id,
           label: `${p.academic_year_label} — ${t('admin.enrollments.semester').replace('{n}', String(p.sequence))}`,
@@ -958,7 +970,9 @@ function EnrolDialog({
         hint={
           periods.length === 0
             ? t('admin.enrollments.periodNone')
-            : t('admin.enrollments.periodHint')
+            : periodId === ''
+              ? t('admin.enrollments.periodNoneCurrent')
+              : t('admin.enrollments.periodHint')
         }
       />
 

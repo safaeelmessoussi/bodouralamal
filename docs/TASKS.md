@@ -3907,3 +3907,40 @@ the Owner's own report named.
       during that session (5 occurrences, self-stopped, likely the same
       family of stale synthetic fixture data as the pg-boss cleanup —
       unconfirmed, flagged for follow-up). Full detail in CHANGES.log.
+
+## Owner-reported: exam deletion 500, delete dialog, semester message — 2026-09-14
+
+- [x] **Exam deletion 500 fixed** (this is the follow-up the entry above
+      flagged — root cause found, not the "stale fixture data" guess).
+      `examStudentRecipients` (`notification.service.ts`) coalesced a null
+      exam `branch_id` to `''` before an `audienceWhere` UUID filter,
+      crashing on any unplaced physical/level-target exam (a real, permitted
+      DB state). Fixed to mirror `examAudienceWhere`'s already-correct
+      null-branch handling. New regression test in
+      `exam-deletion.integration.test.ts`, confirmed to fail without the fix.
+- [x] **Delete-confirmation dialog on `/admin/scheduling` now closes (or
+      explains why not) on every outcome.** It never adopted the shared
+      `classifyDeletion`/`deletionNotice` contract `groups.tsx` and others
+      already use; any failed delete left the same prompt open with the
+      explanation posted elsewhere on the page. Now migrated to that shared
+      contract; the exam-evidence refusal moved into the dialog's own
+      `blocked` slot instead of a floating notice. New source-pinning test
+      `scheduling-delete.test.tsx`, confirmed to fail without the fix.
+- [x] **`تسجيل مستفيدة` semester selector** no longer visually shows a
+      period as chosen when none actually is. `SelectField` fell back to
+      displaying its first option whenever `periodId` was genuinely `''` (no
+      `placeholder` was passed) — confirmed on Staging that no
+      `AcademicPeriod` row currently covers today's date, so `periodId` is
+      correctly empty per the server's own derivation; the "preselected"
+      look was always an illusion. Added an explicit placeholder and a
+      distinct hint for "periods exist, none covers today" vs. "none
+      recorded at all." **Owner action still needed**: record an
+      `AcademicPeriod` covering the current date on Staging — the code fix
+      makes the empty state honest, it cannot fabricate a semester.
+      Two new regression tests in `enrolment-period.test.ts`, confirmed to
+      fail without the fix.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,269/1,269; full disposable-stack
+      integration 2,566/2,566; all 31 guards and doc-links pass.
+- [ ] Push, hosted CI, and Staging deployment for this fix — in progress,
+      per explicit Owner authorization to proceed without stopping.

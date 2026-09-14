@@ -8546,3 +8546,82 @@ Verification: local worktree/index clean throughout; nothing pushed beyond the t
 already-recorded commits (`32b0052`, `ad76612`); no Production action of any kind; Staging
 contains only synthetic fixtures plus the one R115-authorised Owner identity, matching its
 contract exactly (spot-checked at the start of this work, before any change).
+
+2026-09-14 (cont.) — Owner-reported: exam deletion 500, delete dialog not closing, semester message
+Three Owner-reported defects from live Staging use of ad76612, fixed, verified and prepared
+for push/deploy per explicit Owner authorization to proceed without further confirmation.
+
+**1. `DELETE /exams/{id}` returned 500 for an unplaced physical exam.** Root-caused against
+the exact reported id (`6da80eef-e95e-4e1e-bcb3-3789d98ea5e3`, "[تجريبي] امتحان تجريبي"):
+`mode='physical'`, `target_kind='level'`, and `branch_id`/`room_id`/`start_time`/`end_time`
+all NULL — a real, permitted database state (`exam_physical_place_all_or_none_check` allows
+all four set or all four null; the write boundary requires all four for a NEW physical exam,
+but a row predating that requirement, or never placed, legitimately exists). `deleteExam`'s
+`notifyExamCancelled` call coalesced the null `branch_id` to `''` before handing it to
+`examStudentRecipients`'s `entire_level` audience query, which passed it straight into
+`audienceWhere`'s `branchId: { in: [''] } }` filter — an empty string is not a branch id, and
+Postgres refused it (`invalid input syntax for type uuid: ""`), surfacing as an unhandled
+500. `examAudienceWhere` (`roster-resolution.ts`, the newer R124 online-assessment audience
+resolver) already handles exactly this case correctly — "an online assessment carries no
+branch... the honest audience is the Level across branches" — but `examStudentRecipients`
+(`notification.service.ts`, the older physical-exam-roster resolver `deleteExam`/
+`updateExam` actually use) had drifted from it. Fixed by mirroring that same handling into
+`examStudentRecipients`: `ExamNoticeSpec.branchId` is now `string | null`, and the
+`entire_level` arm builds a branch-unrestricted level query when it is null instead of
+calling `audienceWhere` with a placeholder. The three call sites in `exam.service.ts`
+(`updateExam`'s previous/current specs, `deleteExam`'s cancellation spec) no longer coalesce
+`existing.branchId` to `''`. New regression test in `exam-deletion.integration.test.ts`
+constructs the exact unplaced-physical/level-target shape and asserts a Super Admin can
+delete it; confirmed to reproduce the identical `invalid input syntax for type uuid: ""`
+error without the fix (via a temporary revert), and pass with it.
+
+**2. The delete-confirmation dialog on `/admin/scheduling` never closed, and gave no
+explanation, when the delete itself failed.** `confirmDelete`'s catch block only ever called
+`setNotice(...)` — never `setDeleting(null)` — so ANY failed deletion (the exam 500 above
+included) left the SAME "are you sure you want to delete {title}?" prompt on screen with its
+حذف button still live, while the actual explanation appeared as an unrelated notice
+elsewhere on the page; to a reader this reads as "the dialog never closed," and the only
+visible next step (press حذف again) repeats the same refused request. Two sibling admin
+screens (`groups.tsx`, notably) already migrated to the shared `classifyDeletion`/
+`deletionNotice` contract (`lib/deletion-outcome.ts`, added 2026-08-27 for exactly this
+class of inconsistency) months ago; `scheduling.tsx` was the one screen that never did.
+Fixed: `confirmDelete` now uses `classifyDeletion` for every outcome it does not have a more
+specific answer for, closing the dialog (`setDeleting(null)`) on `already-gone`/`stale`/
+`failed` and showing `deletionNotice`'s sentence, exactly like `groups.tsx`. The
+exam-specific `STUDENT_EVIDENCE_EXISTS` refusal keeps its own two-count sentence but now
+reaches the dialog's own `blocked` slot (rule AZ.1 — "closing onto a sentence loses the one
+thing she needs in order to act") instead of a floating page-level notice, so the dialog's
+own continued presence is explained rather than mysterious. A stale `blocked` reason is
+cleared when a different row's delete is opened. New source-pinning test file
+`scheduling-delete.test.tsx` (matching this directory's established `enrolment-period.test.ts`
+precedent — a live render needs a session, four network reads and a real `<dialog>`, which
+proves nothing about the absence of the old bespoke catch path); confirmed to fail without
+the fix and pass with it.
+
+**3. `تسجيل مستفيدة`'s semester selector visually showed the current semester "preselected"
+while `حفظ` refused with "يرجى اختيار الفصل الدراسي قبل الحفظ."** Root cause, verified against
+Staging's actual data: `SelectField`'s native `<select>` renders no empty `<option value="">`
+unless a `placeholder` prop is supplied — `enrollments.tsx`'s period `<SelectField>` never
+passed one. Whenever `periodId` state is genuinely `''` (the R122 default-to-current lookup,
+`rows.find(p => p.is_current)`, found no period covering today), the browser's native
+fallback still visually renders the FIRST option in the list as selected, because React's
+bound `value=''` matches no `<option>` — an entirely separate mechanism from, and a more
+serious defect than, the already-fixed stale-notice race this same file documents from
+2026-09-10. Confirmed on Staging directly: exactly one `AcademicPeriod` row exists, dated
+2026-10-05–2027-01-31, which does not cover today (2026-09-14) — so `periodId` is correctly
+empty per the server's own `isCurrentPeriod` derivation, and the dropdown's "preselected"
+appearance was always an illusion, not a race. This is a genuine Staging content gap (no
+`AcademicPeriod` recorded for the semester actually running now) that only the Owner can
+resolve by recording one — not fabricated here. Fixed the code-level defect regardless:
+`periodLabel`'s `SelectField` now passes an explicit `periodPlaceholder`, so an unselected
+period can never be visually mistaken for a chosen one again; the hint below it now
+distinguishes "no semester recorded at all" (`periodNone`, unchanged) from "semesters exist,
+but none covers today" (`periodNoneCurrent`, new) rather than showing the generic hint in
+both cases. Two new regression tests added to `enrolment-period.test.ts`; confirmed to fail
+without the fix and pass with it.
+
+Verification: backend and frontend typecheck/lint/build clean; full backend unit suite
+342/342; full frontend unit suite 1,269/1,269 (was 1,258 before this entry's tests); full
+disposable-stack integration run 2,566/2,566 (was 2,565), all-table isolation intact; all 31
+`scripts/ci/check-*.sh` guards and the documentation-link guard pass; `git diff --check`
+clean.

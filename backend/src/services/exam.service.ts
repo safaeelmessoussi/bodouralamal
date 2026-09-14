@@ -578,7 +578,8 @@ export async function updatePhysicalExam(
         previous: {
           levelId: existing.levelId,
           administrativeGroupId: existing.administrativeGroupId,
-          branchId: existing.branchId ?? '',
+          // Not editable (see above), so previous and current always agree.
+          branchId: existing.branchId,
           visibility: existing.visibility,
         },
         current: {
@@ -587,7 +588,7 @@ export async function updatePhysicalExam(
             input.administrativeGroupId === undefined
               ? existing.administrativeGroupId
               : input.administrativeGroupId,
-          branchId: existing.branchId ?? '',
+          branchId: existing.branchId,
           visibility: input.visibility ?? existing.visibility,
         },
         previousStaff: existing.staff,
@@ -717,7 +718,7 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
       {
         levelId: existing.levelId,
         administrativeGroupId: existing.administrativeGroupId,
-        branchId: existing.branchId ?? '',
+        branchId: existing.branchId,
         visibility: existing.visibility,
       },
       existing.staff,
