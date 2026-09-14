@@ -8458,3 +8458,91 @@ window again. Verification: the full targeted suite (trash-coverage plus all fou
 suites, 138/138) and the complete disposable-stack integration run both green; backend
 typecheck/lint clean on the changed file. New local commit; pushed as a second, independently
 reviewable commit rather than amending `32b0052`. Hosted CI re-monitored for the new exact SHA.
+
+2026-09-14 (cont.) — Hosted CI green for ad76612 after one evidenced retry
+Push `ad76612` (the trash-coverage correction) initially failed hosted CI's Integration
+job on a single, unrelated pre-existing assertion:
+`assessment.integration.test.ts > "carries the counts that tell a draft from a paper
+somebody has sat"` — `TypeError: Cannot read properties of undefined (reading
+'questionCount')`, from `listAssessments(prisma, superAdmin(), {})`'s result not
+containing the just-created draft exam. Traced to `listAssessments`'s implementation
+(`assessment.service.ts`): an unfiltered super-admin call returns the default FIRST page
+of every `status: 'draft'` exam database-wide, `orderBy: [{ date: 'desc' }, { id: 'desc'
+}]`, with no narrowing by test-file tag — under the full suite's real concurrent-worker
+load, enough other draft exams from other test files can legitimately rank ahead of this
+one and push it off the default page. This is a pre-existing, unrelated, timing/ordering-
+dependent test fragility, not a defect in this task's changes (nothing touched
+`assessment.service.ts` or `listAssessments`); confirmed by an identical full local run
+(2,565/2,565) passing cleanly on the exact same commit moments before the push. Per this
+task's explicit "one retry allowed only for a clearly evidenced transient failure" policy,
+re-ran only the failed job (`gh run rerun 34817742991 --failed`) rather than pushing a new
+commit or altering the test. Result: all 7 jobs green
+(https://github.com/safaeelmessoussi/bodouralamal/actions/runs/34817742991), including
+Release, which published the exact-commit GHCR images for `ad76612`. The underlying test
+fragility is recorded here rather than fixed, since fixing an unrelated pre-existing test's
+determinism is outside this task's defect-remediation scope; it is not blocking anything
+further today.
+
+Hosted CI: GREEN for `ad76612` (initial Integration failure preserved above per policy,
+not concealed behind the retry).
+
+2026-09-14 (cont.) — Staging deployment: ad76612 deployed and verified
+Owner-authorized deployment of the exact green commit `ad76612` to the authorized Staging
+target (`staging.bodouralamal.com` / `92.222.65.141` / `vps-ddc32604.vps.ovh.net`, OVH,
+`/opt/bodour`), positively resolved (DNS→IP→hostname→deployment-directory→NODE_ENV=development
+all independently verified) before any action, upgrading from the previously deployed
+`ca1ef5c2` (24 commits behind, a clean forward-upgrade ancestor).
+
+Host preflight caught two genuine pre-existing host-state issues, both resolved with
+explicit Owner confirmation before proceeding: a routine pending reboot (unattended
+`libc6` security update from 2026-09-12; rebooted, all containers auto-recovered healthy,
+Docker-managed volumes intact) and a transient just-after-reboot NTP-sync race (cleared on
+retry). A `pg_dump` rollback point was taken immediately before migration, per the
+documented pipeline.
+
+New required secret: the pending `20260911100000_deletion_generation_identity_minimization`
+migration requires `EMAIL_LOCK_KEY` (absent on this pre-migration Staging `.env`).
+Provisioned with explicit Owner confirmation, generated entirely on the host
+(`openssl rand -base64 48`) and appended directly to `/opt/bodour/.env` — never printed,
+logged, or transmitted through this session. All three pending migrations applied cleanly;
+`seed:production` and `seed:fixtures` both ran idempotently against the already-populated
+fixture database with no duplication.
+
+The first post-migration API boot failed its health check: `importLegacyRetirements`
+(the new B4/B5 storage-retirement import, `storage-retirement.repository.ts`) refused to
+start on four already-`failed`, terminal `pgboss.job` rows dated 2026-09-13 whose
+`content_id`/`storage_key` pairs used literal placeholder values (`fixture-1` etc.) that do
+not satisfy `requireRetirement`'s canonical-coordinate invariant — this is the deliberate
+"fail startup visibly" behavior documented in that module, not a defect in it or in today's
+scheduling fix. Root-caused precisely (traced to the exact four row ids and the exact
+invariant they violate) before acting; the four dead rows were deleted from `pgboss.job`
+with explicit Owner confirmation (Staging-only, already-terminal, pre-dating this feature,
+not real content). API restarted clean; `/healthz` reports `status: ok` with all four
+components (`database`, `storage`, `jobs`, `queue`) `ok` and 12/12 job workers registered.
+
+TLS reconciled via `enable-tls.sh` (already-issued certificate, not first deployment).
+Verified independently: HTTPS valid, HTTP→HTTPS 301 redirect, HSTS
+(`max-age=31536000; includeSubDomains`), CSP and `X-Content-Type-Options: nosniff` present;
+exact-commit GHCR image revision labels confirmed on both running containers; no internal
+port (`db`/`minio`/API's own `3000`) reachable from outside the host; anonymous
+`GET /api/v1/me` correctly refused `401 AUTH_REQUIRED`. A real, live authenticated Super
+Admin session (evidently the Owner) was actively using the freshly-deployed Staging site
+throughout verification — successful `/auth/refresh`, role/scope-gated admin reads, and
+CRUD across course-schedules/events/rooms/branches (a correct `409` on a branch with live
+dependents)/administrative-groups — treated as stronger real-world smoke-test evidence than
+a scripted check could provide, and not interrupted.
+
+One discovered, NOT fixed, pre-existing issue outside this task's scope: five
+`DELETE /exams/:id` calls (all in an ~08:08:38–08:09:07 window, all against exams the live
+session was trying to remove) returned `500` with the deliberately sanitized "unhandled
+application error" log (no further detail is ever written, by design — TD-14). `deleteExam`
+does not touch `storage_retirement` directly; the likely connection is the same family of
+pre-existing, pre-this-feature synthetic Staging fixture data already found to be malformed
+in the pg-boss cleanup above, but this was not confirmed before the live session moved on
+to other cleanup and stopped hitting it. Recorded here rather than chased further on a live
+host mid-session; needs a follow-up investigation, not a same-session guess-and-mutate.
+
+Verification: local worktree/index clean throughout; nothing pushed beyond the two
+already-recorded commits (`32b0052`, `ad76612`); no Production action of any kind; Staging
+contains only synthetic fixtures plus the one R115-authorised Owner identity, matching its
+contract exactly (spot-checked at the start of this work, before any change).

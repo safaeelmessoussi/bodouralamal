@@ -3883,8 +3883,27 @@ the Owner's own report named.
       entry. Re-verified locally (targeted suite 138/138, full disposable
       integration run green, typecheck/lint clean) and pushed as a new,
       independently reviewable commit.
-- [ ] Monitor hosted CI for the new exact SHA; once green, proceed to the
-      authorized Staging deployment (target already positively resolved:
-      `staging.bodouralamal.com` → `92.222.65.141` →
-      `vps-ddc32604.vps.ovh.net`, OVH, `/opt/bodour`, `NODE_ENV=development`,
-      currently at `ca1ef5c2`, a genuine ancestor 24 commits behind).
+- [x] Hosted CI green for `ad76612` after one evidenced retry (unrelated
+      pre-existing pagination-under-concurrency test flake in
+      `assessment.integration.test.ts`, not a defect — see CHANGES.log).
+      All 7 jobs green, run `34817742991`; exact-commit GHCR images published.
+- [x] **Staging deployed and verified**: `ad76612` deployed to
+      `staging.bodouralamal.com` (`92.222.65.141`,
+      `vps-ddc32604.vps.ovh.net`, OVH, `/opt/bodour`), upgrading from
+      `ca1ef5c2`. Host preflight caught and resolved (with Owner
+      confirmation) a pending reboot and a post-reboot NTP-sync race;
+      `EMAIL_LOCK_KEY` provisioned for the new email-lock migration (Owner
+      confirmed, generated on-host, never displayed); `pg_dump` rollback
+      point taken before migration; all 3 pending migrations applied; seeds
+      idempotent. First boot failed health on four dead, pre-existing
+      malformed `pgboss.job` rows blocking the new storage-retirement
+      import — root-caused precisely and deleted with Owner confirmation
+      (Staging-only, already-terminal, not real content). `/healthz`
+      green (4/4 components, 12/12 workers). TLS/HSTS/CSP/redirect/port-
+      exposure/auth-boundary all independently verified; a live, real Super
+      Admin session (evidently the Owner) actively and successfully used the
+      freshly-deployed site throughout. One pre-existing, NOT fixed,
+      out-of-scope issue found: intermittent `500` on `DELETE /exams/:id`
+      during that session (5 occurrences, self-stopped, likely the same
+      family of stale synthetic fixture data as the pg-boss cleanup —
+      unconfirmed, flagged for follow-up). Full detail in CHANGES.log.
