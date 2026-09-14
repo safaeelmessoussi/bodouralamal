@@ -316,7 +316,7 @@ describe("the structural guard", () => {
  * scans every read of a soft-deletable model and requires a `deletedAt`
  * constraint on it — either inline or in the `where` object built above it.
  *
- * Two reads are exempt and each says why. An exemption is a statement about the
+ * Four reads are exempt and each says why. An exemption is a statement about the
  * code, not a way to quiet the check.
  */
 const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
@@ -345,6 +345,20 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
    * on an id belonging to the subject, so the absent filter widens nothing.
    */
   "erasure.ts": "an erasure must find the tombstoned copies of what it is destroying",
+  /**
+   * **`Session` carries a plain, unconditional `@@unique([scheduleId, date])`
+   * — not partial on `deletedAt` (`schema.prisma`).** A soft-deleted row
+   * permanently occupies its `(schedule_id, date)` slot at the database
+   * layer, so `materializeSchedule`'s idempotency read (`existingRows`) MUST
+   * see tombstoned rows too: excluding them would make it try to `create` a
+   * fresh row for a date the unique index already holds, which the database
+   * refuses. The same read also lets a split's successor recognize a date a
+   * retained predecessor Session already occupies (R43.6) — omitting
+   * `deletedAt` here is what materialization's own idempotency and the split
+   * duplicate-prevention fix both depend on, not an oversight.
+   */
+  "session-materialize.service.ts":
+    "existingRows must see tombstoned Sessions — the (schedule_id, date) unique index is unconditional",
 };
 
 describe("a soft-deleted row is excluded at the database boundary", () => {

@@ -8428,3 +8428,33 @@ project's Git integration from its dashboard (Settings → Git), or remove this 
 from Vercel's installed GitHub App (GitHub → Settings → Integrations → Installed GitHub
 Apps → Vercel → Configure). Local commit only; nothing pushed, deployed, or otherwise
 sent to any remote or third party.
+
+2026-09-14 (cont.) — Hosted CI false-positive: trash-coverage guard, corrected and re-pushed
+Push `32b0052` to `origin/develop` (Owner-authorized) ran hosted CI (run `34816379502`); the
+Integration job failed `trash-coverage.integration.test.ts`'s "constrains deletedAt on every
+read of a soft-deletable model" guard on `session-materialize.service.ts:214 session.findMany`
+(`existingRows`), so the dependent Release job correctly skipped and no image was published.
+
+Root cause: the guard's own heuristic accepts a `deletedAt` reference either inline or within
+40 lines above a call. `existingRows` has always deliberately omitted `deletedAt` — `Session`
+carries a plain, unconditional `@@unique([scheduleId, date])` (not partial on `deletedAt`,
+confirmed directly against `schema.prisma`), so a soft-deleted row still occupies its
+`(schedule_id, date)` slot at the database layer; excluding tombstones from this read would
+make materialization try to `create` a row the unique index already refuses. This is the exact
+same class of deliberate omission the guard's own `READS_TOMBSTONES_DELIBERATELY` allowlist
+already accepts for three other files (`exam.service.ts`, `application-retention.service.ts`,
+`erasure.ts`) — but this call was never on it, previously passing only because its nearest
+visible `deletedAt` token (inside `protectedSessionIds`, 40+ lines above) happened to sit 38
+lines away, under the heuristic's 40-line window by coincidence. The `reservedDates` JSDoc
+added by the same-day scheduling fix (see the entry above) inserted ~10 lines ahead of it,
+pushing the gap to 48 lines and turning a latent, already-fragile pass into a failure — not a
+defect in the scheduling fix's logic, confirmed by independently re-deriving why the omission
+is correct from the schema before touching anything.
+
+Fix: added `session-materialize.service.ts` as a fourth, fully-justified entry to
+`READS_TOMBSTONES_DELIBERATELY` in `trash-coverage.integration.test.ts`, citing the exact
+schema fact, rather than reshuffling comment length to dodge the heuristic's line-distance
+window again. Verification: the full targeted suite (trash-coverage plus all four scheduling
+suites, 138/138) and the complete disposable-stack integration run both green; backend
+typecheck/lint clean on the changed file. New local commit; pushed as a second, independently
+reviewable commit rather than amending `32b0052`. Hosted CI re-monitored for the new exact SHA.
