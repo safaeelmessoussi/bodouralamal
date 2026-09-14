@@ -1927,6 +1927,95 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
     expect(survivor?.scheduleId).toBe(id);
   });
 
+  it("a retained protected session still occupies its room — the split cannot silently double-book it", async () => {
+    // The room/staff conflict check must not be blinded to a session that
+    // R43.6 keeps alive under the predecessor. Overriding the SPLIT date's
+    // own occurrence (still in roomA, unchanged) and then splitting WITHOUT
+    // moving rooms means the successor's own materialization wants that exact
+    // room, on that exact date — a real clash the check must catch, not a
+    // clash with a row "about to stop existing".
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput(),
+      NOW,
+    );
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(SPLIT) },
+    });
+    await prisma.session.update({
+      where: { id: target.id },
+      data: { overridden: true },
+    });
+
+    const err = await failure(() =>
+      updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        {
+          version: 0,
+          scope: "this_and_future",
+          fromDate: day(SPLIT),
+        },
+        NOW,
+      ),
+    );
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+
+    // And the split must have been refused outright, not half-applied: no
+    // successor, no second session for SPLIT under any schedule.
+    const onSplitDate = await prisma.session.findMany({
+      where: { date: day(SPLIT), deletedAt: null },
+    });
+    expect(onSplitDate).toHaveLength(1);
+    expect(onSplitDate[0]?.id).toBe(target.id);
+  });
+
+  it("a retained protected session in a DIFFERENT room is preserved without a duplicate under the successor", async () => {
+    // Complementary case: no room/staff clash, so the split succeeds — but the
+    // successor's materialization must still treat the retained date as
+    // already covered, or the same class silently gains a duplicate Session
+    // for that date the moment a protected occurrence survives a split.
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput(),
+      NOW,
+    );
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(SPLIT) },
+    });
+    await prisma.session.update({
+      where: { id: target.id },
+      data: { overridden: true, roomId: roomB },
+    });
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      {
+        version: 0,
+        scope: "this_and_future",
+        fromDate: day(SPLIT),
+      },
+      NOW,
+    );
+
+    const onSplitDate = await prisma.session.findMany({
+      where: { date: day(SPLIT), deletedAt: null },
+    });
+    // Exactly the one retained session — never a second one materialized
+    // under the successor for the same date.
+    expect(onSplitDate).toHaveLength(1);
+    expect(onSplitDate[0]?.id).toBe(target.id);
+    expect(onSplitDate[0]?.scheduleId).toBe(id);
+
+    const successorDates = await datesOf(result.successorId!);
+    expect(successorDates).not.toContain(SPLIT);
+  });
+
   it("COPIES the staff, or the teacher vanishes from every future session", async () => {
     // §4.4 names this failure explicitly, because it would look like a UI bug
     // for weeks rather than like a split that dropped a column.

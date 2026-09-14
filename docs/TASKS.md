@@ -3823,3 +3823,50 @@ the Owner's own report named.
       written by R138 and merely needed applying. No Staging or Production
       action taken; only the local dev container/database were touched,
       using the repository's own documented, safe workflow.
+
+## Comprehensive HEAD review, Vercel-blocked push/Staging — 2026-09-14
+
+- [x] **Owner-authorized comprehensive read-only review** of the current
+      repository (`develop` @ `ecfbeda`, unchanged since H3), across all nine
+      requested areas (requirements/contract, auth/account lifecycle,
+      authorization/safeguarding, scheduling/exams, storage lifecycle,
+      database/jobs/concurrency, frontend, infrastructure/operations,
+      privacy/data minimization). Full detail and disposition of every
+      finding in `docs/CHANGES.log`'s 2026-09-14 entry.
+- [x] **One confirmed High defect fixed**: the `this_and_future` course-
+      schedule split (SRS Revision 50) could silently double-book a room by
+      being blind to a retained, R43.6-protected session — its conflict
+      check excluded the whole predecessor schedule rather than only the
+      sessions actually being removed, and the successor's materialization
+      had no visibility into that retained session's date either. Fixed in
+      `course-schedule.service.ts` (`findConflicts` gained
+      `excludeSessionIds`, scoped precisely) and `session-materialize.
+      service.ts` (`materializeSchedule` gained `reservedDates`, split-
+      only). Two new regression tests in `course-schedule.integration.
+      test.ts`, confirmed to fail without the fix and pass with it.
+- [x] Two other candidates investigated and recorded as NOT defects
+      (documented, tested design) rather than changed: `consent_forced_
+      private` staff download scope, and consent-withdrawal's asynchronous
+      `consentForcedPrivate` reevaluation. See CHANGES.log for the exact
+      evidence.
+- [x] Verification: backend typecheck/lint/build clean; full backend unit
+      suite 342/342; focused disposable-stack integration run (four
+      scheduling suites, 133/133 incl. the two new tests) green. No
+      frontend/schema/migration/route/OpenAPI change — those gates were not
+      rerun, nothing they cover changed.
+- [x] **Mandatory Vercel precondition failed**: the Vercel Git integration's
+      legacy Commit Status API posted a fresh "success" status directly on
+      `ecfbeda` (current HEAD) at 2026-09-13T21:15:48Z, confirmed live via
+      `gh api` before any push — the integration is still connected, not
+      disconnected. Per this task's explicit instruction, local review/fixes
+      were completed and committed, but the push to `origin/develop` and the
+      authorized Staging deployment were both stopped short. Exact Owner
+      action required: disconnect the Vercel project's Git integration
+      (Vercel dashboard → Settings → Git), or remove this repository from
+      Vercel's installed GitHub App (GitHub → Settings → Integrations →
+      Installed GitHub Apps → Vercel → Configure) — documented already in
+      `docs/operations/environments.md`.
+- [ ] **Blocked on Owner action**: once Vercel is confirmed disconnected,
+      push this commit to `origin/develop`, monitor hosted CI for the exact
+      SHA, and — once green — deploy to the authorized Staging target per
+      this task's remaining instructions (not yet attempted).

@@ -198,6 +198,15 @@ export async function materializeSchedule(
    * what "apply the changes" was asked to mean.
    */
   overwriteManuallyEdited = false,
+  /**
+   * **Split-only** (`course-schedule.service.ts`'s `splitCourseSchedule`):
+   * dates already occupied by a protected Session retained under the
+   * predecessor schedule (R43.6) rather than moved to this one. Without this,
+   * `existingByDate` below — scoped to `schedule.id` alone — has no way to
+   * see that occurrence, and the creation loop would give the same date a
+   * second, duplicate Session under the successor.
+   */
+  reservedDates?: ReadonlySet<string>,
 ): Promise<MaterializeResult> {
   const from = atMidnightUtc(today);
   const dates = expandSchedule(schedule, from, horizon);
@@ -222,6 +231,7 @@ export async function materializeSchedule(
   for (const date of dates) {
     const key = date.toISOString().slice(0, 10);
     if (existingByDate.has(key)) continue;
+    if (reservedDates?.has(key)) continue;
 
     // `createMany` with `skipDuplicates` would be one round trip, but it cannot
     // report WHICH rows it skipped — and "how many did this edit actually

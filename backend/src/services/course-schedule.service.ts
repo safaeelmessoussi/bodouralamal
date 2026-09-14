@@ -571,6 +571,12 @@ async function resolveTarget(
  * table what already occupies the room and the people on those exact dates.
  * `excludeScheduleId` lets an edit ignore its own existing sessions, which
  * otherwise conflict with themselves.
+ *
+ * `excludeSessionIds` is the narrower tool a split needs instead: only the
+ * specific sessions about to be removed may be ignored, never the whole
+ * predecessor schedule — a session retained under the old schedule id (R43.6
+ * protection) is a live row exactly like any other and must still be able to
+ * report a real room/staff clash against the successor being created.
  */
 export async function findConflicts(
   tx: Prisma.TransactionClient,
@@ -593,6 +599,7 @@ export async function findConflicts(
   from: Date,
   to: Date,
   excludeScheduleId?: string,
+  excludeSessionIds?: string[],
 ): Promise<ScheduleConflict[]> {
   const dates = expandSchedule(candidate, from, to);
   if (dates.length === 0) return [];
@@ -624,6 +631,9 @@ export async function findConflicts(
       // cancellation is visible, but it no longer occupies anything.
       status: { not: "cancelled" },
       ...(excludeScheduleId ? { scheduleId: { not: excludeScheduleId } } : {}),
+      ...(excludeSessionIds && excludeSessionIds.length > 0
+        ? { id: { notIn: excludeSessionIds } }
+        : {}),
       OR: [
         ...(candidate.roomId !== null ? [{ roomId: candidate.roomId }] : []),
         // Revision 43.4: the occurrence's OWN staffing snapshot is the truth
@@ -1590,9 +1600,49 @@ async function splitCourseSchedule(
       data: { effectiveUntil: closeAt },
     });
 
-    // Its own sessions AND the predecessor's are excluded: the predecessor's
-    // future occurrences are removed immediately below, so a clash with them is
-    // a clash with rows that are about to stop existing.
+    // The predecessor's occurrences from the split date onward now belong to the
+    // successor — except the protected ones, which stay exactly where they are.
+    // **The same predicate every other scheduling path asks** (R43.6): a session
+    // someone overrode, held, or attached work to is not the split's to move.
+    //
+    // Computed BEFORE the conflict check below, because only the sessions
+    // that are actually about to be removed may be excluded from it — a
+    // session retained here keeps occupying its room/staff exactly like any
+    // other live Session, and the successor's conflict check must see it,
+    // not be blinded to it by virtue of sharing the predecessor's schedule id.
+    const future = await tx.session.findMany({
+      where: { scheduleId: id, deletedAt: null, date: { gte: splitOn } },
+      select: SELECT_PROTECTABLE,
+    });
+    const reasons = await protectionReasons(tx, future);
+    // R138 — a Session protected SOLELY by `OVERRIDDEN` moves to the
+    // successor too, exactly like an ordinary un-protected one, when the
+    // administrator explicitly chose to overwrite manually edited Sessions.
+    // Any OTHER reason (held/cancelled, content, attendance, or a
+    // later-contributed rule) still keeps it with the predecessor regardless
+    // — real historical work is never moved by this flag.
+    const removable = future.filter((s) => {
+      const codes = reasons.get(s.id);
+      if (!codes) return true;
+      return (
+        data.overwriteManuallyEdited === true &&
+        codes.length === 1 &&
+        codes[0] === "OVERRIDDEN"
+      );
+    });
+    // The dates of the sessions that stay behind with the predecessor: the
+    // successor's materialization (below) must not create a second
+    // occurrence on any of these, or a retained protected session would
+    // silently gain a duplicate sibling the moment it survives a split.
+    const removableIds = new Set(removable.map((s) => s.id));
+    const retainedDates = new Set(
+      future
+        .filter((s) => !removableIds.has(s.id))
+        .map((s) => s.date.toISOString().slice(0, 10)),
+    );
+
+    // Only the sessions about to be removed (immediately below) may be
+    // excluded from this check — see the comment above `future`.
     const conflicts = await findConflicts(
       tx,
       {
@@ -1606,7 +1656,8 @@ async function splitCourseSchedule(
       },
       splitOn,
       horizon,
-      id,
+      undefined,
+      [...removableIds],
     );
     assertNoConflicts(conflicts);
 
@@ -1634,30 +1685,6 @@ async function splitCourseSchedule(
       });
     }
 
-    // The predecessor's occurrences from the split date onward now belong to the
-    // successor — except the protected ones, which stay exactly where they are.
-    // **The same predicate every other scheduling path asks** (R43.6): a session
-    // someone overrode, held, or attached work to is not the split's to move.
-    const future = await tx.session.findMany({
-      where: { scheduleId: id, deletedAt: null, date: { gte: splitOn } },
-      select: SELECT_PROTECTABLE,
-    });
-    const reasons = await protectionReasons(tx, future);
-    // R138 — a Session protected SOLELY by `OVERRIDDEN` moves to the
-    // successor too, exactly like an ordinary un-protected one, when the
-    // administrator explicitly chose to overwrite manually edited Sessions.
-    // Any OTHER reason (held/cancelled, content, attendance, or a
-    // later-contributed rule) still keeps it with the predecessor regardless
-    // — real historical work is never moved by this flag.
-    const removable = future.filter((s) => {
-      const codes = reasons.get(s.id);
-      if (!codes) return true;
-      return (
-        data.overwriteManuallyEdited === true &&
-        codes.length === 1 &&
-        codes[0] === "OVERRIDDEN"
-      );
-    });
     if (removable.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: removable.map((s) => s.id) } },
@@ -1674,6 +1701,7 @@ async function splitCourseSchedule(
       splitOn,
       horizon,
       data.overwriteManuallyEdited,
+      retainedDates,
     );
 
     await audit.write(tx, {

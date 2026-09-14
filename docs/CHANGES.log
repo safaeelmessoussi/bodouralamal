@@ -8348,3 +8348,83 @@ migration, route, or script change; the green hosted-CI evidence from
 `4e43697` was reused rather than rerun, since no source it covers changed.
 Local commit(s) only; nothing pushed or deployed. Owner data, Staging,
 Production, DNS and live infrastructure remained untouched throughout.
+
+2026-09-14 — Comprehensive HEAD review; one confirmed High defect fixed (course-schedule split)
+Owner-authorized comprehensive read-only review of the current repository (develop @
+ecfbeda, unchanged since the prior session), covering requirements/contract
+consistency, authentication/account lifecycle, authorization/safeguarding, scheduling/
+exams, storage lifecycle, database/jobs/concurrency, frontend behavior, infrastructure/
+operations and privacy/data minimization. Backend/frontend source had not changed since
+H3 (`3171a47`), which already carried full local and hosted-CI verification (run
+`34783273205`, all 7 jobs green on `ecfbeda`); this review targeted genuinely new,
+concretely reachable defects rather than re-deriving that evidence.
+
+One confirmed High-severity defect, in `backend/src/services/course-schedule.service.ts`'s
+`this_and_future` split (SRS Revision 50): the conflict check ahead of a split excluded
+*every* session under the predecessor schedule id from room/staff overlap detection, on
+the assumption that all of the predecessor's future occurrences are removed immediately
+afterward. That assumption does not hold for a session R43.6 protects (held/cancelled,
+carries attendance/grade/content, or is individually overridden without the admin
+choosing "overwrite manually edited") — those sessions are deliberately retained under
+the predecessor, still occupying their room/staff on their date, yet the conflict check
+could no longer see them. The successor's own materialization (`session-materialize.
+service.ts`) was separately blind to the same retained session, since its idempotency
+check is scoped only to the new successor's schedule id. Together, splitting a schedule
+across a date carrying a protected occurrence could silently create a second, duplicate
+Session for that date under the successor — typically in the same room, with the same
+staff — an undetected double-booking with no database constraint to catch it (`Session`
+has no unique index on `(date, room_id)`, only `(schedule_id, date)`). Reachable via the
+ordinary, documented workflow: override one session's room via `PATCH /sessions/{id}`,
+then perform a routine `this_and_future` edit to the same schedule spanning that date
+without checking "overwrite manually edited" (the default).
+
+Fix: `findConflicts` gained an `excludeSessionIds` parameter (distinct from the existing
+`excludeScheduleId`, still used unchanged by every other caller); the split path now
+computes which of the predecessor's future sessions are actually removable *before*
+running the conflict check, and excludes only those specific session ids — a retained
+protected session is checked like any other live row. `materializeSchedule` gained an
+optional `reservedDates` parameter (split-only) so the successor's materialization skips
+creating a session on any date a retained predecessor session already covers, rather than
+relying on conflict detection alone to prevent the duplicate. Two new regression tests in
+`course-schedule.integration.test.ts` (SRS Revision 50 describe block): one confirms the
+now-real room clash is refused as `SCHEDULE_CONFLICT` rather than silently permitted, with
+exactly one Session surviving for the date; the other confirms a retained protected
+session in a *different* room is preserved with no duplicate materialized under the
+successor. Both were confirmed to fail without the fix (via a temporary revert of the two
+source files, tests left in place) before being confirmed green with it, to prove they
+are not vacuous.
+
+Two other read-only findings recorded as NOT defects, so they are not re-flagged: staff
+minting a download URL for `consent_forced_private` content regardless of branch/teaching
+relationship is explicit, documented design (`docs/architecture/identity-and-access.md`)
+directly asserted by an existing passing integration test; consent withdrawal not
+synchronously flipping `consentForcedPrivate` is the documented eventual-consistency
+design (`docs/architecture/storage.md`), exercised by its own integration test via an
+explicit job run. All other areas across the three review passes (authorization/TD-2
+coverage, OAuth scope and session lifecycle, family-link/consent revocation, H3 manual
+exam opening and grade-save concurrency, storage presigned-URL scoping, pg-boss job
+idempotency, requirements/OpenAPI/TD-3 contract drift, frontend mock/dev-code and RTL
+logical-property hygiene, Compose overlay order and port exposure, and Prisma-schema/
+audit-log/alert data minimization) were independently re-verified against live code and
+came back clean — no code change required.
+
+Verification: backend typecheck and lint clean on the changed files; the full backend
+unit suite (342/342) and a focused disposable-stack integration run covering
+`course-schedule.integration.test.ts`, `course-schedule-teacher.integration.test.ts`,
+`course-schedule.http.integration.test.ts` and `scheduling-visibility.integration.test.ts`
+(133/133, including the two new tests) both green; backend build clean. No frontend,
+schema, migration, route or OpenAPI change, so those suites and the contract guards were
+not rerun — nothing they cover changed.
+
+Vercel precondition (blocking push and Staging for this task): the Vercel Git integration
+remains connected — its legacy Commit Status API posted "success"/"Deployment has
+completed" directly on `ecfbeda` (the current, unchanged HEAD) at 2026-09-13T21:15:48Z,
+confirmed live via `gh api repos/.../commits/ecfbeda.../status` before any push was
+attempted. Per this task's explicit precondition, local review and fixes were completed
+and committed, but the push to `origin/develop` and the authorized Staging deployment
+were both intentionally not performed. The exact Owner action remains as documented in
+`docs/operations/environments.md`'s "Vercel retirement" section: disconnect the Vercel
+project's Git integration from its dashboard (Settings → Git), or remove this repository
+from Vercel's installed GitHub App (GitHub → Settings → Integrations → Installed GitHub
+Apps → Vercel → Configure). Local commit only; nothing pushed, deployed, or otherwise
+sent to any remote or third party.
