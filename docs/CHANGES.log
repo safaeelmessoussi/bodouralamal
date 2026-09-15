@@ -9293,3 +9293,13 @@ Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342;
 unit 1,311/1,311; full disposable-stack integration suite green with all-table isolation
 intact; all 31 `scripts/ci/check-*.sh` guards, doc-links and `git diff --check` pass;
 OpenAPI regenerated, no drift. No migration.
+
+Pushed as `ea73d0e`; hosted CI green on the first run, all 7 jobs (run `34999505173`),
+Release included. Deployed to `staging.bodouralamal.com`, upgrading from `ca94645`: host
+preflight passed cleanly, both exact-commit images pulled and their
+`org.opencontainers.image.revision` label confirmed to match before recreation,
+`prisma migrate deploy` confirmed nothing pending (as expected — no migration in this
+change), `api`/`nginx` recreated and verified on the exact commit's label, `/healthz`
+green (4/4 components, 12/12 workers) within seconds, no error-level log lines in the
+following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers.
+No Production action of any kind.

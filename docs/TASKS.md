@@ -4229,7 +4229,12 @@ the Owner's own report named.
       integration suite green, all-table isolation intact; all 31
       guards, doc-links and `git diff --check` pass; OpenAPI
       regenerated, no drift. No migration.
-- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [x] Pushed as `ea73d0e` (bundled with SRS Revision 149's max_grade
+      revert); hosted CI green on the first run, all 7 jobs (run
+      `34999505173`) including Release. Deployed to Staging, upgrading
+      from `ca94645`: no new migrations, no host issues, `/healthz`
+      green within seconds, TLS/security headers intact, no leftover
+      disposable containers. Full detail in CHANGES.log.
 - [ ] Continue into the remaining checkpoints: per-question grading/
       response-viewing (schema), group/circle/category schema
       migration, teacher قائمة parity with admin's list, exam edit form
