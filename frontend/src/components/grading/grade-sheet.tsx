@@ -60,11 +60,25 @@ function draftFrom(row: GradeSheetRow): Draft {
 export function GradeSheetView({
   examId,
   onMaxGrade,
+  responsesBasePath,
 }: {
   examId: string;
   /** Reports **this exam's** maximum (R81) so a surrounding frame can name it
    *  without fetching the sheet a second time. */
   onMaxGrade?: (maxGrade: number) => void;
+  /**
+   * **Owner-reported, 2026-09-15 — «عرض الإجابات» reaches the same builder
+   * screen بناء الاختبارات already opens on** (`/admin/assessments`'s
+   * `OnePaper`, which already lists every submission and opens any one of
+   * them — R70.1's one-implementation rule applied again rather than a new
+   * viewer). **Each portal's own path**, on the exact reasoning
+   * `TeacherAssessmentsPage`'s docstring states for why a teaching-portal
+   * screen may never link to the admin one: `/admin/assessments` for the
+   * back office, `/teacher/assessments` for the teaching portal. Omitted
+   * entirely (this component has no portal of its own to guess one from,
+   * rule O) hides the link rather than guessing wrong.
+   */
+  responsesBasePath?: '/admin/assessments' | '/teacher/assessments';
 }): ReactNode {
   const { accessToken } = useSession();
 
@@ -205,6 +219,22 @@ export function GradeSheetView({
           </>
         ) : null}
       </section>
+
+      {/* **Owner-reported, 2026-09-15 — see this component's own prop
+          docstring.** Physical-only for the reason stated there: a physical
+          sitting has no submission to open. */}
+      {responsesBasePath && sheet.exam.mode === 'online' ? (
+        <p>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              window.location.href = `${responsesBasePath}?exam=${encodeURIComponent(examId)}`;
+            }}
+          >
+            {t('admin.grades.viewResponses')}
+          </Button>
+        </p>
+      ) : null}
 
       {notice ? (
         <Feedback>

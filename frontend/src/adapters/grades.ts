@@ -34,6 +34,10 @@ export interface GradeSheet {
     administrative_group_name: string | null;
     /** Derived by the server from `created_at > date` — no column exists. */
     recorded_late: boolean;
+    /** Owner-reported, 2026-09-15 — so «عرض الإجابات» only offers itself
+     *  where a submission exists at all: a physical sitting is answered on
+     *  paper, never through this platform. */
+    mode: 'physical' | 'online';
   };
   /** What every score on this sheet is out of (R81). */
   max_grade: number;

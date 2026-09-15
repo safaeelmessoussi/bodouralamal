@@ -1460,12 +1460,18 @@ describe('23–27 · grading, and what a student may see', () => {
       data: { examId, userId: outsiderId, position: 'supervisor' },
     });
     try {
+      // The screen a supervisor actually opens (`admin/assessments.tsx`'s
+      // `OnePaper`) reads THIS first — it gated the whole page behind plain
+      // `loadForAuthor`, so she could reach neither of the two reads below
+      // without also being able to open the page they live on.
+      const authored = await authorPaper(prisma, outsider(), examId);
+      expect(authored.exam.id).toBe(examId);
       const inbox = await listSubmissions(prisma, outsider(), examId);
       expect(inbox.rows.some((r) => r.studentId === alice)).toBe(true);
       const paper = await readSubmission(prisma, outsider(), examId, alice);
       expect(paper.submission?.answers[0]!.text).toBe('إجابتي');
       // **Reading is not authoring** — the supervisor short-circuit lives in
-      // a new function scoped to these two reads, never in `assertMayAuthor`
+      // a new function scoped to these three reads, never in `assertMayAuthor`
       // itself, so adding a question is still refused exactly as in 27.
       await expect(
         addQuestion(prisma, outsider(), examId, { kind: 'short_text', prompt: 'دخيلة' }),

@@ -1368,7 +1368,19 @@ export async function authorPaper(
   actor: Actor,
   examId: string,
 ): Promise<AuthorPaper> {
-  const exam = await loadForAuthor(prisma, actor, examId);
+  /**
+   * **Owner-reported, 2026-09-15 — this is the one read the "viewing
+   * responses" screen (`admin/assessments.tsx`'s `OnePaper`) opens on
+   * first**, before it ever reaches `listSubmissions`/`readSubmission`
+   * below. Those two already admit a named supervisor
+   * (`loadForAuthorOrSupervisor`); this read gated the whole screen behind
+   * plain `loadForAuthor` regardless, so a supervisor who is not the
+   * author could not even open the page to reach them. Same short-circuit,
+   * same reasoning: this is still a READ of the paper's content, never an
+   * authoring write — `updateQuestion`/`addQuestion`/etc. all call
+   * `loadForAuthor` directly and are unaffected.
+   */
+  const exam = await loadForAuthorOrSupervisor(prisma, actor, examId);
 
   const questions = await prisma.examQuestion.findMany({
     where: { examId, deletedAt: null },

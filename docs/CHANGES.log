@@ -9303,3 +9303,31 @@ change), `api`/`nginx` recreated and verified on the exact commit's label, `/hea
 green (4/4 components, 12/12 workers) within seconds, no error-level log lines in the
 following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers.
 No Production action of any kind.
+
+2026-09-15 (cont. 4) — SRS Revision 150: checkpoint 2 — viewing responses reachable,
+online exam staff editable
+
+**Built — viewing a student's submitted responses, reachable end to end.** The feature
+was already fully built: `GET /assessments/{id}/submissions[/{studentId}]` already
+routed, `admin/assessments.tsx`'s `OnePaper` already rendering a full submissions inbox
+and per-student answer dialog. Unreachable for a named supervisor because the page's
+OWN first read (`authorPaper`, `GET /assessments/{id}`) still gated on plain
+`loadForAuthor`, never reaching Revision 148 §2's supervisor short-circuit. Widened for
+the identical reason — still a read, never an authoring write; `authorPaper` has exactly
+one call site. Separately, نقاط الاختبارات (the screen a supervisor already reaches for
+grading) had no link to this page at all — fixed by giving `GradeSheetView` an optional,
+portal-specific `responsesBasePath` rendering «عرض الإجابات» for online exams only (a new
+`mode` field on the sheet's DTO decides). One reused screen, no new viewer.
+
+**Fixed — an online exam's supervisor/assistants are now editable, not only settable at
+creation.** `exam-section.tsx`'s locked+online branch (editing an already-scheduled
+online exam) rendered only a static hint; the same `StaffPicker` a physical exam's edit
+already shows unconditionally had never been added to it. `updateExamSchedule` already
+accepted and replaced staff wholesale for an online arrangement — a rendering gap only,
+and the underlying state/forwarding needed no change. Retargeting/re-opening the access
+gate remain deliberately excluded, exactly as Revision 145 §1 already ratified.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,312/1,312; full disposable-stack integration suite green, all-table isolation
+intact; all 31 `scripts/ci/check-*.sh` guards, doc-links and `git diff --check` pass. No
+migration.

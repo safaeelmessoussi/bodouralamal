@@ -681,6 +681,11 @@ describe("retroactively recorded exams (R70.5)", () => {
         "recorded_late"
       ],
     ).toBe(false);
+    // Owner-reported, 2026-09-15 — carried so «عرض الإجابات» can gate on it
+    // client-side: a physical sitting has no submission to open.
+    expect(
+      (sheet.body.data as { exam: Record<string, unknown> }).exam["mode"],
+    ).toBe("physical");
   });
 });
 

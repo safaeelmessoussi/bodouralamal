@@ -238,7 +238,11 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       {current ? (
         <>
           {copyFailed ? <Feedback tone="warn">{t('admin.grades.reuseAsDraftFailed')}</Feedback> : null}
-          <GradeSheetView examId={current.id} onMaxGrade={setMaxGrade} />
+          <GradeSheetView
+            examId={current.id}
+            onMaxGrade={setMaxGrade}
+            responsesBasePath="/admin/assessments"
+          />
         </>
       ) : examId !== null && status === 'ready' ? (
         // A deep link to an exam outside the caller's scope, or a stale

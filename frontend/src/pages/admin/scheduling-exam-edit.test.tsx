@@ -56,4 +56,16 @@ describe('ExamSection hides the CREATE-only paper picker while editing an online
     expect(examSectionSource).toContain("mode === 'online' && locked");
     expect(examSectionSource).toContain("t('scheduling.exam.onlineEditHint')");
   });
+
+  it('Owner-reported, 2026-09-15 — the supervisor/assistants picker is NOT hidden alongside the paper picker while editing', () => {
+    // The locked+online branch renders the hint AND a StaffPicker, in that
+    // order — a regression here would silently drop staff editing for an
+    // online exam's arrangement, the exact gap R145 §1 left standing.
+    const lockedOnlineBranch = examSectionSource.slice(
+      examSectionSource.indexOf("mode === 'online' && locked"),
+      examSectionSource.indexOf(": mode === 'online' ?"),
+    );
+    expect(lockedOnlineBranch).toContain("t('scheduling.exam.onlineEditHint')");
+    expect(lockedOnlineBranch).toContain('<StaffPicker');
+  });
 });

@@ -4235,7 +4235,22 @@ the Owner's own report named.
       from `ca94645`: no new migrations, no host issues, `/healthz`
       green within seconds, TLS/security headers intact, no leftover
       disposable containers. Full detail in CHANGES.log.
-- [ ] Continue into the remaining checkpoints: per-question grading/
-      response-viewing (schema), group/circle/category schema
-      migration, teacher قائمة parity with admin's list, exam edit form
-      parity, and the روster-viewing gap decision.
+## SRS Revision 150 — checkpoint 2: responses reachable, online staff editable — 2026-09-15 (cont. 4)
+
+- [x] **Built: viewing a student's submitted responses, reachable end to
+      end** (SRS Revision 150 §1) — the feature was already fully
+      built; the gap was `authorPaper` still gating on plain
+      `loadForAuthor`, plus no navigation link from نقاط الاختبارات.
+      Both fixed; no new viewer written.
+- [x] **Fixed: an online exam's supervisor/assistants are editable**
+      (SRS Revision 150 §2) — `StaffPicker` added to `exam-section.tsx`'s
+      locked+online branch; underlying state/forwarding already correct.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,312/1,312; full disposable-stack
+      integration suite green, all-table isolation intact; all 31
+      guards, doc-links and `git diff --check` pass. No migration.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [ ] Continue into the remaining checkpoints: per-question grading
+      (schema migration — the harder remaining half of A1), group/
+      circle/category schema migration (A3), teacher قائمة parity with
+      admin's list (B1), and the روster-viewing gap decision.

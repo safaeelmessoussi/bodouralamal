@@ -101,6 +101,10 @@ export interface GradeSheet {
     teaching_group_name: string | null;
     /** Derived, never stored (R70.5): recorded after the sitting it describes. */
     recorded_late: boolean;
+    /** Owner-reported, 2026-09-15 — so the sheet can offer «عرض الإجابات»
+     *  only where a submission is a thing that exists at all: a physical
+     *  sitting is answered on paper, never through this platform. */
+    mode: string;
   };
   /**
    * R81 — **the exam's maximum**, which is what every score here is out of. It
@@ -432,6 +436,7 @@ export async function readGradeSheet(
       // Derived at read time and stored nowhere (R70.5): the sitting was
       // recorded after the day it took place.
       recorded_late: exam.createdAt.toISOString().slice(0, 10) > exam.date.toISOString().slice(0, 10),
+      mode: exam.mode,
     },
     max_grade: toNumber(exam.maxGrade),
     has_published: grades.some((g) => g.status === 'published'),

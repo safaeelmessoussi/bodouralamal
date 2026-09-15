@@ -259,19 +259,39 @@ export function ExamSection({
       />
 
       {mode === 'online' && locked ? (
-        /**
-         * **Editing an already-scheduled online exam** (Owner, 2026-09-15;
-         * SRS Revision 145 §1) — the paper/target/availability picker below
-         * is CREATE-only: `source` never hydrates from the row being edited
-         * (there is nothing to re-pick — the content is already scheduled),
-         * so rendering it here would show a REQUIRED paper picker with
-         * nothing chosen against a row that already has content. The date,
-         * clock window, catalogue type, tier and staff fields the shared
-         * form renders around this section are what an arrangement edit
-         * actually changes; retargeting and re-opening the access gate are
-         * not yet wired to this form and are left for a later pass.
-         */
-        <Feedback>{t('scheduling.exam.onlineEditHint')}</Feedback>
+        <>
+          {/**
+           * **Editing an already-scheduled online exam** (Owner, 2026-09-15;
+           * SRS Revision 145 §1) — the paper/target/availability picker
+           * below is CREATE-only: `source` never hydrates from the row
+           * being edited (there is nothing to re-pick — the content is
+           * already scheduled), so rendering it here would show a REQUIRED
+           * paper picker with nothing chosen against a row that already has
+           * content. The date, clock window, catalogue type and tier fields
+           * the shared form renders around this section are what an
+           * arrangement edit actually changes; retargeting and re-opening
+           * the access gate are not yet wired to this form and are left for
+           * a later pass. **Staff is not one of those** (Owner-reported,
+           * 2026-09-15, same day) — `updateExamSchedule`
+           * (`PATCH /exams/{id}/schedule`, R145 §1) already accepts and
+           * replaces it wholesale for an online arrangement, exactly as a
+           * physical one's edit already does; only this component's own
+           * rendering had left it unreachable.
+           */}
+          <Feedback>{t('scheduling.exam.onlineEditHint')}</Feedback>
+          <StaffPicker
+            staff={staff}
+            {...(leadStaff ? { leadStaff } : {})}
+            leadLocked={leadLocked}
+            leadLabel={t('scheduling.exam.supervisor')}
+            leadId={supervisorId}
+            onLead={onSupervisor}
+            assistantsLabel={t('scheduling.exam.assistants')}
+            assistantsHint={t('scheduling.exam.assistantsHint')}
+            assistantIds={assistantIds}
+            onAssistants={onAssistants}
+          />
+        </>
       ) : mode === 'online' ? (
         <>
           {/* **R136 — content lives in بناء الاختبارات; this only SCHEDULES
