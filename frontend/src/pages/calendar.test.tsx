@@ -255,6 +255,12 @@ describe('the public calendar preserves the authenticated visibility tier', () =
   });
 });
 
+describe('the public calendar never offers staff management actions (Owner-reported, 2026-09-15)', () => {
+  it('passes canManage={false} to the shared event dialog', () => {
+    expect(CALENDAR_PAGE_SOURCE).toMatch(/<EventDetailsDialog[\s\S]*?canManage={false}[\s\S]*?\/>/);
+  });
+});
+
 describe('the dual-calendar title', () => {
   const JUNE = new Date(2026, 5, 1);
 

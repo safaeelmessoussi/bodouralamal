@@ -46,12 +46,24 @@ export function EventDetailsDialog({
   occurrence,
   branchNames,
   onClose,
+  canManage = true,
 }: {
   occurrence: Occurrence | null;
   /** id → name, from the public `GET /branches` the page already loads. Used
    *  only as a fallback: Revision 36 puts `branch_name` on the occurrence. */
   branchNames: Map<string, string>;
   onClose: () => void;
+  /**
+   * Whether this mount may offer management actions (e.g. «ربط اختبار») to a
+   * staff viewer. `true` everywhere the dialog is opened from a back-office or
+   * personal surface (`/admin/schedules`, `/teacher/schedules`, a student's own
+   * `تقويمي`) — unchanged, the default. The **public** `/calendar` page passes
+   * `false`: an admin/teacher who happens to be signed in while browsing the
+   * public timetable is still just a reader there, so `role` alone (checked
+   * inside `OccurrenceMaterials`) is not the whole rule — *which page opened
+   * this dialog* matters too.
+   */
+  canManage?: boolean;
 }): ReactNode {
   const months = tList('calendar.months');
   const date = occurrence ? new Date(`${occurrence.date}T00:00:00`) : null;
@@ -256,7 +268,7 @@ export function EventDetailsDialog({
             */}
           <AttendancePanel occurrence={occurrence} />
 
-          <OccurrenceMaterials key={occurrence.id} occurrence={occurrence} />
+          <OccurrenceMaterials key={occurrence.id} occurrence={occurrence} canManage={canManage} />
         </>
       ) : null}
     </Dialog>
@@ -387,7 +399,13 @@ function ExamAccessAction({
  * reuse the existing scoped API instead of widening every calendar response.
  * Events have no content relationship. No separate detail page exists.
  */
-function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactNode {
+function OccurrenceMaterials({
+  occurrence,
+  canManage,
+}: {
+  occurrence: Occurrence;
+  canManage: boolean;
+}): ReactNode {
   /**
    * **The context directly, not `useSession()`** — which throws outside a
    * provider.
@@ -400,7 +418,7 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
    */
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
   const activeRoles = useActiveRoleOrNull()?.activeRoles ?? [];
-  const canLinkExam = activeRoles.some((role) => STAFF_ROLES.includes(role));
+  const canLinkExam = canManage && activeRoles.some((role) => STAFF_ROLES.includes(role));
   const [page, setPage] = useState<SessionDetails | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);

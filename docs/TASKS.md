@@ -3992,6 +3992,46 @@ the Owner's own report named.
       (run `34901759632`); deployed to Staging, no new migrations, no host
       issues, `/healthz` and the new public `/programs` endpoint both
       verified live returning real data. Full detail in CHANGES.log.
-- [ ] **Owner action still outstanding**: record an `AcademicPeriod`
-      covering the current date on Staging (now confirmed to block both
-      registration AND approval, not only the enrollment form).
+- [x] **Owner action done**: an `AcademicPeriod` covering the current date
+      (`2026-09-14`–`2027-01-31`) is present on Staging — confirmed directly
+      while investigating the item below, not actioned by this session.
+
+## Five Owner-reported Staging items — 2026-09-15
+
+- [x] **Public calendar management-button leak fixed**: `EventDetailsDialog`
+      gained a `canManage` prop (default `true`); the public `/calendar`
+      page is the one caller that passes `false`, so «ربط اختبار» no longer
+      appears there for a signed-in admin/teacher/super_admin browsing the
+      public timetable. New `event-details-dialog.test.tsx` +
+      `calendar.test.tsx` addition.
+- [x] **Mobile nav «حسابي» link fixed**: added `AccountButton`
+      (`components/header/auth-buttons.tsx`) and mounted it in
+      `MobileMenu`'s authenticated actions block, matching the desktop
+      `UserMenu`'s `/profile` link. New `mobile-menu.test.tsx`.
+- [x] **"Can't edit a scheduled exam"** — investigated: this is R136 clause
+      12's own ratified design (an online occurrence has no edit route by
+      construction; a physical exam edits fine). **No code changed.**
+      Raised to the Owner as a genuine open product question — build a new
+      edit capability, or not — rather than decided silently.
+- [x] **"Student didn't get notified / doesn't see the exam"** — verified
+      against the live Staging row: notification created correctly at
+      scheduling time; the paper's computed `available_from` had simply not
+      yet arrived when checked. **No code changed** — the availability gate
+      is working as R136/R142 specify.
+- [x] **"تقويمي shows all levels, not my own scope"** — re-read
+      `personalFilters`/`readCalendar` line by line against R140 §3 and
+      re-ran `personal-calendar.integration.test.ts` (9/9, real disposable
+      stack): the code is already correctly scoped for both student and
+      Teacher. **No code changed** — no reproducible defect found; flagged
+      back to the Owner to re-check on a hard refresh.
+- [x] **"Teacher doesn't see إدخال الحفظ"** — confirmed this is SRS
+      Revision 106's own rule (`requiresCapability: 'teachesQuran'`,
+      gated on currently staffing a `tracks_quran_progress`-flagged
+      schedule). **No code changed** — a data/assignment question, not a
+      permission bug; backend write authorization independently confirmed
+      already correct.
+- [x] Verification: frontend typecheck/lint/build clean; full frontend
+      unit suite 1,288/1,288; focused personal-calendar integration 9/9;
+      full disposable-stack integration run — see CHANGES.log for the
+      exact count; all 31 guards, doc-links and `git diff --check` pass.
+      No backend/schema/route/OpenAPI change in this diff.

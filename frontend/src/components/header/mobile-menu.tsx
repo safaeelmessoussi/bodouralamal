@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Navigation } from '../../hooks/use-navigation.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { RoleSwitcher } from './role-switcher.js';
-import { DashboardButton, SignInButton, SignOutButton } from './auth-buttons.js';
+import { AccountButton, DashboardButton, SignInButton, SignOutButton } from './auth-buttons.js';
 
 /**
  * The small-screen sheet.
@@ -45,6 +45,10 @@ export function MobileMenu({
             {/* One switcher, as on desktop (R62.9). */}
             <RoleSwitcher inline />
             <DashboardButton roles={roles} block />
+            {/* «حسابي» — present on desktop inside `UserMenu`'s popover
+                (R65); the sheet has no popover, so it is its own row here,
+                matching `SignOutButton` right below it. */}
+            <AccountButton block />
             <SignOutButton onSignOut={onSignOut} block />
           </div>
         ) : (

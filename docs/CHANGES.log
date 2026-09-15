@@ -8780,3 +8780,94 @@ enrollment form — see the fix entry above).
 
 Local worktree/index clean; Staging still holds only synthetic fixtures plus the one
 authorized Owner identity; no Production action of any kind.
+
+2026-09-15 — Five Owner-reported Staging items: two genuine fixes, three confirmed
+already correct
+Owner tested the freshly-deployed Staging site directly (screenshots) and reported five
+items. Each was investigated to a confirmed root cause before deciding whether to change
+code — two were real defects and are fixed; three, on inspection, are the platform already
+behaving exactly as a ratified SRS revision specifies, verified rather than assumed.
+
+**1. Fixed — the public `الجدول الزمني` calendar could leak the staff-only «ربط اختبار»
+(link exam) action.** `EventDetailsDialog` (`components/calendar/event-details-dialog.tsx`)
+is the one shared occurrence dialog `/calendar` (public), `/admin/schedules`,
+`/teacher/schedules` and every «تقويمي» surface all mount identically; its «ربط اختبار»
+button was gated only by the SIGNED-IN caller's active role, never by which page opened the
+dialog — so an admin/teacher/super_admin who happened to be signed in while browsing the
+public timetable saw a management action a public page must never offer. Added a
+`canManage` prop, `true` by default (every existing admin/personal caller unaffected), and
+`AND`-ed into the existing role check; the public `calendar.tsx` is the one caller that now
+passes `canManage={false}`. New `event-details-dialog.test.tsx` (3 tests) and one addition
+to `calendar.test.tsx`, source-pinning per house convention (a live render would need a
+mocked session-details fetch and an `ActiveRoleProvider` to exercise a defect that is
+structurally a one-line wiring gap). Confirmed to fail without the fix.
+
+**2. Fixed — the mobile nav sheet had no «حسابي» (my account) link.** The desktop header's
+`UserMenu` popover offers `/profile` beside sign-out (R65); `MobileMenu`
+(`components/header/mobile-menu.tsx`) never grew an equivalent when it was hand-built —
+`DashboardButton` and `SignOutButton` were there, the account link was not, so a
+phone-width visitor had no way to reach their own profile from the header at all. Added
+`AccountButton` (`components/header/auth-buttons.tsx`, the same one-component-per-action
+pattern `DashboardButton`/`SignOutButton` already use) and mounted it in the mobile sheet's
+authenticated actions block, beside `DashboardButton`. New `mobile-menu.test.tsx` (3 tests),
+source-pinning for the same reason as above. Confirmed to fail without the fix.
+
+**3. Investigated, not a defect — "I scheduled an exam, I can't edit it."** Confirmed by
+reading `scheduling.tsx`'s own row-action guard (`available: (r) => r.type !== 'exam' ||
+r.ids.examMode !== 'online'`) against R136 clause 12's own text: *"Editing an
+already-scheduled remote occurrence's arrangement has no route — none existed to widen —
+so الجدولة's own list hides Edit for it rather than opening a physical-shaped form against
+a row it cannot save."* This is the platform's own ratified design, not a bug — a physical
+exam edits fine; only an online occurrence (a paper, not an arrangement) does not, by the
+same reasoning a class's Session content and an exam's questions are never retargeted after
+the fact. Reusing the content is the documented path («إنشاء نسخة في بناء الاختبارات», from
+the graded occurrence's own grade sheet), not a second edit surface. **No code changed.**
+Whether the Owner wants a genuinely new capability here (editing an already-scheduled
+online exam's arrangement) is a product decision this session does not have standing to
+make silently (§16.3) — raised to the Owner directly rather than built.
+
+**4. Investigated, not a defect — "a student didn't get the notification / doesn't see it
+in اختباراتي."** Verified against the live Staging row itself: the notification WAS created
+at scheduling time for both resolved recipients (`notification` table, `type =
+'exam_scheduled'`), and the paper's `available_from` was correctly computed from the chosen
+availability policy (R136 clause 5) — a real instant several hours after the row was
+scheduled, not yet reached at the time it was checked. `GET /me/assessments`'s `eligible()`
+gate (R136/R142) is deliberately time-based: a scheduled online exam is calendar-visible
+immediately but not answerable until its own `available_from` instant, exactly the property
+R142's manual-open / at_start / offset_minutes distinction exists to state honestly rather
+than optimistically. **No code changed** — this is the availability gate correctly refusing
+early access, not a missing notification.
+
+**5. Investigated, not a defect — "تقويمي still shows all levels, not my own scope."**
+Read `personalFilters` (`calendar.service.ts`) and its composition into `readCalendar` line
+by line: the intersection-per-enrolment, union-across-enrolments rule R140 §3 ratified is
+exactly what is there today, for both the student and the Teacher `تقويمي` surfaces (both
+render the same `PersonalCalendar` against `GET /me/calendar`, never the public
+`GET /calendar`) — confirmed additionally by re-running `personal-calendar.integration
+.test.ts` against a real disposable stack (9/9 green). **No code changed** — no scoping
+defect exists in the code as it stands, in either the student or Teacher case. Flagged back
+to the Owner to re-check on a hard refresh of the redeployed site; if it still reproduces,
+the exact account and page are needed to look further, since the server-side rule the
+report describes is not what the code actually does.
+
+**Also investigated, separately reported as "I don't see إدخال الحفظ as a Teacher":**
+confirmed this gate (`requiresCapability: 'teachesQuran'`, `teacher-modules.ts`) is exactly
+SRS Revision 106's own stated rule — a Teacher account sees the card only while it currently
+staffs a schedule whose Subject is flagged `tracks_quran_progress` (R73). **No code
+changed**; this is a data/assignment question (is the Owner's own Teacher account currently
+staffing such a schedule on Staging), not a permission bug — the backend write authorization
+(`assertCanManageQuranProgress`) was independently confirmed already correct and already
+tested per the existing `f4fdb12` verification.
+
+**Also confirmed, not from this session's work:** the `AcademicPeriod` gap flagged
+outstanding after the previous two deployments (blocking both registration and approval) is
+now resolved — Staging carries a real period (`2026-09-14`–`2027-01-31`) as of this check,
+evidently recorded by the Owner directly. `docs/TASKS.md`'s outstanding checkbox is ticked
+here with this evidence rather than re-actioned.
+
+Verification: frontend typecheck/lint/build clean; full frontend unit suite 1,288/1,288
+(was 1,281); focused `personal-calendar.integration.test.ts` 9/9 on a real disposable
+stack (confirming finding 5, not a new fix); full disposable-stack integration run
+recorded separately below. All 31 `scripts/ci/check-*.sh` guards, the documentation-link
+guard and `git diff --check` pass. No backend, schema, route or OpenAPI change in this
+diff — only the two frontend components named in items 1 and 2, and their new tests.

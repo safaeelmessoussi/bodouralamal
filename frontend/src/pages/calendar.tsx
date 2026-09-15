@@ -353,6 +353,10 @@ export function CalendarPage(): ReactNode {
           setOpenEvent(null);
           linked.close();
         }}
+        // The public timetable is a read: management actions (e.g. «ربط
+        // اختبار») belong to the admin/teacher/personal calendars, never here,
+        // regardless of which role happens to be signed in while browsing it.
+        canManage={false}
       />
       {['loading', 'unavailable', 'error'].includes(linked.status) ? (
         // Unmount on `ready` rather than controlling this auxiliary dialog

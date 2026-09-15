@@ -58,6 +58,21 @@ export function DashboardButton({
 }
 
 /**
+ * My account — `/profile` (R65), the same destination the desktop `UserMenu`
+ * offers inside its popover. The mobile sheet has no popover to nest one in
+ * (§4.1b: a hamburger sheet lists every actual destination flat rather than
+ * hiding one behind a second control), so this is its own block link rather
+ * than a `UserMenu` reuse.
+ */
+export function AccountButton({ block = false }: { block?: boolean }): ReactNode {
+  return (
+    <ButtonLink href="/profile" variant="secondary" block={block}>
+      {t('profile.title')}
+    </ButtonLink>
+  );
+}
+
+/**
  * Sign out. `POST /auth/logout` revokes the current session's refresh token
  * server-side (TD-4.14); clearing the in-memory token alone would leave a live
  * 30-day credential in the cookie, so the request is what actually ends the
