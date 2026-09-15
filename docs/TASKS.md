@@ -4187,4 +4187,13 @@ the Owner's own report named.
       isolation intact); all 31 guards, doc-links and `git diff --check`
       pass. New coverage in `personal-calendar.integration.test.ts`,
       `assessment.integration.test.ts`, `scheduling-exam-source.test.tsx`.
-- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [x] Pushed as `d3e3599`; hosted CI's Backend job failed on
+      `npm run typecheck`'s stricter `exactOptionalPropertyTypes` (a
+      genuine gap in the new test fixture, not caught by the default
+      `tsc -p .` run beforehand). Fixed, re-verified against the exact
+      CI commands, re-ran the full integration suite and all 31 guards
+      green, pushed as `ca94645`; hosted CI green on that run, all 7
+      jobs (run `34983753496`) including Release. Deployed to Staging,
+      upgrading from `4d443e0`: no new migrations, no host issues,
+      `/healthz` green within seconds, TLS/security headers intact, no
+      leftover disposable containers. Full detail in CHANGES.log.

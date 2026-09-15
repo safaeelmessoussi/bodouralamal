@@ -9217,7 +9217,27 @@ narrowing, both directions, plus a staff-actor no-regression case), `assessment.
 integration.test.ts` (online staff assignment, its duplicate-position refusal, the bare-
 exam default and explicit-maximum cases), `scheduling-exam-source.test.tsx` (the maximum's
 removal from CREATE, its retained presence on EDIT) — all confirmed to fail without their
-respective fix; full disposable-stack integration suite green with all-table isolation
-intact; all 31 `scripts/ci/check-*.sh` guards, the documentation-link guard and
-`git diff --check` pass. No migration, no OpenAPI/TD-3 change — every route touched already
-existed.
+respective fix; full disposable-stack integration suite green (2,599/2,617, 18 pre-existing
+skips, no flake) with all-table isolation intact; all 31 `scripts/ci/check-*.sh` guards, the
+documentation-link guard and `git diff --check` pass. No migration, no OpenAPI/TD-3 change
+— every route touched already existed.
+
+Pushed as `d3e3599`; hosted CI's Backend job failed on `npm run typecheck`
+(`tsconfig.typecheck.json`'s `exactOptionalPropertyTypes`, stricter than the default
+`tsc -p .` verified locally beforehand) — a genuine gap in the new
+`personal-calendar.integration.test.ts` fixture's `makeExam` helper, which took
+`Record<string, unknown>` and conditionally spread branch/room fields into a Prisma
+create-input union it could not resolve unambiguously. Fixed by typing the helper's
+parameter explicitly; `npm run typecheck`/`npm run lint` (the exact CI commands) then
+verified clean locally, the full disposable-stack integration suite re-run green a second
+time, all 31 guards re-run. Pushed as `ca94645`; hosted CI green on this run, all 7 jobs
+(run `34983753496`), Release included.
+
+Deployed `ca94645` to `staging.bodouralamal.com`, upgrading from `4d443e0`: host preflight
+passed cleanly, both exact-commit images pulled and their `org.opencontainers.image
+.revision` label confirmed to match before recreation, `prisma migrate deploy` confirmed
+nothing pending (as expected — no migration in this change), `api`/`nginx` recreated and
+verified on the exact commit's label, `/healthz` green (4/4 components, 12/12 workers)
+within seconds, no error-level log lines in the following minutes, TLS/HSTS/CSP headers
+reconfirmed, no leftover disposable containers (local or remote). No Production action of
+any kind.
