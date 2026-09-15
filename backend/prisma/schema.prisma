@@ -3042,8 +3042,10 @@ model ExamQuestion {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  options ExamQuestionOption[]
-  answers StudentExamAnswer[]
+  options        ExamQuestionOption[]
+  answers        StudentExamAnswer[]
+  /// Owner-reported, 2026-09-15 — R137's own per-question grading half.
+  questionScores GradeQuestionScore[]
 
   @@index([examId, displayOrder])
   @@map("exam_question")
@@ -3187,9 +3189,56 @@ model Grade {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  /// Owner-reported, 2026-09-15 — the per-question breakdown, where the
+  /// exam's questions carry R137 points. `score` above stays the single
+  /// source of truth for the total; these rows exist only where a paper
+  /// actually uses per-question allocation (see `GradeQuestionScore`'s own
+  /// comment for the exact rule and why nothing here is trigger-maintained).
+  questionScores GradeQuestionScore[]
+
   @@unique([examId, studentId])
   @@index([studentId, status])
   @@map("grade")
+}
+
+/// **Owner-reported, 2026-09-15 — per-question grading, where R137's
+/// optional points allocation is actually in use.**
+///
+/// One row per (Grade, ExamQuestion) the marker has entered a score for.
+/// **Purely additive to `Grade.score`, never trigger-derived**: the service
+/// computes the sum and writes both in the same transaction
+/// (`saveGradeDraft`), matching how every other write on this table already
+/// works — there is no existing "maintain an aggregate from child rows"
+/// mechanism anywhere in this schema to extend, and inventing one here would
+/// be a second, competing pattern for one write path.
+///
+/// A row can only mean something where the exam actually allocated points
+/// (R137's all-or-nothing rule: every live question carries one, summing to
+/// `Exam.maxGrade`, or none does) — enforced again, defensively, by the
+/// service before any row here is written, since R137's own check runs only
+/// at REMOTE publish time and a physical sitting's questions are never
+/// re-verified against it.
+model GradeQuestionScore {
+  id String @id @default(uuid()) @db.Uuid
+
+  gradeId String @map("grade_id") @db.Uuid
+  grade   Grade  @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+
+  /// Restrict, matching every other reference to a question
+  /// (`StudentExamAnswer.question`, `ExamQuestionOption.question`): a
+  /// recorded score is part of the record and must not vanish out from
+  /// under it merely because the question was later removed from the paper.
+  questionId String       @map("question_id") @db.Uuid
+  question   ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  score Decimal @db.Decimal(6, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([gradeId, questionId])
+  @@index([questionId])
+  @@map("grade_question_score")
 }
 
 // ---------------------------------------------------------------------------

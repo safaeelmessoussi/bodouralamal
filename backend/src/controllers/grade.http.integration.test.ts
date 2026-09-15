@@ -103,7 +103,15 @@ async function clear(): Promise<void> {
   });
   const examIds = exams.map((e) => e.id);
   if (examIds.length > 0) {
+    // `grade` first: `grade_question_score` cascades with it, and it must
+    // be gone before `exam_question` — `grade_question_score.question_id`
+    // is RESTRICT against `exam_question`, so a question with a live score
+    // beside it cannot be deleted first, exactly the ordering mistake this
+    // comment used to describe backwards.
     await prisma.grade.deleteMany({ where: { examId: { in: examIds } } });
+    // `exam_question` is RESTRICT against `exam` (matching every other
+    // reference to a question), so it must be cleared before the exam itself.
+    await prisma.examQuestion.deleteMany({ where: { examId: { in: examIds } } });
     await prisma.examStaff.deleteMany({ where: { examId: { in: examIds } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: examIds } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: examIds } } });
@@ -874,5 +882,227 @@ describe("the student’s own published grades (§5.3)", () => {
     // `400 VALIDATION_FAILED` — the same answer `GET /students/me` gives, because
     // it is the same middleware resolving the same question (R63.6).
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Owner-reported, 2026-09-15 — per-question grading, where the exam uses R137 points", () => {
+  async function pointsExam(points: (number | null)[]): Promise<string> {
+    const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
+      title: `${TAG} اختبار بالنقط`,
+      date: "2098-04-01",
+      start_time: "09:00",
+      end_time: "10:00",
+      level_id: levelId,
+      subject_id: subjectId,
+      academic_year_id: academicYearId,
+      branch_id: branchA,
+      room_id: roomA,
+      administrative_group_id: groupA,
+    });
+    const examId = (created.body as { id: string }).id;
+    for (const [i, p] of points.entries()) {
+      await prisma.examQuestion.create({
+        data: {
+          examId,
+          displayOrder: i,
+          kind: "short_text",
+          prompt: `${TAG} سؤال ${i + 1}`,
+          ...(p === null ? {} : { points: p }),
+        },
+      });
+    }
+    return examId;
+  }
+
+  it("the sheet carries `questions` and each row's breakdown, only when points sum to the maximum", async () => {
+    const examId = await pointsExam([12, 8]);
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    expect(sheet.status).toBe(200);
+    const questions = sheet.body.data!["questions"] as { id: string; points: number }[];
+    expect(questions).toHaveLength(2);
+    expect(questions.map((q) => q.points).sort((a, b) => a - b)).toEqual([8, 12]);
+    const rows = sheet.body.data!["rows"] as { student_id: string; question_scores: unknown[] }[];
+    expect(rows.find((r) => r.student_id === studentOne)?.question_scores).toEqual([]);
+  });
+
+  it("absent from the sheet entirely when no question carries points", async () => {
+    const examId = await pointsExam([null, null]);
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    expect(sheet.body.data).not.toHaveProperty("questions");
+    const rows = sheet.body.data!["rows"] as Record<string, unknown>[];
+    expect(rows[0]).not.toHaveProperty("question_scores");
+  });
+
+  it("saves a per-question breakdown; the total is the sum, computed server-side", async () => {
+    const examId = await pointsExam([12, 8]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: 999, // ignored entirely once question_scores is sent
+          absent: false,
+          question_scores: [
+            { question_id: questions[0]!.id, score: 10 },
+            { question_id: questions[1]!.id, score: 5 },
+          ],
+        },
+      ],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    const rows = sheet.body.data!["rows"] as {
+      student_id: string;
+      score: number;
+      question_scores: { question_id: string; score: number }[];
+    }[];
+    const row = rows.find((r) => r.student_id === studentOne)!;
+    expect(row.score).toBe(15);
+    expect(row.question_scores.sort((a, b) => a.score - b.score)).toEqual([
+      { question_id: questions[1]!.id, score: 5 },
+      { question_id: questions[0]!.id, score: 10 },
+    ]);
+  });
+
+  it("a partial save (one question scored) is a legal draft; the total is the running sum", async () => {
+    const examId = await pointsExam([12, 8]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: false,
+          question_scores: [{ question_id: questions[0]!.id, score: 12 }],
+        },
+      ],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    const rows = sheet.body.data!["rows"] as { student_id: string; score: number }[];
+    expect(rows.find((r) => r.student_id === studentOne)?.score).toBe(12);
+  });
+
+  it("refuses a per-question score above that question's own points, not the exam's maximum", async () => {
+    const examId = await pointsExam([12, 8]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: false,
+          // 15 is within the exam's /20, but exceeds this question's own /12.
+          question_scores: [{ question_id: questions[0]!.id, score: 15 }],
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("QUESTION_SCORE_OUT_OF_RANGE");
+  });
+
+  it("refuses question_scores on an exam that does not use points at all", async () => {
+    const examId = await pointsExam([null, null]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: false,
+          question_scores: [{ question_id: questions[0]!.id, score: 5 }],
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("QUESTIONS_HAVE_NO_POINTS");
+  });
+
+  it("refuses absent alongside a per-question breakdown, at the write boundary", async () => {
+    const examId = await pointsExam([12, 8]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: true,
+          question_scores: [{ question_id: questions[0]!.id, score: 5 }],
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("replaces the breakdown whole on the second save — a question dropped from the payload loses its score", async () => {
+    const examId = await pointsExam([12, 8]);
+    const questions = await prisma.examQuestion.findMany({
+      where: { examId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    const first = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: false,
+          question_scores: [
+            { question_id: questions[0]!.id, score: 10 },
+            { question_id: questions[1]!.id, score: 5 },
+          ],
+        },
+      ],
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    const afterFirst = await call("GET", `/exams/${examId}/grades`, superToken);
+    const versionAfterFirst = (
+      (afterFirst.body.data!["rows"] as { student_id: string; version: number }[]).find(
+        (r) => r.student_id === studentOne,
+      )
+    )!.version;
+    const second = await call("PUT", `/exams/${examId}/grades`, superToken, {
+      entries: [
+        {
+          student_id: studentOne,
+          score: null,
+          absent: false,
+          version: versionAfterFirst,
+          question_scores: [{ question_id: questions[0]!.id, score: 11 }],
+        },
+      ],
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(200);
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    const rows = sheet.body.data!["rows"] as {
+      student_id: string;
+      score: number;
+      question_scores: { question_id: string }[];
+    }[];
+    const row = rows.find((r) => r.student_id === studentOne)!;
+    expect(row.score).toBe(11);
+    expect(row.question_scores).toHaveLength(1);
   });
 });

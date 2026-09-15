@@ -5,7 +5,10 @@ import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { isValidScore, toNumber } from '../policies/grading.js';
 import { notifyGradePublished } from './notification.service.js';
-import { assertAudienceWithinBranchScope } from './assessment.service.js';
+import {
+  assertAudienceWithinBranchScope,
+  assertQuestionPointsConsistent,
+} from './assessment.service.js';
 import {
   assertExamInTeacherScope,
   examAudienceWhere,
@@ -79,6 +82,16 @@ export interface GradeSheetRow {
   status: 'draft' | 'published';
   /** `null` until a row exists; TD-15 requires it on every subsequent write. */
   version: number | null;
+  /**
+   * **Owner-reported, 2026-09-15 — per-question grading, where the exam's
+   * own R137 points allocation is actually in use.** `undefined` when the
+   * exam does not use points at all (`GradeSheet.questions` is then absent
+   * too) — a different fact from an empty array, which would say *"she uses
+   * points and none are entered yet"*. `score` above remains the single
+   * source of truth for the total; this is a breakdown of it, never the
+   * other way around.
+   */
+  question_scores?: { question_id: string; score: number }[];
 }
 
 export interface GradeSheet {
@@ -115,6 +128,15 @@ export interface GradeSheet {
   /** Whether any row is published — what makes the action *re*-publish (BR-8). */
   has_published: boolean;
   rows: GradeSheetRow[];
+  /**
+   * **Owner-reported, 2026-09-15 — present only where the exam uses R137's
+   * points allocation** (every live question carries one, summing to
+   * `max_grade` — `readGradeSheet` re-verifies this every read rather than
+   * trusting the exam's own history). Absent for every exam that leaves
+   * `points` unset, which is most of them; the marking screen then renders
+   * exactly as it always has, one field per student.
+   */
+  questions?: { id: string; prompt: string; points: number }[];
 }
 
 /**
@@ -366,6 +388,40 @@ async function audienceOf(
 }
 
 
+/**
+ * **Owner-reported, 2026-09-15 — this exam's live, points-carrying
+ * questions, or `null` when per-question grading does not apply.**
+ *
+ * `null` covers two different facts on purpose, neither of which the
+ * marking screen needs to tell apart: the exam leaves every question
+ * unallocated (the ordinary case), or it carries an inconsistent
+ * configuration `assertQuestionPointsConsistent` refuses. The second case
+ * is real only for a PHYSICAL sitting — R137's own check runs only at
+ * REMOTE publish time (`publishOccurrenceTx`), so a physical exam's
+ * questions are never verified against it at all. Falling back to the
+ * classic whole-exam field here, rather than surfacing the inconsistency on
+ * a read, is deliberate: a marking screen is not where a content problem
+ * should be discovered or fixed.
+ */
+async function pointsBreakdown(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  examId: string,
+  maxGrade: Prisma.Decimal,
+): Promise<{ id: string; prompt: string; points: Prisma.Decimal }[] | null> {
+  const questions = await prisma.examQuestion.findMany({
+    where: { examId, deletedAt: null },
+    select: { id: true, prompt: true, points: true },
+    orderBy: { displayOrder: 'asc' },
+  });
+  if (questions.length === 0 || questions.every((q) => q.points === null)) return null;
+  try {
+    assertQuestionPointsConsistent(questions, maxGrade);
+  } catch {
+    return null;
+  }
+  return questions as { id: string; prompt: string; points: Prisma.Decimal }[];
+}
+
 function toRow(
   student: { id: string; nameArabic: string },
   grade: {
@@ -373,7 +429,9 @@ function toRow(
     absent: boolean;
     status: string;
     version: number;
+    questionScores?: { questionId: string; score: Prisma.Decimal }[];
   } | null,
+  usesPoints: boolean,
 ): GradeSheetRow {
   if (!grade) {
     return {
@@ -383,6 +441,7 @@ function toRow(
       absent: false,
       status: 'draft',
       version: null,
+      ...(usesPoints ? { question_scores: [] } : {}),
     };
   }
   return {
@@ -392,6 +451,14 @@ function toRow(
     absent: grade.absent,
     status: grade.status === 'published' ? 'published' : 'draft',
     version: grade.version,
+    ...(usesPoints
+      ? {
+          question_scores: (grade.questionScores ?? []).map((qs) => ({
+            question_id: qs.questionId,
+            score: toNumber(qs.score),
+          })),
+        }
+      : {}),
   };
 }
 
@@ -403,7 +470,7 @@ export async function readGradeSheet(
 ): Promise<GradeSheet> {
   const exam = await loadForGrading(prisma, actor, examId);
 
-  const [students, grades] = await Promise.all([
+  const [students, grades, questions] = await Promise.all([
     prisma.user.findMany({
       // `deletedAt: null` is redundant — every arm of `audienceWhere` already
       // constrains it — and it is written anyway, deliberately: this call site
@@ -412,8 +479,13 @@ export async function readGradeSheet(
       select: { id: true, nameArabic: true },
       orderBy: { nameArabic: 'asc' },
     }),
-    prisma.grade.findMany({ where: { examId } }),
+    prisma.grade.findMany({
+      where: { examId },
+      include: { questionScores: { select: { questionId: true, score: true } } },
+    }),
+    pointsBreakdown(prisma, examId, exam.maxGrade),
   ]);
+  const usesPoints = questions !== null;
 
   const byStudent = new Map(grades.map((g) => [g.studentId, g]));
 
@@ -440,7 +512,16 @@ export async function readGradeSheet(
     },
     max_grade: toNumber(exam.maxGrade),
     has_published: grades.some((g) => g.status === 'published'),
-    rows: students.map((s) => toRow(s, byStudent.get(s.id) ?? null)),
+    rows: students.map((s) => toRow(s, byStudent.get(s.id) ?? null, usesPoints)),
+    ...(questions
+      ? {
+          questions: questions.map((q) => ({
+            id: q.id,
+            prompt: q.prompt,
+            points: toNumber(q.points),
+          })),
+        }
+      : {}),
   };
 }
 
@@ -546,6 +627,19 @@ export interface GradeEntry {
   absent: boolean;
   /** TD-15 — required once a row exists, refused as stale if it has moved on. */
   version?: number | undefined;
+  /**
+   * **Owner-reported, 2026-09-15 — per-question grading, where the exam
+   * uses R137's points allocation.** When present, this REPLACES `score`
+   * above for this entry — the sum becomes the row's score, computed here
+   * rather than trusted from the caller, so `score` need not agree with it
+   * and is simply ignored when this is sent. Refused entirely (`VALIDATION_
+   * FAILED`, `QUESTIONS_HAVE_NO_POINTS`) if the exam does not use points at
+   * all; refused per-entry (`QUESTION_SCORE_OUT_OF_RANGE`) if any value
+   * exceeds ITS OWN question's points, not the exam's maximum. A PARTIAL
+   * set — some questions scored, others not yet — is legal for a draft; the
+   * derived total is simply whatever has been entered so far.
+   */
+  questionScores?: { questionId: string; score: number }[];
 }
 
 /**
@@ -593,11 +687,65 @@ export async function saveGradeDraft(
     const existing = await tx.grade.findMany({ where: { examId } });
     const byStudent = new Map(existing.map((g) => [g.studentId, g]));
 
+    // **Owner-reported, 2026-09-15 — resolved once per save, not per entry**:
+    // whether the exam uses R137's points at all, and the exact bound each
+    // question carries, is a fact about the EXAM, asked once.
+    const breakdown = await pointsBreakdown(tx, examId, exam.maxGrade);
+    const pointsById = new Map((breakdown ?? []).map((q) => [q.id, q.points]));
+
     let saved = 0;
     for (const entry of entries) {
+      let questionScores: { questionId: string; score: number }[] | null = null;
+      if (entry.questionScores !== undefined && !entry.absent) {
+        if (breakdown === null) {
+          throw new AppError(
+            'VALIDATION_FAILED',
+            'this exam does not use per-question points',
+            { reason: 'QUESTIONS_HAVE_NO_POINTS', student_id: entry.studentId },
+          );
+        }
+        const seen = new Set<string>();
+        for (const qs of entry.questionScores) {
+          if (seen.has(qs.questionId)) {
+            throw new AppError(
+              'VALIDATION_FAILED',
+              'one question holds one score per student',
+              { reason: 'QUESTION_SCORE_DUPLICATE', student_id: entry.studentId, question_id: qs.questionId },
+            );
+          }
+          seen.add(qs.questionId);
+          const points = pointsById.get(qs.questionId);
+          if (points === undefined) {
+            throw new AppError('NOT_FOUND', 'no such question on this exam', {
+              student_id: entry.studentId,
+              question_id: qs.questionId,
+            });
+          }
+          if (!isValidScore(new Prisma.Decimal(qs.score), points)) {
+            throw new AppError(
+              'VALIDATION_FAILED',
+              'score is outside this question’s own range',
+              {
+                reason: 'QUESTION_SCORE_OUT_OF_RANGE',
+                student_id: entry.studentId,
+                question_id: qs.questionId,
+                max_points: toNumber(points),
+              },
+            );
+          }
+        }
+        questionScores = entry.questionScores;
+      }
+
       // An absent student holds a real 0 (BR-7) — never a null, which is what
       // "nobody has marked this" means and would collapse the two states.
-      const score = entry.absent ? 0 : (entry.score ?? 0);
+      // A per-question breakdown REPLACES the direct score entirely — the
+      // sum is computed here, never trusted from the caller.
+      const score = entry.absent
+        ? 0
+        : questionScores !== null
+          ? questionScores.reduce((total, qs) => total + qs.score, 0)
+          : (entry.score ?? 0);
       const current = byStudent.get(entry.studentId);
 
       /**
@@ -616,8 +764,9 @@ export async function saveGradeDraft(
         });
       }
 
+      let gradeId: string;
       if (!current) {
-        await tx.grade.create({
+        const created = await tx.grade.create({
           data: {
             examId,
             studentId: entry.studentId,
@@ -626,7 +775,9 @@ export async function saveGradeDraft(
             absent: entry.absent,
             status: 'draft',
           },
+          select: { id: true },
         });
+        gradeId = created.id;
       } else {
         if (current.version !== entry.version) {
           throw new AppError('VERSION_CONFLICT', 'this grade was changed by someone else', {
@@ -645,7 +796,29 @@ export async function saveGradeDraft(
             version: { increment: 1 },
           },
         });
+        gradeId = current.id;
       }
+
+      // **Owner-reported, 2026-09-15 — the breakdown is REPLACED whole, on
+      // the identical convention `staff`/every other whole-row field on this
+      // platform already follows**: this save states the complete current
+      // set, and a question absent from it no longer holds a score (an
+      // absent student's breakdown, if it had one, is cleared entirely).
+      if (entry.absent) {
+        await tx.gradeQuestionScore.deleteMany({ where: { gradeId } });
+      } else if (questionScores !== null) {
+        await tx.gradeQuestionScore.deleteMany({
+          where: { gradeId, questionId: { notIn: questionScores.map((qs) => qs.questionId) } },
+        });
+        for (const qs of questionScores) {
+          await tx.gradeQuestionScore.upsert({
+            where: { gradeId_questionId: { gradeId, questionId: qs.questionId } },
+            create: { gradeId, questionId: qs.questionId, score: qs.score },
+            update: { score: qs.score },
+          });
+        }
+      }
+
       saved += 1;
     }
 

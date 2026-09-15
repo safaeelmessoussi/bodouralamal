@@ -1106,10 +1106,18 @@ export async function publishOccurrenceTx(
  * `updateQuestion`): a paper is built one question at a time, and blocking an
  * individual save on a total that will only balance once the last question is
  * written would make ordinary incremental authoring impossible. The one
- * moment totals must be true is the moment a remote paper is actually
- * scheduled/published — this function, called only from there.
+ * moment totals must be true for a REMOTE paper is the moment it is actually
+ * scheduled/published — `publishOccurrenceTx`, below.
+ *
+ * **Owner-reported, 2026-09-15 — exported and reused by `grade.service.ts`'s
+ * per-question grading**, which re-checks this defensively before writing a
+ * single `GradeQuestionScore` row: a physical sitting's questions are never
+ * run through this check at all (there is no publish-time gate for one), so
+ * per-question grading cannot assume the invariant already holds and must
+ * verify it itself rather than trust a guarantee that, for a physical exam,
+ * was never actually made.
  */
-function assertQuestionPointsConsistent(
+export function assertQuestionPointsConsistent(
   questions: { points: { toString(): string } | null }[],
   maxGrade: { toString(): string },
 ): void {

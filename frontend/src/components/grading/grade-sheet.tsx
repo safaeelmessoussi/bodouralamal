@@ -48,13 +48,34 @@ interface Draft {
   /** `''` is **unmarked**. Deliberately a string; see the module docstring. */
   score: string;
   absent: boolean;
+  /**
+   * **Owner-reported, 2026-09-15 — per-question grading, keyed by question
+   * id.** `''` is *not yet scored*, on the identical convention `score`
+   * above already uses — a PARTIAL set is a legal draft (see
+   * `saveGradeDraft`'s own docstring). Present only while `sheet.questions`
+   * is; the plain `score` field above is then read-only, derived from this.
+   */
+  questionScores: Record<string, string>;
 }
 
 function draftFrom(row: GradeSheetRow): Draft {
   return {
     score: row.score === null ? '' : String(row.score),
     absent: row.absent,
+    questionScores: Object.fromEntries(
+      (row.question_scores ?? []).map((qs) => [qs.question_id, String(qs.score)]),
+    ),
   };
+}
+
+/** The live total from whatever has been entered so far — the same sum the
+ *  server itself computes on save, shown before saving so a marker sees
+ *  what she is about to submit. */
+function questionScoresTotal(draft: Draft): number {
+  return Object.values(draft.questionScores).reduce(
+    (total, v) => total + (v.trim() === '' ? 0 : Number(v)),
+    0,
+  );
 }
 
 export function GradeSheetView({
@@ -129,13 +150,32 @@ export function GradeSheetView({
       const result = await saveGrades(
         examId,
         sheet.rows.map((row) => {
-          const draft = drafts[row.student_id] ?? { score: '', absent: false };
+          const draft = drafts[row.student_id] ?? { score: '', absent: false, questionScores: {} };
+          // **Owner-reported, 2026-09-15 — `question_scores` REPLACES `score`
+          // entirely once the exam uses points, but only once at least one
+          // question actually carries a value.** An EMPTY breakdown is not
+          // sent at all — sending `question_scores: []` would tell the
+          // server *"her total is 0"*, which is exactly the *unmarked* vs
+          // *marked zero* distinction BR-7 exists to keep apart; nothing
+          // entered yet must still mean `score: null`.
+          const entered = sheet.questions
+            ? Object.entries(draft.questionScores)
+                .filter(([, v]) => v.trim() !== '')
+                .map(([question_id, v]) => ({ question_id, score: Number(v) }))
+            : [];
+          const questionScores = entered.length > 0 && !draft.absent ? entered : null;
           return {
             student_id: row.student_id,
             // `''` stays null all the way to the server: unmarked is not zero,
             // and BR-7 is what decides what becomes of it.
-            score: draft.absent || draft.score.trim() === '' ? null : Number(draft.score),
+            score:
+              questionScores !== null
+                ? null
+                : draft.absent || draft.score.trim() === ''
+                  ? null
+                  : Number(draft.score),
             absent: draft.absent,
+            ...(questionScores !== null ? { question_scores: questionScores } : {}),
             ...(row.version === null ? {} : { version: row.version }),
           };
         }),
@@ -260,6 +300,17 @@ export function GradeSheetView({
             <thead>
               <tr>
                 <th scope="col">{t('admin.grades.student')}</th>
+                {/* **Owner-reported, 2026-09-15 — per-question grading, one
+                    column per question, where the exam uses R137's
+                    points.** Replaces nothing: the total column stays,
+                    read-only, derived from these. */}
+                {sheet.questions?.map((q, i) => (
+                  <th key={q.id} scope="col">
+                    {t('assessments.question').replace('{n}', String(i + 1))}
+                    {' — '}
+                    {t('assessments.questionPointsOf').replace('{points}', String(q.points))}
+                  </th>
+                ))}
                 <th scope="col">{t('admin.grades.mark').replace('{scale}', String(maxGrade))}</th>
                 <th scope="col">{t('admin.grades.absent')}</th>
                 {/* **No النتيجة column** (Owner decision, 2026-08-17). See the
@@ -270,32 +321,65 @@ export function GradeSheetView({
             </thead>
             <tbody>
               {sheet.rows.map((row) => {
-                const draft = drafts[row.student_id] ?? { score: '', absent: false };
+                const draft = drafts[row.student_id] ?? { score: '', absent: false, questionScores: {} };
                 return (
                   <tr key={row.student_id}>
                     <td>{row.student_name}</td>
+                    {sheet.questions?.map((q) => (
+                      <td key={q.id}>
+                        <input
+                          className="field__input"
+                          type="number"
+                          min={0}
+                          max={q.points}
+                          step="0.01"
+                          inputMode="decimal"
+                          disabled={draft.absent || busy}
+                          value={draft.questionScores[q.id] ?? ''}
+                          aria-label={`${t('assessments.questionPointsOf').replace('{points}', String(q.points))} — ${row.student_name}`}
+                          onChange={(event) =>
+                            setDrafts((d) => ({
+                              ...d,
+                              [row.student_id]: {
+                                ...draft,
+                                questionScores: { ...draft.questionScores, [q.id]: event.target.value },
+                              },
+                            }))
+                          }
+                        />
+                      </td>
+                    ))}
                     <td>
-                      <input
-                        className="field__input"
-                        type="number"
-                        min={0}
-                        max={maxGrade}
-                        // Two decimals is what the column stores, so it is what
-                        // the field offers — a finer step would be rounded on
-                        // the way in and read back as a different number.
-                        step="0.01"
-                        inputMode="decimal"
-                        // An absent student holds no mark to type (BR-7).
-                        disabled={draft.absent || busy}
-                        value={draft.score}
-                        aria-label={`${t('admin.grades.mark').replace('{scale}', String(maxGrade))} — ${row.student_name}`}
-                        onChange={(event) =>
-                          setDrafts((d) => ({
-                            ...d,
-                            [row.student_id]: { ...draft, score: event.target.value },
-                          }))
-                        }
-                      />
+                      {sheet.questions ? (
+                        // **Derived, never typed directly** — the sum of the
+                        // per-question inputs beside it, exactly what the
+                        // server itself computes on save.
+                        <span aria-label={t('admin.grades.mark').replace('{scale}', String(maxGrade))}>
+                          {draft.absent ? 0 : questionScoresTotal(draft)}
+                        </span>
+                      ) : (
+                        <input
+                          className="field__input"
+                          type="number"
+                          min={0}
+                          max={maxGrade}
+                          // Two decimals is what the column stores, so it is what
+                          // the field offers — a finer step would be rounded on
+                          // the way in and read back as a different number.
+                          step="0.01"
+                          inputMode="decimal"
+                          // An absent student holds no mark to type (BR-7).
+                          disabled={draft.absent || busy}
+                          value={draft.score}
+                          aria-label={`${t('admin.grades.mark').replace('{scale}', String(maxGrade))} — ${row.student_name}`}
+                          onChange={(event) =>
+                            setDrafts((d) => ({
+                              ...d,
+                              [row.student_id]: { ...draft, score: event.target.value },
+                            }))
+                          }
+                        />
+                      )}
                     </td>
                     <td>
                       <input
@@ -307,6 +391,7 @@ export function GradeSheetView({
                           setDrafts((d) => ({
                             ...d,
                             [row.student_id]: {
+                              ...draft,
                               score: event.target.checked ? '' : draft.score,
                               absent: event.target.checked,
                             },

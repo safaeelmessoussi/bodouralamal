@@ -4254,7 +4254,32 @@ the Owner's own report named.
       upgrading from `ea73d0e`: no new migrations, no host issues,
       `/healthz` green within seconds, TLS/security headers intact, no
       leftover disposable containers. Full detail in CHANGES.log.
-- [ ] Continue into the remaining checkpoints: per-question grading
-      (schema migration — the harder remaining half of A1), group/
-      circle/category schema migration (A3), teacher قائمة parity with
-      admin's list (B1), and the روster-viewing gap decision.
+## SRS Revision 151 — checkpoint 3: per-question grading and publishing — 2026-09-15 (cont. 5)
+
+- [x] **Built: per-question grading, one new table** (SRS Revision 151) —
+      `grade_question_score`, purely additive; `Grade.score` stays the
+      total, computed and written together in the same transaction.
+- [x] **Built: R137's all-or-nothing points rule re-checked defensively**
+      (SRS Revision 151 §2) — never assumed, since it is only enforced
+      at REMOTE publish time; a physical sitting's questions are never
+      verified against it otherwise.
+- [x] **Built: the wire contract and frontend UI** (SRS Revision 151 §§3–4)
+      — `question_scores` replaces `score` when sent; partial saves are
+      legal drafts; replaced whole on every save; one column per
+      question in `GradeSheetView`, total derived and read-only.
+- [x] **Deliberately not extended: the student's own published-grades
+      list** (SRS Revision 151 §5) — a new drill-down screen, not
+      requested; left for its own future ask.
+- [x] Two test-isolation issues found and fixed, one with real
+      collateral cost (a cleanup-order mistake that broke two unrelated
+      files' cleanup on a subsequent run) — confirmed resolved by a
+      fully green re-run.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,315/1,315; full disposable-stack
+      integration 2,613/2,631 (18 pre-existing skips, all-table
+      isolation intact); all 31 guards, doc-links and
+      `git diff --check` pass; OpenAPI regenerated, no drift.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [ ] Continue into the remaining checkpoints: group/circle/category
+      schema migration (A3), teacher قائمة parity with admin's list
+      (B1), and the روster-viewing gap decision.

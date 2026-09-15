@@ -40,6 +40,20 @@ export const saveGradesSchema = z
             absent: z.boolean().default(false),
             /** TD-15 — omitted for a student who has no row yet. */
             version: version.optional(),
+            /**
+             * **Owner-reported, 2026-09-15 — per-question grading, where the
+             * exam uses R137's points.** Present, this REPLACES `score`
+             * above; the service computes and stores the sum, and refuses
+             * an exam that does not use points at all. Each entry's own
+             * bound (against ITS question's own points, never the exam's
+             * maximum) is checked in the service, which alone knows it.
+             */
+            question_scores: z
+              .array(
+                z.object({ question_id: uuid, score }).strict(),
+              )
+              .max(200)
+              .optional(),
           })
           .strict()
           // An absent student holds a real 0 (BR-7); accepting a mark beside
@@ -48,6 +62,13 @@ export const saveGradesSchema = z
           .refine((e) => !(e.absent && e.score !== null && e.score > 0), {
             message: 'an absent student cannot also hold a score',
             path: ['score'],
+          })
+          // Same rule, restated for the breakdown: absent means nothing was
+          // sat, and a per-question score is a fact about an answer that
+          // was, so the two are exactly as contradictory as `score` above.
+          .refine((e) => !(e.absent && (e.question_scores?.length ?? 0) > 0), {
+            message: 'an absent student cannot also hold per-question scores',
+            path: ['question_scores'],
           }),
       )
       .max(500),

@@ -17,6 +17,15 @@ export interface GradeSheetRow {
   absent: boolean;
   status: 'draft' | 'published';
   version: number | null;
+  /**
+   * **Owner-reported, 2026-09-15 — per-question grading, where the exam
+   * uses R137's points** (present exactly when `GradeSheet.questions` is).
+   * `score` above stays the total; this is its breakdown, never the other
+   * way around. Absent entirely for an exam that leaves every question
+   * unallocated — a different fact from an empty array, which means *this
+   * exam uses points and none are entered for her yet*.
+   */
+  question_scores?: { question_id: string; score: number }[];
 }
 
 export interface GradeSheet {
@@ -43,6 +52,13 @@ export interface GradeSheet {
   max_grade: number;
   has_published: boolean;
   rows: GradeSheetRow[];
+  /**
+   * **Owner-reported, 2026-09-15 — present only where the exam uses R137's
+   * points allocation** (every live question carries one, summing to
+   * `max_grade`). Absent for every exam that leaves `points` unset, which
+   * is most of them; the sheet then renders exactly as it always has.
+   */
+  questions?: { id: string; prompt: string; points: number }[];
 }
 
 export interface GradeEntryInput {
@@ -51,6 +67,12 @@ export interface GradeEntryInput {
   score: number | null;
   absent: boolean;
   version?: number;
+  /**
+   * **Owner-reported, 2026-09-15 — REPLACES `score` above when sent.** The
+   * server computes and stores the sum; `score` is then ignored entirely.
+   * Refused if the exam does not use points, or alongside `absent: true`.
+   */
+  question_scores?: { question_id: string; score: number }[];
 }
 
 export async function fetchGradeSheet(examId: string, token: string | null): Promise<GradeSheet> {

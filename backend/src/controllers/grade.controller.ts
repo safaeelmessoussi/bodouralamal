@@ -39,6 +39,14 @@ export function save(prisma: PrismaClient) {
       score: e.score,
       absent: e.absent,
       version: e.version,
+      ...(e.question_scores !== undefined
+        ? {
+            questionScores: e.question_scores.map((qs) => ({
+              questionId: qs.question_id,
+              score: qs.score,
+            })),
+          }
+        : {}),
     }));
 
     const result = await saveGradeDraft(prisma, requireActor(req), idParam(req, 'id'), entries);

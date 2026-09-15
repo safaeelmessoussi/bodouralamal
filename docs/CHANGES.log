@@ -9341,3 +9341,46 @@ change), `api`/`nginx` recreated and verified on the exact commit's label, `/hea
 green (4/4 components, 12/12 workers) within seconds, no error-level log lines in the
 following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers.
 No Production action of any kind.
+
+2026-09-15 (cont. 5) — SRS Revision 151: checkpoint 3 — per-question grading and
+publishing, one new table
+
+**Built — per-question grading, wherever an exam's questions carry R137's optional
+points.** New `grade_question_score` table (migration `20260915180000_r151_grade_question
+_score`), purely additive: one row per (Grade, ExamQuestion) actually scored, `grade_id`
+Cascade, `question_id` Restrict, the same `score >= 0` CHECK `grade.score` itself carries.
+`Grade.score` stays the single source of truth; nothing is trigger-derived — the service
+computes the sum and writes both in the same transaction `saveGradeDraft` already runs.
+
+R137's all-or-nothing points rule is re-checked defensively on every read/write
+(`pointsBreakdown`, built on the existing, now-exported `assertQuestionPointsConsistent`)
+rather than assumed — R137's own check runs only at REMOTE publish time, so a physical
+sitting's questions were never verified against it at all; an inconsistent or unallocated
+configuration is treated as "this exam does not use points," never surfaced as an error on
+the marking screen.
+
+`PUT /exams/{id}/grades`'s `question_scores` REPLACES `score` entirely when sent, computed
+server-side; refused when the exam has no points at all, when a value exceeds THAT
+QUESTION's own points (not the exam's maximum), on a duplicate question id, or alongside
+`absent`. A partial breakdown is a legal draft. Replaced whole on every save, same
+convention every other whole-row field on this platform already follows.
+
+`GradeSheetView` renders one column per question, the total becomes a derived read-only
+sum, and an entirely empty breakdown is never sent as `[]` — that would say "her total is
+0," exactly the unmarked-vs-zero distinction BR-7 keeps apart.
+
+**Deliberately not extended**: the student's own published-grades list — a per-question
+drill-down there is a new screen a student has never had, not a list extension, and was
+not what the Owner asked for (the staff-facing half was named explicitly).
+
+**Two test-isolation issues found and fixed, one with real cost**: a non-numeric `.sort()`
+and a missing TD-15 version on a second save (both harmless); and a cleanup-order mistake
+(exam_question deleted before grade, backwards — grade_question_score.question_id is
+RESTRICT against exam_question) that left the disposable stack's REUSED database broken
+after the first attempt, breaking two unrelated files' own cleanup on the following run as
+pure collateral damage — confirmed resolved by a fully green re-run once corrected.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,315/1,315; full disposable-stack integration 2,613/2,631 (18 pre-existing skips,
+all-table isolation intact); all 31 `scripts/ci/check-*.sh` guards, doc-links and
+`git diff --check` pass; OpenAPI regenerated, no drift.

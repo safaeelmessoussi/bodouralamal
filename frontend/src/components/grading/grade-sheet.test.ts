@@ -53,7 +53,12 @@ describe('the sheet keeps empty distinguishable from zero', () => {
     // BR-7 decides what becomes of an unmarked student at save time. Coercing
     // the blank field to 0 here would record a mark nobody entered and make the
     // absent-zero rule unobservable.
-    expect(code(SHEET)).toContain("draft.score.trim() === '' ? null");
+    const scoreComputation = code(SHEET).slice(
+      code(SHEET).indexOf('score:', code(SHEET).indexOf('student_id: row.student_id')),
+      code(SHEET).indexOf('absent: draft.absent'),
+    );
+    expect(scoreComputation).toContain("draft.score.trim() === ''");
+    expect(scoreComputation).toContain('? null');
   });
 
   /**
@@ -115,5 +120,38 @@ describe('the maximum comes from the exam, and nothing is converted', () => {
     // client had invented, which is how a mark stops reading back as itself.
     expect(code(SHEET)).not.toContain('Math.round');
     expect(code(SHEET)).not.toContain('10_000');
+  });
+});
+
+/**
+ * **Owner-reported, 2026-09-15 — per-question grading, where the exam uses
+ * R137's points allocation.** Source-pinned like every other rule in this
+ * file (`GradeSheetView` needs a session/token context no test here mocks),
+ * asserting the three properties a live render cannot easily prove: the
+ * empty-vs-zero rule survives into the new path, each input is bound to its
+ * OWN question's points rather than the exam's maximum, and the total column
+ * becomes derived rather than typed once questions are present.
+ */
+describe('per-question grading keeps the same rules the whole-exam field already has', () => {
+  it('never sends an empty breakdown as `[]` — nothing entered still means unmarked', () => {
+    // `entered.length > 0` is the guard: a breakdown with nothing filled in
+    // is `null`, matching `score: null`'s own "unmarked, not zero" meaning —
+    // sending `[]` would tell the server the total is 0, which is a mark
+    // nobody entered.
+    expect(code(SHEET)).toContain('entered.length > 0');
+  });
+
+  it('bounds each per-question input by that question’s own points, not the exam’s maximum', () => {
+    const questionInput = code(SHEET).slice(
+      code(SHEET).indexOf('sheet.questions?.map((q) =>'),
+      code(SHEET).indexOf('))}\n                    <td>'),
+    );
+    expect(questionInput).toContain('max={q.points}');
+    expect(questionInput).not.toContain('max={maxGrade}');
+  });
+
+  it('the total becomes a derived, read-only sum once questions are present — never a second editable field', () => {
+    expect(code(SHEET)).toContain('questionScoresTotal(draft)');
+    expect(code(SHEET)).toContain('sheet.questions ? (');
   });
 });
