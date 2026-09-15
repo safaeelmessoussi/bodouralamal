@@ -4130,7 +4130,16 @@ the Owner's own report named.
       dedicated design pass given the risk to the scheduling engine's
       core tables.
 - [x] Verification: backend/frontend typecheck/lint/build clean; backend
-      unit 342/342; frontend unit 1,308/1,308; focused disposable-stack
-      integration for every changed surface green, isolation intact; no
-      migration, no OpenAPI/TD-3 change. All 31 guards, doc-links and
-      `git diff --check` pass.
+      unit 342/342; frontend unit 1,308/1,308; full disposable-stack
+      integration 2,592/2,592 (18 pre-existing skips, no flake) after
+      fixing one genuine regression the full run caught (an exact
+      key-set assertion needed the new `tracks_quran_progress` field
+      added); no migration, no OpenAPI/TD-3 change. All 31 guards,
+      doc-links and `git diff --check` pass.
+- [x] Pushed as `4d443e0`; hosted CI green on the first run, all 7 jobs
+      (run `34968177974`) — a prior docs-only push's Release job hit a
+      transient GHCR blip, confirmed unrelated to code, and did not
+      recur. Deployed to Staging, no new migrations, no host issues,
+      `/healthz` green within seconds, `/profile` and the retired
+      `/dashboard/student/account` both verified reachable. Full detail
+      in CHANGES.log.

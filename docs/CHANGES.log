@@ -9116,4 +9116,23 @@ Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342;
 unit 1,308/1,308; focused disposable-stack integration runs for every changed backend
 surface (grade, taxonomy) green with all-table isolation intact; all 31
 `scripts/ci/check-*.sh` guards, the documentation-link guard and `git diff --check` pass.
-No migration, no OpenAPI/TD-3 change — every route touched already existed.
+No migration, no OpenAPI/TD-3 change — every route touched already existed. **One genuine
+regression caught by the full run and fixed in the same commit**: adding
+`tracks_quran_progress` to `GET /admin/subjects`'s wire shape broke
+`reference-data.http.integration.test.ts`'s exact key-set assertion for that row — the
+test was updated to include the new, deliberately-added field, exactly the discipline that
+assertion exists to enforce. Full disposable-stack integration 2,592/2,592 (18
+pre-existing skips), no flake, on the re-run after that fix.
+
+Pushed as `4d443e0`; hosted CI green on the first run, all 7 jobs (run `34968177974`) — a
+prior push's Release job (`bfccae4`, docs-only, run `34949449739`) had failed on a
+transient GHCR "unknown blob" push error with every other job green, confirming it was an
+infrastructure blip rather than anything code-related; it did not recur here. Deployed to
+`staging.bodouralamal.com`, upgrading from `ca1aa9b`: host preflight passed cleanly, no new
+migrations (`prisma migrate deploy` confirmed nothing pending), both `api`/`nginx`
+recreated and verified on the exact commit's `org.opencontainers.image.revision` label,
+`/healthz` green (4/4 components, 12/12 workers) within seconds, no error-level log lines
+in the following minutes, TLS/HSTS/CSP headers reconfirmed, `/profile` and the retired
+`/dashboard/student/account` both verified reachable (the latter now rendering the ordinary
+not-found page client-side, as designed), no leftover disposable containers. No Production
+action of any kind.
