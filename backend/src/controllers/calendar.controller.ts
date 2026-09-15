@@ -6,6 +6,7 @@ import { requireActor } from '../middleware/authenticate.js';
 import { AppError } from '../lib/errors.js';
 import {
   listSessionsForContent,
+  personalCalendarOptions,
   prefilledFilters,
   readCalendar,
   readSessionPage,
@@ -321,5 +322,31 @@ export function readMine(prisma: PrismaClient) {
       },
     );
     res.json({ data: occurrences.map(occurrenceDto) });
+  };
+}
+
+/**
+ * `GET /me/calendar/options` — تقويمي's OWN filter vocabulary (Owner-reported,
+ * 2026-09-15), never the association's. See `personalCalendarOptions`'s own
+ * docstring for the exact defect this closes.
+ */
+export function readMineOptions(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const actor = requireActor(req);
+    const options = await personalCalendarOptions(prisma, actor.userId);
+    res.json({
+      data: {
+        branches: options.branches,
+        // `display_order` matches the public bootstrap's Category/Level
+        // shape (TD-3.10) so the frontend's one selector renders either —
+        // `null` here is honest: her own handful of Categories/Levels is
+        // never re-ordered, unlike the association's whole catalogue.
+        categories: options.categories.map((c) => ({ ...c, display_order: null })),
+        levels: options.levels.map((l) => ({ ...l, display_order: null })),
+        subjects: options.subjects,
+        groups: options.groups,
+        circles: options.circles,
+      },
+    });
   };
 }

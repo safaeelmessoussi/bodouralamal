@@ -4039,8 +4039,55 @@ the Owner's own report named.
       (run `34912991227`); deployed to Staging, no new migrations, no
       host issues, `/healthz` green within seconds, TLS/HSTS/CSP
       reconfirmed. Full detail in CHANGES.log.
-- [ ] **Open product question for the Owner** (not a defect, not
-      actioned): does she want a new capability to edit an
-      already-scheduled *online* exam's arrangement? R136 clause 12
-      currently states no such route exists by design — reusing content
-      via «إنشاء نسخة في بناء الاختبارات» is the documented path instead.
+- [x] **Open product question, answered**: the Owner ratified a new
+      capability to edit an already-scheduled online exam's arrangement
+      (SRS Revision 145 §1) — see the section below.
+
+## Eleven further Owner-reported items — 2026-09-15 (continued)
+
+- [x] **تقويمي's filter dropdown fixed**: new `GET /me/calendar/options`
+      (SRS Revision 145 §2) gives it the caller's own vocabulary instead
+      of the public bootstrap's whole catalogue. New
+      `personal-calendar-options.integration.test.ts` (6/6) and
+      `personal-calendar.test.tsx`.
+- [x] **اختباراتي always shows its table now**, migrated to `DataTable`
+      (the same rule already applied to every admin list, 2026-08-30).
+      New `assessments.test.tsx`.
+- [x] **إضافة عنصر's نوع العنصر preselection bug fixed** — the recurring
+      unmatched-`<select>`-value pattern; added an explicit placeholder.
+      New `scheduling-form.test.tsx`.
+- [x] **الجدولة's المؤطِّرات column now shows names, not a count** — plus
+      a second, adjacent bug found and fixed at the same time: activity
+      staffing was hardcoded to show none at all, contradicting R71.
+      Existing `event.http.integration.test.ts`/`exam.http.integration
+      .test.ts` updated; new `scheduling-staff-names.test.ts`.
+- [x] **Built: an online exam's scheduling is now editable** (SRS
+      Revision 145 §1, superseding R136 clause 12) — new
+      `PATCH /exams/{id}/schedule`. Content (R124's freeze) untouched;
+      one stated, Owner-accepted risk around retargeting after
+      submissions exist; re-notification on reschedule deliberately not
+      built (a separate future ask). New `exam-schedule-update.http
+      .integration.test.ts` (10/10) and `scheduling-exam-edit.test.tsx`.
+- [x] **Reported, not implemented, each with its own reasoning** (see
+      CHANGES.log for the full detail on each):
+      - إدخال الحفظ for a newly-staffed مؤطرة — no Subject on Staging
+        carries `tracks_quran_progress`, and there is no admin capability
+        to set it; a data/capability gap, not a bug this session can fix
+        silently.
+      - حصصي removal — would silently remove حصص الحلقة (R106.6a) and
+        عرض المستفيدات, neither reachable from تقويمي's list view by
+        design (rule AO).
+      - تعديل العنصر's frozen branch/level/mode/subject/year — confirmed
+        deliberate, SRS Revision 57.
+      - group/circle/category targeting for حصة دراسية/محاضرة — a real
+        schema/migration decision (`RecurringCourseSchedule` has no
+        category concept at all), not a UI change.
+      - removing حسابي from the student's own side menu — that page
+        carries her reference code/enrolments (R86), which `/profile`
+        does not; removing the menu entry would strand that information.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,303/1,303; focused disposable-stack
+      integration runs for every new/changed surface, all green with
+      isolation intact; `docs/openapi.json` regenerated (179 paths/230
+      operations); TD-3 230/238 implemented, 0 undocumented; all 31
+      guards, doc-links and `git diff --check` pass.

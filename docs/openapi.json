@@ -11610,6 +11610,37 @@
         }
       }
     },
+    "/me/calendar/options": {
+      "get": {
+        "summary": "تقويمي's own filter vocabulary",
+        "description": "Owner-reported, 2026-09-15. `PersonalCalendar` fed its Category/Level filter row the SAME unscoped `GET /calendar/bootstrap` chrome the anonymous public timetable reads — every Category and Level in the association, regardless of who asked — while `groups`/`circles`/`subjects` were never supplied at all. This is the narrower read (rule O, the same reasoning `/me/scope-options`/`/me/event-scope-options` already state): the caller's OWN enrolled Levels/Categories/administrative groups/circles (from her `Enrollment` and `StudentTeachingGroup` rows) UNIONED with what she currently teaches (`teacherEventScope`, R91-dated) and its Subjects and branches — the identical union `personalFilters` itself already reads for `GET /me/calendar`'s occurrence filter. Somebody who is both gets both. **No role check decides which half runs** — either resolution is simply empty when it does not apply. Every field is `[]` for a caller with neither enrolment nor staffing, never a refusal.",
+        "responses": {
+          "200": {
+            "description": "{ branches, categories, levels, subjects, groups, circles } — id/name pairs (Level also carries category_id), narrowed to the caller's own vocabulary."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/students/me/grades": {
       "get": {
         "summary": "The acting student’s published grades",
@@ -12520,6 +12551,77 @@
           },
           "409": {
             "description": "Error envelope (TD-3.8). STATE_CONFLICT — SOURCE_ALREADY_SCHEDULED, NO_QUESTIONS for an empty online source, QUESTION_POINTS_INCOMPLETE or QUESTION_POINTS_MISMATCH (R137), ROOM_BRANCH_MISMATCH, BRANCH_MISMATCH, GROUP_LEVEL_MISMATCH, or SUBJECT_NOT_IN_LEVEL from the shared curriculum policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/schedule": {
+      "patch": {
+        "summary": "Edit a scheduled ONLINE exam's arrangement",
+        "description": "**Document Owner decision, 2026-09-15, superseding R136 clause 12's own text** (\"editing an already-scheduled remote occurrence's arrangement has no route\"). The Owner's own distinction: an exam already taken by a student cannot be changed — reuse it via «إنشاء نسخة في بناء الاختبارات» to keep an unchanged copy — but its SCHEDULING can always be edited, taken or not. This is that route for `mode: 'online'`; `PATCH /exams/{id}` stays the physical sitting's own, unchanged route.\n\n**Body**: `{ version, target?, date?, start_time?, end_time?, scheduling_type_id?, visibility?, staff[]?, availability? }`, `.strict()`. Deliberately absent: `mode`, `source_exam_id`, `bare` (would redefine WHAT is examined — content, not scheduling) and `branch_id`/`room_id` (an online occurrence carries neither, `exam_online_has_no_room_check`). `target` is `POST /exams/schedule`'s own five-arm shape — omitted leaves the current target exactly as it is; given, it is re-resolved and re-authorized (`assertMayAuthor`) exactly as scheduling authorizes a fresh one. `availability`, given, recomputes `available_from` from R136 clause 9/10's four policies; omitted leaves the access gate exactly where it is — never reset toward `manual`.\n\n**Content stays exactly where R124 already put it.** No question or option write reaches through this route, so R124's freeze-on-first-submission needs no change — it was never about scheduling.\n\n**The one honestly-stated risk, not a refusal the Owner did not ask for**: `readGradeSheet`'s roster is always the exam's CURRENT audience, never a snapshot (the same design already governing every other retarget in this platform) — a submission recorded under a since-narrowed target becomes invisible on the sheet rather than lost; the grade is never deleted, and reappears the moment the target widens back.\n\n**Re-notification is deliberately not sent.** A reschedule does not trigger `exam_scheduled` again — extending notification to every arrangement edit is a real question the Owner has not asked, left for an explicitly-requested later pass rather than invented now.\n\n**TD-15**: a stale `version` is `409 VERSION_CONFLICT`. **Staff are REPLACED, not merged**, the identical convention `PATCH /exams/{id}` already uses.",
+        "responses": {
+          "204": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, TARGET_ID_REQUIRED, DATE_REQUIRED, or AVAILABILITY_NEEDS_START_TIME.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — outside the caller's authoring, teaching or branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown exam, target, or one out of the caller's scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — PHYSICAL_USE_OTHER_ROUTE for a physical sitting, NOT_SCHEDULED_YET for a still-draft source, or VERSION_CONFLICT (TD-15).",
             "content": {
               "application/json": {
                 "schema": {

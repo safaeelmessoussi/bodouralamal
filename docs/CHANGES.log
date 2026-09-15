@@ -8882,3 +8882,142 @@ on the exact commit's `org.opencontainers.image.revision` label, `/healthz` gree
 components, 12/12 workers) within seconds, no error-level log lines in the following
 minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No Production
 action of any kind.
+
+2026-09-15 — Eleven further Owner-reported items: five fixed, one substantial ratified
+capability built, five investigated and reported back rather than silently implemented or
+silently declined
+A second, larger Staging walk-through, continuing directly from the batch above (same
+day). Each item was investigated to a root cause first; five were genuine, containable
+defects and are fixed below; one — editing a scheduled online exam — was an explicit new
+Owner policy decision superseding a previously-ratified SRS clause, and is built as its own
+SRS revision; five more turned out to risk a real capability loss, contradict a separately-
+documented deliberate design, or need a schema-level decision this session does not have
+standing to make silently, and are reported rather than actioned.
+
+**Fixed — item 5 (تقويمي's filter dropdown listed every level in the association).**
+Root-caused precisely: `PersonalCalendar`'s Category/Level filter options came from the
+SAME unscoped `GET /calendar/bootstrap` the anonymous public timetable reads, while its
+group/circle/subject options were never supplied at all. New `GET /me/calendar/options`
+(SRS Revision 145 §2) resolves the caller's own enrolled/taught vocabulary — the identical
+union `personalFilters` (R140 §3) already reads for the occurrence query itself — and
+`personal-calendar.tsx` now feeds `CalendarFilters` from it instead of the public
+bootstrap, which stays for the Hijri/Gregorian chrome alone. New
+`personal-calendar-options.integration.test.ts` (6/6, real disposable stack) and
+`personal-calendar.test.tsx` (source-pinned), both confirmed to fail without the fix.
+
+**Fixed — item 4, second half (اختباراتي should show the table, empty or not).** The page
+replaced its whole `<ul>` list with a bare `<EmptyState/>` when there was nothing to show —
+exactly the defect `DataTable` was already corrected for on every admin list (2026-08-30).
+Migrated to `DataTable`, which keeps the columns visible with an empty body rather than
+collapsing the screen. (اختباراتي's exam-visibility half of this item was investigated on
+live Staging data and found to be the availability gate correctly refusing early access,
+not a bug — see the earlier report to the Owner; no code change there.) New
+`assessments.test.tsx`, confirmed to fail without the fix.
+
+**Fixed — item 7 (إضافة عنصر's نوع العنصر looked pre-selected, then refused to save).** The
+exact recurring defect this session has met several times: an unmatched `value=''` with no
+explicit `placeholder` falls back to the browser showing the catalogue's FIRST row as if
+chosen. Added `placeholder={t('scheduling.itemTypePlaceholder')}` to `TypePicker`'s
+`SelectField`. New `scheduling-form.test.tsx`, confirmed to fail without the fix.
+
+**Fixed — item 11 (الجدولة's المؤطِّرات column showed a bare count).** `staffCount` was
+computed client-side from a wire `staff` array that never carried a name — added
+`user_name` to it across all three list DTOs (`courseScheduleDto`, `eventDefinitionDto`,
+`examDto`) and the underlying Prisma selects (one `user: { select: { nameArabic: true } } }`
+join each, the same "one join, on a page of at most 25 rows" precedent `listCourseSchedules`
+already states for Subject/Branch/Room/Level). New `SchedulingItem.staffNames`, rendered
+joined by `، ` in place of the count. **A second, adjacent defect found and fixed at the
+same time**: `fromEvent`'s `staffCount` was hardcoded `null` despite R71 giving an activity
+real staffing — its own docstring said so two lines below the hardcoded value — so الجدولة
+showed «—» for every activity's staffing regardless of who was actually assigned; now reads
+`row.staff.length`/names for real. Two existing HTTP integration tests
+(`event.http.integration.test.ts`, `exam.http.integration.test.ts`) asserted the staff
+array's exact prior shape and were updated to include the now-present name; new
+`scheduling-staff-names.test.ts`, confirmed to fail without the fix.
+
+**Built — item 3 (an online exam's SCHEDULING is now editable), SRS Revision 145 §1,
+Document Owner decision, explicitly superseding R136 clause 12's "no route exists".** The
+Owner's own distinction, ratified: an exam already taken by a student cannot be changed —
+duplicate it to keep an unchanged copy — but its scheduling can always be edited. New
+`PATCH /exams/{id}/schedule` (`updateExamSchedule`, `exam-scheduling.service.ts`): target
+(any of R125's five arms, re-resolved and re-authorized exactly as creation does), date,
+clock window, catalogue type, visibility, staff (replaced wholesale, `updatePhysicalExam`'s
+own convention) and — uniquely to a remote occurrence — `availability`, recomputing
+`available_from`. Deliberately excluded: `mode`/`source_exam_id`/`bare` (content, not
+scheduling) and physical-only `branch_id`/`room_id`. **R124's freeze needed no change at
+all** — this route never writes a question, so "already taken cannot be changed" already
+covered exactly what the Owner said it should, automatically. **One risk stated rather than
+silently guarded against**: retargeting after submissions exist can make an existing grade
+temporarily invisible on the sheet (never deleted — `readGradeSheet`'s roster has always
+been the CURRENT audience, true of every other retarget in this platform); refusing this
+outright would have contradicted the Owner's own explicit "any scheduling can be edited."
+Re-notification on reschedule is deliberately not sent — a separate question left for an
+explicit future ask. Frontend: الجدولة's Edit action no longer hides itself for an online
+exam; `saveSchedulingItem` dispatches an online edit to the new route (and, critically,
+**never** builds `target`/`availability` from the CREATE-only `examSource` state while
+editing — that state is never seeded from the row being edited, and building it
+unconditionally would have silently retargeted every edited online exam to "the whole
+Level"); `ExamSection` replaces its CREATE-only, `required` paper picker with a plain note
+while editing, since nothing hydrates it from an already-scheduled row. New backend
+`exam-schedule-update.http.integration.test.ts` (10/10, real disposable stack, catching one
+genuine bug during its own writing — `resolveTarget`'s date requirement — before it ever
+reached review) and frontend `scheduling-exam-edit.test.tsx`, both confirmed to fail
+without the fix.
+
+**Reported, not implemented — item 6 (إدخال حفظ المستفيدات missing for a newly-staffed
+مؤطرة).** Root-caused on live Staging data: `teachesQuran()`'s query is correct, but **no
+Subject on Staging currently carries `tracks_quran_progress = true` at all** — confirmed by
+direct query (`تفسير القرآن`/`حفظ القرآن`/`ترتيل القرآن` all exist; none is flagged). This is
+not a code bug; it is a reference-data gap, and — unlike `AcademicPeriod`, which the Owner
+could set herself — there is currently **no admin capability to set this flag at all**; it
+is seed-time-only. Setting it directly in Staging's database on the Owner's behalf, or
+building a new admin capability to do so, are both real actions this session does not have
+standing to take silently. Flagged back to the Owner rather than either.
+
+**Reported, not implemented — item 8 (remove حصصي from the teacher dashboard).** Reading
+`/teacher/schedules` found that «حصصي»'s row actions are not decorative: «حصص الحلقة»
+(cancel/reschedule/room-change on her own class's occurrences, R106.6a — itself a
+previously-fixed "rule P" defect, a granted capability with no UI reach) and «عرض
+المستفيدات» (the enrolled roster) have no equivalent on تقويمي's list view, which is
+deliberately never given management row actions (`OccurrenceTable`'s own stated rule AO).
+Removing the section as asked would reopen R106.6a's own defect and remove roster access
+outright. Flagged back to the Owner rather than removing a real capability silently.
+
+**Reported, not implemented — item 9 (تعديل العنصر won't let branch/level/mode/subject/year
+be edited on a class).** Confirmed deliberate and already ratified: SRS Revision 57 states
+these are frozen because changing them would re-point Sessions already materialized against
+the old answer — the same reasoning §4.4 gives a course schedule's scope generally. R50's
+`this_and_future` split (creating a successor schedule, closing the predecessor) is the
+platform's existing answer when one of these genuinely needs to change. No code change;
+explained rather than silently left unaddressed.
+
+**Reported, not implemented — item 10 (group/circle/category targeting for حصة
+دراسية/محاضرة, "the same as نشاط").** Investigated at the schema level:
+`RecurringCourseSchedule` has no category concept at all (no column, no join table) and is
+architecturally a single-target row (`teachingMode` + exactly one nullable FK, CHECK-
+enforced) — the opposite design from `Event`'s multi-scoped join tables `ActivitySection`
+now exposes. Giving a class the same experience is a real schema/migration decision (new
+join tables, a validator/roster-resolution rewrite), not a UI change, and is exactly the
+kind of decision this session does not choose silently. Flagged back to the Owner as a
+scoped, separate follow-up rather than attempted in this pass.
+
+**Reported, not implemented — the final item (remove حسابي from the student's own side
+menu).** `/dashboard/student/account` is not a duplicate of the header's `/profile` link —
+it carries her reference code and enrolments (R86), content `/profile` does not have, and
+nothing else in her portal links to it. Removing the menu entry would strand that
+information with no path to it. Flagged back to the Owner — a rename (to distinguish it
+from the header's own «حسابي» without losing the page) is offered as a lower-risk
+alternative to outright removal.
+
+**Also confirmed, not from this session's work**: the AcademicPeriod the Owner recorded
+after the previous deployment (`2026-09-14`–`2027-01-31`) is in place and resolved both the
+registration and approval blockers already reported fixed.
+
+Verification: backend/frontend typecheck/lint/build clean; full backend unit suite
+342/342; full frontend unit suite 1,303/1,303 (was 1,288); focused disposable-stack
+integration runs for every new/changed backend surface (event/exam/course-schedule HTTP,
+personal-calendar-options, exam-schedule-update) all green with all-table isolation intact;
+`docs/openapi.json` regenerated with no hand edits (179 paths/230 operations, two new); TD-3
+conformance updated, 230/238 implemented, 0 undocumented; all 31 `scripts/ci/check-*.sh`
+guards, the documentation-link guard and `git diff --check` all pass. Full disposable-stack
+integration run recorded separately below.

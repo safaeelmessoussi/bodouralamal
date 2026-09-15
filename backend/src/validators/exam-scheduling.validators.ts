@@ -82,3 +82,28 @@ export const scheduleExamSchema = z
     bare,
   })
   .strict();
+
+/**
+ * `PATCH /exams/{id}/schedule` — an ONLINE occurrence's ARRANGEMENT, edited
+ * (Owner, 2026-09-15; `exam-scheduling.service.ts`'s `updateExamSchedule`
+ * carries the full reasoning).
+ *
+ * **Deliberately absent: `mode`, `source_exam_id`, `bare`, `branch_id`,
+ * `room_id`.** The first three would redefine WHAT is examined; the last two
+ * do not apply to a delivery mode `exam_online_has_no_room_check` forbids
+ * one on. Every field here is an occurrence FACT — when, for whom, how it is
+ * reached — never a content fact.
+ */
+export const updateExamScheduleSchema = z
+  .object({
+    version: z.number().int().nonnegative(),
+    target: assessmentTarget.optional(),
+    date: calendarDate.optional(),
+    start_time: wallClock.optional(),
+    end_time: wallClock.optional(),
+    scheduling_type_id: uuid.nullable().optional(),
+    visibility: visibility.optional(),
+    staff: staff.optional(),
+    availability,
+  })
+  .strict();

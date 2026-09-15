@@ -449,6 +449,10 @@ export function createApp(
   // R82.8 — the caller's OWN calendar: the same projection, narrowed to what
   // concerns her. `GET /calendar` stays the public, visibility-tier read.
   guarded.get('/me/calendar', calendar.readMine(prisma));
+  // Owner-reported, 2026-09-15 — the caller's OWN filter vocabulary for
+  // تقويمي, beside `/me/scope-options`/`/me/event-scope-options` for the same
+  // reason (a narrower question the read above does not already answer).
+  guarded.get('/me/calendar/options', calendar.readMineOptions(prisma));
   guarded.get('/notifications', notifications.list(prisma));
   guarded.post('/notifications/:id/read', notifications.read(prisma));
   // R82.5 — the OPTIONAL send, after an event change is already saved. A
@@ -838,6 +842,12 @@ export function createApp(
    * scheduled occurrence, atomically — see `exam-scheduling.service.ts`.
    */
   guarded.post('/exams/schedule', examScheduling.schedule(prisma));
+  /**
+   * Owner decision, 2026-09-15, superseding R136 clause 12's "no route
+   * exists" for an online occurrence's arrangement. `PATCH /exams/{id}`
+   * (below) stays the physical sitting's own route, unchanged.
+   */
+  guarded.patch('/exams/:id/schedule', examScheduling.updateSchedule(prisma));
 
   // §4.6 grading (M5a, R70). Nested under the exam because a grade cannot exist
   // without one — `Grade.exam_id` is NOT NULL with `ON DELETE RESTRICT`, and the

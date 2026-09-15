@@ -771,7 +771,11 @@ const EXAM_INCLUDE = {
   // privacy-conscious generic label the calendar gives them, decided once
   // in `examDto`'s consumers rather than joined for here.
   teachingGroup: { select: { name: true } },
-  staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+  // Owner-reported, 2026-09-15 — see `listCourseSchedules`'s own note.
+  staff: {
+    where: { deletedAt: null },
+    select: { userId: true, position: true, user: { select: { nameArabic: true } } },
+  },
 } satisfies Prisma.ExamInclude;
 
 export type ExamRow = Prisma.ExamGetPayload<{ include: typeof EXAM_INCLUDE }>;

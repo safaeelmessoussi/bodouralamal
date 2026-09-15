@@ -11,6 +11,7 @@ import {
 import { publicDisplayName } from "../lib/display-name.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
 import * as scope from "../policies/branch-scope.js";
+import { effectiveOn } from "../policies/effective-staffing.js";
 import { visibleContentIds } from "./library.service.js";
 import { expandEvent } from "../lib/recurrence.js";
 
@@ -768,6 +769,149 @@ async function personalFilters(
   };
 
   return { event, session };
+}
+
+export interface PersonalCalendarOptions {
+  branches: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+  levels: { id: string; name: string; category_id: string }[];
+  subjects: { id: string; name: string }[];
+  groups: { id: string; name: string }[];
+  circles: { id: string; name: string }[];
+}
+
+/**
+ * **What تقويمي may narrow by — her own vocabulary, never the association's**
+ * (Owner-reported, 2026-09-15).
+ *
+ * `PersonalCalendar` fed `CalendarFilters` the same public
+ * `GET /calendar/bootstrap` chrome the anonymous timetable uses for its
+ * Category/Level options — every Category and every Level in the
+ * association, regardless of who is asking. The occurrence QUERY was already
+ * correctly scoped (`personalFilters`, R140 §3); only the OPTIONS a reader
+ * could pick from were not, so a beneficiary's own filter row offered her a
+ * choice she had no enrolment in and could only ever narrow to nothing —
+ * exactly the *"a control that implies a scope she does not have... the
+ * control would be a lie"* rule/O already states for branch and category.
+ *
+ * **The same union `personalFilters` itself reads by** (above): a beneficiary
+ * contributes her enrolments and seats, a مؤطرة contributes what she
+ * currently teaches (`teacherEventScope`, R91-dated) and its Subjects, and
+ * somebody who is both gets both. No role check decides which branch runs —
+ * either resolution is simply empty when it does not apply, matching
+ * `personalFilters`'s own reasoning exactly.
+ */
+export async function personalCalendarOptions(
+  prisma: PrismaClient,
+  userId: string,
+): Promise<PersonalCalendarOptions> {
+  const enrolments = await prisma.enrollment.findMany({
+    where: { studentId: userId, deletedAt: null },
+    select: {
+      levelId: true,
+      administrativeGroupId: true,
+      level: { select: { id: true, name: true, categoryId: true, category: { select: { name: true } } } },
+    },
+  });
+  const seats = await prisma.studentTeachingGroup.findMany({
+    where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null } },
+    select: { teachingGroup: { select: { id: true, name: true } } },
+  });
+
+  const taught = await teacherEventScope(prisma, userId);
+  const taughtSchedules = await prisma.recurringCourseSchedule.findMany({
+    where: { deletedAt: null, staff: { some: { userId, ...effectiveOn(new Date()) } } },
+    select: {
+      subjectId: true,
+      subject: { select: { id: true, name: true } },
+      teachingGroupId: true,
+      teachingGroup: { select: { id: true, name: true } },
+    },
+  });
+
+  const levelIds = new Set<string>([...enrolments.map((e) => e.levelId), ...taught.levelIds]);
+  const categoryIds = new Set<string>([
+    ...enrolments.map((e) => e.level.categoryId),
+    ...taught.categoryIds,
+  ]);
+  const groupIds = new Set<string>([
+    ...enrolments.map((e) => e.administrativeGroupId).filter((id): id is string => id !== null),
+    ...taught.administrativeGroupIds,
+  ]);
+  const circles = new Map<string, string>();
+  for (const seat of seats) circles.set(seat.teachingGroup.id, seat.teachingGroup.name);
+  for (const s of taughtSchedules) {
+    if (s.teachingGroup) circles.set(s.teachingGroup.id, s.teachingGroup.name);
+  }
+  const subjects = new Map<string, string>();
+  for (const s of taughtSchedules) {
+    if (s.subject) subjects.set(s.subject.id, s.subject.name);
+  }
+  // Her own enrolled Levels' curriculum — مواد المستوى, the same subjects the
+  // library already shows her (§5.3) — so filtering سجّلها by a Subject
+  // offers exactly what she is actually taught, not the association's whole
+  // catalogue.
+  if (enrolments.length > 0) {
+    const levelSubjects = await prisma.levelSubject.findMany({
+      where: { levelId: { in: [...levelIds] }, deletedAt: null },
+      select: { subject: { select: { id: true, name: true } } },
+    });
+    for (const ls of levelSubjects) subjects.set(ls.subject.id, ls.subject.name);
+  }
+
+  const categoryNames = new Map<string, string>();
+  for (const e of enrolments) categoryNames.set(e.level.categoryId, e.level.category.name);
+  const levelNames = new Map<string, { name: string; categoryId: string }>();
+  for (const e of enrolments) {
+    levelNames.set(e.levelId, { name: e.level.name, categoryId: e.level.categoryId });
+  }
+  // Fill in whatever the enrolment loop above did not already carry — her own
+  // taught Levels/Categories/Branches, which have names to resolve.
+  const missingLevelIds = [...levelIds].filter((id) => !levelNames.has(id));
+  const missingCategoryIds = [...categoryIds].filter((id) => !categoryNames.has(id));
+  const [extraLevels, extraCategories, groupRows, branchRows] = await Promise.all([
+    missingLevelIds.length
+      ? prisma.level.findMany({
+          where: { id: { in: missingLevelIds }, deletedAt: null },
+          select: { id: true, name: true, categoryId: true },
+        })
+      : Promise.resolve([]),
+    missingCategoryIds.length
+      ? prisma.category.findMany({
+          where: { id: { in: missingCategoryIds }, deletedAt: null },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+    groupIds.size
+      ? prisma.administrativeGroup.findMany({
+          where: { id: { in: [...groupIds] }, deletedAt: null },
+          select: { id: true, name: true, level: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+    taught.branchIds.length
+      ? prisma.branch.findMany({
+          where: { id: { in: taught.branchIds }, deletedAt: null },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  for (const l of extraLevels) levelNames.set(l.id, { name: l.name, categoryId: l.categoryId });
+  for (const c of extraCategories) categoryNames.set(c.id, c.name);
+
+  return {
+    branches: branchRows.map((b) => ({ id: b.id, name: b.name })),
+    categories: [...categoryNames.entries()].map(([id, name]) => ({ id, name })),
+    levels: [...levelNames.entries()].map(([id, v]) => ({
+      id,
+      name: v.name,
+      category_id: v.categoryId,
+    })),
+    subjects: [...subjects.entries()].map(([id, name]) => ({ id, name })),
+    // **`{Level} — {Group}`** (rule D): a group's name is not unique across
+    // Levels, so a bare one does not identify it.
+    groups: groupRows.map((g) => ({ id: g.id, name: `${g.level.name} — ${g.name}` })),
+    circles: [...circles.entries()].map(([id, name]) => ({ id, name })),
+  };
 }
 
 export async function readCalendar(

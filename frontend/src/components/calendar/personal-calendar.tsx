@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import {
   fetchCalendarBootstrap,
+  fetchMyCalendarOptions,
   fetchMyOccurrences,
   type CalendarBootstrap,
   type HijriDay,
   type Occurrence,
+  type PersonalCalendarOptions,
 } from '../../adapters/calendar.js';
 import {
   useCalendarFilters,
@@ -64,6 +66,11 @@ export function PersonalCalendar({
   const [view, setView] = useState<CalendarView>(() => viewFromUrl('calendar'));
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
+  /** Her own filter vocabulary (Owner-reported, 2026-09-15) — see
+   *  `fetchMyCalendarOptions`'s own docstring. Never the association's whole
+   *  catalogue, which `bootstrap` above still carries for the Hijri/Gregorian
+   *  chrome alone. */
+  const [options, setOptions] = useState<PersonalCalendarOptions | null>(null);
   const [openDay, setOpenDay] = useState<Date | null>(null);
   /** The occurrence whose details are open — the same shared dialog the public
    *  calendar uses, which nothing but that page opened until now. */
@@ -121,6 +128,15 @@ export function PersonalCalendar({
       .catch(() => setBootstrap(null));
   }, [from, to]);
 
+  useEffect(() => {
+    // Her own vocabulary, fetched once — it does not depend on the month, and
+    // fetching it per month change would be the general bootstrap's mistake
+    // again for a different field.
+    void fetchMyCalendarOptions(token)
+      .then(setOptions)
+      .catch(() => setOptions(null));
+  }, [token]);
+
   const hijriByDate = useMemo(() => {
     const map = new Map<string, HijriDay>();
     for (const day of bootstrap?.hijri.days ?? []) map.set(day.date, day);
@@ -152,8 +168,15 @@ export function PersonalCalendar({
         filters={
           <CalendarFilters
             filters={filters}
-            categories={bootstrap?.categories ?? []}
-            levels={bootstrap?.levels ?? []}
+            // **Her own vocabulary, not the association's** (Owner-reported,
+            // 2026-09-15) — `options`, never `bootstrap`, for every field a
+            // beneficiary or a مؤطرة may actually narrow by.
+            branches={options?.branches ?? []}
+            categories={options?.categories ?? []}
+            levels={options?.levels ?? []}
+            subjects={options?.subjects ?? []}
+            groups={options?.groups ?? []}
+            circles={options?.circles ?? []}
             types={withUnlistedValue(
               schedulingTypeOptions(bootstrap),
               filters.value.type ?? null,

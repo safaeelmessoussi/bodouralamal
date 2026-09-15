@@ -245,6 +245,24 @@ export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurren
   return page.data;
 }
 
+/** `GET /me/calendar/options` — تقويمي's own filter vocabulary (Owner-reported,
+ *  2026-09-15): her enrolled/taught Categories, Levels, Subjects, groups and
+ *  circles, never the association's full catalogue. See the service's own
+ *  docstring for the defect this closes. */
+export interface PersonalCalendarOptions {
+  branches: { id: string; name: string }[];
+  categories: CategoryRef[];
+  levels: LevelRef[];
+  subjects: { id: string; name: string }[];
+  groups: { id: string; name: string }[];
+  circles: { id: string; name: string }[];
+}
+
+export async function fetchMyCalendarOptions(token: string | null): Promise<PersonalCalendarOptions> {
+  const body = await api<{ data: PersonalCalendarOptions }>('/me/calendar/options', { token });
+  return body.data;
+}
+
 export async function fetchOccurrences(query: CalendarQuery): Promise<CalendarResult> {
   const page = await api<CalendarPage>(`/calendar?${calendarParams(query).toString()}`, {
     token: query.token ?? null,

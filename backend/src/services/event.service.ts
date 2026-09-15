@@ -965,7 +965,7 @@ export async function listEvents(
   Page<
     Event & {
       branchScopes: { branchId: string }[];
-      staff: { userId: string; position: 'responsible' | 'assistant' }[];
+      staff: { userId: string; position: 'responsible' | 'assistant'; name: string }[];
     }
   >
 > {
@@ -1038,13 +1038,25 @@ export async function listEvents(
         // them on the next save.
         staff: {
           where: { deletedAt: null },
-          select: { userId: true, position: true },
+          // Owner-reported, 2026-09-15 — see `listCourseSchedules`'s own note.
+          select: { userId: true, position: true, user: { select: { nameArabic: true } } },
         },
       },
     }),
     prisma.event.count({ where }),
   ]);
-  return page(rows, window, total);
+  return page(
+    rows.map((row) => ({
+      ...row,
+      staff: row.staff.map((s) => ({
+        userId: s.userId,
+        position: s.position,
+        name: s.user.nameArabic,
+      })),
+    })),
+    window,
+    total,
+  );
 }
 
 /**

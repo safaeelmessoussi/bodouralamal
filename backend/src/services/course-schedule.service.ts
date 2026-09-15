@@ -2024,7 +2024,15 @@ export async function listCourseSchedules(
   } & PageParams,
 ): Promise<
   Page<
-    RecurringCourseSchedule & { staff: { userId: string; position: string }[] }
+    RecurringCourseSchedule & {
+      staff: {
+        userId: string;
+        position: string;
+        name: string;
+        effectiveFrom: Date | null;
+        effectiveUntil: Date | null;
+      }[];
+    }
   >
 > {
   assertCanRead(actor);
@@ -2059,6 +2067,12 @@ export async function listCourseSchedules(
             position: true,
             effectiveFrom: true,
             effectiveUntil: true,
+            // Owner-reported, 2026-09-15 — المؤطِّرات showed a bare count; a
+            // name is the same "a client cannot render this from ids" rule
+            // the joins below already state, applied to the one column that
+            // was still left as raw ids for the reader to count rather than
+            // read.
+            user: { select: { nameArabic: true } },
           },
         },
         // **The labels the ids stand for**, resolved here for the same reason
@@ -2078,7 +2092,20 @@ export async function listCourseSchedules(
     }),
     prisma.recurringCourseSchedule.count({ where }),
   ]);
-  return page(rows, window, total);
+  return page(
+    rows.map((row) => ({
+      ...row,
+      staff: row.staff.map((s) => ({
+        userId: s.userId,
+        position: s.position,
+        name: s.user.nameArabic,
+        effectiveFrom: s.effectiveFrom,
+        effectiveUntil: s.effectiveUntil,
+      })),
+    })),
+    window,
+    total,
+  );
 }
 
 /**

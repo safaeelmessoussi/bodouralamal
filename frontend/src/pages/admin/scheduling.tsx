@@ -503,14 +503,21 @@ export function SchedulingPage(): ReactNode {
         ),
     },
     {
-      // §8 — how many مؤطِّرات are assigned. `null` is *this kind has no
-      // staffing*, which is a different fact from *nobody is assigned*.
+      // §8 — who is assigned, by name (Owner-reported, 2026-09-15 — this
+      // showed a bare count until now). `staffCount === null` is *this kind
+      // has no staffing at all*, a different fact from *nobody is assigned*
+      // (`staffCount === 0`), which the dash still distinguishes.
       key: 'staff',
       header: t('admin.schedules.staffCount'),
       secondary: true,
-      numeric: true,
       cell: (r) =>
-        r.staffCount === null ? <span className="muted">—</span> : String(r.staffCount),
+        r.staffCount === null ? (
+          <span className="muted">—</span>
+        ) : r.staffNames.length > 0 ? (
+          r.staffNames.join('، ')
+        ) : (
+          <span className="muted">—</span>
+        ),
     },
   ];
 
@@ -529,15 +536,14 @@ export function SchedulingPage(): ReactNode {
       label: t('common.edit'),
       onSelect: (r) => setEditing(r),
       /**
-       * **R136 — a remote occurrence has no arrangement-edit path here.**
-       * Its target/date were assigned atomically at scheduling and are not
-       * revisable through `PATCH /exams/{id}` (that route edits a physical
-       * sitting's place/clock-window/staff, none of which a remote row
-       * carries); offering Edit would open a physical-shaped form against
-       * an online row and fail at save. «إنشاء نسخة في بناء الاختبارات»
-       * (نقاط الامتحانات) is the way to reuse its content afresh.
+       * **Owner, 2026-09-15 (SRS Revision 145 §1) — a remote occurrence's
+       * arrangement is editable, superseding R136 clause 12's "no route
+       * exists".** `PATCH /exams/{id}/schedule` is that route; `saveSchedulingItem`
+       * dispatches to it for an online exam rather than `PATCH /exams/{id}`,
+       * which still refuses one. CONTENT stays exactly where R124 already
+       * put it — «إنشاء نسخة في بناء الاختبارات» (نقاط الامتحانات) is still
+       * how its questions are reused, unchanged.
        */
-      available: (r) => r.type !== 'exam' || r.ids.examMode !== 'online',
     },
     {
       label: t('common.delete'),
@@ -1660,7 +1666,14 @@ export function SchedulingDialog({
        * authoring already does — a second, client-side scope chain here
        * would be a second answer to a question §4.4c already owns.
        */
-      if (item) return null; // Editing a remote row never reaches this branch (Edit is hidden for it).
+      /**
+       * **Editing** (Owner, 2026-09-15; SRS Revision 145 §1) — none of these
+       * CREATE-only questions (paper, target, availability) apply: `source`
+       * is never seeded from the row being edited, and `ExamSection` itself
+       * hides that whole picker for `mode === 'online' && locked` rather
+       * than showing a required control with nothing chosen against it.
+       */
+      if (item) return null;
       if (examSource.sourceId === '') return t('scheduling.exam.paperRequired');
       if (examSource.targetKind !== 'level' && examSource.targetId === '') {
         return t('scheduling.invalid.target');
@@ -1878,7 +1891,20 @@ export function SchedulingDialog({
           // R136 — physical or remote; the remote authoring/audience/
           // availability fields, sent only for the mode that uses them.
           examMode,
-          ...(type === 'exam' && examMode === 'online'
+          /**
+           * **Create-only** (Owner, 2026-09-15; SRS Revision 145 §1). `examSource`
+           * holds its unseeded initial state while editing — nothing hydrates
+           * it from the row being edited, since re-picking a source paper or
+           * retargeting are not what an arrangement edit is for. Building
+           * this unconditionally would have sent `target: { kind: 'level' }`
+           * on every online-exam edit save, silently retargeting it to the
+           * whole Level regardless of what the reader actually opened Edit
+           * to change. `saveSchedulingItem`'s edit branch never reads
+           * `examSourceId`, and omitting `examTarget`/`examAvailability`
+           * here is exactly what leaves the exam's current target and
+           * availability untouched, by `updateExamSchedule`'s own contract.
+           */
+          ...(type === 'exam' && examMode === 'online' && !editing
             ? {
                 examSourceId: examSource.sourceId,
                 examTarget: {

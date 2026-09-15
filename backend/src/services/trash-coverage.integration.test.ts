@@ -324,6 +324,13 @@ const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
   // not filtered on `deleted_at`, so a returning supervisor is revived rather
   // than inserted, and an insert would be refused.
   "exam.service.ts": "revives tombstoned ExamStaff rows",
+  // Owner-reported, 2026-09-15 — `updateExamSchedule`'s staff replacement is
+  // the identical reconciliation `updatePhysicalExam` above already does,
+  // restated here rather than shared (see that function's own comment): a
+  // returning supervisor/assistant must be REVIVED, not refused by the
+  // still-occupied `@@unique([examId, userId])` a tombstoned row leaves
+  // behind.
+  "exam-scheduling.service.ts": "revives tombstoned ExamStaff rows, the same reconciliation exam.service.ts already does",
   /**
    * **R131 §4.10a — the twelve-month clock runs from the REJECTION.**
    *

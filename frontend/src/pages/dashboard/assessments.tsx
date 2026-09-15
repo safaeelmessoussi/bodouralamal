@@ -11,8 +11,8 @@ import {
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { DataTable, type Column } from '../../components/ui/data-table.js';
 import { ChoiceField, TextArea, TextField } from '../../components/ui/field.js';
-import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
 import { StudentLayout } from '../../components/student/student-layout.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
@@ -88,6 +88,41 @@ export function StudentAssessmentsPage(): ReactNode {
     );
   }
 
+  /** «فتح» / «مراجعة إجاباتي» differ by row state — a `Column.cell` closure
+   *  rather than `DataTable`'s `actions`, whose label is fixed per action. */
+  const columns: Column<StudentAssessment>[] = [
+    { key: 'title', header: t('assessments.name'), cell: (row) => row.title },
+    {
+      key: 'state',
+      header: t('assessments.filterStatus'),
+      cell: (row) => (
+        <Badge tone={row.state === 'submitted' ? 'ok' : 'neutral'}>
+          {t(
+            row.state === 'submitted'
+              ? 'assessments.sent'
+              : row.state === 'in_progress'
+                ? 'assessments.saved'
+                : 'assessments.notStarted',
+          )}
+        </Badge>
+      ),
+    },
+    {
+      key: 'grade',
+      header: t('assessments.gradePublished'),
+      cell: (row) => (row.grade_published ? <Badge tone="ok">{t('assessments.gradePublished')}</Badge> : null),
+    },
+    {
+      key: 'action',
+      header: t('common.actions'),
+      cell: (row) => (
+        <Button variant="secondary" onClick={() => setOpenId(row.id)}>
+          {t(row.state === 'submitted' ? 'assessments.review' : 'assessments.open')}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     /**
      * **Inside `StudentLayout`, like every one of her other screens.**
@@ -98,38 +133,25 @@ export function StudentAssessmentsPage(): ReactNode {
      * The title and lede are the layout's props, so they are not stated twice.
      */
     <StudentLayout title={t('assessments.navStudent')} lede={t('assessments.studentLede')}>
-      {state === 'loading' ? <LoadingState /> : null}
-      {state === 'error' ? (
-        <ErrorState error={failure} onRetry={() => void load()} />
-      ) : null}
-      {state === 'ready' && rows.length === 0 ? (
-        // The shared empty state, so an empty list reads as a finished screen
-        // rather than as raw text on an unbuilt route.
-        <EmptyState />
-      ) : null}
-
-      <ul className="assessment-list">
-        {rows.map((row) => (
-          <li key={row.id}>
-            <span>{row.title}</span>
-            <Badge tone={row.state === 'submitted' ? 'ok' : 'neutral'}>
-              {t(
-                row.state === 'submitted'
-                  ? 'assessments.sent'
-                  : row.state === 'in_progress'
-                    ? 'assessments.saved'
-                    : 'assessments.notStarted',
-              )}
-            </Badge>
-            {row.grade_published ? (
-              <Badge tone="ok">{t('assessments.gradePublished')}</Badge>
-            ) : null}
-            <Button variant="secondary" onClick={() => setOpenId(row.id)}>
-              {t(row.state === 'submitted' ? 'assessments.review' : 'assessments.open')}
-            </Button>
-          </li>
-        ))}
-      </ul>
+      {/**
+        * **The table stays, even with nothing in it** (Owner, 2026-09-15) —
+        * the same rule `DataTable` already states for every admin list
+        * (2026-08-30): a screen with zero rows should still show what it
+        * would hold, not collapse to a bare paragraph. This page used to be
+        * the one exception, with a hand-rolled `<ul>` and a separate
+        * `EmptyState` that replaced the whole list instead of living inside
+        * it — migrated to the shared component rather than teaching the same
+        * rule a second time.
+        */}
+      <DataTable<StudentAssessment>
+        caption={t('assessments.navStudent')}
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status={state}
+        error={failure}
+        onRetry={() => void load()}
+      />
     </StudentLayout>
   );
 }

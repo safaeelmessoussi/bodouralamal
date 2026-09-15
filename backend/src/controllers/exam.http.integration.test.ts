@@ -519,7 +519,8 @@ describe("PATCH /exams/{id}", () => {
     const after = await fetchExam(id);
     expect(after["administrative_group_id"]).toBeNull();
     expect(after["staff"]).toEqual([
-      { user_id: assistantId, position: "supervisor" },
+      // Owner-reported, 2026-09-15 — see the event test's own note.
+      { user_id: assistantId, position: "supervisor", user_name: `${TAG} مساعدة` },
     ]);
   });
 

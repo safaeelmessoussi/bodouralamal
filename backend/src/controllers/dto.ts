@@ -578,6 +578,10 @@ export interface CourseScheduleDto {
     position: string;
     effective_from: string | null;
     effective_until: string | null;
+    /** Owner-reported, 2026-09-15 — المؤطِّرات showed a count, never who.
+     *  `null` where the caller (a write response) does not have it resolved;
+     *  the list read always does. */
+    user_name: string | null;
   }[];
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
   version: number;
@@ -641,6 +645,8 @@ export function courseScheduleDto(row: {
     position: string;
     effectiveFrom?: Date | null;
     effectiveUntil?: Date | null;
+    /** Absent from a write response — that caller never re-selects it. */
+    name?: string;
   }[];
   version: number;
   /**
@@ -705,6 +711,7 @@ export function courseScheduleDto(row: {
       position: s.position,
       effective_from: dateOnly(s.effectiveFrom ?? null),
       effective_until: dateOnly(s.effectiveUntil ?? null),
+      user_name: s.name ?? null,
     })),
     version: row.version,
   };
@@ -2060,7 +2067,12 @@ export interface EventDefinitionDto {
   branch_ids: string[];
   /** R71 — who answers for it. Empty for every event created before R71 and for
    *  any an Admin has not assigned, which is a real state rather than a gap. */
-  staff: { user_id: string; position: string }[];
+  staff: {
+    user_id: string;
+    position: string;
+    /** Owner-reported, 2026-09-15 — see `courseScheduleDto`'s own note. */
+    user_name: string | null;
+  }[];
   version: number;
 }
 
@@ -2078,7 +2090,7 @@ export function eventDefinitionDto(row: {
   recurrenceType: string;
   recurrenceEndDate: Date | null;
   branchScopes: { branchId: string }[];
-  staff: { userId: string; position: string }[];
+  staff: { userId: string; position: string; name?: string }[];
   version: number;
 }): EventDefinitionDto {
   return {
@@ -2100,6 +2112,7 @@ export function eventDefinitionDto(row: {
     staff: row.staff.map((x) => ({
       user_id: x.userId,
       position: String(x.position),
+      user_name: x.name ?? null,
     })),
     version: row.version,
   };
@@ -2162,7 +2175,12 @@ export interface ExamDto {
    * row rather than from a hardcoded default — the defect NEW B §A found.
    */
   visibility: string;
-  staff: { user_id: string; position: string }[];
+  staff: {
+    user_id: string;
+    position: string;
+    /** Owner-reported, 2026-09-15 — see `courseScheduleDto`'s own note. */
+    user_name: string | null;
+  }[];
   version: number;
 }
 
@@ -2191,7 +2209,7 @@ export function examDto(row: {
   schedulingTypeId?: string | null;
   maxGrade: Prisma.Decimal;
   visibility: string;
-  staff: { userId: string; position: string }[];
+  staff: { userId: string; position: string; name?: string }[];
   version: number;
 }): ExamDto {
   return {
@@ -2221,6 +2239,7 @@ export function examDto(row: {
     staff: row.staff.map((s) => ({
       user_id: s.userId,
       position: String(s.position),
+      user_name: s.name ?? null,
     })),
     version: row.version,
   };

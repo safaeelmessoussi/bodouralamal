@@ -19,6 +19,7 @@ import {
   listExams,
   scheduleExam,
   updateExam,
+  updateExamSchedule,
   type Exam,
   type ExamAvailabilityPolicy,
 } from './exams.js';
@@ -124,6 +125,9 @@ export interface SchedulingItem {
    */
   visibility: string | null;
   staffCount: number | null;
+  /** Owner-reported, 2026-09-15 — من هم, لا كم؛ `[]` where `staffCount` is
+   *  `null` too (this kind has no staffing at all). */
+  staffNames: string[];
   version: number;
   /** @see SchedulingIds */
   ids: SchedulingIds;
@@ -229,6 +233,7 @@ interface EventDefinitionWire {
     position: string;
     effective_from?: string | null;
     effective_until?: string | null;
+    user_name?: string | null;
   }[];
   version: number;
 }
@@ -292,6 +297,7 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     // audience label carries it rather than a second guess.
     levelName: row.teaching_mode === 'entire_level' ? row.target_name : null,
     staffCount: row.staff.length,
+    staffNames: row.staff.map((x) => x.user_name).filter((n): n is string => n !== null && n !== undefined),
     version: row.version,
     ids: {
       // R110 (Owner, 2026-09-02) — a class and a sitting record their
@@ -363,7 +369,12 @@ export function fromEvent(
     // rather than invented, the rule every other field here follows.
     subjectName: null,
     levelName: null,
-    staffCount: null,
+    // **Corrected alongside `staffNames`** (Owner-reported, 2026-09-15): R71
+    // gave an activity real staffing, stated two lines below, but this had
+    // hardcoded `null` regardless — the الجدولة list showed «—» for every
+    // activity's المؤطِّرات column no matter who was actually assigned.
+    staffCount: row.staff.length,
+    staffNames: row.staff.map((x) => x.user_name).filter((n): n is string => n !== null && n !== undefined),
     version: row.version,
     // An Event genuinely has none of these columns (§4.4). Null is the truth
     // about it, not a gap waiting to be filled — **except `staff`, which R71
@@ -414,6 +425,7 @@ function fromExam(row: Exam): SchedulingItem {
     subjectName: row.subject_name,
     levelName: row.level_name,
     staffCount: row.staff.length,
+    staffNames: row.staff.map((x) => x.user_name).filter((n): n is string => n !== null && n !== undefined),
     version: row.version,
     ids: {
       // R110 (Owner, 2026-09-02) — a class and a sitting record their
@@ -785,6 +797,31 @@ export async function saveSchedulingItem(
 
   if (input.type === 'exam') {
     if (existing) {
+      if (input.examMode === 'online') {
+        // **The arrangement only, superseding R136 clause 12** (Owner,
+        // 2026-09-15; SRS Revision 145 §1). `PATCH /exams/{id}/schedule`,
+        // never `updateExam`/`PATCH /exams/{id}`, which refuses a
+        // `mode: 'online'` row outright. Content stays exactly where R124
+        // already put it — nothing here is a question or an option.
+        await updateExamSchedule(
+          existing.id,
+          {
+            version: existing.version,
+            ...(input.examTarget ? { target: input.examTarget } : {}),
+            date: input.startDate,
+            start_time: input.startTime ?? '',
+            end_time: input.endTime ?? '',
+            ...(input.examStaff ? { staff: input.examStaff } : {}),
+            ...(input.schedulingTypeId !== undefined
+              ? { scheduling_type_id: input.schedulingTypeId }
+              : {}),
+            ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+            ...(input.examAvailability ? { availability: input.examAvailability } : {}),
+          },
+          token,
+        );
+        return NOT_AN_EVENT;
+      }
       // **Arrangements only.** The server refuses the identity fields rather
       // than dropping them, so they are not sent — see `updateExam`.
       await updateExam(

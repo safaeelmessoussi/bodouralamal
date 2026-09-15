@@ -358,6 +358,15 @@ function TypePicker({
         // creation-time decision, and the form says so rather than failing.
         disabled={typeLocked}
         hint={typeLocked ? t('scheduling.typeFixed') : undefined}
+        /**
+         * **Owner-reported, 2026-09-15.** With no explicit placeholder, an
+         * unmatched `value=''` fell back to the browser showing the FIRST
+         * catalogue row — «حصة دراسية» — as if selected, while the actual
+         * state was still `null`: saving then refused with «اختاري نوع
+         * العنصر», which read as a class already chosen suddenly being
+         * rejected. This renders the genuinely-empty state honestly instead.
+         */
+        placeholder={t('scheduling.itemTypePlaceholder')}
         options={offered.map((r) => ({ value: r.id, label: r.name }))}
       />
       {selected === null ? null : selected.attendance_mode === 'disabled' ? (

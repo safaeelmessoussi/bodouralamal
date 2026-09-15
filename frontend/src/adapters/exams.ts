@@ -26,6 +26,9 @@ export type ExamStaffPosition = 'supervisor' | 'assistant';
 export interface ExamStaffRef {
   user_id: string;
   position: ExamStaffPosition;
+  /** Present on a read; absent on what the client sends back (Owner-reported,
+   *  2026-09-15 — see the backend DTO's own note). */
+  user_name?: string | null;
 }
 
 export interface Exam {
@@ -264,4 +267,31 @@ export async function scheduleExam(
   token: string | null,
 ): Promise<{ id: string }> {
   return api<{ id: string }>('/exams/schedule', { method: 'POST', body: input, token });
+}
+
+/**
+ * **An ONLINE occurrence's arrangement, edited** (Owner, 2026-09-15; SRS
+ * Revision 145 §1) — superseding R136 clause 12's "no route exists". Never
+ * `mode`, `source_exam_id` or `bare`: those redefine content, not scheduling,
+ * and R124's freeze stays exactly where it was — this route never touches a
+ * question. `target` omitted leaves the current one exactly as it is.
+ */
+export interface UpdateExamScheduleInput {
+  version: number;
+  target?: ScheduleExamTarget;
+  date?: string;
+  start_time?: string;
+  end_time?: string;
+  scheduling_type_id?: string | null;
+  visibility?: string;
+  staff?: ExamStaffRef[];
+  availability?: ExamAvailabilityPolicy;
+}
+
+export async function updateExamSchedule(
+  id: string,
+  input: UpdateExamScheduleInput,
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/exams/${id}/schedule`, { method: 'PATCH', body: input, token });
 }

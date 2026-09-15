@@ -119,6 +119,17 @@ export function list(prisma: PrismaClient) {
       ...pageParamsFrom(req.query),
       ...sortParamsFrom(req.query),
     });
-    res.json(pageOf(result, examDto));
+    res.json(
+      pageOf(result, (row) =>
+        examDto({
+          ...row,
+          staff: row.staff.map((s) => ({
+            userId: s.userId,
+            position: s.position,
+            name: s.user.nameArabic,
+          })),
+        }),
+      ),
+    );
   };
 }

@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { wallClockInstant } from '../lib/wall-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
+import { lockExamRow } from '../repositories/exam.repository.js';
 import {
   assertCanManage,
   assertCoherent,
@@ -399,5 +400,222 @@ export async function scheduleExam(
     }
 
     return { id: occurrence.id };
+  });
+}
+
+/**
+ * **`PATCH /exams/{id}/schedule` — the ONLINE arrangement, edited** (Document
+ * Owner decision, 2026-09-15, superseding R136 clause 12's "no route exists").
+ *
+ * The Owner's own distinction: *"an exam already taken cannot be changed —
+ * it can be duplicated to keep one unchanged copy — but its scheduling can be
+ * edited, any scheduling can be edited."* This is that route for a remote
+ * occurrence, mirroring exactly what `updatePhysicalExam` already lets a
+ * physical sitting's arrangement do — date, clock window, audience, catalogue
+ * type, tier, staff — plus the one fact only an online occurrence carries,
+ * `availability`. **CONTENT stays exactly where R124 already put it**: no
+ * question/option write reaches through this route, so R124's freeze-on-
+ * first-submission needs no change at all — it was never about scheduling.
+ *
+ * **The target may move to any of R125's five arms**, re-authorized here
+ * exactly as scheduling authorizes it at creation (`assertMayAuthor` against
+ * the NEW target). This is the one honestly-stated risk the Owner's own
+ * words accept rather than this route inventing a refusal she did not ask
+ * for: `readGradeSheet`'s roster is the exam's CURRENT audience (never a
+ * snapshot, by the same design its own docstring states for every other
+ * retargeting), so a submission recorded under a since-narrowed target
+ * becomes invisible on the sheet rather than lost — the grade is never
+ * deleted, and reads it back the moment the target widens again.
+ *
+ * **Re-notification is deliberately NOT sent here.** R134/R136 notify once,
+ * at scheduling; extending that to every reschedule is a real question the
+ * Owner has not asked, and inventing it now risks a spurious second notice
+ * for a typo-fix (a wrong room, a five-minute time correction) that never
+ * needed one. Left for a later, explicitly-requested pass.
+ */
+export interface UpdateExamScheduleInput {
+  version: number;
+  target?: AssessmentTarget;
+  date?: Date;
+  startTime?: Date | null;
+  endTime?: Date | null;
+  schedulingTypeId?: string | null;
+  visibility?: 'public' | 'private' | 'hidden';
+  staff?: ExamStaffInput[];
+  /** Absent means *leave the access gate exactly where it is* — never reset
+   *  to manual, which R136 clause 9's own "never becomes reachable on its
+   *  own" rule would then apply to an already-open paper. */
+  availability?: AvailabilityPolicy;
+}
+
+export async function updateExamSchedule(
+  prisma: PrismaClient,
+  actor: Actor,
+  examId: string,
+  input: UpdateExamScheduleInput,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockExamRow(tx, examId);
+    const existing = await tx.exam.findFirst({
+      where: { id: examId, deletedAt: null },
+      select: {
+        mode: true,
+        status: true,
+        version: true,
+        levelId: true,
+        subjectId: true,
+        targetKind: true,
+        administrativeGroupId: true,
+        sessionId: true,
+        teachingGroupId: true,
+        studentId: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        visibility: true,
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      },
+    });
+    if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
+    if (existing.mode !== 'online') {
+      // The physical arrangement is `PATCH /exams/{id}`'s own — unchanged,
+      // and this route is not a second way to reach it.
+      throw new AppError('STATE_CONFLICT', 'a physical sitting is edited through PATCH /exams/{id}', {
+        reason: 'PHYSICAL_USE_OTHER_ROUTE',
+      });
+    }
+    if (existing.status === 'draft') {
+      throw new AppError('STATE_CONFLICT', 'a reusable source has no arrangement to edit', {
+        reason: 'NOT_SCHEDULED_YET',
+      });
+    }
+    if (existing.version !== input.version) {
+      throw new AppError('VERSION_CONFLICT', 'this exam was changed by someone else');
+    }
+
+    const target =
+      input.target === undefined
+        ? {
+            date: input.date ?? existing.date,
+            administrativeGroupId: existing.administrativeGroupId,
+            sessionId: existing.sessionId,
+            teachingGroupId: existing.teachingGroupId,
+            studentId: existing.studentId,
+          }
+        : await resolveTarget(tx, {
+            levelId: existing.levelId,
+            target: input.target,
+            // Every arm but `session` requires one (`resolveTarget`'s own
+            // `requireDate`) — the exam's CURRENT date when the caller is
+            // only retargeting, never left undefined.
+            date: input.date ?? existing.date,
+          });
+
+    await assertMayAuthor(tx, actor, {
+      levelId: existing.levelId,
+      subjectId: existing.subjectId,
+      branchId: null,
+      administrativeGroupId: target.administrativeGroupId,
+      studentId: target.studentId,
+      targetKind: input.target?.kind ?? existing.targetKind,
+      sessionId: target.sessionId,
+      teachingGroupId: target.teachingGroupId,
+      date: target.date,
+    });
+
+    if (input.schedulingTypeId) {
+      await assertTypeOfKind(tx, input.schedulingTypeId, ['exam'] as const);
+    }
+
+    const newStartTime = input.startTime === undefined ? existing.startTime : input.startTime;
+    if (
+      input.availability !== undefined &&
+      (input.availability.policy === 'at_start' || input.availability.policy === 'offset_minutes') &&
+      !newStartTime
+    ) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'this availability policy needs a start time to anchor on',
+        { reason: 'AVAILABILITY_NEEDS_START_TIME' },
+      );
+    }
+
+    await tx.exam.update({
+      where: { id: examId },
+      data: {
+        ...(input.date === undefined && input.target === undefined ? {} : { date: target.date }),
+        ...(input.startTime === undefined ? {} : { startTime: input.startTime }),
+        ...(input.endTime === undefined ? {} : { endTime: input.endTime }),
+        ...(input.schedulingTypeId === undefined ? {} : { schedulingTypeId: input.schedulingTypeId }),
+        ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+        ...(input.target === undefined
+          ? {}
+          : {
+              targetKind: input.target.kind,
+              administrativeGroupId: target.administrativeGroupId,
+              sessionId: target.sessionId,
+              teachingGroupId: target.teachingGroupId,
+              studentId: target.studentId,
+            }),
+        ...(input.availability === undefined
+          ? {}
+          : { availableFrom: computeAvailableFrom(input.availability, newStartTime, target.date) }),
+        version: { increment: 1 },
+      },
+    });
+
+    if (input.staff !== undefined) {
+      // Replaced wholesale, soft — the identical convention
+      // `updatePhysicalExam` already established, restated here rather than
+      // shared, so neither path's next edit risks the other's regression.
+      const repeated = new Set<string>();
+      for (const person of input.staff) {
+        if (repeated.has(person.userId)) {
+          throw new AppError('VALIDATION_FAILED', 'one person holds one position on one exam', {
+            reason: 'EXAM_STAFF_DUPLICATE',
+          });
+        }
+        repeated.add(person.userId);
+      }
+      const existingStaff = await tx.examStaff.findMany({ where: { examId } });
+      const wanted = new Map(input.staff.map((p) => [p.userId, p.position]));
+      for (const row of existingStaff) {
+        const position = wanted.get(row.userId);
+        if (position === undefined) {
+          if (row.deletedAt === null) {
+            await tx.examStaff.update({
+              where: { id: row.id },
+              data: { deletedAt: new Date(), deletedById: actor.userId },
+            });
+          }
+        } else {
+          await tx.examStaff.update({
+            where: { id: row.id },
+            data: { position, deletedAt: null, deletedById: null },
+          });
+        }
+      }
+      for (const person of input.staff) {
+        if (!existingStaff.some((row) => row.userId === person.userId)) {
+          await tx.examStaff.create({
+            data: { examId, userId: person.userId, position: person.position },
+          });
+        }
+      }
+      await assertStaffAccountsAvailable(tx, input.staff.map((p) => p.userId));
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'exam.schedule.update',
+      targetEntity: 'Exam',
+      targetId: examId,
+      detail: {
+        target_kind: input.target?.kind ?? existing.targetKind,
+        date: target.date.toISOString(),
+        availability_changed: input.availability !== undefined,
+      },
+    });
   });
 }

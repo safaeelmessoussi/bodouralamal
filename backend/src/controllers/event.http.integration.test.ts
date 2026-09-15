@@ -370,7 +370,9 @@ describe("GET /events carries who answers for each one (R71)", () => {
     row = (list.body.data ?? []).find((e) => e["id"] === eventId)!;
 
     expect(row["staff"]).toEqual([
-      { user_id: person, position: "responsible" },
+      // Owner-reported, 2026-09-15 — المؤطِّرات now carries the name beside
+      // the id, matching `courseScheduleDto`'s own `user_name`.
+      { user_id: person, position: "responsible", user_name: `${TAG} مؤطرة مسؤولة` },
     ]);
   });
 });

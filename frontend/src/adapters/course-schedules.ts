@@ -26,6 +26,9 @@ export interface ScheduleStaff {
    *  open-ended there: from the schedule's beginning, through its end. */
   effective_from?: string | null;
   effective_until?: string | null;
+  /** Present on a read; absent on what the client sends back (Owner-reported,
+   *  2026-09-15 — see the backend DTO's own note). */
+  user_name?: string | null;
 }
 
 export interface CourseSchedule {
