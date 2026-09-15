@@ -4279,7 +4279,13 @@ the Owner's own report named.
       integration 2,613/2,631 (18 pre-existing skips, all-table
       isolation intact); all 31 guards, doc-links and
       `git diff --check` pass; OpenAPI regenerated, no drift.
-- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [x] Pushed as `1f18fab`; hosted CI green on the first run, all 7 jobs
+      (run `35009329959`) including Release. Deployed to Staging,
+      upgrading from `495f397`: `prisma migrate deploy` applied
+      `20260915180000_r151_grade_question_score` cleanly (first real
+      migration in this batch), `/healthz` green on the first check,
+      TLS/security headers intact, no leftover disposable containers.
+      Full detail in CHANGES.log.
 - [ ] Continue into the remaining checkpoints: group/circle/category
       schema migration (A3), teacher قائمة parity with admin's list
       (B1), and the روster-viewing gap decision.
