@@ -1454,6 +1454,26 @@ describe('23–27 · grading, and what a student may see', () => {
       addQuestion(prisma, outsider(), examId, { kind: 'short_text', prompt: 'دخيلة' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('Owner-reported, 2026-09-15 — a named supervisor reaches the inbox and the paper, but not authoring', async () => {
+    await prisma.examStaff.create({
+      data: { examId, userId: outsiderId, position: 'supervisor' },
+    });
+    try {
+      const inbox = await listSubmissions(prisma, outsider(), examId);
+      expect(inbox.rows.some((r) => r.studentId === alice)).toBe(true);
+      const paper = await readSubmission(prisma, outsider(), examId, alice);
+      expect(paper.submission?.answers[0]!.text).toBe('إجابتي');
+      // **Reading is not authoring** — the supervisor short-circuit lives in
+      // a new function scoped to these two reads, never in `assertMayAuthor`
+      // itself, so adding a question is still refused exactly as in 27.
+      await expect(
+        addQuestion(prisma, outsider(), examId, { kind: 'short_text', prompt: 'دخيلة' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    } finally {
+      await prisma.examStaff.deleteMany({ where: { examId, userId: outsiderId } });
+    }
+  });
 });
 
 describe('28–31 · history and privacy', () => {

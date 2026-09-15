@@ -9241,3 +9241,55 @@ verified on the exact commit's label, `/healthz` green (4/4 components, 12/12 wo
 within seconds, no error-level log lines in the following minutes, TLS/HSTS/CSP headers
 reconfirmed, no leftover disposable containers (local or remote). No Production action of
 any kind.
+
+2026-09-15 (cont. 3) — SRS Revision 149: النقطة القصوى returns to «إضافة عنصر», pre-filled
+with 20
+Reconsiders Revision 147 §4's field removal: النقطة القصوى is asked again on CREATE,
+pre-filled with `'20'` (`SchedulingDialog`'s `examMaxGrade` defaults to `'20'` only when
+`item === null`) rather than left empty, so a reader who accepts the default no longer
+risks the empty-field crash Revision 147 §4 already fixed server-side. Deliberately NOT
+pre-filled on EDIT — an existing exam's field starts empty there because empty already
+means "leave it alone" on save, and pre-filling `'20'` would silently overwrite a real
+stored value. `BARE_DEFAULT_MAX_GRADE` server-side is unchanged. Frontend-only; full
+frontend unit suite green (1,311/1,311) including an updated `scheduling-exam-source
+.test.tsx`.
+
+2026-09-15 (cont. 3) — SRS Revision 148: the first of Revision 147's three deferred
+architectural items, checkpointed
+The Owner, continuing the same walk-through, authorized proceeding into all three
+previously-deferred architectural items (per-question grading/response-viewing, class
+field editing, group/circle/category schema migration), the روster-viewing gap, and three
+further UI corrections. Given the combined scope, each is being shipped as its own
+verified checkpoint rather than one large batch; this is the first.
+
+**Built — editable class branch/level/mode/subject/year, through R50's own split.**
+`updateCourseScheduleSchema` gains five optional identity fields, refused outside
+`scope: 'this_and_future'` (the freeze §4.4 always stated stays exactly as strict for an
+in-place edit) and refused if `teaching_mode`/`target_id` are named separately.
+`splitCourseSchedule`'s successor now resolves a changed identity through the SAME
+functions CREATE uses (`resolveTarget`, `assertSubjectTaughtAtLevel`) rather than a second
+check, including re-validating an unchanged target against a NEW branch and refusing a
+stale room left behind by a branch move (`ROOM_BRANCH_MISMATCH`). Frontend: the
+per-occurrence editor's `this_and_future` scope (`schedule-sessions.tsx`'s `ScopeDialog` —
+the one screen this scope was ever reachable from) gains an identity section, admin-portal
+only, pre-filled via `useScopeOptions` and submitted alongside the fields that dialog
+already always sends in full.
+
+**Fixed — a named exam supervisor may now read a student's submitted answers**, closing
+the gap Revision 146 §1 closed for grading alone but left standing for
+`listSubmissions`/`readSubmission` (both already fully routed; only the authorization
+underneath, and the frontend UI to reach them, were missing). A new function,
+`loadForAuthorOrSupervisor`, scoped to exactly these two reads — never `assertMayAuthor`
+itself, which nine other content-authoring call sites also gate.
+
+Two test-isolation bugs found and fixed while writing coverage for the above: the new
+split tests staffed the shared fixture teacher, leaking a successor row into an unrelated
+later assertion about her total footprint (fixed: staff nobody); and relying on the shared
+`slot()` time allocator from a describe block moved to the end of the file overflowed past
+24 hours of cumulative calls across the whole file, since that allocator has no
+wraparound guard (fixed: a small dedicated fixed-time helper local to the new tests).
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,311/1,311; full disposable-stack integration suite green with all-table isolation
+intact; all 31 `scripts/ci/check-*.sh` guards, doc-links and `git diff --check` pass;
+OpenAPI regenerated, no drift. No migration.

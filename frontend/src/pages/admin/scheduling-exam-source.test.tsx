@@ -277,7 +277,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
     expect(html).toContain(`>${ar.scope.academicYear}<`);
   });
 
-  it('the maximum is not asked at creation any more (Owner-reported, 2026-09-15) — the server defaults a bare exam\'s maximum', () => {
+  it('the maximum is asked again at creation (Owner-reported, 2026-09-15 — brought back), pre-filled with 20', () => {
     const html = renderToStaticMarkup(
       <ExamSection
         {...(baseProps as unknown as ExamSectionProps)}
@@ -286,7 +286,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
         source={EXAM_SOURCE_INITIAL}
       />,
     );
-    expect(html).not.toContain(ar.scheduling.exam.maxGrade);
+    expect(html).toContain(ar.scheduling.exam.maxGrade);
   });
 
   it('the maximum is still editable once the sitting exists', () => {
@@ -299,6 +299,10 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
       />,
     );
     expect(html).toContain(ar.scheduling.exam.maxGrade);
+  });
+
+  it('a fresh exam pre-fills the maximum with 20; an existing one is left alone (a blank means "do not touch it" on save)', () => {
+    expect(code(SCHEDULING_SOURCE)).toContain("useState(item === null ? '20' : '')");
   });
 });
 

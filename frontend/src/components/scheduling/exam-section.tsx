@@ -479,14 +479,15 @@ export function ExamSection({
               change *what is examined, for whom, or where*. **Hidden with a
               source chosen** — the maximum is then the source's own paper's,
               copied with it, not independently set here.
-              **Owner-reported, 2026-09-15 — not asked at CREATE any more.**
-              She sets a maximum while authoring an exam, never while
-              scheduling one; a bare occurrence has no authoring step, so the
-              server defaults it (`BARE_DEFAULT_MAX_GRADE`,
-              `exam-scheduling.service.ts`) rather than asking for it here.
-              Shown again once the row exists, so a wrong default is never
-              stuck. */}
-          {hasSource || !locked ? null : (
+              **Owner-reported, 2026-09-15 — back on CREATE, pre-filled with
+              20.** Briefly removed on the reasoning that a bare exam's
+              maximum belongs to authoring, not scheduling; the Owner asked
+              for it back, still defaulted (`onSourceChange`'s caller seeds
+              `maxGrade` to `'20'` for a fresh bare exam — see
+              `scheduling.tsx`) so a reader who accepts the default need not
+              type anything, and `BARE_DEFAULT_MAX_GRADE` server-side still
+              covers the case where this value is omitted regardless. */}
+          {hasSource ? null : (
             <NumberField
               label={t('scheduling.exam.maxGrade')}
               hint={t('scheduling.exam.maxGradeHint')}

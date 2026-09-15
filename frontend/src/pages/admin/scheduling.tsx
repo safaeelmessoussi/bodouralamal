@@ -1114,9 +1114,17 @@ export function SchedulingDialog({
   const [examMode, setExamMode] = useState<'physical' | 'online'>(
     item?.ids.examMode ?? initialExamSource?.mode ?? 'physical',
   );
-  /** R81 — the exam's own maximum grade. A string while it is being typed; the
-   *  form has no default to offer, because there is no platform scale left. */
-  const [examMaxGrade, setExamMaxGrade] = useState('');
+  /**
+   * R81 — the exam's own maximum grade. A string while it is being typed;
+   * there is no platform-wide scale to default to. **`'20'` on a fresh bare
+   * exam only** (Owner-reported, 2026-09-15) — a reader who accepts the
+   * default types nothing; an existing exam's stored value is left exactly
+   * as `undefined`/empty here means *"leave it alone"* on save
+   * (`examMaxGrade == null` omits `max_grade` from the edit request
+   * entirely, see `adapters/scheduling.ts`), which a pre-filled `'20'` would
+   * silently overwrite the moment she saved without touching this field.
+   */
+  const [examMaxGrade, setExamMaxGrade] = useState(item === null ? '20' : '');
   /**
    * **R136 — the authored-source/audience/availability state.** Prefilled
    * from `?source=&mode=` when بناء الاختبارات linked here — see the effect

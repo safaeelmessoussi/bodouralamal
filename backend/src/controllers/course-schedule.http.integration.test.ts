@@ -144,8 +144,10 @@ let staffingTeacherToken: string;
 let branchA: string;
 let branchB: string;
 let roomA: string;
+let roomB: string;
 let levelId: string;
 let subjectId: string;
+let subjectB: string;
 let groupA: string;
 let groupB: string;
 let academicYearId: string;
@@ -262,6 +264,18 @@ beforeAll(async () => {
   subjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة` } }))
     .id;
   await prisma.levelSubject.create({ data: { levelId, subjectId } });
+  // Owner-reported, 2026-09-15 — a second subject the SAME level teaches,
+  // for the this_and_future identity-change tests below.
+  subjectB = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة ب` } })
+  ).id;
+  await prisma.levelSubject.create({ data: { levelId, subjectId: subjectB } });
+
+  roomB = (
+    await prisma.room.create({
+      data: { name: `${TAG} قاعة ب`, branchId: branchB },
+    })
+  ).id;
 
   groupA = (
     await prisma.administrativeGroup.create({
@@ -651,6 +665,7 @@ describe("the write boundary refuses what would re-point history", () => {
   });
 });
 
+
 describe("the routes are mounted and guarded (TD-2)", () => {
   it("refuses an anonymous caller, and serves a teacher their own scope", async () => {
     const anon = await call("GET", "/admin/course-schedules");
@@ -994,5 +1009,146 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
     const res = await call("GET", "/admin/course-schedules", outsider);
     expect(res.status).toBe(403);
     expect(res.body.error?.code).toBe("FORBIDDEN");
+  });
+});
+
+/**
+ * Fixed, hand-picked times — never `slot()` (`scheduleBody()`'s own
+ * allocator). This describe block runs LAST, after every other test in the
+ * file has already called `slot()` an unknown number of times; that shared
+ * counter has no wraparound guard past 24 hours (`Math.floor(minutes/60)`
+ * exceeds 23 and fails `wallClock`'s own regex), so relying on it here is
+ * exactly the flake this file's own comment on `slot()` was written to
+ * avoid for room/time COLLISIONS, not for running out of clock.
+ */
+let identitySlot = 0;
+function identityBody(over: Record<string, unknown> = {}): Record<string, unknown> {
+  const hh = String(1 + identitySlot++).padStart(2, "0");
+  return {
+    title: `${TAG} حلقة الهوية`,
+    subject_id: subjectId,
+    teaching_mode: "administrative_group",
+    target_id: groupA,
+    branch_id: branchA,
+    room_id: roomA,
+    start_time: `${hh}:00`,
+    end_time: `${hh}:10`,
+    recurrence: "weekly",
+    weekdays: ["wednesday"],
+    academic_year_id: academicYearId,
+    staff: [],
+    ...over,
+  };
+}
+
+describe("Owner-reported, 2026-09-15 — this_and_future MAY change what an in-place edit still refuses", () => {
+  it("moves branch and target together, and the successor lands there — never the predecessor", async () => {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, identityBody());
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      branch_id: branchB,
+      teaching_mode: "administrative_group",
+      target_id: groupB,
+      room_id: roomB,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const successorId = (res.body.schedule as { id: string }).id;
+    expect(successorId).not.toBe(scheduleId);
+
+    const predecessor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+      select: { branchId: true, administrativeGroupId: true },
+    });
+    expect(predecessor.branchId).toBe(branchA);
+    expect(predecessor.administrativeGroupId).toBe(groupA);
+
+    const successor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: successorId },
+      select: { branchId: true, administrativeGroupId: true, roomId: true },
+    });
+    expect(successor.branchId).toBe(branchB);
+    expect(successor.administrativeGroupId).toBe(groupB);
+    expect(successor.roomId).toBe(roomB);
+  });
+
+  it("moves the subject when the new one is taught at the same level", async () => {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, identityBody());
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      subject_id: subjectB,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const successor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: (res.body.schedule as { id: string }).id },
+      select: { subjectId: true },
+    });
+    expect(successor.subjectId).toBe(subjectB);
+  });
+
+  it("refuses a subject the target Level does not teach, exactly as CREATE does", async () => {
+    const untaught = (
+      await prisma.subject.create({ data: { name: `${TAG} مادة غير مُدرَّسة` } })
+    ).id;
+    const created = await call("POST", "/admin/course-schedules", superAdmin, identityBody());
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      subject_id: untaught,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.error?.code).toBe("STATE_CONFLICT");
+  });
+
+  it("refuses a stale room left behind by a branch move (ROOM_BRANCH_MISMATCH)", async () => {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, identityBody());
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    // Branch moves to B; `room_id` is left unstated, so the predecessor's own
+    // room (at branch A) would otherwise silently ride along.
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      branch_id: branchB,
+      teaching_mode: "administrative_group",
+      target_id: groupB,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("ROOM_BRANCH_MISMATCH");
+  });
+
+  it("still refuses identity fields without this_and_future, and refuses target_id without teaching_mode", async () => {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, identityBody());
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const noScope = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      subject_id: subjectB,
+    });
+    expect(noScope.status).toBe(400);
+
+    const lonelyTarget = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      target_id: groupB,
+    });
+    expect(lonelyTarget.status).toBe(400);
   });
 });

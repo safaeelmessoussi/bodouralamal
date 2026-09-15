@@ -387,6 +387,41 @@ export async function loadForAuthor(
   return exam;
 }
 
+/**
+ * **Owner-reported, 2026-09-15 — a named supervisor may READ what she was
+ * already let grade.** `loadForGrading` (`grade.service.ts`) gained the
+ * `ExamStaff.position: 'supervisor'` short-circuit `assertMayMark`
+ * (`attendance.service.ts`) already had; viewing a student's actual
+ * submitted answers — the two functions right below — still authorized
+ * through plain `loadForAuthor` and inherited the identical gap.
+ *
+ * **A NEW function, not a widened `assertMayAuthor`.** That function also
+ * gates every content-authoring write (add/edit/delete a question or
+ * option) through nine other call sites; a supervisor's reach is *she may
+ * see what was submitted for her own sitting*, never *she may rewrite its
+ * questions*, so the short-circuit lives here, scoped to reading, and
+ * nowhere near authoring's own boundary.
+ */
+async function loadForAuthorOrSupervisor(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+): Promise<AuthorAssessmentRow> {
+  const exam = await prisma.exam.findFirst({
+    where: { id, deletedAt: null },
+    select: { ...ASSESSMENT_SELECT, ...AUTHOR_LINEAGE_SELECT },
+  });
+  if (!exam) throw new AppError('NOT_FOUND', 'no such assessment');
+
+  const supervises = await prisma.examStaff.count({
+    where: { examId: id, userId: actor.userId, position: 'supervisor', deletedAt: null },
+  });
+  if (supervises === 0) {
+    await assertMayAuthor(prisma, actor, { ...exam, date: exam.date });
+  }
+  return exam;
+}
+
 /* ── The freeze ───────────────────────────────────────────────────────────── */
 
 /**
@@ -1699,7 +1734,7 @@ export async function listSubmissions(
     score: string | null;
   }[];
 }> {
-  const exam = await loadForAuthor(prisma, actor, examId);
+  const exam = await loadForAuthorOrSupervisor(prisma, actor, examId);
 
   const where = await examAudienceWhere(prisma, {
     targetKind: exam.targetKind,
@@ -1766,7 +1801,7 @@ export async function readSubmission(
   examId: string,
   studentId: string,
 ): Promise<StudentPaper> {
-  await loadForAuthor(prisma, actor, examId);
+  await loadForAuthorOrSupervisor(prisma, actor, examId);
 
   const submission = await prisma.studentExamSubmission.findFirst({
     where: { examId, studentId, state: { not: 'in_progress' } },

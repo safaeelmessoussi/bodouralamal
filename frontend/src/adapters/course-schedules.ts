@@ -308,6 +308,14 @@ export async function updateCourseSchedule(
       // **R90 — who staffs it.** Accepted on create and refused here, while the
       // form rendered the controls on both.
       | 'staff'
+      // **Owner-reported, 2026-09-15 — `this_and_future`-only** (§4.4): the
+      // validator refuses these outside that scope; see this function's own
+      // `this_and_future` paragraph above.
+      | 'subject_id'
+      | 'branch_id'
+      | 'academic_year_id'
+      | 'teaching_mode'
+      | 'target_id'
     >
   > & {
     scope?: 'all_sessions' | 'this_and_future';

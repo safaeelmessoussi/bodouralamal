@@ -335,6 +335,25 @@ export const updateCourseScheduleSchema = z
      * recorded attendance, regardless of this flag.
      */
     overwrite_manually_edited: z.boolean().optional(),
+    /**
+     * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
+     * §4.4 otherwise freezes.** Subject/target/branch/year stay frozen for an
+     * IN-PLACE edit (`all_sessions` and the omitted-scope default, above) for
+     * the exact reason the docstring at the top of this schema still gives —
+     * an in-place mutation would silently re-point Sessions and Staff
+     * assignments already materialized against the old answer. `R50`'s split
+     * already exists precisely to change identity SAFELY: it closes the
+     * predecessor exactly where it is and opens a successor carrying the new
+     * answer, so nothing about the past is rewritten. These five are simply
+     * `this_and_future`'s successor gaining the same freedom CREATE already
+     * has, through the one mechanism §4.4 already trusts for it — not a
+     * second, competing propagation design.
+     */
+    subject_id: uuid.optional(),
+    branch_id: uuid.optional(),
+    academic_year_id: uuid.optional(),
+    teaching_mode: teachingMode.optional(),
+    target_id: uuid.optional(),
   })
   .strict()
   .refine((v) => v.scope !== "this_and_future" || v.from_date !== undefined, {
@@ -345,6 +364,27 @@ export const updateCourseScheduleSchema = z
     path: ["from_date"],
     message: "from_date is only meaningful with scope this_and_future",
   })
+  .refine(
+    (v) =>
+      v.scope === "this_and_future" ||
+      (v.subject_id === undefined &&
+        v.branch_id === undefined &&
+        v.academic_year_id === undefined &&
+        v.teaching_mode === undefined &&
+        v.target_id === undefined),
+    {
+      path: ["scope"],
+      message:
+        "subject/branch/year/target are only editable with scope this_and_future (§4.4)",
+    },
+  )
+  .refine(
+    (v) => (v.teaching_mode === undefined) === (v.target_id === undefined),
+    {
+      path: ["target_id"],
+      message: "teaching_mode and target_id are named together or not at all",
+    },
+  )
   .superRefine(checkDelivery);
 
 /** Not `.strict()`: TD-10's `page`/`page_size` share the query object. */

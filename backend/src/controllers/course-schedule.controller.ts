@@ -194,6 +194,17 @@ export function update(prisma: PrismaClient) {
         ...(body.overwrite_manually_edited !== undefined
           ? { overwriteManuallyEdited: body.overwrite_manually_edited }
           : {}),
+        // Owner-reported, 2026-09-15 — `this_and_future`-only; the validator
+        // already refuses these outside that scope.
+        ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
+        ...(body.branch_id !== undefined ? { branchId: body.branch_id } : {}),
+        ...(body.academic_year_id !== undefined
+          ? { academicYearId: body.academic_year_id }
+          : {}),
+        ...(body.teaching_mode !== undefined
+          ? { teachingMode: body.teaching_mode }
+          : {}),
+        ...(body.target_id !== undefined ? { targetId: body.target_id } : {}),
       },
     );
     // **R50: a split answers with the SUCCESSOR, not the closed predecessor.**

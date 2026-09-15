@@ -4197,3 +4197,40 @@ the Owner's own report named.
       upgrading from `4d443e0`: no new migrations, no host issues,
       `/healthz` green within seconds, TLS/security headers intact, no
       leftover disposable containers. Full detail in CHANGES.log.
+
+## SRS Revision 149 — النقطة القصوى returns to «إضافة عنصر» — 2026-09-15 (cont. 3)
+
+- [x] **Built: النقطة القصوى asked again on CREATE, pre-filled with 20**
+      (SRS Revision 149) — reconsiders Revision 147 §4's removal;
+      deliberately not pre-filled on EDIT (empty there means "leave it
+      alone").
+- [x] Verification: frontend typecheck/lint/build clean; full frontend
+      unit suite 1,311/1,311. No backend change, no migration.
+
+## SRS Revision 148 — checkpoint 1 of Revision 147's three deferred items — 2026-09-15 (cont. 3)
+
+- [x] **Built: editable class branch/level/mode/subject/year, through R50's
+      own split** (SRS Revision 148 §1) — five new optional fields on
+      `updateCourseScheduleSchema`, `this_and_future`-only; successor
+      identity resolved through the same `resolveTarget`/
+      `assertSubjectTaughtAtLevel` CREATE uses; frontend identity
+      section added to `schedule-sessions.tsx`'s `ScopeDialog`,
+      admin-portal only.
+- [x] **Fixed: a named exam supervisor may now read a student's submitted
+      answers** (SRS Revision 148 §2) — new `loadForAuthorOrSupervisor`,
+      scoped to `listSubmissions`/`readSubmission` only; authoring
+      itself is untouched.
+- [x] Two test-isolation bugs found and fixed while writing coverage:
+      shared-fixture-teacher staffing leaking into an unrelated later
+      assertion, and the shared `slot()` allocator overflowing past 24
+      hours from a describe block moved to the end of the file.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,311/1,311; full disposable-stack
+      integration suite green, all-table isolation intact; all 31
+      guards, doc-links and `git diff --check` pass; OpenAPI
+      regenerated, no drift. No migration.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [ ] Continue into the remaining checkpoints: per-question grading/
+      response-viewing (schema), group/circle/category schema
+      migration, teacher قائمة parity with admin's list, exam edit form
+      parity, and the روster-viewing gap decision.

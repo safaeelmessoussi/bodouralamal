@@ -33,7 +33,7 @@ import {
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { DateField, TextArea, TextField } from '../../components/ui/field.js';
+import { DateField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -41,6 +41,8 @@ import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { VisibilityField } from '../../components/scheduling/visibility-field.js';
+import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
+import { useScopeOptions } from '../../hooks/use-scope-options.js';
 
 /**
  * The fields `ScopeDialog` edits, whichever scope carries them onward —
@@ -60,6 +62,20 @@ interface SessionScopeEdit {
   /** R138 — on the same footing as `delivery_mode`/`visibility` above. */
   title: string;
   description: string | null;
+  /**
+   * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
+   * §4.4 otherwise freezes**, present only for `this_and_future` (the split
+   * REPLACES these too, which is what makes changing them safe): the same
+   * fields CREATE takes, resolved server-side exactly the same way. Absent
+   * for `this_session`/`all_sessions`, which never touch identity.
+   */
+  identity?: {
+    subject_id: string;
+    branch_id: string;
+    academic_year_id: string;
+    teaching_mode: 'entire_level' | 'administrative_group';
+    target_id: string;
+  };
 }
 
 /**
@@ -175,6 +191,10 @@ export function ScheduleSessionsPage({
     subjectId: string;
     academicYearId: string;
     branchId: string | null;
+    /** Owner-reported, 2026-09-15 — the schedule's own current group,
+     *  `administrative_group` mode only, so `ScopeDialog`'s identity section
+     *  can pre-fill the target it edits. */
+    targetId: string;
   } | null>(null);
   /** R75.6 — the class's own name and note, which a recording is named from.
    *  They belong to the schedule, not to the occurrence. */
@@ -226,6 +246,9 @@ export function ScheduleSessionsPage({
           subjectId: mine.subject_id,
           academicYearId: mine.academic_year_id,
           branchId: mine.branch_id,
+          // Unlike the upload/recording use above, the identity SECTION needs
+          // the raw target back — an `administrative_group` class's own group.
+          targetId: mine.target_id,
         });
         setKlass({
           title: mine.title,
@@ -458,6 +481,18 @@ export function ScheduleSessionsPage({
       title: edit.title,
       description: edit.description,
       overwrite_manually_edited: overwriteManuallyEdited,
+      // **Owner-reported, 2026-09-15 — only `this_and_future` may carry
+      // these** (the server refuses them otherwise, §4.4); `edit.identity`
+      // itself is only ever set by `ScopeDialog` while that scope is chosen.
+      ...(scope === 'this_and_future' && edit.identity
+        ? {
+            subject_id: edit.identity.subject_id,
+            branch_id: edit.identity.branch_id,
+            academic_year_id: edit.identity.academic_year_id,
+            teaching_mode: edit.identity.teaching_mode,
+            target_id: edit.identity.target_id,
+          }
+        : {}),
     };
     await run(
       () =>
@@ -553,7 +588,16 @@ export function ScheduleSessionsPage({
           rooms={rooms}
           busy={busy}
           onCancel={() => setEditing(null)}
-          onConfirm={(scope, edit) => void applyEdit(editing, scope, edit)}
+          onConfirm={(editScope, edit) => void applyEdit(editing, editScope, edit)}
+          /**
+           * **Owner-reported, 2026-09-15 — manager-only, same as the split
+           * itself** (`assertCanManage` gates `this_and_future`'s identity
+           * fields server-side too). `token`/`identity` are both `null` for
+           * the teacher portal, and `ScopeDialog` renders no identity section
+           * at all when either is.
+           */
+          token={isTeacherPortal ? null : accessToken}
+          identity={isTeacherPortal || !scope || !klass ? null : { ...scope, ...klass }}
         />
       ) : null}
 
@@ -726,6 +770,8 @@ function ScopeDialog({
   busy,
   onConfirm,
   onCancel,
+  token,
+  identity,
 }: {
   session: ScheduleSession;
   total: number;
@@ -735,6 +781,21 @@ function ScopeDialog({
   busy: boolean;
   onConfirm: (scope: EditScope, edit: SessionScopeEdit) => void;
   onCancel: () => void;
+  /**
+   * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
+   * §4.4 otherwise freezes, `this_and_future`-only.** `null` for the teacher
+   * portal (splitting stays manager-only) and while the page's own schedule
+   * read has not resolved yet — either way, no identity section renders.
+   */
+  token: string | null;
+  identity: {
+    branchId: string | null;
+    levelId: string;
+    subjectId: string;
+    academicYearId: string;
+    targetId: string;
+    teachingMode: string;
+  } | null;
 }): ReactNode {
   const [scope, setScope] = useState<EditScope>('this_session');
   const [date, setDate] = useState(session.date);
@@ -766,6 +827,36 @@ function ScopeDialog({
    */
   const [title, setTitle] = useState(session.title);
   const [description, setDescription] = useState(session.description ?? '');
+
+  /**
+   * **Owner-reported, 2026-09-15 — the successor's identity, edited exactly
+   * as CREATE edits it, shown only for `this_and_future`.**
+   *
+   * `fields: []` when `identity` is `null` (teacher portal, or not yet
+   * loaded) — the hook's own rule is "a screen that shows no Branch selector
+   * should not make an Admin-only branch request it will never render."
+   * `mode` is `administrative_group`-only here: `entire_level` asks nothing
+   * further (§4.4c, exactly as `ClassSection` already treats it), and
+   * `teaching_group` has no working target picker on the CREATE form either
+   * — not a gap this pass introduces or fixes.
+   */
+  const identityScope = useScopeOptions({
+    token,
+    fields: identity ? (['branchId', 'levelId', 'subjectId', 'academicYearId', 'groupId'] as const) : [],
+    initial: identity
+      ? {
+          branchId: identity.branchId ?? '',
+          levelId: identity.levelId,
+          subjectId: identity.subjectId,
+          academicYearId: identity.academicYearId,
+          groupId: identity.teachingMode === 'administrative_group' ? identity.targetId : '',
+        }
+      : {},
+    mode: 'form',
+  });
+  const [identityMode, setIdentityMode] = useState<'entire_level' | 'administrative_group'>(
+    identity?.teachingMode === 'administrative_group' ? 'administrative_group' : 'entire_level',
+  );
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -856,6 +947,48 @@ function ScopeDialog({
           onRoom={setRoomId}
         />
 
+        {/* **Owner-reported, 2026-09-15 — the good, simple design for editing
+            what §4.4 otherwise freezes.** `this_and_future` splits the
+            schedule regardless (R50); this is that split's successor
+            choosing a new identity instead of inheriting the old one
+            unchanged, through the exact same server-side resolution CREATE
+            uses (`resolveTarget`/`assertSubjectTaughtAtLevel`). Absent from
+            every other scope, and from the teacher portal entirely, both of
+            which the freeze still applies to in full. */}
+        {scope === 'this_and_future' && identity ? (
+          <fieldset>
+            <legend>{t('admin.sessions.identityLegend')}</legend>
+            <p className="field__hint">
+              {t('admin.sessions.identityHint').replace('{date}', session.date)}
+            </p>
+            <ScopeSelectors
+              scope={identityScope}
+              fields={['branchId', 'levelId']}
+              mode="form"
+            />
+            <SelectField
+              label={t('admin.schedules.mode')}
+              value={identityMode}
+              onChange={(v) => setIdentityMode(v as 'entire_level' | 'administrative_group')}
+              options={[
+                { value: 'entire_level', label: t('admin.schedules.mode_entire_level') },
+                {
+                  value: 'administrative_group',
+                  label: t('admin.schedules.mode_administrative_group'),
+                },
+              ]}
+            />
+            {identityMode === 'administrative_group' ? (
+              <ScopeSelectors scope={identityScope} fields={['groupId']} mode="form" />
+            ) : null}
+            <ScopeSelectors
+              scope={identityScope}
+              fields={['subjectId', 'academicYearId']}
+              mode="form"
+            />
+          </fieldset>
+        ) : null}
+
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
             {t('common.cancel')}
@@ -877,6 +1010,20 @@ function ScopeDialog({
                 visibility,
                 title,
                 description: description.trim() === '' ? null : description,
+                ...(scope === 'this_and_future' && identity
+                  ? {
+                      identity: {
+                        subject_id: identityScope.value.subjectId,
+                        branch_id: identityScope.value.branchId,
+                        academic_year_id: identityScope.value.academicYearId,
+                        teaching_mode: identityMode,
+                        target_id:
+                          identityMode === 'administrative_group'
+                            ? identityScope.value.groupId
+                            : identityScope.value.levelId,
+                      },
+                    }
+                  : {}),
               })
             }
           >

@@ -1059,6 +1059,14 @@ export async function updateCourseSchedule(
      * unless this is explicitly `true`.
      */
     overwriteManuallyEdited?: boolean;
+    /** Owner-reported, 2026-09-15 — see `splitCourseSchedule`'s own docstring
+     *  for the reasoning; the validator refuses these outside
+     *  `scope: 'this_and_future'` before this function is ever called. */
+    subjectId?: string;
+    branchId?: string;
+    academicYearId?: string;
+    teachingMode?: TeachingMode;
+    targetId?: string;
   },
   now: Date = new Date(),
 ): Promise<{
@@ -1442,6 +1450,20 @@ async function splitCourseSchedule(
      *  successor (and is resynced to the successor's values) or stays exactly
      *  where it is, with the predecessor, as today. */
     overwriteManuallyEdited?: boolean;
+    /**
+     * **Owner-reported, 2026-09-15 — the split's own successor may name a
+     * new identity, which is the "good, simple design" for editing what §4.4
+     * otherwise freezes.** Absent, the successor inherits the predecessor's
+     * exactly as it always has (every line below already reads `existing.X`
+     * as the fallback) — this is purely additive. `teachingMode`/`targetId`
+     * are named together or not at all (validator-enforced); either alone
+     * would leave the OTHER two target columns ambiguous.
+     */
+    subjectId?: string;
+    branchId?: string;
+    academicYearId?: string;
+    teachingMode?: TeachingMode;
+    targetId?: string;
   },
   now: Date,
 ): Promise<{
@@ -1497,6 +1519,17 @@ async function splitCourseSchedule(
     existing.branchId,
     "no such schedule",
   );
+  // The successor's own branch, when this edit moves it — the same check
+  // CREATE runs against `input.branchId`, asked again here because a manager
+  // scoped to one branch must not use a split to move a class into another.
+  if (data.branchId !== undefined && data.branchId !== existing.branchId) {
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      data.branchId,
+      "no such branch",
+    );
+  }
 
   const splitOn = atMidnightUtc(fromDate);
   // Splitting at or before a date the series never reached would produce a
@@ -1545,6 +1578,75 @@ async function splitCourseSchedule(
       tx,
       successorStaff.map((person) => person.userId),
     );
+
+    // **Owner-reported, 2026-09-15 — the successor's identity, resolved
+    // exactly as CREATE resolves it, when this edit names a new one.**
+    // Absent, every value below falls back to `existing.X` unchanged — the
+    // pre-existing split behaviour. The branch resolves first because the
+    // target's own resolution (`administrative_group` mode) validates against
+    // it; the target is always RE-resolved when branch/subject/mode moves,
+    // even naming the same group/level/circle, so a group that no longer
+    // matches the new branch is caught here rather than by a database CHECK.
+    const successorBranchId = data.branchId ?? existing.branchId;
+    const successorSubjectId = data.subjectId ?? existing.subjectId;
+    const successorAcademicYearId = data.academicYearId ?? existing.academicYearId;
+    const identityChanged =
+      data.branchId !== undefined ||
+      data.subjectId !== undefined ||
+      data.teachingMode !== undefined;
+    let target: {
+      levelId: string | null;
+      administrativeGroupId: string | null;
+      teachingGroupId: string | null;
+      effectiveLevelId?: string;
+    } = {
+      levelId: existing.levelId,
+      administrativeGroupId: existing.administrativeGroupId,
+      teachingGroupId: existing.teachingGroupId,
+    };
+    if (identityChanged) {
+      target = await resolveTarget(
+        tx,
+        data.teachingMode ?? existing.teachingMode,
+        data.teachingMode !== undefined
+          ? (data.targetId as string)
+          : ((existing.levelId ??
+              existing.administrativeGroupId ??
+              existing.teachingGroupId) as string),
+        successorBranchId,
+      );
+      const subject = await tx.subject.findFirst({
+        where: { id: successorSubjectId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+      await assertSubjectTaughtAtLevel(
+        tx,
+        target.effectiveLevelId as string,
+        successorSubjectId,
+      );
+    }
+    if (
+      successorDelivery.roomId &&
+      successorBranchId !== existing.branchId &&
+      data.roomId === undefined
+    ) {
+      // Carrying an unstated room across a branch move is exactly the
+      // "half-specified sitting" §7/R35's own reasoning refuses elsewhere —
+      // the room almost certainly belongs to the OLD branch, and there is no
+      // honest default here the way there is for delivery. The caller must
+      // say where the successor meets, same as CREATE requires.
+      const room = await tx.room.findFirst({
+        where: { id: successorDelivery.roomId, deletedAt: null },
+        select: { branchId: true },
+      });
+      if (!room || room.branchId !== successorBranchId) {
+        throw new AppError("VALIDATION_FAILED", "room is at a different branch", {
+          reason: "ROOM_BRANCH_MISMATCH",
+        });
+      }
+    }
+
     const successorValues = {
       // **The successor IS the same class**, split at a date (R50) — so it keeps
       // its name, and an edit that renames it renames both halves' successor.
@@ -1553,13 +1655,13 @@ async function splitCourseSchedule(
         data.description === undefined
           ? existing.description
           : data.description,
-      subjectId: existing.subjectId,
-      teachingMode: existing.teachingMode,
-      levelId: existing.levelId,
-      administrativeGroupId: existing.administrativeGroupId,
-      teachingGroupId: existing.teachingGroupId,
-      branchId: existing.branchId,
-      academicYearId: existing.academicYearId,
+      subjectId: successorSubjectId,
+      teachingMode: data.teachingMode ?? existing.teachingMode,
+      levelId: target.levelId,
+      administrativeGroupId: target.administrativeGroupId,
+      teachingGroupId: target.teachingGroupId,
+      branchId: successorBranchId,
+      academicYearId: successorAcademicYearId,
       // R97 — all three from one resolution, so a split that takes the tail
       // online leaves the successor with no room rather than a stale one.
       roomId: successorDelivery.roomId,
