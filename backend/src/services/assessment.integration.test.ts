@@ -2085,7 +2085,12 @@ describe('the AUTHOR reads her own paper — including a draft (2026-09-05)', ()
 describe('the library — a paper that was created must still be there', () => {
   it('lists a DRAFT, which is the case that had no route back at all', async () => {
     const { id } = await levelPaper(levelId, superAdmin());
-    const page = await listAssessments(prisma, superAdmin(), {});
+    // Filtered by this file's own `levelId`: every `levelPaper()` fixture in
+    // this file shares the same `date` (`TODAY`), so an unfiltered read's
+    // `[{date:'desc'},{id:'desc'}]` order tie-breaks on a random UUID — a
+    // coin flip on whether THIS row lands within the default 25-row page
+    // once enough same-date drafts have accumulated (found flaky in CI).
+    const page = await listAssessments(prisma, superAdmin(), { levelId });
     const mine = page.data.filter((row) => row.id === id);
     expect(mine).toHaveLength(1);
     expect(mine[0]!.status).toBe('draft');
@@ -2104,11 +2109,14 @@ describe('the library — a paper that was created must still be there', () => {
     });
 
     // The source is copied, never retargeted or consumed (R136 clause 3): a
-    // second, independent read finds the draft exactly as it was.
-    const page = await listAssessments(prisma, superAdmin(), {});
+    // second, independent read finds the draft exactly as it was. Filtered
+    // by `levelId` for the same pagination-fragility reason as above.
+    const page = await listAssessments(prisma, superAdmin(), { levelId });
     expect(page.data.find((row) => row.id === id)?.status).toBe('draft');
     // The occurrence `scheduleExam` produced is not a reusable source and
-    // must not appear in بناء الاختبارات's library, whatever its own status.
+    // must not appear in بناء الاختبارات's library, whatever its own status
+    // — excluded by the query's own `status: 'draft'` WHERE clause, so this
+    // assertion needs no pagination guard.
     expect(page.data.some((row) => row.id === occurrenceId)).toBe(false);
   });
 
@@ -2124,7 +2132,7 @@ describe('the library — a paper that was created must still be there', () => {
     });
     await closeAssessment(prisma, superAdmin(), occurrenceId);
 
-    const page = await listAssessments(prisma, superAdmin(), {});
+    const page = await listAssessments(prisma, superAdmin(), { levelId });
     expect(page.data.find((row) => row.id === id)?.status).toBe('draft');
     expect(page.data.some((row) => row.id === occurrenceId)).toBe(false);
   });
@@ -2133,7 +2141,15 @@ describe('the library — a paper that was created must still be there', () => {
     const { id } = await levelPaper(levelId, superAdmin());
     await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س ١' });
     await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'س ٢' });
-    const row = (await listAssessments(prisma, superAdmin(), {})).data.find((r) => r.id === id)!;
+    // Filtered by this file's own `levelId`, not an unfiltered read: every
+    // `levelPaper()` fixture in this file shares the same `date` (`TODAY`),
+    // so an unfiltered list's `[{date:'desc'},{id:'desc'}]` order tie-breaks
+    // on a random UUID — a coin flip on whether THIS row lands within the
+    // default 25-row page once enough same-date drafts have accumulated
+    // (found flaky in CI, unrelated to what this test asserts).
+    const row = (await listAssessments(prisma, superAdmin(), { levelId })).data.find(
+      (r) => r.id === id,
+    )!;
     expect(row.questionCount).toBe(2);
     expect(row.submissionCount).toBe(0);
   });

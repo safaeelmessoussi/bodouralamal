@@ -9446,3 +9446,32 @@ contract phase) is the right shape for the expand phase, but unlike R43's zero-b
 data situation, real data now exists, so a genuine backfill/migrate design is needed before
 any contract phase — a scope decision, not an implementation detail. Reported to the
 Document Owner rather than guessed at; see `docs/TASKS.md` for the open item.
+
+2026-09-15 (cont. 7) — defect fix: flaky `listAssessments` library assertions,
+found while verifying checkpoint 4's hosted CI
+
+Checkpoint 4 (`555fbea`) pushed clean but hosted CI run `35011959262` failed on
+`Integration`, on an assertion checkpoint 4's own diff never touched:
+`src/services/assessment.integration.test.ts > carries the counts that tell a draft from a
+paper somebody has sat` — `TypeError: Cannot read properties of undefined (reading
+'questionCount')`.
+
+**Root cause, confirmed by reading the query, not assumed:** four call sites in this file
+read `listAssessments(prisma, superAdmin(), {})` — no filter — then locate their own
+freshly-created row by id in the returned page. Every `levelPaper()` fixture in the file
+passes the identical `date: TODAY`, and `listAssessments` orders
+`[{date:'desc'},{id:'desc'}]`; once enough same-date drafts exist, the `id`-desc tie-break
+(a UUID, unrelated to creation order) makes it a coin flip whether a given row lands inside
+the default 25-row page. Pre-existing, unrelated to any change in this session's batch —
+confirmed by `git diff` showing nothing touched this file before the failure.
+
+**Fixed** by scoping all four call sites to the file's own `levelId` (a fresh
+`prisma.level.create` row per file, in `beforeAll` — not shared across files), which bounds
+the candidate set to this file's own fixtures without weakening any assertion's actual
+claim. One assertion (`occurrenceId` must not appear in the draft-only library) needed no
+change — the endpoint's own `status: 'draft'` WHERE clause excludes it structurally,
+regardless of pagination.
+
+Verification: focused run of the fixed file, 133/133; backend lint/typecheck/unit
+342/342; full disposable-stack integration 2,613/2,631 (18 pre-existing skips, all-table
+isolation intact); all 31 guards, doc-links and `git diff --check` pass. No migration.

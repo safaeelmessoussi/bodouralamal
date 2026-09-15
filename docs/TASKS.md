@@ -4307,7 +4307,34 @@ the Owner's own report named.
       1,319/1,319, including a new `schedules-edit.test.tsx` confirmed
       to fail without the fix by stash/restore. No backend change, no
       migration.
-- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [x] Pushed as `555fbea`; hosted CI (run `35011959262`) failed on
+      `Integration`, unrelated to this checkpoint's diff — see the
+      defect fix below. Deploy follows once a green run lands.
+
+## Defect found and fixed while verifying checkpoint 4's CI — 2026-09-15
+
+- [x] **`assessment.integration.test.ts`'s unfiltered `listAssessments`
+      library assertions were flaky, unrelated to any checkpoint in
+      this batch.** Four call sites read `listAssessments(prisma,
+      superAdmin(), {})` (no filter) and then located their own
+      freshly-created row by id. Every `levelPaper()` fixture in the
+      file shares the same `date` (`TODAY`), so the endpoint's
+      `[{date:'desc'},{id:'desc'}]` order tie-breaks on a random UUID
+      once enough same-date drafts exist — a coin flip on whether a
+      given row lands inside the default 25-row page. Tripped hosted
+      CI run `35011959262` on an assertion this batch's checkpoint 4
+      never touched.
+- [x] Fixed by scoping all four calls to the file's own unique
+      `levelId` (created fresh per file in `beforeAll`, so the filter
+      bounds the candidate set to this file's own fixtures without
+      weakening what each assertion actually tests).
+- [x] Verification: focused run of the file — 133/133 passed;
+      backend lint/typecheck/unit 342/342; full disposable-stack
+      integration 2,613/2,631 (18 pre-existing skips, all-table
+      isolation intact); all 31 guards, doc-links and
+      `git diff --check` pass. No migration.
+- [ ] Push, verify hosted CI is green, then deploy checkpoint 4 to
+      Staging and record the outcome.
 
 ## A3 — group/circle/category schema migration: investigated, not implemented — 2026-09-15
 
