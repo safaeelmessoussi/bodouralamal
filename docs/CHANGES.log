@@ -9397,3 +9397,52 @@ rows), `api`/`nginx` recreated and verified on the exact commit's label, `/healt
 following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers
 (the two standing `bodour-certbot-1`/`bodour-minio-init-1` are pre-existing infra, not
 artifacts of this deploy). No Production action of any kind.
+
+2026-09-15 (cont. 6) — SRS Revision 152: checkpoint 4 — teacher قائمة gains
+تعديل, حذف reported rather than assumed
+
+**Built — تعديل, wherever الجدولة already offers it, reusing the exact same dialog and
+server grant.** `/teacher/schedules`'s قائمة never offered a row action to reach an edit
+the server already accepts: `PATCH /admin/course-schedules/{id}` already tolerates a
+Teacher who currently staffs the class (`assertTeacherCurrentlyStaffs`, Revision 140 §2),
+Event `assertMayEdit` already admits a Teacher in her own scope, Exam `updatePhysicalExam`
+already admits one within her §4.4c scope — none of the three needed a server change. The
+list now wires the identical `SchedulingDialog` in edit mode الجدولة's own list already
+opens, reusing the same `teachingContexts` derivation her own create-flow already built.
+
+**Deliberately NOT built — حذف, on any of the three kinds.** Investigation confirmed every
+kind's deletion stays server-refused for a Teacher by a separately-ratified Document Owner
+decision, each with a stated reason: class deletion is Teacher ⊘ (Revision 140 §2 — "the
+ratified grant is creation and operational editing, not every write TD-2's row could
+theoretically cover"); Event deletion is Admin-only (Revision 43/72, R71.3 — a `responsible`
+Teacher's grant was scoped to edit, never delete); Exam deletion is Admin-and-above (R70.4 —
+`Exam` carries no `created_by`, so "her own but not another's" cannot be expressed against
+this schema). Wiring حذف in unmodified would 403 at the server on every row, and granting it
+for real would mean reversing three independently-ratified boundaries — reported to the
+Document Owner rather than assumed. Open question left for her: whether Event/Exam حذف
+should be granted for rows a Teacher is responsible for/staffs (and on what basis for Exam,
+given the missing `created_by`), and whether B1 was intended to reopen the already-ratified
+class-delete `⊘`.
+
+Verification: frontend typecheck/lint/build clean; full frontend unit suite 1,319/1,319,
+including a new `schedules-edit.test.tsx` confirmed to fail without the fix by a
+stash/restore round trip. No backend change, no migration.
+
+Investigated in the same pass, NOT implemented — A3 (group/circle/category schema
+migration): confirmed the largest remaining item. `RecurringCourseSchedule` targets via a
+single exclusive-arm enum + 3 nullable FKs (`resolveTarget`), unlike `Event`'s 4 independent
+join tables (`EventBranch`/`EventCategory`/`EventLevel`/`EventAdministrativeGroup`, AND
+across dimensions, OR within one) — and Revision 139, ratified 5 days before this pass,
+states explicitly that `RecurringCourseSchedule` "stays single-target by §4.4c's own CHECK
+constraint, untouched by this revision." Event has deliberately no Teaching-Group arm at
+all ("inventing the join here would be inventing a domain relationship the SRS does not
+define"). A matching redesign would touch `resolveTarget`, `roster-resolution.ts` (multiple
+functions), `notification.service.ts`, `attendance.service.ts`, `calendar.service.ts`'s
+`personalFilters` (the `session` branch, while preserving R92's override semantics), the
+scope-options service, and shared frontend `ScopeSelectors` — which `ActivitySection` and
+`ExamSection` also depend on, so touching it risks unintentionally widening those too. The
+R43 precedent (additive expand, never combined with a same-migration drop; a separate later
+contract phase) is the right shape for the expand phase, but unlike R43's zero-beneficiary-
+data situation, real data now exists, so a genuine backfill/migrate design is needed before
+any contract phase — a scope decision, not an implementation detail. Reported to the
+Document Owner rather than guessed at; see `docs/TASKS.md` for the open item.

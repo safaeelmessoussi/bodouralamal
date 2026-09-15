@@ -4286,6 +4286,59 @@ the Owner's own report named.
       migration in this batch), `/healthz` green on the first check,
       TLS/security headers intact, no leftover disposable containers.
       Full detail in CHANGES.log.
-- [ ] Continue into the remaining checkpoints: group/circle/category
-      schema migration (A3), teacher قائمة parity with admin's list
-      (B1), and the روster-viewing gap decision.
+## SRS Revision 152 — checkpoint 4: teacher قائمة gains تعديل — 2026-09-15 (cont. 6)
+
+- [x] **Built: تعديل on `/teacher/schedules`' قائمة** (SRS Revision 152 §1) —
+      reuses the exact `SchedulingDialog` edit mode الجدولة's own قائمة
+      already opens; no server change needed, all three kinds
+      (class/Event/Exam) already tolerate an in-scope Teacher on UPDATE.
+- [x] **Deliberately NOT built: حذف, on any kind** (SRS Revision 152 §2) —
+      every kind's DELETE stays server-refused for a Teacher by a
+      separately-ratified decision (class ⊘ Revision 140 §2; Event
+      Admin-only Revision 43/72/R71.3; Exam Admin-and-above R70.4, no
+      `created_by` to express "her own"). Wiring it in would either 403
+      on every row or silently reverse one of these three boundaries —
+      reported to the Document Owner, not assumed. **Open question for
+      the Owner**: should Event/Exam حذف be granted to a Teacher for
+      rows she is responsible for/staffs, and on what scoping basis for
+      Exam given the missing `created_by`; and was B1 intended to also
+      reopen the already-ratified class-delete `⊘`?
+- [x] Verification: frontend typecheck/lint/build clean; frontend unit
+      1,319/1,319, including a new `schedules-edit.test.tsx` confirmed
+      to fail without the fix by stash/restore. No backend change, no
+      migration.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+
+## A3 — group/circle/category schema migration: investigated, not implemented — 2026-09-15
+
+- [x] Investigated `RecurringCourseSchedule`'s current single-exclusive-arm
+      targeting (`resolveTarget`, 3 nullable FKs + enum) against `Event`'s
+      4 independent join tables (AND across dimensions, OR within one);
+      confirmed Revision 139 (ratified 5 days earlier) explicitly left
+      `RecurringCourseSchedule` "untouched" and single-target; confirmed
+      Event has deliberately no Teaching-Group arm at all.
+- [x] Mapped every downstream consumer a matching redesign would touch:
+      `resolveTarget`, `roster-resolution.ts` (multiple functions),
+      `notification.service.ts`, `attendance.service.ts`,
+      `calendar.service.ts`'s `personalFilters` (the `session` branch,
+      preserving R92's override semantics), scope-options service, and
+      shared frontend `ScopeSelectors` (also depended on by
+      `ActivitySection`/`ExamSection` — a real regression risk if
+      touched without care).
+- [x] Confirmed the R43 expand/contract precedent (additive expand,
+      never combined with a same-migration drop; a separate later
+      contract phase) as the right-shaped pattern, but noted unlike
+      R43's zero-beneficiary-data situation, real data now exists, so a
+      genuine backfill/migrate design is a real design question, not an
+      implementation detail.
+- [ ] **NOT implemented — genuinely an unscoped architecture decision**
+      (which dimensions to add: Branch/Category/Level plural, a new
+      Teaching-Group join arm?; multi-select UI on `ClassSection`; the
+      backfill/migrate design against real data). Reported to the
+      Document Owner per the standing rule against guessing at schema
+      decisions, rather than implemented on an inference. Full detail
+      in CHANGES.log.
+
+- [ ] The روster-viewing gap decision (`عرض المستفيدات`, flagged
+      Revision 147 and again in Revision 152's own docstring) — still
+      outstanding, no decision made.

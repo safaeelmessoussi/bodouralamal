@@ -57,12 +57,16 @@ import { sortRows } from '../../lib/sort-rows.js';
  * `/me/course-schedule-options` read) rather than reimplementing it.
  * **`PATCH /admin/course-schedules/{id}` also now accepts her**, for a class
  * she currently staffs (`assertTeacherCurrentlyStaffs`) — same boundary
- * Session CRUD already uses — but this table offers no edit ACTION for it
- * yet; only creation is wired here. Not a narrower server grant, a smaller
- * first UI slice: her occurrence-level tools (حصص الحلقة → cancel/reschedule
- * one Session) already cover the common case, and a class-level edit action
- * is left for a later pass rather than assumed done because the route
- * accepts it.
+ * Session CRUD already uses. **B1 (Revision 152 §1) wires تعديل onto this
+ * table's own قائمة**, the same `SchedulingDialog` in edit mode الجدولة's
+ * own list already opens — one row action for all three kinds, since
+ * Event `assertMayEdit` and Exam `assertCanManage`/`assertScope` admit her
+ * in scope the identical way. **حذف is deliberately absent** (Revision 152
+ * §2): every kind's deletion stays server-refused for a Teacher by a
+ * separately-ratified decision (class — Revision 140 §2; Event — Revision
+ * 43/72, R71.3; Exam — R70.4), so wiring it here would either 403 on every
+ * row or silently ask to reverse one of those three boundaries — flagged
+ * back to the Document Owner instead.
  *
  * **The scope rules are the server's, unchanged.** For an activity, a Teacher
  * must name Administrative Groups they teach and may not reach a branch,
@@ -110,6 +114,30 @@ export function TeacherSchedulesPage(): ReactNode {
   const [catalogTruncated, setCatalogTruncated] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState<TableStatus>('loading');
   const [catalogSort, setCatalogSort] = useState<SortState | null>(null);
+  /**
+   * **Owner-reported, 2026-09-15 (B1) — تعديل, reusing الجدولة's own edit
+   * dialog and server grant, not a teacher-shaped rebuild.** `PATCH
+   * /admin/course-schedules/{id}`, Event `assertMayEdit` and Exam
+   * `assertCanManage`/`assertScope` already tolerate a Teacher in her own
+   * scope (see this file's own docstring on `PATCH .../course-schedules`);
+   * this only wires the SAME `SchedulingDialog` الجدولة's own قائمة already
+   * opens in edit mode, rather than duplicating it.
+   *
+   * **حذف is deliberately NOT added here**, on any of the three kinds —
+   * unlike تعديل, it stays server-refused for a Teacher across the board:
+   * class deletion is Teacher ⊘ by Revision 140 §2's own text ("deletion is
+   * untouched... the ratified grant is creation and operational editing, not
+   * every write TD-2's row could theoretically cover"); Event deletion is
+   * Admin-only by Revision 43/72 and R71.3 (a `responsible` Teacher's grant
+   * was scoped to edit, not delete); Exam deletion is Admin-and-above by
+   * R70.4, which states in terms that `Exam` carries no `created_by` so
+   * "her own but not another's" cannot be expressed against this schema.
+   * Wiring حذف here unmodified would 403 at the server on every row and,
+   * worse, invite quietly widening one of these three separately-ratified
+   * boundaries instead of asking. Flagged for the Document Owner rather than
+   * assumed.
+   */
+  const [editing, setEditing] = useState<SchedulingItem | null>(null);
 
   const loadCatalog = useCallback(async () => {
     setCatalogStatus('loading');
@@ -198,7 +226,26 @@ export function TeacherSchedulesPage(): ReactNode {
       // identical action uses.
       available: (r) => specOfKind(r.type).hasOccurrences,
     },
+    {
+      // B1 — same action, same dialog, as الجدولة's own قائمة; the server
+      // already scopes what a Teacher may actually save (see the state
+      // declaration above for why حذف has no matching entry here).
+      label: t('common.edit'),
+      onSelect: (r) => setEditing(r),
+    },
   ];
+
+  const teachingContexts = rows
+    .filter((r) => r.subject_id !== null && r.academic_year_id !== null)
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      branchId: r.branch_id,
+      levelId: r.level_id ?? '',
+      subjectId: r.subject_id ?? '',
+      academicYearId: r.academic_year_id ?? '',
+      groupId: r.teaching_mode === 'administrative_group' ? r.target_id : null,
+    }));
 
   return (
     <TeacherLayout
@@ -271,17 +318,7 @@ export function TeacherSchedulesPage(): ReactNode {
            * come from a class she teaches rather than from `/admin/levels`,
            * which answers 403 for her. The rows are already on this page.
            */
-          teachingContexts={rows
-            .filter((r) => r.subject_id !== null && r.academic_year_id !== null)
-            .map((r) => ({
-              id: r.id,
-              title: r.title,
-              branchId: r.branch_id,
-              levelId: r.level_id ?? '',
-              subjectId: r.subject_id ?? '',
-              academicYearId: r.academic_year_id ?? '',
-              groupId: r.teaching_mode === 'administrative_group' ? r.target_id : null,
-            }))}
+          teachingContexts={teachingContexts}
           // R72/§2 — the kinds a Teacher may author here.
           types={TEACHER_TYPES}
           onCancel={() => setComposing(false)}
@@ -293,6 +330,22 @@ export function TeacherSchedulesPage(): ReactNode {
             // SAME rows) and is what makes a newly self-staffed class appear
             // without a manual refresh.
             void load();
+            void loadCatalog();
+          }}
+        />
+      ) : null}
+
+      {editing ? (
+        <SchedulingDialog
+          item={editing}
+          token={accessToken}
+          teachingContexts={teachingContexts}
+          types={TEACHER_TYPES}
+          onCancel={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void load();
+            void loadCatalog();
           }}
         />
       ) : null}
