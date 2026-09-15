@@ -243,11 +243,14 @@ export interface ScheduleExamInput {
   /** Remote only. Absent means `manual`. */
   availability?: ExamAvailabilityPolicy;
   /** Required exactly when `source_exam_id` is absent on a `physical`
-   *  sitting — its own title/maximum/Level/Subject/year, since there is no
-   *  source to take them from. */
+   *  sitting — its own title/Level/Subject/year, since there is no source to
+   *  take them from. */
   bare?: {
     title: string;
-    max_grade: number;
+    /** **Owner-reported, 2026-09-15 — no longer asked here.** Omitted, the
+     *  server defaults it (`BARE_DEFAULT_MAX_GRADE`); `PATCH /exams/{id}`
+     *  still edits it afterward. */
+    max_grade?: number;
     description?: string | null;
     level_id: string;
     subject_id: string;

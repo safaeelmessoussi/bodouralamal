@@ -53,6 +53,7 @@ export function PersonalCalendar({
   fields = [],
   columns,
   heading,
+  catalogList,
 }: {
   token: string | null;
   /** Which filters this reader may narrow by — see the note above. */
@@ -60,6 +61,23 @@ export function PersonalCalendar({
   /** Which columns the list shows — the same authorization question (rule O). */
   columns: readonly OccurrenceColumn[];
   heading: string;
+  /**
+   * **Owner-reported, 2026-09-15 — تقويمي's قائمة, for a مؤطرة, is not a
+   * month's occurrences at all** (matching الجدولة's own قائمة, R84's SAME
+   * property extended to a second reader): every scoped Class/Event/Exam
+   * DEFINITION she reaches, never a dated occurrence. That is a different
+   * data source (catalogue rows, not `Occurrence`s), so it cannot be a column
+   * set on the shared `OccurrenceTable` — the caller renders its own table and
+   * hands it in whole, exactly as `admin/scheduling.tsx`'s own قائمة is its
+   * own `DataTable`, never `OccurrenceTable`.
+   *
+   * **Absent (every other caller) leaves this exactly as it always was** —
+   * the shared month-bounded occurrence list, month nav included (R84). Only
+   * when a caller opts in does the month stepping disappear from the
+   * header FOR THE LIST VIEW — the grid still has one, unaffected, since
+   * switching back to تقويم still means a month.
+   */
+  catalogList?: ReactNode;
 }): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
@@ -160,10 +178,18 @@ export function PersonalCalendar({
         onView={setView}
         gregorianMonths={bootstrap?.gregorian_months ?? []}
         hijriMonths={bootstrap?.hijri.months ?? []}
-        month={month}
-        onPrevious={() => setMonth(addMonths(month, -1))}
-        onToday={() => setMonth(startOfMonth(today))}
-        onNext={() => setMonth(addMonths(month, 1))}
+        // **A month means nothing over a catalogue** (Owner-reported,
+        // 2026-09-15) — omitted exactly as admin/scheduling.tsx's own list
+        // header omits it, and only for THIS view: the grid keeps its month
+        // untouched the moment she switches back to تقويم.
+        {...(view === 'list' && catalogList
+          ? {}
+          : {
+              month,
+              onPrevious: () => setMonth(addMonths(month, -1)),
+              onToday: () => setMonth(startOfMonth(today)),
+              onNext: () => setMonth(addMonths(month, 1)),
+            })}
         // **Rendered in both views, always** — the property R84 exists for.
         filters={
           <CalendarFilters
@@ -199,6 +225,8 @@ export function PersonalCalendar({
             emptyMessage={t('calendar.mineEmpty')}
             onRetry={() => void load()}
           />
+        ) : catalogList ? (
+          catalogList
         ) : (
           /* **The same table the public and back-office lists use** (R84):
              قائمة is a table everywhere, and the two views of this surface show

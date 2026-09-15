@@ -51,7 +51,13 @@ const availability = z
 const bare = z
   .object({
     title: z.string().trim().min(1).max(120),
-    max_grade: maxGrade,
+    // **Owner-reported, 2026-09-15 — no longer asked here.** She sets it while
+    // authoring an exam, not while scheduling one; a bare occurrence has no
+    // authoring step of its own, so the service defaults it (see
+    // `exam-scheduling.service.ts`) rather than leaving `Exam.maxGrade`, a
+    // `NOT NULL` column, with nothing to write. Still accepted when sent —
+    // the already-existing edit path (§ locked exam edit) still sends it.
+    max_grade: maxGrade.optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     level_id: uuid,
     subject_id: uuid,

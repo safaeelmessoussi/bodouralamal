@@ -145,8 +145,9 @@ describe('the exam colour is one token, used on every surface', () => {
 
   it('names the kind in Arabic, so colour is never the only signal', () => {
     // §14.4 and plain accessibility: a reader who cannot separate violet from
-    // green still reads "امتحان".
-    expect(t(OCCURRENCE_KIND_LABEL.exam)).toBe('امتحان');
+    // green still reads "اختبار" (Owner-reported, 2026-09-15 — the platform
+    // no longer uses "امتحان" anywhere).
+    expect(t(OCCURRENCE_KIND_LABEL.exam)).toBe('اختبار');
     expect(t(OCCURRENCE_KIND_LABEL.exam)).not.toContain('calendar.');
   });
 

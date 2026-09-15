@@ -9136,3 +9136,88 @@ in the following minutes, TLS/HSTS/CSP headers reconfirmed, `/profile` and the r
 `/dashboard/student/account` both verified reachable (the latter now rendering the ordinary
 not-found page client-side, as designed), no leftover disposable containers. No Production
 action of any kind.
+
+2026-09-15 (cont. 2) — SRS Revision 147: seven items fixed and tested, three explicitly
+deferred as their own dedicated pass
+The Owner's continued Staging walk-through, same day: a screenshot of a completely bare
+exam-answer page plus a new platform-wide "every page renders inside the platform's
+chrome" rule, a «بدء الاختبار» crash with its exact occurrence-dialog values, full build
+authorization for the previously-deferred تقويمي/حصصي rework and the group/circle/category
+schema migration (the latter re-flagged rather than attempted — see below), a remote
+exam's missing staff fields, النقطة القصوى's removal from bare exam scheduling with its
+exact validation-error JSON, a terminology-unification instruction (امتحان → اختبار
+everywhere), and a past-date ratification for «إضافة عنصر».
+
+**Fixed — the bare exam-answer page, and the platform-wide chrome rule it exposed.**
+`StudentAssessmentsPage`'s `Paper` sub-component returned bare JSX — no header, no
+footer — for all three of its states once a paper was open via `?exam=`; only the outer
+table view was ever wrapped in `StudentLayout`. All three states now render inside it. A
+repo-wide audit for pages missing a layout wrapper found exactly one other surface,
+`public.tsx`'s pre-auth/error screens, correctly bare (no session to show chrome for).
+Standing rule recorded once in SRS Revision 147 §1, cited rather than restated elsewhere.
+
+**Fixed — the actual «تعذّر تحميل الاختبار» root cause.** تقويمي's personal exam read
+filtered only by the coarse tier/branch visibility rule, never by R124's fine-grained
+audience — the same audience `eligible()` checks on open. A beneficiary could see and open
+«بدء الاختبار» for a sitting she was never the audience of, then have the paper endpoint
+correctly refuse it. `calendar.service.ts`'s `personalFilters` now also reports whether the
+caller holds any enrolment at all; when she does, the exam list is narrowed row-by-row
+through the SAME `examAudienceWhere` `eligible()` itself calls. A pure staff actor (no
+enrolments) is completely unaffected — her existing coarse-tier view is unchanged.
+
+**Fixed — a remote sitting's supervisor/assistants, and the max_grade validation crash.**
+`StaffPicker` now renders for an online exam exactly as it already did for a physical one.
+Two further gaps surfaced fixing this: `scheduleExam`'s online CREATE path built the
+occurrence but never wrote its `ExamStaff` rows (the check/insert existed only in the
+physical branch); and the frontend's online-CREATE adapter call never forwarded
+`examStaff` at all (the online-EDIT call already did). Separately, `bare.max_grade` is now
+optional server-side, defaulting to 20 at creation when omitted (`BARE_DEFAULT_MAX_GRADE`
+in `exam-scheduling.service.ts`) rather than hitting `Exam.maxGrade`'s `NOT NULL` column
+with nothing to write — the Owner's exact reported `VALIDATION_FAILED`/`bare.max_grade`
+crash. The bare-creation pathway itself is untouched (Revision 136 clause 12 stands); only
+the client-facing field is removed from CREATE, still rendering, unchanged, on EDIT.
+
+**Built — حصصي retired; تقويمي's قائمة is now catalogue-shaped, like الجدولة's own.** The
+separate "what classes am I responsible for" table on `/teacher/schedules` is deleted.
+تقويمي's قائمة view, for a teacher, now reads the same unbounded `listSchedulingItems`
+catalogue الجدولة's own قائمة already merges (every scoped Class/Event/Exam definition,
+server-scoped to the caller), instead of a month-bounded occurrence read — via one new,
+backward-compatible `catalogList` prop on `PersonalCalendar` that leaves every other
+caller, including the beneficiary's own تقويمي, completely unaffected. «حصص الحلقة» moves
+to this list's own row action, gated exactly as الجدولة's identical action is, reaching the
+unchanged `/teacher/schedules/{id}/sessions` destination. **«عرض المستفيدات», which حصصي
+also offered, has no replacement anywhere on this list — matching الجدولة's own قائمة,
+which offers no roster action either.** Flagged rather than silently dropped: the roster
+adapter call and its i18n strings are left in place, unused, open for the Owner's decision
+on whether a replacement is wanted.
+
+**Built — terminology unified on اختبار.** All 61 occurrences of «امتحان» in
+`frontend/src/i18n/ar.ts` — confirmed the sole location of user-facing platform text, every
+other repository occurrence being internal engineering prose in a comment — are now
+«اختبار», correspondingly inflected. Three test fixtures asserting the old text are updated.
+
+**Confirmed, not changed — past dates in «إضافة عنصر».** Audited every date field and its
+underlying validation at both layers; no `min` attribute, validator, or service check
+restricts a scheduling item's date to today or later anywhere. The Owner's ratification is
+recorded as confirmation of existing correct behavior.
+
+**Deferred, explicitly, to their own dedicated pass** — each now a firm build instruction,
+not attempted here given the genuine schema/architecture weight each carries:
+- Viewing a student's submitted exam responses and per-question grading/publishing — a new
+  `GradeQuestionScore`-shaped schema addition plus service/route/UI work.
+- A simple mechanism for editing a class's branch/level/mode/subject/year, frozen since
+  Revision 57.
+- The real schema migration for group/circle/category targeting on
+  `RecurringCourseSchedule`, touching session materialization, conflict detection and
+  roster resolution, all of which currently assume a single target.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,310/1,310; new coverage — `personal-calendar.integration.test.ts` (audience
+narrowing, both directions, plus a staff-actor no-regression case), `assessment.
+integration.test.ts` (online staff assignment, its duplicate-position refusal, the bare-
+exam default and explicit-maximum cases), `scheduling-exam-source.test.tsx` (the maximum's
+removal from CREATE, its retained presence on EDIT) — all confirmed to fail without their
+respective fix; full disposable-stack integration suite green with all-table isolation
+intact; all 31 `scripts/ci/check-*.sh` guards, the documentation-link guard and
+`git diff --check` pass. No migration, no OpenAPI/TD-3 change — every route touched already
+existed.

@@ -2546,6 +2546,46 @@ describe('R136 — assigning the target/date IS scheduling, in one step', () => 
   });
 });
 
+describe('Owner-reported, 2026-09-15 — a remote sitting keeps its supervisor/assistants too', () => {
+  it('creates the ExamStaff rows on an ONLINE schedule, exactly as a physical one already does', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'online',
+      sourceExamId: id,
+      target: { kind: 'level' },
+      date: TODAY,
+      staff: [{ userId: teacherId, position: 'supervisor' }],
+    });
+
+    const rows = await prisma.examStaff.findMany({ where: { examId: occurrenceId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: teacherId, position: 'supervisor' });
+  });
+
+  it('refuses the same duplicate-position case an online schedule never checked before', async () => {
+    const { id } = await levelPaper(levelId, superAdmin());
+    await addQuestion(prisma, superAdmin(), id, { kind: 'short_text', prompt: 'سؤال' });
+
+    await expect(
+      scheduleExam(prisma, superAdmin(), {
+        mode: 'online',
+        sourceExamId: id,
+        target: { kind: 'level' },
+        date: TODAY,
+        staff: [
+          { userId: teacherId, position: 'supervisor' },
+          { userId: teacherId, position: 'assistant' },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { reason: 'EXAM_STAFF_DUPLICATE' },
+    });
+  });
+});
+
 /**
  * **R136 (Codex B1) — deterministic proof of atomicity, not an architectural
  * claim.** The R134-era flow was `copy`, then `retarget`, then `publish`,
@@ -2825,6 +2865,51 @@ describe('Codex B2/B3 · source-backed physical scheduling: branch authorization
         endTime: new Date('1970-01-01T11:00:00.000Z'),
       }),
     ).rejects.toMatchObject({ details: { reason: 'ROOM_BRANCH_MISMATCH' } });
+  });
+
+  it('Owner-reported, 2026-09-15 — a bare exam with no maximum defaults to 20, not a NOT-NULL violation', async () => {
+    const ownRoom = await room(branchId);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'physical',
+      bare: {
+        title: `${TAG} بلا نقطة قصوى`,
+        levelId: localOnlyLevelId,
+        subjectId,
+        academicYearId,
+      },
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      branchId,
+      roomId: ownRoom,
+      startTime: new Date('1970-01-01T09:00:00.000Z'),
+      endTime: new Date('1970-01-01T11:00:00.000Z'),
+    });
+    expect(
+      (await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } })).maxGrade.toNumber(),
+    ).toBe(20);
+  });
+
+  it('a maximum sent alongside a bare exam is still honoured', async () => {
+    const ownRoom = await room(branchId);
+    const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
+      mode: 'physical',
+      bare: {
+        title: `${TAG} بنقطة قصوى`,
+        maxGrade: 100,
+        levelId: localOnlyLevelId,
+        subjectId,
+        academicYearId,
+      },
+      target: { kind: 'level' },
+      date: OTHER_DATE,
+      branchId,
+      roomId: ownRoom,
+      startTime: new Date('1970-01-01T09:00:00.000Z'),
+      endTime: new Date('1970-01-01T11:00:00.000Z'),
+    });
+    expect(
+      (await prisma.exam.findUniqueOrThrow({ where: { id: occurrenceId } })).maxGrade.toNumber(),
+    ).toBe(100);
   });
 });
 

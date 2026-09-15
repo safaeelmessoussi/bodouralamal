@@ -25,6 +25,7 @@ export { expandEvent };
 import type { RoleScope } from "../policies/branch-scope.js";
 import {
   eventsStaffedBy,
+  examAudienceWhere,
   teacherEventScope,
 } from "../policies/roster-resolution.js";
 import {
@@ -615,6 +616,12 @@ async function personalFilters(
 ): Promise<{
   event: Prisma.EventWhereInput;
   session: Prisma.SessionWhereInput;
+  /** Whether `userId` holds any live enrolment — the same signal that already
+   *  decides every arm above. A pure staff actor (no enrolments) is left
+   *  exactly as coarse-tier visibility (`examTierWhere`) already shows her —
+   *  narrowing her own تقويمي by an audience rule that only ever matches a
+   *  beneficiary would hide sittings she has always seen. */
+  isBeneficiary: boolean;
 }> {
   const enrolments = await prisma.enrollment.findMany({
     where: { studentId: userId, deletedAt: null },
@@ -768,7 +775,53 @@ async function personalFilters(
     ],
   };
 
-  return { event, session };
+  return { event, session, isBeneficiary: enrolments.length > 0 };
+}
+
+/**
+ * **A beneficiary's own exam occurrences, narrowed to the ones she is
+ * actually the audience of** — see the call site's comment for why. One row
+ * at a time through `examAudienceWhere` (its shape depends on that row's own
+ * `targetKind`, so no single static `where` could express all five arms across
+ * a mixed list at once); a month's worth of sittings is never large enough for
+ * this to matter.
+ */
+async function filterExamsByAudience<
+  T extends {
+    id: string;
+    targetKind: string;
+    levelId: string;
+    branchId: string | null;
+    administrativeGroupId: string | null;
+    sessionId: string | null;
+    teachingGroupId: string | null;
+    studentId: string | null;
+    date: Date;
+  },
+>(prisma: PrismaClient, userId: string, exams: T[]): Promise<T[]> {
+  const kept: T[] = [];
+  for (const exam of exams) {
+    const audience = await examAudienceWhere(prisma, {
+      targetKind: exam.targetKind,
+      levelId: exam.levelId,
+      branchId: exam.branchId,
+      administrativeGroupId: exam.administrativeGroupId,
+      sessionId: exam.sessionId,
+      teachingGroupId: exam.teachingGroupId,
+      studentId: exam.studentId,
+      on: exam.date,
+    });
+    if (audience === null) continue;
+    // `deletedAt: null` is redundant — every arm `examAudienceWhere` returns
+    // already states it — but kept explicit here anyway, matching the trash-
+    // coverage guard's own convention for a `where` composed from a variable
+    // it cannot trace into another file.
+    const member = await prisma.user.count({
+      where: { AND: [audience, { id: userId, deletedAt: null }] },
+    });
+    if (member > 0) kept.push(exam);
+  }
+  return kept;
 }
 
 export interface PersonalCalendarOptions {
@@ -1193,7 +1246,29 @@ export async function readCalendar(
           },
         });
 
-  for (const exam of exams) {
+  /**
+   * **Owner-reported, 2026-09-15 — تقويمي showed a sitting «بدء الاختبار»
+   * opened and could not load.**
+   *
+   * The block above filters an exam occurrence by `examTierWhere` alone — the
+   * coarse *"is this branch/tier announced to her at all"* question §4.6/R109
+   * asks. It never asked R124's finer one — *is SHE this sitting's audience* —
+   * which is exactly `studentPaper`'s `eligible()` check on open. A beneficiary
+   * could see and open a sitting targeted at a Level/group/session/student she
+   * was never part of, and the paper endpoint correctly refused it — just too
+   * late, behind a button that should never have offered it.
+   *
+   * Narrowed here, on her PERSONAL calendar only (`isBeneficiary` — a pure
+   * staff actor has no enrolments and keeps the tier-only visibility she
+   * already had), through the SAME `examAudienceWhere` `eligible()` itself
+   * calls — one audience rule, not a second guess of it (§4.4c).
+   */
+  const examsForActor =
+    query.mine === true && personal?.isBeneficiary === true && actor !== null
+      ? await filterExamsByAudience(prisma, actor.userId, exams)
+      : exams;
+
+  for (const exam of examsForActor) {
     out.push({
       kind: "exam",
       schedulingTypeId: exam.schedulingType?.id ?? null,

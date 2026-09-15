@@ -23,6 +23,17 @@ import {
 } from './assessment.service.js';
 
 /**
+ * **Owner-reported, 2026-09-15 — a bare exam's maximum, when she does not
+ * state one.** `Exam.maxGrade` is `NOT NULL` with no column default; asking
+ * for it here was the only source of a value, and she wants it gone from
+ * الجدولة (SRS Revision 136 clause 12 keeps the bare pathway itself — this
+ * is a default, not its retirement). 20 matches the association's own
+ * everyday scale (`grade-sheet.tsx`'s own docstring: «النقطة من 20» is the
+ * ordinary case); `PATCH /exams/{id}` still edits it afterward, unchanged.
+ */
+const BARE_DEFAULT_MAX_GRADE = 20;
+
+/**
  * **R136 — الجدولة: the one place a physical or remote exam OCCURRENCE is
  * created, always as an independent copy of its reusable source, always in
  * one atomic transaction.**
@@ -79,7 +90,11 @@ export interface ScheduleExamInput {
    *  the source's own content is always authoritative for what it is used as. */
   bare?: {
     title: string;
-    maxGrade: number;
+    /** **Owner-reported, 2026-09-15 — no longer asked at scheduling time.**
+     *  `Exam.maxGrade` stays `NOT NULL`; `BARE_DEFAULT_MAX_GRADE` below is
+     *  what fills it when this is omitted, editable afterward exactly as any
+     *  other bare exam's maximum already is (`PATCH /exams/{id}`). */
+    maxGrade?: number;
     description?: string | null;
     levelId: string;
     subjectId: string;
@@ -221,7 +236,7 @@ export async function scheduleExam(
           status: 'draft',
           title: bare.title,
           description: bare.description ?? null,
-          maxGrade: bare.maxGrade,
+          maxGrade: bare.maxGrade ?? BARE_DEFAULT_MAX_GRADE,
           levelId: bare.levelId,
           subjectId: bare.subjectId,
           academicYearId: bare.academicYearId,
@@ -315,6 +330,30 @@ export async function scheduleExam(
       if (input.visibility !== undefined) {
         await tx.exam.update({ where: { id: occurrence.id }, data: { visibility: input.visibility } });
       }
+      // **Owner-reported, 2026-09-15 — a remote sitting answers for how it
+      // goes exactly as a physical one does** (§4.6): the duplicate-position
+      // check and `ExamStaff` rows above were written only inside the
+      // `mode === 'physical'` arm, so a remote sitting's supervisor/assistants
+      // were silently dropped even when the form collected them. Same checks,
+      // same rows — there is no place/room fact in either.
+      const seenOnline = new Set<string>();
+      for (const person of input.staff ?? []) {
+        if (seenOnline.has(person.userId)) {
+          throw new AppError('VALIDATION_FAILED', 'one person holds one position on one exam', {
+            reason: 'EXAM_STAFF_DUPLICATE',
+          });
+        }
+        seenOnline.add(person.userId);
+      }
+      for (const person of input.staff ?? []) {
+        await tx.examStaff.create({
+          data: { examId: occurrence.id, userId: person.userId, position: person.position },
+        });
+      }
+      await assertStaffAccountsAvailable(
+        tx,
+        (input.staff ?? []).map((person) => person.userId),
+      );
     }
 
     const fresh = await tx.exam.findUniqueOrThrow({

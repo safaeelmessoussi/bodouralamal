@@ -34,7 +34,7 @@ describe('the beneficiary’s landing is title + lede only', () => {
 
   it('and its lede names where the menu leads', () => {
     expect(ar.studentDashboard.landing).toBe(
-      'من القائمة تصلين إلى تقويمك ونقاط الامتحانات والمحتوى.',
+      'من القائمة تصلين إلى تقويمك ونقاط الاختبارات والمحتوى.',
     );
   });
 });
@@ -42,7 +42,7 @@ describe('the beneficiary’s landing is title + lede only', () => {
 describe('the مؤطرة’s landing promises nothing', () => {
   it('keeps its lede', () => {
     expect(ar.teacher.homeLede).toBe(
-      'من القائمة تصلين إلى تقويمك وجداولك ونقاط الامتحانات والمحتوى وإدخال الحفظ.',
+      'من القائمة تصلين إلى تقويمك وجداولك ونقاط الاختبارات والمحتوى وإدخال الحفظ.',
     );
   });
 

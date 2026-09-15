@@ -103,6 +103,60 @@ async function makeEvent(
   return created.event.id;
 }
 
+/**
+ * A period covering the exam date `makeExam` defaults to (2026-06-15) —
+ * `enrolmentInPeriodOn` (R122) requires one; plain `enrol()` sets none, which
+ * is correct for the Event/Session tests above (they never ask a period-
+ * scoped question) but leaves an `entire_level` exam audience match with
+ * nothing to find.
+ */
+// `VarChar(9)`, `YYYY-YYYY` only (`academic_year_label_format_check`) — no
+// room for the `TAG` prefix, so a clearly-fictional label stands in for it;
+// `clear()` below deletes by this exact label rather than by TAG-prefix.
+const PERIOD_YEAR_LABEL = "2299-2300";
+
+async function currentPeriod(): Promise<string> {
+  const academicYearId = (
+    await prisma.academicYear.create({ data: { label: PERIOD_YEAR_LABEL } })
+  ).id;
+  const period = await prisma.academicPeriod.create({
+    data: { academicYearId, sequence: 1, startDate: day("2026-01-01"), endDate: day("2026-12-31") },
+  });
+  return period.id;
+}
+
+async function makeRoom(branchId: string): Promise<string> {
+  const room = await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId } });
+  return room.id;
+}
+
+async function makeExam(title: string, over: Record<string, unknown>): Promise<string> {
+  // `exam_physical_place_all_or_none_check` — a physical sitting needs a
+  // room and a clock window along with its branch, or none of the four.
+  const roomId = over["branchId"] ? await makeRoom(over["branchId"] as string) : null;
+  const exam = await prisma.exam.create({
+    data: {
+      title: `${TAG} ${title}`,
+      mode: "physical",
+      status: "published",
+      publishedAt: TODAY,
+      date: day("2026-06-15"),
+      maxGrade: 20,
+      targetKind: "level",
+      ...(roomId
+        ? {
+            roomId,
+            startTime: new Date("1970-01-01T09:00:00.000Z"),
+            endTime: new Date("1970-01-01T11:00:00.000Z"),
+          }
+        : {}),
+      ...over,
+    },
+    select: { id: true },
+  });
+  return exam.id;
+}
+
 async function clear(): Promise<void> {
   const events = await prisma.event.findMany({
     where: { title: { startsWith: TAG } },
@@ -117,7 +171,27 @@ async function clear(): Promise<void> {
   await prisma.notification.deleteMany({ where: { event: { id: { in: eventIds } } } });
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
 
+  const exams = await prisma.exam.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const examIds = exams.map((e) => e.id);
+  await prisma.examStaff.deleteMany({ where: { examId: { in: examIds } } });
+  await prisma.auditLog.deleteMany({ where: { targetId: { in: examIds } } });
+  await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
+  // The exam's own room (`makeRoom`), freed before branches are deleted below.
+  await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+
   await clearTeachingContext(prisma, TAG);
+
+  const periods = await prisma.academicPeriod.findMany({
+    where: { academicYear: { label: PERIOD_YEAR_LABEL } },
+    select: { id: true, academicYearId: true },
+  });
+  await prisma.academicPeriod.deleteMany({ where: { id: { in: periods.map((p) => p.id) } } });
+  await prisma.academicYear.deleteMany({
+    where: { id: { in: periods.map((p) => p.academicYearId) } },
+  });
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -275,5 +349,54 @@ describe("§3 — a مؤطِّرة's personal calendar shows what she is assigne
 
     const rows = await readCalendar(prisma, teacherViewer(teacherId), { ...range, mine: true });
     expect(rows.some((r) => r.kind === "session")).toBe(true);
+  });
+});
+
+describe("Owner-reported, 2026-09-15 — تقويمي only offers a sitting she is actually the audience of", () => {
+  it("a beneficiary does NOT see an exam sat by a Level she does not hold", async () => {
+    const studentId = await person("مستفيدة أ");
+    await enrol(prisma, ctxA, studentId);
+
+    // Targeted at ctxB's Level/branch — she holds no enrolment there.
+    await makeExam("اختبار مستوى آخر", {
+      levelId: ctxB.levelId,
+      branchId: ctxB.branchId,
+      subjectId: ctxB.subjectId,
+    });
+
+    const rows = scoped(await readCalendar(prisma, viewer(studentId), { ...range, mine: true }));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("a beneficiary DOES see an exam sat by her own Level/branch", async () => {
+    const studentId = await person("مستفيدة ب");
+    const enrolmentId = await enrol(prisma, ctxA, studentId);
+    await prisma.enrollment.update({
+      where: { id: enrolmentId },
+      data: { academicPeriodId: await currentPeriod() },
+    });
+
+    await makeExam("اختبار مستواها", {
+      levelId: ctxA.levelId,
+      branchId: ctxA.branchId,
+      subjectId: ctxA.subjectId,
+    });
+
+    const rows = scoped(await readCalendar(prisma, viewer(studentId), { ...range, mine: true }));
+    expect(rows.map((r) => r.title)).toContain(`${TAG} اختبار مستواها`);
+  });
+
+  it("a staff actor with no enrolment anywhere keeps the coarse tier-only view (no regression)", async () => {
+    const teacherId = await person("مؤطرة لا تسجيل لها");
+    await makeExam("اختبار عام", {
+      levelId: ctxA.levelId,
+      branchId: ctxA.branchId,
+      subjectId: ctxA.subjectId,
+    });
+
+    const rows = scoped(
+      await readCalendar(prisma, teacherViewer(teacherId), { ...range, mine: true }),
+    );
+    expect(rows.map((r) => r.title)).toContain(`${TAG} اختبار عام`);
   });
 });

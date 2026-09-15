@@ -47,7 +47,7 @@ export function schedule(prisma: PrismaClient) {
         : {
             bare: {
               title: b.bare.title,
-              maxGrade: b.bare.max_grade,
+              ...(b.bare.max_grade === undefined ? {} : { maxGrade: b.bare.max_grade }),
               ...(b.bare.description === undefined ? {} : { description: b.bare.description }),
               levelId: b.bare.level_id,
               subjectId: b.bare.subject_id,

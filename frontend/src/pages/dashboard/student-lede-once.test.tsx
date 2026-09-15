@@ -74,7 +74,7 @@ function render(body: React.ReactNode): string {
   );
 }
 
-const LEDE = 'من القائمة تصلين إلى تقويمك ونقاط الامتحانات والمحتوى.';
+const LEDE = 'من القائمة تصلين إلى تقويمك ونقاط الاختبارات والمحتوى.';
 
 /** How many times a string occurs in the rendered HTML. */
 function occurrences(html: string, needle: string): number {

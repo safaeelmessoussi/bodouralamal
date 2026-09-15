@@ -892,6 +892,12 @@ export async function saveSchedulingItem(
             : {}),
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.examAvailability ? { availability: input.examAvailability } : {}),
+          // **Owner-reported, 2026-09-15 — dropped on CREATE only.** The
+          // edit path (`updateExamSchedule`, above) already forwards this;
+          // the online create call never did, so a remote sitting's
+          // supervisor/assistants, chosen in the same form, were silently
+          // discarded.
+          ...(input.examStaff ? { staff: input.examStaff } : {}),
         },
         token,
       );
@@ -930,7 +936,12 @@ export async function saveSchedulingItem(
               bare: {
                 title: input.title,
                 description: input.description,
-                max_grade: input.examMaxGrade!,
+                // **Owner-reported, 2026-09-15 — no longer asked at
+                // creation.** Omitted rather than sent as `null`: the
+                // server defaults a bare exam's maximum when this key is
+                // absent (`BARE_DEFAULT_MAX_GRADE`), and `null` used to hit
+                // its `NOT NULL` column with nothing to write.
+                ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
                 level_id: input.levelId!,
                 subject_id: input.subjectId!,
                 academic_year_id: input.academicYearId!,

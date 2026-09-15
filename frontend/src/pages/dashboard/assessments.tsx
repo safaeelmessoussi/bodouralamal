@@ -258,20 +258,38 @@ function Paper({
     setDraft({ ...draft, [question.id]: { ...current, optionIds: next } });
   }
 
-  if (state === 'loading') return <p className="hint">{t('common.loading')}</p>;
+  // R146 — every page renders inside the platform's chrome, no exceptions
+  // (Owner, 2026-09-15): this sub-component used to return bare content for
+  // all three states, escaping `StudentAssessmentsPage`'s `StudentLayout`
+  // entirely once a paper was open. `title`/`lede` are stated once here since
+  // `paper` is only available in the ready state.
+  if (state === 'loading') {
+    return (
+      <StudentLayout title={t('assessments.navStudent')}>
+        <p className="hint">{t('common.loading')}</p>
+      </StudentLayout>
+    );
+  }
   if (state === 'error' || paper === null) {
-    return <Feedback tone="warn">{t('assessments.loadFailed')}</Feedback>;
+    return (
+      <StudentLayout title={t('assessments.navStudent')}>
+        <p>
+          <Button variant="ghost" onClick={onBack}>
+            {t('common.back')}
+          </Button>
+        </p>
+        <Feedback tone="warn">{t('assessments.loadFailed')}</Feedback>
+      </StudentLayout>
+    );
   }
 
   return (
-    <section>
+    <StudentLayout title={paper.title} lede={paper.description ?? null}>
       <p>
         <Button variant="ghost" onClick={onBack}>
           {t('common.back')}
         </Button>
       </p>
-      <h1>{paper.title}</h1>
-      {paper.description ? <p>{paper.description}</p> : null}
       {notice ? <Feedback>{notice}</Feedback> : null}
       {sent ? <Feedback>{t('assessments.submittedNotice')}</Feedback> : null}
 
@@ -369,6 +387,6 @@ function Paper({
         onConfirm={() => void run(true)}
         onCancel={() => setConfirming(false)}
       />
-    </section>
+    </StudentLayout>
   );
 }

@@ -382,6 +382,27 @@ export function ExamSection({
               ) : null}
             </>
           ) : null}
+
+          {/* **Owner-reported, 2026-09-15 — a remote sitting needs its own
+              الأستاذ/المؤطر المسؤول والمؤطرون المساعدون too.** §4.6's
+              supervision responsibility is about who answers for how the
+              exam goes, not about where it is sat — R136 gave a remote
+              sitting the same clock/audience machinery a physical one has,
+              and left this the one field still physical-only. Same
+              `StaffPicker`, same vocabulary, same server-side scope
+              (`assertExamInTeacherScope`). */}
+          <StaffPicker
+            staff={staff}
+            {...(leadStaff ? { leadStaff } : {})}
+            leadLocked={leadLocked}
+            leadLabel={t('scheduling.exam.supervisor')}
+            leadId={supervisorId}
+            onLead={onSupervisor}
+            assistantsLabel={t('scheduling.exam.assistants')}
+            assistantsHint={t('scheduling.exam.assistantsHint')}
+            assistantIds={assistantIds}
+            onAssistants={onAssistants}
+          />
         </>
       ) : (
         <>
@@ -450,16 +471,22 @@ export function ExamSection({
             />
           )}
 
-          {/* **R81 — every exam states what its marks are out of.** Required,
-              because a sitting whose maximum is unknown cannot be marked at
-              all; editable afterwards, because a typo here would otherwise
-              strand every score on the exam — and the server refuses a maximum
-              below a mark already recorded rather than clamping anybody's
-              result. Not locked with the identity fields: the maximum does not
+          {/* **R81 — every exam states what its marks are out of.** Editable
+              afterwards, because a typo here would otherwise strand every
+              score on the exam — and the server refuses a maximum below a
+              mark already recorded rather than clamping anybody's result.
+              Not locked with the identity fields: the maximum does not
               change *what is examined, for whom, or where*. **Hidden with a
               source chosen** — the maximum is then the source's own paper's,
-              copied with it, not independently set here. */}
-          {hasSource ? null : (
+              copied with it, not independently set here.
+              **Owner-reported, 2026-09-15 — not asked at CREATE any more.**
+              She sets a maximum while authoring an exam, never while
+              scheduling one; a bare occurrence has no authoring step, so the
+              server defaults it (`BARE_DEFAULT_MAX_GRADE`,
+              `exam-scheduling.service.ts`) rather than asking for it here.
+              Shown again once the row exists, so a wrong default is never
+              stuck. */}
+          {hasSource || !locked ? null : (
             <NumberField
               label={t('scheduling.exam.maxGrade')}
               hint={t('scheduling.exam.maxGradeHint')}

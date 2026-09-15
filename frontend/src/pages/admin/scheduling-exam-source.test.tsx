@@ -264,7 +264,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
     expect(html).not.toContain(`>${ar.scope.academicYear}<`);
   });
 
-  it('with no source chosen, Level/Subject/Year and the maximum still render exactly as before', () => {
+  it('with no source chosen, Level/Subject/Year still render exactly as before', () => {
     const html = renderToStaticMarkup(
       <ExamSection
         {...(baseProps as unknown as ExamSectionProps)}
@@ -272,10 +272,33 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
         source={EXAM_SOURCE_INITIAL}
       />,
     );
-    expect(html).toContain(ar.scheduling.exam.maxGrade);
     expect(html).toContain(`>${ar.scope.level}<`);
     expect(html).toContain(`>${ar.scope.subject}<`);
     expect(html).toContain(`>${ar.scope.academicYear}<`);
+  });
+
+  it('the maximum is not asked at creation any more (Owner-reported, 2026-09-15) — the server defaults a bare exam\'s maximum', () => {
+    const html = renderToStaticMarkup(
+      <ExamSection
+        {...(baseProps as unknown as ExamSectionProps)}
+        mode="physical"
+        locked={false}
+        source={EXAM_SOURCE_INITIAL}
+      />,
+    );
+    expect(html).not.toContain(ar.scheduling.exam.maxGrade);
+  });
+
+  it('the maximum is still editable once the sitting exists', () => {
+    const html = renderToStaticMarkup(
+      <ExamSection
+        {...(baseProps as unknown as ExamSectionProps)}
+        mode="physical"
+        locked
+        source={EXAM_SOURCE_INITIAL}
+      />,
+    );
+    expect(html).toContain(ar.scheduling.exam.maxGrade);
   });
 });
 

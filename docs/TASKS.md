@@ -4143,3 +4143,48 @@ the Owner's own report named.
       `/healthz` green within seconds, `/profile` and the retired
       `/dashboard/student/account` both verified reachable. Full detail
       in CHANGES.log.
+
+## SRS Revision 147 — seven fixed, three explicitly deferred — 2026-09-15 (cont. 2)
+
+- [x] **Fixed: every page renders inside the platform's chrome** (SRS
+      Revision 147 §1) — `StudentAssessmentsPage`'s `Paper` sub-component
+      wrapped in `StudentLayout` for all three states, not only the
+      table view; a repo-wide audit found no other reachable bare page.
+- [x] **Fixed: تقويمي's personal exam read now narrows by audience, not
+      only tier** (SRS Revision 147 §2) — the actual root cause of
+      «تعذّر تحميل الاختبار» on «بدء الاختبار»; a pure staff actor's
+      coarse-tier view is unaffected.
+- [x] **Built: a remote exam's supervisor/assistants, end to end** (SRS
+      Revision 147 §3) — `StaffPicker` on the online scheduling form,
+      `ExamStaff` rows now written on the online CREATE path (previously
+      silently dropped), and the missing adapter forward fixed.
+- [x] **Fixed: النقطة القصوى removed from bare exam CREATE; server
+      defaults it to 20** (SRS Revision 147 §4) — closes the Owner's
+      exact reported `VALIDATION_FAILED`/`bare.max_grade` crash without
+      reversing Revision 136 clause 12's bare-pathway ratification;
+      still editable, unchanged, once the sitting exists.
+- [x] **Built: حصصي retired; تقويمي's قائمة is catalogue-shaped like
+      الجدولة's own** (SRS Revision 147 §5) — new backward-compatible
+      `catalogList` prop on `PersonalCalendar`; «حصص الحلقة» carried over
+      as a row action. **«عرض المستفيدات» has no replacement — flagged
+      for the Owner's decision, not silently dropped or rebuilt.**
+- [x] **Built: terminology unified on اختبار** (SRS Revision 147 §6) —
+      all 61 occurrences of امتحان in `ar.ts` (the sole location of
+      user-facing text) replaced; three test fixtures updated.
+- [x] **Confirmed, not changed: past dates already allowed in «إضافة
+      عنصر»** (SRS Revision 147 §7) — audited both layers, no restriction
+      found anywhere; the Owner's ratification recorded as confirmation.
+- [x] **Deferred, explicitly, to their own dedicated pass**: viewing a
+      student's exam responses and per-question grading/publishing (new
+      schema), a simple class branch/level/mode/subject/year editing
+      mechanism (supersedes Revision 57), and the real group/circle/
+      category schema migration for `RecurringCourseSchedule` — each a
+      genuine schema/architecture undertaking, not rushed alongside the
+      seven items above.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,310/1,310; full disposable-stack
+      integration 2,599/2,617 (18 pre-existing skips, no flake, all-table
+      isolation intact); all 31 guards, doc-links and `git diff --check`
+      pass. New coverage in `personal-calendar.integration.test.ts`,
+      `assessment.integration.test.ts`, `scheduling-exam-source.test.tsx`.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
