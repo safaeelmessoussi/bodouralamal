@@ -9020,4 +9020,20 @@ personal-calendar-options, exam-schedule-update) all green with all-table isolat
 `docs/openapi.json` regenerated with no hand edits (179 paths/230 operations, two new); TD-3
 conformance updated, 230/238 implemented, 0 undocumented; all 31 `scripts/ci/check-*.sh`
 guards, the documentation-link guard and `git diff --check` all pass. Full disposable-stack
-integration run recorded separately below.
+integration run 2,589/2,589 (18 pre-existing skips, no flake this run — the one already-
+documented transient pagination flake did not recur). One genuine second defect caught by
+this same full run and fixed in the same commit: `updateExamSchedule`'s staff-reconciliation
+read (`ExamStaff.findMany`, deliberately unfiltered on `deletedAt` to revive a tombstoned
+row rather than refuse it — the identical pattern `updatePhysicalExam` already uses)
+tripped `trash-coverage.integration.test.ts`'s guard as a new, not-yet-allowlisted call
+site; added to `READS_TOMBSTONES_DELIBERATELY` alongside `exam.service.ts`'s own identical
+entry, not by weakening the guard.
+
+Pushed as `ca1aa9b`; hosted CI green on the first run, all 7 jobs (run `34948449244`).
+Deployed to `staging.bodouralamal.com`, upgrading from `4e3d652`: host preflight passed
+cleanly, no new migrations (`prisma migrate deploy` confirmed nothing pending), both
+`api`/`nginx` recreated and verified on the exact commit's `org.opencontainers.image
+.revision` label, `/healthz` green (4/4 components, 12/12 workers) within seconds, no
+error-level log lines in the following minutes, the new `GET /me/calendar/options` route
+confirmed live and correctly refusing an anonymous caller (401), TLS/HSTS/CSP headers
+reconfirmed, no leftover disposable containers. No Production action of any kind.

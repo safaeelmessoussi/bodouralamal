@@ -4086,8 +4086,16 @@ the Owner's own report named.
         carries her reference code/enrolments (R86), which `/profile`
         does not; removing the menu entry would strand that information.
 - [x] Verification: backend/frontend typecheck/lint/build clean; backend
-      unit 342/342; frontend unit 1,303/1,303; focused disposable-stack
-      integration runs for every new/changed surface, all green with
-      isolation intact; `docs/openapi.json` regenerated (179 paths/230
-      operations); TD-3 230/238 implemented, 0 undocumented; all 31
-      guards, doc-links and `git diff --check` pass.
+      unit 342/342; frontend unit 1,303/1,303; full disposable-stack
+      integration 2,589/2,589 (18 pre-existing skips, no flake);
+      `docs/openapi.json` regenerated (179 paths/230 operations); TD-3
+      230/238 implemented, 0 undocumented; all 31 guards, doc-links and
+      `git diff --check` pass. One second defect caught by the full run
+      and fixed in the same commit: a new deliberately-unfiltered
+      tombstone read needed adding to the trash-coverage guard's own
+      allowlist (see CHANGES.log).
+- [x] Pushed as `ca1aa9b`; hosted CI green on the first run, all 7 jobs
+      (run `34948449244`); deployed to Staging, no new migrations, no
+      host issues, `/healthz` green within seconds, the new
+      `/me/calendar/options` route confirmed live and correctly refusing
+      an anonymous caller. Full detail in CHANGES.log.
