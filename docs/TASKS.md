@@ -4333,8 +4333,12 @@ the Owner's own report named.
       integration 2,613/2,631 (18 pre-existing skips, all-table
       isolation intact); all 31 guards, doc-links and
       `git diff --check` pass. No migration.
-- [ ] Push, verify hosted CI is green, then deploy checkpoint 4 to
-      Staging and record the outcome.
+- [x] Pushed as `45e5e69`; hosted CI green on the first run, all 7 jobs
+      (run `35013779376`) including Release. Deployed to Staging,
+      upgrading from `1f18fab` (carrying checkpoint 4/SRS Revision 152
+      together with this fix): no pending migrations, `/healthz` green
+      on the first check, TLS/security headers intact, no leftover
+      disposable containers. Full detail in CHANGES.log.
 
 ## A3 — group/circle/category schema migration: investigated, not implemented — 2026-09-15
 
