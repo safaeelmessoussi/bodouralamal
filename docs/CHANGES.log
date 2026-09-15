@@ -9037,3 +9037,83 @@ cleanly, no new migrations (`prisma migrate deploy` confirmed nothing pending), 
 error-level log lines in the following minutes, the new `GET /me/calendar/options` route
 confirmed live and correctly refusing an anonymous caller (401), TLS/HSTS/CSP headers
 reconfirmed, no leftover disposable containers. No Production action of any kind.
+
+2026-09-15 (cont.) — A further Staging round: three fixed and tested, three investigated
+and reported, one compliance question answered outside code
+The Owner's continued Staging walk-through, same day, plus a hosting-provider reply
+requiring a compliance answer rather than a code change.
+
+**Compliance — the Hostoweb VPS reply.** Reviewed against `docs/operations/provider-
+acceptance.md` and `docs/compliance/personal-data-audit.md`. Morocco location, root
+access, Docker, dedicated IPv4, SSD and monthly billing are now confirmed in writing,
+satisfying several of the acceptance matrix's rows. Two points given back to the Owner
+rather than resolved unilaterally: (1) her stated plan to run with NO backup at all is a
+step past the already-ratified 2026-09-12 decision (`provider-acceptance.md`'s "Temporary
+B8 exception"), which deferred only the OFFSITE Moroccan requirement in favor of an
+encrypted SAME-VPS backup already built in this codebase (`scripts/backup/`) — flagged as
+a lower-risk option that needs neither Hostoweb's own backup feature nor the DPA question
+at all; (2) whether a standard Hostoweb ToS with no bespoke data-processing clause is
+sufficient for the CNDP filing or for launch is explicitly marked throughout the
+compliance audit as `LEGAL/CNDP CONFIRMATION REQUIRED` — outside engineering's authority,
+answered as "not established" rather than guessed at.
+
+**Fixed — a named exam supervisor could not grade her own sitting.** `loadForGrading`
+(`grade.service.ts`) refused a مؤطِّرة grading a whole-Level online exam unless she taught
+that Level `entire_level` — correct and unchanged — but never checked `ExamStaff.position
+= 'supervisor'`, the identical short-circuit `assertMayMark` (attendance) already has for
+exactly this situation. New test in `grade.http.integration.test.ts`, confirmed to fail
+without the fix. **Investigated alongside, not built**: viewing a student's actual
+submitted answers has real backend endpoints (`GET /assessments/{id}/submissions[/
+{studentId}]`) but no frontend wiring at all, and grading itself is whole-exam-only — no
+per-question score storage exists anywhere in `grade.service.ts`/the `Grade` model.
+Building the response-viewing screen and per-question grading/publishing granularity are
+both real features, not bugs, and are left for their own explicitly-scoped pass rather
+than attempted inside this fix.
+
+**Built — `tracks_quran_progress` (R73) is now admin-settable**, closing the gap behind
+"no teacher sees إدخال الحفظ regardless of staffing" (investigated on live Staging data in
+the previous entry, found to be a data/capability gap, not a bug). `PATCH /admin/subjects
+/{id}` now accepts the field; `GET /admin/subjects` returns it; المواد's shared taxonomy
+form gains a documented checkbox variant, on the same footing `description` already is for
+a Category. The "at most one live Subject" invariant stays the existing declarative
+database constraint (`subject_one_quran_tracker`), never re-checked here — a second holder
+still fails at the boundary, now distinguished client-side (`DUPLICATE`, not
+`VERSION_CONFLICT`) so the dialog stays open with a clear remedy. New tests in
+`taxonomy.http.integration.test.ts` for the conflict refusal and the field's exposure on
+the list read; the success path against the one shared production-seeded holder is
+deliberately not exercised at HTTP-integration level, since restoring it afterward cannot
+return the row's `version` (TD-15) to its exact prior value even once the flag itself is
+back — exactly what the all-table-isolation guard exists to catch, confirmed the hard way
+while writing the test and then removed rather than weakening the guard.
+
+**Built — «حسابي» merged into one page.** `/dashboard/student/account` and `/profile`
+answered the same question under the same header label for an adult beneficiary; the
+route, its registry entry and its now-unused i18n keys are removed. The one thing the
+retired page had that `/profile` did not — showing the ACTIVE CHILD's identity while a
+parent acts for one — is now a new, strictly additive, read-only `ChildIdentitySection` on
+`/profile`, gated on `activeChildId` and never replacing the signed-in person's own
+editable section above it, preserving the exact "never the wrong card" invariant the
+retired page's own docstring stated. New `profile/index.test.tsx`; `guardian-portal.test.ts`
+retargeted to a still-live `childContext` module. All confirmed to fail without their fix.
+
+**Reported, not implemented, each with its own reasoning** — the Owner's further requests
+this same round:
+- تقويمي/حصصي redesign (showing قائمة-style events with a «الحصص» button per class) —
+  a real, moderate UI redesign, deferred for a dedicated pass rather than rushed alongside
+  everything above.
+- Changing branch/level/mode/subject/year on a class, propagated to its future sessions or
+  to one session only — supersedes SRS Revision 57's deliberate freeze with new propagation
+  semantics comparable in scope to R50's own `this_and_future` split; needs its own careful
+  design, not a rushed extension of an already-large batch.
+- Group/circle/category targeting for a class, "the same as نشاط" — confirmed at the schema
+  level in the previous entry to need real migration work (`RecurringCourseSchedule` has no
+  category concept at all); the Owner has now asked for it to be done, and it remains
+  deferred to its own dedicated pass given the risk a rushed migration carries for the
+  scheduling engine's core tables (session materialization, roster resolution, conflict
+  detection) — not declined, only sequenced.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,308/1,308; focused disposable-stack integration runs for every changed backend
+surface (grade, taxonomy) green with all-table isolation intact; all 31
+`scripts/ci/check-*.sh` guards, the documentation-link guard and `git diff --check` pass.
+No migration, no OpenAPI/TD-3 change — every route touched already existed.

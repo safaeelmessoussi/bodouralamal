@@ -33,6 +33,15 @@ export const updateSubjectSchema = z.object({
   version,
   name: entityName.optional(),
   display_order: displayOrder.optional(),
+  /**
+   * **R73's structural marker, made settable** (Owner-reported, 2026-09-15).
+   * Previously written only by the production seed; the "at most one live
+   * Subject" invariant stays a declarative DB constraint
+   * (`subject_one_quran_tracker`), never re-checked here — see
+   * `taxonomy.service.ts`'s `updateSubject` for the coded conflict it
+   * surfaces as.
+   */
+  tracks_quran_progress: z.boolean().optional(),
 });
 
 /**

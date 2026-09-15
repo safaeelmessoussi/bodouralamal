@@ -150,6 +150,9 @@ describe("GET /admin/subjects", () => {
       "id",
       "levels",
       "name",
+      // R73 — Owner-reported, 2026-09-15: the marker is now admin-settable,
+      // so المواد's list has to be able to see it.
+      "tracks_quran_progress",
       "version",
     ]);
   });

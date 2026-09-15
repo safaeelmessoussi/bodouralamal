@@ -245,6 +245,22 @@ async function loadForGrading(
   }
 
   /**
+   * **Owner-reported, 2026-09-15 — the assigned supervisor could not grade
+   * her own sitting.** `assertMayMark` (`attendance.service.ts`) already
+   * lets an exam's `ExamStaff.position = 'supervisor'` act "regardless of
+   * target kind" — the same fact `EventDetailsDialog`'s own comment states
+   * for её visibility. Grading never carried the identical short-circuit, so
+   * a مؤطِّرة named supervisor on a `target_kind: 'level'` sitting she does
+   * not teach `entire_level` for fell through to `assertExamInTeacherScope`'s
+   * whole-Level question below and was refused — despite being the one
+   * person the exam explicitly names as responsible for it.
+   */
+  const supervises = await prisma.examStaff.count({
+    where: { examId, userId: actor.userId, position: 'supervisor', deletedAt: null },
+  });
+  if (supervises > 0) return sitting;
+
+  /**
    * **R136 (Codex B5) — the grading picker asks the same per-arm question
    * authoring does, not a fifth one of its own.**
    *

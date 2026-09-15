@@ -4099,3 +4099,38 @@ the Owner's own report named.
       host issues, `/healthz` green within seconds, the new
       `/me/calendar/options` route confirmed live and correctly refusing
       an anonymous caller. Full detail in CHANGES.log.
+
+## A further Staging round, same day — 2026-09-15 (continued)
+
+- [x] **Compliance question answered, outside code**: the Hostoweb VPS
+      reply reviewed against `provider-acceptance.md`/`personal-data-
+      audit.md`. Morocco/root/Docker/IPv4/SSD/monthly billing confirmed
+      in writing; the "no backup at all" plan and the DPA/CNDP question
+      both handed back to the Owner rather than resolved by engineering
+      — see CHANGES.log for the exact reasoning on each.
+- [x] **Fixed: a named exam supervisor can now grade her own sitting**
+      (SRS Revision 146 §1) — the same `ExamStaff.position: 'supervisor'`
+      short-circuit attendance already had, missing from grading.
+- [x] **Built: `tracks_quran_progress` (R73) is admin-settable** (SRS
+      Revision 146 §2) — closes the data/capability gap flagged in the
+      previous round.
+- [x] **Built: «حسابي» is one page** (SRS Revision 146 §3) —
+      `/dashboard/student/account` retired and merged into `/profile`,
+      including its one genuinely missing piece (the active child's
+      identity while a parent acts for one).
+- [x] **Investigated, not built**: viewing a student's actual exam
+      answers (backend reads exist, no frontend wiring) and per-question
+      grading/publishing (no such storage exists at all) — real features,
+      scoped for their own pass.
+- [x] **Reported, not implemented** (Owner asked again after the previous
+      round's flags; still deferred, not declined): تقويمي/حصصي redesign,
+      class branch/level/mode/subject/year editing with this-vs-future
+      propagation (supersedes SRS Revision 57), and the class
+      group/circle/category schema migration — each needs its own
+      dedicated design pass given the risk to the scheduling engine's
+      core tables.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342; frontend unit 1,308/1,308; focused disposable-stack
+      integration for every changed surface green, isolation intact; no
+      migration, no OpenAPI/TD-3 change. All 31 guards, doc-links and
+      `git diff --check` pass.

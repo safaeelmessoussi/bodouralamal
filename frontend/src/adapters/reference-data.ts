@@ -41,6 +41,13 @@ export interface SubjectRef {
    * does THIS Level teach* and has no use for the reverse join.
    */
   levels?: { id: string; name: string; category_name: string }[];
+  /**
+   * **R73's structural marker** (Owner-reported, 2026-09-15). `GET
+   * /admin/subjects` carries it so المواد can show — and set — which live
+   * Subject's teaching authorises a memorisation log; every other reader of
+   * `SubjectRef` (a plain selector) ignores it.
+   */
+  tracks_quran_progress?: boolean;
 }
 
 export interface AcademicYearRef {

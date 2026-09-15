@@ -13,7 +13,6 @@ import { CalendarPage } from './pages/calendar.js';
 import { StudentAssessmentsPage } from './pages/dashboard/assessments.js';
 import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
-import { StudentAccountPage } from './pages/dashboard/account.js';
 import { StudentLibraryPage } from './pages/dashboard/library.js';
 import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
@@ -126,12 +125,6 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentLibraryPage />
-        </PendingGuard>
-      );
-    case 'dashboard-student-account':
-      return (
-        <PendingGuard>
-          <StudentAccountPage />
         </PendingGuard>
       );
     case 'dashboard-student-quran':

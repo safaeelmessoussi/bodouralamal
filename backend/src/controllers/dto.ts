@@ -1128,6 +1128,16 @@ export function subjectRefDto(row: {
  */
 export interface SubjectWithLevelsDto extends SubjectRefDto {
   levels: { id: string; name: string; category_name: string }[];
+  /**
+   * **R73's structural marker** (Owner-reported, 2026-09-15 — the admin
+   * screen that manages Subjects had no way to see or set it). Absent from
+   * `SubjectRefDto` deliberately: that projection is reused everywhere a
+   * Subject is merely picked from a list, and this is an operational fact
+   * about the curriculum, not a label — exposing it there would be exactly
+   * the "just return the row" temptation `subjectRefDto`'s own docstring
+   * names.
+   */
+  tracks_quran_progress: boolean;
 }
 
 export function subjectWithLevelsDto(row: {
@@ -1135,6 +1145,7 @@ export function subjectWithLevelsDto(row: {
   name: string;
   displayOrder: number | null;
   version: number;
+  tracksQuranProgress: boolean;
   levels: { id: string; name: string; categoryName: string }[];
 }): SubjectWithLevelsDto {
   return {
@@ -1142,6 +1153,7 @@ export function subjectWithLevelsDto(row: {
     name: row.name,
     display_order: row.displayOrder,
     version: row.version,
+    tracks_quran_progress: row.tracksQuranProgress,
     levels: row.levels.map((level) => ({
       id: level.id,
       name: level.name,

@@ -93,6 +93,8 @@ export interface SubjectWithLevels extends SubjectRef {
    * `findMany`, so this is an extra join rather than an N+1.
    */
   levels: { id: string; name: string; categoryName: string }[];
+  /** R73's structural marker — see `SubjectWithLevelsDto`'s own note. */
+  tracksQuranProgress: boolean;
 }
 
 /**
@@ -132,6 +134,7 @@ export async function listSubjects(
       name: true,
       displayOrder: true,
       version: true,
+      tracksQuranProgress: true,
       // Live pairings only, and live Levels only: a soft-deleted Level does not
       // block anything, so listing it would name a dependency that is not there.
       levels: {
@@ -155,6 +158,7 @@ export async function listSubjects(
     name: subject.name,
     displayOrder: subject.displayOrder,
     version: subject.version,
+    tracksQuranProgress: subject.tracksQuranProgress,
     levels: subject.levels
       // Category then Level, the reading order of the hierarchy — and the
       // Category first because `Level.displayOrder` is scoped WITHIN its Category
@@ -199,7 +203,7 @@ export async function updateSubject(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; displayOrder?: number | null },
+  data: { name?: string; displayOrder?: number | null; tracksQuranProgress?: boolean },
 ): Promise<Subject> {
   assertCanWrite(actor);
   return updateWithVersion<Subject>({

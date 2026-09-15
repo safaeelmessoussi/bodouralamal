@@ -115,22 +115,6 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
     roles: STUDENT,
     status: 'ready',
   },
-  {
-    /**
-     * **The existing personal surface** (`/profile`), not a new one.
-     *
-     * R65 put `/profile` outside the portals deliberately: it is about the
-     * PERSON and is reachable whatever role the account is working as. **That
-     * route is unchanged**; this is the framed way in, which also carries the
-     * Category/Level/Branch the Owner moved off the landing page (R86).
-     */
-    path: '/dashboard/student/account',
-    // `/students/me` under child context — and R96's QR.
-    childContext: true,
-    labelKey: 'student.nav.account',
-    roles: STUDENT,
-    status: 'ready',
-  },
 ];
 
 /** The modules this session may see — the shared predicate, not a local copy. */

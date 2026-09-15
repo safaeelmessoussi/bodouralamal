@@ -9,7 +9,9 @@ import {
   visibleStudentModules,
 } from './student-modules.js';
 
-const account = studentModuleForPath('/dashboard/student/account')!;
+// `/dashboard/student/account` was retired 2026-09-15 (merged into
+// `/profile`); any `childContext: true` module proves the same gate.
+const account = studentModuleForPath('/dashboard/student/calendar')!;
 const ACTING = { actingForChild: true };
 
 /**

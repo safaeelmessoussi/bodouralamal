@@ -49,6 +49,8 @@ export interface TaxonomyInput {
    *  one. Subjects accept it too on the wire and simply never send it. */
   description?: string | null;
   display_order?: number | null;
+  /** R73 — Subjects only; omit to leave unchanged. See `SubjectRef`'s own note. */
+  tracks_quran_progress?: boolean;
 }
 
 export async function listCategories(

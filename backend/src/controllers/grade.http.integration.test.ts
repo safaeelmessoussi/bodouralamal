@@ -82,6 +82,7 @@ async function makeUser(label: string, role?: string): Promise<string> {
 
 let superToken: string;
 let teacherToken: string;
+let teacherId: string;
 let outsiderToken: string;
 let branchA: string;
 let branchB: string;
@@ -230,7 +231,7 @@ beforeAll(async () => {
   ]);
 
   // **A real staffing row — this IS the teacher's scope (§4.4c).**
-  const teacherId = await makeUser("مؤطرة", "teacher");
+  teacherId = await makeUser("مؤطرة", "teacher");
   teacherToken = bearer(teacherId, [{ role: "teacher", branches: null }]);
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
@@ -369,6 +370,35 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
   it("a Teacher may NOT delete a sitting — deletion stays Admin (R70.4)", async () => {
     const res = await call("DELETE", `/exams/${examId}`, teacherToken);
     expect(res.status).toBe(403);
+  });
+
+  /**
+   * **Owner-reported, 2026-09-15 — the assigned supervisor could not grade
+   * her own sitting.** The whole-Level refusal above is unchanged and
+   * correct on its own terms; this is the one exception `assertMayMark`
+   * (attendance) already carries and grading never did — an exam's own
+   * `ExamStaff.position: 'supervisor'` reaches it regardless of whether she
+   * teaches the whole Level.
+   */
+  it("a named supervisor CAN grade a whole-Level sitting she does not teach entire_level for", async () => {
+    const wholeLevel = await call("POST", "/exams", superToken, {
+      max_grade: 20,
+      title: `${TAG} امتحان مستوى كامل بمشرفة`,
+      date: "2098-04-05",
+      start_time: "09:00",
+      end_time: "10:00",
+      level_id: levelId,
+      subject_id: subjectId,
+      academic_year_id: academicYearId,
+      branch_id: branchA,
+      room_id: roomA,
+      staff: [{ user_id: teacherId, position: "supervisor" }],
+    });
+    expect(wholeLevel.status).toBe(201);
+    const id = (wholeLevel.body as { id: string }).id;
+
+    const sheet = await call("GET", `/exams/${id}/grades`, teacherToken);
+    expect(sheet.status).toBe(200);
   });
 });
 

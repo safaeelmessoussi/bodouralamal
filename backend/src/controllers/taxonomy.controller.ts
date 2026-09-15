@@ -135,6 +135,9 @@ export function updateSubjectHandler(prisma: PrismaClient) {
       {
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+        ...(body.tracks_quran_progress !== undefined
+          ? { tracksQuranProgress: body.tracks_quran_progress }
+          : {}),
       },
     );
     res.json({ data: subjectRefDto(updated) });

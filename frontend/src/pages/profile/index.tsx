@@ -7,6 +7,7 @@ import {
   updateOwnProfile,
   type OwnProfile,
 } from '../../adapters/profile.js';
+import { fetchStudentIdentity, type StudentIdentity } from '../../adapters/students.js';
 import { BlockedNotice } from '../../components/ui/blocked-notice.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
@@ -16,6 +17,8 @@ import { Badge } from '../../components/ui/badge.js';
 import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
 import { DateField, TextField } from '../../components/ui/field.js';
+import { levelLabel } from '../../components/scope/level-select.js';
+import { useActiveChild } from '../../contexts/active-child.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -42,9 +45,11 @@ import { UserQr } from '../../components/ui/user-qr.js';
  */
 export function ProfilePage(): ReactNode {
   const { accessToken, status } = useSession();
+  const { activeChildId, activeChild } = useActiveChild();
 
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [applications, setApplications] = useState<MyChildApplication[]>([]);
+  const [childIdentity, setChildIdentity] = useState<StudentIdentity | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState(false);
 
@@ -73,6 +78,35 @@ export function ProfilePage(): ReactNode {
     void load();
   }, [load]);
 
+  /**
+   * **The child's own identity, while acting for one** (Owner, 2026-09-15 —
+   * merging `/dashboard/student/account` here rather than keeping the two
+   * apart). `ProfileDetails`/`PlacementSection` below are, and stay, always
+   * about the SIGNED-IN PERSON — `/profile` never swapped whose name it edits
+   * or whose account it can delete, and this does not change that. This is
+   * an ADDITIONAL, read-only section, never a replacement: the one thing the
+   * retired page's own docstring warned against is exactly the thing an
+   * unconditional swap here would have done — "a card printed for the wrong
+   * person is worse than no card at all."
+   */
+  useEffect(() => {
+    if (activeChildId === null) {
+      setChildIdentity(null);
+      return;
+    }
+    let live = true;
+    void fetchStudentIdentity(accessToken, activeChildId)
+      .then((identity) => {
+        if (live) setChildIdentity(identity);
+      })
+      .catch(() => {
+        if (live) setChildIdentity(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [accessToken, activeChildId]);
+
   return (
     <>
       <ApplicationHeader />
@@ -89,6 +123,9 @@ export function ProfilePage(): ReactNode {
             <>
               <ProfileDetails profile={profile} onSaved={setProfile} />
               <PlacementSection profile={profile} />
+              {activeChild && childIdentity ? (
+                <ChildIdentitySection name={activeChild.label} identity={childIdentity} />
+              ) : null}
               <ChildSection applications={applications} />
               <DeleteAccountSection />
             </>
@@ -97,6 +134,59 @@ export function ProfilePage(): ReactNode {
       </main>
       <SiteFooter />
     </>
+  );
+}
+
+/**
+ * **The child's card and placement, named so it is never mistaken for her
+ * own** (merged from `/dashboard/student/account`, Owner, 2026-09-15). Every
+ * field here is the CHILD's — `fetchStudentIdentity` resolved with
+ * `X-Active-Child-ID` — never edited from this section, which is the same
+ * read-only boundary the retired page always held.
+ */
+function ChildIdentitySection({
+  name,
+  identity,
+}: {
+  name: string;
+  identity: StudentIdentity;
+}): ReactNode {
+  return (
+    <section className="card" aria-labelledby="child-identity-heading">
+      <h2 id="child-identity-heading">{t('studentDashboard.viewingChild').replace('{name}', name)}</h2>
+
+      <dl className="detail-list">
+        <dt>{t('student.account.name')}</dt>
+        <dd>{identity.name_arabic}</dd>
+        {identity.reference_code ? (
+          <>
+            <dt>{t('student.account.reference')}</dt>
+            <dd>{identity.reference_code}</dd>
+          </>
+        ) : null}
+      </dl>
+
+      <h3>{t('qr.title')}</h3>
+      <p className="muted">{t('qr.lede')}</p>
+      <UserQr qr={identity.qr} caption={identity.name_arabic} />
+
+      <h3>{t('student.account.enrolments')}</h3>
+      {identity.enrollments.length === 0 ? (
+        <p className="muted">{t('student.account.noEnrolments')}</p>
+      ) : (
+        <ul className="detail-list">
+          {identity.enrollments.map((e) => (
+            <li key={e.level.id}>
+              <strong>
+                {levelLabel({ id: e.level.id, name: e.level.name, category_name: e.category.name })}
+              </strong>
+              <br />
+              <span className="muted">{e.branch.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

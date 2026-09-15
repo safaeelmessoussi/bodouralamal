@@ -26,7 +26,7 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { TextArea, TextField } from '../../components/ui/field.js';
+import { CheckboxField, TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -81,6 +81,9 @@ interface KindSpec {
   /** NEW K — a Category carries a description and a Subject does not, so the
    *  shared form is configured rather than copied (rule C). */
   withDescription?: boolean;
+  /** R73 — Subjects only; the same documented-variant pattern as
+   *  `withDescription`, never a second form. */
+  withQuranFlag?: boolean;
   list: (token: string | null, sort: SortState | null) => Promise<Row[]>;
   /** R76.4 — the sequence, submitted to this kind's own `/order` route. */
   reorder: (ids: readonly string[], token: string | null) => Promise<unknown>;
@@ -164,6 +167,7 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     // `GET /admin/subjects` is the same endpoint every selector reads. It
     // publishes `version` precisely so this screen could reuse it rather than
     // add a second read over the same table.
+    withQuranFlag: true,
     list: listSubjects,
     reorder: reorderSubjects,
     create: createSubject,
@@ -216,6 +220,22 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
           );
         },
       },
+      {
+        /**
+         * **R73's marker, shown rather than only settable** (Owner-reported,
+         * 2026-09-15). At most one live Subject may carry it
+         * (`subject_one_quran_tracker`), so a reader comparing rows needs to
+         * see which one before trying to set another.
+         */
+        key: 'tracks_quran_progress',
+        header: 'admin.taxonomy.colTracksQuran',
+        cell: (r) =>
+          (r as SubjectRef).tracks_quran_progress ? (
+            <span className="badge badge--ok">{t('admin.taxonomy.tracksQuranYes')}</span>
+          ) : (
+            <span className="muted">—</span>
+          ),
+      },
     ],
   },
 };
@@ -266,9 +286,29 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
       // A stale `version` is the interesting failure (TD-15): someone else
       // edited this row. Reloading is the only correct response — never a
       // silent overwrite.
-      const conflict = error instanceof ApiError && error.status === 409;
-      setNotice(t(conflict ? 'common.conflict' : 'common.saveFailed'));
-      if (conflict) {
+      const versionConflict = error instanceof ApiError && error.code === 'VERSION_CONFLICT';
+      /**
+       * **R73 — a different 409, and a different remedy** (Owner-reported,
+       * 2026-09-15). Setting `tracks_quran_progress` while another live
+       * Subject already carries it hits `subject_one_quran_tracker` and
+       * comes back as the generic Prisma-P2002 mapping, `DUPLICATE` — not a
+       * stale version of THIS row. Treating it as `versionConflict` would
+       * close the dialog and reload as if someone else had edited this exact
+       * Subject, which is the wrong story: the reader should stay on the
+       * form and either uncheck the box or go turn it off the other Subject
+       * first.
+       */
+      const quranTrackerTaken = error instanceof ApiError && error.code === 'DUPLICATE';
+      setNotice(
+        t(
+          versionConflict
+            ? 'common.conflict'
+            : quranTrackerTaken
+              ? 'admin.taxonomy.tracksQuranTaken'
+              : 'common.saveFailed',
+        ),
+      );
+      if (versionConflict) {
         setEditing(null);
         await load();
       }
@@ -363,6 +403,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
           title={t(editing === 'new' ? spec.createKey : spec.editKey)}
           {...(spec.formHintKey ? { hint: t(spec.formHintKey) } : {})}
           {...(spec.withDescription ? { withDescription: true } : {})}
+          {...(spec.withQuranFlag ? { withQuranFlag: true } : {})}
           initial={editing === 'new' ? null : editing}
           busy={busy}
           onCancel={() => setEditing(null)}
@@ -404,25 +445,37 @@ function TaxonomyFormDialog({
   hint,
   initial,
   withDescription = false,
+  withQuranFlag = false,
   busy,
   onSave,
   onCancel,
 }: {
   title: string;
   hint?: string;
-  initial: { name: string; description?: string | null; display_order: number | null } | null;
+  initial: {
+    name: string;
+    description?: string | null;
+    display_order: number | null;
+    tracks_quran_progress?: boolean;
+  } | null;
   withDescription?: boolean;
+  withQuranFlag?: boolean;
   busy: boolean;
   onSave: (input: TaxonomyInput) => void;
   onCancel: () => void;
 }): ReactNode {
-  const pristine = { name: initial?.name ?? '', description: initial?.description ?? '' };
+  const pristine = {
+    name: initial?.name ?? '',
+    description: initial?.description ?? '',
+    tracksQuranProgress: initial?.tracks_quran_progress ?? false,
+  };
   const [name, setName] = useState(pristine.name);
   const [description, setDescription] = useState(pristine.description);
+  const [tracksQuranProgress, setTracksQuranProgress] = useState(pristine.tracksQuranProgress);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
   // Only user-modified data is dirty; a validation error is not a change.
-  const dirty = isDirty({ name, description }, pristine);
+  const dirty = isDirty({ name, description, tracksQuranProgress }, pristine);
 
   function submit(): void {
     setTouched(true);
@@ -439,6 +492,10 @@ function TaxonomyFormDialog({
       // and sending `null` from there would clear a column it does not own.
       // `''` becomes `null` at the boundary: *no description* is one state.
       ...(withDescription ? { description: description.trim() || null } : {}),
+      // **R73 — sent only by the form that offers it**, on the same footing as
+      // `description` above: a Category has no such column, and sending it
+      // regardless would be refused by the `.strict()` schema on that route.
+      ...(withQuranFlag ? { tracks_quran_progress: tracksQuranProgress } : {}),
     });
   }
 
@@ -466,6 +523,14 @@ function TaxonomyFormDialog({
           onChange={setDescription}
           rows={2}
           hint={t('admin.taxonomy.descriptionHint')}
+        />
+      ) : null}
+      {withQuranFlag ? (
+        <CheckboxField
+          label={t('admin.taxonomy.tracksQuranLabel')}
+          checked={tracksQuranProgress}
+          onChange={setTracksQuranProgress}
+          hint={t('admin.taxonomy.tracksQuranHint')}
         />
       ) : null}
     </FormDialog>

@@ -304,6 +304,56 @@ describe("Subjects (§5.6 الفئات والمواد)", () => {
   });
 });
 
+/**
+ * **R73's marker, made settable through the admin screen** (Owner-reported,
+ * 2026-09-15). §15.1's Production seed already leaves exactly one live
+ * `tracks_quran_progress` Subject (`requireMemorisationSubject`'s own
+ * invariant) — this suite reads and briefly moves that ONE shared row rather
+ * than inventing a second, and restores it in `finally` regardless of the
+ * assertion outcome, exactly as the all-table-isolation guard requires for a
+ * test that must touch shared reference data.
+ */
+describe("Subjects — the Quran-tracking marker (R73)", () => {
+  it("refuses a second live Subject while one already carries it", async () => {
+    const fresh = await call("POST", "/admin/subjects", superAdmin, {
+      name: `${TAG} مادة تتبُّع`,
+    });
+    expect(fresh.status).toBe(201);
+    const row = fresh.body.data as unknown as Record<string, unknown>;
+
+    const conflict = await call(
+      "PATCH",
+      `/admin/subjects/${row["id"]}`,
+      superAdmin,
+      { version: row["version"], tracks_quran_progress: true },
+    );
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error?.code).toBe("DUPLICATE");
+
+    await call("DELETE", `/admin/subjects/${row["id"]}`, superAdmin);
+  });
+
+  it("exposes the live holder on GET /admin/subjects", async () => {
+    const list = await call("GET", "/admin/subjects", superAdmin);
+    const rows = list.body.data as unknown as Record<string, unknown>[];
+    expect(rows.some((r) => r["tracks_quran_progress"] === true)).toBe(true);
+  });
+
+  /**
+   * **Not tested here: actually moving the marker onto a live Subject.**
+   * §15.1's seed leaves exactly one such row, shared by every other suite's
+   * fixtures (`requireMemorisationSubject`) — and TD-15's `version` column
+   * makes "restore it afterward" impossible to do losslessly: a write-then-
+   * write-back round trip leaves a real, permanently different `version`
+   * even once `tracks_quran_progress` itself is back to `true`, which is
+   * exactly what the all-table-isolation guard exists to catch. The
+   * conflict-refusal test above already proves the write path is wired
+   * correctly; actually exercising the success path against this one
+   * shared row is a job for a unit test against `taxonomy.service.ts`
+   * directly (no HTTP layer, no shared fixture), not this suite.
+   */
+});
+
 describe("Levels (§5.6 مستويات, TD-4.6b)", () => {
   let levelId = "";
 
