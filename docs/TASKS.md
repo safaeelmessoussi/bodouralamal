@@ -4032,6 +4032,15 @@ the Owner's own report named.
       already correct.
 - [x] Verification: frontend typecheck/lint/build clean; full frontend
       unit suite 1,288/1,288; focused personal-calendar integration 9/9;
-      full disposable-stack integration run — see CHANGES.log for the
-      exact count; all 31 guards, doc-links and `git diff --check` pass.
-      No backend/schema/route/OpenAPI change in this diff.
+      full disposable-stack integration 2,571/2,571 (18 pre-existing
+      skips, no new flake); all 31 guards, doc-links and
+      `git diff --check` pass. No backend/schema/route/OpenAPI change.
+- [x] Pushed as `4e3d652`; hosted CI green on the first run, all 7 jobs
+      (run `34912991227`); deployed to Staging, no new migrations, no
+      host issues, `/healthz` green within seconds, TLS/HSTS/CSP
+      reconfirmed. Full detail in CHANGES.log.
+- [ ] **Open product question for the Owner** (not a defect, not
+      actioned): does she want a new capability to edit an
+      already-scheduled *online* exam's arrangement? R136 clause 12
+      currently states no such route exists by design — reusing content
+      via «إنشاء نسخة في بناء الاختبارات» is the documented path instead.
