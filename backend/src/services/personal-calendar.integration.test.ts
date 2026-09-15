@@ -130,10 +130,13 @@ async function makeRoom(branchId: string): Promise<string> {
   return room.id;
 }
 
-async function makeExam(title: string, over: Record<string, unknown>): Promise<string> {
+async function makeExam(
+  title: string,
+  spec: { levelId: string; branchId?: string; subjectId?: string },
+): Promise<string> {
   // `exam_physical_place_all_or_none_check` — a physical sitting needs a
   // room and a clock window along with its branch, or none of the four.
-  const roomId = over["branchId"] ? await makeRoom(over["branchId"] as string) : null;
+  const roomId = spec.branchId ? await makeRoom(spec.branchId) : null;
   const exam = await prisma.exam.create({
     data: {
       title: `${TAG} ${title}`,
@@ -143,14 +146,12 @@ async function makeExam(title: string, over: Record<string, unknown>): Promise<s
       date: day("2026-06-15"),
       maxGrade: 20,
       targetKind: "level",
-      ...(roomId
-        ? {
-            roomId,
-            startTime: new Date("1970-01-01T09:00:00.000Z"),
-            endTime: new Date("1970-01-01T11:00:00.000Z"),
-          }
-        : {}),
-      ...over,
+      levelId: spec.levelId,
+      ...(spec.branchId ? { branchId: spec.branchId } : {}),
+      ...(spec.subjectId ? { subjectId: spec.subjectId } : {}),
+      roomId,
+      startTime: roomId ? new Date("1970-01-01T09:00:00.000Z") : null,
+      endTime: roomId ? new Date("1970-01-01T11:00:00.000Z") : null,
     },
     select: { id: true },
   });
