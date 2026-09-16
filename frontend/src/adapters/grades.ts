@@ -26,6 +26,14 @@ export interface GradeSheetRow {
    * exam uses points and none are entered for her yet*.
    */
   question_scores?: { question_id: string; score: number }[];
+  /**
+   * **Owner-reported, 2026-09-16 — whether she has actually answered, not
+   * whether she has been graded.** `undefined` on a physical sitting
+   * (`GradeSheet.exam.mode === 'physical'`) — answered on paper, no
+   * submission row exists to ask about. Gates «عرض الإجابات»: a row that
+   * is not `true` opens no dialog, since there is nothing to open.
+   */
+  submitted?: boolean;
 }
 
 export interface GradeSheet {

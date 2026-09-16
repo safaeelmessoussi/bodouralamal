@@ -107,7 +107,7 @@ export function TeacherExamsPage(): ReactNode {
           </Button>
         </p>
         {copyFailed ? <Feedback tone="warn">{t('admin.grades.reuseAsDraftFailed')}</Feedback> : null}
-        <GradeSheetView examId={openExam.id} responsesBasePath="/teacher/assessments" />
+        <GradeSheetView examId={openExam.id} />
       </TeacherLayout>
     );
   }

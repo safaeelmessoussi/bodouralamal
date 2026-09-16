@@ -9786,3 +9786,45 @@ migration in this batch), `api`/`nginx` recreated and verified on the exact comm
 `/healthz` green (4/4 components, 12/12 workers) on the first check, no error-level log lines
 in the following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable
 containers. No Production action of any kind.
+
+**Built (Revision 160, in progress) — an eight-item Owner batch; §1/§5/§8 completed and
+verified this pass, the rest tracked in `docs/TASKS.md` and `docs/SRS.md`'s own Revision 160
+entry as they land.** §1: نقاط الاختبارات's exam-wide «فتح في بناء الاختبارات» link AND the
+students-and-answers inbox table it opened (بناء الاختبارات's `SubmissionDialog`) are REMOVED
+— نقاط الاختبارات now lists the same students with their submission status and their grade
+together, so a second, blinder listing of them elsewhere was redundant, not merely
+duplicative. `frozen`'s own freeze-once-anyone-answers read is kept (`rows`/`listSubmissions`
+still feed it). A new `GradeSheetRow.submitted` field (`state !== 'in_progress'`, the SAME
+predicate `readSubmission` refuses on) gates the per-row «عرض الإجابات» — withheld for a
+student who has not sent anything — and surfaces in a new «حالة الإجابة» column, distinct
+from the existing draft/published «الحالة» column beside it. §5: the self-managed-account
+claim option (`register.kindSelfManaged`, R132) is hidden from the registration dropdown for
+this release — removed from the rendered options array only; validation, submission and the
+admin review queue are untouched. §8: «تنزيل الملف» opened the file instead of saving it —
+the button reused the SAME `inline`-disposed presigned URL the previewer renders with.
+`presignGetUrl`/`mintDownloadUrl` gained an `attachment` disposition option (the storage
+key's own already-slugified filename segment, no new lookup), exposed as
+`?disposition=attachment`; the download button now mints its own, separate `attachment` URL
+on click.
+
+Two smaller findings alongside §1: a PRE-EXISTING teardown gap in `grade.http.integration.
+test.ts`'s own `clear()` — it never deleted `StudentExamSubmission`/`StudentExamAnswer`
+before deleting the exams that RESTRICT against them, invisible until this pass's own new
+tests became the first in that file to ever write one — fixed in the same commit. §2's own
+`multiDimensionHint` sentence is explained in the SRS entry rather than re-litigated here;
+whether the picker's whole mode-selector shape is reconsidered is tracked open, pending that
+explanation landing with the Owner.
+
+Verification (§1/§5/§8 only): backend/frontend typecheck/lint/build clean; backend unit
+342/342; frontend unit 1,354/1,354; new coverage in `grade.http.integration.test.ts` (the
+`submitted` predicate proved true/false/absent across a real online exam, an unsubmitted
+draft, and the file's own pre-existing physical exam), `grade-sheet.test.ts`/`assessment-ui.
+test.ts` (the removed link/table, and why), `register.test.tsx` (the option absent from the
+rendered dropdown, the state machine proved untouched by the SAME direct `validate`/
+`buildPayload` tests already covering `self_managed`), `content.integration.test.ts` (a real
+MinIO round trip: no `content-disposition` header on the default mint, exactly `attachment;
+filename="…"` on the new one), `content-preview-dialog.download.test.tsx` (source-pinned:
+never reuses `load.url`, always mints fresh with `'attachment'`). Focused integration run
+green (`content.integration.test.ts` 71/71, `grade.http.integration.test.ts` 37/37), all-
+table isolation intact after the teardown fix. Full disposable-stack re-run and Staging
+deployment held until this batch reaches its next coherent boundary.

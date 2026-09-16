@@ -6,6 +6,7 @@ import type { PublicBranch } from '../adapters/branches.js';
 import { buildPayload, explainFailure, validate } from './register.js';
 import { ApiError } from '../lib/api.js';
 import { ar } from '../i18n/ar.js';
+import PAGE from './register.tsx?raw';
 
 /**
  * Registration form rules (§4.1, §4.1b step 5, Revision 39).
@@ -431,5 +432,22 @@ describe('registration says WHY it refused (2026-08-28)', () => {
     // remedy really is to begin the sign-in again, so the distinction must not
     // collapse in the other direction either.
     expect(explainFailure(duplicate())).toBe(ar.register.tokenSpent);
+  });
+});
+
+describe('the self-managed claim option is HIDDEN from the dropdown, not removed (Owner request, 2026-09-16)', () => {
+  // Source-pinned, like `dashboard/library.test.tsx`'s own deep-link guard:
+  // `Register` needs router/session context this file does not set up, and
+  // the underlying state machine is already covered directly above by
+  // `validate`/`buildPayload` against `intent: 'self_managed'`.
+  const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+  it('no longer offers it as a choice in the dropdown', () => {
+    expect(source).not.toContain("t('register.kindSelfManaged')");
+  });
+
+  it('keeps the whole flow reachable by state — validation, submission and the review queue are untouched', () => {
+    expect(source).toContain("intent === 'self_managed'");
+    expect(source).toContain('requestSelfManagedClaim');
   });
 });

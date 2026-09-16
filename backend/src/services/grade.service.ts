@@ -83,6 +83,17 @@ export interface GradeSheetRow {
   /** `null` until a row exists; TD-15 requires it on every subsequent write. */
   version: number | null;
   /**
+   * **Owner-reported, 2026-09-16 — whether SHE has actually answered, not
+   * whether she has been graded.** `undefined` for a physical sitting
+   * (`GradeSheet.exam.mode === 'physical'`): answered-on-paper has no
+   * submission row to ask about, the identical condition the exam-wide
+   * «عرض الإجابات» link already gates on. The SAME predicate
+   * `readSubmission` itself refuses on (`state !== 'in_progress'`), so a
+   * row reading `true` here is guaranteed to open, never a dialog that then
+   * says «لم تُرسل بعد».
+   */
+  submitted?: boolean;
+  /**
    * **Owner-reported, 2026-09-15 — per-question grading, where the exam's
    * own R137 points allocation is actually in use.** `undefined` when the
    * exam does not use points at all (`GradeSheet.questions` is then absent
@@ -432,6 +443,7 @@ function toRow(
     questionScores?: { questionId: string; score: Prisma.Decimal }[];
   } | null,
   usesPoints: boolean,
+  submitted: boolean | undefined,
 ): GradeSheetRow {
   if (!grade) {
     return {
@@ -442,6 +454,7 @@ function toRow(
       status: 'draft',
       version: null,
       ...(usesPoints ? { question_scores: [] } : {}),
+      ...(submitted === undefined ? {} : { submitted }),
     };
   }
   return {
@@ -459,6 +472,7 @@ function toRow(
           })),
         }
       : {}),
+    ...(submitted === undefined ? {} : { submitted }),
   };
 }
 
@@ -470,7 +484,7 @@ export async function readGradeSheet(
 ): Promise<GradeSheet> {
   const exam = await loadForGrading(prisma, actor, examId);
 
-  const [students, grades, questions] = await Promise.all([
+  const [students, grades, questions, submissions] = await Promise.all([
     prisma.user.findMany({
       // `deletedAt: null` is redundant — every arm of `audienceWhere` already
       // constrains it — and it is written anyway, deliberately: this call site
@@ -484,8 +498,18 @@ export async function readGradeSheet(
       include: { questionScores: { select: { questionId: true, score: true } } },
     }),
     pointsBreakdown(prisma, examId, exam.maxGrade),
+    // Owner-reported, 2026-09-16 — the SAME predicate `readSubmission`
+    // itself refuses on (`state !== 'in_progress'`). A physical sitting has
+    // no submissions at all, so the query still runs but always answers
+    // empty — cheaper than a conditional and no different a result.
+    prisma.studentExamSubmission.findMany({
+      where: { examId, state: { not: 'in_progress' } },
+      select: { studentId: true },
+    }),
   ]);
   const usesPoints = questions !== null;
+  const isOnline = exam.mode === 'online';
+  const submittedIds = new Set(submissions.map((s) => s.studentId));
 
   const byStudent = new Map(grades.map((g) => [g.studentId, g]));
 
@@ -512,7 +536,9 @@ export async function readGradeSheet(
     },
     max_grade: toNumber(exam.maxGrade),
     has_published: grades.some((g) => g.status === 'published'),
-    rows: students.map((s) => toRow(s, byStudent.get(s.id) ?? null, usesPoints)),
+    rows: students.map((s) =>
+      toRow(s, byStudent.get(s.id) ?? null, usesPoints, isOnline ? submittedIds.has(s.id) : undefined),
+    ),
     ...(questions
       ? {
           questions: questions.map((q) => ({

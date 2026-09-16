@@ -1199,24 +1199,20 @@ export const ar = {
     publishConfirmCount: 'سيصبح الاختبار متاحاً لـ{n} مستفيدة معنية. هل تريدين نشره؟',
     publishConfirmNobody:
       'لا توجد حالياً أي مستفيدة معنية بهذا الاختبار. تحقّقي من المستوى والجهة الموجَّه إليها والتاريخ. يمكنك نشره الآن — وستجده المستفيدات اللواتي يُسجَّلن لاحقاً — أو إبقاؤه مسودة.',
-    noAudience: 'لا توجد مستفيدات معنيات بهذا الاختبار حالياً.',
     closeConfirm: 'سيتوقف استقبال الإجابات. ما أُرسل يبقى محفوظاً ومقروءاً.',
     // H3 (Owner decision 2026-09-13) — explicit manual opening only.
     openExam: 'فتح الاختبار',
     openExamConfirm:
       'ستصبح ورقة الاختبار متاحة فوراً للمستفيدات المعنيات. هذا الفتح لا يمكن التراجع عنه.',
     notYetOpen: 'لم يُفتح بعد',
-    // The inbox.
-    inbox: 'الإجابات',
-    eligible: 'المعنيات بالاختبار',
-    submittedAt: 'أُرسل في',
+    // **Owner-reported, 2026-09-16 — the students-and-answers inbox table
+    // these two rendered is REMOVED** (نقاط الاختبارات lists the same
+    // students with their submission status and their grade together).
+    // `stateInProgress`/`stateSubmitted` outlive it: `grade-sheet.tsx`'s
+    // own new submission-status column reuses them.
     stateInProgress: 'قيد الإجابة',
     stateSubmitted: 'أُرسل',
-    gradeNone: 'بلا نقطة',
-    gradeDraft: 'نقطة غير منشورة',
-    gradePublished: 'نقطة منشورة',
     openSubmission: 'عرض الإجابات',
-    inProgressNotReadable: 'لم تُرسل بعد، ولا تُعرض إجابة قيد الكتابة.',
     grading: 'التنقيط يتم من «نقاط الاختبارات»، وهي الشاشة نفسها التي تنقّط بها باقي الاختبارات.',
     // The student's side.
     open: 'فتح',
@@ -2364,9 +2360,12 @@ export const ar = {
       // Owner-reported, 2026-09-15 — تفتح لوحة الإجابات نفسها التي يفتحها بناء
       // الاختبارات، لا شاشة جديدة (مبدأ ر70.1: تنفيذ واحد، مدخلان).
       viewResponses: 'عرض الإجابات',
-      // Owner-reported, 2026-09-16 — the exam-wide bulk browse, now distinct
-      // from the per-row «عرض الإجابات» dialog which carries the old label.
-      openInBuilder: 'فتح في بناء الاختبارات',
+      // Owner-reported, 2026-09-16 — whether she actually sent answers, a
+      // DIFFERENT axis from `status` below (the grade's own draft/published
+      // state). Gates «عرض الإجابات»: a row that reads `stateInProgress`
+      // (`assessments.stateInProgress`/`stateSubmitted`, the SAME two labels
+      // the retired inbox table used) shows no button at all.
+      submissionStatus: 'حالة الإجابة',
       filterLevel: 'تصفية بالمستوى',
       allLevels: 'كل المستويات',
       searchPlaceholder: 'ابحثي بعنوان الاختبار…',

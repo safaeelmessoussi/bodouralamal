@@ -4520,3 +4520,35 @@ the Owner's own report named.
       Staging, upgrading from `14b193b`: no pending migrations,
       `/healthz` green on the first check, no leftover disposable
       containers. Full detail in CHANGES.log.
+
+## SRS Revision 160 — eight-item Owner batch, landing incrementally — 2026-09-16
+
+- [x] **Built: نقاط الاختبارات §1** — removed the exam-wide «فتح في بناء
+      الاختبارات» link and the students-and-answers inbox table it
+      pointed at; added `GradeSheetRow.submitted` (same predicate
+      `readSubmission` uses) gating the per-row «عرض الإجابات» and
+      shown in a new «حالة الإجابة» column. Found and fixed a
+      pre-existing integration-test teardown gap alongside it.
+- [x] **Built: registration §5** — `register.kindSelfManaged` (R132)
+      hidden from the dropdown for this release; validation,
+      submission and the review queue untouched.
+- [x] **Built: content library §8** — «تنزيل الملف» now mints its own
+      `attachment`-disposed presigned URL instead of reusing the
+      previewer's `inline` one, so it actually downloads.
+- [ ] **§2 — filter UX overhaul for the `multi_dimension` picker**:
+      replace the mode-selector shape with all filters shown directly
+      («الكل» pre-selected), cascading options as one is chosen; the
+      Owner's own question about `multiDimensionHint`'s intersection
+      rule is answered in SRS Revision 160 §2. Not started.
+- [ ] **§3 — تعديل الحصة per-occurrence overrides** for فروع/فئات/
+      مستويات/مجموعات مستوى/حلقات/نمط التدريس/المادة/طريقة الحضور/
+      القاعة/الأستاذ المسؤول/المؤطرون المساعدون. Not started.
+- [ ] **§4 — multi-role registration**: request more than one role
+      (مستفيدة/ابن أو ابنة/مؤطرة/مديرة) in one submission, full outer
+      join of the fields each role needs, super admin approves any
+      subset. Not started.
+- [ ] **§6 — redesign بناء الاختبارات.** Not started.
+- [ ] **§7 — redesign مستجدّات.** Not started.
+- [ ] Full disposable-stack re-run, push and Staging deployment held
+      until the next coherent boundary in this batch — see
+      CHANGES.log for the exact state of what has already shipped.

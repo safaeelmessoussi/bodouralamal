@@ -124,28 +124,11 @@ function entryPayload(
 export function GradeSheetView({
   examId,
   onMaxGrade,
-  responsesBasePath,
 }: {
   examId: string;
   /** Reports **this exam's** maximum (R81) so a surrounding frame can name it
    *  without fetching the sheet a second time. */
   onMaxGrade?: (maxGrade: number) => void;
-  /**
-   * **«فتح في بناء الاختبارات» — a bulk, side-by-side browse of every
-   * submission**, reaching the same builder screen بناء الاختبارات already
-   * opens on (`/admin/assessments`'s `OnePaper`, R70.1's one-implementation
-   * rule applied again rather than a new viewer). Distinct since
-   * 2026-09-16 from the per-row «عرض الإجابات» dialog below, which is where
-   * grading actually happens now — this link is for reading many answers
-   * at once, not for marking one student. **Each portal's own path**, on
-   * the exact reasoning `TeacherAssessmentsPage`'s docstring states for why
-   * a teaching-portal screen may never link to the admin one:
-   * `/admin/assessments` for the back office, `/teacher/assessments` for
-   * the teaching portal. Omitted entirely (this component has no portal of
-   * its own to guess one from, rule O) hides the link rather than guessing
-   * wrong.
-   */
-  responsesBasePath?: '/admin/assessments' | '/teacher/assessments';
 }): ReactNode {
   const { accessToken } = useSession();
 
@@ -318,30 +301,6 @@ export function GradeSheetView({
         ) : null}
       </section>
 
-      {/**
-       * **Owner-reported, 2026-09-16 — the exam-WIDE link now says where it
-       * actually goes, distinct from the per-row «عرض الإجابات» below.**
-       * The two are not the same capability any more: this one still opens
-       * بناء الاختبارات's own submissions inbox (`OnePaper`) for a bulk,
-       * side-by-side browse of every free-text answer; the per-row dialog
-       * is where grading actually happens now. Kept rather than removed —
-       * §20 rule 16 cuts both ways, and browsing many answers at once is a
-       * real capability the per-row dialog does not replace. Physical-only
-       * exception unchanged: a physical sitting has no submission to open.
-       */}
-      {responsesBasePath && sheet.exam.mode === 'online' ? (
-        <p>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              window.location.href = `${responsesBasePath}?exam=${encodeURIComponent(examId)}`;
-            }}
-          >
-            {t('admin.grades.openInBuilder')}
-          </Button>
-        </p>
-      ) : null}
-
       {notice ? (
         <Feedback>
           {notice}
@@ -366,9 +325,16 @@ export function GradeSheetView({
             <thead>
               <tr>
                 <th scope="col">{t('admin.grades.student')}</th>
-                {/* **Owner-reported, 2026-09-16 — one row, one dialog.**
-                    Physical-only condition matches the exam-wide link
-                    above: a physical sitting has no submission to open. */}
+                {/* **Owner-reported, 2026-09-16 — whether she actually sent
+                    answers, distinct from `admin.grades.status` below
+                    (which is about the GRADE's own draft/published state).
+                    Physical-only condition: a physical sitting has no
+                    submission to ask about. */}
+                {sheet.exam.mode === 'online' ? (
+                  <th scope="col">{t('admin.grades.submissionStatus')}</th>
+                ) : null}
+                {/* The per-row action. Blank header, matching the platform's
+                    own convention for an action-only column. */}
                 {sheet.exam.mode === 'online' ? <th scope="col" /> : null}
                 {/* **Owner-reported, 2026-09-15 — per-question grading, one
                     column per question, where the exam uses R137's
@@ -397,13 +363,26 @@ export function GradeSheetView({
                     <td>{row.student_name}</td>
                     {sheet.exam.mode === 'online' ? (
                       <td>
-                        <Button
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() => setOpenStudentId(row.student_id)}
-                        >
-                          {t('admin.grades.viewResponses')}
-                        </Button>
+                        <Badge tone={row.submitted ? 'ok' : 'neutral'}>
+                          {t(row.submitted ? 'assessments.stateSubmitted' : 'assessments.stateInProgress')}
+                        </Badge>
+                      </td>
+                    ) : null}
+                    {sheet.exam.mode === 'online' ? (
+                      <td>
+                        {/* **Owner-reported, 2026-09-16 — nothing to open for
+                            a student who has not sent anything yet.** */}
+                        {row.submitted ? (
+                          <Button
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => setOpenStudentId(row.student_id)}
+                          >
+                            {t('admin.grades.viewResponses')}
+                          </Button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
                     ) : null}
                     {sheet.questions?.map((q) => (

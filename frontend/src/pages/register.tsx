@@ -352,11 +352,16 @@ export function Register(): ReactNode {
                   setFramingBranchIds([]);
                 }
               }}
+              // `self_managed` (R132) is hidden from the dropdown for this
+              // release (Owner request, 2026-09-16) — not removed. The
+              // option's whole flow (state, validation, submission,
+              // `/register/self-managed-claims` review queue) stays intact;
+              // a direct link or an already-in-progress session can still
+              // reach it, only the entry point is withdrawn.
               options={[
                 { value: 'adult', label: t('register.kindAdult') },
                 { value: 'parent_child', label: t('register.kindParentChild') },
                 { value: 'teacher', label: t('register.kindTeacher') },
-                { value: 'self_managed', label: t('register.kindSelfManaged') },
               ]}
               hint={t('register.kindHint')}
             />

@@ -155,6 +155,7 @@ export function downloadUrl(prisma: PrismaClient, clients: StorageClients) {
       req.actor ?? null,
       idParam(req, 'id'),
       req.header(ACTIVE_CHILD_HEADER) ?? undefined,
+      req.query['disposition'] === 'attachment' ? 'attachment' : 'inline',
     );
     // A minted URL is never cacheable: it is short-lived by design (TD-12) and
     // shared caching would hand one caller's grant to another.

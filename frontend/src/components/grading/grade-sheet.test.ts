@@ -190,10 +190,25 @@ describe('per-row «عرض الإجابات» opens a dialog, not a redirect', (
     expect(code(SHEET)).toContain("label={t('admin.grades.totalOverride')}");
   });
 
-  it('the exam-wide link and the per-row dialog carry DIFFERENT labels, on purpose', () => {
-    // They stopped being the same capability the moment grading moved into
-    // the per-row dialog — a reader must be able to tell which is which.
-    expect(code(SHEET)).toContain("t('admin.grades.openInBuilder')");
+  // **Owner-reported, 2026-09-16 — the exam-wide «فتح في بناء الاختبارات»
+  // link is REMOVED**, along with the redirect it pointed at: نقاط
+  // الاختبارات now IS where every student's answers are opened, per row,
+  // so a second link to a second screen for the same task was redundant.
+  it('offers no exam-wide link at all — the per-row dialog is the only way in', () => {
+    expect(code(SHEET)).not.toContain('admin.grades.openInBuilder');
+    expect(code(SHEET)).not.toContain('responsesBasePath');
+    expect(code(SHEET)).not.toContain('window.location.href');
+  });
+
+  it('hides «عرض الإجابات» for a student who has not submitted — nothing to open', () => {
+    expect(code(SHEET)).toContain('row.submitted ? (');
     expect(code(SHEET)).toContain("t('admin.grades.viewResponses')");
+  });
+
+  it('shows her submission status in its own column, distinct from the grade status column', () => {
+    expect(code(SHEET)).toContain("t('admin.grades.submissionStatus')");
+    expect(code(SHEET)).toContain(
+      "t(row.submitted ? 'assessments.stateSubmitted' : 'assessments.stateInProgress')",
+    );
   });
 });

@@ -73,6 +73,7 @@ export function ContentPreviewDialog({
 }): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'idle' });
   const [attempt, setAttempt] = useState(0);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!item) {
@@ -137,11 +138,23 @@ export function ContentPreviewDialog({
             {load.kind === 'ready' ? (
               // A new tab rather than an anchor with `download`: the object is
               // served with its own Content-Disposition, and `noopener` keeps the
-              // opened context from reaching back into this one.
+              // opened context from reaching back into this one. `load.url` is
+              // NOT reused here — it is minted `inline` for the preview surface
+              // above, so opening it again just re-renders the file. This mints
+              // a SEPARATE, `attachment`-disposed URL so the browser actually
+              // saves it.
               <Button
                 variant="primary"
                 icon="download"
-                onClick={() => window.open(load.url, '_blank', 'noopener,noreferrer')}
+                disabled={downloading}
+                onClick={() => {
+                  setDownloading(true);
+                  void fetchContentUrl(item.id, accessToken, activeChildId, 'attachment')
+                    .then((url) => {
+                      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                    })
+                    .finally(() => setDownloading(false));
+                }}
               >
                 {t('content.download')}
               </Button>

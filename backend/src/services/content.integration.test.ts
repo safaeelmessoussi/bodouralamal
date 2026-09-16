@@ -1419,6 +1419,18 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     expect(Buffer.from(await res.arrayBuffer()).length).toBe(bytes.length);
   });
 
+  it("an `attachment` mint forces a real download; the default `inline` mint does not (Owner report, 2026-09-16)", async () => {
+    const { id } = await uploadPdf(admin(), "قابل للتنزيل فعلاً");
+
+    const inline = await mintDownloadUrl(prisma, clients, admin(), id, undefined, "inline");
+    const inlineRes = await fetch(inline.url);
+    expect(inlineRes.headers.get("content-disposition")).toBeNull();
+
+    const attachment = await mintDownloadUrl(prisma, clients, admin(), id, undefined, "attachment");
+    const attachmentRes = await fetch(attachment.url);
+    expect(attachmentRes.headers.get("content-disposition")).toMatch(/^attachment; filename="/);
+  });
+
   it("refuses a suspended Teacher inside their unexpired token window (§19.2)", async () => {
     const { id } = await uploadPdf(admin(), "محمي");
     await prisma.user.update({

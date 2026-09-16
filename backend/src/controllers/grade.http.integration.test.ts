@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { provisionAcademicPeriod, releaseAcademicPeriods } from "../test-support/academic-period.js";
 
 /**
  * **Grade entry and Teacher scope over real HTTP (§4.6, BR-7, BR-8, BR-12,
@@ -120,6 +121,21 @@ async function clear(): Promise<void> {
     // only place anything here is HARD-deleted (production soft-deletes), so the
     // notices go first.
     await prisma.notification.deleteMany({ where: { exam: { id: { in: examIds } } } });
+    // Owner-reported, 2026-09-16 — a submission RESTRICTs the exam it
+    // answers, same reasoning as `examQuestion` above; the fixture below
+    // creates real ones (`submitted`'s own test coverage), so this suite's
+    // teardown must clear them too, not just suites that write submissions
+    // through the HTTP submit route.
+    const submissionIds = (
+      await prisma.studentExamSubmission.findMany({
+        where: { examId: { in: examIds } },
+        select: { id: true },
+      })
+    ).map((s) => s.id);
+    if (submissionIds.length > 0) {
+      await prisma.studentExamAnswer.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await prisma.studentExamSubmission.deleteMany({ where: { id: { in: submissionIds } } });
+    }
     await prisma.exam.deleteMany({ where: { id: { in: examIds } } });
   }
 
@@ -1137,5 +1153,87 @@ describe("Owner-reported, 2026-09-15 — per-question grading, where the exam us
     const row = rows.find((r) => r.student_id === studentOne)!;
     expect(row.score).toBe(11);
     expect(row.question_scores).toHaveLength(1);
+  });
+});
+
+describe("Owner-reported, 2026-09-16 — whether she has actually answered, not whether she has been graded", () => {
+  // An ONLINE exam's audience is resolved AS OF ITS OWN DATE
+  // (`audienceOf`'s `on: exam.mode === 'online' ? exam.date : null`), which
+  // this file's other fixtures never exercise — every `pointsExam()` sitting
+  // is a PHYSICAL one, resolved period-blind. `provisionAcademicPeriod`
+  // covers *today*, so this exam is dated today and these two students get
+  // their OWN dedicated enrolment naming that period — `studentOne`/
+  // `studentTwo`'s shared enrolment (used by every other describe block
+  // here) is left untouched.
+  let periodId: string;
+  let onlineStudentA: string;
+  let onlineStudentB: string;
+  const TODAY = new Date();
+
+  beforeAll(async () => {
+    periodId = await provisionAcademicPeriod(prisma);
+    onlineStudentA = await makeUser("مستفيدة عن بُعد أ");
+    onlineStudentB = await makeUser("مستفيدة عن بُعد ب");
+    for (const studentId of [onlineStudentA, onlineStudentB]) {
+      await prisma.enrollment.create({
+        data: { studentId, levelId, branchId: branchA, academicPeriodId: periodId },
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await prisma.enrollment.deleteMany({
+      where: { studentId: { in: [onlineStudentA, onlineStudentB] } },
+    });
+    await releaseAcademicPeriods(prisma);
+  });
+
+  async function onlineExam(): Promise<string> {
+    const exam = await prisma.exam.create({
+      data: {
+        title: `${TAG} اختبار عن بُعد`,
+        mode: "online",
+        status: "published",
+        levelId,
+        subjectId,
+        date: TODAY,
+        maxGrade: 20,
+        targetKind: "level",
+        availableFrom: TODAY,
+      },
+      select: { id: true },
+    });
+    return exam.id;
+  }
+
+  it("`submitted` is true only for the student with a real submission row, the SAME predicate readSubmission uses", async () => {
+    const examId = await onlineExam();
+    await prisma.studentExamSubmission.create({
+      data: { examId, studentId: onlineStudentA, state: "submitted", submittedAt: new Date() },
+    });
+
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    expect(sheet.status).toBe(200);
+    const rows = sheet.body.data!["rows"] as { student_id: string; submitted?: boolean }[];
+    expect(rows.find((r) => r.student_id === onlineStudentA)?.submitted).toBe(true);
+    expect(rows.find((r) => r.student_id === onlineStudentB)?.submitted).toBe(false);
+  });
+
+  it("an in-progress (unsubmitted) draft reads exactly like no submission at all", async () => {
+    const examId = await onlineExam();
+    await prisma.studentExamSubmission.create({
+      data: { examId, studentId: onlineStudentA, state: "in_progress" },
+    });
+
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    const rows = sheet.body.data!["rows"] as { student_id: string; submitted?: boolean }[];
+    expect(rows.find((r) => r.student_id === onlineStudentA)?.submitted).toBe(false);
+  });
+
+  it("absent entirely on a physical sitting — there is no submission to ask about", async () => {
+    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
+    expect(sheet.body.data!["exam"]).toMatchObject({ mode: "physical" });
+    const rows = sheet.body.data!["rows"] as Record<string, unknown>[];
+    expect(rows[0]).not.toHaveProperty("submitted");
   });
 });

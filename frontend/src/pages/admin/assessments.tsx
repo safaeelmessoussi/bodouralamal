@@ -9,7 +9,6 @@ import {
   listSubmissions,
   openAssessment,
   readAuthorPaper,
-  readSubmission,
   removeQuestion,
   reorderQuestions,
   updateQuestion,
@@ -509,8 +508,11 @@ function OnePaper({
   layout: PortalLayout;
 }): ReactNode {
   const [paper, setPaper] = useState<AssessmentPaper | null>(null);
+  // `rows` still feeds `frozen` below (whether ANYONE has answered) even
+  // though the table it used to render — the students-and-answers inbox,
+  // removed 2026-09-16 now that نقاط الاختبارات lists the same students
+  // with their submission status AND their grade — is gone.
   const [rows, setRows] = useState<SubmissionRow[]>([]);
-  const [eligible, setEligible] = useState(0);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -520,15 +522,12 @@ function OnePaper({
   // that row.
   const [editingQuestion, setEditingQuestion] = useState<AssessmentQuestion | null>(null);
   const [confirm, setConfirm] = useState<'close' | 'open' | null>(null);
-  const [viewing, setViewing] = useState<AssessmentPaper | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
       setPaper(await readAuthorPaper(examId, token));
-      const inbox = await listSubmissions(examId, token);
-      setRows(inbox.data);
-      setEligible(inbox.eligible_count);
+      setRows((await listSubmissions(examId, token)).data);
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -579,34 +578,6 @@ function OnePaper({
     [ids[index], ids[to]] = [ids[to]!, ids[index]!];
     await act(() => reorderQuestions(examId, ids, token), t('assessments.saveFailed'));
   }
-
-  const columns: Column<SubmissionRow>[] = [
-    { key: 'name', header: t('common.name'), cell: (r) => r.name },
-    {
-      key: 'state',
-      header: t('common.status'),
-      cell: (r) => (
-        <Badge tone={r.state === 'in_progress' ? 'neutral' : 'ok'}>
-          {t(r.state === 'in_progress' ? 'assessments.stateInProgress' : 'assessments.stateSubmitted')}
-        </Badge>
-      ),
-    },
-    {
-      key: 'grade_status',
-      header: t('assessments.gradePublished'),
-      cell: (r) => (
-        <Badge tone={r.grade_status === 'published' ? 'ok' : 'neutral'}>
-          {t(
-            r.grade_status === null
-              ? 'assessments.gradeNone'
-              : r.grade_status === 'published'
-                ? 'assessments.gradePublished'
-                : 'assessments.gradeDraft',
-          )}
-        </Badge>
-      ),
-    },
-  ];
 
   return layout({
     title: paper?.title ?? t('assessments.title'),
@@ -740,46 +711,20 @@ function OnePaper({
             </Button>
           ) : null}
 
-          <h3>{t('assessments.inbox')}</h3>
-          <p className="hint">
-            {t('assessments.eligible')}: {eligible}
-          </p>
           {/**
-            * **A preview, not a gate.** `eligible` resolves the draft's own
-            * currently-stored target — the same one الجدولة offers to keep
-            * as-is, or lets the author change before scheduling (R136). A
-            * target that currently resolves to nobody is not refused here:
-            * a legitimate case exists (schedule for a Level, then admit
-            * students, R122 resolving the audience on the occurrence's own
-            * date), and the author decides with the number in front of her.
+            * **Owner-reported, 2026-09-16 — the students-and-answers inbox
+            * table is REMOVED from here.** نقاط الاختبارات
+            * (`/admin/exam-grades` and `/teacher/exams`, `GradeSheetView`)
+            * now lists every eligible student with her submission status
+            * AND her grade in one table, so this screen showing the same
+            * students a second time — with grading nowhere on it — was a
+            * second, poorer answer to the same question.
+            *
+            * `rows`/`eligible`/`load()` above are KEPT: `frozen`
+            * (defined near the top of this component) still needs to know
+            * whether anybody has answered, to freeze question editing —
+            * the `assessments.frozen` notice rendered further up this page.
             */}
-          {eligible === 0 && paper.status !== 'closed' ? (
-            <Feedback tone="warn">{t('assessments.noAudience')}</Feedback>
-          ) : null}
-          <DataTable
-            caption={t('assessments.inbox')}
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.student_id}
-            status={status}
-            onRetry={() => void load()}
-            actions={[
-              {
-                label: t('assessments.openSubmission'),
-                onSelect: (r) => {
-                  if (r.state === 'in_progress') {
-                    // Not readable, and the reason is a rule rather than a fault.
-                    setNotice(t('assessments.inProgressNotReadable'));
-                    return;
-                  }
-                  void readSubmission(examId, r.student_id, token).then(setViewing).catch(() => {
-                    setNotice(t('assessments.loadFailed'));
-                  });
-                },
-              },
-            ]}
-          />
-          <p className="hint">{t('assessments.grading')}</p>
         </>
       ) : null}
 
@@ -820,8 +765,6 @@ function OnePaper({
           }}
         />
       ) : null}
-
-      {viewing ? <SubmissionDialog paper={viewing} onClose={() => setViewing(null)} /> : null}
 
       <ConfirmDialog
         open={confirm === 'close'}
@@ -998,50 +941,6 @@ function QuestionDialog({
           />
         </>
       ) : null}
-    </FormDialog>
-  );
-}
-
-/** One student's submitted paper. Read-only — the mark is entered on the sheet. */
-function SubmissionDialog({
-  paper,
-  onClose,
-}: {
-  paper: AssessmentPaper;
-  onClose: () => void;
-}): ReactNode {
-  const byQuestion = new Map((paper.submission?.answers ?? []).map((a) => [a.question_id, a]));
-  return (
-    <FormDialog
-      open
-      onCancel={onClose}
-      onSubmit={onClose}
-      title={t('assessments.openSubmission')}
-      busy={false}
-      dirty={false}
-    >
-      <ol className="assessment-questions">
-        {paper.questions.map((q, index) => {
-          const answer = byQuestion.get(q.id);
-          const chosen = q.options.filter((o) => answer?.option_ids.includes(o.id));
-          return (
-            <li key={q.id}>
-              <p>
-                <strong>{t('assessments.question').replace('{n}', String(index + 1))}</strong>{' '}
-                {q.prompt}
-              </p>
-              {answer?.text ? <p>{answer.text}</p> : null}
-              {chosen.length > 0 ? <p>{chosen.map((o) => o.label).join('، ')}</p> : null}
-              {answer?.justification ? (
-                <p className="hint">
-                  {t('assessments.yourJustification')}: {answer.justification}
-                </p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
-      <p className="hint">{t('assessments.grading')}</p>
     </FormDialog>
   );
 }

@@ -88,9 +88,12 @@ describe('R124 — the builder offers only what the server accepts', () => {
     expect(builder).not.toContain('/grades');
   });
 
-  it('refuses to open an in-progress submission, and says why', () => {
-    expect(builder).toContain('assessments.inProgressNotReadable');
-  });
+  // The students-and-answers inbox table this described — «هل هذه إجابة
+  // قيد الإنجاز؟» — was REMOVED (Owner-reported, 2026-09-16): نقاط
+  // الاختبارات's own per-row «عرض الإجابات» now gates on the identical
+  // fact (`GradeSheetRow.submitted`) by simply not offering the button at
+  // all rather than offering it and then refusing the click. See
+  // `grade-sheet.test.ts`'s own coverage of that gate.
 });
 
 describe('R124 — the whole sequence, and the occurrence’s own date', () => {

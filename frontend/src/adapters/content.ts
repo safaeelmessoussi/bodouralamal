@@ -324,10 +324,14 @@ export async function fetchContentUrl(
   contentId: string,
   token?: string | null,
   activeChildId?: string | null,
+  /** `'attachment'` mints a URL that forces a real save-to-disk rather than
+   *  the in-place rendering the previewer's own surfaces need. */
+  disposition: 'inline' | 'attachment' = 'inline',
 ): Promise<string | null> {
   try {
+    const query = disposition === 'attachment' ? '?disposition=attachment' : '';
     const body = await api<{ url: string; expires_in: number }>(
-      `/content/${encodeURIComponent(contentId)}/download-url`,
+      `/content/${encodeURIComponent(contentId)}/download-url${query}`,
       { ...(token ? { token } : {}), ...(activeChildId ? { activeChildId } : {}) },
     );
     return body.url;

@@ -1537,6 +1537,13 @@ export async function mintDownloadUrl(
   actor: Actor | null,
   contentId: string,
   activeChildHeader: string | undefined,
+  /**
+   * `'attachment'` forces the browser to save the file rather than render it
+   * — the previewer's own inline surfaces (the PDF `<iframe>`, `<video>`,
+   * `<audio>`, `<img>`) mint the default, undisposed URL instead, since
+   * `attachment` would break rendering in place.
+   */
+  disposition: 'inline' | 'attachment' = 'inline',
 ): Promise<MintResult> {
   // Optional authentication follows the public-library contract: an anonymous
   // reader, an invalid credential (ignored by the middleware), and a valid
@@ -1605,6 +1612,16 @@ export async function mintDownloadUrl(
   });
   if (!row) throw new AppError('NOT_FOUND', 'no such content');
 
-  const url = await presignGetUrl(clients, row.storageBucket as BucketName, row.storageKey);
+  // The storage key's own last segment is already a slugified original
+  // filename plus extension (`buildStorageKey`), so it needs no further
+  // lookup — just forwarding as the saved-as name.
+  const filename = disposition === 'attachment' ? row.storageKey.split('/').pop() : undefined;
+  const url = await presignGetUrl(
+    clients,
+    row.storageBucket as BucketName,
+    row.storageKey,
+    PRESIGN_TTL_SECONDS.get,
+    filename,
+  );
   return { url, expiresIn: PRESIGN_TTL_SECONDS.get };
 }

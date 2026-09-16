@@ -158,10 +158,23 @@ export async function presignGetUrl(
   bucket: BucketName,
   key: string,
   expiresIn: number = PRESIGN_TTL_SECONDS.get,
+  /**
+   * Forces a real download rather than in-place rendering. Left unset, S3
+   * answers with the object's own stored disposition (none), so a browser
+   * that can render the MIME type (a PDF, an image) opens it instead of
+   * saving it — the previewer relies on exactly that to render inline.
+   */
+  attachmentFilename?: string,
 ): Promise<string> {
   const signed = await getSignedUrl(
     clients.publicOrigin,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(attachmentFilename !== undefined
+        ? { ResponseContentDisposition: `attachment; filename="${attachmentFilename}"` }
+        : {}),
+    }),
     { expiresIn },
   );
   return toProxyUrl(signed, clients.storagePrefix);
