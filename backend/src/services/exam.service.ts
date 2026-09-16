@@ -626,14 +626,16 @@ export async function updatePhysicalExam(
 }
 
 export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string): Promise<void> {
-  // **Deletion stays Admin and above (R70.4)**, where creating and editing are
-  // now open to a Teacher in scope. `Exam` carries no `created_by`, so *"your
-  // own but not another person's"* cannot be expressed against this schema —
-  // and R70 adds no column to make it sayable, because editing already covers
-  // the mistake a Teacher needs to correct.
-  if (!isAdminish(actor)) {
-    throw new AppError('FORBIDDEN', 'deleting an exam requires admin (TD-2, R70.4)');
-  }
+  /**
+   * **Owner decision, 2026-09-16 — deletion joins the ratified grant,
+   * reversing R70.4's "deletion stays Admin and above."** `Exam` still
+   * carries no `created_by`; the SAME boundary `assertScope` already uses
+   * for editing (§4.4c) stands in for "her own" instead — a Teacher outside
+   * her scope still gets `FORBIDDEN` (`EXAM_OUT_OF_SCOPE`), exactly as an
+   * edit attempt already does (`assertExamInTeacherScope`'s own refusal
+   * shape, unlike course-schedule/event's `NOT_FOUND`).
+   */
+  assertCanManage(actor);
   await prisma.$transaction(async (tx) => {
     await lockExamRow(tx, id);
     const existing = await tx.exam.findFirst({
@@ -641,16 +643,24 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
       select: {
         branchId: true,
         levelId: true,
+        subjectId: true,
         administrativeGroupId: true,
         visibility: true,
+        date: true,
         staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
       },
     });
     if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
-    scope.assertCanActOnBranch(
-      actor.roleScopes,
-      MANAGING_ROLE,
-      existing.branchId ?? '',
+    await assertScope(
+      tx,
+      actor,
+      {
+        branchId: existing.branchId ?? '',
+        levelId: existing.levelId,
+        subjectId: existing.subjectId ?? '',
+        administrativeGroupId: existing.administrativeGroupId,
+        date: existing.date,
+      },
       'no such exam',
     );
 

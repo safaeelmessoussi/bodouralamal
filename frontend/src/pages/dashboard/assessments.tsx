@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   myAssessments,
@@ -8,48 +8,70 @@ import {
   type AssessmentPaper,
   type StudentAssessment,
 } from '../../adapters/assessments.js';
+import { fetchMyGrades, type PublishedGrade } from '../../adapters/grades.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column } from '../../components/ui/data-table.js';
+import { DataTable, type Column, type SortState } from '../../components/ui/data-table.js';
 import { ChoiceField, TextArea, TextField } from '../../components/ui/field.js';
 import { StudentLayout } from '../../components/student/student-layout.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { useActiveChild } from '../../contexts/active-child.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
+import { sortRows } from '../../lib/sort-rows.js';
 
 /**
- * **اختباراتي — the beneficiary's own assessments** (SRS §4.6, R124).
+ * **اختباراتي — the beneficiary's exams AND grades, one table** (Owner-reported,
+ * 2026-09-16, merging the separate «نقاطي» screen into this one).
  *
- * ## What she sees, and what she does not
+ * ## Why one table, not two screens
  *
- * Her own papers and her own answers. **Never the roster, never another
- * student's response, never an answer key** — the server refuses all three, and
- * this screen has no route that could ask for them.
+ * The two screens answered the same underlying question — *what exams concern
+ * me, and where do things stand* — from two disjoint sources: `/me/assessments`
+ * (every ONLINE exam she may open, whether or not it is graded yet) and
+ * `/students/me/grades` (every PUBLISHED grade, on EITHER mode). Neither alone
+ * was the whole picture: an online exam with no grade yet was invisible on
+ * «نقاطي», and a physical sitting was invisible on «اختباراتي» — it has no paper
+ * to open here at all. Both reads are kept exactly as they were (§5.3's
+ * "published only" rule for a grade is untouched); this page merges their two
+ * row sets by exam id instead of building a third read.
+ *
+ * ## طريقة الحضور decides what a row offers
+ *
+ * «مراجعة إجاباتي»/«فتح» and «الحالة» exist only because an ONLINE exam is
+ * answered through this platform — a physical sitting is not, so neither has
+ * anything to show for it. Every row still carries `طريقة الحضور` and, once
+ * published, её grade — the two facts that apply regardless of mode.
+ *
+ * ## Fixed alongside the merge: a parent acting for a child could not open this
+ * page at all
+ *
+ * `myAssessments` never sent `X-Active-Child-ID`, so a parent viewing her
+ * child's اختباراتي got a `400` from `resolveActingStudent` (§4.3) — the same
+ * middleware `/students/me/grades` already satisfies correctly. Both reads now
+ * carry the active-child header identically.
  *
  * ## Save is not Submit
  *
- * The distinction is the Owner's and it is the whole shape of this page. **حفظ**
- * leaves a draft she can come back to; **إرسال** is final and asks for
- * confirmation in Arabic first. **Nothing autosaves and nothing autosubmits** —
- * a closed browser leaves a draft, which is what a person expects, and an
- * assessment that submitted itself because a phone locked would be a mark
- * nobody chose to hand in.
- *
- * ## The grade is not here
- *
- * It reaches her through «نقاطي», the screen that already shows published
- * grades — and only once published. This page says whether it has been, and
- * nothing more.
+ * Unchanged from before the merge: **حفظ** leaves a draft; **إرسال** is final
+ * and asks for confirmation first. Nothing autosaves and nothing autosubmits.
  */
 export function StudentAssessmentsPage(): ReactNode {
   const { accessToken } = useSession();
-  const [rows, setRows] = useState<StudentAssessment[]>([]);
+  const { activeRole } = useActiveRole();
+  const { activeChild, activeChildId } = useActiveChild();
+
+  const [assessmentRows, setAssessmentRows] = useState<StudentAssessment[]>([]);
+  const [gradeRows, setGradeRows] = useState<PublishedGrade[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   /** Kept rather than discarded: `ErrorState` turns the actual failure into the
    *  right sentence and the right next action — a 403 and a dropped connection
    *  need different words. Throwing it away forces one generic line on both. */
   const [failure, setFailure] = useState<unknown>(null);
+  const [sort, setSort] = useState<SortState | null>(null);
   /**
    * **R136 — «بدء الاختبار» on the calendar occurrence dialog deep-links
    * here**, the same `?exam=` pattern بناء الاختبارات already uses. Read
@@ -59,21 +81,49 @@ export function StudentAssessmentsPage(): ReactNode {
     new URLSearchParams(window.location.search).get('exam'),
   );
 
+  const asParent = activeRole === 'parent';
+  const childHeader = asParent ? activeChildId : null;
+  const awaitingChild = asParent && activeChildId === null;
+
   const load = useCallback(async () => {
+    // A parent who has not chosen a child yet has no subject to ask about —
+    // both reads would 400 on the missing header, and it is not sent because
+    // there is genuinely nothing to name.
+    if (awaitingChild) {
+      setAssessmentRows([]);
+      setGradeRows([]);
+      setState('ready');
+      return;
+    }
     setState('loading');
     setFailure(null);
     try {
-      setRows(await myAssessments(accessToken));
+      const [assessments, grades] = await Promise.all([
+        myAssessments(accessToken, childHeader),
+        fetchMyGrades(accessToken, childHeader),
+      ]);
+      setAssessmentRows(assessments);
+      setGradeRows(grades);
       setState('ready');
     } catch (error) {
       setFailure(error);
       setState('error');
     }
-  }, [accessToken]);
+  }, [accessToken, childHeader, awaitingChild]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const merged = useMemo(() => mergeRows(assessmentRows, gradeRows), [assessmentRows, gradeRows]);
+  const sorted = sortRows(merged, sort, {
+    title: (r) => r.title,
+    date: (r) => r.date,
+    subject: (r) => r.subjectName ?? r.levelName,
+    mode: (r) => r.mode,
+    state: (r) => r.state,
+    score: (r) => r.score,
+  });
 
   if (openId !== null) {
     return (
@@ -88,65 +138,100 @@ export function StudentAssessmentsPage(): ReactNode {
     );
   }
 
-  /** «فتح» / «مراجعة إجاباتي» differ by row state — a `Column.cell` closure
-   *  rather than `DataTable`'s `actions`, whose label is fixed per action. */
-  const columns: Column<StudentAssessment>[] = [
-    { key: 'title', header: t('assessments.name'), cell: (row) => row.title },
+  const columns: Column<MergedExamRow>[] = [
+    { key: 'title', sortKey: 'title', header: t('assessments.name'), cell: (row) => row.title },
     {
+      key: 'date',
+      sortKey: 'date',
+      header: t('assessments.date'),
+      cell: (row) => formatDate(row.date),
+    },
+    {
+      key: 'subject',
+      sortKey: 'subject',
+      header: t('student.grades.subject'),
+      secondary: true,
+      cell: (row) => row.subjectName ?? row.levelName ?? <span className="muted">—</span>,
+    },
+    {
+      // طريقة الحضور — every row states it, whatever else it does or does not offer.
+      key: 'mode',
+      sortKey: 'mode',
+      header: t('assessments.attendanceMethod'),
+      cell: (row) => t(row.mode === 'online' ? 'assessments.modeOnline' : 'assessments.modePhysical'),
+    },
+    {
+      // الحالة — only a remote exam has an interaction of hers to report.
       key: 'state',
+      sortKey: 'state',
       header: t('assessments.filterStatus'),
-      cell: (row) => (
-        <Badge tone={row.state === 'submitted' ? 'ok' : 'neutral'}>
-          {t(
-            row.state === 'submitted'
-              ? 'assessments.sent'
-              : row.state === 'in_progress'
-                ? 'assessments.saved'
-                : 'assessments.notStarted',
-          )}
-        </Badge>
-      ),
+      cell: (row) =>
+        row.mode !== 'online' ? (
+          <span className="muted">—</span>
+        ) : (
+          <Badge tone={row.state === 'submitted' ? 'ok' : 'neutral'}>
+            {t(
+              row.state === 'submitted'
+                ? 'assessments.sent'
+                : row.state === 'in_progress'
+                  ? 'assessments.saved'
+                  : 'assessments.notStarted',
+            )}
+          </Badge>
+        ),
     },
     {
-      key: 'grade',
-      header: t('assessments.gradePublished'),
-      cell: (row) => (row.grade_published ? <Badge tone="ok">{t('assessments.gradePublished')}</Badge> : null),
+      key: 'score',
+      sortKey: 'score',
+      header: t('student.grades.score'),
+      numeric: true,
+      cell: (row) =>
+        !row.gradePublished ? (
+          <span className="muted">—</span>
+        ) : row.absent ? (
+          // BR-7's absent-zero is a `0` in the data, and rendering it as a mark
+          // would report a score for a sitting she did not attend.
+          <Badge tone="neutral">{t('student.grades.absent')}</Badge>
+        ) : (
+          `${row.score} / ${row.maxGrade}`
+        ),
     },
     {
+      // مراجعة إجاباتي / فتح — only a remote exam is answered through this platform.
       key: 'action',
       header: t('common.actions'),
-      cell: (row) => (
-        <Button variant="secondary" onClick={() => setOpenId(row.id)}>
-          {t(row.state === 'submitted' ? 'assessments.review' : 'assessments.open')}
-        </Button>
-      ),
+      cell: (row) =>
+        row.mode === 'online' ? (
+          <Button variant="secondary" onClick={() => setOpenId(row.id)}>
+            {t(row.state === 'submitted' ? 'assessments.review' : 'assessments.open')}
+          </Button>
+        ) : null,
     },
   ];
 
   return (
-    /**
-     * **Inside `StudentLayout`, like every one of her other screens.**
-     *
-     * It was the only student page that rendered a bare `<section>` with its own
-     * `<h1>`: no header, no navigation, no shell — a route that looked
-     * unfinished and, worse, gave her no way back to the rest of her portal.
-     * The title and lede are the layout's props, so they are not stated twice.
-     */
     <StudentLayout title={t('assessments.navStudent')} lede={t('assessments.studentLede')}>
+      {/* R62.10 — persistent, and the first thing under the heading. A parent
+          looking at the wrong child's exams must find that out by reading the
+          screen. */}
+      {asParent ? (
+        <p className="state" role="status">
+          {activeChild
+            ? t('studentDashboard.viewingChild').replace('{name}', activeChild.label)
+            : t('studentDashboard.chooseChild')}
+        </p>
+      ) : null}
+
       {/**
         * **The table stays, even with nothing in it** (Owner, 2026-09-15) —
-        * the same rule `DataTable` already states for every admin list
-        * (2026-08-30): a screen with zero rows should still show what it
-        * would hold, not collapse to a bare paragraph. This page used to be
-        * the one exception, with a hand-rolled `<ul>` and a separate
-        * `EmptyState` that replaced the whole list instead of living inside
-        * it — migrated to the shared component rather than teaching the same
-        * rule a second time.
+        * the same rule `DataTable` already states for every admin list.
         */}
-      <DataTable<StudentAssessment>
+      <DataTable<MergedExamRow>
         caption={t('assessments.navStudent')}
         columns={columns}
-        rows={rows}
+        rows={sorted}
+        sort={sort}
+        onSort={setSort}
         rowKey={(row) => row.id}
         status={state}
         error={failure}
@@ -154,6 +239,53 @@ export function StudentAssessmentsPage(): ReactNode {
       />
     </StudentLayout>
   );
+}
+
+interface MergedExamRow {
+  id: string;
+  title: string;
+  date: string;
+  mode: 'online' | 'physical';
+  subjectName: string | null;
+  levelName: string;
+  /** `null` for a physical row — she has no interaction with it here. */
+  state: string | null;
+  gradePublished: boolean;
+  score: number | null;
+  maxGrade: number | null;
+  absent: boolean;
+}
+
+/**
+ * `/me/assessments` (online exams she may open, graded or not) and
+ * `/students/me/grades` (published grades, either mode) merged by exam id.
+ * An id absent from the grade list is simply not yet published — the online
+ * row alone still carries title/date/state. An id absent from the assessment
+ * list is a physical sitting, or an online exam graded without ever gaining a
+ * submission row; either way `mode` on the grade row itself (not an
+ * assumption) says which.
+ */
+function mergeRows(assessments: StudentAssessment[], grades: PublishedGrade[]): MergedExamRow[] {
+  const gradeById = new Map(grades.map((g) => [g.exam_id, g]));
+  const assessmentById = new Map(assessments.map((a) => [a.id, a]));
+  const ids = new Set<string>([...assessmentById.keys(), ...gradeById.keys()]);
+  return [...ids].map((id) => {
+    const a = assessmentById.get(id) ?? null;
+    const g = gradeById.get(id) ?? null;
+    return {
+      id,
+      title: a?.title ?? g!.exam_title,
+      date: a?.date ?? g!.date,
+      mode: g?.mode ?? 'online',
+      subjectName: a?.subject_name ?? g?.subject_name ?? null,
+      levelName: a?.level_name ?? g?.level_name ?? '',
+      state: a?.state ?? null,
+      gradePublished: g !== null,
+      score: g?.score ?? null,
+      maxGrade: g?.max_grade ?? null,
+      absent: g?.absent ?? false,
+    };
+  });
 }
 
 interface Draft {

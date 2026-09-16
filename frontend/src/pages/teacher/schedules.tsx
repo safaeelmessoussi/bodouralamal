@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { listCourseSchedules, type CourseSchedule } from '../../adapters/course-schedules.js';
-import { listSchedulingItems, type SchedulingItem } from '../../adapters/scheduling.js';
+import { notifyEventChange } from '../../adapters/events.js';
+import {
+  deleteSchedulingItem,
+  listSchedulingItems,
+  type SchedulingItem,
+} from '../../adapters/scheduling.js';
 import { specOfKind } from '../../adapters/scheduling-types.js';
 import {
   DataTable,
@@ -12,7 +17,11 @@ import {
 } from '../../components/ui/data-table.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { Feedback } from '../../components/ui/feedback.js';
 import { SchedulingDialog } from '../admin/scheduling.js';
+import { ApiError } from '../../lib/api.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import { useSession } from '../../contexts/session.js';
 import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
 import { t } from '../../i18n/index.js';
@@ -61,12 +70,18 @@ import { sortRows } from '../../lib/sort-rows.js';
  * table's own قائمة**, the same `SchedulingDialog` in edit mode الجدولة's
  * own list already opens — one row action for all three kinds, since
  * Event `assertMayEdit` and Exam `assertCanManage`/`assertScope` admit her
- * in scope the identical way. **حذف is deliberately absent** (Revision 152
- * §2): every kind's deletion stays server-refused for a Teacher by a
- * separately-ratified decision (class — Revision 140 §2; Event — Revision
- * 43/72, R71.3; Exam — R70.4), so wiring it here would either 403 on every
- * row or silently ask to reverse one of those three boundaries — flagged
- * back to the Document Owner instead.
+ * in scope the identical way. **حذف joins it (Revision 154, Document Owner
+ * decision 2026-09-16)** — reversing Revision 140 §2 (class), Revision
+ * 43/72 §R71.3 (event) and R70.4 (exam), each of which had kept deletion
+ * Admin-only. The grant is the SAME boundary as edit, never wider:
+ * `assertTeacherCurrentlyStaffs` for a class, `assertMayEdit`'s scope for
+ * an event, `assertScope`'s for an exam — a row outside it still refuses
+ * exactly as an edit attempt already would (`NOT_FOUND` for a class or
+ * event; `FORBIDDEN`/`EXAM_OUT_OF_SCOPE` for an exam, `assertExamInTeacher
+ * Scope`'s own established shape). The action, the dialog and the R82.5
+ * notify-decision are the identical ones الجدولة's own قائمة already uses
+ * (`deleteSchedulingItem`, `classifyDeletion`, `notifyEventChange`) — no
+ * teacher-shaped rebuild.
  *
  * **The scope rules are the server's, unchanged.** For an activity, a Teacher
  * must name Administrative Groups they teach and may not reach a branch,
@@ -123,21 +138,23 @@ export function TeacherSchedulesPage(): ReactNode {
    * this only wires the SAME `SchedulingDialog` الجدولة's own قائمة already
    * opens in edit mode, rather than duplicating it.
    *
-   * **حذف is deliberately NOT added here**, on any of the three kinds —
-   * unlike تعديل, it stays server-refused for a Teacher across the board:
-   * class deletion is Teacher ⊘ by Revision 140 §2's own text ("deletion is
-   * untouched... the ratified grant is creation and operational editing, not
-   * every write TD-2's row could theoretically cover"); Event deletion is
-   * Admin-only by Revision 43/72 and R71.3 (a `responsible` Teacher's grant
-   * was scoped to edit, not delete); Exam deletion is Admin-and-above by
-   * R70.4, which states in terms that `Exam` carries no `created_by` so
-   * "her own but not another's" cannot be expressed against this schema.
-   * Wiring حذف here unmodified would 403 at the server on every row and,
-   * worse, invite quietly widening one of these three separately-ratified
-   * boundaries instead of asking. Flagged for the Document Owner rather than
-   * assumed.
+   * **حذف joins it (2026-09-16, Revision 154)** — same reuse: `deleting`,
+   * `deleteBlocked` and `notifying` below are الجدولة's own three pieces of
+   * state, and `confirmDelete` is its own function, not a second
+   * implementation of the same dialog/classifier/notify sequence.
    */
   const [editing, setEditing] = useState<SchedulingItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
+  /** Set only for a genuinely blocked deletion (rule AZ.1) — the dialog
+   *  stays open and explains why, matching الجدولة's own identical state. */
+  const [deleteBlocked, setDeleteBlocked] = useState<ReactNode | null>(null);
+  /** The saved Event change awaiting the send-or-not decision (R82.5). */
+  const [notifying, setNotifying] = useState<{
+    id: string;
+    change: 'created' | 'rescheduled' | 'cancelled';
+  } | null>(null);
 
   const loadCatalog = useCallback(async () => {
     setCatalogStatus('loading');
@@ -228,12 +245,64 @@ export function TeacherSchedulesPage(): ReactNode {
     },
     {
       // B1 — same action, same dialog, as الجدولة's own قائمة; the server
-      // already scopes what a Teacher may actually save (see the state
-      // declaration above for why حذف has no matching entry here).
+      // already scopes what a Teacher may actually save.
       label: t('common.edit'),
       onSelect: (r) => setEditing(r),
     },
+    {
+      // Revision 154 — same action, same dialog, as الجدولة's own قائمة; the
+      // server scopes what a Teacher may actually delete (see this file's
+      // own top docstring).
+      label: t('common.delete'),
+      danger: true,
+      onSelect: (r) => {
+        // A stale block from a PREVIOUS item's refusal must not paint over
+        // this one's fresh confirmation.
+        setDeleteBlocked(null);
+        setDeleting(r);
+      },
+    },
   ];
+
+  async function confirmDelete(): Promise<void> {
+    if (!deleting) return;
+    const deleted = deleting;
+    setBusy(true);
+    try {
+      await deleteSchedulingItem(deleted, accessToken);
+      setDeleting(null);
+      await load();
+      await loadCatalog();
+      setNotice(t('common.deleted'));
+      // An Event cancellation is its soft deletion (R82). The delete is
+      // already committed; this second dialog decides delivery only.
+      if (deleted.type === 'activity' || deleted.type === 'holiday') {
+        setNotifying({ id: deleted.id, change: 'cancelled' });
+      }
+    } catch (error) {
+      // Same refusal shape الجدولة's own identical dialog already handles —
+      // see its docstring (`scheduling-delete.test.tsx`) for why.
+      const details = error instanceof ApiError ? error.details : undefined;
+      if (details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS') {
+        setDeleteBlocked(
+          t('scheduling.deleteBlockedEvidence')
+            .replace('{submissions}', String(details['submissions'] ?? 0))
+            .replace('{grades}', String(details['grades'] ?? 0)),
+        );
+        setBusy(false);
+        return;
+      }
+      const outcome = classifyDeletion(error);
+      setDeleting(null);
+      if (outcome.kind === 'already-gone') {
+        await load();
+        await loadCatalog();
+      }
+      setNotice(deletionNotice(outcome));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const teachingContexts = rows
     .filter((r) => r.subject_id !== null && r.academic_year_id !== null)
@@ -257,6 +326,8 @@ export function TeacherSchedulesPage(): ReactNode {
         </Button>
       }
     >
+      {notice ? <Feedback>{notice}</Feedback> : null}
+
       {/**
         * **Her own occurrences AND her own catalogue, on the shared calendar
         * surface** (merged 2026-08-20; قائمة reworked Owner-reported,
@@ -349,6 +420,55 @@ export function TeacherSchedulesPage(): ReactNode {
           }}
         />
       ) : null}
+
+      {/* R82.5 — the optional notice, الجدولة's own identical dialog. */}
+      <ConfirmDialog
+        open={notifying !== null}
+        title={t('scheduling.notify.title')}
+        body={t('scheduling.notify.body')}
+        details={<p className="muted">{t('scheduling.notify.audience')}</p>}
+        confirmLabel={t('scheduling.notify.send')}
+        cancelLabel={t('scheduling.notify.skip')}
+        busy={busy}
+        onConfirm={() => {
+          void (async () => {
+            if (!notifying?.id) return;
+            setBusy(true);
+            try {
+              const result = await notifyEventChange(notifying.id, notifying.change, accessToken);
+              setNotice(
+                result.notified === 0
+                  ? t('scheduling.notify.sentNone')
+                  : t('scheduling.notify.sent').replace('{n}', String(result.notified)),
+              );
+              setNotifying(null);
+            } catch {
+              setNotice(t('scheduling.notify.failed'));
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+        onCancel={() => {
+          setNotifying(null);
+          setNotice(t('scheduling.notify.skipped'));
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleting !== null}
+        {...(deleteBlocked ? { blocked: deleteBlocked } : {})}
+        title={t('scheduling.deleteTitle')}
+        body={t('scheduling.deleteBody').replace('{title}', deleting?.title ?? '')}
+        confirmLabel={t('common.delete')}
+        danger
+        busy={busy}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => {
+          setDeleting(null);
+          setDeleteBlocked(null);
+        }}
+      />
     </TeacherLayout>
   );
 }

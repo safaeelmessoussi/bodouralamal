@@ -49,9 +49,17 @@ describe('R124 — a student sees her own paper and nothing else', () => {
 
   it('tells her the grade is withheld rather than showing a draft one', () => {
     expect(studentPage).toContain('assessments.gradeWithheld');
-    // The mark itself is not on this screen at any status — it reaches her
-    // through the grades surface that already exists.
-    expect(studentPage).not.toContain('score');
+    /**
+     * **The mark is never rendered WHILE she is taking/reviewing a paper**
+     * (the `Paper` sub-component) — narrowed here (Owner-reported,
+     * 2026-09-16) from "never on this screen at all", since اختباراتي's own
+     * table now DOES show her published mark once there is one (نقاطي
+     * merged into it). `readPaper`'s own response never carries a score at
+     * all; this checks the component that consumes it never references one
+     * either, rather than the whole file, which legitimately does now.
+     */
+    const paperComponent = studentPage.slice(studentPage.indexOf('function Paper('));
+    expect(paperComponent).not.toMatch(/\bscore\b/);
   });
 });
 

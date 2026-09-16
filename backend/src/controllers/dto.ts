@@ -2801,6 +2801,8 @@ export interface StudentAssessmentDto {
   /** Whether her grade has been PUBLISHED. The mark itself is not here — it
    *  reaches her through the grades surface that already exists. */
   grade_published: boolean;
+  level_name: string;
+  subject_name: string | null;
 }
 
 export function studentAssessmentDto(row: {
@@ -2810,6 +2812,8 @@ export function studentAssessmentDto(row: {
   date: Date;
   state: string | null;
   gradePublished: boolean;
+  levelName: string;
+  subjectName: string | null;
 }): StudentAssessmentDto {
   return {
     id: row.id,
@@ -2818,6 +2822,8 @@ export function studentAssessmentDto(row: {
     date: row.date.toISOString().slice(0, 10),
     state: row.state === null ? null : String(row.state),
     grade_published: row.gradePublished,
+    level_name: row.levelName,
+    subject_name: row.subjectName,
   };
 }
 

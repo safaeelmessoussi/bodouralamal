@@ -38,8 +38,9 @@ export type Route =
   | 'dashboard-student-calendar'
   | 'dashboard-student-library'
   | 'dashboard-student-quran'
-  /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
-  | 'dashboard-student-grades'
+  /** §5.3's اختباراتي — every exam that concerns her, either mode, and her
+   *  published grade once there is one (Revision 153 merged «نقاطي» into
+   *  this route rather than keeping a second one). */
   | 'dashboard-student-assessments'
   /**
    * **R98 — the online classroom**, `/classroom/{sessionId}`.
@@ -117,10 +118,9 @@ export function resolveRoute(pathname: string): Route {
   // `/profile` remain what they are for every other context.
   if (path === '/dashboard/student/library') return 'dashboard-student-library';
   if (path === '/dashboard/student/quran') return 'dashboard-student-quran';
-  // §5.3 has listed this node since R62 and nothing rendered it; the grades were
-  // publishable and unreachable by the مستفيدة they were about.
-  if (path === '/dashboard/student/grades') return 'dashboard-student-grades';
-  // R124 — her own assessments: what she may open, and what she has sent.
+  // R124 — her own assessments: what she may open, what she has sent, and
+  // (Revision 153) her published grade on either mode — «نقاطي»'s old,
+  // separate `/dashboard/student/grades` route no longer exists.
   if (path === '/dashboard/student/assessments') return 'dashboard-student-assessments';
   if (path === '/dashboard/student') return 'dashboard-student';
   // R65 — the personal section, and the child-registration page under it.

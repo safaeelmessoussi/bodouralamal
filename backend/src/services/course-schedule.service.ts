@@ -1836,19 +1836,44 @@ export async function deleteCourseSchedule(
   id: string,
   now: Date = new Date(),
 ): Promise<{ futureRemoved: number; retained: number }> {
-  assertCanManage(actor);
+  /**
+   * **Owner decision, 2026-09-16 — deletion joins the ratified grant** (§2),
+   * reversing Revision 140 §2's "deletion is untouched (Teacher ⊘)": the
+   * SAME boundary editing already uses (`assertTeacherCurrentlyStaffs`), not
+   * a wider one — a class she does not currently staff still answers exactly
+   * as one that does not exist.
+   */
+  const selfServiceTeacher =
+    !isManager(actor) && scope.hasRole(actor.roleScopes, "teacher");
+  if (!isManager(actor) && !selfServiceTeacher) {
+    throw new AppError(
+      "FORBIDDEN",
+      "course schedule management requires admin or teaching staff",
+    );
+  }
 
   const schedule = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, branchId: true },
+    select: {
+      id: true,
+      branchId: true,
+      staff: {
+        where: { deletedAt: null },
+        select: { userId: true, effectiveFrom: true, effectiveUntil: true },
+      },
+    },
   });
   if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
-  scope.assertCanActOnBranch(
-    actor.roleScopes,
-    MANAGING_ROLE,
-    schedule.branchId,
-    "no such schedule",
-  );
+  if (selfServiceTeacher) {
+    assertTeacherCurrentlyStaffs(schedule.staff, actor.userId, now);
+  } else {
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      schedule.branchId,
+      "no such schedule",
+    );
+  }
 
   return prisma.$transaction(async (tx) => {
     // The SAME predicate materialization uses (§4.4, Revision 43.5). This used

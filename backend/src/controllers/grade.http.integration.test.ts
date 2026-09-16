@@ -375,9 +375,38 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
     );
   });
 
-  it("a Teacher may NOT delete a sitting — deletion stays Admin (R70.4)", async () => {
-    const res = await call("DELETE", `/exams/${examId}`, teacherToken);
+  it("a Teacher outside her scope may not delete a sitting (R70.4/Revision 154)", async () => {
+    // `outsiderToken` staffs nothing at all — genuinely out of scope, unlike
+    // `teacherToken` below, which staffs the very schedule this exam
+    // targets. Revision 154 (2026-09-16) reversed the old blanket
+    // Admin-only rule; the refusal here is `assertScope`'s
+    // `EXAM_OUT_OF_SCOPE`, not a role gate.
+    const res = await call("DELETE", `/exams/${examId}`, outsiderToken);
     expect(res.status).toBe(403);
+    expect(res.body.error?.details?.["reason"]).toBe("EXAM_OUT_OF_SCOPE");
+  });
+
+  it("Revision 154 — a Teacher WITHIN her §4.4c scope may delete her own sitting", async () => {
+    // A fresh exam, never the shared `examId` — many later tests in this
+    // file still need it to exist.
+    const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
+      title: `${TAG} امتحان يُحذف`,
+      date: "2098-03-02",
+      start_time: "09:00",
+      end_time: "10:30",
+      level_id: levelId,
+      subject_id: subjectId,
+      academic_year_id: academicYearId,
+      branch_id: branchA,
+      room_id: roomA,
+      administrative_group_id: groupA,
+    });
+    expect(created.status).toBe(201);
+    const disposableExamId = (created.body as { id: string }).id;
+
+    const res = await call("DELETE", `/exams/${disposableExamId}`, teacherToken);
+    expect(res.status).toBe(204);
   });
 
   /**
@@ -783,6 +812,9 @@ describe("the student’s own published grades (§5.3)", () => {
     expect(row!["score"]).toBe(15);
     expect(row!["max_grade"]).toBe(20);
     expect(row!["absent"]).toBe(false);
+    // Owner-reported, 2026-09-16 — اختباراتي/نقاطي merge: طريقة الحضور. This
+    // fixture is `POST /exams` (the physical-sitting route), never `/assessments`.
+    expect(row!["mode"]).toBe("physical");
     expect(res.body.meta).toBeUndefined();
   });
 
@@ -808,6 +840,7 @@ describe("the student’s own published grades (§5.3)", () => {
         "subject_name",
         "score",
         "max_grade",
+        "mode",
       ].sort(),
     );
     expect(row).not.toHaveProperty("passed");

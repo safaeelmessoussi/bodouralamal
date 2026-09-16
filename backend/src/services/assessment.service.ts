@@ -1917,11 +1917,17 @@ export async function assessmentsForStudent(
     date: Date;
     state: string | null;
     gradePublished: boolean;
+    levelName: string;
+    subjectName: string | null;
   }[]
 > {
   const candidates = await prisma.exam.findMany({
     where: { deletedAt: null, mode: 'online', status: { in: ['published', 'closed'] } },
-    select: ASSESSMENT_SELECT,
+    // **`level`/`subject` names, additive** — the merged اختباراتي/نقاطي table
+    // (Owner-reported, 2026-09-16) needs a subject column for EVERY row,
+    // including one not yet graded, which `readPublishedGrades` alone cannot
+    // supply.
+    select: { ...ASSESSMENT_SELECT, level: { select: { name: true } }, subject: { select: { name: true } } },
     orderBy: { date: 'desc' },
   });
 
@@ -1943,6 +1949,8 @@ export async function assessmentsForStudent(
     date: Date;
     state: string | null;
     gradePublished: boolean;
+    levelName: string;
+    subjectName: string | null;
   }[] = [];
   for (const exam of candidates) {
     // **A submission keeps it on her list.** Eligibility can lapse; what she
@@ -1957,6 +1965,8 @@ export async function assessmentsForStudent(
       date: exam.date,
       state: answered,
       gradePublished: published.has(exam.id),
+      levelName: exam.level.name,
+      subjectName: exam.subject?.name ?? null,
     });
   }
   return rows;

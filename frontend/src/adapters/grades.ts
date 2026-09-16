@@ -134,6 +134,7 @@ export interface PublishedGrade {
   /** What it was out of — **per row**, because each exam sets its own (R81). */
   max_grade: number;
   absent: boolean;
+  mode: 'physical' | 'online';
 }
 
 export async function fetchMyGrades(

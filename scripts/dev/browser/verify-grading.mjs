@@ -240,7 +240,8 @@ if (studentCookie) {
     httpOnly: true,
   });
 
-  await goto('/dashboard/student/grades', 'table, .state, main');
+  // Revision 153 merged «نقاطي» into اختباراتي — one route, not two.
+  await goto('/dashboard/student/assessments', 'table, .state, main');
   // The page fetches after mount, so `main` existing is not the page being
   // ready — a fixed wait raced it and reported her grades missing. Wait for a
   // ROW, which is the thing being measured.

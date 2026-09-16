@@ -570,6 +570,9 @@ export interface PublishedGradeRow {
   /** What it is out of — carried per row, because each exam sets its own. */
   max_grade: number;
   absent: boolean;
+  /** Owner-reported, 2026-09-16 — اختباراتي/نقاطي merge: طريقة الحضور needs
+   *  every published row to say which it was. */
+  mode: 'physical' | 'online';
 }
 
 export async function readPublishedGrades(
@@ -597,6 +600,7 @@ export async function readPublishedGrades(
           title: true,
           date: true,
           maxGrade: true,
+          mode: true,
           level: { select: { name: true } },
           subject: { select: { name: true } },
         },
@@ -616,6 +620,7 @@ export async function readPublishedGrades(
       score: toNumber(g.score),
       max_grade: toNumber(g.exam.maxGrade),
       absent: g.absent,
+      mode: g.exam.mode,
     })),
   };
 }

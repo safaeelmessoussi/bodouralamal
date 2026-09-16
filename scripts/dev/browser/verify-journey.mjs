@@ -103,22 +103,17 @@ check(
 await open(S.studentCookie, '/dashboard/student/assessments');
 body = await text();
 check('the paper is on her list', body.includes('اختبار الحفظ'), body.slice(0, 400));
-check(
-  'her list says the mark has been published',
-  body.includes('نقطة منشورة'),
-  body.slice(0, 400),
-);
 
 /**
- * **The mark itself lives on نقاطي, not on اختباراتي** — one concept, one home.
- * The assessments list says *whether* a mark has been published; §5.3's grades
- * page is what shows it, with its own scale beside it (R81: exams no longer
- * share one, so `17.5 / 20` has to carry its own maximum).
+ * **Revision 153 merged the separate «نقاطي» into اختباراتي** — one page, not
+ * two, so her published mark is on the SAME row rather than a second screen.
+ * A fresh cookie for the second load (the refresh cookie rotates on every
+ * page render, so reusing one shows a logged-out shell).
  */
-await open(S.studentCookie2, '/dashboard/student/grades');
+await open(S.studentCookie2, '/dashboard/student/assessments');
 body = await text();
 check(
-  'the published mark is visible to her, on the paper’s own scale',
+  'the published mark is visible to her, on the paper’s own scale (R81)',
   body.includes('17.5') && body.includes('20'),
   body.slice(0, 400),
 );

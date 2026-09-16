@@ -132,7 +132,10 @@ describe('§14.4 — every student portal page renders inside StudentLayout', ()
   it('finds the pages it is meant to be guarding', () => {
     // Without this the loop below passes by matching nothing at all — the
     // failure mode a glob-driven guard has and a hand-written list does not.
-    expect(portalPages.length).toBeGreaterThanOrEqual(5);
+    // Floor lowered from 5 to 4 (Revision 153): `grades.tsx` («نقاطي») was
+    // deleted, its table merged into `assessments.tsx` — one file fewer by
+    // design, not a glob regression.
+    expect(portalPages.length).toBeGreaterThanOrEqual(4);
   });
 
   it('every one of them uses the shared shell', () => {

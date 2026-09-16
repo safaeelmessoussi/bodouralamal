@@ -11,7 +11,6 @@ import { ClassroomPage } from './pages/classroom.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentAssessmentsPage } from './pages/dashboard/assessments.js';
-import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentLibraryPage } from './pages/dashboard/library.js';
 import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
@@ -139,19 +138,11 @@ function App(): React.ReactNode {
     case 'dashboard-student-assessments':
       // R124 — the same `PendingGuard` her other screens carry: a Pending
       // account reaches nothing (TD-1), and the guard is not this page's to
-      // reinvent.
+      // reinvent. Revision 153 merged «نقاطي»'s published-grades table into
+      // this same page — one route, not two.
       return (
         <PendingGuard>
           <StudentAssessmentsPage />
-        </PendingGuard>
-      );
-    case 'dashboard-student-grades':
-      // §5.3's *My Grades & Exams*. PUBLISHED grades only — the draft is the
-      // مؤطِّرة's working note (BR-8) and the server's query excludes it, so this
-      // screen cannot show one. Same child-context rule as the dashboard above.
-      return (
-        <PendingGuard>
-          <StudentGradesPage />
         </PendingGuard>
       );
     case 'profile':

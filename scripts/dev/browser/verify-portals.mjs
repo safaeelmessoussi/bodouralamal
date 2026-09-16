@@ -168,8 +168,9 @@ check(
 await open('/dashboard/student/quran');
 check('15 · حفظي opens', (await shell()).heading !== null, 'quran');
 
-await open('/dashboard/student/grades');
-check('16 · نقاطي opens', (await shell()).heading !== null, 'grades');
+// Revision 153 merged «نقاطي» into اختباراتي — one nav module, not two.
+await open('/dashboard/student/assessments');
+check('16 · اختباراتي opens', (await shell()).heading !== null, 'assessments');
 
 /* ── the bell itself ────────────────────────────────────────────────────── */
 

@@ -559,9 +559,21 @@ export interface EventStaffInput {
  * post-delete notification request can require the same capability before it
  * consults the deletion record. The same-actor Trash check then narrows it
  * further; it never substitutes for this role check.
+ *
+ * **Owner decision, 2026-09-16 — a Teacher joins this gate**, reversing
+ * Revision 43/72/R71.3's "deletion remains Admin". This is the coarse ROLE
+ * check only: `deleteEvent` additionally requires `assertMayEdit`'s per-event
+ * boundary (responsible, or her own group scope — the SAME one editing
+ * already uses) before she may delete a SPECIFIC row; a teacher who is
+ * neither still refuses there. `notifyEventChange`'s post-delete re-check
+ * needs only this coarser gate, since `deletedEventRecipients` already
+ * verifies THIS actor is THIS event's own `deletedById` — the same-actor
+ * Trash check the docstring above already names.
  */
 export function assertMayDeleteEvent(actor: Actor): void {
-  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'deleting events requires admin');
+  if (!isAdmin(actor) && !isTeacher(actor)) {
+    throw new AppError('FORBIDDEN', 'deleting events requires admin or teaching staff');
+  }
 }
 
 /**
@@ -793,6 +805,13 @@ export async function deleteEvent(
   await prisma.$transaction(async (tx) => {
     const event = await tx.event.findFirst({ where: { id, deletedAt: null } });
     if (!event) throw new AppError('NOT_FOUND', 'no such event');
+
+    if (!isAdmin(actor)) {
+      // Owner decision, 2026-09-16 — a Teacher may delete an event she may
+      // already edit, no wider. Read while the live scope rows still exist
+      // — the block below removes them.
+      await assertMayEdit(tx, actor, id);
+    }
 
     // **Captured BEFORE the joins are removed**, because they are hard-deleted
     // rather than soft-deleted: after this point the event's audience is not

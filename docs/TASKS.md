@@ -4362,14 +4362,72 @@ the Owner's own report named.
       R43's zero-beneficiary-data situation, real data now exists, so a
       genuine backfill/migrate design is a real design question, not an
       implementation detail.
-- [ ] **NOT implemented — genuinely an unscoped architecture decision**
-      (which dimensions to add: Branch/Category/Level plural, a new
-      Teaching-Group join arm?; multi-select UI on `ClassSection`; the
-      backfill/migrate design against real data). Reported to the
-      Document Owner per the standing rule against guessing at schema
-      decisions, rather than implemented on an inference. Full detail
-      in CHANGES.log.
+- [x] **Document Owner decision, 2026-09-16 — the dimensions are named**:
+      branches, categories, levels, administrative groups, teaching
+      circles, subjects, main/assistant teachers, "using dynamic
+      filters." Resolves WHICH dimensions; does not by itself resolve
+      HOW they combine, whether the old single-target columns are kept
+      alongside the new join tables (expand-only) or eventually
+      dropped (contract phase, needing a real backfill design against
+      live data), or the exact multi-select UI shape.
+- [ ] **NOT YET implemented** — still the largest remaining item by a
+      wide margin, and now that the dimensions are confirmed the next
+      step is a concrete migration/UI plan (exact new tables, backfill
+      approach, which shared frontend components are touched) before
+      any schema is written, matching how every other multi-file
+      change this session was planned first. Full detail in
+      CHANGES.log.
 
-- [ ] The روster-viewing gap decision (`عرض المستفيدات`, flagged
-      Revision 147 and again in Revision 152's own docstring) — still
-      outstanding, no decision made.
+## Teacher delete-own (B1's حذف half) and اختباراتي/نقاطي merge — 2026-09-16
+
+- [x] **Built: اختباراتي/نقاطي merge** (SRS Revision 153) — one table,
+      client-merged by exam id; طريقة الحضور on every row; الحالة and
+      «مراجعة إجاباتي»/«فتح» only for a remote row; النقطة on either
+      mode once published; sortable on every header. Fixed alongside
+      it: a parent acting for a child could not open اختباراتي at all
+      (`myAssessments` never sent `X-Active-Child-ID`).
+- [x] **Built: a Teacher may delete her own class/event/exam**
+      (SRS Revision 154) — reverses Revision 140 §2, Revision 43/72/
+      R71.3 and R70.4, on explicit Document Owner instruction. The SAME
+      boundary each kind's edit grant already uses, never wider:
+      `assertTeacherCurrentlyStaffs` (class), `assertMayEdit`'s scope
+      (event), `assertScope`'s §4.4c scope (exam). Teacher قائمة gains
+      حذف, reusing الجدولة's own delete/notify-decision flow exactly
+      (Revision 152's precedent extended, not a second implementation).
+- [x] **Confirmed, no code needed: roster access for the 3 named
+      workflows.** Investigated Quran memorization recording, exam
+      grade entry, and event-occurrence attendance recording — each
+      already shows the teacher exactly the scoped beneficiaries list
+      she needs (`studentsTaughtBy`, `audienceOf`, `assertMayMark`
+      respectively), independently server-scoped, none a general
+      roster-browsing screen. The `عرض المستفيدات` gap this resolves is
+      therefore closed by confirmation, not by new capability — no
+      general roster list is being restored, matching what the Owner
+      actually asked for.
+- [ ] **Audit-trail principle ("who created it, when, and if deleted,
+      who deleted it and when") — reported, not broadly implemented.**
+      Investigated first: `deletedAt`/`deletedById` are ALREADY the
+      near-universal convention (35 of 37 soft-deletable models carry
+      both); `createdBy` is genuinely rare (only the two `Legal*`
+      models). Today's delete grants did not need it — each reuses the
+      existing per-kind edit-scope check instead of a creator column.
+      A platform-wide `createdBy` retrofit is a separate, much larger
+      decision (which of the ~67 remaining models, whether historical
+      rows get a real answer or `NULL`, and a documented tension with
+      `docs/architecture/security.md`'s stated principle against
+      duplicating actor columns already reconstructable from the audit
+      log) — not assumed or attempted in this pass.
+- [x] Verification: backend/frontend typecheck/lint/build clean;
+      backend unit 342/342; frontend unit 1,329/1,329; full
+      disposable-stack integration suite, 2,620/2,638 (18 pre-existing
+      skips), all-table isolation intact; all 31 guards, doc-links and
+      `git diff --check` pass. Two pre-existing tests corrected (not
+      weakened) and one test-isolation gap fixed — see CHANGES.log for
+      all three, including the cascading `grade.http.integration.
+      test.ts` fixture regression the first full-suite run surfaced
+      and this pass resolved. Three E2E browser scripts updated to the
+      merged route, not yet re-run live. No migration.
+- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+
+- [ ] The روster-viewing gap decision (`عرض المستفيدات`) is now resolved
+      — see the confirmation above; nothing further outstanding here.

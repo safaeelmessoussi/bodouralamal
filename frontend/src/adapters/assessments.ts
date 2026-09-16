@@ -77,6 +77,8 @@ export interface StudentAssessment {
   /** `null` = not started · `in_progress` = saved · `submitted`. */
   state: string | null;
   grade_published: boolean;
+  level_name: string;
+  subject_name: string | null;
 }
 
 export interface SubmissionRow {
@@ -200,8 +202,13 @@ export async function readSubmission(
 
 /* ── The beneficiary's own three ──────────────────────────────────────────── */
 
-export async function myAssessments(token: string | null): Promise<StudentAssessment[]> {
-  return (await api<{ data: StudentAssessment[] }>('/me/assessments', { token })).data;
+export async function myAssessments(
+  token: string | null,
+  activeChildId: string | null = null,
+): Promise<StudentAssessment[]> {
+  return (
+    await api<{ data: StudentAssessment[] }>('/me/assessments', { token, activeChildId })
+  ).data;
 }
 
 /**

@@ -135,8 +135,8 @@ export const ar = {
       calendar: 'تقويمي',
       content: 'مكتبة المحتوى',
       quran: 'حفظي',
+      // Revision 153 merged «نقاطي» into اختباراتي — one nav entry, not two.
       assessments: 'اختباراتي',
-      grades: 'نقاطي',
     },
     // R86 — مكتبة المحتوى وحسابي داخل بوابة المستفيدة، لا صفحات عامة بلا قائمة.
     library: {
@@ -157,21 +157,15 @@ export const ar = {
       enrolments: 'التسجيلات التعليمية',
       noEnrolments: 'لا تسجيلات فعّالة.',
     },
-    // §5.3 — نقاطي. PUBLISHED grades only; the draft is the مؤطِّرة's working
-    // note (BR-8) and never reaches this surface. No pass/fail wording here by
-    // decision (2026-08-17): the screen reports what she scored, not a verdict
-    // about her — and the business rules that DO decide progression are
-    // untouched in the model.
+    // §5.3 — PUBLISHED grades, reused by اختباراتي's merged table (Revision
+    // 153; the separate «نقاطي» screen these labels first served no longer
+    // exists). No pass/fail wording by decision (2026-08-17): what reaches
+    // her is what she scored, not a verdict — the business rules that DO
+    // decide progression are untouched in the model.
     grades: {
-      title: 'نقاطي',
-      lede: 'نقاطك في الاختبارات المنشورة. لكل اختبار نقطته القصوى.',
-      caption: 'النقاط المنشورة',
-      exam: 'الاختبار',
-      date: 'التاريخ',
       subject: 'المادة',
       score: 'النقطة',
       absent: 'غائبة',
-      empty: 'لا توجد نقاط منشورة بعد. تظهر النقطة هنا بعد أن تنشرها المؤطِّرة.',
     },
   quran: {
       title: 'حفظي',
@@ -1111,6 +1105,10 @@ export const ar = {
     mode: 'طريقة الأداء',
     modeOnline: 'عن بُعد',
     modePhysical: 'حضوري',
+    // Owner-reported, 2026-09-16 — اختباراتي/نقاطي merge: عمود منفصل عن
+    // «طريقة الأداء» أعلاه لأنه يخاطب المستفيدة عن حضورها، لا المؤطِّرة عن
+    // بناء المحتوى، مع القيمتين نفسيهما.
+    attendanceMethod: 'طريقة الحضور',
     // R136 — يستبدل «نشر»: الجدولة هي من تُجدوِل وتنشر معاً في خطوة واحدة.
     scheduleAction: 'جدولة الاختبار',
     colQuestions: 'الأسئلة',

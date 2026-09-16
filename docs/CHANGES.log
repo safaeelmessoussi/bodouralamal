@@ -9486,3 +9486,90 @@ either change), `api`/`nginx` recreated and verified on the exact commit's label
 green (4/4 components, 12/12 workers) on the first check, no error-level log lines in the
 following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No
 Production action of any kind.
+
+2026-09-16 — SRS Revisions 153–154: اختباراتي/نقاطي merge; a Teacher may
+delete her own class/event/exam; roster-access and audit-trail items resolved
+or reported
+
+The Document Owner returned with decisions on the four items Revision 152 §2 and the A3
+investigation had reported back, plus a new, independent ask (merge اختباراتي/نقاطي). Each
+is addressed on its own terms rather than folded together.
+
+**Built (Revision 153) — اختباراتي and نقاطي merge into one table.** `/dashboard/student/
+grades` is retired; its published-grades read (`readPublishedGrades`, untouched) is now
+merged, client-side, by exam id, with `/me/assessments`'s existing online-exam read
+(`assessmentsForStudent`) — each gained only the additive fields the merge needed
+(`level`/`subject` names on the assessments read; `exam.mode` on the grades read). طريقة
+الحضور appears on every row; «مراجعة إجاباتي»/«فتح» and الحالة exist only for a remote row;
+النقطة applies to either mode once published, superseding the old boolean badge with the
+actual mark. Sortable on every header (`sortRows`, both reads unpaginated). **Fixed
+alongside it**: a parent acting for a child could not open اختباراتي at all — `myAssessments`
+never sent `X-Active-Child-ID`, so `resolveActingStudent` refused her with a `400`; both
+reads now carry the header identically.
+
+**Built (Revision 154) — a Teacher may delete her own class, event or exam**, reversing
+three separately-ratified "deletion stays Admin" decisions (Revision 140 §2, Revision
+43/72/R71.3, R70.4) on explicit Document Owner instruction. "Her own" is the SAME boundary
+each kind's existing EDIT grant already uses, never a wider one:
+`assertTeacherCurrentlyStaffs` for a class, `assertMayEdit`'s scope for an event (the
+role-level `assertMayDeleteEvent` gate widens to admit a Teacher; the per-event check is
+`assertMayEdit`, called before the event's scope rows are removed), `assertScope`'s §4.4c
+scope for an exam. `Exam` still carries no `created_by` — R70.4's schema observation stands;
+the Owner's instruction settles the POLICY question that column was never needed to answer.
+Each kind's existing refusal SHAPE is preserved rather than unified: class/event outside
+scope still answers `NOT_FOUND` (matching their edit grants); exam outside scope still
+answers `FORBIDDEN`/`EXAM_OUT_OF_SCOPE` (`assertExamInTeacherScope`'s own long-established
+shape). `notifyEventChange`'s post-delete "shall I notify" re-check needed only its coarse
+role gate widened — the actual per-event guarantee was already, independently, the
+`deletedById`-match `deletedEventRecipients` performs. Teacher قائمة gains حذف, reusing
+الجدولة's own `deleteSchedulingItem`/`classifyDeletion`/`ConfirmDialog`/`notifyEventChange`
+sequence exactly (Revision 152 §1's pattern extended, not reimplemented).
+
+**Confirmed, no code needed — roster access for the 3 named workflows.** The Owner resolved
+the روster-viewing gap by scoping teacher beneficiary-list access to exactly three existing
+workflows (Quran memorization recording, exam grade entry, event-occurrence attendance
+recording) rather than restoring a general list. Investigation found each already shows the
+teacher exactly the scoped list she needs (`studentsTaughtBy`, `audienceOf`,
+`assertMayMark` respectively) — none a general roster-browsing screen, all independently
+server-scoped. Nothing to build; the gap closes by confirmation.
+
+**Reported, not broadly implemented — the audit-trail principle** ("anything created or
+deleted should carry who and when"). Investigated first: `deletedAt`/`deletedById` are
+ALREADY the near-universal convention (35 of 37 soft-deletable models carry both);
+`createdBy` is genuinely new outside the two `Legal*` models. Today's delete grants reused
+each kind's existing edit-scope check rather than a creator column, so nothing in this batch
+needed it. A platform-wide `createdBy` retrofit — which models, whether historical rows get
+a real answer or `NULL`, and a real tension with `docs/architecture/security.md`'s stated
+principle against duplicating actor columns the audit log already reconstructs — is a
+separate, larger decision, reported rather than assumed.
+
+**Not yet implemented — A3 (group/circle/category schema migration), dimensions now named
+by the Document Owner** (branches, categories, levels, administrative groups, teaching
+circles, subjects, main/assistant teachers, "using dynamic filters"), still the largest
+remaining item: a concrete migration/UI plan is the next step before any schema is written,
+matching how every other multi-file change this session was planned first.
+
+**Two pre-existing tests corrected, not weakened**: `course-schedule.http.integration.test.
+ts`'s own Revision 140 test asserted a teacher "still cannot delete... even her own class" —
+updated to assert the new success, with the unaffected conflicts-preview check reordered
+before the now-destructive delete call. `grade.http.integration.test.ts`'s "a Teacher may
+NOT delete a sitting" used `teacherToken` against the file's own SHARED `examId` — and that
+teacher's fixture schedule exactly matches the exam's scope — so the new grant let the
+delete actually SUCCEED and remove a fixture roughly a dozen later tests in the same file
+still depended on, cascading into 11 unrelated failures the first full-suite run surfaced.
+Split into a refusal test against `outsiderToken` (genuinely out of scope, asserting
+`EXAM_OUT_OF_SCOPE`) and a new success test against a disposable exam created for that
+purpose alone. **One test-isolation gap found and fixed**:
+`teacher-exam-scope.http.integration.test.ts`'s `clear()` never deleted `trash` rows,
+harmless until this revision's own delete test created its file's first one —
+`trash.deleted_by_id` is `Restrict` against `user`, so `clear()`'s `user.deleteMany` began
+throwing and silently skipped every cleanup step after it (level/subject/room/branch) on
+every subsequent run; fixed by deleting matching `trash` rows before `user`, the ordering
+`event.http.integration.test.ts`'s own `clear()` already carries.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,329/1,329; full disposable-stack integration suite, 2,620/2,638 (18 pre-existing
+skips), all-table isolation intact; all 31 guards, doc-links and `git diff --check` pass.
+Three E2E browser scripts (`verify-portals.mjs`, `verify-journey.mjs`, `verify-grading.mjs`)
+updated to the merged
+route — not yet re-run live in this pass. No migration.

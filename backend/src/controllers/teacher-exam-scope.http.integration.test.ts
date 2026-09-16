@@ -118,6 +118,14 @@ async function clear(): Promise<void> {
   const ids = users.map((u) => u.id);
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  // Revision 154 (2026-09-16) — deleting an exam now leaves a Trash
+  // snapshot (TD-5), and `deleted_by` is `Restrict`: a suite that deletes
+  // its own users while one still references it is refused. Ordering,
+  // again — the tombstone goes before the person who wrote it (the same
+  // fix `event.http.integration.test.ts`'s own `clear()` already carries).
+  await prisma.trash.deleteMany({
+    where: { OR: [{ targetId: { in: examIds } }, { deletedById: { in: ids } }] },
+  });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 
@@ -417,6 +425,62 @@ describe("and nothing else — the list agrees with assertExamInTeacherScope", (
  * to fix. The `entire_level` path masked it, because it carries no group
  * constraint at all.
  */
+/**
+ * **Owner decision, 2026-09-16 — a Teacher may delete an exam within her
+ * §4.4c scope, reversing R70.4's "deletion stays Admin and above."** The
+ * SAME boundary `assertScope` already uses for editing, not a wider one —
+ * proved here on the identical scope fixtures §4.4c's read/edit tests above
+ * already established, on a dedicated exam so deleting it disturbs nothing
+ * else in this file's shared `exams` map.
+ */
+describe("Revision 154 — a مؤطِّرة may delete an exam within her §4.4c scope", () => {
+  it("deletes her own — 204, tombstoned", async () => {
+    const exam = await prisma.exam.create({
+      data: {
+        title: `${TAG} تُحذف`,
+        levelId,
+        academicYearId: yearId,
+        date: day(60),
+        startTime: new Date("1970-01-01T09:00:00Z"),
+        endTime: new Date("1970-01-01T10:00:00Z"),
+        maxGrade: 20,
+        round: 1,
+        status: "published",
+        publishedAt: new Date(),
+        branchId,
+        roomId,
+        subjectId,
+        targetKind: "level",
+      },
+      select: { id: true },
+    });
+
+    const res = await call("DELETE", `/exams/${exam.id}`, teacherToken);
+    expect(res.status).toBe(204);
+
+    const row = await prisma.exam.findUniqueOrThrow({
+      where: { id: exam.id },
+      select: { deletedAt: true },
+    });
+    expect(row.deletedAt).not.toBeNull();
+  });
+
+  it("refuses one outside her scope — 403, same as `PATCH` already would (see the R106 describe block below)", async () => {
+    // `otherBranch` is read-only coverage elsewhere in this file; the refusal
+    // must not have removed it. `assertExamInTeacherScope` throws FORBIDDEN
+    // (EXAM_OUT_OF_SCOPE), not NOT_FOUND — the exact code the R106 test just
+    // below asserts for the identical kind of refusal on a PATCH.
+    const res = await call("DELETE", `/exams/${exams["otherBranch"]}`, teacherToken);
+    expect(res.status).toBe(403);
+
+    const row = await prisma.exam.findUniqueOrThrow({
+      where: { id: exams["otherBranch"]! },
+      select: { deletedAt: true },
+    });
+    expect(row.deletedAt).toBeNull();
+  });
+});
+
 describe("R106 — group scope follows the exam's date, not today's staffing", () => {
   it("authorizes editing at the sitting date and refuses rescheduling beyond that authority", async () => {
     const id = exams["pastGroupExam"]!;

@@ -832,6 +832,61 @@ describe("deletion reports what it kept (§4.4, TD-5)", () => {
   });
 });
 
+/**
+ * **Owner decision, 2026-09-16 — a Teacher may delete a class she currently
+ * staffs, reversing Revision 140 §2's "deletion is untouched."** The SAME
+ * boundary editing already uses (`assertTeacherCurrentlyStaffs`), not a
+ * wider one.
+ */
+describe("a Teacher may delete a class she currently staffs (Revision 154)", () => {
+  it("deletes her own — 200, and the row is tombstoned", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody(),
+    );
+    expect(created.status).toBe(201);
+    const id = (created.body.schedule as { id: string }).id;
+
+    const res = await call(
+      "DELETE",
+      `/admin/course-schedules/${id}`,
+      staffingTeacherToken,
+    );
+    expect(res.status).toBe(200);
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id },
+      select: { deletedAt: true, deletedById: true },
+    });
+    expect(row.deletedAt).not.toBeNull();
+  });
+
+  it("refuses one she does not staff — 404, same as an edit attempt would", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({ staff: [] }),
+    );
+    expect(created.status).toBe(201);
+    const id = (created.body.schedule as { id: string }).id;
+
+    const res = await call(
+      "DELETE",
+      `/admin/course-schedules/${id}`,
+      teacherToken,
+    );
+    expect(res.status).toBe(404);
+
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id },
+      select: { deletedAt: true },
+    });
+    expect(row.deletedAt).toBeNull();
+  });
+});
+
 /* ── Role-scoped reads on ONE endpoint (Document Owner decision, 2026-08-05) ── */
 
 describe("a Teacher reads the schedules they staff, through the same endpoint", () => {
@@ -923,13 +978,14 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
     expect(denied.body.error?.code).toBe("NOT_FOUND");
   });
 
-  it("§2, Revision 140 — may now EDIT a schedule she staffs; still cannot delete or preview conflicts; her own creation is bounded by §2's own rules, not a blanket refusal", async () => {
+  it("§2, Revision 140/154 — may now EDIT AND DELETE a schedule she staffs; still cannot preview conflicts; her own creation is bounded by §2's own rules, not a blanket refusal", async () => {
     // §14.1's "teachers do not create or edit schedules" is SUPERSEDED by §2
-    // for exactly two verbs, each independently bounded — never a blanket
-    // widening of "the write". Delete and the conflicts preview are
-    // UNCHANGED: §2's own ratified grant is creation-within-declared-scope
-    // and operational editing of a schedule she currently staffs, nothing
-    // wider. The full create-authorization matrix (declared capability,
+    // for creation and operational editing, and by Revision 154
+    // (2026-09-16) for deletion on the SAME boundary
+    // (`assertTeacherCurrentlyStaffs`) — never a blanket widening of "the
+    // write". The conflicts preview stays UNCHANGED: an administrative
+    // planning view, never part of either grant. The full create-
+    // authorization matrix (declared capability,
     // branch role, entire_level-only, self-staffing) is exercised
     // exhaustively in `course-schedule-teacher.integration.test.ts`; this
     // suite only needs to prove THIS endpoint composes those checks
@@ -979,20 +1035,9 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
       `${TAG} حلقة معدَّلة`,
     );
 
-    // **DELETE — unchanged, still refused.** Deletion was never part of §2's
-    // ratified grant (`docs/CHANGES.log`/SRS Revision 140) — she may create
-    // and operationally edit, never delete, even her own class.
-    expect(
-      (
-        await call(
-          "DELETE",
-          `/admin/course-schedules/${id}`,
-          staffingTeacherToken,
-        )
-      ).status,
-    ).toBe(403);
     // **Conflicts preview — unchanged, still refused.** An administrative
-    // planning view, not part of the operational-edit grant.
+    // planning view, not part of either grant. Checked BEFORE delete: the
+    // row must still exist for this call to mean anything.
     expect(
       (
         await call(
@@ -1002,6 +1047,22 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
         )
       ).status,
     ).toBe(403);
+
+    // **DELETE — now ALLOWED (Revision 154, 2026-09-16)**, the SAME
+    // boundary as EDIT (`assertTeacherCurrentlyStaffs`) — covered on its own
+    // fixtures in "a Teacher may delete a class she currently staffs"
+    // below; asserted here too so this describe block's own narrative
+    // ("§2 supersedes §14.1 for exactly these verbs") stays accurate as a
+    // single read.
+    expect(
+      (
+        await call(
+          "DELETE",
+          `/admin/course-schedules/${id}`,
+          staffingTeacherToken,
+        )
+      ).status,
+    ).toBe(200);
   });
 
   it("refuses a caller who is neither admin nor teaching staff", async () => {

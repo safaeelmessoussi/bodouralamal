@@ -395,6 +395,67 @@ describe("DELETE /events/{id} and the backfill endpoints", () => {
     ).toBe(0);
   });
 
+  /**
+   * **Owner decision, 2026-09-16 — a Teacher may delete an event she may
+   * already edit, reversing Revision 43/72/R71.3's "deletion remains
+   * Admin."** The SAME boundary `assertMayEdit` already uses — `responsible`,
+   * or her own group scope — not a wider one.
+   */
+  it("Revision 154 — the responsible مؤطرة may delete it, 204, tombstoned", async () => {
+    const branchId = await makeBranch("الرباط");
+    const created = await call(
+      "POST",
+      "/events",
+      superToken,
+      payload({ branch_ids: [branchId] }),
+    );
+    expect(created.status).toBe(201);
+    const eventId = created.body.id!;
+
+    const person = await withRole("مؤطرة مسؤولة عن الحذف", "teacher");
+    const staffed = await call("PUT", `/events/${eventId}/staff`, superToken, {
+      staff: [{ user_id: person, position: "responsible" }],
+    });
+    expect(staffed.status).toBe(204);
+
+    const teacherToken = bearer(person, ["teacher"]);
+    const res = await call("DELETE", `/events/${eventId}`, teacherToken);
+    expect(res.status).toBe(204);
+
+    const row = await prisma.event.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { deletedAt: true, deletedById: true },
+    });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedById).toBe(person);
+  });
+
+  it("Revision 154 — refuses a Teacher who is neither responsible nor in scope, 404", async () => {
+    const branchId = await makeBranch("طنجة");
+    const created = await call(
+      "POST",
+      "/events",
+      superToken,
+      payload({ branch_ids: [branchId] }),
+    );
+    expect(created.status).toBe(201);
+    const eventId = created.body.id!;
+
+    const outsider = await withRole("مؤطرة غريبة عن الحدث", "teacher");
+    const res = await call(
+      "DELETE",
+      `/events/${eventId}`,
+      bearer(outsider, ["teacher"]),
+    );
+    expect(res.status).toBe(404);
+
+    const row = await prisma.event.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { deletedAt: true },
+    });
+    expect(row.deletedAt).toBeNull();
+  });
+
   it("lists then attaches backfill candidates, idempotently", async () => {
     await makeBranch("مراكش");
     const created = await call(

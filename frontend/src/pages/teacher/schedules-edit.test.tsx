@@ -3,27 +3,22 @@ import { describe, expect, it } from 'vitest';
 import SCHEDULES from './schedules.tsx?raw';
 
 /**
- * **B1 (Owner-reported, 2026-09-15) — تقويمي's قائمة reuses الجدولة's own
- * edit dialog and server grant for تعديل, but never wires حذف.**
+ * **B1 (Owner-reported, 2026-09-15/2026-09-16) — تقويمي's قائمة reuses
+ * الجدولة's own edit AND delete flows, both a pure frontend-reuse task.**
  *
  * `PATCH /admin/course-schedules/{id}`, Event `assertMayEdit` and Exam
  * `assertCanManage`/`assertScope` already tolerate a Teacher acting within
- * her own scope, so تعديل is a pure frontend-reuse task: the same
- * `SchedulingDialog` الجدولة's own قائمة already opens in edit mode.
- *
- * حذف is different: class deletion stays Teacher ⊘ by Revision 140 §2's own
- * text, Event deletion is Admin-only by Revision 43/72/R71.3, and Exam
- * deletion is Admin-and-above by R70.4 (no `created_by` column exists to
- * express "her own"). Wiring حذف here unmodified would 403 at the server on
- * every row and would silently attempt to reverse three separately-ratified
- * boundaries rather than ask — so this list must never gain a حذف action
- * until the Document Owner decides otherwise. Asserted against the source,
- * matching this directory's own `scheduling-delete.test.tsx` precedent: the
- * property under test is wiring, not a rendered `<dialog>`.
+ * her own scope for EDIT; Revision 154 (2026-09-16) extends the identical
+ * boundary to DELETE (`assertTeacherCurrentlyStaffs`/`assertMayEdit`/
+ * `assertScope` again — never a wider grant), so both actions wire the SAME
+ * `SchedulingDialog`/`deleteSchedulingItem`/`ConfirmDialog`/`classifyDeletion`
+ * الجدولة's own قائمة already uses. Asserted against the source, matching
+ * this directory's own `scheduling-delete.test.tsx` precedent: the property
+ * under test is wiring, not a rendered `<dialog>`.
  */
 const source = SCHEDULES.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
-describe('teacher قائمة gains تعديل, matching الجدولة, but never حذف', () => {
+describe('teacher قائمة gains تعديل AND حذف, matching الجدولة', () => {
   it('wires an edit action that opens the shared SchedulingDialog on the row', () => {
     expect(source).toMatch(/label: t\('common\.edit'\),\s*onSelect: \(r\) => setEditing\(r\)/);
   });
@@ -32,19 +27,33 @@ describe('teacher قائمة gains تعديل, matching الجدولة, but neve
     expect(source).toMatch(/editing \? \(\s*<SchedulingDialog\s*item=\{editing\}/);
   });
 
-  it('never wires a delete action — no common.delete label, no setDeleting', () => {
-    expect(source).not.toContain("t('common.delete')");
-    expect(source).not.toContain('setDeleting');
+  it('wires a delete action through the shared confirm-then-classify sequence', () => {
+    expect(source).toMatch(/label: t\('common\.delete'\),\s*danger: true,\s*onSelect: \(r\) => \{/);
+    expect(source).toContain('await deleteSchedulingItem(deleted, accessToken);');
+    expect(source).toContain('classifyDeletion(error)');
+    expect(source).toContain('deletionNotice(outcome)');
   });
 
-  it('reloads both the catalogue and the raw rows after a save, on both dialogs', () => {
-    // A saved edit can change staffing (teachingContexts derives from `rows`)
-    // and the catalogue's own displayed columns — both must refresh.
+  it('clears a stale blocked reason before a DIFFERENT item is confirmed', () => {
+    expect(source).toMatch(/setDeleteBlocked\(null\);\s*setDeleting\(r\);/);
+  });
+
+  it('offers the R82.5 notify decision after deleting an event/activity, never a class/exam', () => {
+    expect(source).toMatch(
+      /if \(deleted\.type === 'activity' \|\| deleted\.type === 'holiday'\) \{\s*setNotifying/,
+    );
+  });
+
+  it('reloads both the catalogue and the raw rows after every save/delete', () => {
+    // A saved edit or a successful delete can change staffing
+    // (`teachingContexts` derives from `rows`) and the catalogue's own
+    // displayed columns — both must refresh.
     const savedBlocks = source.match(/onSaved=\{\(\) => \{[\s\S]*?\}\}/g) ?? [];
     expect(savedBlocks.length).toBeGreaterThanOrEqual(2);
     for (const block of savedBlocks) {
       expect(block).toContain('void load();');
       expect(block).toContain('void loadCatalog();');
     }
+    expect(source).toMatch(/await deleteSchedulingItem\(deleted, accessToken\);\s*setDeleting\(null\);\s*await load\(\);\s*await loadCatalog\(\);/);
   });
 });
