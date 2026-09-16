@@ -779,6 +779,9 @@ export async function saveGradeDraft(
             score,
             absent: entry.absent,
             status: 'draft',
+            // Revision 156 — who entered the mark, distinct from `studentId`
+            // (who it is about).
+            createdById: actor.userId,
           },
           select: { id: true },
         });
@@ -841,6 +844,9 @@ export async function saveGradeDraft(
           score: 0,
           absent: true,
           status: 'draft',
+          // Revision 156 — the row exists because THIS save triggered BR-7's
+          // initialisation, even though it names no explicit entry for her.
+          createdById: actor.userId,
         },
       });
     }

@@ -303,6 +303,7 @@ export async function createTeachingGroup(
         levelId: input.levelId,
         subjectId: input.subjectId,
         displayOrder: input.displayOrder ?? null,
+        createdById: actor.userId,
       },
     });
 
@@ -506,6 +507,7 @@ export async function addMember(
         // not the primary defence (Revision 43.2).
         subjectId: group.subjectId,
         levelId: group.levelId,
+        createdById: actor.userId,
       },
       select: { id: true },
     });

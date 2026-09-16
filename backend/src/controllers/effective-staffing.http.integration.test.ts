@@ -69,6 +69,7 @@ const REPLACE_FROM = day(30);
 const REPLACE_UNTIL = day(60);
 
 let adminToken: string;
+let adminUserId: string;
 let branchId: string;
 let levelId: string;
 let categoryId: string;
@@ -172,6 +173,7 @@ beforeAll(async () => {
   await clear();
 
   const admin = await person("مديرة", "super_admin");
+  adminUserId = admin;
   adminToken = bearer(admin, [{ role: "super_admin", branches: null }]);
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} تاركة` } })).id;
@@ -517,6 +519,33 @@ describe("§2 — a staffing change never rewrites a past occurrence", () => {
       select: { staff: { where: { deletedAt: null }, select: { userId: true } } },
     });
     expect(later?.staff.map((s) => s.userId)).not.toContain(coverOnly);
+  });
+
+  it("Revision 156 — a second override records who removed the cover and who added her replacement", async () => {
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId, deletedAt: null, date: { gt: day(0) } },
+      orderBy: { date: "asc" },
+      select: { id: true, version: true },
+    });
+
+    // coverOnly is staffed here from the "§11" case above; replace her.
+    const res = await call("PATCH", `/sessions/${future.id}`, adminToken, {
+      version: future.version,
+      staff: [{ user_id: helper1, position: "teacher" }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const rows = await prisma.sessionStaff.findMany({
+      where: { sessionId: future.id },
+      select: { userId: true, deletedAt: true, deletedById: true, createdById: true },
+    });
+
+    const removed = rows.find((r) => r.userId === coverOnly);
+    expect(removed?.deletedAt).not.toBeNull();
+    expect(removed?.deletedById).toBe(adminUserId);
+
+    const added = rows.find((r) => r.userId === helper1 && r.deletedAt === null);
+    expect(added?.createdById).toBe(adminUserId);
   });
 });
 

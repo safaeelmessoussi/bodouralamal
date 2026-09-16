@@ -167,6 +167,8 @@ export async function preProvision(
           sex: input.sex,
           preProvisionedEmail: email,
           accountStatus: input.preApproved ? 'active' : 'pending',
+          // Revision 156 — pre-provisioned by a real admin action.
+          createdById: actor.userId,
         },
         select: { id: true, accountStatus: true, preProvisionedEmail: true },
       });
@@ -188,6 +190,8 @@ export async function preProvision(
           userId: user.id,
           roleId: roleRow.id,
           branchId: input.branchId ?? null,
+          // Revision 156.
+          createdById: actor.userId,
         },
       });
     }
@@ -1150,7 +1154,9 @@ export async function applyRoleAssignments(
           data: { deletedAt: null, deletedById: null },
         });
       } else {
-        await tx.userBranchRole.create({ data: { userId: id, roleId, branchId: a.branchId } });
+        await tx.userBranchRole.create({
+          data: { userId: id, roleId, branchId: a.branchId, createdById: actor.userId },
+        });
       }
     }
 

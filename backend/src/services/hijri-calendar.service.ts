@@ -294,6 +294,9 @@ export async function recordMonthStart(
           gregorianStartDate: input.gregorianStartDate,
           source: input.source ?? 'manual',
           updatedById: actor.userId,
+          // Revision 156 — distinct from `updatedById`, which this create
+          // path also sets on first write (see the module docstring on why).
+          createdById: actor.userId,
         },
       });
     }

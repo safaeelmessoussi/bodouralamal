@@ -289,6 +289,8 @@ export async function createPhysicalExam(
         // R109 — absent is the column's default, so the key is omitted rather
         // than written as a literal: one place decides what "unchosen" means.
         ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+        // Revision 156.
+        createdById: actor.userId,
       },
       select: { id: true },
     });
@@ -317,7 +319,12 @@ export async function createPhysicalExam(
 
     for (const person of input.staff ?? []) {
       await tx.examStaff.create({
-        data: { examId: exam.id, userId: person.userId, position: person.position },
+        data: {
+          examId: exam.id,
+          userId: person.userId,
+          position: person.position,
+          createdById: actor.userId,
+        },
       });
     }
 
@@ -562,7 +569,12 @@ export async function updatePhysicalExam(
       for (const person of input.staff) {
         if (!existingStaff.some((row) => row.userId === person.userId)) {
           await tx.examStaff.create({
-            data: { examId: id, userId: person.userId, position: person.position },
+            data: {
+              examId: id,
+              userId: person.userId,
+              position: person.position,
+              createdById: actor.userId,
+            },
           });
         }
       }

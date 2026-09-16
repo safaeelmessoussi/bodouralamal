@@ -17,6 +17,7 @@ import {
   audienceForSession,
   audienceSize,
   audienceWhere,
+  scheduleDimensions,
   staffsSession,
 } from "../policies/roster-resolution.js";
 import * as audit from "../repositories/audit.repository.js";
@@ -334,7 +335,7 @@ export async function overrideSession(
       });
       const after = data.staff ?? before;
       if (data.staff !== undefined) {
-        await replaceSessionStaff(tx, sessionId, data.staff);
+        await replaceSessionStaff(tx, sessionId, data.staff, actor.userId);
       }
       await notifySessionStaffChanged(
         tx,
@@ -448,12 +449,19 @@ export async function cancelSession(
   // were expected at THIS class, not the ones the recurring rule usually gathers.
   // Built through `audienceForSession` so it cannot disagree with the
   // notification list resolved from the same function moments later.
+  const fallbackDimensions = await scheduleDimensions(
+    prisma,
+    session.scheduleId,
+    session.schedule.teachingMode as never,
+  );
   const spec = (await audienceForSession(prisma, sessionId)) ?? {
     teachingMode: session.schedule.teachingMode as never,
     levelId: session.schedule.levelId,
     administrativeGroupId: session.schedule.administrativeGroupId,
     teachingGroupId: session.schedule.teachingGroupId,
     branchId: session.schedule.branchId,
+    // Revision 155 — see `notifySessionChange`'s identical fallback.
+    ...(fallbackDimensions ? { dimensions: fallbackDimensions } : {}),
     // Period-blind — `audience_size` on the cancellation audit row is how many
     // people the class concerns (R123).
     on: null,
@@ -630,7 +638,7 @@ export async function linkContent(
           select: { id: true },
         })
       : await tx.sessionContent.create({
-          data: { sessionId, contentId },
+          data: { sessionId, contentId, createdById: actor.userId },
           select: { id: true },
         });
 
@@ -718,6 +726,10 @@ async function replaceSessionStaff(
   tx: Prisma.TransactionClient,
   sessionId: string,
   staff: { userId: string; position: "teacher" | "assistant" }[],
+  /** Revision 156 — also fixes a real gap found alongside it: this path
+   *  never recorded WHO removed a dropped name (nor who restored one),
+   *  unlike every other soft-delete in this codebase. */
+  actorUserId: string,
 ): Promise<void> {
   const keep = new Set(staff.map((s) => s.userId));
   const existing = await tx.sessionStaff.findMany({
@@ -729,7 +741,7 @@ async function replaceSessionStaff(
     if (!keep.has(row.userId) && row.deletedAt === null) {
       await tx.sessionStaff.update({
         where: { id: row.id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date(), deletedById: actorUserId },
       });
     }
   }
@@ -738,11 +750,16 @@ async function replaceSessionStaff(
     if (found) {
       await tx.sessionStaff.update({
         where: { id: found.id },
-        data: { position: s.position, deletedAt: null, deletedById: null },
+        data: {
+          position: s.position,
+          deletedAt: null,
+          deletedById: null,
+          createdById: actorUserId,
+        },
       });
     } else {
       await tx.sessionStaff.create({
-        data: { sessionId, userId: s.userId, position: s.position },
+        data: { sessionId, userId: s.userId, position: s.position, createdById: actorUserId },
       });
     }
   }
@@ -861,6 +878,7 @@ async function regenerateOne(
       tx,
       sessionId,
       schedule.staff.map((x) => ({ userId: x.userId, position: x.position })),
+      actor.userId,
     );
 
     await audit.write(tx, {

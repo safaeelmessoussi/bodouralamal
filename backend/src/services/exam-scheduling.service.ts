@@ -202,7 +202,7 @@ export async function scheduleExam(
         date: target.date,
       });
 
-      occurrence = await copyContentIntoNewRow(tx, source, {
+      occurrence = await copyContentIntoNewRow(tx, actor.userId, source, {
         mode: input.mode,
         date: target.date,
         titleSuffix: false,
@@ -246,6 +246,7 @@ export async function scheduleExam(
           teachingGroupId: target.teachingGroupId,
           studentId: target.studentId,
           date: target.date,
+          createdById: actor.userId,
         },
         select: { id: true },
       });
@@ -311,7 +312,12 @@ export async function scheduleExam(
       });
       for (const person of input.staff ?? []) {
         await tx.examStaff.create({
-          data: { examId: occurrence.id, userId: person.userId, position: person.position },
+          data: {
+            examId: occurrence.id,
+            userId: person.userId,
+            position: person.position,
+            createdById: actor.userId,
+          },
         });
       }
       await assertStaffAccountsAvailable(
@@ -347,7 +353,12 @@ export async function scheduleExam(
       }
       for (const person of input.staff ?? []) {
         await tx.examStaff.create({
-          data: { examId: occurrence.id, userId: person.userId, position: person.position },
+          data: {
+            examId: occurrence.id,
+            userId: person.userId,
+            position: person.position,
+            createdById: actor.userId,
+          },
         });
       }
       await assertStaffAccountsAvailable(
@@ -637,7 +648,12 @@ export async function updateExamSchedule(
       for (const person of input.staff) {
         if (!existingStaff.some((row) => row.userId === person.userId)) {
           await tx.examStaff.create({
-            data: { examId, userId: person.userId, position: person.position },
+            data: {
+              examId,
+              userId: person.userId,
+              position: person.position,
+              createdById: actor.userId,
+            },
           });
         }
       }

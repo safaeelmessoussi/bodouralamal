@@ -89,7 +89,10 @@ export async function createLink(
     }
 
     const link = await tx.familyLink.create({
-      data: { parentId, studentId, status: 'pending' },
+      // Revision 156 — staff acting on someone else's relationship (see the
+      // comment on `existing` above): `createdById` distinguishes this from
+      // `parentId`'s own self-service request, which names no separate actor.
+      data: { parentId, studentId, status: 'pending', createdById: actor.userId },
       select: { id: true, status: true },
     });
 

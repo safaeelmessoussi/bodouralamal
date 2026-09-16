@@ -9583,3 +9583,83 @@ change), `api`/`nginx` recreated and verified on the exact commit's label, `/hea
 (4/4 components, 12/12 workers) on the first check, no error-level log lines in the
 following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No
 Production action of any kind.
+
+2026-09-16 — SRS Revisions 155–156: class multi-dimension targeting (A3)
+implemented end to end; a created_by audit trail for every manual
+creation/deletion
+
+The Document Owner gave one instruction covering both remaining items Revision 153's own
+report had deferred: implement A3 (the multi-dimension class schema) end to end, and give
+every manually-created-or-deleted row a who/when trail (explicitly excluding automatic rows
+like `Notification`).
+
+**Built (Revision 155) — a fourth, additive `multi_dimension` teaching mode.** Mirrors
+`Event`'s own join-table shape exactly (R24's precedent: an explicit join per dimension,
+never a generic polymorphic scope table) for branches/categories/levels/administrative
+groups, via five new tables (`course_schedule_branch`/`_category`/`_level`/
+`_administrative_group`/`_teaching_group`), each Cascade-on-schedule-delete/
+Restrict-on-target-delete. The three legacy single-target arms and their CHECK constraint
+are completely untouched. A deferred DB trigger backstops "at least one of the five" at
+commit time; the service layer separately requires at least one of level/group/circle
+specifically (`MULTI_DIMENSION_NEEDS_A_LEVEL`) — branches/categories alone give a class no
+population to check its curriculum Subject against. `audienceWhere`'s new arm mirrors
+`eventAudienceWhere`'s AND-across-kind/OR-within-kind composition precisely, extended by
+exactly one new rule Event never needed: a named Teaching Circle UNIONS with the rest rather
+than intersecting, since a circle is already Level-locked (§4.4c) and "Level A and Circle C"
+reads as *these two populations together*. `branchId`/`roomId` stay exactly what they always
+were — the class's physical meeting place, unconstrained by the new audience dimensions, by
+the Owner's own request. **A missed 7th `AudienceSpec` construction site** (`resolveScheduleRoster`,
+found via a live 500 on the roster endpoint, not by grep — it builds its spec via `{...schedule,
+on: null}` rather than a literal `teachingMode:` key) motivated a full second sweep of every
+`resolveAudience`/`audienceWhere`/`audienceSize` call site in the backend; two more
+(`notifySessionChange`'s and `session.service.ts`'s own defensive fallbacks) needed the same fix.
+**Deliberately not built, reported rather than guessed**: R50 `this_and_future` splitting of a
+`multi_dimension` schedule (refused by name, `MULTI_DIMENSION_SPLIT_NOT_SUPPORTED` — the
+predecessor's single-fallback identity-carry-forward logic has no sound generalisation to five
+join tables) and the admin scheduling form's own multi-select UI (`ActivitySection`'s existing
+per-dimension picker uses Event's pure-OR combination rule, wrong for this revision's
+AND-across-kind rule; wiring it correctly needs its own pass, not a graft). Migration:
+`20260916100000_r155_multi_dimension_schedule_expand` (the enum value, five tables, indexes,
+FKs) plus a hand-written companion `20260916110000_r155_multi_dimension_schedule_constraints`
+(the extended CHECK, the new deferred constraint trigger) — mirroring the TD-6b expand pattern,
+hand-written because no safe shadow database was available locally for `prisma migrate diff`.
+
+**Built (Revision 156) — a `created_by`/`created_at` trail for every manually-created row**,
+`deleted_by`/`deleted_at` (already near-universal per Revision 153's own report) completing the
+pair. Every one of the ~69 Prisma models was classified MANUAL/AUTOMATIC/already-unambiguous
+before any column was added, rather than adding `created_by` uniformly: 31 models needed it
+(`User`, `Branch`, `Level`, `RecurringCourseSchedule`, `Event`, `Exam`, `Grade`, `FamilyLink` and
+23 others — full list in SRS Revision 156 §2); models with an existing domain-specific actor
+column (`Attendance.markedById`, `ConsentRecord.grantedByUserId`), a self-evident actor via their
+own foreign key (`ChildApplication.parentId`), or no independent creation lifecycle of their own
+(`Session`/`SessionStaff`'s automatic materialization, `EventBranch`-style pure side-effect
+joins) were left alone — and automatic rows (`Notification`) were excluded exactly as the Owner
+named. `created_by` follows the SAME bare-scalar-no-FK convention `deleted_by` already
+established (33 of 35 existing `deleted_by` columns carry no Postgres FK, deliberately, per
+`docs/architecture/security.md`'s stance against duplicating actor columns and to avoid
+`RESTRICT` blocking account erasure) — added identically, `ADD COLUMN "created_by" UUID`, no
+constraint, everywhere. **A real, independent gap found and fixed while wiring this**:
+`SessionStaff`'s one genuine manual path (`replaceSessionStaff`, the per-occurrence override
+behind `PATCH /sessions/:id`'s `staff` field) never recorded who removed a dropped name — and,
+once `created_by` existed, the REVIVAL branch was found to leave a re-added row's `created_by`
+untouched (`NULL`, for a row Session's own automatic materialization had created) rather than
+crediting the admin who just re-added that person. **This second half was caught by the new
+integration test itself**, written assuming the revived row would already carry `created_by`
+and failing against exactly that row before the fix. Both are now set (`deletedById`/
+`createdById` on removal, `createdById` on revival) — `replaceSessionStaff`'s signature widened
+to take the acting admin's id, both call sites updated. Migration:
+`20260916120000_r156_created_by_audit_trail` (31 additive columns, no companion constraints
+file — nothing in this revision needs a CHECK or trigger against `created_by`).
+
+Verification: backend typecheck/lint/build clean; backend unit 342/342; full disposable-stack
+integration suite, 2,631/2,649 (18 pre-existing skips), all-table isolation intact; new coverage
+in `course-schedule.http.integration.test.ts` (the multi_dimension create/refusals/exclusivity/
+Teacher-refusal/list/roster cases, plus a `created_by` assertion on create),
+`roster-resolution.integration.test.ts` (the composition rule directly and through teacher
+scope, including the Teaching-Circle-unions-not-intersects case), and
+`effective-staffing.http.integration.test.ts` (the SessionStaff removal/revival `created_by`/
+`deleted_by` fix, above). Not independently re-tested for all 31 audit-trail models
+individually — the wiring is mechanically identical at every already-tested `.create()` call
+site, verified file-by-file against `tsc --noEmit` as it was added, and every existing
+create-path test continues to pass unchanged. All 31 guards, doc-links and `git diff --check`
+pass. No frontend changes in either revision.

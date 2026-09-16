@@ -4370,13 +4370,14 @@ the Owner's own report named.
       alongside the new join tables (expand-only) or eventually
       dropped (contract phase, needing a real backfill design against
       live data), or the exact multi-select UI shape.
-- [ ] **NOT YET implemented** — still the largest remaining item by a
-      wide margin, and now that the dimensions are confirmed the next
-      step is a concrete migration/UI plan (exact new tables, backfill
-      approach, which shared frontend components are touched) before
-      any schema is written, matching how every other multi-file
-      change this session was planned first. Full detail in
-      CHANGES.log.
+- [x] **Built end to end (SRS Revision 155), 2026-09-16** — the Document
+      Owner's explicit "implement end to end" instruction resolved the
+      remaining HOW questions this section had left open: the old
+      single-target columns stay (expand-only, no contract phase in
+      this pass — see Revision 155 §4/§5 for what is deliberately
+      still out of scope: R50 `this_and_future` split, the admin
+      scheduling form's own multi-select UI). Full detail in
+      CHANGES.log and SRS Revision 155.
 
 ## Teacher delete-own (B1's حذف half) and اختباراتي/نقاطي merge — 2026-09-16
 
@@ -4404,19 +4405,21 @@ the Owner's own report named.
       therefore closed by confirmation, not by new capability — no
       general roster list is being restored, matching what the Owner
       actually asked for.
-- [ ] **Audit-trail principle ("who created it, when, and if deleted,
-      who deleted it and when") — reported, not broadly implemented.**
-      Investigated first: `deletedAt`/`deletedById` are ALREADY the
-      near-universal convention (35 of 37 soft-deletable models carry
-      both); `createdBy` is genuinely rare (only the two `Legal*`
-      models). Today's delete grants did not need it — each reuses the
-      existing per-kind edit-scope check instead of a creator column.
-      A platform-wide `createdBy` retrofit is a separate, much larger
-      decision (which of the ~67 remaining models, whether historical
-      rows get a real answer or `NULL`, and a documented tension with
-      `docs/architecture/security.md`'s stated principle against
-      duplicating actor columns already reconstructable from the audit
-      log) — not assumed or attempted in this pass.
+- [x] **Audit-trail principle — built end to end (SRS Revision 156),
+      2026-09-16.** The Document Owner's explicit instruction resolved
+      the "separate, much larger decision" this section had reported:
+      `created_by`/`created_at` (mostly already existed) for every
+      MANUAL-creation model, `deleted_by`/`deleted_at` (mostly already
+      existed) for every soft-delete, explicitly excluding automatic
+      creation (Notification named by the Owner; generalised to every
+      model sharing that shape). 31 models classified and wired; the
+      same bare-scalar-no-FK convention `deleted_by` already used, for
+      the same reason (`docs/architecture/security.md`'s stance against
+      duplicating actor columns, and to avoid `RESTRICT` blocking
+      account erasure). Found and fixed alongside it: `SessionStaff`'s
+      one genuine manual path (`replaceSessionStaff`, the per-occurrence
+      override) never recorded who removed OR who revived a name. Full
+      detail in CHANGES.log and SRS Revision 156.
 - [x] Verification: backend/frontend typecheck/lint/build clean;
       backend unit 342/342; frontend unit 1,329/1,329; full
       disposable-stack integration suite, 2,620/2,638 (18 pre-existing
@@ -4435,3 +4438,30 @@ the Owner's own report named.
 
 - [ ] The روster-viewing gap decision (`عرض المستفيدات`) is now resolved
       — see the confirmation above; nothing further outstanding here.
+
+## A3 end-to-end + platform-wide audit trail — 2026-09-16
+
+- [x] **Built: class multi-dimension targeting, end to end** (SRS
+      Revision 155) — a fourth, additive `multi_dimension` arm on
+      `RecurringCourseSchedule`, mirroring `Event`'s own join-table
+      shape (branches/categories/levels/administrative groups) plus
+      one genuinely new rule a Teaching Circle needed (unions with the
+      rest rather than intersecting, since Event never had a circle
+      arm to combine against). Backend only — see Revision 155 §5 for
+      the admin scheduling form's multi-select UI, deliberately not
+      built this pass — and R50 `this_and_future` split is refused by
+      name (`MULTI_DIMENSION_SPLIT_NOT_SUPPORTED`) rather than guessed
+      at, both flagged as named follow-up work.
+- [x] **Built: a `created_by` audit trail for every manually-created
+      or -deleted row** (SRS Revision 156), 31 models classified and
+      wired, following the SAME bare-scalar-no-FK convention
+      `deleted_by` already used. Found and fixed alongside it:
+      `SessionStaff`'s one manual override path never recorded who
+      removed or who revived a name.
+- [x] Verification: backend typecheck/lint/build clean; backend unit
+      342/342; full disposable-stack integration suite, 2,631/2,649
+      (18 pre-existing skips) including new coverage for both
+      revisions; all-table isolation intact; all 31 guards, doc-links
+      and `git diff --check` pass. Full detail in CHANGES.log and SRS
+      Revisions 155–156.
+- [ ] Pushed to `develop`; hosted CI; Staging deployment. Pending.

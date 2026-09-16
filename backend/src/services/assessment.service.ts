@@ -576,6 +576,7 @@ export async function createAssessment(
         sessionId: target.sessionId,
         teachingGroupId: target.teachingGroupId,
         studentId: target.studentId,
+        createdById: actor.userId,
       },
       select: { id: true },
     });
@@ -730,6 +731,7 @@ export async function addQuestion(
         prompt: input.prompt,
         justification: input.justification ?? 'none',
         points: input.points ?? null,
+        createdById: actor.userId,
         ...(input.options === undefined
           ? {}
           : {
@@ -737,6 +739,7 @@ export async function addQuestion(
                 create: input.options.map((label, index) => ({
                   displayOrder: index + 1,
                   label,
+                  createdById: actor.userId,
                 })),
               },
             }),
@@ -847,7 +850,7 @@ export async function updateQuestion(
       });
       for (const [index, label] of patch.options.entries()) {
         await tx.examQuestionOption.create({
-          data: { questionId, displayOrder: index + 1, label },
+          data: { questionId, displayOrder: index + 1, label, createdById: actor.userId },
         });
       }
     }
@@ -2466,6 +2469,8 @@ export function todayUTC(): Date {
  */
 export async function copyContentIntoNewRow(
   tx: Prisma.TransactionClient,
+  /** Revision 156 — the copy's own creator, distinct from `source`'s. */
+  actorUserId: string,
   source: {
     id: string;
     title: string;
@@ -2538,6 +2543,8 @@ export async function copyContentIntoNewRow(
       // R136 clause 4/12 — provenance only; never authorization, audience,
       // availability, grading, freeze, publication, deletion or notification.
       sourceExamId: source.id,
+      // Revision 156 — the copy's own creator, never `source`'s.
+      createdById: actorUserId,
     },
     select: { id: true },
   });
@@ -2555,10 +2562,12 @@ export async function copyContentIntoNewRow(
         // independence still holds, since this is a fresh, separately owned
         // row (editing the copy's points never touches the source's).
         points: question.points,
+        createdById: actorUserId,
         options: {
           create: question.options.map((option) => ({
             label: option.label,
             displayOrder: option.displayOrder,
+            createdById: actorUserId,
           })),
         },
       },
@@ -2576,7 +2585,7 @@ export async function copyAssessment(
   const source = await loadForAuthor(prisma, actor, examId);
 
   return prisma.$transaction(async (tx) => {
-    const created = await copyContentIntoNewRow(tx, source, {
+    const created = await copyContentIntoNewRow(tx, actor.userId, source, {
       date: todayUTC(),
       titleSuffix: true,
     });

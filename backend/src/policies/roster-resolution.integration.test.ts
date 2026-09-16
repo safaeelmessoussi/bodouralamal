@@ -128,6 +128,74 @@ async function schedule(
   return row.id;
 }
 
+/** Revision 155 — a `multi_dimension` schedule, its target the five join
+ *  tables rather than the three legacy columns. `branchId` here is still
+ *  only the PHYSICAL meeting place, unrelated to the audience dimensions. */
+async function multiDimensionSchedule(
+  subjectId: string,
+  physicalBranchId: string,
+  dimensions: {
+    branchIds?: string[];
+    categoryIds?: string[];
+    levelIds?: string[];
+    administrativeGroupIds?: string[];
+    teachingGroupIds?: string[];
+  },
+): Promise<{ id: string; spec: AudienceSpec }> {
+  const row = await prisma.recurringCourseSchedule.create({
+    data: {
+      title: `${TAG} حلقة متعددة الأبعاد`,
+      subjectId,
+      teachingMode: "multi_dimension",
+      branchId: physicalBranchId,
+      startTime: new Date(Date.UTC(1970, 0, 1, 9, 0, 0)),
+      endTime: new Date(Date.UTC(1970, 0, 1, 10, 0, 0)),
+      recurrence: "weekly",
+      weekdays: ["saturday"],
+      academicYearId,
+      branchScopes: {
+        createMany: { data: (dimensions.branchIds ?? []).map((branchId) => ({ branchId })) },
+      },
+      categoryScopes: {
+        createMany: { data: (dimensions.categoryIds ?? []).map((categoryId) => ({ categoryId })) },
+      },
+      levelScopes: {
+        createMany: { data: (dimensions.levelIds ?? []).map((levelId2) => ({ levelId: levelId2 })) },
+      },
+      administrativeGroupScopes: {
+        createMany: {
+          data: (dimensions.administrativeGroupIds ?? []).map((administrativeGroupId) => ({
+            administrativeGroupId,
+          })),
+        },
+      },
+      teachingGroupScopes: {
+        createMany: {
+          data: (dimensions.teachingGroupIds ?? []).map((teachingGroupId) => ({ teachingGroupId })),
+        },
+      },
+    },
+  });
+  return {
+    id: row.id,
+    spec: {
+      teachingMode: "multi_dimension",
+      levelId: null,
+      administrativeGroupId: null,
+      teachingGroupId: null,
+      branchId: physicalBranchId,
+      on: null,
+      dimensions: {
+        branchIds: dimensions.branchIds ?? [],
+        categoryIds: dimensions.categoryIds ?? [],
+        levelIds: dimensions.levelIds ?? [],
+        administrativeGroupIds: dimensions.administrativeGroupIds ?? [],
+        teachingGroupIds: dimensions.teachingGroupIds ?? [],
+      },
+    },
+  };
+}
+
 const specOf = async (scheduleId: string): Promise<AudienceSpec> => {
   const s = await prisma.recurringCourseSchedule.findUniqueOrThrow({
     where: { id: scheduleId },
@@ -328,6 +396,60 @@ describe("audienceWhere — the three teaching modes (§4.4c)", () => {
   });
 });
 
+/**
+ * **Revision 155 — `multi_dimension`, the fourth arm.** Every case above
+ * stays exactly what it was; these prove the new one composes correctly
+ * against the SAME fixture, on the two rules that matter: different KINDS
+ * of dimension intersect (mirroring `eventAudienceWhere`), and a Teaching
+ * Circle — the one dimension Event never had — unions with the rest
+ * instead.
+ */
+describe("audienceWhere — multi_dimension (Revision 155)", () => {
+  it("administrative_group_ids alone resolves the SAME population the legacy mode already does", async () => {
+    const { spec } = await multiDimensionSchedule(tafsirId, amerchichId, {
+      administrativeGroupIds: [groupAId],
+    });
+    expect(ids(await resolveAudience(prisma, spec))).toEqual(
+      [huda, sara].sort(),
+    );
+  });
+
+  it("level_ids + branch_ids intersect, exactly as Event's own dimensions do", async () => {
+    // level_ids alone would reach the whole Level (هدى، سارة، ليلى) — naming
+    // targaId alongside it narrows to ليلى's branch only, the same rule
+    // `entire_level` mode already enforces through its own branch column.
+    const { spec } = await multiDimensionSchedule(tafsirId, targaId, {
+      levelIds: [levelId],
+      branchIds: [targaId],
+    });
+    expect(ids(await resolveAudience(prisma, spec))).toEqual([layla]);
+  });
+
+  it("a Teaching Circle UNIONS with the rest, never intersects", async () => {
+    // tgHifz1 alone is هدى only (proved above, teaching_group mode). Naming
+    // targaId alongside it is a DIFFERENT population (ليلى, by branch) — the
+    // two combine as هدى + ليلى, never their (empty) overlap, and سارة stays
+    // out of both.
+    const { spec } = await multiDimensionSchedule(hifzId, amerchichId, {
+      teachingGroupIds: [tgHifz1],
+      branchIds: [targaId],
+    });
+    expect(ids(await resolveAudience(prisma, spec))).toEqual(
+      [huda, layla].sort(),
+    );
+    expect(ids(await resolveAudience(prisma, spec))).not.toContain(sara);
+  });
+
+  it("counts agree with the resolved rows, exactly as the legacy modes already do", async () => {
+    const { spec } = await multiDimensionSchedule(tafsirId, amerchichId, {
+      levelIds: [levelId],
+    });
+    expect(await audienceSize(prisma, spec)).toBe(
+      (await resolveAudience(prisma, spec)).length,
+    );
+  });
+});
+
 describe("independence between Subjects (BR-22)", () => {
   it("one student is in an administrative group AND two different subject splits at once", async () => {
     const admin = await specOf(
@@ -494,6 +616,28 @@ describe("teacher scope resolves through CourseScheduleStaff (§4.4c, TD-2)", ()
     // هدى only: سارة is in the same Level and the same administrative group,
     // but in a different Hifz split, and this teacher staffs only that split.
     expect(reached).toEqual([huda]);
+    expect(reached).not.toContain(sara);
+  });
+
+  it("Revision 155 — a teacher staffing a multi_dimension schedule reaches its UNION, not its intersection", async () => {
+    const rasha = await person("الأستاذة رشا");
+    const { id: s } = await multiDimensionSchedule(hifzId, amerchichId, {
+      teachingGroupIds: [tgHifz1],
+      branchIds: [targaId],
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: s, userId: rasha, position: "teacher" },
+    });
+
+    const where = await studentsTaughtBy(prisma, rasha);
+    const reached = ids(
+      await prisma.user.findMany({ where, select: { id: true } }),
+    );
+    // Her circle's own member, union that branch's own student — never
+    // their intersection, the same rule `audienceWhere`'s own
+    // multi_dimension case resolves, proved again here through the
+    // teacher-scope arm rather than the direct read.
+    expect(reached).toEqual([huda, layla].sort());
     expect(reached).not.toContain(sara);
   });
 

@@ -159,6 +159,7 @@ export async function createSchedulingType(
         structuralKind: data.structuralKind,
         attendanceMode: data.attendanceMode,
         displayOrder: (last._max.displayOrder ?? 0) + 1,
+        createdById: actor.userId,
       },
     });
 

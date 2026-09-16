@@ -268,7 +268,10 @@ export async function createAcademicPeriod(
     }
     await assertNoOverlap(tx, input, null);
 
-    const created = await tx.academicPeriod.create({ data: input, select: SELECT });
+    const created = await tx.academicPeriod.create({
+      data: { ...input, createdById: actor.userId },
+      select: SELECT,
+    });
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

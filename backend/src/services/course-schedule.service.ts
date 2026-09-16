@@ -31,7 +31,7 @@ import {
   resolveDelivery,
   type Delivery,
 } from "../policies/delivery.js";
-import { resolveAudience } from "../policies/roster-resolution.js";
+import { resolveAudience, scheduleDimensions } from "../policies/roster-resolution.js";
 import * as audit from "../repositories/audit.repository.js";
 import * as trash from "../repositories/trash.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
@@ -430,8 +430,26 @@ export interface CourseScheduleInput {
   description?: string | null;
   subjectId: string;
   teachingMode: TeachingMode;
-  /** Exactly one entity, of the kind the mode names (§4.4c). */
-  targetId: string;
+  /** Exactly one entity, of the kind the mode names (§4.4c). Required for
+   *  every mode EXCEPT `multi_dimension`, which uses `dimensions` instead
+   *  (Revision 155) — the validator enforces which of the two a given
+   *  `teachingMode` requires; this type states only what each carries. */
+  targetId?: string;
+  /**
+   * **Revision 155 — required, and used ONLY, when `teachingMode` is
+   * `multi_dimension`.** Any combination of the five; at least one of
+   * `levelIds`/`administrativeGroupIds`/`teachingGroupIds` must be named —
+   * a class teaches a curriculum Subject to a real population, and
+   * `branchIds`/`categoryIds` alone narrow that population without naming
+   * one (see `resolveTarget`'s own `multi_dimension` case for why).
+   */
+  dimensions?: {
+    branchIds?: string[];
+    categoryIds?: string[];
+    levelIds?: string[];
+    administrativeGroupIds?: string[];
+    teachingGroupIds?: string[];
+  };
   branchId: string;
   roomId?: string | null;
   /** R97 — the DEFAULT delivery for every Session this schedule materializes.
@@ -486,25 +504,38 @@ export interface ScheduleConflict {
 async function resolveTarget(
   tx: Prisma.TransactionClient,
   mode: TeachingMode,
-  targetId: string,
+  targetId: string | undefined,
   branchId: string,
+  /** Revision 155 — required, and read, only for `multi_dimension`. */
+  dimensions?: CourseScheduleInput["dimensions"],
 ): Promise<{
   levelId: string | null;
   administrativeGroupId: string | null;
   teachingGroupId: string | null;
   /**
-   * **The Level this schedule actually delivers to**, whichever of the three
-   * modes named the target (§4.4c).
+   * **The Level(s) this schedule actually delivers to**, whichever mode
+   * named the target(s) (§4.4c). Plural since Revision 155: every legacy
+   * mode still resolves to exactly one, `multi_dimension` to however many
+   * its named levels/groups/circles imply.
    *
    * Distinct from `levelId` above, which is the *column* and is populated only
-   * in `entire_level` mode. The curriculum check needs the Level in all three
-   * modes, and deriving it here — beside the resolution that already knows it —
+   * in `entire_level` mode. The curriculum check needs the Level in every
+   * mode, and deriving it here — beside the resolution that already knows it —
    * is what keeps the derivation from being repeated by every caller that asks.
    */
-  effectiveLevelId: string;
+  effectiveLevelIds: string[];
+  /** Revision 155 — the join rows to write, present only for `multi_dimension`. */
+  scopeRows?: {
+    branchIds: string[];
+    categoryIds: string[];
+    levelIds: string[];
+    administrativeGroupIds: string[];
+    teachingGroupIds: string[];
+  };
 }> {
   switch (mode) {
     case "entire_level": {
+      if (!targetId) throw new AppError("VALIDATION_FAILED", "target_id is required", { reason: "TARGET_ID_REQUIRED" });
       const level = await tx.level.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true },
@@ -514,10 +545,11 @@ async function resolveTarget(
         levelId: targetId,
         administrativeGroupId: null,
         teachingGroupId: null,
-        effectiveLevelId: targetId,
+        effectiveLevelIds: [targetId],
       };
     }
     case "administrative_group": {
+      if (!targetId) throw new AppError("VALIDATION_FAILED", "target_id is required", { reason: "TARGET_ID_REQUIRED" });
       const group = await tx.administrativeGroup.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true, branchId: true, levelId: true },
@@ -542,10 +574,11 @@ async function resolveTarget(
         levelId: null,
         administrativeGroupId: targetId,
         teachingGroupId: null,
-        effectiveLevelId: group.levelId,
+        effectiveLevelIds: [group.levelId],
       };
     }
     case "teaching_group": {
+      if (!targetId) throw new AppError("VALIDATION_FAILED", "target_id is required", { reason: "TARGET_ID_REQUIRED" });
       const group = await tx.teachingGroup.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true, levelId: true },
@@ -558,7 +591,88 @@ async function resolveTarget(
         levelId: null,
         administrativeGroupId: null,
         teachingGroupId: targetId,
-        effectiveLevelId: group.levelId,
+        effectiveLevelIds: [group.levelId],
+      };
+    }
+    case "multi_dimension": {
+      const branchIds = [...new Set(dimensions?.branchIds ?? [])];
+      const categoryIds = [...new Set(dimensions?.categoryIds ?? [])];
+      const levelIds = [...new Set(dimensions?.levelIds ?? [])];
+      const administrativeGroupIds = [...new Set(dimensions?.administrativeGroupIds ?? [])];
+      const teachingGroupIds = [...new Set(dimensions?.teachingGroupIds ?? [])];
+
+      /**
+       * **A class must name a real teaching population — Level, Group or
+       * Circle — not only an organisational filter.** Unlike an Event,
+       * which has no Subject and for which "everyone in this Category" is
+       * a complete audience on its own, a class delivers a curriculum
+       * Subject, and `assertSubjectTaughtAtLevel` needs an actual Level to
+       * check the Subject against. Branches/Categories alone would leave
+       * nothing for it to check — refused here rather than left to the
+       * DB's own coarser "at least one of the five" trigger, which cannot
+       * express this narrower, curriculum-specific rule.
+       */
+      if (
+        levelIds.length === 0 &&
+        administrativeGroupIds.length === 0 &&
+        teachingGroupIds.length === 0
+      ) {
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "a class must name at least one level, administrative group or teaching circle",
+          { reason: "MULTI_DIMENSION_NEEDS_A_LEVEL" },
+        );
+      }
+
+      const [branches, categories, levels, groups, circles] = await Promise.all([
+        branchIds.length === 0
+          ? []
+          : tx.branch.findMany({ where: { id: { in: branchIds }, deletedAt: null }, select: { id: true } }),
+        categoryIds.length === 0
+          ? []
+          : tx.category.findMany({ where: { id: { in: categoryIds }, deletedAt: null }, select: { id: true } }),
+        levelIds.length === 0
+          ? []
+          : tx.level.findMany({ where: { id: { in: levelIds }, deletedAt: null }, select: { id: true } }),
+        administrativeGroupIds.length === 0
+          ? []
+          : tx.administrativeGroup.findMany({
+              where: { id: { in: administrativeGroupIds }, deletedAt: null },
+              select: { id: true, levelId: true },
+            }),
+        teachingGroupIds.length === 0
+          ? []
+          : tx.teachingGroup.findMany({
+              where: { id: { in: teachingGroupIds }, deletedAt: null },
+              select: { id: true, levelId: true },
+            }),
+      ]);
+      if (branches.length !== branchIds.length) throw new AppError("NOT_FOUND", "no such branch");
+      if (categories.length !== categoryIds.length) throw new AppError("NOT_FOUND", "no such category");
+      if (levels.length !== levelIds.length) throw new AppError("NOT_FOUND", "no such level");
+      if (groups.length !== administrativeGroupIds.length) throw new AppError("NOT_FOUND", "no such administrative group");
+      if (circles.length !== teachingGroupIds.length) throw new AppError("NOT_FOUND", "no such teaching group");
+
+      // **Deliberately NOT re-checked against the schedule's own `branchId`
+      // here** (unlike `administrative_group` mode above): a multi-dimension
+      // class is, by the Owner's own request, a flexible-audience class that
+      // may reach beyond where it physically meets — `branchId`/`roomId`
+      // stay what they always were, the PHYSICAL location, unaffected by
+      // this wider audience.
+      const effectiveLevelIds = [
+        ...new Set([
+          ...levelIds,
+          ...groups.map((g) => g.levelId),
+          ...circles.map((c) => c.levelId),
+        ]),
+      ];
+
+      return {
+        levelId: null,
+        administrativeGroupId: null,
+        teachingGroupId: null,
+        effectiveLevelIds,
+        scopeRows: { branchIds, categoryIds, levelIds, administrativeGroupIds, teachingGroupIds },
       };
     }
   }
@@ -777,6 +891,7 @@ export async function createCourseSchedule(
       input.teachingMode,
       input.targetId,
       input.branchId,
+      input.dimensions,
     );
 
     // **The rule this surface was missing entirely.** Teaching Groups and
@@ -785,28 +900,34 @@ export async function createCourseSchedule(
     // `level_subject` held none — classes delivering a Subject their Level
     // officially does not offer, and to which no content could then be attached.
     // One policy, all three surfaces (`policies/curriculum.ts`).
-    await assertSubjectTaughtAtLevel(
-      tx,
-      target.effectiveLevelId,
-      input.subjectId,
-    );
+    //
+    // **Revision 155 — every level a `multi_dimension` schedule implies**,
+    // not only the first: a class naming two Levels must teach its Subject
+    // at BOTH, or one population would be silently taught a Subject their
+    // curriculum never offered.
+    for (const levelId of target.effectiveLevelIds) {
+      await assertSubjectTaughtAtLevel(tx, levelId, input.subjectId);
+    }
 
     // **§2 — the declared-capability check, now that the target is resolved.**
+    // Reached only for `entire_level` (`assertTeacherEntireLevelOnly` above
+    // already refuses a self-service Teacher every other mode), so exactly
+    // one effective Level always exists here.
     if (selfServiceTeacher) {
       await assertTeacherDeclaredCapability(
         tx,
         actor.userId,
-        target.effectiveLevelId,
+        target.effectiveLevelIds[0]!,
         input.subjectId,
       );
     }
 
-    // **`effectiveLevelId` is derived, not a column.** Separated here because
-    // the row below is built by spreading `target`, and a derived field carried
-    // into a `create` is an invalid-argument error rather than anything the type
-    // system catches through a spread.
-    const { effectiveLevelId: _derived, ...targetColumns } = target;
-    void _derived;
+    // **`effectiveLevelIds`/`scopeRows` are derived, never columns.**
+    // Separated here because the row below is built by spreading `target`,
+    // and a derived field carried into a `create` is an invalid-argument
+    // error rather than anything the type system catches through a spread.
+    const { effectiveLevelIds: _derivedLevels, scopeRows, ...targetColumns } = target;
+    void _derivedLevels;
 
     if (input.roomId) {
       const room = await tx.room.findFirst({
@@ -910,9 +1031,51 @@ export async function createCourseSchedule(
         ...(input.attendanceMarking === undefined
           ? {}
           : { attendanceMarking: input.attendanceMarking }),
+        // Revision 156.
+        createdById: actor.userId,
       },
       select: { id: true },
     });
+
+    // Revision 155 — the multi_dimension join rows, written in the SAME
+    // transaction the schedule row itself is; the deferred DB trigger
+    // (`course_schedule_multi_dimension_nonempty`) fires at commit, once
+    // every row below has landed.
+    if (scopeRows) {
+      await Promise.all([
+        scopeRows.branchIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleBranch.createMany({
+              data: scopeRows.branchIds.map((branchId) => ({ scheduleId: schedule.id, branchId })),
+            }),
+        scopeRows.categoryIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleCategory.createMany({
+              data: scopeRows.categoryIds.map((categoryId) => ({ scheduleId: schedule.id, categoryId })),
+            }),
+        scopeRows.levelIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleLevel.createMany({
+              data: scopeRows.levelIds.map((levelId) => ({ scheduleId: schedule.id, levelId })),
+            }),
+        scopeRows.administrativeGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleAdministrativeGroup.createMany({
+              data: scopeRows.administrativeGroupIds.map((administrativeGroupId) => ({
+                scheduleId: schedule.id,
+                administrativeGroupId,
+              })),
+            }),
+        scopeRows.teachingGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleTeachingGroup.createMany({
+              data: scopeRows.teachingGroupIds.map((teachingGroupId) => ({
+                scheduleId: schedule.id,
+                teachingGroupId,
+              })),
+            }),
+      ]);
+    }
 
     await assertStaffIntervals(tx, schedule.id, staff, {
       anchorDate: input.anchorDate ?? null,
@@ -928,6 +1091,7 @@ export async function createCourseSchedule(
           // written before this revision means.
           effectiveFrom: s.effectiveFrom ?? null,
           effectiveUntil: s.effectiveUntil ?? null,
+          createdById: actor.userId,
         },
       });
     }
@@ -1340,6 +1504,7 @@ export async function updateCourseSchedule(
             position: s.position,
             effectiveFrom: s.effectiveFrom ?? null,
             effectiveUntil: s.effectiveUntil ?? null,
+            createdById: actor.userId,
           },
         });
       }
@@ -1513,6 +1678,29 @@ async function splitCourseSchedule(
     },
   });
   if (!existing) throw new AppError("NOT_FOUND", "no such schedule");
+  /**
+   * **Revision 155 — `this_and_future` splitting is deliberately NOT
+   * supported for a `multi_dimension` schedule yet, on either side.** The
+   * predecessor's identity re-resolution above (`existing.levelId ??
+   * existing.administrativeGroupId ?? existing.teachingGroupId` as a
+   * SINGLE fallback target) has no meaning once a schedule's real target
+   * is five join tables rather than one column — extending it correctly
+   * needs its own design pass, not a guess grafted onto the legacy
+   * three-arm logic below. Refused with a named reason rather than
+   * silently mis-splitting; a manager who needs to change a
+   * multi-dimension class's audience partway through its life still has
+   * the full-series edit (`updateCourseSchedule`, `scope: 'all_sessions'`).
+   */
+  if (
+    existing.teachingMode === "multi_dimension" ||
+    data.teachingMode === "multi_dimension"
+  ) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "splitting a multi-dimension schedule is not yet supported",
+      { reason: "MULTI_DIMENSION_SPLIT_NOT_SUPPORTED" },
+    );
+  }
   scope.assertCanActOnBranch(
     actor.roleScopes,
     MANAGING_ROLE,
@@ -1598,13 +1786,16 @@ async function splitCourseSchedule(
       levelId: string | null;
       administrativeGroupId: string | null;
       teachingGroupId: string | null;
-      effectiveLevelId?: string;
+      effectiveLevelIds?: string[];
     } = {
       levelId: existing.levelId,
       administrativeGroupId: existing.administrativeGroupId,
       teachingGroupId: existing.teachingGroupId,
     };
     if (identityChanged) {
+      // `data.teachingMode`/`existing.teachingMode` can never be
+      // `multi_dimension` here — refused above, before either identity is
+      // read — so this always resolves to exactly one effective Level.
       target = await resolveTarget(
         tx,
         data.teachingMode ?? existing.teachingMode,
@@ -1622,7 +1813,7 @@ async function splitCourseSchedule(
       if (!subject) throw new AppError("NOT_FOUND", "no such subject");
       await assertSubjectTaughtAtLevel(
         tx,
-        target.effectiveLevelId as string,
+        target.effectiveLevelIds![0]!,
         successorSubjectId,
       );
     }
@@ -1764,7 +1955,10 @@ async function splitCourseSchedule(
     assertNoConflicts(conflicts);
 
     const successor = await tx.recurringCourseSchedule.create({
-      data: successorValues,
+      // Revision 156 — added here rather than on `successorValues` itself,
+      // which `findConflicts` above also reads and has no `createdById` of
+      // its own to accept.
+      data: { ...successorValues, createdById: actor.userId },
       select: { id: true },
     });
     // §4.4: without this the teacher silently disappears from every future
@@ -1783,6 +1977,7 @@ async function splitCourseSchedule(
           // dates, which is the correct answer rather than an error.
           effectiveFrom: s.effectiveFrom,
           effectiveUntil: s.effectiveUntil,
+          createdById: actor.userId,
         })),
       });
     }
@@ -2215,6 +2410,13 @@ export async function listCourseSchedules(
         // `level_id` on the DTO is what a client seeds a Level selector from.
         administrativeGroup: { select: { name: true, levelId: true } },
         teachingGroup: { select: { name: true, levelId: true } },
+        // Revision 155 — a `multi_dimension` row's real target; empty
+        // arrays (never included at all) for every other mode's rows.
+        branchScopes: { select: { branchId: true } },
+        categoryScopes: { select: { categoryId: true } },
+        levelScopes: { select: { levelId: true } },
+        administrativeGroupScopes: { select: { administrativeGroupId: true } },
+        teachingGroupScopes: { select: { teachingGroupId: true } },
       },
     }),
     prisma.recurringCourseSchedule.count({ where }),
@@ -2229,6 +2431,18 @@ export async function listCourseSchedules(
         effectiveFrom: s.effectiveFrom,
         effectiveUntil: s.effectiveUntil,
       })),
+      dimensions:
+        row.teachingMode === "multi_dimension"
+          ? {
+              branchIds: row.branchScopes.map((r) => r.branchId),
+              categoryIds: row.categoryScopes.map((r) => r.categoryId),
+              levelIds: row.levelScopes.map((r) => r.levelId),
+              administrativeGroupIds: row.administrativeGroupScopes.map(
+                (r) => r.administrativeGroupId,
+              ),
+              teachingGroupIds: row.teachingGroupScopes.map((r) => r.teachingGroupId),
+            }
+          : null,
     })),
     window,
     total,
@@ -2258,6 +2472,7 @@ export async function resolveScheduleRoster(
     // than found-and-refused (§20 rule 17).
     where: { id, deletedAt: null, ...readableScope(actor) },
     select: {
+      id: true,
       branchId: true,
       teachingMode: true,
       levelId: true,
@@ -2269,11 +2484,13 @@ export async function resolveScheduleRoster(
   // schedule exists somewhere the caller may not look.
   if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
 
+  const dimensions = await scheduleDimensions(prisma, schedule.id, schedule.teachingMode);
+
   return resolveAudience(
     prisma,
     // Period-blind (R123): this read answers *who is in this class*, which is
     // the schedule's standing membership rather than a question about one day.
-    { ...schedule, on: null },
+    { ...schedule, ...(dimensions ? { dimensions } : {}), on: null },
     { id: true, nameArabic: true },
   ) as Promise<{ id: string; nameArabic: string | null }[]>;
 }

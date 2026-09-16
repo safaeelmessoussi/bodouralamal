@@ -254,6 +254,7 @@ export async function enrolInGroup(
         levelId: group.levelId,
         branchId: group.branchId,
         academicPeriodId,
+        createdById: actor.userId,
       },
       select: {
         id: true,
@@ -413,7 +414,7 @@ export async function enrolInLevel(
     // No group: this Level has no subdivision. The composite FK is not enforced
     // when `administrative_group_id` is NULL, so the branch stands alone here
     // and is the caller's checked choice.
-    data: { studentId, levelId, branchId, academicPeriodId },
+    data: { studentId, levelId, branchId, academicPeriodId, createdById: actor.userId },
     select: {
       id: true,
       studentId: true,

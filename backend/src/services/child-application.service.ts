@@ -361,6 +361,8 @@ export async function decideChildApplication(
           // Approved here, so the child is usable immediately (TD-4.2).
           accountStatus: 'active',
           referenceCode,
+          // Revision 156 — created by the staff member deciding the application.
+          createdById: actor.userId,
         },
         select: { id: true },
       });
@@ -414,6 +416,8 @@ export async function decideChildApplication(
         status: 'approved',
         decidedAt,
         decidedById: actor.userId,
+        // Revision 156 — this decision IS the link's creation, in one act.
+        createdById: actor.userId,
       },
     });
 

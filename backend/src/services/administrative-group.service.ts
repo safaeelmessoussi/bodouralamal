@@ -147,6 +147,7 @@ export async function createAdministrativeGroup(
         levelId: input.levelId,
         branchId: input.branchId,
         displayOrder: input.displayOrder ?? null,
+        createdById: actor.userId,
       },
     });
 

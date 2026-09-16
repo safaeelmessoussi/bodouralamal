@@ -184,7 +184,11 @@ export async function createSubject(
 
   return prisma.$transaction(async (tx) => {
     const subject = await tx.subject.create({
-      data: { name: data.name, displayOrder: data.displayOrder ?? null },
+      data: {
+        name: data.name,
+        displayOrder: data.displayOrder ?? null,
+        createdById: actor.userId,
+      },
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -371,6 +375,7 @@ export async function createCategory(
         name: data.name,
         description: data.description ?? null,
         displayOrder: data.displayOrder ?? null,
+        createdById: actor.userId,
       },
     });
     await audit.write(tx, {

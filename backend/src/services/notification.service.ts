@@ -18,6 +18,7 @@ import {
   audienceForSession,
   examAudienceWhere,
   assertExamInTeacherScope,
+  scheduleDimensions,
 } from "../policies/roster-resolution.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
 import * as users from "../repositories/user.repository.js";
@@ -606,12 +607,22 @@ export async function notifySessionChange(
    * beneficiaries would see the combined class on their calendars and be told
    * nothing when it was cancelled.
    */
+  const fallbackDimensions = await scheduleDimensions(
+    prisma,
+    session.scheduleId,
+    session.schedule.teachingMode as never,
+  );
   const spec = (await audienceForSession(prisma, sessionId)) ?? {
     teachingMode: session.schedule.teachingMode as never,
     levelId: session.schedule.levelId,
     administrativeGroupId: session.schedule.administrativeGroupId,
     teachingGroupId: session.schedule.teachingGroupId,
     branchId: session.schedule.branchId,
+    // Revision 155 — the same schedule-dimensions read `audienceForSession`
+    // itself does; this whole fallback is a defensive branch for a session
+    // that vanished between `loadForWrite` and here, but a `multi_dimension`
+    // schedule reaching it must not silently resolve to nobody's dimensions.
+    ...(fallbackDimensions ? { dimensions: fallbackDimensions } : {}),
     // Period-blind: who this class concerns, not who was expected on a day.
     on: null,
   };

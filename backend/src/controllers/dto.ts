@@ -585,6 +585,21 @@ export interface CourseScheduleDto {
   }[];
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
   version: number;
+  /**
+   * **Revision 155 — present only when `teaching_mode` is
+   * `multi_dimension`**, `null` for every other mode (never the empty
+   * object — the absence of a real target is a different fact from "this
+   * mode does not use one"). Ids only, matching `target_id`'s own shape;
+   * a client resolving names does so through the existing scope-options
+   * reads, the same way the create form already populates its pickers.
+   */
+  dimensions: {
+    branch_ids: string[];
+    category_ids: string[];
+    level_ids: string[];
+    administrative_group_ids: string[];
+    teaching_group_ids: string[];
+  } | null;
 }
 
 /**
@@ -606,8 +621,12 @@ function targetOf(row: {
       return row.levelId ?? "";
     case "administrative_group":
       return row.administrativeGroupId ?? "";
-    default:
+    case "teaching_group":
       return row.teachingGroupId ?? "";
+    // Revision 155 — a `multi_dimension` row has no single target; its real
+    // one is `dimensions`, not this field.
+    default:
+      return "";
   }
 }
 
@@ -662,6 +681,17 @@ export function courseScheduleDto(row: {
   // Level, and that link is what `level_id` publishes.
   administrativeGroup?: { name: string; levelId: string } | null;
   teachingGroup?: { name: string; levelId: string } | null;
+  /** Revision 155 — present (possibly all-empty-arrays) only for a
+   *  `multi_dimension` row; every caller building one already has it from
+   *  `scheduleDimensions`, so there is no narrower-projection reason to
+   *  make it optional the way the resolved NAMES above are. */
+  dimensions?: {
+    branchIds: string[];
+    categoryIds: string[];
+    levelIds: string[];
+    administrativeGroupIds: string[];
+    teachingGroupIds: string[];
+  } | null;
 }): CourseScheduleDto {
   return {
     id: row.id,
@@ -714,6 +744,15 @@ export function courseScheduleDto(row: {
       user_name: s.name ?? null,
     })),
     version: row.version,
+    dimensions: row.dimensions
+      ? {
+          branch_ids: row.dimensions.branchIds,
+          category_ids: row.dimensions.categoryIds,
+          level_ids: row.dimensions.levelIds,
+          administrative_group_ids: row.dimensions.administrativeGroupIds,
+          teaching_group_ids: row.dimensions.teachingGroupIds,
+        }
+      : null,
   };
 }
 

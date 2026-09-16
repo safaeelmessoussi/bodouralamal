@@ -145,7 +145,11 @@ export async function createAcademicYear(
       });
     }
     const created = await tx.academicYear.create({
-      data: { label: input.label, isCurrent: input.isCurrent ?? false },
+      data: {
+        label: input.label,
+        isCurrent: input.isCurrent ?? false,
+        createdById: actor.userId,
+      },
       select: YEAR_SELECT,
     });
     await audit.write(tx, {
@@ -385,7 +389,12 @@ export async function assignSubjectToLevel(
             select: { id: true },
           })
         ).id
-      : (await tx.levelSubject.create({ data: { levelId, subjectId }, select: { id: true } })).id;
+      : (
+          await tx.levelSubject.create({
+            data: { levelId, subjectId, createdById: actor.userId },
+            select: { id: true },
+          })
+        ).id;
 
     if (existing?.deletedAt) {
       await trash.removeForRevivedTarget(tx, 'LevelSubject', id);
@@ -567,7 +576,7 @@ export async function assignSurahToLevel(
       });
       await trash.removeForRevivedTarget(tx, 'LevelSurah', existing.id);
     } else {
-      await tx.levelSurah.create({ data: { levelId, surahId } });
+      await tx.levelSurah.create({ data: { levelId, surahId, createdById: actor.userId } });
     }
 
     await audit.write(tx, {

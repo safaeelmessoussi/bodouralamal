@@ -73,7 +73,29 @@ export function create(prisma: PrismaClient) {
           ? { schedulingTypeId: body.scheduling_type_id }
           : {}),
         teachingMode: body.teaching_mode,
-        targetId: body.target_id,
+        ...(body.target_id !== undefined ? { targetId: body.target_id } : {}),
+        // Revision 155 — `multi_dimension`'s own target shape.
+        ...(body.dimensions !== undefined
+          ? {
+              dimensions: {
+                ...(body.dimensions.branch_ids !== undefined
+                  ? { branchIds: body.dimensions.branch_ids }
+                  : {}),
+                ...(body.dimensions.category_ids !== undefined
+                  ? { categoryIds: body.dimensions.category_ids }
+                  : {}),
+                ...(body.dimensions.level_ids !== undefined
+                  ? { levelIds: body.dimensions.level_ids }
+                  : {}),
+                ...(body.dimensions.administrative_group_ids !== undefined
+                  ? { administrativeGroupIds: body.dimensions.administrative_group_ids }
+                  : {}),
+                ...(body.dimensions.teaching_group_ids !== undefined
+                  ? { teachingGroupIds: body.dimensions.teaching_group_ids }
+                  : {}),
+              },
+            }
+          : {}),
         branchId: body.branch_id,
         startTime: body.start_time,
         endTime: body.end_time,
@@ -232,7 +254,7 @@ async function reload(
   prisma: PrismaClient,
   id: string,
 ): Promise<Parameters<typeof courseScheduleWriteDto>[0]> {
-  return prisma.recurringCourseSchedule.findUniqueOrThrow({
+  const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
     where: { id },
     include: {
       // R91 — the response must carry the periods, or a form that just saved a
@@ -246,8 +268,30 @@ async function reload(
           effectiveUntil: true,
         },
       },
+      // Revision 155 — real stored data, not a resolved display name, so
+      // (unlike `subject`/`branch`/etc.) it belongs on a write response too.
+      branchScopes: { select: { branchId: true } },
+      categoryScopes: { select: { categoryId: true } },
+      levelScopes: { select: { levelId: true } },
+      administrativeGroupScopes: { select: { administrativeGroupId: true } },
+      teachingGroupScopes: { select: { teachingGroupId: true } },
     },
   });
+  return {
+    ...row,
+    dimensions:
+      row.teachingMode === "multi_dimension"
+        ? {
+            branchIds: row.branchScopes.map((r) => r.branchId),
+            categoryIds: row.categoryScopes.map((r) => r.categoryId),
+            levelIds: row.levelScopes.map((r) => r.levelId),
+            administrativeGroupIds: row.administrativeGroupScopes.map(
+              (r) => r.administrativeGroupId,
+            ),
+            teachingGroupIds: row.teachingGroupScopes.map((r) => r.teachingGroupId),
+          }
+        : null,
+  };
 }
 
 /**

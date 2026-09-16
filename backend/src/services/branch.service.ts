@@ -213,6 +213,8 @@ export async function createBranch(
         // already refused a non-Super-Admin who tried to SET it.
         displayOrder: data.displayOrder ?? null,
         ...publicFieldData(data),
+        // Revision 156.
+        createdById: actor.userId,
       },
     });
     await audit.write(tx, {
@@ -428,7 +430,9 @@ export async function createRoom(
     const branch = await tx.branch.findFirst({ where: { id: branchId, deletedAt: null } });
     if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
 
-    const room = await tx.room.create({ data: { name: data.name, branchId } });
+    const room = await tx.room.create({
+      data: { name: data.name, branchId, createdById: actor.userId },
+    });
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

@@ -42,6 +42,9 @@ const SCHEDULE_KEYS = [
   "delivery_mode",
   // R57 — the class's own name and note. Labels, never identifiers.
   "description",
+  // Revision 155 — a `multi_dimension` row's real target; `null` for every
+  // other mode's row, never an empty object.
+  "dimensions",
   // R55 — R50's bound reaches the contract; `null` is open-ended.
   "effective_until",
   "end_time",
@@ -138,6 +141,7 @@ async function makeUser(
 }
 
 let superAdmin: string;
+let superAdminId: string;
 let scopedAdmin: string;
 let teacherToken: string;
 let staffingTeacherToken: string;
@@ -307,9 +311,8 @@ beforeAll(async () => {
     },
   });
 
-  superAdmin = bearer(await makeUser("مدير عام"), [
-    { role: "super_admin", branches: null },
-  ]);
+  superAdminId = await makeUser("مدير عام");
+  superAdmin = bearer(superAdminId, [{ role: "super_admin", branches: null }]);
   scopedAdmin = bearer(await makeUser("مدير فرع"), [
     { role: "admin", branches: [branchA] },
   ]);
@@ -1070,6 +1073,156 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
     const res = await call("GET", "/admin/course-schedules", outsider);
     expect(res.status).toBe(403);
     expect(res.body.error?.code).toBe("FORBIDDEN");
+  });
+});
+
+/**
+ * **Revision 155 — a `multi_dimension` schedule targets several dimensions
+ * at once**, mirroring §7's Event join tables (R24's own precedent). The
+ * legacy three-arm CHECK constraint and every existing mode are untouched
+ * (proved by every test above still passing); this is a fourth, additive
+ * arm.
+ */
+describe("Revision 155 — a multi_dimension schedule", () => {
+  it("creates with level_ids + branch_ids, and its roster resolves the SAME population administrative_group mode already does", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId], branch_ids: [branchA] },
+        staff: [],
+      }),
+    );
+    expect(created.status).toBe(201);
+    const schedule = created.body.schedule as {
+      id: string;
+      teaching_mode: string;
+      target_id: string;
+      dimensions: Record<string, string[]> | null;
+    };
+    expect(schedule.teaching_mode).toBe("multi_dimension");
+    // Never a single target — the real one lives in `dimensions`.
+    expect(schedule.target_id).toBe("");
+    expect(schedule.dimensions).toEqual({
+      branch_ids: [branchA],
+      category_ids: [],
+      level_ids: [levelId],
+      administrative_group_ids: [],
+      teaching_group_ids: [],
+    });
+
+    // Revision 156 — the audit trail: the row records who created it.
+    const persisted = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: schedule.id },
+      select: { createdById: true },
+    });
+    expect(persisted.createdById).toBe(superAdminId);
+
+    // `studentA` is enrolled in `groupA`, at `levelId`/`branchA` — inside
+    // BOTH named dimensions, so she is expected on this class's roster
+    // exactly as an `administrative_group`-mode schedule targeting `groupA`
+    // already resolves her.
+    const roster = await call(
+      "GET",
+      `/admin/course-schedules/${schedule.id}/roster`,
+      superAdmin,
+    );
+    expect(roster.status).toBe(200);
+    expect(roster.body.students!.map((s) => s.student_id)).toContain(
+      studentA,
+    );
+
+    // It also appears in the list read, with the SAME `dimensions` shape.
+    const list = await call(
+      "GET",
+      `/admin/course-schedules?page_size=100`,
+      superAdmin,
+    );
+    const row = (list.body.data ?? []).find((r) => r.id === schedule.id) as
+      | { dimensions: Record<string, string[]> | null }
+      | undefined;
+    expect(row?.dimensions).toEqual(schedule.dimensions);
+  });
+
+  it("refuses branches/categories alone — a class must name a level, group or circle", async () => {
+    const res = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { branch_ids: [branchA] },
+        staff: [],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe(
+      "MULTI_DIMENSION_NEEDS_A_LEVEL",
+    );
+  });
+
+  it("refuses a level id that does not exist", async () => {
+    const res = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: ["00000000-0000-0000-0000-000000000000"] },
+        staff: [],
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses target_id alongside multi_dimension, and dimensions with any other mode", async () => {
+    const withTargetId = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        dimensions: { level_ids: [levelId] },
+        staff: [],
+        // `scheduleBody()`'s own default `target_id: groupA` is left in
+        // place deliberately, to prove it is refused rather than ignored.
+      }),
+    );
+    expect(withTargetId.status).toBe(400);
+
+    const withDimensions = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        dimensions: { level_ids: [levelId] },
+        staff: [],
+      }),
+    );
+    expect(withDimensions.status).toBe(400);
+  });
+
+  it("a Teacher may not self-create one — §2's grant is entire_level only", async () => {
+    const res = await call(
+      "POST",
+      "/admin/course-schedules",
+      staffingTeacherToken,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId] },
+        staff: [{ user_id: teacherId, position: "teacher" }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe(
+      "TEACHER_ENTIRE_LEVEL_ONLY",
+    );
   });
 });
 

@@ -487,6 +487,7 @@ export async function createLevel(
         categoryId: input.categoryId,
         genderRestriction: input.genderRestriction,
         displayOrder: input.displayOrder ?? null,
+        createdById: actor.userId,
       },
     });
 

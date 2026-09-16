@@ -325,6 +325,13 @@ enum TeachingMode {
   entire_level
   administrative_group
   teaching_group
+  /// Revision 155 — a schedule targeted by ANY combination of branches,
+  /// categories, levels, administrative groups and teaching circles (§7's
+  /// own explicit-join idiom, R24's precedent, applied here rather than a
+  /// generic polymorphic scope). The three arms above stay a single,
+  /// exclusive target each; this one has none of the three legacy columns
+  /// set and resolves entirely through the `CourseSchedule*` join tables.
+  multi_dimension
 
   @@map("teaching_mode")
 }
@@ -754,6 +761,7 @@ model User {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  createdById  String? @map("created_by") @db.Uuid
   deletedById  String? @map("deleted_by") @db.Uuid
   deletedBy    User?   @relation("UserDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
   deletedUsers User[]  @relation("UserDeletedBy")
@@ -906,6 +914,7 @@ model Partner {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@index([deletedAt, isVisible, displayOrder])
@@ -941,6 +950,7 @@ model UserBranchRole {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([userId, roleId, branchId])
@@ -994,6 +1004,7 @@ model Branch {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   rooms Room[]
@@ -1004,6 +1015,9 @@ model Branch {
   branchRoles          UserBranchRole[]
   content              EducationalContent[]
   eventScopes          EventBranch[]
+  /// Revision 155 (expand phase) — a `multi_dimension` schedule's own
+  /// audience joins, mirroring `eventScopes` above.
+  courseScheduleScopes CourseScheduleBranch[]
   /// Revision 39 — applicants who REQUESTED this branch at registration. Not
   /// the people placed here; that is `groups → StudentGroup`.
   intendedBy           User[]                    @relation("UserIntendedBranch")
@@ -1037,6 +1051,7 @@ model Room {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   // Revision 43 (expand phase) — see the educational-model block below.
@@ -1086,15 +1101,18 @@ model Category {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  levels            Level[]
+  levels               Level[]
   /// R62 — the stage a parent applied to for a child. The administrator may
   /// change it: placement is an administrative decision, never a rule.
-  childApplications ChildApplication[]
-  eventScopes       EventCategory[]
+  childApplications    ChildApplication[]
+  eventScopes          EventCategory[]
+  /// Revision 155 (expand phase) — mirrors `eventScopes` above.
+  courseScheduleScopes CourseScheduleCategory[]
   /// Revision 49 — applicants who asked for this stage. See `User`.
-  intendedBy        User[]             @relation("UserIntendedCategory")
+  intendedBy           User[]                   @relation("UserIntendedCategory")
 
   @@index([displayOrder])
   @@map("category")
@@ -1126,6 +1144,7 @@ model Level {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   subjects LevelSubject[]
@@ -1140,6 +1159,8 @@ model Level {
   exams                Exam[]
   content              EducationalContent[]
   eventScopes          EventLevel[]
+  /// Revision 155 (expand phase) — mirrors `eventScopes` above.
+  courseScheduleScopes CourseScheduleLevel[]
 
   @@index([categoryId, displayOrder])
   @@map("level")
@@ -1176,6 +1197,7 @@ model Subject {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   levels LevelSubject[]
@@ -1201,6 +1223,7 @@ model LevelSubject {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([levelId, subjectId])
@@ -1221,6 +1244,7 @@ model LevelSurah {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([levelId, surahId])
@@ -1270,12 +1294,15 @@ model AdministrativeGroup {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  enrollments Enrollment[]
-  schedules   RecurringCourseSchedule[]
-  grades      Grade[]
-  eventScopes EventAdministrativeGroup[]
+  enrollments          Enrollment[]
+  schedules            RecurringCourseSchedule[]
+  grades               Grade[]
+  eventScopes          EventAdministrativeGroup[]
+  /// Revision 155 (expand phase) — mirrors `eventScopes` above.
+  courseScheduleScopes CourseScheduleAdministrativeGroup[]
 
   // Redundant against the primary key ON PURPOSE: PostgreSQL requires a unique
   // constraint on the referenced column pair before `Enrollment` can declare
@@ -1322,12 +1349,17 @@ model TeachingGroup {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  members   StudentTeachingGroup[]
-  schedules RecurringCourseSchedule[]
+  members              StudentTeachingGroup[]
+  schedules            RecurringCourseSchedule[]
   /// R124 — assessments published to this split.
-  exams     Exam[]
+  exams                Exam[]
+  /// Revision 155 (expand phase) — a `multi_dimension` schedule that names
+  /// this circle among its dimensions. Distinct from `schedules` above,
+  /// which is the LEGACY single-target `teaching_group` mode's own FK.
+  courseScheduleScopes CourseScheduleTeachingGroup[]
 
   // Same technique as `AdministrativeGroup(id, level_id)`: the referenced pair
   // a composite FK needs. `StudentTeachingGroup` carries subject+level and this
@@ -1369,6 +1401,7 @@ model StudentTeachingGroup {
 
   addedAt     DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@index([teachingGroupId, deletedAt])
@@ -1436,6 +1469,7 @@ model Enrollment {
 
   enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   /// **`deleted_at` is REMOVAL, never the end of a semester** (R122). A period
@@ -1569,15 +1603,94 @@ model RecurringCourseSchedule {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   staff    CourseScheduleStaff[]
   sessions Session[]
 
+  /// Revision 155 (expand phase) — populated ONLY when `teachingMode` is
+  /// `multi_dimension`; every other mode keeps its single legacy target
+  /// above and none of these five. See `docs/SRS.md` Revision 155.
+  branchScopes              CourseScheduleBranch[]
+  categoryScopes            CourseScheduleCategory[]
+  levelScopes               CourseScheduleLevel[]
+  administrativeGroupScopes CourseScheduleAdministrativeGroup[]
+  teachingGroupScopes       CourseScheduleTeachingGroup[]
+
   @@index([branchId, deletedAt])
   @@index([subjectId, deletedAt])
   @@index([academicYearId, deletedAt])
   @@map("recurring_course_schedule")
+}
+
+/// Revision 155 (expand phase) — `RecurringCourseSchedule`'s multi-dimension
+/// targeting, mirroring §7's Event join tables exactly (R24's own
+/// precedent: an explicit join per dimension, never a generic polymorphic
+/// scope table). **ADDITIVE ONLY**: the three legacy single-target arms
+/// above and their CHECK constraint are untouched; `teaching_mode =
+/// 'multi_dimension'` is a NEW, fourth arm that uses these tables instead,
+/// exactly as R43's own expand phase never combined addition with removal
+/// in one migration. Populated EXPLICITLY at schedule creation, never
+/// evaluated as runtime null/wildcard matches — the same discipline the
+/// comment beside `EventBranch` states.
+model CourseScheduleBranch {
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  branchId   String                  @map("branch_id") @db.Uuid
+  branch     Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([scheduleId, branchId])
+  @@map("course_schedule_branch")
+}
+
+model CourseScheduleCategory {
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  categoryId String                  @map("category_id") @db.Uuid
+  category   Category                @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([scheduleId, categoryId])
+  @@map("course_schedule_category")
+}
+
+model CourseScheduleLevel {
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  levelId    String                  @map("level_id") @db.Uuid
+  level      Level                   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  @@id([scheduleId, levelId])
+  @@map("course_schedule_level")
+}
+
+model CourseScheduleAdministrativeGroup {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  scheduleId            String                  @map("schedule_id") @db.Uuid
+  schedule              RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  administrativeGroupId String                  @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup     @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleId, administrativeGroupId])
+  @@index([administrativeGroupId])
+  @@map("course_schedule_administrative_group")
+}
+
+/// **No `EventTeachingGroup` precedent exists** — Event deliberately has no
+/// circle arm at all (§7: "inventing the join here would be inventing a
+/// domain relationship the SRS does not define"). A class, unlike an event,
+/// already has one (the legacy `teaching_group` mode), so extending it to a
+/// join table here is completing an existing relationship, not inventing one.
+model CourseScheduleTeachingGroup {
+  id              String                  @id @default(uuid()) @db.Uuid
+  scheduleId      String                  @map("schedule_id") @db.Uuid
+  schedule        RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  teachingGroupId String                  @map("teaching_group_id") @db.Uuid
+  teachingGroup   TeachingGroup           @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleId, teachingGroupId])
+  @@index([teachingGroupId])
+  @@map("course_schedule_teaching_group")
 }
 
 /// **SRS Revision 92 — one occurrence's audience, when it is not its schedule's.**
@@ -1655,6 +1768,7 @@ model CourseScheduleStaff {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   /// **`@@unique([scheduleId, userId])` was withdrawn by R91.** It encoded *one
@@ -1814,6 +1928,7 @@ model SessionStaff {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([sessionId, userId])
@@ -1948,6 +2063,7 @@ model SessionContent {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([sessionId, contentId])
@@ -2011,6 +2127,7 @@ model FamilyLink {
   identityReviewRaisedAt DateTime? @map("identity_review_raised_at") @db.Timestamptz(6)
 
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
@@ -2628,6 +2745,7 @@ model SchedulingType {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   events          Event[]
@@ -2668,6 +2786,7 @@ model Event {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   /// **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
@@ -2964,6 +3083,7 @@ model Exam {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   submissions StudentExamSubmission[]
@@ -3040,6 +3160,7 @@ model ExamQuestion {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   options        ExamQuestionOption[]
@@ -3069,6 +3190,7 @@ model ExamQuestionOption {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   chosenBy StudentExamAnswerOption[]
@@ -3187,6 +3309,7 @@ model Grade {
 
   publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   /// Owner-reported, 2026-09-15 — the per-question breakdown, where the
@@ -3290,8 +3413,9 @@ model AcademicPeriod {
   /// each other; a wrong date silently changes who counts as enrolled.
   version Int @default(0)
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String?  @map("created_by") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   enrollments Enrollment[]
 
@@ -3328,6 +3452,7 @@ model AcademicYear {
   /// references it — periods, exams, course schedules, content — exactly
   /// `deleteLevel`'s and `deleteSubject`'s own blocking-reference discipline.
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   content EducationalContent[]
@@ -3389,6 +3514,7 @@ model EducationalContent {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   sessionLinks SessionContent[]
@@ -3422,6 +3548,7 @@ model ExamStaff {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   /// One person holds one position on one exam.
@@ -3449,6 +3576,7 @@ model EventStaff {
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   /// One person holds one position on one event.
@@ -3561,6 +3689,7 @@ model HijriMonthStart {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedById String?   @map("updated_by") @db.Uuid
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
   @@unique([hijriYear, hijriMonth])

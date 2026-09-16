@@ -98,6 +98,29 @@ export interface AudienceSpec {
   audienceBranchIds?: string[] | null;
 
   /**
+   * **Revision 155 — populated ONLY when `teachingMode` is
+   * `multi_dimension`; every other mode leaves this `undefined` and
+   * resolves through the three legacy fields above exactly as before.**
+   *
+   * The class's real target when it has one: any combination of branches,
+   * categories, levels, administrative groups and teaching circles,
+   * composed by `audienceWhere` exactly as `eventAudienceWhere` composes
+   * Event's own four (AND across different kinds, OR within one kind) —
+   * plus a fifth, circle, kind Event has never had. See `audienceWhere`'s
+   * own `multi_dimension` case for why a circle unions with the rest
+   * rather than intersecting: a Teaching Circle is already Level-locked,
+   * so "Level A and Circle C" reads as *these two populations together*,
+   * not their overlap.
+   */
+  dimensions?: {
+    branchIds: string[];
+    categoryIds: string[];
+    levelIds: string[];
+    administrativeGroupIds: string[];
+    teachingGroupIds: string[];
+  };
+
+  /**
    * **R123 — which day's enrolments count, or `null` for the period-blind
    * question.**
    *
@@ -234,6 +257,86 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
             }),
       };
     }
+    case "multi_dimension": {
+      if (!spec.dimensions) {
+        throw new Error(unreachable("multi_dimension", "dimensions"));
+      }
+      const { branchIds, categoryIds, levelIds, administrativeGroupIds, teachingGroupIds } =
+        spec.dimensions;
+
+      /**
+       * **The enrolment-based dimensions AND together, exactly as
+       * `eventAudienceWhere` composes Event's own four** — one `some`
+       * rather than one per kind, for the identical reason its own
+       * comment gives: separate ones would each be satisfied by a
+       * DIFFERENT enrolment of the same student.
+       */
+      const enrolment: Prisma.EnrollmentWhereInput = {
+        deletedAt: null,
+        ...period,
+      };
+      let namesAnEnrolmentDimension = false;
+      if (branchIds.length > 0) {
+        enrolment.branchId = { in: branchIds };
+        namesAnEnrolmentDimension = true;
+      }
+      if (levelIds.length > 0) {
+        enrolment.levelId = { in: levelIds };
+        namesAnEnrolmentDimension = true;
+      }
+      if (categoryIds.length > 0) {
+        enrolment.level = { categoryId: { in: categoryIds } };
+        namesAnEnrolmentDimension = true;
+      }
+      if (administrativeGroupIds.length > 0) {
+        enrolment.administrativeGroupId = { in: administrativeGroupIds };
+        enrolment.administrativeGroup = { deletedAt: null };
+        namesAnEnrolmentDimension = true;
+      }
+
+      const parts: Prisma.UserWhereInput[] = [];
+      if (namesAnEnrolmentDimension) {
+        parts.push({ deletedAt: null, levelEnrollments: { some: enrolment } });
+      }
+      /**
+       * **A circle UNIONS with the rest, never intersects** — the one
+       * genuinely new combination rule this mode needs, since Event never
+       * had a circle arm to combine anything with. A Teaching Circle is
+       * already Level-locked (§4.4c), so "Level A and Circle C" reads as
+       * *these two populations together*, the same way naming two
+       * Branches unions rather than intersects them below.
+       */
+      if (teachingGroupIds.length > 0) {
+        parts.push({
+          deletedAt: null,
+          teachingGroupSeats: {
+            some: {
+              deletedAt: null,
+              teachingGroupId: { in: teachingGroupIds },
+              teachingGroup: { deletedAt: null },
+            },
+          },
+          ...(spec.on === null
+            ? {}
+            : {
+                levelEnrollments: {
+                  some: {
+                    deletedAt: null,
+                    ...enrolmentInPeriodOn(spec.on),
+                    level: { teachingGroups: { some: { id: { in: teachingGroupIds } } } },
+                  },
+                },
+              }),
+        });
+      }
+      // Unreachable once the DB trigger (`course_schedule_multi_dimension_
+      // nonempty`) and `resolveTarget`'s own service-level check both hold —
+      // never trusted blindly, and a matches-nobody predicate is safer than
+      // an empty `where`, which would match EVERYONE (the exact accident
+      // `eventAudienceWhere`'s own global case returns early to prevent).
+      if (parts.length === 0) return { deletedAt: null, id: { in: [] } };
+      return parts.length === 1 ? parts[0]! : { OR: parts };
+    }
   }
 }
 
@@ -263,6 +366,43 @@ function unreachable(mode: string, field: string): string {
  * missing occurrence means rather than being handed an empty audience that
  * looks like *nobody is expected*.
  */
+/**
+ * **Revision 155 — the one read of a `multi_dimension` schedule's own five
+ * join tables**, reused by every `AudienceSpec` construction site rather
+ * than restated at each one (the exact drift `roster-resolution.ts`'s own
+ * module docstring warns every arm about). `null` for any other mode —
+ * callers spread it into `AudienceSpec.dimensions` only when truthy, so a
+ * legacy schedule's spec carries `dimensions: undefined` exactly as before
+ * this revision existed.
+ */
+export async function scheduleDimensions(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  scheduleId: string,
+  teachingMode: TeachingMode,
+): Promise<AudienceSpec['dimensions'] | null> {
+  if (teachingMode !== 'multi_dimension') return null;
+  const [branches, categories, levels, groups, circles] = await Promise.all([
+    prisma.courseScheduleBranch.findMany({ where: { scheduleId }, select: { branchId: true } }),
+    prisma.courseScheduleCategory.findMany({ where: { scheduleId }, select: { categoryId: true } }),
+    prisma.courseScheduleLevel.findMany({ where: { scheduleId }, select: { levelId: true } }),
+    prisma.courseScheduleAdministrativeGroup.findMany({
+      where: { scheduleId },
+      select: { administrativeGroupId: true },
+    }),
+    prisma.courseScheduleTeachingGroup.findMany({
+      where: { scheduleId },
+      select: { teachingGroupId: true },
+    }),
+  ]);
+  return {
+    branchIds: branches.map((r) => r.branchId),
+    categoryIds: categories.map((r) => r.categoryId),
+    levelIds: levels.map((r) => r.levelId),
+    administrativeGroupIds: groups.map((r) => r.administrativeGroupId),
+    teachingGroupIds: circles.map((r) => r.teachingGroupId),
+  };
+}
+
 export async function audienceForSession(
   prisma: Prisma.TransactionClient | PrismaClient,
   sessionId: string,
@@ -284,6 +424,7 @@ export async function audienceForSession(
       audienceBranches: { select: { branchId: true } },
       schedule: {
         select: {
+          id: true,
           teachingMode: true,
           levelId: true,
           administrativeGroupId: true,
@@ -295,12 +436,15 @@ export async function audienceForSession(
   });
   if (!session?.schedule) return null;
 
+  const { id: scheduleId, ...scheduleFields } = session.schedule;
   const override = session.audienceBranches.map((b) => b.branchId);
+  const dimensions = await scheduleDimensions(prisma, scheduleId, scheduleFields.teachingMode);
   return {
-    ...session.schedule,
+    ...scheduleFields,
     // Empty means INHERIT — the ordinary case, and every occurrence but the
     // rare combined one.
     audienceBranchIds: override.length > 0 ? override : null,
+    ...(dimensions ? { dimensions } : {}),
     on: on === 'occurrence' ? session.date : null,
   };
 }
@@ -489,6 +633,31 @@ export async function studentsTaughtBy(
     select: { levelId: true, branchId: true },
   });
 
+  /**
+   * **Revision 155 — the `multi_dimension` arm**, the period-blind
+   * membership question for every such schedule she staffs, exactly as the
+   * three legacy arms already ask it. Read here (not composed from
+   * `scheduleDimensions`'s per-schedule round trip) because this function
+   * already needs every SUCH schedule's own set, not one at a time.
+   */
+  const multiDimension = await prisma.recurringCourseSchedule.findMany({
+    where: {
+      deletedAt: null,
+      teachingMode: "multi_dimension",
+      staff: staffed,
+      ...subject,
+    },
+    select: {
+      id: true,
+      branchId: true,
+      branchScopes: { select: { branchId: true } },
+      categoryScopes: { select: { categoryId: true } },
+      levelScopes: { select: { levelId: true } },
+      administrativeGroupScopes: { select: { administrativeGroupId: true } },
+      teachingGroupScopes: { select: { teachingGroupId: true } },
+    },
+  });
+
   const arms: Prisma.UserWhereInput[] = [
     {
       levelEnrollments: {
@@ -545,6 +714,28 @@ export async function studentsTaughtBy(
     // `audienceForSession` every other reader uses (R92 §B7) — never a fourth
     // arm written by hand here.
     ...occurrenceArms,
+    // Revision 155 — each `multi_dimension` schedule she staffs, through the
+    // SAME `audienceWhere` every other reader composes, never a sixth
+    // hand-written arm here.
+    ...multiDimension.map((s) =>
+      audienceWhere({
+        teachingMode: "multi_dimension",
+        levelId: null,
+        administrativeGroupId: null,
+        teachingGroupId: null,
+        branchId: s.branchId,
+        on: null,
+        dimensions: {
+          branchIds: s.branchScopes.map((r) => r.branchId),
+          categoryIds: s.categoryScopes.map((r) => r.categoryId),
+          levelIds: s.levelScopes.map((r) => r.levelId),
+          administrativeGroupIds: s.administrativeGroupScopes.map(
+            (r) => r.administrativeGroupId,
+          ),
+          teachingGroupIds: s.teachingGroupScopes.map((r) => r.teachingGroupId),
+        },
+      }),
+    ),
   ];
 
   return { deletedAt: null, OR: arms };

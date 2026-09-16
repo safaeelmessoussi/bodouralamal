@@ -92,6 +92,8 @@ export async function createPartner(
         description: input.description ?? null,
         displayOrder: input.displayOrder ?? null,
         ...(input.isVisible === undefined ? {} : { isVisible: input.isVisible }),
+        // Revision 156.
+        createdById: actor.userId,
       },
     });
     await audit.write(tx, {

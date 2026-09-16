@@ -755,6 +755,10 @@ async function createContentFromFinalization(
         mimeType: claims.mime,
         sizeBytes: BigInt(size),
         origin: claims.origin ?? 'uploaded',
+        // Revision 156 — a manual upload; the automatic recording-ingestion
+        // path (`session-recording-ingest.service.ts`) deliberately leaves
+        // this null, on its own "no actor — system-initiated" convention.
+        createdById: actor.userId,
       },
     });
     await audit.write(tx, {

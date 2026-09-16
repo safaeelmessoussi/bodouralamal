@@ -19,7 +19,26 @@ export const teachingMode = z.enum([
   "entire_level",
   "administrative_group",
   "teaching_group",
+  "multi_dimension",
 ]);
+
+/**
+ * **Revision 155 — a `multi_dimension` schedule's real target**, named
+ * where the other three modes name `target_id` instead. Every array is
+ * optional; at least one of `level_ids`/`administrative_group_ids`/
+ * `teaching_group_ids` is still required (`MULTI_DIMENSION_NEEDS_A_LEVEL`,
+ * checked in the service — a class must teach a curriculum Subject to a
+ * real population, which `branch_ids`/`category_ids` alone cannot name).
+ */
+export const courseScheduleDimensions = z
+  .object({
+    branch_ids: z.array(uuid).max(50).optional(),
+    category_ids: z.array(uuid).max(50).optional(),
+    level_ids: z.array(uuid).max(50).optional(),
+    administrative_group_ids: z.array(uuid).max(50).optional(),
+    teaching_group_ids: z.array(uuid).max(50).optional(),
+  })
+  .strict();
 
 export const recurrence = z.enum([
   "none",
@@ -187,7 +206,11 @@ export const createCourseScheduleSchema = z
     description: scheduleDescription,
     subject_id: uuid,
     teaching_mode: teachingMode,
-    target_id: uuid,
+    /** Required for every mode except `multi_dimension`, which uses
+     *  `dimensions` instead (checked below — the two are named exclusively,
+     *  never both, never neither). */
+    target_id: uuid.optional(),
+    dimensions: courseScheduleDimensions.optional(),
     branch_id: uuid,
     room_id: uuid.nullable().optional(),
     /** R97 — the DEFAULT delivery for the Sessions this schedule materializes.
@@ -239,7 +262,42 @@ export const createCourseScheduleSchema = z
     staff: staff.optional(),
   })
   .strict()
-  .superRefine(checkDelivery);
+  .superRefine(checkDelivery)
+  .superRefine((v, ctx) => {
+    // Revision 155 — `target_id` and `dimensions` are exclusive: exactly the
+    // one `teaching_mode` names, never both, never neither.
+    if (v.teaching_mode === "multi_dimension") {
+      if (v.target_id !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["target_id"],
+          message: "target_id is not used by multi_dimension — use dimensions",
+        });
+      }
+      if (v.dimensions === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dimensions"],
+          message: "multi_dimension requires dimensions",
+        });
+      }
+    } else {
+      if (v.target_id === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["target_id"],
+          message: "target_id is required for this teaching_mode",
+        });
+      }
+      if (v.dimensions !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dimensions"],
+          message: "dimensions is used only by multi_dimension",
+        });
+      }
+    }
+  });
 
 /**
  * **Subject, target, branch and academic year are not editable**, and `.strict()`

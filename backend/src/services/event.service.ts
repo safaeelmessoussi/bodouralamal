@@ -278,6 +278,8 @@ export async function createEvent(
         endTime: input.endTime ?? null,
         recurrenceType: input.recurrenceType as never,
         recurrenceEndDate: input.recurrenceEndDate ?? null,
+        // Revision 156.
+        createdById: actor.userId,
       },
     });
 
@@ -312,7 +314,12 @@ export async function createEvent(
     // personally answer for every event they set up would be a fiction.
     if (!isAdmin(actor) && isTeacher(actor)) {
       await tx.eventStaff.create({
-        data: { eventId: event.id, userId: actor.userId, position: 'responsible' },
+        data: {
+          eventId: event.id,
+          userId: actor.userId,
+          position: 'responsible',
+          createdById: actor.userId,
+        },
       });
     }
 
@@ -703,7 +710,12 @@ export async function setEventStaff(
     for (const person of staff) {
       if (!existing.some((row) => row.userId === person.userId)) {
         await tx.eventStaff.create({
-          data: { eventId, userId: person.userId, position: person.position },
+          data: {
+            eventId,
+            userId: person.userId,
+            position: person.position,
+            createdById: actor.userId,
+          },
         });
       }
     }
