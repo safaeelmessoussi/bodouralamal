@@ -9844,3 +9844,17 @@ Verification: frontend typecheck/lint/build clean; frontend unit 1,354/1,354 (th
 `var(--transition-fast)`). Visual result checked against a static harness built from the
 real compiled stylesheet, following `scripts/dev/browser`'s own established harness
 pattern — not the Owner's populated local stack, which this pass never touched or rebuilt.
+
+**Built (Revision 160 §6) — بناء الاختبارات's question list redesigned; found no other
+defect to fix on the same screen.** `<ol className="assessment-questions">` had never
+carried a stylesheet rule at all, so it rendered as a bare browser list — that alone was
+what read as "messy and very basic," not any of the screen's data, requests or actions.
+Each question is now a bordered card, numbered by a CSS `counter` (not a second `{n}` in the
+markup), its kind/points shown as the platform's own badge chips, and its edit/reorder/
+remove actions in one row below a hairline. The exam's own status/target summary and the
+library's filterable table one screen up were read and left untouched — an ordinary working
+`DataTable` is not the defect reported. No field, handler, request or i18n string changed.
+
+Verification: frontend typecheck/lint/build clean; frontend unit 1,354/1,354 unmodified;
+`check-design-tokens.sh` clean. Visual result checked against the same kind of static
+harness §7 used, built from the real compiled stylesheet.

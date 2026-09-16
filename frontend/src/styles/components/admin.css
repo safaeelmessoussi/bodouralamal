@@ -1085,3 +1085,68 @@
   flex-wrap: wrap;
   margin-inline-start: auto;
 }
+
+/* **بناء الاختبارات's question list, redesigned (Owner report, 2026-09-16:
+ * "messy and very basic").** No logic changed — `<ol className="assessment-
+ * questions">` is the exact same markup the component already rendered, this
+ * class simply had no rule at all until now, so it fell back to the browser's
+ * bare list default (a decimal marker and nothing else). Each question is now
+ * its own card, numbered, with its kind/points as chips and its actions in one
+ * tidy row instead of a run-on paragraph of ghost buttons. */
+.assessment-questions {
+  list-style: none;
+  margin: var(--space-4) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* The running number IS the numbering — see `.assessment-questions__index`
+     below — so the list itself must not draw a second one. */
+  counter-reset: assessment-question;
+}
+.assessment-questions > li {
+  position: relative;
+  padding: var(--space-4);
+  padding-inline-start: calc(var(--space-4) + 2rem + var(--space-3));
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  counter-increment: assessment-question;
+}
+/* The number rides in its own circle at the card's start — a shape distinct
+   from the kind/points chips beside the prompt, on the same reasoning §14.4
+   already applies to every other status marker in this platform. */
+.assessment-questions > li::before {
+  content: counter(assessment-question);
+  position: absolute;
+  inset-inline-start: var(--space-4);
+  inset-block-start: var(--space-4);
+  inline-size: 2rem;
+  block-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.assessment-questions__prompt {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-2);
+}
+.assessment-questions ul {
+  margin: var(--space-2) 0;
+  padding-inline-start: var(--space-5);
+}
+.assessment-questions__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}

@@ -647,15 +647,14 @@ function OnePaper({
             {paper.questions.map((q, index) => (
               <li key={q.id}>
                 <p className="assessment-questions__prompt">
-                  <strong>{t('assessments.question').replace('{n}', String(index + 1))}</strong>{' '}
-                  <span className="muted">{t(KIND_LABELS[q.kind])}</span>
+                  <strong>{t('assessments.question').replace('{n}', String(index + 1))}</strong>
+                  <Badge tone="neutral">{t(KIND_LABELS[q.kind])}</Badge>
                   {/* R137 — shown to author and student alike (per-surface
                       wiring below); a maximum, never the mark earned. */}
                   {q.points !== null ? (
-                    <span className="muted">
-                      {' — '}
+                    <Badge tone="neutral">
                       {t('assessments.questionPointsOf').replace('{points}', q.points)}
-                    </span>
+                    </Badge>
                   ) : null}
                 </p>
                 <p>{q.prompt}</p>
@@ -670,7 +669,7 @@ function OnePaper({
                   <p className="hint">{t(JUSTIFICATION_LABELS[q.justification])}</p>
                 ) : null}
                 {editable ? (
-                  <p>
+                  <div className="assessment-questions__actions">
                     {/* Up/down, not drag-and-drop: no reusable drag component
                         exists here, and one screen is not a reason to add a
                         library (§14.3). */}
@@ -699,7 +698,7 @@ function OnePaper({
                     >
                       {t('assessments.removeQuestion')}
                     </Button>
-                  </p>
+                  </div>
                 ) : null}
               </li>
             ))}

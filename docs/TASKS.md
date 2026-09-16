@@ -4547,7 +4547,11 @@ the Owner's own report named.
       (مستفيدة/ابن أو ابنة/مؤطرة/مديرة) in one submission, full outer
       join of the fields each role needs, super admin approves any
       subset. Not started.
-- [ ] **§6 — redesign بناء الاختبارات.** Not started.
+- [x] **Built: بناء الاختبارات §6** — the question list carried no
+      stylesheet rule at all; each question is now a numbered card
+      with kind/points as badge chips and its actions in one row.
+      The rest of the screen (summary, library table) was checked
+      and left as-is — no logic, request or i18n string changed.
 - [x] **Built: مستجدّات §7** — each notice is now an icon (a new
       per-category glyph) beside a text column in its own soft card;
       the unread marker stays the AG-required inline-start border
