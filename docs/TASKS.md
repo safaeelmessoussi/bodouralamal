@@ -4569,6 +4569,12 @@ the Owner's own report named.
       the unread marker stays the AG-required inline-start border
       (shape, not colour), a soft tint added only as a second cue. No
       headline/reason text changed.
-- [ ] Full disposable-stack re-run, push and Staging deployment held
-      until the next coherent boundary in this batch — see
-      CHANGES.log for the exact state of what has already shipped.
+- [x] Full disposable-stack re-run: 2,640/2,658 (18 pre-existing
+      skips), all-table isolation intact, up from 2,636/2,654. All 31
+      guards, doc-links and `git diff --check` pass. Pushed as four
+      commits (`fc14bb2`, `98c3279`, `0ffae92`, `325e360`), hosted CI
+      green on each, all 7 jobs. Deployed `325e360` to Staging,
+      upgrading from `326289f`: no pending migrations, `/healthz`
+      green on the first check, no leftover disposable containers.
+      §2/§3/§4 remain open pending Owner confirmation — see above.
+      Full detail in CHANGES.log.

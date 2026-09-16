@@ -9858,3 +9858,27 @@ library's filterable table one screen up were read and left untouched — an ord
 Verification: frontend typecheck/lint/build clean; frontend unit 1,354/1,354 unmodified;
 `check-design-tokens.sh` clean. Visual result checked against the same kind of static
 harness §7 used, built from the real compiled stylesheet.
+
+**Built (Revision 160 §2/§3/§4) — investigated and documented; nothing implemented.** Each
+is a real design fork (detailed in SRS Revision 160 §2/§3/§4 and `docs/TASKS.md`) reported
+rather than guessed at, on the same convention R92's own comment already established for
+this exact boundary.
+
+Five of the eight items in this Owner batch (§1, §5, §6, §7, §8) are now shipped; §2/§3/§4
+are investigated and documented, held for the Owner's confirmation before any schema or
+workflow change. Full disposable-stack integration suite re-run at this boundary: **2,640
+passed / 18 skipped (2,658)**, all-table isolation intact — a real increase over the prior
+batch's 2,636/2,654, matching the new coverage this batch added (the `submitted` predicate
+tests, the attachment-disposition round trip). All 31 CI guards, `check-doc-links.sh` and
+`git diff --check` pass.
+
+Pushed as four commits on `develop` — `fc14bb2` (§1/§5/§8), `98c3279` (§7), `0ffae92` (§6),
+`325e360` (§2/§3/§4 documentation) — hosted CI green on every one, all 7 jobs each, Release
+included. Deployed `325e360` to `staging.bodouralamal.com`, upgrading from `326289f`: host
+preflight passed cleanly, both exact-commit images pulled and their
+`org.opencontainers.image.revision` label confirmed before recreation, a pre-migration dump
+taken (`predeploy-326289f-to-325e360-20260916T223333Z.dump`), `prisma migrate deploy`
+confirmed nothing pending (expected — no migration in this batch), `api`/`nginx` recreated
+and verified on the exact commit's label, `/healthz` green (4/4 components, 12/12 workers) on
+the first check, no error-level log lines in the following minutes, TLS/HSTS/CSP headers
+reconfirmed, no leftover disposable containers. No Production action of any kind.
