@@ -1403,7 +1403,7 @@ describe("Revision 157 — this_and_future splits a multi_dimension schedule", (
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const successorId = (res.body.schedule as { id: string }).id;
     expect(successorId).not.toBe(scheduleId);
-    expect(res.body.schedule.dimensions).toEqual({
+    expect((res.body.schedule as { dimensions: unknown }).dimensions).toEqual({
       branch_ids: [branchA],
       category_ids: [],
       level_ids: [levelId],
@@ -1455,7 +1455,7 @@ describe("Revision 157 — this_and_future splits a multi_dimension schedule", (
       dimensions: { administrative_group_ids: [groupA] },
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.schedule.dimensions).toEqual({
+    expect((res.body.schedule as { dimensions: unknown }).dimensions).toEqual({
       branch_ids: [],
       category_ids: [],
       level_ids: [],
