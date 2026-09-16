@@ -4464,4 +4464,10 @@ the Owner's own report named.
       revisions; all-table isolation intact; all 31 guards, doc-links
       and `git diff --check` pass. Full detail in CHANGES.log and SRS
       Revisions 155–156.
-- [ ] Pushed to `develop`; hosted CI; Staging deployment. Pending.
+- [x] Pushed as `14b193b`; hosted CI green, all 7 jobs (run `35091290782`),
+      Release included (one Integration-job browser-timing flake, confirmed
+      unrelated and cleared by a clean rerun). Deployed to Staging, upgrading
+      from `895173f`: pre-migration dump taken, `prisma migrate deploy`
+      applied all three new migrations cleanly, `/healthz` green on the
+      first check, no leftover disposable containers. Full detail in
+      CHANGES.log.
