@@ -7,6 +7,7 @@ import {
 } from '../../adapters/notifications.js';
 import { t } from '../../i18n/index.js';
 import { Button, ButtonLink } from '../ui/button.js';
+import { Icon, type IconName } from '../ui/icon.js';
 import { ErrorState } from '../states.js';
 import { useActiveRoleOrNull } from '../../contexts/active-role.js';
 
@@ -78,6 +79,44 @@ const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
   exam_cancelled: 'notifications.examCancelled',
   grade_published: 'notifications.gradePublished',
   assessment_published: 'notifications.assessmentPublished',
+};
+
+/**
+ * **A category glyph, redesigned for scannability (Owner report, 2026-09-16:
+ * "make it beautiful and easy to scan").** Presentational only — the same
+ * `Record` discipline `HEADLINE_KEYS` above already uses, so a new
+ * `NotificationItem['type']` fails the type check here too rather than
+ * silently rendering with no icon.
+ */
+const CATEGORY_ICON: Record<NotificationItem['type'], IconName> = {
+  registration_review_required: 'user',
+  registration_approved: 'user',
+  registration_rejected: 'user',
+  family_link_requested: 'user',
+  family_link_approved: 'user',
+  family_link_rejected: 'user',
+  family_link_revoked: 'user',
+  role_assignments_changed: 'user',
+  platform_ownership_received: 'user',
+  enrollment_changed: 'user',
+  session_cancelled: 'calendar',
+  session_restored: 'calendar',
+  session_rescheduled: 'calendar',
+  session_assigned: 'calendar',
+  session_unassigned: 'calendar',
+  event_created: 'calendar',
+  event_staff_assigned: 'calendar',
+  event_staff_unassigned: 'calendar',
+  event_rescheduled: 'calendar',
+  event_cancelled: 'calendar',
+  exam_teacher_assigned: 'calendar',
+  exam_teacher_unassigned: 'calendar',
+  exam_scheduled: 'calendar',
+  exam_rescheduled: 'calendar',
+  exam_changed: 'calendar',
+  exam_cancelled: 'calendar',
+  grade_published: 'book',
+  assessment_published: 'book',
 };
 
 /**
@@ -217,48 +256,58 @@ export function NotificationList({
               item.read_at === null ? 'notifications__item is-unread' : 'notifications__item'
             }
           >
-            <p className="notifications__headline">
-              {/* The target-neutral fields (R82.1): a notice is about a class,
-                  an activity or an exam, and the reader experiences one list. */}
-              {t(HEADLINE_KEYS[item.type])
-                .replace('{subject}', item.title ?? t('notifications.theClass'))
-                .replace('{date}', item.date ?? '')
-                .replace('{time}', item.start_time ?? '')
-                .trim()}
-            </p>
-            {/* The reason is the whole point of the notice — «ألغيت» without
-                «لماذا» is what the association's manual channels already
-                managed, badly. Absent on a restoration, where the stored reason
-                describes the cancellation that no longer applies. */}
-            {/* The reason belongs to a cancellation. On a restoration or a
-                reschedule the stored reason describes something that no longer
-                applies, and on an assignment there is none. */}
-            {/* R83.2 — a cancellation may carry NO reason, and that is a
-                complete answer rather than a gap: the line is simply absent. */}
-            {(item.type === 'session_cancelled' || item.type === 'event_cancelled') &&
-            item.reason ? (
-              <p className="notifications__reason">
-                {t('notifications.reason').replace('{reason}', item.reason)}
+            {/* The category glyph — a SHAPE cue for scanning, never the only
+                one: the unread/read distinction stays on the inline-start
+                border below it (§14.4, AG), not on this icon. */}
+            <span className="notifications__icon" aria-hidden="true">
+              <Icon name={CATEGORY_ICON[item.type]} size={18} />
+            </span>
+            <div className="notifications__body">
+              <p className="notifications__headline">
+                {/* The target-neutral fields (R82.1): a notice is about a class,
+                    an activity or an exam, and the reader experiences one list. */}
+                {t(HEADLINE_KEYS[item.type])
+                  .replace('{subject}', item.title ?? t('notifications.theClass'))
+                  .replace('{date}', item.date ?? '')
+                  .replace('{time}', item.start_time ?? '')
+                  .trim()}
               </p>
-            ) : null}
-            {(() => {
-              const target = notificationHref(item, activeRole);
-              return target ? (
-                <ButtonLink variant="secondary" className="row-action" href={target.href}>
-                  {target.label}
-                </ButtonLink>
-              ) : null;
-            })()}
-            {item.read_at === null ? (
-              <Button
-                variant="secondary"
-                className="row-action"
-                disabled={busy === item.id}
-                onClick={() => void read(item.id)}
-              >
-                {t('notifications.markRead')}
-              </Button>
-            ) : null}
+              {/* The reason is the whole point of the notice — «ألغيت» without
+                  «لماذا» is what the association's manual channels already
+                  managed, badly. Absent on a restoration, where the stored reason
+                  describes the cancellation that no longer applies. */}
+              {/* The reason belongs to a cancellation. On a restoration or a
+                  reschedule the stored reason describes something that no longer
+                  applies, and on an assignment there is none. */}
+              {/* R83.2 — a cancellation may carry NO reason, and that is a
+                  complete answer rather than a gap: the line is simply absent. */}
+              {(item.type === 'session_cancelled' || item.type === 'event_cancelled') &&
+              item.reason ? (
+                <p className="notifications__reason">
+                  {t('notifications.reason').replace('{reason}', item.reason)}
+                </p>
+              ) : null}
+              <div className="notifications__actions">
+                {(() => {
+                  const target = notificationHref(item, activeRole);
+                  return target ? (
+                    <ButtonLink variant="secondary" className="row-action" href={target.href}>
+                      {target.label}
+                    </ButtonLink>
+                  ) : null;
+                })()}
+                {item.read_at === null ? (
+                  <Button
+                    variant="secondary"
+                    className="row-action"
+                    disabled={busy === item.id}
+                    onClick={() => void read(item.id)}
+                  >
+                    {t('notifications.markRead')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </li>
         ))}
       </ul>

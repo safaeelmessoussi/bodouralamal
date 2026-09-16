@@ -4548,7 +4548,11 @@ the Owner's own report named.
       join of the fields each role needs, super admin approves any
       subset. Not started.
 - [ ] **§6 — redesign بناء الاختبارات.** Not started.
-- [ ] **§7 — redesign مستجدّات.** Not started.
+- [x] **Built: مستجدّات §7** — each notice is now an icon (a new
+      per-category glyph) beside a text column in its own soft card;
+      the unread marker stays the AG-required inline-start border
+      (shape, not colour), a soft tint added only as a second cue. No
+      headline/reason text changed.
 - [ ] Full disposable-stack re-run, push and Staging deployment held
       until the next coherent boundary in this batch — see
       CHANGES.log for the exact state of what has already shipped.

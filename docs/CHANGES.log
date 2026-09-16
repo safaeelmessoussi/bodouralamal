@@ -9828,3 +9828,19 @@ never reuses `load.url`, always mints fresh with `'attachment'`). Focused integr
 green (`content.integration.test.ts` 71/71, `grade.http.integration.test.ts` 37/37), all-
 table isolation intact after the teardown fix. Full disposable-stack re-run and Staging
 deployment held until this batch reaches its next coherent boundary.
+
+**Built (Revision 160 §7) — مستجدّات redesigned for scannability, no logic or copy changed.**
+Each notice in the bell panel is now an icon beside a text column, in its own soft card — a
+NEW `CATEGORY_ICON` map (three categories: `user`, a NEW `calendar` icon, `book`) mirrors
+`HEADLINE_KEYS`'s own exhaustiveness discipline over the same union. The unread marker stays
+exactly what AG (`docs/development/ux-architecture.md`) requires — the inline-start border,
+a shape and not only a colour — with a soft background tint added as a second, non-load-
+bearing cue; nothing about when a notice is marked read, or whether a read one keeps
+rendering, changed, and every headline/reason string is byte-for-byte identical.
+
+Verification: frontend typecheck/lint/build clean; frontend unit 1,354/1,354 (the existing
+`notification-list.test.tsx`/`notification-types.test.ts` both pass unmodified); the
+`check-design-tokens.sh` guard (one raw transition duration caught and replaced with
+`var(--transition-fast)`). Visual result checked against a static harness built from the
+real compiled stylesheet, following `scripts/dev/browser`'s own established harness
+pattern — not the Owner's populated local stack, which this pass never touched or rebuilt.

@@ -946,22 +946,62 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
+/* Redesigned for scannability (Owner report, 2026-09-16). Each notice is now
+   an icon beside a text column, in its own soft card — the unread marker
+   STAYS the inline-start border (§14.4, AG: a shape, not only a colour); the
+   card background only adds a second, non-load-bearing cue. */
 .notifications__item {
-  padding-inline-start: var(--space-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-inline-start: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  transition: background-color var(--transition-fast);
 }
 .notifications__item.is-unread {
   border-inline-start-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.notifications__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+.notifications__item.is-unread .notifications__icon {
+  background: var(--color-surface-raised);
+}
+.notifications__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  flex: 1;
 }
 .notifications__headline {
   margin: 0;
   font-weight: 600;
+  line-height: 1.4;
 }
 .notifications__reason {
-  margin: var(--space-1) 0 var(--space-2);
+  margin: 0;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+.notifications__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-1);
 }
 .notifications__count {
   display: inline-block;

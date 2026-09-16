@@ -31,6 +31,10 @@ export type IconName =
   | 'download'
   | 'search'
   | 'folder'
+  // مستجدّات (§4.8) — a schedule-shaped fact: a class, an activity or an
+  // exam moved, was assigned, or was cancelled/restored. One glyph for the
+  // whole category rather than a page-icon per notice type.
+  | 'calendar'
   // A layout with a side panel — the admin-sections toggle (§14), chosen
   // specifically because it reads as neither the header's own hamburger
   // (`menu`) nor a close action (`close`): a reader must not mistake the
@@ -57,6 +61,7 @@ const PATHS: Record<IconName, string> = {
   download: 'M12 4v10m0 0l-4-4m4 4l4-4M5 19h14',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm6 -2l4 4',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z',
+  calendar: 'M7 3v3M17 3v3M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 9h16',
   // A rectangle with a vertical divider — a panel beside a page, the
   // universal "sidebar" glyph, and structurally unlike every other icon here.
   sidebar: 'M4 4h16v16H4V4zM15 4v16',
