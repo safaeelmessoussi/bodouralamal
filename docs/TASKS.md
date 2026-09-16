@@ -4471,3 +4471,43 @@ the Owner's own report named.
       applied all three new migrations cleanly, `/healthz` green on the
       first check, no leftover disposable containers. Full detail in
       CHANGES.log.
+
+## SRS Revision 155 completed end to end + six Owner-reported fixes — 2026-09-16
+
+- [x] **Built: SRS Revision 155's own deferred §4/§5, end to end** (SRS
+      Revision 157) — `this_and_future` now reaches a `multi_dimension`
+      schedule (carry-forward by default, an explicit rename validated
+      against every effective Level), and the admin scheduling form
+      gained its own five-independent-picker UI, unscoped
+      administrative-group/circle reads, and the locked-on-edit
+      "fixed at creation" statement `ActivitySection` already uses.
+- [x] **Built: نقاط الاختبارات's per-student "view her responses and
+      grade them" dialog** (SRS Revision 158) — reuses the exact
+      submission read و question/answer rendering بناء الاختبارات's own
+      `SubmissionDialog` already established, adds an editable grade
+      input beside each question, and a plain total field always
+      offered (not only when the exam has no points). Saves that ONE
+      student immediately as a draft, through the identical
+      `entryPayload`/`saveGrades` path the bulk save uses. No backend
+      change.
+- [x] **Built: five smaller Owner-reported fixes** (SRS Revision 159)
+      — a misleading sentence removed from بناء الاختبارات's freeze
+      notice; حصص الجدول's «المؤطِّرات» column now shows names (the
+      same fix Revision 155 already gave the schedule list, missed
+      here); الجدولة's occurrence dialog: التوقيت's stray `dir="ltr"`
+      fixed, التاريخ's Hijri half reformatted with a real separator, an
+      exam's own supervisors now named (`ExamStaff`, in their own row —
+      never folded into `instructors`); بناء الاختبارات/نقاط الاختبارات
+      moved to the end of both main navs, matching the Owner's stated
+      order, with `/admin/assessments`/`/teacher/assessments` finally
+      added to §14.1's own sitemap text (both missing since R124); and
+      «بدء الاختبار» now withdraws once the sitting's own end time
+      passes, replaced by «عرض الاختبار» for a student/parent (the
+      existing read-only review capability, reached by a new route).
+- [x] Verification: backend/frontend typecheck/lint/build clean;
+      backend unit 342/342; frontend unit 1,348/1,348; full
+      disposable-stack integration suite, 2,636/2,654 (18
+      pre-existing skips), all-table isolation intact; all 31 guards,
+      doc-links and `git diff --check` pass. Full detail in
+      CHANGES.log and SRS Revisions 157–159.
+- [ ] Pushed to `develop`; hosted CI; Staging deployment. Pending.

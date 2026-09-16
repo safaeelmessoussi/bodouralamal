@@ -64,7 +64,7 @@ export interface ScheduleSession {
   visibility: string;
   /** TD-15: sent back on a single-occurrence edit. */
   version: number;
-  staff: { user_id: string; position: string }[];
+  staff: { user_id: string; position: string; user_name: string | null }[];
   /**
    * Stable R43.6 codes saying **why this occurrence will be spared**.
    *

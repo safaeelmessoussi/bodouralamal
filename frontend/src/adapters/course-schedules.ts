@@ -61,6 +61,19 @@ export interface CourseSchedule {
   teaching_mode: string;
   target_id: string;
   /**
+   * **`multi_dimension` only** (SRS Revision 155) — `null` for every other
+   * mode's row, never an empty object. Ids only, matching `target_id`'s own
+   * shape; a client resolving names does so through the existing scope
+   * reads, the same way the create form's own pickers already do.
+   */
+  dimensions: {
+    branch_ids: string[];
+    category_ids: string[];
+    level_ids: string[];
+    administrative_group_ids: string[];
+    teaching_group_ids: string[];
+  } | null;
+  /**
    * **Which Level the class is for**, resolved server-side whatever the mode
    * names — for `entire_level` it equals `target_id`, and for the other two it
    * comes through the target, whose own row is the only thing that knows it
@@ -220,8 +233,26 @@ export interface CourseScheduleInput {
    * catalogue carries none, and none was guessed for it.
    */
   scheduling_type_id?: string | null;
-  /** Exactly one target, of the kind the mode names (§4.4c). */
-  target_id: string;
+  /**
+   * **Exactly one target, of the kind the mode names (§4.4c)** — every mode
+   * except `multi_dimension`, which uses `dimensions` below instead and
+   * refuses this field outright. Optional on the type for that one mode;
+   * every other caller still sends it.
+   */
+  target_id?: string;
+  /**
+   * **`multi_dimension` only (SRS Revision 155, Owner-reported end-to-end
+   * 2026-09-16).** Named exclusively with `target_id`: this mode sends
+   * `dimensions` and omits `target_id`; every other mode does the reverse
+   * (the server's own `courseScheduleDimensions` exclusivity rule).
+   */
+  dimensions?: {
+    branch_ids?: string[];
+    category_ids?: string[];
+    level_ids?: string[];
+    administrative_group_ids?: string[];
+    teaching_group_ids?: string[];
+  };
   branch_id: string;
   room_id?: string | null;
   /** **R97 — the DEFAULT delivery** for the Sessions this schedule

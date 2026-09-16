@@ -9679,3 +9679,94 @@ dump taken, `prisma migrate deploy` applied all three new migrations cleanly
 exact commit's label, `/healthz` green (4/4 components, 12/12 workers) on the first check, no
 error-level log lines in the following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover
 disposable containers. No Production action of any kind.
+
+2026-09-16 — SRS Revisions 157–159: multi_dimension completed end to end
+(split + admin UI); a per-student grading-and-responses dialog on نقاط
+الاختبارات; five smaller Owner-reported fixes
+
+The Document Owner's single message asked to complete the two items Revision 155 itself
+had deferred, plus six new reports/asks in one pass — the largest reached in this session,
+addressed in three revisions rather than one.
+
+**Built (Revision 157) — SRS Revision 155 completed end to end.** `this_and_future` now
+reaches a `multi_dimension` schedule: `splitCourseSchedule`'s own refusal is gone, replaced
+by reusing `resolveTarget`'s existing `multi_dimension` case exactly as the legacy three
+modes already reuse it for an identity change. Absent an explicit rename the successor
+carries the predecessor's own dimensions forward (read once via `scheduleDimensions`);
+named explicitly (`teaching_mode: 'multi_dimension'` + `dimensions`, the same exclusivity
+CREATE's schema enforces, restated on the split schema), the successor's new dimensions are
+validated against every effective Level they imply, looped rather than `[0]` alone. The
+admin scheduling form gained the picker CREATE's own capability had no screen for (rule P):
+five independent `MultiSelectField`s, never `ActivitySection` directly since its pure-OR
+composition is the wrong rule here (AND-across-kind, a circle unions instead —
+`multiDimensionHint` states it beside the picker); administrative-group/circle options are
+read UNSCOPED (`listAdministrativeGroups`/`listCircles`, both gaining an optional `pageSize`,
+called at 100) since the chained `scope.options.groupId` needs a Level+branch this dialog
+never sets for this mode; a representative Level is synced into `scope.value.levelId` purely
+to keep the Subject picker sensible, a form convenience the server's own validation does not
+depend on. Locked (editing) states the fact plainly — the identical `scopeFixed` sentence
+Event's own locked scope already uses — rather than five empty-looking disabled pickers,
+matching R139's "never seed on edit" rule. **One list-view display gap found and closed
+alongside this**: a `multi_dimension` row's `target_name` is `''` by construction, and the
+list's «الجهة المعنية» column rendered it as a blank cell; fixed with the mode's own label as
+a fallback.
+
+**Built (Revision 158) — نقاط الاختبارات's per-student "view her responses and grade them"
+dialog.** The gap was never missing data: بناء الاختبارات's own `OnePaper` already had a
+full, read-only submissions inbox (`SubmissionDialog`, R148's supervisor-widened read), and
+نقاط الاختبارات's own per-question inputs already existed — blind, with no question text and
+no answer beside them, and its one "عرض الإجابات" button was a full-page redirect to the
+OTHER screen. Each row now carries its own «عرض الإجابات» (online exams only), opening a
+dialog that fetches the SAME submission read and renders question+answer in the identical
+shape `SubmissionDialog` already established, with an editable grade input beside each
+question and a plain total field always offered — the table itself only ever offered one or
+the other, never both. `entryPayload` (extracted from the bulk save so both share it) already
+decided the precedence rule (a filled per-question set sums and wins; an empty set leaves the
+manual total in charge) — now stated explicitly rather than left for a marker to infer. The
+dialog's own «حفظ» commits that ONE student immediately as a draft, through the identical
+`saveGrades` call the bulk save uses (`saveGradeDraft` already upserts whichever entries it is
+given). The exam-wide link is kept, not removed — a real bulk-browse capability the per-row
+dialog does not replace — and relabelled «فتح في بناء الاختبارات» so the two are never
+confused now that they mean different things. No backend change: every read/write this
+dialog uses already existed.
+
+**Built (Revision 159) — five smaller reports, in one pass.** A misleading sentence removed
+from بناء الاختبارات's freeze notice (the freeze rule itself, R124, is unchanged). حصص
+الجدول's «المؤطِّرات» column showed a bare count under a header naming people — the same
+`user_name` join/DTO fix Revision 155 already gave `listCourseSchedules`'s own staff list,
+applied here too (this list was missed at the time). الجدولة's occurrence dialog: a stray
+`dir="ltr"` on التوقيت's value put its own logical margin on the wrong side of an RTL row,
+visually separating it from every other field — removed, since a plain `HH:MM` string needs
+no direction override; التاريخ's Hijri half rendered the raw ministry identifier with no real
+separator (the same stray-margin bug) — reformatted into the `day month year` label
+`day-events-dialog.tsx`'s own renderer already uses; an exam's own `ExamStaff` were never
+named at all — a NEW `supervisors` field carries them, in their own row, never folded into
+`instructors` (§4.6: supervisors, not instructors); room and category were checked and found
+already shown for a Session and a holiday respectively, nothing to add. بناء
+الاختبارات/نقاط الاختبارات (renamed from «نقاط الامتحانات») move to the end of both main
+navs, matching the Owner's stated order in both dashboards — and **two pre-existing §14.1
+documentation gaps closed alongside the move**: `/admin/assessments`/`/teacher/assessments`
+(live since R124) were never listed in the sitemap text at all. «بدء الاختبار» now withdraws
+once the sitting's own scheduled end passes (local wall-clock, TD-11) rather than staying
+offered forever once manually opened, replaced for a student/parent by «عرض الاختبار» — the
+SAME `/dashboard/student/assessments?exam=` link, which already renders read-only once a
+submission exists (`studentPaper`'s own contract: *"eligibility decides may I start, never
+may I see what I wrote"*).
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,348/1,348, including new coverage — `course-schedule.http.integration.test.ts` (the
+split's carry-forward, explicit rename, a subject-not-taught refusal on rename, and the
+exclusivity rule on the split schema), `class-section.multi-dimension.test.tsx` (all five
+pickers together, every other mode unaffected, the locked sentence, and the payload/
+validation/unscoped-read wiring source-pinned against `scheduling.tsx`), `grade-sheet.test.
+ts` (the shared `entryPayload` extraction, the per-row button's physical-exam awareness, the
+one-entry dialog save, the explicit manual-total path, the two links' distinct labels), and
+`event-details-dialog`'s own suite (the ended-gate's three states, including the fixture
+regression this surfaced against the file's own `date: '2026-06-15'` default — now
+overridden to 2099 in every test unaffected by the new gate), `calendar.http.integration.
+test.ts`/`visibility-matrix.http.integration.test.ts` (an exam's `supervisors`, proved never
+folded into `instructors`), `admin-modules.test.ts`/`teacher-modules.test.ts` (the new pinned
+order). Full disposable-stack integration suite, 2,636/2,654 (18 pre-existing skips),
+all-table isolation intact. All 31 guards, doc-links and `git diff --check` pass. Migration:
+none new — Revision 157 uses the `dimensions`/`courseScheduleDimensions` schema Revision 155
+already shipped; the other two revisions are frontend/copy or additive-read only.

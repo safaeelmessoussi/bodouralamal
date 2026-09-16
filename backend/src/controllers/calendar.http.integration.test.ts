@@ -449,6 +449,9 @@ const OCCURRENCE_KEYS = [
   "structural_kind",
   "subject_id",
   "subject_name",
+  // Owner-reported, 2026-09-16 — an exam's own ExamStaff; empty for a
+  // Session/Event (`Occurrence.supervisors`'s own docstring).
+  "supervisors",
   "teaching_mode",
   "title",
   "visibility",

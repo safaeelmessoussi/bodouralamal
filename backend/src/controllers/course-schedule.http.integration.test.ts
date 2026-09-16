@@ -1366,3 +1366,154 @@ describe("Owner-reported, 2026-09-15 — this_and_future MAY change what an in-p
     expect(lonelyTarget.status).toBe(400);
   });
 });
+
+/**
+ * **Revision 157 — `this_and_future` reaches a `multi_dimension` schedule
+ * too.** Deferred by Revision 155 (§4) as its own design question; resolved
+ * here the same way the legacy three-arm identity change already was:
+ * absent an explicit rename, the successor carries the predecessor's own
+ * dimensions forward untouched (never zero join rows — the deferred DB
+ * trigger would refuse that); named explicitly (`teaching_mode:
+ * "multi_dimension"` + `dimensions`), the successor gets the NEW ones.
+ */
+describe("Revision 157 — this_and_future splits a multi_dimension schedule", () => {
+  it("carries the predecessor's own dimensions forward when this edit does not rename them", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      identityBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId], branch_ids: [branchA] },
+        staff: [],
+      }),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    // Only the room moves; dimensions are left unstated entirely.
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      room_id: roomA,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const successorId = (res.body.schedule as { id: string }).id;
+    expect(successorId).not.toBe(scheduleId);
+    expect(res.body.schedule.dimensions).toEqual({
+      branch_ids: [branchA],
+      category_ids: [],
+      level_ids: [levelId],
+      administrative_group_ids: [],
+      teaching_group_ids: [],
+    });
+
+    const successor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: successorId },
+      select: {
+        teachingMode: true,
+        branchScopes: { select: { branchId: true } },
+        levelScopes: { select: { levelId: true } },
+      },
+    });
+    expect(successor.teachingMode).toBe("multi_dimension");
+    expect(successor.branchScopes.map((r) => r.branchId)).toEqual([branchA]);
+    expect(successor.levelScopes.map((r) => r.levelId)).toEqual([levelId]);
+
+    // The predecessor's own join rows are untouched by the split.
+    const predecessor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+      select: { levelScopes: { select: { levelId: true } } },
+    });
+    expect(predecessor.levelScopes.map((r) => r.levelId)).toEqual([levelId]);
+  });
+
+  it("renames the successor's own dimensions when this edit names new ones", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      identityBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId] },
+        staff: [],
+      }),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      teaching_mode: "multi_dimension",
+      dimensions: { administrative_group_ids: [groupA] },
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.schedule.dimensions).toEqual({
+      branch_ids: [],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [groupA],
+      teaching_group_ids: [],
+    });
+  });
+
+  it("refuses a rename to a level the subject is not taught at", async () => {
+    const untaught = (
+      await prisma.subject.create({ data: { name: `${TAG} مادة غير مدرَّسة لدمج` } })
+    ).id;
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      identityBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId] },
+        staff: [],
+      }),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      subject_id: untaught,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.error?.code).toBe("STATE_CONFLICT");
+  });
+
+  it("still refuses dimensions without teaching_mode: multi_dimension named alongside them", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      identityBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId] },
+        staff: [],
+      }),
+    );
+    const scheduleId = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    const res = await call("PATCH", `/admin/course-schedules/${scheduleId}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: "2026-06-16",
+      dimensions: { administrative_group_ids: [groupA] },
+    });
+    expect(res.status).toBe(400);
+  });
+});

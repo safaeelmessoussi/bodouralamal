@@ -53,9 +53,14 @@ describe('the sheet keeps empty distinguishable from zero', () => {
     // BR-7 decides what becomes of an unmarked student at save time. Coercing
     // the blank field to 0 here would record a mark nobody entered and make the
     // absent-zero rule unobservable.
+    //
+    // **Owner-reported, 2026-09-16 — this logic moved into `entryPayload`**,
+    // extracted so the bulk save and the per-student dialog's own save build
+    // the identical wire entry rather than two implementations. The anchor
+    // moves with it; the property is unchanged.
     const scoreComputation = code(SHEET).slice(
-      code(SHEET).indexOf('score:', code(SHEET).indexOf('student_id: row.student_id')),
-      code(SHEET).indexOf('absent: draft.absent'),
+      code(SHEET).indexOf('score:', code(SHEET).indexOf('student_id: studentId,')),
+      code(SHEET).indexOf('absent: draft.absent,'),
     );
     expect(scoreComputation).toContain("draft.score.trim() === ''");
     expect(scoreComputation).toContain('? null');
@@ -153,5 +158,42 @@ describe('per-question grading keeps the same rules the whole-exam field already
   it('the total becomes a derived, read-only sum once questions are present — never a second editable field', () => {
     expect(code(SHEET)).toContain('questionScoresTotal(draft)');
     expect(code(SHEET)).toContain('sheet.questions ? (');
+  });
+});
+
+/**
+ * **Owner-reported, 2026-09-16 — one row, one dialog: view her responses and
+ * grade them in the same place.** Source-pinned for the identical reason
+ * every other rule in this file is: `GradeSheetView` needs a session/token
+ * context and a mocked `readSubmission` network call no test here provides.
+ */
+describe('per-row «عرض الإجابات» opens a dialog, not a redirect', () => {
+  it('the per-row button is physical-exam-aware, like the exam-wide link beside it', () => {
+    expect(code(SHEET)).toContain("sheet.exam.mode === 'online' ? (");
+    expect(code(SHEET)).toContain('setOpenStudentId(row.student_id)');
+  });
+
+  it('fetches the SAME submission read بناء الاختبارات uses, not a second endpoint', () => {
+    expect(code(SHEET)).toContain('readSubmission(examId, studentId, accessToken)');
+  });
+
+  it('the dialog’s own save sends ONE entry, built by the SAME entryPayload the bulk save uses', () => {
+    expect(code(SHEET)).toContain(
+      '[entryPayload(studentId, row.version, draft, sheet.questions !== undefined)]',
+    );
+  });
+
+  it('reviewing without per-question grading is offered explicitly, not merely possible', () => {
+    // The manual total field exists whether or not the exam uses points, and
+    // its own hint states the precedence rule rather than leaving the marker
+    // to infer it from `entryPayload`'s behaviour.
+    expect(code(SHEET)).toContain("label={t('admin.grades.totalOverride')}");
+  });
+
+  it('the exam-wide link and the per-row dialog carry DIFFERENT labels, on purpose', () => {
+    // They stopped being the same capability the moment grading moved into
+    // the per-row dialog — a reader must be able to tell which is which.
+    expect(code(SHEET)).toContain("t('admin.grades.openInBuilder')");
+    expect(code(SHEET)).toContain("t('admin.grades.viewResponses')");
   });
 });

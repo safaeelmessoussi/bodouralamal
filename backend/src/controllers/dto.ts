@@ -1838,7 +1838,10 @@ export interface ScheduleSessionDto {
   visibility: string;
   /** TD-15: sent back on a "this session only" edit. */
   version: number;
-  staff: { user_id: string; position: string }[];
+  /** Owner-reported, 2026-09-16 — المؤطِّرات showed a bare count; `user_name`
+   *  is the same fix `listCourseSchedules`'s own staff list already carries
+   *  (Revision 155), applied here too. */
+  staff: { user_id: string; position: string; user_name: string | null }[];
   protected_reasons: string[];
 }
 
@@ -1856,7 +1859,7 @@ export function scheduleSessionDto(row: {
   onlineMediaMode: string | null;
   visibility: string;
   version: number;
-  staff: { userId: string; position: string }[];
+  staff: { userId: string; position: string; name: string | null }[];
   protectedReasons: string[];
 }): ScheduleSessionDto {
   return {
@@ -1873,7 +1876,7 @@ export function scheduleSessionDto(row: {
     online_media_mode: row.onlineMediaMode,
     visibility: String(row.visibility),
     version: row.version,
-    staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
+    staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position, user_name: s.name })),
     protected_reasons: row.protectedReasons,
   };
 }

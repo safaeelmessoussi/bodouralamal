@@ -116,42 +116,6 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     requiresCapability: 'teachesQuran',
   },
   {
-    // R70 — unblocked for **grading**. §4.6's online paper builder is still
-    // declared and refused, so what this node opens is the grade sheet, which
-    // is the same component `/admin/exam-grades` renders (R70.1).
-    //
-    // Renamed **إدخال نقاط الامتحانات** by R106: she enters marks here rather
-    // than browsing a report, and the verb is what the other entries carry.
-    path: '/teacher/exams',
-    labelKey: 'teacher.nav.exams',
-    section: null,
-    roles: TEACHER,
-    status: 'ready',
-  },
-  {
-    /**
-     * **R124 — the paper, where R70 left only the marking.**
-     *
-     * The node above says *"§4.6's online paper builder is still declared and
-     * refused"*. It is neither: the Owner ratified Revision 124 and the builder
-     * is live — and **a مؤطِّرة is one of its three authorised author roles**,
-     * alongside Admin and Super Admin. The service implements her arm through
-     * `assertExamInTeacherScope`, so the authority existed while the route did
-     * not: a complete capability with no reach, which is this project's most
-     * repeated defect (rule P).
-     *
-     * **The same component the back office renders**, exactly as
-     * `/teacher/exams` reuses the grade sheet (R70.1). One implementation, two
-     * chromes; what differs is what the server will accept, not what the screen
-     * can do.
-     */
-    path: '/teacher/assessments',
-    labelKey: 'teacher.nav.assessments',
-    section: null,
-    roles: TEACHER,
-    status: 'ready',
-  },
-  {
     /**
      * §14.1: *"Course Schedules … /teacher/schedules (teacher view)"*; §5.6 line
      * 753 defines its content — the schedules this teacher staffs, with their
@@ -186,6 +150,52 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
      */
     path: '/teacher/content',
     labelKey: 'teacher.nav.content',
+    section: null,
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
+     * **R124 — the paper, where R70 left only the marking.**
+     *
+     * The node below says *"§4.6's online paper builder is still declared and
+     * refused"*. It is neither: the Owner ratified Revision 124 and the builder
+     * is live — and **a مؤطِّرة is one of its three authorised author roles**,
+     * alongside Admin and Super Admin. The service implements her arm through
+     * `assertExamInTeacherScope`, so the authority existed while the route did
+     * not: a complete capability with no reach, which is this project's most
+     * repeated defect (rule P).
+     *
+     * **The same component the back office renders**, exactly as
+     * `/teacher/exams` reuses the grade sheet (R70.1). One implementation, two
+     * chromes; what differs is what the server will accept, not what the screen
+     * can do.
+     *
+     * **Owner-reported, 2026-09-16 — moved after الجدولة/مكتبة المحتوى, and
+     * before نقاط الاختبارات (§4.4's own writer-before-marker order)**, so this
+     * dashboard reads in the SAME four-node order the admin/super_admin
+     * dashboard now uses (`admin-modules.ts`).
+     */
+    path: '/teacher/assessments',
+    labelKey: 'teacher.nav.assessments',
+    section: null,
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    // R70 — unblocked for **grading**. §4.6's online paper builder is still
+    // declared and refused, so what this node opens is the grade sheet, which
+    // is the same component `/admin/exam-grades` renders (R70.1).
+    //
+    // Renamed **إدخال نقاط الامتحانات** by R106: she enters marks here rather
+    // than browsing a report, and the verb is what the other entries carry.
+    //
+    // **Owner-reported, 2026-09-16 — renamed to نقاط الاختبارات and moved
+    // after بناء الاختبارات/الجدولة/مكتبة المحتوى**, matching the label and
+    // order `/admin/exam-grades` already carries — one name for one screen,
+    // whichever dashboard opens it.
+    path: '/teacher/exams',
+    labelKey: 'teacher.nav.exams',
     section: null,
     roles: TEACHER,
     status: 'ready',

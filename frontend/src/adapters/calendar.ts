@@ -123,6 +123,10 @@ export interface Occurrence {
    * asked for.
    */
   instructors: { id: string; display_name: string }[];
+  /** Exam only (Owner-reported, 2026-09-16) — `ExamStaff`, never folded into
+   *  `instructors` above (§4.6: supervisors/assistants, not instructors).
+   *  Empty for a Session/Event. Same shape, same rendering rule. */
+  supervisors: { id: string; display_name: string }[];
   /** The official Hijri overlay, or null when the month is not yet recorded. */
   hijri_date: string | null;
   hijri_month_ar: string | null;

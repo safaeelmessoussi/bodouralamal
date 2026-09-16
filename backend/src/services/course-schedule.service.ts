@@ -1231,6 +1231,9 @@ export async function updateCourseSchedule(
     academicYearId?: string;
     teachingMode?: TeachingMode;
     targetId?: string;
+    /** Revision 157 — see `splitCourseSchedule`'s own field of the same
+     *  name; forwarded through unchanged when `scope: 'this_and_future'`. */
+    dimensions?: CourseScheduleInput["dimensions"];
   },
   now: Date = new Date(),
 ): Promise<{
@@ -1629,6 +1632,10 @@ async function splitCourseSchedule(
     academicYearId?: string;
     teachingMode?: TeachingMode;
     targetId?: string;
+    /** Revision 157 — the successor's own dimensions, when this edit renames
+     *  into or within `multi_dimension`. Named together with `teachingMode`,
+     *  exactly as `targetId` already is (validator-enforced). */
+    dimensions?: CourseScheduleInput["dimensions"];
   },
   now: Date,
 ): Promise<{
@@ -1679,28 +1686,17 @@ async function splitCourseSchedule(
   });
   if (!existing) throw new AppError("NOT_FOUND", "no such schedule");
   /**
-   * **Revision 155 — `this_and_future` splitting is deliberately NOT
-   * supported for a `multi_dimension` schedule yet, on either side.** The
-   * predecessor's identity re-resolution above (`existing.levelId ??
-   * existing.administrativeGroupId ?? existing.teachingGroupId` as a
-   * SINGLE fallback target) has no meaning once a schedule's real target
-   * is five join tables rather than one column — extending it correctly
-   * needs its own design pass, not a guess grafted onto the legacy
-   * three-arm logic below. Refused with a named reason rather than
-   * silently mis-splitting; a manager who needs to change a
-   * multi-dimension class's audience partway through its life still has
-   * the full-series edit (`updateCourseSchedule`, `scope: 'all_sessions'`).
+   * **Revision 157 — the predecessor's OWN dimensions, read once, up front.**
+   * `null` for every legacy mode (`scheduleDimensions`'s own contract).
+   * Carried forward as the successor's dimensions whenever this edit does
+   * not explicitly rename them (`data.dimensions` absent) — the SAME
+   * "unless this edit says otherwise" rule every other identity field
+   * below already follows.
    */
-  if (
-    existing.teachingMode === "multi_dimension" ||
-    data.teachingMode === "multi_dimension"
-  ) {
-    throw new AppError(
-      "VALIDATION_FAILED",
-      "splitting a multi-dimension schedule is not yet supported",
-      { reason: "MULTI_DIMENSION_SPLIT_NOT_SUPPORTED" },
-    );
-  }
+  const existingDimensions =
+    existing.teachingMode === "multi_dimension"
+      ? await scheduleDimensions(prisma, id, existing.teachingMode)
+      : null;
   scope.assertCanActOnBranch(
     actor.roleScopes,
     MANAGING_ROLE,
@@ -1787,35 +1783,86 @@ async function splitCourseSchedule(
       administrativeGroupId: string | null;
       teachingGroupId: string | null;
       effectiveLevelIds?: string[];
+      scopeRows?: {
+        branchIds: string[];
+        categoryIds: string[];
+        levelIds: string[];
+        administrativeGroupIds: string[];
+        teachingGroupIds: string[];
+      };
     } = {
       levelId: existing.levelId,
       administrativeGroupId: existing.administrativeGroupId,
       teachingGroupId: existing.teachingGroupId,
     };
+    const resolvedMode = data.teachingMode ?? existing.teachingMode;
     if (identityChanged) {
-      // `data.teachingMode`/`existing.teachingMode` can never be
-      // `multi_dimension` here — refused above, before either identity is
-      // read — so this always resolves to exactly one effective Level.
-      target = await resolveTarget(
-        tx,
-        data.teachingMode ?? existing.teachingMode,
-        data.teachingMode !== undefined
-          ? (data.targetId as string)
-          : ((existing.levelId ??
-              existing.administrativeGroupId ??
-              existing.teachingGroupId) as string),
-        successorBranchId,
-      );
-      const subject = await tx.subject.findFirst({
-        where: { id: successorSubjectId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!subject) throw new AppError("NOT_FOUND", "no such subject");
-      await assertSubjectTaughtAtLevel(
-        tx,
-        target.effectiveLevelIds![0]!,
-        successorSubjectId,
-      );
+      if (resolvedMode === "multi_dimension") {
+        /**
+         * **Revision 157 — the successor's dimensions.** `data.dimensions`
+         * when this edit explicitly renames them (validator requires
+         * `teaching_mode: 'multi_dimension'` alongside it, exactly as
+         * `target_id` requires its own mode); otherwise the SAME arrays
+         * `existingDimensions` already read — the predecessor's dimensions
+         * carried forward unchanged, matching every other identity field's
+         * "unless this edit says otherwise" rule.
+         */
+        target = await resolveTarget(
+          tx,
+          "multi_dimension",
+          undefined,
+          successorBranchId,
+          data.teachingMode !== undefined
+            ? data.dimensions
+            : (existingDimensions ?? undefined),
+        );
+        const subject = await tx.subject.findFirst({
+          where: { id: successorSubjectId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+        // Every effective Level, not only the first — a multi-dimension
+        // class can name several, and each must actually teach the Subject.
+        for (const levelId of target.effectiveLevelIds!) {
+          await assertSubjectTaughtAtLevel(tx, levelId, successorSubjectId);
+        }
+      } else {
+        target = await resolveTarget(
+          tx,
+          resolvedMode,
+          data.teachingMode !== undefined
+            ? (data.targetId as string)
+            : ((existing.levelId ??
+                existing.administrativeGroupId ??
+                existing.teachingGroupId) as string),
+          successorBranchId,
+        );
+        const subject = await tx.subject.findFirst({
+          where: { id: successorSubjectId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+        await assertSubjectTaughtAtLevel(
+          tx,
+          target.effectiveLevelIds![0]!,
+          successorSubjectId,
+        );
+      }
+    } else if (resolvedMode === "multi_dimension") {
+      /**
+       * **Nothing about identity changed, but a `multi_dimension`
+       * successor still needs its own join rows** — they are not a column
+       * `updateWithVersion` can copy by leaving it alone, unlike every
+       * legacy target. Carried forward untouched, with no re-validation:
+       * nothing this branch could have gone stale against (branch/
+       * subject/mode are all unchanged here).
+       */
+      target = {
+        levelId: null,
+        administrativeGroupId: null,
+        teachingGroupId: null,
+        ...(existingDimensions ? { scopeRows: existingDimensions } : {}),
+      };
     }
     if (
       successorDelivery.roomId &&
@@ -1961,6 +2008,46 @@ async function splitCourseSchedule(
       data: { ...successorValues, createdById: actor.userId },
       select: { id: true },
     });
+
+    // Revision 157 — the successor's own multi_dimension join rows, mirroring
+    // CREATE's identical block: written in the SAME transaction as the
+    // schedule row, so the deferred DB trigger sees a consistent commit.
+    if (target.scopeRows) {
+      const scopeRows = target.scopeRows;
+      await Promise.all([
+        scopeRows.branchIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleBranch.createMany({
+              data: scopeRows.branchIds.map((branchId) => ({ scheduleId: successor.id, branchId })),
+            }),
+        scopeRows.categoryIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleCategory.createMany({
+              data: scopeRows.categoryIds.map((categoryId) => ({ scheduleId: successor.id, categoryId })),
+            }),
+        scopeRows.levelIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleLevel.createMany({
+              data: scopeRows.levelIds.map((levelId) => ({ scheduleId: successor.id, levelId })),
+            }),
+        scopeRows.administrativeGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleAdministrativeGroup.createMany({
+              data: scopeRows.administrativeGroupIds.map((administrativeGroupId) => ({
+                scheduleId: successor.id,
+                administrativeGroupId,
+              })),
+            }),
+        scopeRows.teachingGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleTeachingGroup.createMany({
+              data: scopeRows.teachingGroupIds.map((teachingGroupId) => ({
+                scheduleId: successor.id,
+                teachingGroupId,
+              })),
+            }),
+      ]);
+    }
     // §4.4: without this the teacher silently disappears from every future
     // session of the successor.
     if (existing.staff.length > 0) {
@@ -2210,9 +2297,13 @@ export async function listScheduleSessions(
         // **`SessionStaff` carries NO period** (R91). The snapshot IS the
         // occurrence's own truth — who took this class — so a date on it would
         // be a second answer to a question the row already settles.
+        //
+        // Owner-reported, 2026-09-16 — المؤطِّرات showed a bare count here too;
+        // the SAME fix `listCourseSchedules` already carries (Revision 155,
+        // 2026-09-15), applied to this list's own separate staff select.
         staff: {
           where: { deletedAt: null },
-          select: { userId: true, position: true },
+          select: { userId: true, position: true, user: { select: { nameArabic: true } } },
         },
       },
     }),
@@ -2230,7 +2321,15 @@ export async function listScheduleSessions(
   );
 
   return page(
-    rows.map((r) => ({ ...r, protectedReasons: reasons.get(r.id) ?? [] })),
+    rows.map((r) => ({
+      ...r,
+      staff: r.staff.map((s) => ({
+        userId: s.userId,
+        position: s.position,
+        name: s.user.nameArabic,
+      })),
+      protectedReasons: reasons.get(r.id) ?? [],
+    })),
     window,
     total,
   );
@@ -2257,7 +2356,7 @@ export interface ScheduleSessionRow {
   overridden: boolean;
   roomId: string | null;
   version: number;
-  staff: { userId: string; position: string }[];
+  staff: { userId: string; position: string; name: string | null }[];
   /** Stable codes from the R43.6 rule set. Empty means a schedule edit or a
    *  split may rewrite this occurrence. */
   protectedReasons: string[];

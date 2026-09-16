@@ -204,6 +204,9 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     audience_label: o.audienceLabel,
     status: o.status,
     instructors: o.instructors.map((i) => ({ id: i.id, display_name: i.displayName })),
+    // Owner-reported, 2026-09-16 — an exam's own ExamStaff; empty for every
+    // other kind (`Occurrence.supervisors`'s own docstring).
+    supervisors: o.supervisors.map((i) => ({ id: i.id, display_name: i.displayName })),
     hijri_date: o.hijriDate,
     hijri_month_ar: o.hijriMonthArabic,
     /** R136 clause 16/17 — see `Occurrence.availableFrom`'s own docstring. */

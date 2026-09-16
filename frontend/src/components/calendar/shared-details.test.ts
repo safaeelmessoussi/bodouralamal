@@ -110,7 +110,7 @@ describe('a Session dialog shows its linked exam, when one is scheduled (R137)',
     const definitions = code(DIALOG).match(/function ExamAccessAction\(/g) ?? [];
     expect(definitions).toHaveLength(1);
     expect(code(DIALOG)).toContain(
-      '<ExamAccessAction examId={occurrence.id} availableFrom={occurrence.available_from} />',
+      '<ExamAccessAction\n      examId={occurrence.id}\n      availableFrom={occurrence.available_from}\n      ended={examHasEnded(occurrence)}\n    />',
     );
     expect(code(DIALOG)).toContain(
       '<ExamAccessAction examId={exam.id} availableFrom={exam.available_from} />',

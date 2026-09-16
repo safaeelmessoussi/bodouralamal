@@ -368,10 +368,13 @@ describe('every nav label a module declares actually exists', () => {
  *
  * This replaces `'نقاط الامتحانات sits at the end of الشؤون التعليمية'`, which
  * pinned that node as the last `academic` entry. R105 deleted the section and
- * gave the Owner's own sequence instead, in which نقاط الامتحانات is ninth of
- * eleven and الجدولة and مكتبة المحتوى follow it. **The old assertion was
- * superseded by a later decision on the same question — it did not stop
- * describing a property, so it is restated at full width rather than dropped.**
+ * gave the Owner's own sequence instead. **Owner-reported, 2026-09-16 —
+ * بناء الاختبارات/نقاط الاختبارات moved to the END of the main list**, after
+ * الجدولة and مكتبة المحتوى rather than before them, for consistency with the
+ * teacher dashboard's own order (`teacher-modules.test.ts`). **The old
+ * assertion was superseded by a later decision on the same question — it did
+ * not stop describing a property, so it is restated at full width rather
+ * than dropped.**
  *
  * Pinned as a **literal sequence** because the defect is a reshuffle, which no
  * set-comparison can see: §14.1 says "no reshuffling", and the only way a
@@ -391,10 +394,10 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/groups', // مجموعات المستويات
     '/admin/teaching-groups', // حلقات المواد
     '/admin/quran', // إدخال الحفظ
-    '/admin/assessments', // بناء الاختبارات (R124)
-    '/admin/exam-grades', // نقاط الامتحانات
     '/admin/schedules', // الجدولة
     '/admin/content', // مكتبة المحتوى
+    '/admin/assessments', // بناء الاختبارات (R124)
+    '/admin/exam-grades', // نقاط الاختبارات
   ] as const;
 
   /**

@@ -78,6 +78,34 @@ export interface ClassSectionProps {
    * (`responsibleLocked`).
    */
   staffLocked?: boolean;
+  /**
+   * **`mode === 'multi_dimension'` only** (SRS Revision 155, completed
+   * end-to-end 2026-09-16). Five independent controls, mirroring
+   * `ActivitySection`'s own dimension pattern — but never that component
+   * directly: its "all dimensions OR together" composition (`scopeAllLevelsHint`)
+   * is the WRONG rule here (branch/category/level/administrative-group
+   * AND-across-kind, a Teaching Circle UNIONS instead — `multiDimensionHint`
+   * states it). Absent for every other mode.
+   */
+  multiDimension?: {
+    branch: ClassDimensionValue;
+    category: ClassDimensionValue;
+    level: ClassDimensionValue;
+    administrativeGroup: ClassDimensionValue;
+    teachingGroup: ClassDimensionValue;
+  };
+}
+
+/** One dimension's own selection, options and setter — mirrors
+ *  `ScopeDimensionValue` below (`ActivitySection`'s own shape), restated
+ *  under its own name rather than shared: a class's fifth dimension
+ *  (Teaching Circle) has no `ScopeDimensionKey` to belong to, and giving
+ *  the two the same type would invite passing one where the other's
+ *  composition rule applies. */
+export interface ClassDimensionValue {
+  selected: readonly string[];
+  onChange: (next: string[]) => void;
+  options: { id: string; name: string }[];
 }
 
 export function ClassSection({
@@ -100,15 +128,85 @@ export function ClassSection({
   scheduleFrom,
   scheduleUntil,
   staffLocked,
+  multiDimension,
 }: ClassSectionProps): ReactNode {
   return (
     <>
-      <ScopeSelectors
-        scope={scope}
-        fields={['branchId', 'levelId']}
-        mode="form"
-        locked={locked ? ['branchId', 'levelId'] : []}
-      />
+      {/* **`multi_dimension` replaces the single branch/Level pair with five
+          independent multi-selects** (SRS Revision 155) — the real target
+          lives in `dimensions`, not in `scope.value.branchId`/`levelId`.
+          Every other mode is unaffected: the pair below is exactly what it
+          always was. */}
+      {mode === 'multi_dimension' && locked ? (
+        /**
+         * **Never re-editable, on the SAME §4.4 rule `ActivitySection`'s own
+         * locked scope already states** (Owner-reported, 2026-09-16): the
+         * five arrays are never seeded from the row being edited (matching
+         * `ActivitySection`'s own "never on edit" — R139's rule, restated
+         * here rather than re-derived), so five empty, disabled pickers
+         * would look exactly like an audience nobody chose. Stated
+         * plainly instead — the identical sentence Event's own locked
+         * scope already uses.
+         */
+        <p className="muted">{t('admin.calendar.scopeFixed')}</p>
+      ) : mode === 'multi_dimension' && multiDimension ? (
+        <>
+          <MultiSelectField
+            label={t('admin.calendar.scopeBranch')}
+            selected={multiDimension.branch.selected}
+            onChange={multiDimension.branch.onChange}
+            options={multiDimension.branch.options.map((o) => ({ value: o.id, label: o.name }))}
+            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+            disabled={locked}
+          />
+          <MultiSelectField
+            label={t('admin.calendar.scopeCategory')}
+            selected={multiDimension.category.selected}
+            onChange={multiDimension.category.onChange}
+            options={multiDimension.category.options.map((o) => ({ value: o.id, label: o.name }))}
+            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+            disabled={locked}
+          />
+          <MultiSelectField
+            label={t('admin.calendar.scopeLevel')}
+            selected={multiDimension.level.selected}
+            onChange={multiDimension.level.onChange}
+            options={multiDimension.level.options.map((o) => ({ value: o.id, label: o.name }))}
+            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+            disabled={locked}
+          />
+          <MultiSelectField
+            label={t('admin.calendar.scopeGroup')}
+            selected={multiDimension.administrativeGroup.selected}
+            onChange={multiDimension.administrativeGroup.onChange}
+            options={multiDimension.administrativeGroup.options.map((o) => ({
+              value: o.id,
+              label: o.name,
+            }))}
+            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+            disabled={locked}
+          />
+          <MultiSelectField
+            label={t('admin.calendar.scopeCircle')}
+            selected={multiDimension.teachingGroup.selected}
+            onChange={multiDimension.teachingGroup.onChange}
+            options={multiDimension.teachingGroup.options.map((o) => ({
+              value: o.id,
+              label: o.name,
+            }))}
+            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+            disabled={locked}
+          />
+          <Feedback>{t('admin.calendar.multiDimensionHint')}</Feedback>
+        </>
+      ) : (
+        <ScopeSelectors
+          scope={scope}
+          fields={['branchId', 'levelId']}
+          mode="form"
+          locked={locked ? ['branchId', 'levelId'] : []}
+        />
+      )}
 
       <SelectField
         label={t('admin.schedules.mode')}

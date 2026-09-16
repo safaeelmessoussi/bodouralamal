@@ -54,8 +54,12 @@ export async function listAdministrativeGroups(
   page = 1,
   filters: GroupFilters = {},
   sort: SortState | null = null,
+  /** Owner-reported, 2026-09-16 — the multi_dimension class picker lists
+   *  every group, unscoped, in one page rather than the ordinary 25-row
+   *  screen size; every existing caller is unaffected by the default. */
+  pageSize = 25,
 ): Promise<Page<AdministrativeGroup>> {
-  const params = new URLSearchParams({ page: String(page), page_size: '25' });
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }

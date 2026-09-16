@@ -488,6 +488,9 @@ export const ar = {
     examNotYetOpened: 'لم يُفتح هذا الاختبار بعد.',
     examOpensAt: 'يُفتح هذا الاختبار في:',
     examStart: 'بدء الاختبار',
+    // Owner-reported, 2026-09-16 — once the sitting's own end time has
+    // passed, بدء الاختبار is withdrawn; a student/parent sees this instead.
+    examView: 'عرض الاختبار',
     allDay: 'طوال اليوم',
     eventCount: 'عدد الأنشطة',
     kindExam: 'اختبار',
@@ -504,6 +507,9 @@ export const ar = {
     detailsLevel: 'المستوى',
     detailsRecurrence: 'التكرار',
     detailsInstructors: 'المؤطِّرات',
+    // Owner-reported, 2026-09-16 — an exam's own staff, named apart from
+    // المؤطِّرات: they supervise the sitting, they do not teach it.
+    detailsSupervisors: 'المشرفون',
     detailsVisibility: 'مستوى الظهور',
     openDetails: 'عرض التفاصيل',
     visibilityPublic: 'عام',
@@ -897,10 +903,11 @@ export const ar = {
       // authorization.
       schedules: 'الجدولة',
       content: 'مكتبة المحتوى',
-      // R106 — «إدخال»: she enters marks here. «نقاط الاختبارات» alone named a
-      // report; the verb is what every other entry in this menu carries.
-      exams: 'إدخال نقاط الاختبارات',
       assessments: 'بناء الاختبارات',
+      // Owner-reported, 2026-09-16 — renamed from «إدخال نقاط الاختبارات» to
+      // match `/admin/exam-grades`'s own label exactly, for one name across
+      // both dashboards.
+      exams: 'نقاط الاختبارات',
       // R85 — «إدخال الحفظ»: the Owner's word, and the operational one. «تتبع»
       // describes watching; this screen is where a مؤطرة RECORDS what was
       // memorised, which is what she comes to it to do.
@@ -1184,7 +1191,7 @@ export const ar = {
     draft: 'مسودة',
     closed: 'مغلق',
     // The freeze, said once and plainly.
-    frozen: 'أجابت مستفيدة واحدة على الأقل، فلم تعد الأسئلة قابلة للتعديل. هذا يحمي ما أجبن به.',
+    frozen: 'أجابت مستفيدة واحدة على الأقل، فلم تعد الأسئلة قابلة للتعديل.',
     noQuestions: 'لا يمكن نشر اختبار بلا أسئلة.',
     publishConfirm: 'سيصبح الاختبار متاحاً للمستفيدات المعنيات. هل تريدين نشره؟',
     // **The author must know the size of the audience before she publishes.**
@@ -1392,6 +1399,9 @@ export const ar = {
       branch: 'اختاري الفرع.',
       level: 'اختاري المستوى.',
       target: 'اختاري الحلقة المعنية.',
+      // Owner-reported, 2026-09-16 — SRS Revision 155, the multi_dimension
+      // mode's own rule: a class must name a real teaching population.
+      multiDimensionNeedsLevel: 'اختاري مستوى، مجموعة إدارية أو حلقة على الأقل.',
       subject: 'اختاري المادة.',
       year: 'اختاري السنة الدراسية.',
       times: 'أدخلي وقت البداية والنهاية.',
@@ -1813,6 +1823,15 @@ export const ar = {
       scopeCategory: 'فئات',
       scopeGroup: 'مجموعات مستوى',
       scopeLevel: 'مستويات',
+      // Owner-reported, 2026-09-16 — SRS Revision 155's fifth dimension, a
+      // Teaching Circle. `Event` never had this arm; a class does.
+      scopeCircle: 'حلقات',
+      // A class's own hint, distinct from `scopeAllLevelsHint` above: a
+      // Teaching Circle UNIONS with the rest instead of narrowing it (§4.4c —
+      // a circle is already Level-locked), which is the one composition
+      // rule Event never needed.
+      multiDimensionHint:
+        'الفروع والفئات والمستويات والمجموعات الإدارية تتقاطع فيما بينها؛ الحلقات تُضاف إليها دون أن تُقلّص الجمهور.',
       scopeHint: 'يُحدَّد عند الإنشاء فقط.',
       scopeLocked: 'لا يمكن تغيير نطاق النشاط بعد إنشائه — تغيير الجمهور إعادة إنشاء لا تعديل.',
       deleted: 'تم حذف النشاط.',
@@ -2345,6 +2364,9 @@ export const ar = {
       // Owner-reported, 2026-09-15 — تفتح لوحة الإجابات نفسها التي يفتحها بناء
       // الاختبارات، لا شاشة جديدة (مبدأ ر70.1: تنفيذ واحد، مدخلان).
       viewResponses: 'عرض الإجابات',
+      // Owner-reported, 2026-09-16 — the exam-wide bulk browse, now distinct
+      // from the per-row «عرض الإجابات» dialog which carries the old label.
+      openInBuilder: 'فتح في بناء الاختبارات',
       filterLevel: 'تصفية بالمستوى',
       allLevels: 'كل المستويات',
       searchPlaceholder: 'ابحثي بعنوان الاختبار…',
@@ -2386,6 +2408,12 @@ export const ar = {
       // بدل أن يُحَلّ على الشبكة كلّها فتظهر مستفيدات مقرّات أخرى.
       examIncomplete:
         'هذا الاختبار لا يحمل مقرّاً ولا مادة (أُنشئ قبل تحديث النظام)، ولذلك تعذّر تحديد المستفيدات المعنيّات به. عدّلي الاختبار من الجدولة وحدّدي المقرّ والمادة، ثم أعيدي فتح النقاط.',
+      // Owner-reported, 2026-09-16 — the per-student «عرض الإجابات» dialog.
+      noSubmissionYet: 'لم تُقدَّم إجابة بعد.',
+      noAnswerYet: 'لم تُجب عن هذا السؤال.',
+      totalOverride: 'أو أدخلي نقطة إجمالية مباشرة',
+      totalOverrideHint:
+        'إن أدخلتِ نقطة لكل سؤال أعلاه فسيُستخدم مجموعها عند الحفظ، وتُتجاهل هذه الخانة. لإدخال نقطة إجمالية مباشرة بدل ذلك، اتركي نقاط الأسئلة كلها فارغة.',
     },
     quran: {
       lede: 'تسجيل ما حفظته المستفيدة ومراجعتها. السور المعروضة هي سور مقرّر مستواها.',
@@ -2564,6 +2592,8 @@ export const ar = {
       staffLockedToSelf: 'أنتِ المؤطّرة المسؤولة عن هذه الحصة.',
       mode_entire_level: 'المستوى كامل',
       mode_administrative_group: 'مجموعة إدارية',
+      // Owner-reported, 2026-09-16 — SRS Revision 155, the admin UI.
+      mode_multi_dimension: 'أبعاد متعددة',
       mode_teaching_group: 'حلقة مادة',
       create: 'إضافة جدول',
       editTitle: 'تعديل الجدول',

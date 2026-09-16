@@ -41,6 +41,9 @@ const WIRE: CourseSchedule = {
   room_name: null,
   teaching_mode: 'administrative_group',
   target_id: '00000000-0000-4000-8000-000000000003',
+  // SRS Revision 155 — `null` for every mode but `multi_dimension`, which
+  // this fixture is not.
+  dimensions: null,
   branch_id: '00000000-0000-4000-8000-000000000004',
   room_id: null,
   // R97 — the schedule's DEFAULT delivery for the Sessions it materializes.
@@ -71,6 +74,9 @@ describe('the adapter type matches the wire contract', () => {
       // together because the server refuses one without the other.
       'delivery_mode',
       'description',
+      // SRS Revision 155 — a `multi_dimension` row's real target; `null`
+      // for every other mode, never an empty object.
+      'dimensions',
       'effective_until',
       'end_time',
       'id',

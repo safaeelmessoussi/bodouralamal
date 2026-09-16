@@ -190,6 +190,16 @@ export interface Occurrence {
   /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
    *  verbatim and implement no fallback. */
   instructors: { id: string; displayName: string }[];
+  /**
+   * **Exam only (Owner-reported, 2026-09-16) — `ExamStaff`, never folded
+   * into `instructors` above.** §4.6's own distinction stands: an exam's
+   * staff are supervisors/assistants, not instructors, so this is its own
+   * field with its own label rather than a value that would misstate what
+   * the row means for every other kind. Empty for a Session/Event — the
+   * same "absent, never invented" discipline every other kind-specific
+   * field on this interface follows.
+   */
+  supervisors: { id: string; displayName: string }[];
   /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
      no lifecycle, so these stay null for it rather than being invented. */
   subjectId: string | null;
@@ -581,6 +591,7 @@ function sessionOccurrence(
       id: assignment.user.id,
       displayName: publicDisplayName(assignment.user),
     })),
+    supervisors: [],
     ...hijri(session.date, monthStarts),
   };
 }
@@ -1164,6 +1175,7 @@ export async function readCalendar(
         levelId: event.levelScopes[0]?.level.id ?? null,
         levelName: event.levelScopes[0]?.level.name ?? null,
         instructors: [],
+        supervisors: [],
         ...hijri(date, monthStarts),
       });
     }
@@ -1242,6 +1254,14 @@ export async function readCalendar(
             teachingGroup: { select: { name: true } },
             schedulingType: {
               select: { id: true, name: true, structuralKind: true, attendanceMode: true },
+            },
+            // Owner-reported, 2026-09-16 — the dialog names no one; §4.6's own
+            // ExamStaff (supervisor/assistant) is the "who" the reader asked for.
+            staff: {
+              where: { deletedAt: null },
+              select: {
+                user: { select: { id: true, publicDisplayName: true, nameArabic: true } },
+              },
             },
           },
         });
@@ -1342,6 +1362,12 @@ export async function readCalendar(
       // `instructors` slot means *who teaches this*, and nobody teaches an
       // exam — inventing a value here would misstate what the row is.
       instructors: [],
+      // Owner-reported, 2026-09-16 — named in their own field, `supervisors`,
+      // rather than folded into `instructors` above.
+      supervisors: exam.staff.map((assignment) => ({
+        id: assignment.user.id,
+        displayName: publicDisplayName(assignment.user),
+      })),
       // **R136 clause 16/17 — publication ≠ Student access.** `visibility`
       // above already says whether this row is announced at all; `null` here
       // means *no gate beyond that* (a physical sitting, or a manually-opened

@@ -26,7 +26,13 @@ const WIRE: ScheduleSession = {
   // the editor cannot be seen to hydrate from a default.
   visibility: 'public',
   version: 0,
-  staff: [{ user_id: '00000000-0000-4000-8000-000000000002', position: 'teacher' }],
+  staff: [
+    {
+      user_id: '00000000-0000-4000-8000-000000000002',
+      position: 'teacher',
+      user_name: 'أستاذة نموذجية',
+    },
+  ],
   protected_reasons: [],
 };
 

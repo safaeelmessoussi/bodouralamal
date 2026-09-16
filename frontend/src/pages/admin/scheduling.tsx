@@ -7,12 +7,14 @@ import {
   type HijriDay,
   type Occurrence,
 } from '../../adapters/calendar.js';
+import { listAdministrativeGroups } from '../../adapters/administrative-groups.js';
 import { listRooms } from '../../adapters/branches-admin.js';
 import {
   listEventScopeOptions,
   listEventStaffOptions,
   notifyEventChange,
 } from '../../adapters/events.js';
+import { listCircles } from '../../adapters/teaching-groups.js';
 import { AVAILABLE_TYPES, specOfKind } from '../../adapters/scheduling-types.js';
 import {
   listSchedulingTypes,
@@ -126,7 +128,15 @@ import { Feedback } from '../../components/ui/feedback.js';
  */
 type View = 'list' | 'calendar';
 
-const MODES = ['administrative_group', 'entire_level'] as const;
+/**
+ * **Owner-reported, 2026-09-16 — `multi_dimension` (SRS Revision 155),
+ * completed end to end.** Offered only where `canAssignStaff` already
+ * gates the other two (a self-service Teacher stays `entire_level`-only —
+ * the server's own `TEACHER_ENTIRE_LEVEL_ONLY` refusal), matching the
+ * SelectField's existing `modes={canAssignStaff ? MODES : ['entire_level']}`
+ * gate below.
+ */
+const MODES = ['administrative_group', 'entire_level', 'multi_dimension'] as const;
 /** R91 — the three interval refusals, each with its own sentence. */
 const STAFFING_REFUSALS: Record<string, string> = {
   OVERLAPPING_MAIN_TEACHER: 'admin.schedules.overlappingMain',
@@ -430,7 +440,19 @@ export function SchedulingPage(): ReactNode {
       key: 'audience',
       header: t('admin.schedules.target'),
       // An activity has no audience of that kind (§4.4) — absent, not invented.
-      cell: (r) => r.audienceLabel ?? <span className="muted">—</span>,
+      // **`multi_dimension` has no single target name to show** (SRS
+      // Revision 155 — `target_name` is `''`, deliberately, never `null`):
+      // the mode's own label is a plain, honest fallback rather than a
+      // blank cell (Owner-reported, 2026-09-16). The five-dimension
+      // breakdown itself is seen by opening the class, not in this list.
+      cell: (r) =>
+        r.ids.teachingMode === 'multi_dimension' ? (
+          t('admin.schedules.mode_multi_dimension')
+        ) : r.audienceLabel ? (
+          r.audienceLabel
+        ) : (
+          <span className="muted">—</span>
+        ),
     },
     {
       /**
@@ -1237,6 +1259,15 @@ export function SchedulingDialog({
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [levelIds, setLevelIds] = useState<string[]>([]);
   const [groupIds, setGroupIds] = useState<string[]>([]);
+  /**
+   * **Owner-reported, 2026-09-16 — SRS Revision 155's fifth dimension, a
+   * Teaching Circle, which `الجدولة`'s event scope never needed** (an Event
+   * has no circle arm at all). The four above are shared with
+   * `ActivitySection`'s own event/holiday scope — `type` fixes which one
+   * form uses them for a given dialog, never both at once — but no
+   * pre-existing state fits a circle, so this is the one genuinely new array.
+   */
+  const [teachingGroupIds, setTeachingGroupIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -1539,8 +1570,56 @@ export function SchedulingDialog({
       .catch(() => setRooms([]));
   }, [scope.value.branchId, token]);
 
+  /**
+   * **Owner-reported, 2026-09-16 — the multi_dimension picker's own
+   * administrative-group/circle options, UNSCOPED.** `scope.options.groupId`
+   * (used by `ActivitySection`'s "group" dimension above) is chained on
+   * `scope.value.levelId`/`branchId` (§4.4c: a group is a roster at a
+   * premises), and this dialog sets neither singular value for
+   * `multi_dimension` — the real target lives in the five plural arrays
+   * instead. A class naming several Levels/branches at once needs every
+   * group/circle reachable, not one Level's, so this is a SEPARATE,
+   * independent read rather than a second use of the chained one.
+   */
+  const [allGroups, setAllGroups] = useState<{ id: string; name: string; levelId: string }[]>([]);
+  const [allCircles, setAllCircles] = useState<{ id: string; name: string; levelId: string }[]>([]);
+
+  useEffect(() => {
+    if (mode !== 'multi_dimension') return;
+    void listAdministrativeGroups(token, 1, {}, null, 100)
+      .then((p) => setAllGroups(p.data.map((g) => ({ id: g.id, name: g.name, levelId: g.level_id }))))
+      .catch(() => setAllGroups([]));
+    void listCircles(token, 1, {}, null, 100)
+      .then((p) => setAllCircles(p.data.map((c) => ({ id: c.id, name: c.name, levelId: c.level_id }))))
+      .catch(() => setAllCircles([]));
+  }, [mode, token]);
+
+  /**
+   * **A representative Level, synced into the singular `scope.value.levelId`
+   * purely to drive the Subject picker** (`ClassSection`'s `ScopeSelectors
+   * fields={['subjectId', ...]}` chain, unchanged and shared with every
+   * other mode). `multi_dimension` can name several Levels at once; the
+   * server validates the Subject against every effective one on save
+   * (`assertSubjectTaughtAtLevel`, looped) — this is a FORM CONVENIENCE
+   * only, narrowing the Subject list to something sensible while the
+   * dialog is open, never the authority on which Levels are correct.
+   */
+  useEffect(() => {
+    if (mode !== 'multi_dimension') return;
+    const representative =
+      levelIds[0] ??
+      allGroups.find((g) => groupIds.includes(g.id))?.levelId ??
+      allCircles.find((c) => teachingGroupIds.includes(c.id))?.levelId ??
+      '';
+    if (representative !== scope.value.levelId) scope.set('levelId', representative);
+  }, [mode, levelIds, groupIds, teachingGroupIds, allGroups, allCircles, scope.value.levelId, scope.set]);
+
   const targetId =
-    mode === 'entire_level' ? scope.value.levelId : scope.value.groupId;
+    mode === 'entire_level'
+      ? scope.value.levelId
+      : mode === 'multi_dimension'
+        ? undefined
+        : scope.value.groupId;
 
   /**
    * **R90 — appraise the مؤطِّرات against the class as it stands on the form.**
@@ -1789,8 +1868,29 @@ export function SchedulingDialog({
     }
     if (type === 'class') {
       if (scope.value.branchId === '') return t('scheduling.invalid.branch');
-      if (scope.value.levelId === '') return t('scheduling.invalid.level');
-      if (targetId === '') return t('scheduling.invalid.target');
+      /**
+       * **Owner-reported, 2026-09-16 — `multi_dimension`'s own check, never
+       * on edit** (§4.4 populates the five join tables at creation only —
+       * the same "never re-derived on edit" rule `ActivitySection`'s own
+       * scope validation above already states). Mirrors the server's
+       * `MULTI_DIMENSION_NEEDS_A_LEVEL`: a class delivers a curriculum
+       * Subject, so branches/categories alone name no population to check
+       * it against — at least one of Level, administrative group or
+       * Teaching Circle is required.
+       */
+      if (mode === 'multi_dimension') {
+        if (
+          !editing &&
+          levelIds.length === 0 &&
+          groupIds.length === 0 &&
+          teachingGroupIds.length === 0
+        ) {
+          return t('scheduling.invalid.multiDimensionNeedsLevel');
+        }
+      } else {
+        if (scope.value.levelId === '') return t('scheduling.invalid.level');
+        if (targetId === '') return t('scheduling.invalid.target');
+      }
       // **Points at the fix, not at the empty box.** With no `LevelSubject`
       // rows a Level teaches nothing, so *choose a subject* is unanswerable —
       // the remedy is on another screen, and naming it turns a dead end into a
@@ -1984,7 +2084,17 @@ export function SchedulingDialog({
                   ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
                 ],
           teachingMode: mode,
-          targetId,
+          ...(mode === 'multi_dimension'
+            ? {
+                dimensions: {
+                  ...(branchIds.length > 0 ? { branchIds } : {}),
+                  ...(categoryIds.length > 0 ? { categoryIds } : {}),
+                  ...(levelIds.length > 0 ? { levelIds } : {}),
+                  ...(groupIds.length > 0 ? { administrativeGroupIds: groupIds } : {}),
+                  ...(teachingGroupIds.length > 0 ? { teachingGroupIds } : {}),
+                },
+              }
+            : { targetId }),
           branchId: scope.value.branchId,
           // **R97 — hidden means CLEARED, not merely unsubmitted** (§13). An
           // online class sends no room whatever was chosen before the switch,
@@ -2154,6 +2264,33 @@ export function SchedulingDialog({
                from the one it saves. */
             scheduleFrom={recurrence.startDate}
             scheduleUntil={recurrence.endDate}
+            multiDimension={{
+              branch: {
+                selected: branchIds,
+                onChange: setBranchIds,
+                options: scope.options.branchId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              category: {
+                selected: categoryIds,
+                onChange: setCategoryIds,
+                options: scope.options.categoryId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              level: {
+                selected: levelIds,
+                onChange: setLevelIds,
+                options: scope.options.levelId.map((o) => ({ id: o.value, name: o.label })),
+              },
+              administrativeGroup: {
+                selected: groupIds,
+                onChange: setGroupIds,
+                options: allGroups.map((g) => ({ id: g.id, name: g.name })),
+              },
+              teachingGroup: {
+                selected: teachingGroupIds,
+                onChange: setTeachingGroupIds,
+                options: allCircles.map((c) => ({ id: c.id, name: c.name })),
+              },
+            }}
           />
         ) : type === 'exam' ? (
           <>

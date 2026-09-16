@@ -66,6 +66,7 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence =>
     recurrence: 'weekly',
     visibility: null,
     instructors: [],
+    supervisors: [],
     delivery_mode: 'online',
     online_media_mode: 'audio_video',
     ...over,

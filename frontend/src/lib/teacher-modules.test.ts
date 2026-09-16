@@ -169,14 +169,18 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
     // nothing — so the property that replaces it is the one the Owner actually
     // specified: the ORDER. Pinned literally, because §14.1's "no reshuffling"
     // can only be honoured by a generated menu if reordering fails a test.
+    //
+    // **Owner-reported, 2026-09-16 — الجدولة/مكتبة المحتوى moved before
+    // بناء الاختبارات/نقاط الاختبارات**, matching the admin/super_admin
+    // dashboard's own end-of-list order (`admin-modules.test.ts`).
     expect(TEACHER_MODULES.map((m) => m.path)).toEqual([
       '/teacher', // مساحة التدريس
       '/teacher/availability', // إدخال متى أنا متاحة
       '/teacher/quran', // إدخال حفظ المستفيدات
-      '/teacher/exams', // إدخال نقاط الامتحانات
-      '/teacher/assessments', // بناء الاختبارات (R124) — the paper, beside its marking
       '/teacher/schedules', // الجدولة
       '/teacher/content', // مكتبة المحتوى
+      '/teacher/assessments', // بناء الاختبارات (R124) — the paper, beside its marking
+      '/teacher/exams', // نقاط الاختبارات
     ]);
   });
 
@@ -199,5 +203,9 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
     // meant to ask, and asks it the same way twice.
     expect(t('teacher.nav.schedules')).toBe(t('admin.nav.scheduling'));
     expect(t('teacher.nav.content')).toBe(t('admin.nav.content'));
+    // Owner-reported, 2026-09-16 — نقاط الاختبارات renamed to match exactly;
+    // بناء الاختبارات already did. One name for one screen, either dashboard.
+    expect(t('teacher.nav.assessments')).toBe(t('admin.nav.assessments'));
+    expect(t('teacher.nav.exams')).toBe(t('admin.nav.examGrades'));
   });
 });

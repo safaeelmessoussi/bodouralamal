@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
+import { readSubmission, type AssessmentPaper } from '../../adapters/assessments.js';
 import {
   fetchGradeSheet,
   publishGrades,
   saveGrades,
+  type GradeEntryInput,
   type GradeSheet,
   type GradeSheetRow,
 } from '../../adapters/grades.js';
@@ -12,6 +14,8 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
+import { CheckboxField, NumberField } from '../ui/field.js';
+import { FormDialog } from '../ui/form-dialog.js';
 import { Feedback } from '../ui/feedback.js';
 
 /**
@@ -78,6 +82,45 @@ function questionScoresTotal(draft: Draft): number {
   );
 }
 
+/**
+ * **One row's wire entry, built from its draft — the ONE place this shape is
+ * assembled** (Owner-reported, 2026-09-16: extracted so the bulk «حفظ» below
+ * and the per-student «عرض الإجابات» dialog's own save build the identical
+ * payload, never two implementations that could quietly disagree).
+ *
+ * `sheet.questions` decides whether `question_scores` exists to send at all
+ * — `undefined` on `sheet`, not merely absent from the entry, refuses it
+ * outright rather than silently ignoring typed values (`saveGradeDraft`'s
+ * own `QUESTIONS_HAVE_NO_POINTS`).
+ */
+function entryPayload(
+  studentId: string,
+  version: number | null,
+  draft: Draft,
+  hasQuestions: boolean,
+): GradeEntryInput {
+  const entered = hasQuestions
+    ? Object.entries(draft.questionScores)
+        .filter(([, v]) => v.trim() !== '')
+        .map(([question_id, v]) => ({ question_id, score: Number(v) }))
+    : [];
+  const questionScores = entered.length > 0 && !draft.absent ? entered : null;
+  return {
+    student_id: studentId,
+    // `''` stays null all the way to the server: unmarked is not zero, and
+    // BR-7 is what decides what becomes of it.
+    score:
+      questionScores !== null
+        ? null
+        : draft.absent || draft.score.trim() === ''
+          ? null
+          : Number(draft.score),
+    absent: draft.absent,
+    ...(questionScores !== null ? { question_scores: questionScores } : {}),
+    ...(version === null ? {} : { version }),
+  };
+}
+
 export function GradeSheetView({
   examId,
   onMaxGrade,
@@ -88,16 +131,19 @@ export function GradeSheetView({
    *  without fetching the sheet a second time. */
   onMaxGrade?: (maxGrade: number) => void;
   /**
-   * **Owner-reported, 2026-09-15 — «عرض الإجابات» reaches the same builder
-   * screen بناء الاختبارات already opens on** (`/admin/assessments`'s
-   * `OnePaper`, which already lists every submission and opens any one of
-   * them — R70.1's one-implementation rule applied again rather than a new
-   * viewer). **Each portal's own path**, on the exact reasoning
-   * `TeacherAssessmentsPage`'s docstring states for why a teaching-portal
-   * screen may never link to the admin one: `/admin/assessments` for the
-   * back office, `/teacher/assessments` for the teaching portal. Omitted
-   * entirely (this component has no portal of its own to guess one from,
-   * rule O) hides the link rather than guessing wrong.
+   * **«فتح في بناء الاختبارات» — a bulk, side-by-side browse of every
+   * submission**, reaching the same builder screen بناء الاختبارات already
+   * opens on (`/admin/assessments`'s `OnePaper`, R70.1's one-implementation
+   * rule applied again rather than a new viewer). Distinct since
+   * 2026-09-16 from the per-row «عرض الإجابات» dialog below, which is where
+   * grading actually happens now — this link is for reading many answers
+   * at once, not for marking one student. **Each portal's own path**, on
+   * the exact reasoning `TeacherAssessmentsPage`'s docstring states for why
+   * a teaching-portal screen may never link to the admin one:
+   * `/admin/assessments` for the back office, `/teacher/assessments` for
+   * the teaching portal. Omitted entirely (this component has no portal of
+   * its own to guess one from, rule O) hides the link rather than guessing
+   * wrong.
    */
   responsesBasePath?: '/admin/assessments' | '/teacher/assessments';
 }): ReactNode {
@@ -117,6 +163,13 @@ export function GradeSheetView({
    * problem rather than her scope or the data.
    */
   const [reason, setReason] = useState<string | null>(null);
+  /**
+   * **Owner-reported, 2026-09-16 — per-row «عرض الإجابات».** Which student's
+   * responses-and-grading dialog is open, or `null` for none. Physical-only
+   * exams never offer the button at all (no submission to open), so this is
+   * meaningful only alongside `sheet.exam.mode === 'online'`.
+   */
+  const [openStudentId, setOpenStudentId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -151,33 +204,7 @@ export function GradeSheetView({
         examId,
         sheet.rows.map((row) => {
           const draft = drafts[row.student_id] ?? { score: '', absent: false, questionScores: {} };
-          // **Owner-reported, 2026-09-15 — `question_scores` REPLACES `score`
-          // entirely once the exam uses points, but only once at least one
-          // question actually carries a value.** An EMPTY breakdown is not
-          // sent at all — sending `question_scores: []` would tell the
-          // server *"her total is 0"*, which is exactly the *unmarked* vs
-          // *marked zero* distinction BR-7 exists to keep apart; nothing
-          // entered yet must still mean `score: null`.
-          const entered = sheet.questions
-            ? Object.entries(draft.questionScores)
-                .filter(([, v]) => v.trim() !== '')
-                .map(([question_id, v]) => ({ question_id, score: Number(v) }))
-            : [];
-          const questionScores = entered.length > 0 && !draft.absent ? entered : null;
-          return {
-            student_id: row.student_id,
-            // `''` stays null all the way to the server: unmarked is not zero,
-            // and BR-7 is what decides what becomes of it.
-            score:
-              questionScores !== null
-                ? null
-                : draft.absent || draft.score.trim() === ''
-                  ? null
-                  : Number(draft.score),
-            absent: draft.absent,
-            ...(questionScores !== null ? { question_scores: questionScores } : {}),
-            ...(row.version === null ? {} : { version: row.version }),
-          };
+          return entryPayload(row.student_id, row.version, draft, sheet.questions !== undefined);
         }),
         accessToken,
       );
@@ -186,6 +213,37 @@ export function GradeSheetView({
           ? t('admin.grades.savedWithAbsent').replace('{n}', String(result.initialised))
           : t('admin.grades.saved'),
       );
+      await load();
+    } catch (error) {
+      setNotice(refusalText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * **Owner-reported, 2026-09-16 — the per-student «عرض الإجابات» dialog
+   * saves ITS student alone, immediately, as a draft** — not a staged
+   * change waiting for the bulk «حفظ» above. Reuses the identical
+   * `entryPayload` the bulk save builds from, sent as a one-entry array;
+   * `saveGradeDraft` already upserts whichever entries it is given and
+   * leaves every other student's row untouched (`grade.service.ts`).
+   */
+  async function saveOne(studentId: string): Promise<void> {
+    if (!sheet) return;
+    const row = sheet.rows.find((r) => r.student_id === studentId);
+    if (!row) return;
+    const draft = drafts[studentId] ?? { score: '', absent: false, questionScores: {} };
+    setBusy(true);
+    setNotice(null);
+    try {
+      await saveGrades(
+        examId,
+        [entryPayload(studentId, row.version, draft, sheet.questions !== undefined)],
+        accessToken,
+      );
+      setNotice(t('admin.grades.saved'));
+      setOpenStudentId(null);
       await load();
     } catch (error) {
       setNotice(refusalText(error));
@@ -260,9 +318,17 @@ export function GradeSheetView({
         ) : null}
       </section>
 
-      {/* **Owner-reported, 2026-09-15 — see this component's own prop
-          docstring.** Physical-only for the reason stated there: a physical
-          sitting has no submission to open. */}
+      {/**
+       * **Owner-reported, 2026-09-16 — the exam-WIDE link now says where it
+       * actually goes, distinct from the per-row «عرض الإجابات» below.**
+       * The two are not the same capability any more: this one still opens
+       * بناء الاختبارات's own submissions inbox (`OnePaper`) for a bulk,
+       * side-by-side browse of every free-text answer; the per-row dialog
+       * is where grading actually happens now. Kept rather than removed —
+       * §20 rule 16 cuts both ways, and browsing many answers at once is a
+       * real capability the per-row dialog does not replace. Physical-only
+       * exception unchanged: a physical sitting has no submission to open.
+       */}
       {responsesBasePath && sheet.exam.mode === 'online' ? (
         <p>
           <Button
@@ -271,7 +337,7 @@ export function GradeSheetView({
               window.location.href = `${responsesBasePath}?exam=${encodeURIComponent(examId)}`;
             }}
           >
-            {t('admin.grades.viewResponses')}
+            {t('admin.grades.openInBuilder')}
           </Button>
         </p>
       ) : null}
@@ -300,6 +366,10 @@ export function GradeSheetView({
             <thead>
               <tr>
                 <th scope="col">{t('admin.grades.student')}</th>
+                {/* **Owner-reported, 2026-09-16 — one row, one dialog.**
+                    Physical-only condition matches the exam-wide link
+                    above: a physical sitting has no submission to open. */}
+                {sheet.exam.mode === 'online' ? <th scope="col" /> : null}
                 {/* **Owner-reported, 2026-09-15 — per-question grading, one
                     column per question, where the exam uses R137's
                     points.** Replaces nothing: the total column stays,
@@ -325,6 +395,17 @@ export function GradeSheetView({
                 return (
                   <tr key={row.student_id}>
                     <td>{row.student_name}</td>
+                    {sheet.exam.mode === 'online' ? (
+                      <td>
+                        <Button
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => setOpenStudentId(row.student_id)}
+                        >
+                          {t('admin.grades.viewResponses')}
+                        </Button>
+                      </td>
+                    ) : null}
                     {sheet.questions?.map((q) => (
                       <td key={q.id}>
                         <input
@@ -435,7 +516,223 @@ export function GradeSheetView({
           </div>
         </>
       )}
+
+      {openStudentId ? (
+        <ResponsesDialog
+          examId={examId}
+          accessToken={accessToken}
+          studentId={openStudentId}
+          studentName={sheet.rows.find((r) => r.student_id === openStudentId)?.student_name ?? ''}
+          maxGrade={maxGrade}
+          hasQuestions={sheet.questions !== undefined}
+          questions={sheet.questions ?? []}
+          draft={
+            drafts[openStudentId] ?? { score: '', absent: false, questionScores: {} }
+          }
+          onDraft={(next) =>
+            setDrafts((d) => ({ ...d, [openStudentId]: next }))
+          }
+          busy={busy}
+          onSave={() => void saveOne(openStudentId)}
+          onClose={() => setOpenStudentId(null)}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * **Owner-reported, 2026-09-16 — one student's responses, beside her grading,
+ * in one dialog.** Answers come from her own submission
+ * (`GET /assessments/{id}/submissions/{studentId}`, R148's supervisor-widened
+ * read) — `sheet.questions` alone carries no option labels or answer text,
+ * only `{id, prompt, points}` (R137), so a marker who needed to see WHAT she
+ * wrote had to leave for بناء الاختبارات's own read-only `SubmissionDialog`.
+ * This is not a second implementation of that dialog: the question+answer
+ * rendering mirrors it exactly (same fields, same layout), with editable
+ * per-question grade inputs added beside each one.
+ *
+ * **Two ways to mark her, both legal, the SAME rule `entryPayload` already
+ * applies**: a per-question score in every filled box sums to her total
+ * automatically; leaving them all empty and typing directly into
+ * «النقطة الإجمالية» sends that instead — `question_scores` only travels
+ * when at least one is filled (BR-7's *unmarked ≠ zero* rule, restated
+ * here so the choice is visible rather than a fact the marker has to infer).
+ */
+function ResponsesDialog({
+  examId,
+  accessToken,
+  studentId,
+  studentName,
+  maxGrade,
+  hasQuestions,
+  questions,
+  draft,
+  onDraft,
+  busy,
+  onSave,
+  onClose,
+}: {
+  examId: string;
+  accessToken: string | null;
+  studentId: string;
+  studentName: string;
+  maxGrade: number;
+  hasQuestions: boolean;
+  questions: { id: string; prompt: string; points: number }[];
+  draft: Draft;
+  onDraft: (next: Draft) => void;
+  busy: boolean;
+  onSave: () => void;
+  onClose: () => void;
+}): ReactNode {
+  const [paper, setPaper] = useState<AssessmentPaper | null>(null);
+  const [paperState, setPaperState] = useState<'loading' | 'ready' | 'error'>('loading');
+  /**
+   * **Whether THIS dialog has changed anything, since it opened** — the
+   * `dirty` every `FormDialog` caller must report (the guard `Dialog`'s own
+   * backdrop-dismiss/close-confirmation reads). Reset whenever a different
+   * student's dialog opens; set the moment any field inside it is touched,
+   * through `handleDraft` below rather than `onDraft` directly.
+   */
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPaperState('loading');
+    setDirty(false);
+    void readSubmission(examId, studentId, accessToken)
+      .then((next) => {
+        if (!cancelled) {
+          setPaper(next);
+          setPaperState('ready');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPaperState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [examId, studentId, accessToken]);
+
+  function handleDraft(next: Draft): void {
+    setDirty(true);
+    onDraft(next);
+  }
+
+  // The full question, matched to her answer by id — `paper.questions` is
+  // the SAME set `sheet.questions` names, plus the options/text this dialog
+  // exists to show.
+  const byQuestion = new Map((paper?.submission?.answers ?? []).map((a) => [a.question_id, a]));
+
+  return (
+    <FormDialog
+      open
+      wide
+      title={`${t('assessments.openSubmission')} — ${studentName}`}
+      busy={busy}
+      dirty={dirty}
+      submitLabel={t('admin.grades.save')}
+      onSubmit={onSave}
+      onCancel={onClose}
+    >
+      {paperState === 'loading' ? <p className="state">{t('common.loading')}</p> : null}
+      {paperState === 'error' ? (
+        <p className="state" role="alert">
+          {t('common.loadFailed')}
+        </p>
+      ) : null}
+
+      {paperState === 'ready' && !paper?.submission ? (
+        <Feedback tone="warn">{t('admin.grades.noSubmissionYet')}</Feedback>
+      ) : null}
+
+      {paperState === 'ready' && paper ? (
+        <ol className="assessment-questions">
+          {paper.questions.map((q, index) => {
+            const answer = byQuestion.get(q.id);
+            const chosen = q.options.filter((o) => answer?.option_ids.includes(o.id));
+            // `sheet.questions` (R137 points) and `paper.questions` (this
+            // read's own list) name the SAME questions; matched by id since
+            // one is the exam's grading view and the other its authoring one.
+            const points = questions.find((sq) => sq.id === q.id)?.points;
+            return (
+              <li key={q.id}>
+                <p>
+                  <strong>{t('assessments.question').replace('{n}', String(index + 1))}</strong>{' '}
+                  {q.prompt}
+                  {points !== undefined ? (
+                    <>
+                      {' — '}
+                      {t('assessments.questionPointsOf').replace('{points}', String(points))}
+                    </>
+                  ) : null}
+                </p>
+                {answer?.text ? <p>{answer.text}</p> : null}
+                {chosen.length > 0 ? <p>{chosen.map((o) => o.label).join('، ')}</p> : null}
+                {answer?.justification ? (
+                  <p className="hint">
+                    {t('assessments.yourJustification')}: {answer.justification}
+                  </p>
+                ) : null}
+                {answer === undefined ? (
+                  <p className="hint">{t('admin.grades.noAnswerYet')}</p>
+                ) : null}
+                {hasQuestions && points !== undefined ? (
+                  <NumberField
+                    label={t('admin.grades.mark').replace('{scale}', String(points))}
+                    min={0}
+                    max={points}
+                    step="0.01"
+                    disabled={draft.absent || busy}
+                    value={draft.questionScores[q.id] ?? ''}
+                    onChange={(next) =>
+                      handleDraft({
+                        ...draft,
+                        questionScores: { ...draft.questionScores, [q.id]: next },
+                      })
+                    }
+                  />
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+
+      {hasQuestions ? (
+        <p aria-label={t('admin.grades.mark').replace('{scale}', String(maxGrade))}>
+          <strong>{t('admin.grades.mark').replace('{scale}', String(maxGrade))}</strong>{' '}
+          {draft.absent ? 0 : questionScoresTotal(draft)}
+        </p>
+      ) : null}
+
+      {/* **Owner-reported, 2026-09-16 — reviewing without grading per
+          question is a legal path, not a fallback.** Typed here, it wins
+          over the per-question boxes above only when EVERY one of them is
+          left empty — filling in even one sends `question_scores` instead
+          (`entryPayload`'s own rule, stated so the choice is visible). */}
+      <NumberField
+        label={t('admin.grades.totalOverride')}
+        hint={hasQuestions ? t('admin.grades.totalOverrideHint') : null}
+        min={0}
+        max={maxGrade}
+        step="0.01"
+        disabled={draft.absent || busy}
+        value={draft.score}
+        onChange={(next) => handleDraft({ ...draft, score: next })}
+      />
+
+      <CheckboxField
+        label={t('admin.grades.absent')}
+        checked={draft.absent}
+        disabled={busy}
+        onChange={(checked) =>
+          handleDraft({ ...draft, score: checked ? '' : draft.score, absent: checked })
+        }
+      />
+    </FormDialog>
   );
 }
 

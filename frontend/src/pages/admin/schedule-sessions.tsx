@@ -315,13 +315,21 @@ export function ScheduleSessionsPage({
         t(`calendar.visibility${r.visibility.charAt(0).toUpperCase()}${r.visibility.slice(1)}`),
     },
     {
-      // §8 — how many مؤطِّرات are assigned to this occurrence. Staffing is
-      // per-date (R91/R43.4), so this is not the series' answer.
+      // §8 — who is assigned to this occurrence. Staffing is per-date
+      // (R91/R43.4), so this is not the series' answer.
+      //
+      // Owner-reported, 2026-09-16 — this rendered a bare count under a
+      // column literally labeled "المؤطِّرات"; names are what the header
+      // promises.
       key: 'staff',
       header: t('admin.schedules.staffCount'),
       secondary: true,
-      numeric: true,
-      cell: (r) => String(r.staff.length),
+      cell: (r) =>
+        r.staff.length === 0 ? (
+          <span className="muted">—</span>
+        ) : (
+          r.staff.map((s) => s.user_name ?? s.user_id).join('، ')
+        ),
     },
     {
       key: 'protection',

@@ -62,6 +62,7 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence =>
     level_id: null,
     level_name: null,
     instructors: [],
+    supervisors: [],
     subject_id: null,
     subject_name: null,
     teaching_mode: null,

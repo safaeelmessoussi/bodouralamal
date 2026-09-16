@@ -289,6 +289,11 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     repeatUntil: row.effective_until,
     branchName: row.branch_name,
     roomName: row.room_name,
+    // **`multi_dimension` has no single target name** (`target_name` is `''`
+    // for it, deliberately — the server names no ONE thing). `''` travels
+    // as-is; the UI layer (never this adapter, which imports no i18n) is
+    // where an empty audience label gets a fallback (Owner-reported,
+    // 2026-09-16).
     audienceLabel: row.target_name,
     subjectName: row.subject_name,
     // A class taught to a Group reaches its Level through the target, which the
@@ -620,7 +625,18 @@ export interface SchedulingInput {
   /** Class only (§4.4c). */
   subjectId?: string;
   teachingMode?: string;
+  /** Every mode except `multi_dimension`, which sends `dimensions` below
+   *  instead and omits this entirely (SRS Revision 155). */
   targetId?: string;
+  /** `multi_dimension` only — named exclusively with `targetId` (never
+   *  both, on create); absent for every other mode. */
+  dimensions?: {
+    branchIds?: string[];
+    categoryIds?: string[];
+    levelIds?: string[];
+    administrativeGroupIds?: string[];
+    teachingGroupIds?: string[];
+  };
   branchId?: string;
   roomId?: string | null;
   /** R97 — sent as a unit with `onlineMediaMode`; the server refuses a
@@ -759,7 +775,32 @@ export async function saveSchedulingItem(
         description: input.description,
         subject_id: input.subjectId!,
         teaching_mode: input.teachingMode!,
-        target_id: input.targetId!,
+        // **SRS Revision 155 — exactly one of the two travels.**
+        // `multi_dimension` sends `dimensions` and no `target_id`; every
+        // other mode is unaffected — `input.targetId` is still required for
+        // them, and `!` states that the same way it always did.
+        ...(input.targetId !== undefined ? { target_id: input.targetId } : {}),
+        ...(input.dimensions !== undefined
+          ? {
+              dimensions: {
+                ...(input.dimensions.branchIds !== undefined
+                  ? { branch_ids: input.dimensions.branchIds }
+                  : {}),
+                ...(input.dimensions.categoryIds !== undefined
+                  ? { category_ids: input.dimensions.categoryIds }
+                  : {}),
+                ...(input.dimensions.levelIds !== undefined
+                  ? { level_ids: input.dimensions.levelIds }
+                  : {}),
+                ...(input.dimensions.administrativeGroupIds !== undefined
+                  ? { administrative_group_ids: input.dimensions.administrativeGroupIds }
+                  : {}),
+                ...(input.dimensions.teachingGroupIds !== undefined
+                  ? { teaching_group_ids: input.dimensions.teachingGroupIds }
+                  : {}),
+              },
+            }
+          : {}),
         branch_id: input.branchId!,
         academic_year_id: input.academicYearId!,
         start_time: input.startTime ?? '',

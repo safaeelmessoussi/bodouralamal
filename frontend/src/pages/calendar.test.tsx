@@ -11,7 +11,8 @@ import { EventDetailsDialog } from '../components/calendar/event-details-dialog.
 import { CalendarNav } from '../components/calendar/calendar-nav.js';
 import { LevelSelector } from '../components/calendar/level-selector.js';
 import type { HijriDay, Occurrence, PrefilledFilters } from '../adapters/calendar.js';
-import { SessionContext } from '../contexts/session.js';
+import { ActiveRoleProvider } from '../contexts/active-role.js';
+import { SessionContext, type Me } from '../contexts/session.js';
 import { tList } from '../i18n/index.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 import CALENDAR_PAGE_SOURCE from './calendar.tsx?raw';
@@ -69,6 +70,7 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   audience_label: null,
   status: null,
   instructors: [],
+  supervisors: [],
   hijri_date: null,
   hijri_month_ar: null,
   // R136 — Exam (online) only; every other kind (this fixture's default,
@@ -800,6 +802,11 @@ describe('the dialog’s exam-availability action (R136)', () => {
       kind: 'exam',
       delivery_mode: 'online',
       title: 'اختبار الحفظ',
+      // Owner-reported, 2026-09-16 — a date/end_time far enough in the
+      // future that `examHasEnded` never fires by accident here; the tests
+      // for THAT gate override both explicitly, below.
+      date: '2099-06-15',
+      end_time: '10:30',
       ...over,
     });
 
@@ -869,6 +876,104 @@ describe('the dialog’s exam-availability action (R136)', () => {
     expect(html).not.toContain('لم يُفتح هذا الاختبار بعد');
     expect(html).not.toContain('يُفتح هذا الاختبار في');
     expect(html).not.toContain('بدء الاختبار');
+  });
+
+  /**
+   * **Owner-reported, 2026-09-16 — once the sitting's own scheduled end has
+   * passed, none of the three "is it open yet" states still apply**, and a
+   * student/parent gets «عرض الاختبار» instead of «بدء الاختبار» — the SAME
+   * `/dashboard/student/assessments` deep link, which already renders
+   * read-only once a submission exists.
+   */
+  const studentMe: Me = {
+    id: 's1',
+    is_platform_owner: false,
+    account_status: 'active',
+    roles: ['student'],
+    role_scopes: [{ role: 'student', branches: null }],
+    active_role: 'student',
+    approved_child_links: [],
+    teaches_quran: false,
+    self_attendance_allowed: false,
+  };
+
+  it('past its own end time: withdraws بدء الاختبار even though it is manually open', () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+      >
+        <EventDetailsDialog
+          occurrence={examOccurrence({ date: '2020-01-01', end_time: '10:30', available_from: past })}
+          branchNames={new Map()}
+          onClose={() => undefined}
+        />
+      </SessionContext.Provider>,
+    );
+    expect(html).not.toContain('بدء الاختبار');
+    expect(html).not.toContain('لم يُفتح هذا الاختبار بعد');
+    expect(html).not.toContain('يُفتح هذا الاختبار في');
+  });
+
+  it('past its own end time, a student: offers «عرض الاختبار» to the SAME paper, by id', () => {
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider
+        value={{ status: 'authenticated', me: studentMe, accessToken: 'tok', setAccessToken: () => undefined }}
+      >
+        <ActiveRoleProvider>
+          <EventDetailsDialog
+            occurrence={examOccurrence({ id: 'exam-2', date: '2020-01-01', end_time: '10:30' })}
+            branchNames={new Map()}
+            onClose={() => undefined}
+          />
+        </ActiveRoleProvider>
+      </SessionContext.Provider>,
+    );
+    expect(html).toContain('عرض الاختبار');
+    expect(html).toContain('/dashboard/student/assessments?exam=exam-2');
+    expect(html).not.toContain('بدء الاختبار');
+  });
+
+  it('past its own end time, staff (no active student role): offers nothing at all', () => {
+    const staffMe: Me = {
+      ...studentMe,
+      id: 't1',
+      roles: ['teacher'],
+      role_scopes: [{ role: 'teacher', branches: null }],
+      active_role: 'teacher',
+    };
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider
+        value={{ status: 'authenticated', me: staffMe, accessToken: 'tok', setAccessToken: () => undefined }}
+      >
+        <ActiveRoleProvider>
+          <EventDetailsDialog
+            occurrence={examOccurrence({ date: '2020-01-01', end_time: '10:30' })}
+            branchNames={new Map()}
+            onClose={() => undefined}
+          />
+        </ActiveRoleProvider>
+      </SessionContext.Provider>,
+    );
+    expect(html).not.toContain('بدء الاختبار');
+    expect(html).not.toContain('عرض الاختبار');
+  });
+
+  it('still open (end time in the future): behaves exactly as before, unaffected', () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+      >
+        <EventDetailsDialog
+          occurrence={examOccurrence({ id: 'exam-3', available_from: past })}
+          branchNames={new Map()}
+          onClose={() => undefined}
+        />
+      </SessionContext.Provider>,
+    );
+    expect(html).toContain('بدء الاختبار');
+    expect(html).not.toContain('عرض الاختبار');
   });
 });
 

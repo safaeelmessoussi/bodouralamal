@@ -136,18 +136,30 @@ export function EventDetailsDialog({
                 {date.getDate()} {months[date.getMonth()] ?? ''} {date.getFullYear()}
               </time>
               {/* Only when the backend supplied one — a month the Ministry has
-                  not announced carries no Hijri label at all (Revision 31). */}
+                  not announced carries no Hijri label at all (Revision 31).
+                  **Owner-reported, 2026-09-16 — was rendered as the raw
+                  `"1448-03-22"` ministry string, with no separator from the
+                  Gregorian date beside it** (a stray `dir="ltr"` put the
+                  gap-giving margin on the wrong logical side of an RTL row,
+                  so the two ran together). Formatted into the same
+                  `day month year` label `day-events-dialog.tsx` already
+                  uses for a Hijri date, with an explicit separator rather
+                  than a margin. */}
               {occurrence.hijri_date ? (
-                <span className="details__hijri" dir="ltr">
-                  {occurrence.hijri_date}
-                </span>
+                <span className="details__hijri">{' — '}{hijriLabel(occurrence)}</span>
               ) : null}
             </dd>
 
             {occurrence.start_time ? (
               <>
                 <dt>{t('calendar.detailsTime')}</dt>
-                <dd dir="ltr">
+                {/* **Owner-reported, 2026-09-16 — `dir="ltr"` on an RTL row's
+                    value put it on the opposite side from every other
+                    field.** The time itself needs no direction override: a
+                    plain `HH:MM — HH:MM` string is a single strongly-LTR run
+                    with no Arabic in it, so the digits still read left to
+                    right without forcing the whole cell's own direction. */}
+                <dd>
                   {occurrence.start_time}
                   {occurrence.end_time ? ` — ${occurrence.end_time}` : ''}
                 </dd>
@@ -242,6 +254,15 @@ export function EventDetailsDialog({
                 {/* Rendered exactly as returned — the backend already decided
                     which name is public (Revision 36.1, §20 rule 21). */}
                 <dd>{occurrence.instructors.map((i) => i.display_name).join('، ')}</dd>
+              </>
+            ) : null}
+
+            {/* Owner-reported, 2026-09-16 — an exam's own ExamStaff, named in
+                its own row: §4.6 calls them supervisors, never instructors. */}
+            {occurrence.supervisors.length > 0 ? (
+              <>
+                <dt>{t('calendar.detailsSupervisors')}</dt>
+                <dd>{occurrence.supervisors.map((i) => i.display_name).join('، ')}</dd>
               </>
             ) : null}
 
@@ -346,7 +367,26 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
 function ExamAvailabilityAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   if (occurrence.kind !== 'exam') return null;
   if (occurrence.delivery_mode !== 'online') return null;
-  return <ExamAccessAction examId={occurrence.id} availableFrom={occurrence.available_from} />;
+  return (
+    <ExamAccessAction
+      examId={occurrence.id}
+      availableFrom={occurrence.available_from}
+      ended={examHasEnded(occurrence)}
+    />
+  );
+}
+
+/**
+ * **Owner-reported, 2026-09-16 — the sitting's own scheduled end, not
+ * `available_from`, decides when «بدء الاختبار» stops being offered.**
+ * `available_from` answers *is it open*; this answers *is it still going
+ * on at all* — a sitting opened at 09:00 for a 09:00–10:00 window must not
+ * still invite "بدء الاختبار" at noon. Local wall-clock (TD-11), the same
+ * reading every other field on this dialog already gives `occurrence.date`.
+ */
+function examHasEnded(occurrence: Occurrence): boolean {
+  if (!occurrence.end_time) return false;
+  return Date.now() > new Date(`${occurrence.date}T${occurrence.end_time}:00`).getTime();
 }
 
 /**
@@ -358,11 +398,41 @@ function ExamAvailabilityAction({ occurrence }: { occurrence: Occurrence }): Rea
 function ExamAccessAction({
   examId,
   availableFrom,
+  ended = false,
 }: {
   examId: string;
   availableFrom: string | null;
+  /**
+   * **Owner-reported, 2026-09-16.** Once true, every one of the three
+   * "is it open yet" states below stops applying — none of them make sense
+   * once the sitting is over — and a student/parent sees «عرض الاختبار»
+   * instead, to review the paper with her own responses if she took it (the
+   * SAME destination `/dashboard/student/assessments` already renders
+   * read-only once a submission exists, `studentPaper`'s own contract).
+   * Defaults `false` for `SessionLinkedExams` below, which links an exam
+   * from a session and does not carry that exam's own end time to check.
+   */
+  ended?: boolean;
 }): ReactNode {
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  const activeRoles = useActiveRoleOrNull()?.activeRoles ?? [];
+  // A parent acts FOR her child on this exact page (§4.1's family switch),
+  // so she gets the same «عرض الاختبار» a student gets, never nothing.
+  const isStudentOrParent = activeRoles.some((role) => role === 'student' || role === 'parent');
+
+  if (ended) {
+    if (!accessToken || !isStudentOrParent) return null;
+    return (
+      <p className="details__action">
+        <ButtonLink
+          variant="secondary"
+          href={`/dashboard/student/assessments?exam=${encodeURIComponent(examId)}`}
+        >
+          {t('calendar.examView')}
+        </ButtonLink>
+      </p>
+    );
+  }
 
   if (availableFrom === null) {
     return <p className="details__action muted">{t('calendar.examNotYetOpened')}</p>;
@@ -563,6 +633,23 @@ function OccurrenceMaterials({
 
 /** Unknown tiers fall back to the raw value rather than an empty cell, so a
  *  tier added server-side is visible instead of invisible. */
+/**
+ * `occurrence.hijri_date` is the ministry's own `"YYYY-MM-DD"` string
+ * (Revision 31/32) — a stable, sortable identifier, never meant to be shown
+ * verbatim. `occurrence.hijri_month_ar` is the one label field the backend
+ * already resolves; this reads the day and year out of the identifier and
+ * composes the SAME `day month year` shape `day-events-dialog.tsx`'s own
+ * `hijriLabel` already renders from a `HijriDay`'s separate numeric fields.
+ */
+function hijriLabel(occurrence: { hijri_date: string | null; hijri_month_ar: string | null }): string {
+  if (!occurrence.hijri_date) return '';
+  const day = Number(occurrence.hijri_date.slice(8, 10));
+  const year = occurrence.hijri_date.slice(0, 4);
+  return occurrence.hijri_month_ar && Number.isFinite(day)
+    ? `${day} ${occurrence.hijri_month_ar} ${year}`.trim()
+    : occurrence.hijri_date;
+}
+
 function visibilityLabel(visibility: string): string {
   const key = `calendar.visibility${visibility.charAt(0).toUpperCase()}${visibility.slice(1)}`;
   const label = t(key);

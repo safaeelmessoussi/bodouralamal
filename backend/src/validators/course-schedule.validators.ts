@@ -412,6 +412,13 @@ export const updateCourseScheduleSchema = z
     academic_year_id: uuid.optional(),
     teaching_mode: teachingMode.optional(),
     target_id: uuid.optional(),
+    /**
+     * **Revision 157 — `this_and_future`'s successor may also RENAME into or
+     * within `multi_dimension`**, the same additive freedom `target_id`
+     * already has. Named exclusively with `target_id`, exactly as CREATE's
+     * own `courseScheduleDimensions` field is — see the refinements below.
+     */
+    dimensions: courseScheduleDimensions.optional(),
   })
   .strict()
   .refine((v) => v.scope !== "this_and_future" || v.from_date !== undefined, {
@@ -429,20 +436,59 @@ export const updateCourseScheduleSchema = z
         v.branch_id === undefined &&
         v.academic_year_id === undefined &&
         v.teaching_mode === undefined &&
-        v.target_id === undefined),
+        v.target_id === undefined &&
+        v.dimensions === undefined),
     {
       path: ["scope"],
       message:
         "subject/branch/year/target are only editable with scope this_and_future (§4.4)",
     },
   )
-  .refine(
-    (v) => (v.teaching_mode === undefined) === (v.target_id === undefined),
-    {
-      path: ["target_id"],
-      message: "teaching_mode and target_id are named together or not at all",
-    },
-  )
+  .superRefine((v, ctx) => {
+    // Revision 157 — the SAME exclusivity CREATE's own schema enforces
+    // (`teaching_mode`/`target_id`/`dimensions`), restated here because a
+    // split's successor may rename into or within any mode, including
+    // `multi_dimension`. `target_id`/`dimensions` are refused whenever
+    // `teaching_mode` is absent — a stray target with no named mode is
+    // exactly as ambiguous here as on CREATE.
+    if (v.teaching_mode === "multi_dimension") {
+      if (v.target_id !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["target_id"],
+          message: "target_id is not used by multi_dimension — use dimensions",
+        });
+      }
+      if (v.dimensions === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dimensions"],
+          message: "multi_dimension requires dimensions",
+        });
+      }
+    } else if (v.teaching_mode !== undefined) {
+      if (v.target_id === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["target_id"],
+          message: "teaching_mode and target_id are named together or not at all",
+        });
+      }
+      if (v.dimensions !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dimensions"],
+          message: "dimensions is used only by multi_dimension",
+        });
+      }
+    } else if (v.target_id !== undefined || v.dimensions !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["target_id"],
+        message: "teaching_mode and target_id are named together or not at all",
+      });
+    }
+  })
   .superRefine(checkDelivery);
 
 /** Not `.strict()`: TD-10's `page`/`page_size` share the query object. */

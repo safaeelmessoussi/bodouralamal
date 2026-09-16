@@ -227,6 +227,28 @@ export function update(prisma: PrismaClient) {
           ? { teachingMode: body.teaching_mode }
           : {}),
         ...(body.target_id !== undefined ? { targetId: body.target_id } : {}),
+        // Revision 157 — the successor's own dimensions, this_and_future-only.
+        ...(body.dimensions !== undefined
+          ? {
+              dimensions: {
+                ...(body.dimensions.branch_ids !== undefined
+                  ? { branchIds: body.dimensions.branch_ids }
+                  : {}),
+                ...(body.dimensions.category_ids !== undefined
+                  ? { categoryIds: body.dimensions.category_ids }
+                  : {}),
+                ...(body.dimensions.level_ids !== undefined
+                  ? { levelIds: body.dimensions.level_ids }
+                  : {}),
+                ...(body.dimensions.administrative_group_ids !== undefined
+                  ? { administrativeGroupIds: body.dimensions.administrative_group_ids }
+                  : {}),
+                ...(body.dimensions.teaching_group_ids !== undefined
+                  ? { teachingGroupIds: body.dimensions.teaching_group_ids }
+                  : {}),
+              },
+            }
+          : {}),
       },
     );
     // **R50: a split answers with the SUCCESSOR, not the closed predecessor.**

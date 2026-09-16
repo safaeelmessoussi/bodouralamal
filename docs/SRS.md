@@ -24,6 +24,46 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
+**Revision 159 (Document Owner decisions — five reported fixes across نقاط الاختبارات, حصص الجدول, الجدولة's dialogs, the two main navs, and an exam's own access window, ratified 2026-09-16):** **IMPLEMENTED AND TESTED, BACKEND AND FRONTEND WHERE NEEDED.**
+
+**§1 — a misleading sentence removed.** The question-freeze notice on بناء الاختبارات (`assessments.frozen`) said "أجابت مستفيدة واحدة على الأقل، فلم تعد الأسئلة قابلة للتعديل. هذا يحمي ما أجبن به." — the Owner asked for the second sentence removed; the first (the actual freeze rule, R124) is unchanged.
+
+**§2 — حصص الجدول's «المؤطِّرات» column showed a bare count under a header that names people.** `listScheduleSessions` (`course-schedule.service.ts`) never joined `SessionStaff.user`, so `schedule-sessions.tsx` had nothing to render but `staff.length`. Fixed with the SAME `user: { select: { nameArabic: true } }` join and `user_name` DTO field `listCourseSchedules` already carries for its own staff list (Revision 155's own equivalent fix, applied here too — this list was missed at the time).
+
+**§3 — الجدولة's occurrence-detail dialog, four fixes in one component.** (a) `التوقيت`'s value carried a stray `dir="ltr"` that put its own logical "start" margin on the wrong side of an RTL row, visually separating it from every other field's value — removed; a plain `HH:MM — HH:MM` string needs no direction override to read left-to-right. (b) `التاريخ`'s Hijri half rendered the raw ministry identifier (`"1448-03-22"`) with no separator from the Gregorian date beside it (the same stray-`dir` margin bug), reading as one run-together string — reformatted into the `day month year` label `day-events-dialog.tsx`'s own Hijri renderer already uses, with an explicit separator rather than a margin. (c) An exam occurrence named no one: `ExamStaff` (supervisor/assistant) was never surfaced at all, on the reasoning `instructors` means *who teaches this* and nobody teaches an exam (§4.6) — correct, and left unexpanded rather than reused; a NEW field, `supervisors`, carries them instead, in their own dialog row, for every kind (empty for a Session/Event). (d) Room and category were checked and found ALREADY shown for a Session and a holiday respectively — nothing to add there; reported rather than guessed at.
+
+**§4 — the two main navs, reordered and reconciled.** بناء الاختبارات and نقاط الاختبارات (renamed from «نقاط الامتحانات» to match `/teacher/exams`'s own label exactly) move to the end of both the admin/super_admin sidebar and the teacher menu, after الجدولة and مكتبة المحتوى — the Owner's own stated order, identical in both dashboards now. **Two pre-existing §14.1 documentation gaps closed alongside this, found while updating the sitemap for the move**: `/admin/assessments` and `/teacher/assessments` (both live since R124) were never listed in §14.1's own sitemap text at all — the same "rule P" gap R105/R110/M4c's own entries in this document already record for other nodes that shipped without a sitemap update.
+
+**§5 — an exam's «بدء الاختبار» button now respects its own scheduled end.** It was gated on `available_from` alone (R136 clause 16/17 — *is it open*) and never asked *is it still going on* — a sitting opened at 09:00 for a 09:00–10:00 window still offered "بدء الاختبار" at noon. Past the sitting's own `end_time` (local wall-clock, TD-11), the button is withdrawn for everyone, and a student/parent sees «عرض الاختبار» instead — the SAME `/dashboard/student/assessments?exam=` deep link, which `studentPaper`'s own contract already renders read-only once a submission exists (*"eligibility decides may I start, never may I see what I wrote"*, `assessment.service.ts`) — so this is a NEW route to an existing capability, not a new one.
+
+**Verified:** backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend unit 1,348/1,348; new coverage in `event-details-dialog`'s own test suite (the ended-gate's three states: still open, past end with no active role, past end for a student/parent — proving the exact fixture regression this would have produced against the file's own pre-existing `date: '2026-06-15'` default, now overridden to 2099 in every unaffected test), `calendar.http.integration.test.ts`/`visibility-matrix.http.integration.test.ts` (an exam's own `supervisors` field, proved never folded into `instructors`), and `admin-modules.test.ts`/`teacher-modules.test.ts` (the new pinned order, in both dashboards). Full disposable-stack integration suite verified green (see the batch-level verification note below, shared across this Revision, 157 and 158). No migration for §1/§4/§5 (frontend/copy only); §2/§3 are additive backend reads, no schema change.
+
+**Revision 158 (Document Owner decision — نقاط الاختبارات gets a per-student "view her responses and grade them" dialog, ratified 2026-09-16):** **IMPLEMENTED AND TESTED, FRONTEND ONLY — no new endpoint.**
+
+**§1 — the gap was never the data; it was that grading and reading were on two different screens.** بناء الاختبارات's own `OnePaper` already had a full submissions inbox with a per-student, read-only `SubmissionDialog` (`GET /assessments/{id}/submissions/{studentId}`, R148's supervisor-widened read); نقاط الاختبارات's own per-question inputs (Revision 153's own report/154's context) already existed, but blind — a table of bare number boxes with no question text and no answer beside them, and the one "عرض الإجابات" button on the page was a full-page redirect to the OTHER screen. The two capabilities existed; reaching both without leaving نقاط الاختبارات did not.
+
+**§2 — one row, one dialog, reusing what already existed rather than a second reader.** Each row of نقاط الاختبارات (online exams only — a physical sitting has no submission to open) now carries its own «عرض الإجابات», opening a dialog that fetches the SAME submission read `OnePaper` uses and renders question+answer in the identical shape `SubmissionDialog` already established (prompt, chosen option(s), free text, justification) — not a second implementation of that view, an editable one. Each question with R137 points allocated gets its own grade input beside its answer, pre-seeded from whatever draft (or already-saved) score exists.
+
+**§3 — two ways to mark her, both legal, on the SAME rule the table already enforced, now visible.** `entryPayload` (extracted from the bulk save, now shared by both) already decided: any filled per-question score sums to the total and wins; an empty set of them leaves the plain total field in charge. The dialog states this explicitly (`totalOverrideHint`) rather than leaving a marker to infer it, and adds the plain total field even when the exam uses points — the table itself only ever offered ONE or the other depending on whether points existed at all, never both at once.
+
+**§4 — the dialog's own «حفظ» commits immediately, as a draft, for that student alone** — not a staged change waiting for the page's bulk «حفظ». `saveGradeDraft` (`grade.service.ts`) already upserts whichever entries a `PUT /exams/{id}/grades` call names and leaves every other student's row untouched; the dialog sends a one-entry array through the identical adapter call the bulk save uses, so nothing here is a second write path. Publishing stays the existing page-level action, applied to whatever the drafts (dialog-saved or bulk-saved) currently hold.
+
+**§5 — the exam-wide link is kept, not removed, and now says what it actually does.** It still opens بناء الاختبارات's own submissions inbox for a bulk, side-by-side browse of every answer — a real capability the per-row dialog does not replace (§20 rule 16 cuts both ways) — relabelled «فتح في بناء الاختبارات» so it is never confused with the per-row «عرض الإجابات», which now means something different (grading, not merely reading).
+
+**Verified:** frontend typecheck/lint/build clean; frontend unit 1,348/1,348, including new source-pinned coverage (`grade-sheet.test.ts`) proving: the shared `entryPayload` extraction changed no BR-7 behaviour (the empty-vs-zero rule, restated against its new location), the per-row button is physical-exam-aware, the dialog's own save sends exactly one entry built by the identical helper the bulk save uses, the manual-total path is offered explicitly, and the two links now carry deliberately different labels. No backend change and no migration — every read/write this dialog uses already existed.
+
+**Revision 157 (Document Owner decision — SRS Revision 155 completed end to end: `this_and_future` splitting AND the admin scheduling form's own picker, ratified 2026-09-16):** **IMPLEMENTED AND TESTED, BACKEND AND FRONTEND.** Resolves Revision 155 §4 and §5, both explicitly deferred at the time as their own design questions rather than guessed at.
+
+**§1 — `this_and_future` reaches a `multi_dimension` schedule, the same way the legacy three-arm identity change already did.** `splitCourseSchedule`'s own `multi_dimension` refusal (Revision 155 §4) is gone; in its place, `resolveTarget`'s existing `multi_dimension` case (unchanged) is reused for the successor exactly as the legacy modes already reuse it. Absent an explicit rename, the successor's dimensions are the predecessor's own, read once via `scheduleDimensions` and carried forward untouched — never zero join rows, which the deferred DB trigger would refuse. Named explicitly (`teaching_mode: 'multi_dimension'` + `dimensions`, the SAME exclusivity CREATE's own schema enforces, restated on the split schema), the successor gets the NEW dimensions instead, validated against every effective Level the new set implies (looped, not `[0]` alone — a multi-dimension class can name several).
+
+**§2 — the admin scheduling form's own picker**, built where CREATE already accepted the capability but no screen offered it (rule P, the same shape R105/R110's own entries in this document record repeatedly). Five independent `MultiSelectField` controls — mirroring `ActivitySection`'s own dimension pattern, but never that component directly: its composition rule (pure OR, `scopeAllLevelsHint`) is the WRONG one here (AND-across-kind, a Teaching Circle unions instead — Revision 155 §2's own rule, restated as `multiDimensionHint` beside the picker). Administrative-group and circle OPTIONS are read UNSCOPED (`listAdministrativeGroups`/`listCircles`, both extended with an optional `pageSize`, called with 100 rather than the ordinary 25) — the chained `scope.options.groupId` `ActivitySection` itself uses needs a Level AND a branch already chosen before it answers anything (§4.4c: a group is a roster at a premises), which this dialog never sets for `multi_dimension`. A representative Level is synced into `scope.value.levelId` purely to keep the Subject picker sensible while the dialog is open — a form convenience, never the authority: the server still validates the Subject against every effective Level on save, exactly as §1 restates.
+
+**§3 — locked (editing) states the fact plainly, on the SAME rule `ActivitySection`'s own locked scope already established.** §4.4 freezes a class's scope at creation; five empty, disabled pickers would look exactly like an audience nobody had chosen for a row that in fact has one — the identical `admin.calendar.scopeFixed` sentence Event's own locked scope renders replaces the pickers here too, rather than seeding five arrays from a row whose real dimensions this pass deliberately does not thread into edit-time state (matching R139's own "never on edit" rule for Events).
+
+**§4 — a list-view display gap found and closed alongside this**: a `multi_dimension` row's `target_name` is `''` by construction (no single target exists to name) — the list's «الجهة المعنية» column rendered a blank cell rather than the empty-string check the `??` fallback already used for `null`. Fixed with the mode's own label as a plain, honest fallback; the real five-dimension breakdown is seen by opening the class.
+
+**Verified:** backend typecheck/lint/build clean; backend unit 342/342; frontend typecheck/lint/build clean; frontend unit 1,348/1,348, including new coverage: `course-schedule.http.integration.test.ts` (§1 — carry-forward, explicit rename, a subject-not-taught refusal on rename, and the exclusivity rule extended to the split schema) and `class-section.multi-dimension.test.tsx` (§2/§3 — all five pickers render together, the legacy pair is unaffected for every other mode, the locked sentence replaces them on edit, and the submitted payload/validation/unscoped-read wiring, source-pinned against `scheduling.tsx` the same way `class-section.scope.test.tsx` already established for Events). Full disposable-stack integration suite: **2,631/2,649 passed** before this batch (Revisions 155–156's own last confirmed run); re-verified green after this batch and Revisions 158–159 together — see `docs/CHANGES.log` for the exact re-run figure. All 31 guards, doc-links and `git diff --check` pass. Migration: none new — §1 uses the existing `dimensions`/`courseScheduleDimensions` schema Revision 155 already shipped.
+
 **Revision 156 (Document Owner decision — a `created_by`/`created_at` audit trail for anything a real person manually creates or deletes, ratified 2026-09-16):** **IMPLEMENTED AND TESTED, BACKEND ONLY. THIRTY-ONE NEW ADDITIVE COLUMNS, NO NEW TABLES.** Resolves the audit-trail item Revision 153's own report (above) deliberately left as "a separate, larger decision" pending explicit instruction — now given.
 
 **§1 — every Prisma model classified MANUAL/AUTOMATIC/already-unambiguous before a single column was added**, rather than adding `created_by` uniformly. `deletedAt`/`deletedById` were already found (Revision 153's report) to be the near-universal convention (35/37 soft-deletable models); this revision's own audit found the inverse is true of `createdById` — genuinely absent everywhere except the two `Legal*` models. Three buckets, evidence-based (grep + read, not assumed): **(a) MANUAL** — a real person's deliberate action, no existing column already answers "who": the 31 models listed in §2 gained `created_by`. **(b) AUTOMATIC** — a system process with no independent lifecycle of its own creation (`Notification`, `Session`/`SessionStaff`'s materialization path, `EventBranch`/`EventCategory`/`EventLevel`/`EventAdministrativeGroup`'s pure side-effect joins of one parent transaction) — explicitly excluded by the Owner's own wording ("not notifications, as they get created automatically, not manually by a user") and generalised to every model sharing that same shape. **(c) already unambiguous** — a domain-specific actor column already names the "who" under its own name (`Attendance.markedById`, `QuranProgressLog.loggedById`, `ConsentRecord.grantedByUserId`), or the row's own foreign key already is the actor (`StudentExamSubmission`/`ChildApplication`/`SelfManagedClaim` are self-service — `studentId`/`parentId` already says who).
@@ -2577,11 +2617,6 @@ TEACHER PORTAL (مؤطِّرة) — THE MENU, IN THIS EXACT ORDER (Revision 106)
 │                                       (R87 §M) — she must staff a live schedule whose Subject
 │                                       carries `tracks_quran_progress`. That mirrors the server's
 │                                       rule; it does not stand in for one
-├── إدخال نقاط الامتحانات ............. /teacher/exams — the SAME grade sheet /admin/exam-grades
-│                                       renders (R70.1: one implementation, two ways in).
-│                                       ~~نقاط الامتحانات~~ renamed by R106: she enters marks.
-│                                       Authoring a paper (§4.6 `mode = online`) stays declared
-│                                       and refused
 ├── الجدولة ........................... /teacher/schedules — her classes, read-only (TD-2 `⊘` on
 │   │                                   creating or editing a Recurring Course Schedule stands,
 │   │                                   R71.0/R94.2), plus `نشاط` and `امتحان` authoring in her own
@@ -2594,10 +2629,23 @@ TEACHER PORTAL (مؤطِّرة) — THE MENU, IN THIS EXACT ORDER (Revision 106)
 │                                       `staffsSession` has enforced it just as long; **no screen
 │                                       offered it.** Rule P, the tenth instance. An occurrence she
 │                                       does not staff is `404`, exactly as before
-└── مكتبة المحتوى ..................... /teacher/content — upload/record, §5.5. Visibility honours
-                                        the Category default and there is **no Global scope**
-                                        (§4.9); the server enforces all three. **`/admin/content`
-                                        is NOT offered to her** — that is the staff-wide library
+├── مكتبة المحتوى ..................... /teacher/content — upload/record, §5.5. Visibility honours
+│                                       the Category default and there is **no Global scope**
+│                                       (§4.9); the server enforces all three. **`/admin/content`
+│                                       is NOT offered to her** — that is the staff-wide library
+├── بناء الاختبارات ................... /teacher/assessments (**R124**) — the online paper, where
+│                                       R70 left only the marking; she is one of the three
+│                                       authorised author roles (`assertExamInTeacherScope`).
+│                                       **Never listed here before this sweep** (Owner-reported,
+│                                       2026-09-16) — rule P again, the same shape as
+│                                       `/teacher/quran`'s own gap. Moved after الجدولة/مكتبة المحتوى,
+│                                       matching /admin/assessments's own new position
+└── نقاط الاختبارات ................... /teacher/exams — the SAME grade sheet /admin/exam-grades
+                                        renders (R70.1: one implementation, two ways in).
+                                        ~~إدخال نقاط الامتحانات~~ renamed (Owner-reported,
+                                        2026-09-16) to match /admin/exam-grades's own label exactly.
+                                        Authoring a paper (§4.6 `mode = online`) stays declared
+                                        and refused
 
 BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision 105)
 │
@@ -2640,10 +2688,6 @@ BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision
 │                                       sitemap simply never listed a node for it — rule P.
 │                                       /teacher/quran is the teaching view of the same capability;
 │                                       /dashboard/student/quran is the beneficiary's own view
-├── نقاط الامتحانات ................... /admin/exam-grades (+ ?exam=) — Revision 70; /teacher/exams
-│                                       reaches THE SAME screen. Exam authoring and grading remain
-│                                       /teacher/exams; /dashboard/student/assessments (اختباراتي) is the
-│                                       taking/viewing view — Revision 153 merged the separate «نقاطي» into it
 ├── الجدولة ........................... /admin/schedules — ALL types (class, activity, later exam),
 │   │                                   with a List view (definitions) and a Calendar view
 │   │                                   (occurrences); /teacher/schedules is the teacher view
@@ -2655,6 +2699,20 @@ BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision
 │                                       «الحضور من الفروع» — R92's cross-branch audience)
 ├── مكتبة المحتوى ..................... /admin/content — the Content Library. /teacher/content is the
 │                                       upload/record view and /resources the all-roles library
+├── بناء الاختبارات ................... /admin/assessments (**R124**) — the online assessment
+│                                       builder; the paper, where R70 left only the marking.
+│                                       **Never listed here before this sweep** (Owner-reported,
+│                                       2026-09-16) — rule P again, the capability and route both
+│                                       existed. Beside «نقاط الاختبارات»: this writes the paper,
+│                                       that one marks it
+├── نقاط الاختبارات ................... /admin/exam-grades (+ ?exam=) — Revision 70; /teacher/exams
+│                                       reaches THE SAME screen. Exam authoring and grading remain
+│                                       /teacher/exams; /dashboard/student/assessments (اختباراتي) is the
+│                                       taking/viewing view — Revision 153 merged the separate «نقاطي» into it.
+│                                       ~~نقاط الامتحانات~~ renamed (Owner-reported, 2026-09-16) to
+│                                       match /teacher/exams's own label exactly. **Moved to the END
+│                                       of the main list, after الجدولة/مكتبة المحتوى** (Owner-reported,
+│                                       2026-09-16), together with بناء الاختبارات above
 │
 └── الإدارة  *(Super Admin only, AS A SECTION — R61; stable configuration, in dependency order — R69)*
     │                                   **The only heading in this sidebar, because it is the only

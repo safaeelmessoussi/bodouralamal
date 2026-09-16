@@ -272,39 +272,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
-    /**
-     * **بناء الاختبارات** (R124) — the online assessment builder.
-     *
-     * Beside «نقاط الامتحانات» because they are two halves of one thing: this
-     * writes the paper, that one marks it. **It is not in الإدارة**: R61 makes
-     * that section Super-Admin-only by placement, and authoring an assessment
-     * is a مؤطِّرة's work within her own teaching (TD-2 as split by R70.4).
-     *
-     * The list is empty until a paper exists, which is ordinary — and the one
-     * action, «اختبار جديد», is what a data-first page offers when there is
-     * nothing yet (rule A/§14.4), not a filter standing in the way.
-     */
-    path: '/admin/assessments',
-    labelKey: 'admin.nav.assessments',
-    section: null,
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    /**
-     * R70.1 — grade entry had no node at all: §14.1 listed grading under
-     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
-     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
-     * `/resources` set and R69 applied twice — a second path segment would be a
-     * node §14.1 does not list.
-     */
-    path: '/admin/exam-grades',
-    labelKey: 'admin.nav.examGrades',
-    section: null,
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
     // **R56 — one node for everything that appears on the calendar.** R51 put
     // Events and Course Schedules in one section; this makes them one screen,
     // with the type as a field on the form rather than a navigation decision.
@@ -319,6 +286,47 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   {
     path: '/admin/content',
     labelKey: 'admin.nav.content',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * **بناء الاختبارات** (R124) — the online assessment builder.
+     *
+     * Beside «نقاط الاختبارات» because they are two halves of one thing: this
+     * writes the paper, that one marks it. **It is not in الإدارة**: R61 makes
+     * that section Super-Admin-only by placement, and authoring an assessment
+     * is a مؤطِّرة's work within her own teaching (TD-2 as split by R70.4).
+     *
+     * The list is empty until a paper exists, which is ordinary — and the one
+     * action, «اختبار جديد», is what a data-first page offers when there is
+     * nothing yet (rule A/§14.4), not a filter standing in the way.
+     *
+     * **Owner-reported, 2026-09-16 — moved after الجدولة/مكتبة المحتوى**, the
+     * same order the teacher portal now uses (`teacher-modules.ts`), so the
+     * two dashboards read as one consistent hierarchy rather than two that
+     * happen to share the same four nodes in different places.
+     */
+    path: '/admin/assessments',
+    labelKey: 'admin.nav.assessments',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * R70.1 — grade entry had no node at all: §14.1 listed grading under
+     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
+     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
+     * `/resources` set and R69 applied twice — a second path segment would be a
+     * node §14.1 does not list.
+     *
+     * **Owner-reported, 2026-09-16 — moved after الجدولة/مكتبة المحتوى**, same
+     * reasoning as بناء الاختبارات above.
+     */
+    path: '/admin/exam-grades',
+    labelKey: 'admin.nav.examGrades',
     section: null,
     roles: STAFF,
     status: 'ready',

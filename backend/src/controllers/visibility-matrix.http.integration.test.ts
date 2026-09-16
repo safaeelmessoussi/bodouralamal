@@ -545,6 +545,21 @@ describe("§E — the public tier is public, for every kind", () => {
     // could not make this pass.
     expect(seen).toContain(vacationId);
   });
+
+  it("Owner-reported, 2026-09-16 — an exam's own occurrence carries its supervisor, never as an instructor", async () => {
+    const res = await call(
+      "GET",
+      `/calendar?from=${WINDOW.from}&to=${WINDOW.to}&type=exam`,
+    );
+    const row = (res.body.data ?? []).find((r) => String(r["id"]) === rows.exam["public"]);
+    expect(row).toBeDefined();
+    expect((row!["supervisors"] as { id: string; display_name: string }[]).map((s) => s.display_name)).toContain(
+      `${TAG} المراقبة`,
+    );
+    // §4.6's own distinction, proved directly: an exam's staff are never
+    // folded into `instructors`, which stays empty for every exam row.
+    expect(row!["instructors"]).toEqual([]);
+  });
 });
 
 describe("§E — the private tier: approved accounts yes, anonymous no, staff by branch", () => {
