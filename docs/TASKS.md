@@ -4535,18 +4535,30 @@ the Owner's own report named.
 - [x] **Built: content library §8** — «تنزيل الملف» now mints its own
       `attachment`-disposed presigned URL instead of reusing the
       previewer's `inline` one, so it actually downloads.
-- [ ] **§2 — filter UX overhaul for the `multi_dimension` picker**:
-      replace the mode-selector shape with all filters shown directly
-      («الكل» pre-selected), cascading options as one is chosen; the
-      Owner's own question about `multiDimensionHint`'s intersection
-      rule is answered in SRS Revision 160 §2. Not started.
-- [ ] **§3 — تعديل الحصة per-occurrence overrides** for فروع/فئات/
-      مستويات/مجموعات مستوى/حلقات/نمط التدريس/المادة/طريقة الحضور/
-      القاعة/الأستاذ المسؤول/المؤطرون المساعدون. Not started.
-- [ ] **§4 — multi-role registration**: request more than one role
-      (مستفيدة/ابن أو ابنة/مؤطرة/مديرة) in one submission, full outer
-      join of the fields each role needs, super admin approves any
-      subset. Not started.
+- [ ] **§2 — filter UX overhaul, investigated and explained; redesign
+      held pending confirmation.** `multiDimensionHint`'s intersection
+      rule matches what the Owner described (SRS Revision 160 §2's
+      full explanation). Collapsing the three teaching modes into
+      always-shown filters is mechanically possible but changes what
+      a self-service Teacher is offered (`MODES` gates both); true
+      mutual cascading needs a faceted-options read that does not
+      exist today. Awaiting confirmation of the exact shape.
+- [ ] **§3 — تعديل الحصة per-occurrence overrides, investigated.**
+      طريقة الحضور/القاعة (`this_session` scope) and staff (`طاقم
+      التدريس` action) are ALREADY per-occurrence editable — found
+      while checking, not built new. فروع has a narrow existing
+      override (branches only, R92). فئات/مستويات/مجموعات مستوى/
+      حلقات/نمط التدريس/المادة have none. Generalising R92 to these
+      does not conflict with §20 rule 22 (confirmed: not a snapshot),
+      but is a new schema decision on the exact boundary R92's own
+      comment deferred. Awaiting confirmation before building it.
+- [ ] **§4 — multi-role registration, investigated.** The blocker is
+      `User.requestedRole`, a single scalar column read/written
+      everywhere a registration is created, listed or approved.
+      Supporting several roles needs it widened to a set (most likely
+      a join table) and a real answer for what a PARTIAL approval
+      leaves behind. A schema-and-workflow decision with more than
+      one defensible shape — awaiting confirmation before building.
 - [x] **Built: بناء الاختبارات §6** — the question list carried no
       stylesheet rule at all; each question is now a numbered card
       with kind/points as badge chips and its actions in one row.
