@@ -4427,7 +4427,11 @@ the Owner's own report named.
       test.ts` fixture regression the first full-suite run surfaced
       and this pass resolved. Three E2E browser scripts updated to the
       merged route, not yet re-run live. No migration.
-- [ ] Push, verify hosted CI, deploy to Staging, record the outcome.
+- [x] Pushed as `895173f`; hosted CI green on the first run, all 7 jobs
+      (run `35067326661`) including Release. Deployed to Staging,
+      upgrading from `44b886a`: no pending migrations, `/healthz`
+      green on the first check, TLS/security headers intact, no
+      leftover disposable containers. Full detail in CHANGES.log.
 
 - [ ] The روster-viewing gap decision (`عرض المستفيدات`) is now resolved
       — see the confirmation above; nothing further outstanding here.

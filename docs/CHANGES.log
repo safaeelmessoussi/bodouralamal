@@ -9573,3 +9573,13 @@ skips), all-table isolation intact; all 31 guards, doc-links and `git diff --che
 Three E2E browser scripts (`verify-portals.mjs`, `verify-journey.mjs`, `verify-grading.mjs`)
 updated to the merged
 route — not yet re-run live in this pass. No migration.
+
+Pushed as `895173f`; hosted CI green on the first run, all 7 jobs (run `35067326661`),
+Release included. Deployed to `staging.bodouralamal.com`, upgrading from `44b886a`: host
+preflight passed cleanly, both exact-commit images pulled and their
+`org.opencontainers.image.revision` label confirmed to match before recreation,
+`prisma migrate deploy` confirmed nothing pending (as expected — no migration in this
+change), `api`/`nginx` recreated and verified on the exact commit's label, `/healthz` green
+(4/4 components, 12/12 workers) on the first check, no error-level log lines in the
+following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No
+Production action of any kind.
