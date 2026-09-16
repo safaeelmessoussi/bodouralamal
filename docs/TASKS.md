@@ -4510,4 +4510,13 @@ the Owner's own report named.
       pre-existing skips), all-table isolation intact; all 31 guards,
       doc-links and `git diff --check` pass. Full detail in
       CHANGES.log and SRS Revisions 157–159.
-- [ ] Pushed to `develop`; hosted CI; Staging deployment. Pending.
+- [x] Pushed as `20ffa0e`; hosted CI's first run failed `Backend —
+      lint, typecheck, test, build` (two unchecked `unknown` reads in
+      the new R157 split tests, caught by `npm run typecheck`'s own
+      `tsconfig.typecheck.json` — the config that actually typechecks
+      test files, unlike the plain one this pass had been running
+      directly). Fixed, pushed as `326289f`; hosted CI green, all 7
+      jobs (run `35126306570`), Release included. Deployed to
+      Staging, upgrading from `14b193b`: no pending migrations,
+      `/healthz` green on the first check, no leftover disposable
+      containers. Full detail in CHANGES.log.

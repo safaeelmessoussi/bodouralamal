@@ -9770,3 +9770,19 @@ order). Full disposable-stack integration suite, 2,636/2,654 (18 pre-existing sk
 all-table isolation intact. All 31 guards, doc-links and `git diff --check` pass. Migration:
 none new — Revision 157 uses the `dimensions`/`courseScheduleDimensions` schema Revision 155
 already shipped; the other two revisions are frontend/copy or additive-read only.
+
+Pushed as `20ffa0e`; hosted CI's first run failed on `Backend — lint, typecheck, test, build`
+— two `res.body.schedule.dimensions` reads in the new R157 split tests, unchecked
+`unknown`-typed access. **Found only by `npm run typecheck`'s own `tsconfig.typecheck.json`,
+not the plain `tsconfig.json` this pass had been running directly all session** — the plain
+config excludes `*.test.ts` entirely from its own scope, which is the gap that let this ship
+past every earlier local check. Fixed with the same `as { dimensions: unknown }` cast every
+neighbouring assertion in the same file already uses; pushed as `326289f`. Re-run green, all
+7 jobs (run `35126306570`), Release included. Deployed to `staging.bodouralamal.com`,
+upgrading from `14b193b`: host preflight passed cleanly, both exact-commit images pulled and
+their `org.opencontainers.image.revision` label confirmed to match before recreation, a
+pre-migration dump taken, `prisma migrate deploy` confirmed nothing pending (as expected — no
+migration in this batch), `api`/`nginx` recreated and verified on the exact commit's label,
+`/healthz` green (4/4 components, 12/12 workers) on the first check, no error-level log lines
+in the following minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable
+containers. No Production action of any kind.
