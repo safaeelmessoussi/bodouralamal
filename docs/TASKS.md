@@ -4829,23 +4829,56 @@ the Owner's own report named.
       drill as green from its 547/547 test count; it had in fact exited
       non-zero at its final loop step (recorded correctly in
       `docs/CHANGES.log`, overstated in the chat summary).
-- [ ] **Open, not fixed — why this went unnoticed.** `backend/scripts/*.ts`
-      is outside both `tsconfig.json` and `tsconfig.typecheck.json`
-      (`include: ["src", "prisma/seed"]`), so the compiler could not flag
-      the stale `questions`. An ad-hoc typecheck of that directory (the two
-      repaired scripts now pass) shows four type-only errors in three other
-      scripts, all of which run correctly: `generate-openapi.ts` — the
-      synthetic config lacks `RECORDING_STAGING_BUCKET`, and
-      `/auth/switch-role` is defined twice (lines 261 and 273; the later
-      definition wins, the earlier is dead text — which prose is intended is
-      a documentation call, and this file drives `docs/openapi.json`);
-      `seed-dev-scenario.ts:108` — `sex` is optional where the create input
-      requires it; `seed-r82-scenario.ts:267` — `academicYearId` may be
-      `undefined` under `exactOptionalPropertyTypes`. Bringing `scripts/`
-      into `npm run typecheck` means fixing these first.
-- [ ] **Open, not fixed — the second gap.** `verify-production-seed.sh` is
-      not run by hosted CI (no reference under `.github/`), so a red
-      scenario loop reaches nobody until someone runs it by hand. Wiring it
-      in adds several minutes and a job to the CI set that
-      `.github/workflows/ci.yml` and `docs/development/ci-cd.md` define —
-      a pipeline decision, not made here.
+- [x] **Closed — why this went unnoticed, part 1: `scripts/` was never
+      type-checked.** `backend/scripts/*.ts` sat outside `tsconfig.json` and
+      `tsconfig.typecheck.json`. Fixed the four type-only errors an ad-hoc
+      check had found (all three scripts ran correctly): `generate-openapi.ts`
+      — the synthetic config now carries `RECORDING_STAGING_BUCKET`, and the
+      duplicated `/auth/switch-role` path key is reduced to the later
+      definition, which is the one JavaScript already kept, so **regenerating
+      `docs/openapi.json` is byte-identical** and both OpenAPI guards pass
+      (no documentation call was needed after all); `seed-dev-scenario.ts` —
+      `person()`'s dead `sex: null` option removed (no caller passed it and
+      the column is required); `seed-r82-scenario.ts` — `academicYearId` is
+      omitted rather than `undefined` under `exactOptionalPropertyTypes`.
+      `tsconfig.typecheck.json` now includes `scripts`; the shipped build
+      config still emits none of it. Proven able to fail: a probe file with
+      the original `questions: []` shape is rejected by `npm run typecheck`
+      with exactly R124's error.
+- [x] **Closed — part 2: the seed drill was not in hosted CI.** Added a
+      `seed-drill` job to `.github/workflows/ci.yml` running
+      `scripts/seed/verify-production-seed.sh`, and added it to the release
+      job's `needs`. `check-release-artifacts.sh` now fails if the job or
+      that dependency is removed (both mutations verified). The CI handbook
+      and deployment runbook say seven verification jobs now.
+- [x] **Localhost moved to SeaweedFS** (Owner-authorized, 2026-09-20). Only
+      the `minio` service was recreated (`--no-deps`, both compose files) on
+      the new `bodour_seaweedfs-data` volume, then `minio-init` ran. The old
+      `bodour_minio-data` volume (about 82 MB: `public` 81M, `private`
+      864K, `recordings-staging` empty) is retained, unreferenced. **Five
+      `educational_content` rows reference objects that were not migrated**,
+      so their downloads no longer resolve on Localhost — re-upload, or
+      delete the old volume once you are sure. Verified: `/healthz` green
+      (storage ok, 12/12 workers), zero error-level API log lines, an
+      authenticated PUT/GET/DELETE round trip on both buckets, and anonymous
+      GET `200` on `public` versus `403` on `private`.
+- [x] **Documentation drift corrected.** The B1 row in
+      `deployment-readiness.md` said SeaweedFS was "now the running object
+      store on Localhost and Staging" — untrue when written (nothing had been
+      deployed). It now says the repository defines one model, Localhost runs
+      it, and Staging still runs its pre-change container. Stale "MinIO"
+      wording for the object store in `testing.md` and `resilience.md` was
+      reworded; dated history and the accurate legacy-volume refusals were
+      left as written.
+- [ ] **Staging, next authorized deployment:** host preflight refuses to run
+      while the legacy `bodour_minio-data` volume exists, so an operator must
+      first stop the old `minio` container and `docker volume rm
+      bodour_minio-data` (Staging object data is already Owner-authorized to
+      be discarded). Not done — no remote environment was touched.
+- [ ] **Left as they are (working, verified):** the two disposable fixtures
+      `scripts/backup/fixtures/docker-compose.yml` and
+      `scripts/seed/fixtures/docker-compose.yml`, and the dev harnesses
+      `verify-livekit-join.sh`/`verify-livekit-ingest.sh`, still use the MinIO
+      **client** (`mc`) against the SeaweedFS endpoint. No MinIO server image
+      remains in any compose file. Replacing `mc` there needs the exact API
+      image on the host, which the seed drill does not build.

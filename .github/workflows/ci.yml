@@ -221,6 +221,27 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  seed-drill:
+    name: Seed drill — fresh-install seed + scenario fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npx prisma generate
+        working-directory: backend
+      # The only routine that executes backend/scripts/seed-*.ts against a real
+      # schema. It sat outside CI, so R124's ExamQuestion relation broke two of
+      # them and nothing noticed until a manual run. It owns a uniquely named
+      # Compose project and tears it down on exit.
+      - run: bash scripts/seed/verify-production-seed.sh
+
   production-smoke:
     name: Production — anonymous browser + restart/recovery smoke
     runs-on: ubuntu-latest
@@ -238,7 +259,7 @@ jobs:
   release-images:
     name: Release — publish exact-commit API and web images
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: [guards, contract, backend, frontend, integration, production-smoke]
+    needs: [guards, contract, backend, frontend, integration, seed-drill, production-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read

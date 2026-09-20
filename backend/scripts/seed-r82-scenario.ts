@@ -273,7 +273,7 @@ const schedule = await prisma.recurringCourseSchedule.create({
     levelId: levelA.id,
     branchId: branchA.id,
     roomId: room.id,
-    academicYearId: year ? year.id : undefined,
+    ...(year ? { academicYearId: year.id } : {}),
     startTime: new Date('1970-01-01T09:00:00Z'),
     endTime: new Date('1970-01-01T10:00:00Z'),
     recurrence: 'weekly',

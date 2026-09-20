@@ -5,6 +5,10 @@
   "compilerOptions": {
     "noEmit": true
   },
+  // `scripts/` (fixtures, the OpenAPI generator) is not shipped, so the build
+  // omits it, but it runs against the live Prisma client and drifted silently
+  // when a schema change (R124) invalidated a create — typecheck it here.
+  "include": ["src", "prisma/seed", "scripts"],
   // Re-include the test files the build artifact deliberately omits: they must
   // still be typechecked, they just must not be emitted into dist/.
   "exclude": []

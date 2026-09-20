@@ -2,18 +2,19 @@
 
 # CI/CD
 
-GitHub Actions runs six parallel verification jobs on every push to `develop`/`main` and on
-every pull request. A seventh release job runs only after all six succeed on a push to
+GitHub Actions runs seven parallel verification jobs on every push to `develop`/`main` and on
+every pull request. An eighth release job runs only after all seven succeed on a push to
 `develop`.
 
 ```
 guards      twenty-eight dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
-backend     syntax-aware no-PII guard · lint · exact typecheck · default tests · production build
+backend     syntax-aware no-PII guard · lint · exact typecheck (src · seeds · scripts) · default tests · production build
 frontend    lint · exact typecheck · tests · production build
-integration fresh PostgreSQL · MinIO · pg-boss · Nginx · all integration/API tests · isolation
+integration fresh PostgreSQL · SeaweedFS · pg-boss · Nginx · all integration/API tests · isolation
+seed-drill  fresh-install Production seed · seed-owned suites · every backend/scripts/seed-* scenario fixture
 production  Production seed · TLS edge · anonymous browser · dependency/restart/recreation recovery
-release     exact-commit API + web images → GHCR (develop push only, after all six pass)
+release     exact-commit API + web images → GHCR (develop push only, after all seven pass)
 ```
 
 The contract job runs the two OpenAPI-backed scripts and the backend job runs the remaining
@@ -55,7 +56,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-security-headers.sh` | An Nginx location declaring its own header set but dropping HSTS — `add_header` does not inherit, so the header is silently absent on the wire while the configuration still reads as if it were set |
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
-| `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
+| `check-release-artifacts.sh` | Release publication that can precede a green gate (including the seed drill), lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
 | `check-host-preflight.sh` | Loss of the executable clean-host gate, its pure version/domain/public-IP parser rules, root-authoritative effective-SSH-policy inspection, the exact pipeline invocation, or the explicit Owner disk-capacity input |
 | `check-compose-operations.sh` | Any base-Compose service falling back to unbounded logs; drift in the shared ceilings; or loss of whole-application Docker/deployment health probes |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |

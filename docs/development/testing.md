@@ -270,7 +270,7 @@ anonymous refresh/API refusal, no browser credential residue, CSP/runtime cleanl
 public reads, and the live Production auth rate-limit envelope. The probe never mints a development
 session or loads fixture users; authenticated journeys remain a same-origin Staging acceptance
 gate. The resolved API service must also carry the two-minute stop grace that outlives
-pg-boss's bounded 105-second drain. The recovery half stops only its disposable MinIO and proves
+pg-boss's bounded 105-second drain. The recovery half stops only its disposable object store and proves
 fail-closed health plus recovery; leaves a real job pending while the worker is stopped and proves
 it drains on return; holds a real handler active across API SIGTERM and proves the graceful drain;
 then restarts PostgreSQL, Nginx, and the full stack. Finally it force-recreates every long-running
@@ -340,7 +340,7 @@ their uniquely named resources. No timer is installed, no external host is conta
 live dataset is used by these checks.
 
 The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL
-and MinIO volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every
+and object-store volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every
 migration, creates objects across the complete staging-prefix catalog, proves the strict
 48-hour boundary and bounded continuation, and verifies canonical objects survive. Its purge
 case removes the queue first to prove the content row/Trash deletion rolls back, then uses the
@@ -1588,10 +1588,10 @@ the fixture-owned joins and retains the Production Subjects.
 Run `bash scripts/seed/verify-production-seed.sh`. It starts a disposable PostgreSQL 18
 volume, applies every migration, executes the **actual** Production seed entry point twice,
 and then checks the R107–R108 boundary through the real policy and Quran service. It also boots
-the real API/pg-boss catalog against disposable MinIO, runs all 18 integration files affected
+the real API/pg-boss catalog against a disposable SeaweedFS object store, runs all 18 integration files affected
 by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
 
-The drill's internal S3 client uses its loopback MinIO endpoint, while its browser-facing
+The drill's internal S3 client uses its loopback object-store endpoint (`MINIO_ENDPOINT`, a compatibility name), while its browser-facing
 `STORAGE_BASE_URL` is the exact same-origin `${PUBLIC_BASE_URL}/storage` coordinate required
 by §3.1. The latter is configuration validation in this seed-focused harness, not a claim that
 the harness's direct API listener is an Nginx storage proxy; production-shaped proxy traffic is
@@ -1609,6 +1609,13 @@ covered by the disposable full-stack CI gate.
 The opt-in variable and unique database volume are deliberate. This proof owns its whole
 database and invokes the bootstrap seed, so it must never share a development or Owner
 database merely to make the test convenient.
+
+Hosted CI runs this drill as its own `seed-drill` job, and `check-release-artifacts.sh` fails
+if that job is removed or stops gating release publication. It is the only routine that
+executes `backend/scripts/seed-*.ts` against a real schema; while it sat outside CI, R124's
+`ExamQuestion` relation broke two of those scripts and nothing noticed. `backend/scripts/`
+is also part of `npm run typecheck` (see `tsconfig.typecheck.json`), so the compiler now sees
+that class of drift as well; the shipped build still excludes it.
 
 ### A contract change reaches the harnesses too
 
@@ -2017,7 +2024,7 @@ recording, which is exactly the pair that check exists to tell apart.
 
 ### The staging-cleanup failure is after success, so test both truths
 
-`session-recording-ingest.integration.test.ts` drives real MinIO and injects a fault only at
+`session-recording-ingest.integration.test.ts` drives the real object store (SeaweedFS) and injects a fault only at
 the selected `DeleteObject` call. The intermediate assertion is load-bearing: the canonical
 object, content row and relation exist while the staging object remains, and
 `ingestion_failure_reason` stays null. A retry must then delete the selected staging key while
@@ -2360,7 +2367,7 @@ is not acceptance of the later code.
 The next continuation **reproduced the defect before changing production code**:
 one targeted assertion failed because the intent already had `completedAt` while
 the copy was still held behind a barrier (68 other assertions skipped). The
-barrier models an accepted request's delayed remote effect; real MinIO performs
+barrier models an accepted request's delayed remote effect; the real object store performs
 the COPY only after caller failure and absent cleanup. This is deterministic
 failure injection, not a claim that a real network timeout was induced.
 

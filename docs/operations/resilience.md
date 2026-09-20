@@ -125,7 +125,7 @@ The repository-side Production drill asserts the resolved two-minute container b
 exercises both sides of the worker boundary: work inserted while the API is stopped remains
 `created` and drains after start, while a handler observed `active` during SIGTERM completes before
 the restart. It also restarts PostgreSQL and Nginx independently, performs a full-stack stop/start,
-and force-recreates every long-running container over unchanged PostgreSQL/MinIO volumes. After
+and force-recreates every long-running container over unchanged PostgreSQL/object-store volumes. After
 each data-boundary phase it rechecks the exact Production seed, migration history, a private object,
 and durable job terminal states; ordinary API startup is also asserted not to migrate or seed.
 It then takes a real encrypted recovery point from that Production-mode graph, writes later

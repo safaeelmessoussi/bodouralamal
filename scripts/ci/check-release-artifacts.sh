@@ -24,8 +24,15 @@ fail() {
 
 grep -Fq "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'" "$workflow" ||
   fail 'release publication must be limited to pushes on develop'
-grep -Fq 'needs: [guards, contract, backend, frontend, integration, production-smoke]' "$workflow" ||
+grep -Fq 'needs: [guards, contract, backend, frontend, integration, seed-drill, production-smoke]' "$workflow" ||
   fail 'release publication must wait for every verification job'
+awk '
+  /^  seed-drill:/ { inside = 1 }
+  /^  production-smoke:/ { inside = 0 }
+  inside && /run: bash scripts\/seed\/verify-production-seed\.sh/ { drill = 1 }
+  END { exit drill ? 0 : 1 }
+' "$workflow" ||
+  fail 'hosted CI must run the production-seed drill, the only routine that executes the seed scenario fixtures'
 awk '
   /^  production-smoke:/ { inside = 1 }
   /^  release-images:/ { inside = 0 }

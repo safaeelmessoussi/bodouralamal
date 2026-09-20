@@ -10231,3 +10231,50 @@ definition winning), `seed-dev-scenario.ts:108` and `seed-r82-scenario.ts:267`. 
 `scripts/` into the typecheck, and wiring the drill into CI, are recorded as open items in
 `docs/TASKS.md` rather than done here: the first needs a documentation call on the duplicated
 contract prose (that file drives `docs/openapi.json`), the second changes the CI job set.
+
+**Follow-up to the two entries above — the open items closed, Localhost moved to SeaweedFS, and
+a false status claim from the storage pass corrected. No SRS, application, schema or migration
+change.**
+
+*Why the R124 drift went unnoticed, both halves closed.* (1) `backend/scripts/*.ts` was in
+neither tsconfig. Fixed the four type-only errors an ad-hoc check had found, none of them a
+runtime fault: `generate-openapi.ts` gains `RECORDING_STAGING_BUCKET` in its synthetic config
+and loses its dead first definition of `/auth/switch-role` (the later definition is the one
+JavaScript already kept, so regenerating `docs/openapi.json` is byte-identical and both OpenAPI
+guards pass — the "documentation call" recorded earlier turned out not to be needed);
+`seed-dev-scenario.ts` drops `person()`'s unused `sex: null` option; `seed-r82-scenario.ts` omits
+`academicYearId` instead of passing `undefined`. `tsconfig.typecheck.json` now includes
+`scripts`; the shipped build still emits none of it. Proven able to fail: a probe file carrying
+the original `questions: []` is rejected by `npm run typecheck` with R124's exact error.
+(2) The seed drill was not in hosted CI. Added a `seed-drill` job running
+`scripts/seed/verify-production-seed.sh`, added it to the release job's `needs`, and made
+`check-release-artifacts.sh` fail if the job or that dependency disappears (both mutations
+verified against the guard, then restored). `ci-cd.md` and `deployment.md` now say seven
+verification jobs; dated hosted-run history was left as written.
+
+*Localhost is now on SeaweedFS (Owner-authorized, 2026-09-20).* The running dev stack was still
+on the pre-change MinIO container. Only the `minio` service was recreated, with `--no-deps` and
+both compose files (the standing rule for this stack), on the new `bodour_seaweedfs-data`
+volume, followed by the explicit `minio-init` bootstrap. Nginx resolves the storage upstream
+dynamically, so it followed the new container without a reload. The old `bodour_minio-data`
+volume (about 82 MB) is retained and unreferenced. **Five `educational_content` rows point at
+objects that were not migrated**, as the Owner's authorization allowed; their downloads no
+longer resolve on Localhost. Verified: `/healthz` green with storage ok and 12/12 workers, zero
+error-level API log lines, an authenticated PUT/GET/DELETE round trip on both buckets, and
+anonymous GET `200` on `public` versus `403` on `private`.
+
+*A false claim from the storage pass, corrected.* The B1 row of `deployment-readiness.md` said
+SeaweedFS was "now the running object store on Localhost and Staging". That was untrue when
+written — nothing had been deployed — and Staging still is not: it runs its pre-change MinIO
+container until its next authorized deployment. The row now says so, and also records the step
+the deployment will need: host preflight refuses to run while the legacy `bodour_minio-data`
+volume exists, so an operator must first remove it by hand. Stale present-tense "MinIO" wording
+for the object store in `testing.md` and `resilience.md` was reworded; dated history and the
+accurate legacy-volume refusals were left alone. The MinIO **client** (`mc`) remains in two
+disposable fixtures and two dev harnesses, working against the SeaweedFS endpoint; no MinIO
+server image remains in any compose file.
+
+Verification: `bash scripts/seed/verify-production-seed.sh` exits 0 again after these script
+changes (13 + 335 + 199 = 547 tests, plus the full scenario loop); `npm run typecheck` clean
+with `scripts/` included; all 31 `scripts/ci/check-*.sh` guards pass; `docs/openapi.json`
+regeneration produces no diff. Not deployed to Staging or Production.

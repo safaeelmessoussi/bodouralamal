@@ -23,6 +23,7 @@ const SYNTHETIC_CONFIG: AppConfig = {
   MINIO_SECRET_KEY: 'unused',
   PUBLIC_BASE_URL: 'http://127.0.0.1',
   STORAGE_BASE_URL: 'http://127.0.0.1/storage',
+  RECORDING_STAGING_BUCKET: 'unused',
   SUPER_ADMIN_EMAIL: 'unused@example.com',
   NODE_ENV: 'test',
   TZ: 'Africa/Casablanca',
@@ -255,18 +256,6 @@ const document = {
         {
           '200': 'New access token; a rotated refresh cookie unless the grace window applied.',
           '401': `${ENVELOPE} All refusal reasons are deliberately indistinguishable.`,
-        },
-      ),
-    },
-    '/auth/switch-role': {
-      post: op(
-        'Work as one of your own assigned roles',
-        '**SRS Revision 60.3 — the Active Role.** A person holding several roles (§2.1) chooses which one they are currently working as. Body `{ role }`; answers `{ access_token, expires_at, active_role }`. **The returned token is already NARROWED**: `roles[]` and `role_scopes[]` carry only that role\'s entry, so every authorization check in the platform narrows without any of them knowing this endpoint exists — a Super Admin working as `teacher` is refused by `isSuperAdmin` everywhere, including the Trash\'s destructive verbs. **§4.2 is unchanged**: scope still resolves per role, and the retained entry keeps its own branches, so a مؤطِّرة scoped to Marrakesh stays scoped to Marrakesh. **Decided against LIVE rows, never against the presented token** — the caller\'s current token may itself be narrowed, and reading it here would make the first switch a one-way door. **No logout, no new session, no refresh-cookie change.** **Not the load-bearing path**: the client holds the access token in memory and switching navigates by full page load, so `POST /auth/refresh` is what makes an active role persist; this endpoint exists for the immediate coded refusal and the `auth.role_switch` audit row. **A SAFETY mechanism, not containment** (§60.0) — switching back is self-service and instant, so it prevents accidents and makes testing-as-a-role truthful rather than defending against a hostile Super Admin.',
-        {
-          '200': 'Switched; the token is narrowed to the requested role.',
-          '400': `${ENVELOPE} VALIDATION_FAILED when no role is given.`,
-          '401': ENVELOPE,
-          '403': `${ENVELOPE} FORBIDDEN with details.reason ROLE_NOT_ASSIGNED — the live rows do not carry that role for this account. 403 rather than 404: the caller is authenticated and the roles are their own, so there is nothing to hide.`,
         },
       ),
     },

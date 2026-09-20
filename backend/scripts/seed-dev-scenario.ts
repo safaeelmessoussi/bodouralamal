@@ -101,7 +101,7 @@ await clean();
 async function person(
   label: string,
   role: string | null,
-  sex: 'female' | 'male' | null = 'female',
+  sex: 'female' | 'male' = 'female',
   isBeneficiary = false,
 ): Promise<string> {
   const user = await prisma.user.create({
@@ -109,7 +109,7 @@ async function person(
       nameArabic: `${TAG} ${label}`,
       accountStatus: 'active',
       isBeneficiary,
-      ...(sex === null ? {} : { sex }),
+      sex,
     },
   });
   if (role !== null) {
