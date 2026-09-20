@@ -32,7 +32,15 @@ export PRODUCTION_SEED_MINIO_PORT="$minio_port"
 export MINIO_ACCESS_KEY='production-seed-fixture'
 export MINIO_SECRET_KEY='production-seed-fixture-secret'
 docker compose --project-name "$project" --file "$compose_file" up -d --wait db minio
-docker compose --project-name "$project" --file "$compose_file" run --rm minio-init
+# The exact shared initializer Production's one-shot container runs, executed
+# from the backend so its AWS SDK resolves from the existing dependency tree.
+# This drill builds no API image, and no S3-client image is needed: the MinIO
+# `mc` image this used to pull cannot be pulled on a clean runner.
+(
+  cd "$repo_root/backend"
+  MINIO_ENDPOINT="http://127.0.0.1:${minio_port}" \
+    node --input-type=module < <(sed "s|'./policy.mjs'|'../scripts/storage/policy.mjs'|" "$repo_root/scripts/storage/initialize.mjs")
+)
 
 export DATABASE_URL="postgresql://app:production-seed-drill-password@127.0.0.1:${db_port}/bodour"
 export GOOGLE_CLIENT_ID='production-seed-fixture'

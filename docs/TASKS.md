@@ -4875,10 +4875,24 @@ the Owner's own report named.
       first stop the old `minio` container and `docker volume rm
       bodour_minio-data` (Staging object data is already Owner-authorized to
       be discarded). Not done — no remote environment was touched.
-- [ ] **Left as they are (working, verified):** the two disposable fixtures
-      `scripts/backup/fixtures/docker-compose.yml` and
-      `scripts/seed/fixtures/docker-compose.yml`, and the dev harnesses
-      `verify-livekit-join.sh`/`verify-livekit-ingest.sh`, still use the MinIO
-      **client** (`mc`) against the SeaweedFS endpoint. No MinIO server image
-      remains in any compose file. Replacing `mc` there needs the exact API
-      image on the host, which the seed drill does not build.
+- [x] **Correction, found by the first hosted run of the new job.** This
+      pass first recorded the `mc` (MinIO client) users as "working,
+      verified". That held only where the image was already cached: on a clean
+      runner `docker pull minio/mc` is refused (`pull access denied`), and the
+      new `seed-drill` job failed at its bucket step. Fixed for the seed
+      drill: the `minio-init` service and its `minio/mc` image are removed
+      from `scripts/seed/fixtures/docker-compose.yml`, and the drill runs the
+      canonical `scripts/storage/initialize.mjs` on the host from `backend/`
+      (the storage-lifecycle drill's existing pattern) — which also checks
+      the public-read policy and refuses versioning/lifecycle/retention, so it
+      is stricter than the `mc mb` it replaces.
+- [ ] **Still depend on the unpullable `minio/mc` image (not in CI, work only
+      where it is cached):** `scripts/backup/fixtures/docker-compose.yml`
+      with `scripts/backup/verify-backup-restore.sh` (the fixture seeds one
+      object with `mc pipe` and the drill reads it back with `mc cat`;
+      replacing that means restructuring a destructive recovery drill, so it
+      was not done blind), and the dev harnesses
+      `scripts/dev/browser/verify-livekit-join.sh` and
+      `verify-livekit-ingest.sh` (`minio/mc:latest ls`, wrapped in `|| true`,
+      so a failed pull reads as "no artefacts" rather than as an error). No
+      MinIO server image remains in any compose file.

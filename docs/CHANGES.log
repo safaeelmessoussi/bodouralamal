@@ -10278,3 +10278,28 @@ Verification: `bash scripts/seed/verify-production-seed.sh` exits 0 again after 
 changes (13 + 335 + 199 = 547 tests, plus the full scenario loop); `npm run typecheck` clean
 with `scripts/` included; all 31 `scripts/ci/check-*.sh` guards pass; `docs/openapi.json`
 regeneration produces no diff. Not deployed to Staging or Production.
+
+**Correction to the follow-up entry above — found by the first hosted run of the new `seed-drill`
+job, which failed in 50 seconds.** That entry recorded the MinIO **client** (`mc`) users as
+"working against the SeaweedFS endpoint". They worked only where `minio/mc` was already cached:
+on a clean GitHub runner `docker pull minio/mc` is refused (`pull access denied`), so the seed
+fixture's `minio-init` service could not start. Everything else in that run passed (Backend,
+Frontend, Integration, API contract, guards); the release job was correctly held back by the new
+`needs` entry.
+
+Fixed for the seed drill: `minio-init` and its `minio/mc` image are removed from
+`scripts/seed/fixtures/docker-compose.yml`, and `verify-production-seed.sh` runs the canonical
+`scripts/storage/initialize.mjs` on the host from `backend/` (so the AWS SDK resolves from the
+existing dependency tree) — the storage-lifecycle drill's established pattern. That initializer
+also checks the public-read policy and refuses versioning, lifecycle and retention, so the drill's
+bucket step is now stricter than the `mc mb` it replaces, and no client image is pulled. The drill
+exits 0 again locally (13 + 335 + 199 = 547 tests plus the scenario loop).
+
+Not fixed, and stated plainly rather than described as working: three other places still depend
+on the unpullable `minio/mc` image and work only where it is cached — the backup drill's fixture
+(`mc pipe` to seed an object, `mc cat` to read it back in `verify-backup-restore.sh`; not in CI;
+replacing it means restructuring a destructive recovery drill, so it was not done without being
+able to justify that risk here) and the two dev harnesses `verify-livekit-join.sh` and
+`verify-livekit-ingest.sh` (`minio/mc:latest ls` under `|| true`, so a failed pull would read as
+"no artefacts"). Recorded as an open item in `docs/TASKS.md`. No MinIO server image remains in
+any compose file.
