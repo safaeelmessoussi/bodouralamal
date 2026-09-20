@@ -10474,3 +10474,20 @@ refusal is not translated) — left open, because whether that should be a coded
 whole series is a decision; and `seed-dev-scenario`'s title-keyed cleanup missed a split's
 successor, which takes the occurrence's title, leaving scenario residue on Localhost behind a
 `|| true` — fixed to clean by ownership, residue removed. Frontend unit is 1,372/1,372.
+
+**Deployed to `staging.bodouralamal.com` at `4ec1a2765ad6d338381b4a59e856ddea899f240d` (SRS
+Revision 163), upgrading from `a6b599d`.** Hosted run `35524209891` passed all seven verification
+jobs — including the full disposable-stack gate, which is the clean-room confirmation of the
+soft-delete guard fix — and published both exact-commit images first. Documented Staging pipeline,
+unchanged: exact detached checkout, `pg_dump` outside the checkout, host preflight PASS, pull with
+both revision labels verified, `db` and the object store up, explicit bucket bootstrap,
+`migrate deploy` (none pending), `seed:production`, `seed:fixtures`, application up,
+`enable-tls.sh`; the checkout stayed clean. Verified on the real edge: `/healthz` 200 with 12/12
+workers, both containers on the exact revision, zero error-level API lines, the served bundle
+carries the new attendance gate, every occurrence carries `item_title` (a class's chip still reads
+its Subject — «حفظ القرآن» — while its dialog title is what was typed — «حلقة حفظ القرآن»), an
+anonymous reader is offered no attendance anywhere, and the anonymous browser suite passes 15/15.
+One frontend unit test (`admin-modules`, an async import) failed once in a full run under load and
+passed alone and in three consecutive full runs afterwards; noted, not chased. No Production
+action; «دخول الحصة» on Staging still answers «غير مهيّأة» until the Owner decides the media
+provider (Revision 163 §4).

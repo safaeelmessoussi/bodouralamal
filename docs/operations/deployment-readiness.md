@@ -46,11 +46,13 @@ base, Production profile, Staging overlay, and Local Development overlay.
 Staging and current `develop` are different facts:
 
 - `https://staging.bodouralamal.com` is deployed at
-  `a6b599d9148cff7732db7511a4ddf07f428682e4` (2026-09-20). Hosted run `35517908293` passed all
-  seven verification jobs and exact-image publication before promotion; host preflight passed
-  before and after; the real edge then passed 15/15 anonymous browser assertions
+  `4ec1a2765ad6d338381b4a59e856ddea899f240d` (2026-09-20, SRS Revision 163). Hosted run
+  `35524209891` passed all seven verification jobs and exact-image publication before promotion;
+  host preflight passed; the real edge then passed 15/15 anonymous browser assertions
   (`scripts/deploy/verify-production-browser.mjs`), `/healthz` with 12/12 workers, and a signed
-  PUT/GET round trip through the TLS proxy on the unified SeaweedFS store. The first accepted
+  PUT/GET round trip through the TLS proxy on the unified SeaweedFS store (that round trip was
+  proved at `a6b599d`, the release that moved Staging onto SeaweedFS; storage is unchanged since).
+  The first accepted
   Staging release was `4fd620de2cf182aa8a8342d48641c054ea76002e` (hosted run `33262358687`,
   attempt 2, six verification jobs at the time).
 - Acceptance belongs to that deployed commit. Later `develop` documentation or application

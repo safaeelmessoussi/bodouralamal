@@ -5050,3 +5050,13 @@ changed destructively; Production go-live remains on hold.
       the item type by a value that became a catalogue id under R110. The
       assertions this revision touched were restated in both; neither is
       reported as passing.
+- [x] Pushed as `4ec1a27`; hosted CI green, all 8 jobs (run `35524209891`),
+      including the full integration gate with the soft-delete guard and the
+      release. **Deployed to Staging**, upgrading from `a6b599d`, by the
+      documented Staging pipeline: dump taken, preflight PASS, no pending
+      migration, `/healthz` 200 with 12/12 workers, both revision labels
+      exact, zero error-level API lines, 15/15 anonymous browser assertions.
+      On the real site every occurrence carries `item_title` (a class's chip
+      still reads its Subject, its dialog reads what was typed) and an
+      anonymous reader is offered no attendance anywhere. No Production
+      action.
