@@ -4886,13 +4886,46 @@ the Owner's own report named.
       (the storage-lifecycle drill's existing pattern) — which also checks
       the public-read policy and refuses versioning/lifecycle/retention, so it
       is stricter than the `mc mb` it replaces.
-- [ ] **Still depend on the unpullable `minio/mc` image (not in CI, work only
-      where it is cached):** `scripts/backup/fixtures/docker-compose.yml`
-      with `scripts/backup/verify-backup-restore.sh` (the fixture seeds one
-      object with `mc pipe` and the drill reads it back with `mc cat`;
-      replacing that means restructuring a destructive recovery drill, so it
-      was not done blind), and the dev harnesses
-      `scripts/dev/browser/verify-livekit-join.sh` and
-      `verify-livekit-ingest.sh` (`minio/mc:latest ls`, wrapped in `|| true`,
-      so a failed pull reads as "no artefacts" rather than as an error). No
-      MinIO server image remains in any compose file.
+- [x] **The last three `minio/mc` users replaced; none remains anywhere in
+      `scripts/` or any compose file.** The backup fixture loses its
+      `minio-init` service and gains a loopback-only port; the drill runs the
+      canonical `initialize.mjs` and seeds/reads back its canary through
+      `scripts/backup/fixtures/object-probe.mjs` (the backend's own S3 SDK).
+      Both livekit harnesses list through
+      `scripts/dev/browser/list-bucket.mjs`, which exits non-zero on any
+      failure (verified: unreachable store and wrong credentials both fail).
+
+## Storage unification finished end to end — Localhost and Staging — 2026-09-20
+
+Owner authorization (2026-09-20): Localhost and Staging may be touched and
+changed destructively; Production go-live remains on hold.
+
+- [x] **Four pre-existing defects found by actually running what was changed,
+      all fixed.** (1) `verify-backup-restore.sh` corrupted *the first pack
+      `find` listed*; pack names are content hashes, so about half the time it
+      hit a tree pack, the next backup failed in `create` instead of `verify`,
+      and the drill died silently (1 pass in 3 before; **3 of 3 after**, 117s,
+      117s, 113s). It now locates a **data** pack exactly through restic.
+      (2) Both livekit harnesses read the browser run's status on the line
+      after it under `set -e`, so a failing check aborted them before their
+      storage check. (3) The ingest harness swallowed a failed listing and then
+      printed PASS for "nothing left in staging". (4) The join harness asserted
+      media in the staging bucket, unsatisfiable since ingest began sweeping it
+      (R99.13); it now requires this run's new MP4 and OGG in the canonical
+      store. Its two failing «دخول الحصة» checks were **not** a product
+      regression: it clicked the first chip whose text said تفسير, which is the
+      dev fixtures' in-person class; it now selects today's cell and the online
+      mark. Result: join **61/61** plus a real 5.5 MB MP4 and 126 KB OGG;
+      ingest **27/27**; both exit 0 against SeaweedFS.
+- [x] **Localhost is whole, and the earlier report is corrected.** "Five
+      `educational_content` rows lost their objects" overcounted: four are dev
+      fixture rows that never had objects. One real recording (84,378,142
+      bytes) and 106 private residue objects existed. All **107 were copied at
+      the S3 level and verified by size, SHA-256 and content type, zero
+      mismatches**; the recording is served through the real Nginx edge with
+      its exact length and range reads. The legacy `bodour_minio-data` volume
+      was then deleted. Localhost also now runs current `HEAD` images, no
+      pending migrations, `/healthz` green with 12/12 workers. (One transient
+      `job runner failed to start` occurred when a migration command was
+      launched one second after the API started; the identical startup
+      succeeded by hand and on restart. Cause not proven.)

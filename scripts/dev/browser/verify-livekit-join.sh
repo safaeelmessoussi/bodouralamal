@@ -90,34 +90,48 @@ if [[ "$CHROME_READY" != "1" ]]; then
   exit 1
 fi
 
-PORT=9252 node scripts/dev/browser/verify-livekit-join.mjs
-NODE_STATUS=$?
+# `|| NODE_STATUS=$?`, not a bare `NODE_STATUS=$?` on the next line: under
+# `set -e` a failing browser run aborted the script before its status was
+# read, so the storage check below never ran exactly when it mattered.
+# "<bytes>\t<key>" for every recording media object in the canonical store. A
+# failed listing stops the harness: an empty result must mean an empty bucket,
+# never an unreachable store.
+canonical_media() {
+  node scripts/dev/browser/list-bucket.mjs private | awk -F'\t' '$2 ~ /^content\/.*[.](mp4|ogg)$/' | sort
+}
+MEDIA_BEFORE="$(canonical_media)"
 
-# ── R99.7 — the ARTEFACTS, by extension, in the platform own store ─────────
+NODE_STATUS=0
+PORT=9252 node scripts/dev/browser/verify-livekit-join.mjs || NODE_STATUS=$?
+
+# ── R99.7 — the ARTEFACTS, by extension, in the platform's own store ────────
 #
 # The harness above proves the lifecycle; this proves what the lifecycle
 # actually produced. A صوت وصورة class must leave an MP4 and a صوت فقط class an
 # OGG — the one thing an API response can never tell you.
 #
-# The staging objects OUTLIVE the fixture teardown on purpose: rows are wiped,
-# bytes are evidence.
+# **Read from the CANONICAL store, and only THIS run's objects.** This used to
+# look in the staging bucket, which was right until the platform began importing
+# a completed recording and sweeping its staging media (R99.13 — asserted by
+# verify-livekit-ingest.sh). After that a healthy run left nothing there, so the
+# check could only fail; it went unnoticed because the script aborted before
+# reaching it. The imported bytes outlive the fixture teardown on purpose: rows
+# are wiped, bytes are evidence.
 echo
-echo "-- recorded artefacts in the staging bucket --"
-ARTEFACTS="$(docker run --rm --network bodour_default \
-  -e MC_HOST_local="http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" \
-  minio/mc:latest ls --recursive local/"${RECORDING_STAGING_BUCKET:-recordings-staging}" 2>/dev/null || true)"
+echo "-- recorded artefacts this run added to the canonical store --"
+ARTEFACTS="$(comm -13 <(printf '%s\n' "$MEDIA_BEFORE") <(canonical_media))"
 echo "$ARTEFACTS"
 
 MP4S="$(printf "%s\n" "$ARTEFACTS" | grep -c "[.]mp4$" || true)"
 OGGS="$(printf "%s\n" "$ARTEFACTS" | grep -c "[.]ogg$" || true)"
 # A byte count, because a zero-length file is a passing lifecycle and a failed
 # recording — the exact pair this check exists to tell apart.
-TINY="$(printf "%s\n" "$ARTEFACTS" | grep -E "[.](mp4|ogg)$" | grep -cE " 0B | [0-9]{1,3}B " || true)"
+TINY="$(printf "%s\n" "$ARTEFACTS" | awk -F'\t' '$2 ~ /[.](mp4|ogg)$/ && $1 < 1000' | wc -l | tr -d ' ')"
 
 if [[ "$MP4S" -ge 1 && "$OGGS" -ge 1 && "$TINY" -eq 0 ]]; then
   echo "PASS  a صوت وصورة class produced an MP4 and a صوت فقط class produced an OGG, both non-trivial"
 else
-  echo "FAIL  expected >=1 .mp4 and >=1 .ogg with real bytes; got mp4=$MP4S ogg=$OGGS tiny=$TINY"
+  echo "FAIL  expected >=1 new .mp4 and >=1 new .ogg with real bytes; got mp4=$MP4S ogg=$OGGS tiny=$TINY"
   NODE_STATUS=1
 fi
 

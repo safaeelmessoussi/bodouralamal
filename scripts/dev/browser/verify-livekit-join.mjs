@@ -307,8 +307,14 @@ let safaTab = null;
   await safaTab.open('/calendar');
 
   const opened = await safaTab.evaluate(`(async () => {
-    const chips = [...document.querySelectorAll('.event-chip--interactive')];
-    const chip = chips.find((c) => c.innerText.includes('تفسير'));
+    // TODAY's cell and the online mark, not "the first chip that says تفسير":
+    // a chip renders the Subject name, and the dev fixtures carry an in-person
+    // تفسير القرآن class earlier in the month — matched by text alone, it was
+    // that class this opened, and its dialog rightly offers no «دخول الحصة».
+    const chips = [...document.querySelectorAll('.is-today .event-chip--interactive')];
+    const chip = chips.find(
+      (c) => c.innerText.includes('تفسير') && c.querySelector('.event-chip__delivery'),
+    );
     if (!chip) return 'no chip';
     chip.click();
     await new Promise((r) => setTimeout(r, 900));

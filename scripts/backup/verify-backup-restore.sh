@@ -8,6 +8,8 @@ compose_file="$repo_root/scripts/backup/fixtures/docker-compose.yml"
 project="bodour-backup-drill-$$"
 export MINIO_ACCESS_KEY='backup-drill-access'
 export MINIO_SECRET_KEY='backup-drill-secret-password'
+export BACKUP_DRILL_MINIO_PORT="${BACKUP_DRILL_MINIO_PORT:-59006}"
+export MINIO_ENDPOINT="http://127.0.0.1:${BACKUP_DRILL_MINIO_PORT}"
 workdir="$(mktemp -d /tmp/bodour-backup-drill.XXXXXXXX)"
 repository="$workdir/repository"
 password_file="$workdir/restic-password"
@@ -47,7 +49,15 @@ container_ids() {
   done
 }
 
-docker compose --project-name "$project" --file "$compose_file" up -d
+docker compose --project-name "$project" --file "$compose_file" up -d --wait
+
+# The exact shared initializer, then one canary object, both from the host
+# through the fixture's loopback port with the backend's own S3 SDK.
+(
+  cd "$repo_root/backend"
+  node --input-type=module < <(sed "s|'./policy.mjs'|'../scripts/storage/policy.mjs'|" "$repo_root/scripts/storage/initialize.mjs")
+)
+node "$repo_root/scripts/backup/fixtures/object-probe.mjs" put private drill/object.txt 'object-at-recovery-point'
 
 before_ids="$(container_ids)"
 create_args=(--allow-fixtures --project "$project" --compose-file "$compose_file"
@@ -127,9 +137,18 @@ before_failure="$(own_snapshots | python3 -c 'import json,sys; print("\n".join(s
 # Corrupt ONE pack in this disposable repository, preserving its bytes privately
 # for repair. A new successful write is insufficient: full read-data must fail,
 # all previous snapshots must remain, and services must already be restarted.
-pack="$(docker run --rm --entrypoint /bin/sh --volume "$repository:/repository:ro" "$RESTIC_IMAGE" \
-  -c 'find /repository/data -type f | head -1')"
-[[ "$pack" == /repository/data/* ]]
+# A DATA pack, located exactly — never "whichever pack is listed first". The
+# next backup loads its parent snapshot's TREES, so a truncated tree pack fails
+# earlier, in `create`, and proves nothing about verification. Pack names are
+# content hashes, so the old first-listed choice made this step a coin flip.
+# Both filters read their whole input: an early exit would SIGPIPE restic and
+# fail the pipeline under `pipefail`.
+data_blob="$("${restic_run[@]}" list blobs | awk '$1 == "data" && !seen { print $2; seen = 1 }')"
+[[ "$data_blob" =~ ^[0-9a-f]{64}$ ]]
+pack_id="$("${restic_run[@]}" find --blob "$data_blob" --show-pack-id |
+  awk '/^Object belongs to pack [0-9a-f]+$/ && !seen { print $5; seen = 1 }')"
+[[ "$pack_id" =~ ^[0-9a-f]{64}$ ]]
+pack="/repository/data/${pack_id:0:2}/$pack_id"
 docker run --rm --entrypoint /bin/sh --volume "$repository:/repository" --volume "$workdir:/work" \
   "$RESTIC_IMAGE" -c 'cp "$1" /work/saved-pack; truncate -s 0 "$1"' sh "$pack"
 if create_point >"$workdir/corrupt-failure.log" 2>&1; then
@@ -191,9 +210,7 @@ database_value="$(docker compose --project-name "$project" --file "$compose_file
 [[ "$database_value" == 'database-at-recovery-point' ]] ||
   { printf 'backup drill: PostgreSQL recovery mismatch\n' >&2; exit 1; }
 
-object_value="$(docker compose --project-name "$project" --file "$compose_file" \
-  run --rm --no-deps --entrypoint /bin/sh minio-init \
-  -c 'mc cat local/private/drill/object.txt')"
+object_value="$(node "$repo_root/scripts/backup/fixtures/object-probe.mjs" get private drill/object.txt)"
 [[ "$object_value" == 'object-at-recovery-point' ]] ||
   { printf 'backup drill: object recovery mismatch\n' >&2; exit 1; }
 

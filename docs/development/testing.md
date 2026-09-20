@@ -318,7 +318,9 @@ API or job catalog is changed by this slice.
 - `bash scripts/backup/verify-backup-restore.sh`: **passed in 150 seconds** against real
   PostgreSQL, B1 SeaweedFS and pinned encrypted restic. Tests raw and separately executed logical
   dump restore, object/config bytes, exact container identities, low-space/wrong-key/overlap
-  refusal before outage, durable repeated failures, corruption of a saved disposable data pack
+  refusal before outage, durable repeated failures, corruption of a saved disposable **data** pack
+  (located exactly through restic — a first-listed pack may hold tree blobs, which fail the next
+  backup in `create` instead and made this step pass only about half the time)
   causing full verification failure without pruning old snapshots, repaired retry, exactly two
   project generations across differing paths, foreign-project preservation, monthly skip and
   repository/foreign-snapshot refusal **before target creation**. A newer foreign snapshot does
@@ -2018,9 +2020,23 @@ so it can never show that a صوت وصورة class produced video and a صوت 
 did not.
 
 `verify-livekit-join.sh` therefore records **both**, against real local Egress,
-and then lists the staging bucket and checks the **extensions and the byte
-counts** — because a zero-length file is a passing lifecycle and a failed
-recording, which is exactly the pair that check exists to tell apart.
+and then checks the **extensions and the byte counts** of the media objects *this
+run* added to the canonical store — because a zero-length file is a passing
+lifecycle and a failed recording, which is exactly the pair that check exists to
+tell apart. It reads the canonical store, not the staging bucket: a completed
+recording is imported and its staging media swept (R99.13, asserted by
+`verify-livekit-ingest.sh`), so a healthy run leaves nothing in staging.
+
+Three defects hid in these two harnesses together, and each hid the next. The
+status of the browser run was read on the line *after* it under `set -e`, so any
+failing check aborted the script before the storage check ran. The storage
+listing swallowed its own failure (`|| true`), so an unreachable store read as
+"nothing left" — a PASS in the ingest harness on the very failure it exists to
+catch. And the staging-bucket assertion had been unsatisfiable since ingest
+landed. The listing is now `scripts/dev/browser/list-bucket.mjs`, which exits
+non-zero on any failure, and the join harness selects its own occurrence by
+today's cell and the online mark rather than by the first chip whose text
+matches — a chip renders the Subject name, which the dev fixtures also use.
 
 ### The staging-cleanup failure is after success, so test both truths
 

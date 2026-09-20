@@ -10303,3 +10303,57 @@ able to justify that risk here) and the two dev harnesses `verify-livekit-join.s
 `verify-livekit-ingest.sh` (`minio/mc:latest ls` under `|| true`, so a failed pull would read as
 "no artefacts"). Recorded as an open item in `docs/TASKS.md`. No MinIO server image remains in
 any compose file.
+
+**Storage unification carried to the end on Localhost — the last `minio/mc` users replaced, and
+four pre-existing defects found by running what was changed. Owner authorization, 2026-09-20:
+Localhost and Staging may be changed destructively; Production go-live stays on hold. No SRS,
+application, schema or migration change.**
+
+*No `minio/mc` remains in `scripts/` or any compose file.* The backup fixture drops its
+`minio-init` service for a loopback-only port; `verify-backup-restore.sh` runs the canonical
+`scripts/storage/initialize.mjs` and seeds/reads back its canary object through the new
+`scripts/backup/fixtures/object-probe.mjs`. Both livekit harnesses list through the new
+`scripts/dev/browser/list-bucket.mjs`. Each resolves the backend's own S3 SDK (the
+`createRequire` convention `scripts/test/` already uses) and pulls no client image. The lister
+exits non-zero on any failure — proven against an unreachable store and against wrong credentials.
+
+*Four defects, none caused by the storage work, each found only because the changed scripts
+were actually run rather than assumed.* (1) The backup drill truncated "the first pack `find`
+lists". Pack names are content hashes, so that was a coin flip between a data pack (the next
+backup succeeds and full read-data verification catches it — what the step exists to prove) and
+a tree pack (the next backup must read it for its parent snapshot and fails in `create`, and the
+drill's `phase == verify` assertion then killed it silently under `set -e`). Observed 1 pass in
+3 before. It now takes a data blob from `restic list blobs` and its pack from
+`restic find --blob … --show-pack-id`; the assertion was restated, not loosened. **3 of 3
+consecutive passes after** (117s, 117s, 113s). My first version of that lookup failed on its own:
+an early-exiting `awk` SIGPIPEd restic under `pipefail`; both filters now read their whole input.
+(2) Both livekit harnesses wrote `node …` and then `NODE_STATUS=$?` on the next line under
+`set -e`, so any failing browser check aborted the script before its storage check ran. (3) The
+ingest harness's listing ended in `2>/dev/null || true`, so an unreachable store produced an
+empty list, zero leftovers and **PASS** — success on the exact failure the check exists to
+catch. (4) The join harness required an MP4 and an OGG in the *staging* bucket, which became
+unsatisfiable when ingest began importing a completed recording and sweeping its staging media
+(R99.13) — and contradicted the ingest harness, which asserts that sweep. It now requires the
+media objects *this run* added to the canonical store. Its two failing «دخول الحصة» checks were
+investigated as a possible product regression and are not one: the harness clicked the first chip
+whose text contained تفسير, a chip renders the Subject name, and the dev fixtures carry an
+in-person تفسير القرآن class earlier in the month. It now selects today's cell and the online
+mark. Results against SeaweedFS: join **61/61** plus a 5.5 MB MP4 and a 126 KB OGG, ingest
+**27/27**, both exit 0.
+
+*Localhost made whole, and an earlier statement corrected.* The previous entry said five
+`educational_content` rows had lost their objects. Four of those are dev fixture rows that never
+had objects. What the legacy volume really held was one real recording (84,378,142 bytes) and 106
+private residue objects. Discarding them was authorized, but a one-off S3-level copy cost minutes:
+a temporary MinIO on the old volume, every object copied into SeaweedFS and re-read, **107 of 107
+verified by size, SHA-256 and content type, zero mismatches**. The recording is served through
+the real Nginx edge with its exact `Content-Length` and range reads. The temporary server and the
+legacy `bodour_minio-data` volume were then deleted. Localhost also now runs images built from
+current `HEAD`, has no pending migration, and reports `/healthz` green with 12/12 workers. One
+transient `job runner failed to start` occurred when a migration command was launched a second
+after the API started; the identical startup succeeded by hand and on restart, so the cause is
+unproven rather than assumed.
+
+Verification: all 31 `scripts/ci/check-*.sh` guards, documentation links and `git diff --check`
+pass. The backup drill is still not part of hosted CI; the Production dress rehearsal that is
+already exercises backup and restore against the real release graph.

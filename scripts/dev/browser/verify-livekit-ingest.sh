@@ -91,8 +91,11 @@ if [[ "$CHROME_READY" != "1" ]]; then
   exit 1
 fi
 
-PORT=9253 node scripts/dev/browser/verify-livekit-ingest.mjs
-NODE_STATUS=$?
+# `|| NODE_STATUS=$?`, not a bare `NODE_STATUS=$?` on the next line: under
+# `set -e` a failing browser run aborted the script before its status was
+# read, so the storage check below never ran exactly when it mattered.
+NODE_STATUS=0
+PORT=9253 node scripts/dev/browser/verify-livekit-ingest.mjs || NODE_STATUS=$?
 
 # ── R99.13 — staging is swept, and the DURABLE object is elsewhere ─────────
 #
@@ -112,9 +115,10 @@ echo "-- the staging bucket, for THIS run's two occurrences --"
 SEERAH="$(node -e "process.stdout.write(JSON.parse(process.env.R99_SCENARIO).seerahToday)")"
 TAFSEER="$(node -e "process.stdout.write(JSON.parse(process.env.R99_SCENARIO).tafseerToday)")"
 
-STAGING="$(docker run --rm --network bodour_default \
-  -e MC_HOST_local="http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" \
-  minio/mc:latest ls --recursive local/"${RECORDING_STAGING_BUCKET:-recordings-staging}" 2>/dev/null || true)"
+# A failed listing stops the harness. It used to be swallowed, and an
+# unreachable store then read as "nothing left" — a PASS on the very failure
+# this check exists to catch.
+STAGING="$(node scripts/dev/browser/list-bucket.mjs "${RECORDING_STAGING_BUCKET:-recordings-staging}")"
 MINE="$(printf "%s\n" "$STAGING" | grep -E "session-recordings/($SEERAH|$TAFSEER)/" || true)"
 echo "${MINE:-(nothing left under either occurrence)}"
 
