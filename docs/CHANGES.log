@@ -10024,3 +10024,63 @@ final round: **2,670 passed / 18 skipped (2,688)**, all-table isolation intact, 
 disposable containers/networks/volumes. All 31 CI guards, `check-openapi-current.sh`
 (179 paths / 230 operations, unchanged — no route or contract shape changed), documentation
 links (1,095) and `git diff --check` pass. No migration.
+
+Pushed as `c5f1006`; hosted CI green, all 7 jobs (run `35507143651`), Release included.
+
+**Deployed to `staging.bodouralamal.com`, upgrading from `88fee22` — and an unrelated,
+pre-existing incident discovered and fully recovered during that deployment, recorded here
+in full because it bears directly on the safety of every future Staging/Production deployment
+that touches `db`/`minio`.**
+
+Host preflight initially refused deployment: 14 GiB free, below the Owner-approved 20-GiB
+Staging floor (`deployment-readiness.md`, 2026-08-29). Investigated rather than bypassed: the
+shortfall was ~40 old, non-current `ghcr.io/…/bodouralamal-{api,web}` release-generation
+images (GHCR permanently retains every exact-commit publish, so nothing was lost by removing
+the local cache) plus one stray locally-built `bodour-api:dev` image that should never have
+existed on a release host (§20 rule "never target-host builds"). Removed; 27 GiB free; preflight
+passed cleanly. Images pulled and their `org.opencontainers.image.revision` labels verified
+against `c5f1006` before any container changed.
+
+**The incident.** `prisma migrate deploy` (the documented pipeline's own exact invocation,
+`-f docker-compose.storage.yml` included) reported no pending migration — but, as a side effect
+of bringing up its declared `db`/`minio` dependencies, Compose reconciled the long-running
+`bodour-minio-1` container against `docker-compose.storage.yml`'s CURRENT definition of that
+service, which commit `d9c25e6` (2026-09-12, "B1 — maintained object store") changed from real
+MinIO to SeaweedFS. That commit's own `docs/TASKS.md`/`docs/CHANGES.log` entries state, five
+times over, that this was **local engineering acceptance only** — "no live rollout occurred,"
+"legacy Local/Staging MinIO configuration unchanged," "live provisioning… require[s] separate
+authorization" — but `docker-compose.storage.yml`'s `minio` service is NOT actually tier-scoped:
+it is the same base definition regardless of which tier overlay (`-staging.yml`/`-production.yml`)
+sits beside it, so the documented deployment runbook's own commands — unchanged, exactly as
+written — silently perform the "live rollout" that same commit's documentation says requires
+separate authorization and did not happen. This is a real gap in the compose-file structure,
+not a deployment error; the same sequence would recur on Production the same way.
+
+Consequence and recovery: `bodour-minio-1` was recreated against a fresh, empty
+`bodour_seaweedfs-data` volume, `/healthz` went `503` within seconds (confirmed from the API's
+own request log), and the ORIGINAL `bodour_minio-data` volume — never touched, never deleted —
+still held every real object. Recovered within minutes by stopping the SeaweedFS container and
+starting the original `minio/minio:RELEASE.2025-09-07T16-13-09Z` image directly against the
+original volume, network and access keys (from the pre-`d9c25e6` service definition, read from
+git history). Confirmed after recovery: `/healthz` `{"status":"ok",…,"storage":"ok"}`, 12/12
+workers, the original `public`/`private`/`recordings-staging` buckets present with their
+original file timestamps (Aug 25 – Sep 17, predating this incident) — **zero data loss, a few
+minutes of Staging `503`s, no Production exposure at any point.** The stray empty
+`bodour_seaweedfs-data` volume this produced was removed once; it was created again, harmlessly
+and un-mounted, when `api`/`nginx` were recreated with `docker-compose.storage.yml` still in the
+`-f` chain (Compose evaluates a file's `volumes:` declarations regardless of `--no-deps`) — left
+in place rather than risk a further manual `docker volume rm` outside the documented pipeline;
+it holds no data and is not referenced by any running container.
+
+**Left open, for the Document Owner:** `docker-compose.storage.yml`'s `minio` service needs to
+actually distinguish "verified locally only" from "authorized for live Staging/Production" —
+today it cannot, and the exact sequence above (any command that lets Compose reconcile its
+`minio`/`db` dependencies, which `--no-deps api nginx` alone avoids but `prisma migrate deploy`
+does not) will repeat it. Not fixed here: it is a real schema/infrastructure decision — whether
+and when the SeaweedFS rollout is actually authorized for Staging, and what the compose
+structure should enforce until then — not a rendering choice, and this pass did not guess at it.
+
+Once `bodour-minio-1` was corrected, the originally intended upgrade completed cleanly:
+`api`/`nginx` recreated on `c5f1006`, both revision labels verified, `/healthz` green
+(4/4 components, 12/12 workers), no error-level log lines in the following minutes,
+TLS/HSTS/CSP headers reconfirmed. No Production action of any kind.

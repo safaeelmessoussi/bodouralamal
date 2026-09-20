@@ -4673,3 +4673,49 @@ the Owner's own report named.
       all 31 guards, `check-openapi-current.sh`, doc-links and
       `git diff --check` pass. No schema change, no migration. Full detail
       in CHANGES.log and SRS Revision 162.
+- [x] Pushed as `c5f1006`; hosted CI green, all 7 jobs (run
+      `35507143651`), Release included. Deployed to Staging, upgrading
+      from `88fee22`: host preflight initially failed on free disk (14
+      GiB, below the 20-GiB approved floor) — ~40 old release-generation
+      images plus one stray target-host-built image removed (all
+      permanently recoverable from GHCR), 27 GiB free, preflight passed.
+      **An unrelated, pre-existing incident occurred and was fully
+      recovered during this deployment — see the new open item below and
+      CHANGES.log for the complete account.** After recovery: `api`/
+      `nginx` recreated and verified on `c5f1006`'s exact label,
+      `/healthz` green (4/4 components, 12/12 workers), no error-level
+      log lines, TLS/HSTS/CSP headers reconfirmed. No Production action.
+
+## OPEN — Document Owner decision required: `docker-compose.storage.yml`'s `minio` service is not actually tier-scoped (discovered 2026-09-20)
+
+- [ ] **Found while deploying SRS Revision 162 to Staging, not part of that
+      task.** Commit `d9c25e6` ("B1 — maintained object store",
+      2026-09-12) replaced the `minio` service's image with SeaweedFS in
+      `docker-compose.storage.yml`. That commit's own `docs/TASKS.md`/
+      `docs/CHANGES.log` entries state five times over that this was
+      **local engineering acceptance only** — "no live rollout occurred,"
+      "legacy Local/Staging MinIO configuration unchanged," "live
+      provisioning… require[s] separate authorization." But the compose
+      file itself does not encode that distinction: `minio`'s definition
+      in `docker-compose.storage.yml` is identical regardless of which
+      tier overlay sits beside it, so the documented deployment runbook's
+      own unmodified commands perform exactly the "live rollout" that
+      commit's documentation says requires separate authorization and did
+      not happen — proven when running the routine `prisma migrate
+      deploy` step against Staging recreated `bodour-minio-1` on the new
+      image against a fresh, empty volume, causing `/healthz` `503`s
+      within seconds. Recovered within minutes with zero data loss
+      (original `bodour_minio-data` volume was never touched); full
+      timeline in `docs/CHANGES.log`'s "SRS Revision 162" deployment
+      entry.
+- [ ] **Not fixed here — a real schema/infrastructure decision, not a
+      rendering choice.** Needs: (1) whether and when the SeaweedFS
+      rollout is actually authorized for Staging (and separately,
+      Production), and if so the documented populated-migration/backup/
+      verification/rollback process `docs/architecture/storage.md`
+      already describes; (2) until authorized, how the compose structure
+      should PREVENT `docker-compose.storage.yml` from silently applying
+      to a tier that has not approved it — today nothing stops the exact
+      sequence above from recurring on the next deployment (Staging or
+      Production) that lets Compose reconcile its `db`/`minio`
+      dependencies, which is every ordinary migration step.
