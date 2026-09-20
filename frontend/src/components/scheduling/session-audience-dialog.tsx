@@ -5,7 +5,11 @@ import {
   setSessionAudienceOverrides,
   type SessionRoster,
 } from '../../adapters/sessions.js';
-import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
+import {
+  listAdministrativeGroups,
+  type AdministrativeGroup,
+  type Page,
+} from '../../adapters/administrative-groups.js';
 import { listCircles, type TeachingGroupRow } from '../../adapters/teaching-groups.js';
 import { Badge } from '../ui/badge.js';
 import { FormDialog } from '../ui/form-dialog.js';
@@ -52,6 +56,33 @@ import { t } from '../../i18n/index.js';
  * administrator would otherwise have to infer from what did not change — the
  * same reasoning the one-off staffing dialog records.
  */
+/**
+ * **Codex review, 2026-09-20 — every row, not just the first page.**
+ *
+ * `listAdministrativeGroups`/`listCircles` were each called once, at
+ * `pageSize = 100`, and their `meta.total` discarded — an institute with
+ * more than 100 groups or more than 100 circles had entries a combined
+ * class simply could not select, with no affordance saying any were
+ * missing. Walks the SAME unscoped read Revision 157's own multi_dimension
+ * picker established, one page at a time, until every row named by
+ * `meta.total` has been collected. A ~2000-row cap guards against a
+ * malformed `meta.total` looping forever; no institute this platform serves
+ * is within two orders of magnitude of that.
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<Page<T>>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  const pageSize = 100;
+  const maxPages = 20;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await fetchPage(page);
+    rows.push(...result.data);
+    if (rows.length >= result.meta.total || result.data.length < pageSize) break;
+  }
+  return rows;
+}
+
 export function SessionAudienceDialog({
   sessionId,
   version,
@@ -92,10 +123,16 @@ export function SessionAudienceDialog({
   // Unscoped, like the multi_dimension class picker's own reads (Revision
   // 157): this dialog offers every group/circle on the platform, never the
   // ordinary Level+branch-chained list — combining across boundaries is
-  // exactly the case that list cannot answer.
+  // exactly the case that list cannot answer. **Every page**, and a failed
+  // load says so, rather than the picker silently offering fewer options
+  // than the platform actually has (codex review, 2026-09-20).
   useEffect(() => {
-    void listAdministrativeGroups(token, 1, {}, null, 100).then((page) => setGroups(page.data));
-    void listCircles(token, 1, {}, null, 100).then((page) => setCircles(page.data));
+    void fetchAllPages((page) => listAdministrativeGroups(token, page, {}, null, 100))
+      .then(setGroups)
+      .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
+    void fetchAllPages((page) => listCircles(token, page, {}, null, 100))
+      .then(setCircles)
+      .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
   }, [token]);
 
   useEffect(() => {

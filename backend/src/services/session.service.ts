@@ -252,7 +252,32 @@ async function scheduleLevelIds(
   }
   if (schedule.teachingMode === "multi_dimension") {
     const dims = await scheduleDimensions(prisma, scheduleId, schedule.teachingMode as never);
-    return dims?.levelIds ?? [];
+    if (!dims) return [];
+    // **Codex review, 2026-09-20 — the levels a group or circle scope IMPLY,
+    // unioned in.** This returned `dims.levelIds` alone, which is empty for a
+    // valid group-only or circle-only `multi_dimension` class (naming an
+    // Administrative Group or a Circle carries no `CourseScheduleLevel` row
+    // of its own), so the validation loop below silently ran zero times and
+    // accepted a Subject the Level never teaches. `course-schedule.service.ts`
+    // computes this same union at creation (`effectiveLevelIds`); reused here
+    // in spirit rather than re-derived a third way.
+    const [groups, circles] = await Promise.all([
+      dims.administrativeGroupIds.length === 0
+        ? []
+        : prisma.administrativeGroup.findMany({
+            where: { id: { in: dims.administrativeGroupIds }, deletedAt: null },
+            select: { levelId: true },
+          }),
+      dims.teachingGroupIds.length === 0
+        ? []
+        : prisma.teachingGroup.findMany({
+            where: { id: { in: dims.teachingGroupIds }, deletedAt: null },
+            select: { levelId: true },
+          }),
+    ]);
+    return [
+      ...new Set([...dims.levelIds, ...groups.map((g) => g.levelId), ...circles.map((c) => c.levelId)]),
+    ];
   }
   return [];
 }
@@ -1033,8 +1058,22 @@ export async function readSessionRoster(
   // fallback `audienceForSession` itself uses, so the picker seeds exactly
   // what the schedule already resolves for a session with no override at
   // all, and adding a second value is what "combine" means.
+  //
+  // **Codex review, 2026-09-20 — no venue fallback here.** This used to read
+  // `effective.branchIds.length > 0 ? effective.branchIds : [spec.branchId]`,
+  // which substituted the schedule's VENUE branch into the AUDIENCE the
+  // moment a mode genuinely has none of its own (`administrative_group`,
+  // `teaching_group`, or a `multi_dimension` class scoped by group/circle
+  // alone). The dialog seeds its branch picker straight from this list and
+  // submits whatever is still checked, so a circle-only class silently
+  // gained "every enrolled beneficiary at the venue branch" the moment an
+  // administrator opened الحضور and added a second circle — a population
+  // nobody chose. `naturalDimensions` already returns an empty branch list
+  // for exactly the modes that have none; that emptiness is the correct,
+  // honest answer and must reach the editor unchanged. The venue is shown
+  // separately, from `venueRow` below, which is the only place it belongs.
   const effective = spec.dimensions ?? naturalDimensions(spec, null);
-  const branchIds = effective.branchIds.length > 0 ? effective.branchIds : [spec.branchId];
+  const branchIds = effective.branchIds;
 
   const [branches, categories, levels, administrativeGroups, teachingGroups, venueRow, students] =
     await Promise.all([

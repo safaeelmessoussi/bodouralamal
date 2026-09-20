@@ -55,8 +55,18 @@ describe('replacement per dimension, not addition — and the control says which
     // Combining across a Level or a branch boundary is exactly the case that
     // chained list cannot answer — the same reasoning the multi_dimension
     // class picker's own unscoped reads already established (Revision 157).
-    expect(code(DIALOG)).toContain('listAdministrativeGroups(token, 1, {}, null, 100)');
-    expect(code(DIALOG)).toContain('listCircles(token, 1, {}, null, 100)');
+    expect(code(DIALOG)).toContain('fetchAllPages((page) => listAdministrativeGroups(token, page, {}, null, 100))');
+    expect(code(DIALOG)).toContain('fetchAllPages((page) => listCircles(token, page, {}, null, 100))');
+  });
+
+  it('walks every page rather than trusting the first (codex review, 2026-09-20)', () => {
+    // An institute with more than 100 groups or circles had entries the
+    // picker could never offer, silently — a truncated dialog, not a
+    // pinned first page. `fetchAllPages`'s own behaviour is proven directly
+    // in `session-audience-dialog.fetch-all-pages.test.ts`; this only pins
+    // that both reads actually go through it.
+    expect(code(DIALOG)).toContain('export async function fetchAllPages');
+    expect(code(DIALOG)).toContain('.catch(() => setNotice(');
   });
 });
 

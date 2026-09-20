@@ -745,6 +745,32 @@ describe("Owner-reported, 2026-09-17 — generalised beyond branches and beyond 
     expect(studentIds(roster)).toEqual([studentE]);
   });
 
+  it("codex review, 2026-09-20 — HIGH: an administrative_group occurrence's roster does not synthesize the venue as an audience branch", async () => {
+    // `groupOccurrence` carries no override at all here — the exact case the
+    // review found: `readSessionRoster` used to fall back to
+    // `[schedule.branchId]` whenever a mode genuinely has no branch dimension
+    // of its own, silently seeding the editor's branch picker with the
+    // VENUE. Saving from that state (even having touched only another
+    // dimension) would submit that phantom branch and turn a group-scoped
+    // occurrence into "every enrolled beneficiary at the venue branch,
+    // combined with whatever else was chosen" — a population nobody chose.
+    const roster = await rosterOf(groupOccurrence);
+    expect((roster["audience"] as { branches: unknown[] }).branches).toEqual([]);
+    expect(roster["overridden"]).toBe(false);
+  });
+
+  it("codex review, 2026-09-20 — combining a second Circle on that same occurrence still reports no phantom branch", async () => {
+    // The venue fallback specifically corrupted a SAVE, not merely a read: a
+    // regression here would show up as the branch reappearing the moment any
+    // other dimension is overridden — proving the fix holds once the
+    // occurrence is genuinely overridden, not only in the untouched case above.
+    const res = await setAudience(groupOccurrence, [], { teachingGroupIds: [circle1] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const roster = await rosterOf(groupOccurrence);
+    expect((roster["audience"] as { branches: unknown[] }).branches).toEqual([]);
+  });
+
   it("clearing one dimension's override leaves another's untouched", async () => {
     expect((await setAudience(nextWeek, [], { levelIds: [levelId, levelId2] })).status).toBe(200);
     expect((await setAudience(nextWeek, [], { teachingGroupIds: [circle1], levelIds: [levelId, levelId2] })).status).toBe(200);

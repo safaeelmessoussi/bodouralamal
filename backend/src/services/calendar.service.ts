@@ -24,6 +24,8 @@ import { expandEvent } from "../lib/recurrence.js";
 export { expandEvent };
 import type { RoleScope } from "../policies/branch-scope.js";
 import {
+  audienceForSession,
+  audienceWhere,
   eventsStaffedBy,
   examAudienceWhere,
   teacherEventScope,
@@ -464,6 +466,12 @@ async function operationalFloor(
  */
 const SESSION_OCCURRENCE_INCLUDE = {
   room: { select: { name: true } },
+  // **Codex review, 2026-09-20 — the occurrence's OWN Subject override**
+  // (Revision 161), read alongside the schedule's so `sessionOccurrence`
+  // below can prefer it. Without this the calendar showed and filtered by
+  // the SCHEDULE's Subject unconditionally, silently ignoring an override
+  // meant to change exactly what a reader sees this class as teaching.
+  subject: { select: { id: true, name: true } },
   staff: {
     where: { deletedAt: null },
     select: {
@@ -532,6 +540,12 @@ function sessionOccurrence(
     sch.administrativeGroup?.level ??
     sch.teachingGroup?.level ??
     null;
+  // **Codex review, 2026-09-20 — the occurrence's own Subject override
+  // (Revision 161) wins over the schedule's**, exactly as every other
+  // per-occurrence override already does (room, delivery, visibility). A
+  // session with no override carries `subject: null` and falls back to the
+  // schedule's, unchanged.
+  const subject = session.subject ?? sch.subject;
   return {
     kind: "session",
     schedulingTypeId: sch.schedulingType?.id ?? null,
@@ -542,7 +556,7 @@ function sessionOccurrence(
     attendanceMode: sch.schedulingType?.attendanceMode ?? 'disabled',
     attendanceMarking: sch.attendanceMarking,
     id: session.id,
-    title: sch.subject.name,
+    title: subject.name,
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -553,8 +567,8 @@ function sessionOccurrence(
     // A Session has no description of its own; the audience label that used to
     // be smuggled in here now has its own field.
     description: null,
-    subjectId: sch.subject.id,
-    subjectName: sch.subject.name,
+    subjectId: subject.id,
+    subjectName: subject.name,
     teachingMode: sch.teachingMode,
     audienceLabel:
       sch.administrativeGroup?.name ??
@@ -657,6 +671,11 @@ async function personalFilters(
     .map((e) => e.administrativeGroupId)
     .filter((id): id is string => id !== null);
   const circleIds = seats.map((s) => s.teachingGroupId);
+  // **Codex review, 2026-09-20** — her own branches and categories, needed
+  // below for the `multi_dimension` and R161-override arms the Session
+  // predicate did not previously reach at all.
+  const branchIds = [...new Set(enrolments.map((e) => e.branchId))];
+  const categoryIds = [...new Set(enrolments.map((e) => e.level.categoryId))];
 
   /**
    * **§3, Revision 140 — an event concerns her only where ONE enrolment
@@ -719,6 +738,34 @@ async function personalFilters(
     ],
   };
 
+  /**
+   * **Codex review, 2026-09-20 — a `multi_dimension` schedule reaching her**,
+   * per enrolment, with the identical AND-across-kind/empty-means-
+   * unconstrained rule `audienceWhere`'s own `multi_dimension` arm applies
+   * (`dimensionMatch` above, restated for `RecurringCourseSchedule`'s own
+   * scope relations — same field and id names, a different model).
+   *
+   * **Deliberately a SUPERSET, not the exact rule.** An override can now
+   * replace just ONE of five dimensions while the others still constrain
+   * naturally (Revision 161), which is not expressible as a single static
+   * Prisma `where` — reconstructing that algebra a second time here would be
+   * exactly the drift `roster-resolution.ts`'s own docstring warns every
+   * arm about. This half only has to not MISS a real candidate; precision is
+   * restored by `filterSessionsByPersonalAudience` below, through the SAME
+   * canonical `audienceForSession`/`audienceWhere` every other reader
+   * composes.
+   */
+  const scheduleDimensionMatch = (
+    field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
+    idField: "branchId" | "categoryId" | "levelId" | "administrativeGroupId",
+    value: string | null,
+  ): Prisma.RecurringCourseScheduleWhereInput => ({
+    OR: [
+      { [field]: { none: {} } },
+      ...(value ? [{ [field]: { some: { [idField]: value } } }] : []),
+    ],
+  });
+
   const session: Prisma.SessionWhereInput = {
     OR: [
       // Assigned — the Session's OWN snapshot (R43.4), so a مؤطرة who covered
@@ -730,15 +777,20 @@ async function personalFilters(
             {
               /**
                * **The inherited audience** — and only where the occurrence has
-               * not overridden it (R92).
+               * not overridden it (R92, generalised by Revision 161 to five
+               * dimensions).
                *
-               * `audienceBranches: { none: {} }` is the whole of *inherit*: an
-               * occurrence that states its own branches is answered by the arm
-               * below instead, so a combined class does not appear twice and,
-               * more importantly, does not still appear for somebody the
-               * override removed.
+               * Excluding every `audience*` table is the whole of *inherit*:
+               * an occurrence that states its own override on ANY dimension
+               * is answered by the broader arm below instead, so a combined
+               * class does not appear twice and, more importantly, does not
+               * still appear for somebody an override removed.
                */
               audienceBranches: { none: {} },
+              audienceCategories: { none: {} },
+              audienceLevels: { none: {} },
+              audienceAdministrativeGroups: { none: {} },
+              audienceTeachingGroups: { none: {} },
               schedule: {
                 OR: [
                   // *That Level at that branch* — the R66 pairing, not the Level
@@ -753,31 +805,79 @@ async function personalFilters(
                   ...(circleIds.length
                     ? [{ teachingGroupId: { in: circleIds } }]
                     : []),
+                  // `multi_dimension` — a schedule this codebase's own
+                  // Revision 155 could resolve for her but this predicate,
+                  // built for the three legacy modes alone, never reached
+                  // (codex review, 2026-09-20): a beneficiary of such a
+                  // class could miss its Sessions entirely.
+                  {
+                    teachingMode: "multi_dimension" as const,
+                    OR: [
+                      ...enrolments.map((e) => ({
+                        AND: [
+                          scheduleDimensionMatch("branchScopes", "branchId", e.branchId),
+                          scheduleDimensionMatch("categoryScopes", "categoryId", e.level.categoryId),
+                          scheduleDimensionMatch("levelScopes", "levelId", e.levelId),
+                          scheduleDimensionMatch(
+                            "administrativeGroupScopes",
+                            "administrativeGroupId",
+                            e.administrativeGroupId,
+                          ),
+                        ],
+                      })),
+                      ...(circleIds.length
+                        ? [{ teachingGroupScopes: { some: { teachingGroupId: { in: circleIds } } } }]
+                        : []),
+                    ],
+                  },
                 ],
               },
             },
             /**
-             * **R92 — the combined occurrence.**
+             * **R92, generalised by Revision 161 — the occurrence's own
+             * override names one of her ids directly, in ANY of the five
+             * tables, whatever the schedule's mode.**
              *
-             * One lesson delivered once instead of twice: the second branch's
-             * beneficiaries see the SAME Session, held at the first branch. The
-             * Level still has to match — combining branches is a statement about
-             * where the people come from, never about what is being taught — and
-             * the branch is matched against the OCCURRENCE's own list rather
-             * than the schedule's.
-             *
-             * Without this arm the override would be honoured by notifications
-             * and invisible on the calendar: told about a class she cannot see,
-             * which is the single failure R92's shared resolver exists to
-             * prevent.
+             * One lesson delivered once instead of twice: the second
+             * population's beneficiaries see the SAME Session. Without this
+             * arm an override would be honoured by notifications and
+             * invisible on the calendar — told about a class she cannot
+             * see, the single failure R92's shared resolver exists to
+             * prevent, and exactly the gap codex's review found: only the
+             * branch table was ever consulted here, so the four dimensions
+             * Revision 161 added were invisible to every beneficiary's
+             * personal calendar.
              */
-            ...(enrolments.length
+            ...(branchIds.length ||
+            categoryIds.length ||
+            levelIds.length ||
+            groupIds.length ||
+            circleIds.length
               ? [
                   {
-                    OR: enrolments.map((e) => ({
-                      audienceBranches: { some: { branchId: e.branchId } },
-                      schedule: { levelId: e.levelId },
-                    })),
+                    OR: [
+                      ...(branchIds.length
+                        ? [{ audienceBranches: { some: { branchId: { in: branchIds } } } }]
+                        : []),
+                      ...(categoryIds.length
+                        ? [{ audienceCategories: { some: { categoryId: { in: categoryIds } } } }]
+                        : []),
+                      ...(levelIds.length
+                        ? [{ audienceLevels: { some: { levelId: { in: levelIds } } } }]
+                        : []),
+                      ...(groupIds.length
+                        ? [
+                            {
+                              audienceAdministrativeGroups: {
+                                some: { administrativeGroupId: { in: groupIds } },
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(circleIds.length
+                        ? [{ audienceTeachingGroups: { some: { teachingGroupId: { in: circleIds } } } }]
+                        : []),
+                    ],
                   },
                 ]
               : []),
@@ -831,6 +931,52 @@ async function filterExamsByAudience<
       where: { AND: [audience, { id: userId, deletedAt: null }] },
     });
     if (member > 0) kept.push(exam);
+  }
+  return kept;
+}
+
+/**
+ * **Codex review, 2026-09-20 — restores exact precision after
+ * `personalFilters`'s necessarily over-inclusive Session `where`.**
+ *
+ * A `multi_dimension` schedule's own AND-across-kind rule and Revision 161's
+ * per-dimension REPLACEMENT overrides are not expressible as one static
+ * Prisma filter (see the long comment beside `personalFilters`'s own
+ * `session` predicate), so that predicate is a SUPERSET: it can include a
+ * session her audience does not actually reach. This resolves each surviving
+ * candidate through the SAME `audienceForSession` + `audienceWhere` every
+ * other reader composes (R92 §B7) — never a second hand-written evaluation
+ * of the override/combination rules, which is exactly the drift
+ * `roster-resolution.ts`'s own module docstring warns every arm about.
+ *
+ * Mirrors `filterExamsByAudience` immediately above: one row at a time,
+ * because a month's worth of occurrences is never large enough for the extra
+ * round trip to matter, and because reconstructing the resolver's own
+ * algebra a second time in SQL is the actual risk.
+ */
+async function filterSessionsByPersonalAudience<T extends { id: string; staff: { user: { id: string } }[] }>(
+  prisma: PrismaClient,
+  userId: string,
+  sessions: T[],
+): Promise<T[]> {
+  const kept: T[] = [];
+  for (const session of sessions) {
+    // Staffed directly — already exact, no audience override to resolve.
+    if (session.staff.some((s) => s.user.id === userId)) {
+      kept.push(session);
+      continue;
+    }
+    const spec = await audienceForSession(prisma, session.id);
+    if (spec === null) continue;
+    // `deletedAt: null` is redundant — every arm `audienceWhere` returns
+    // already states it — but kept explicit here anyway, matching
+    // `filterExamsByAudience`'s own convention just above: the trash-
+    // coverage guard cannot trace a `where` composed from a variable into
+    // another file.
+    const member = await prisma.user.count({
+      where: { AND: [audienceWhere(spec), { id: userId, deletedAt: null }] },
+    });
+    if (member > 0) kept.push(session);
   }
   return kept;
 }
@@ -1411,16 +1557,45 @@ export async function readCalendar(
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
-        // R109 — at the caller's tier, exactly as the Events and Exams above.
-        // The tier still applies on a personal calendar: being enrolled in the
-        // class does not widen what she may see of it.
-        ...sessionTierWhere(actor),
+        // **Codex review, 2026-09-20 — every independent OR-bearing
+        // condition now lives in ONE `AND` array, never spread as sibling
+        // top-level `OR` keys.** `sessionTierWhere(actor)` returns its own
+        // `{ OR: [...] }` for an Admin/Teacher/Student/Parent actor; the new
+        // Subject-override arm below needs an `OR` of its own too, and a
+        // second `...{ OR: [...] }` spread onto the SAME object SILENTLY
+        // OVERWRITES the first — which would have dropped R109's
+        // visibility-tier filter entirely (public/private/hidden-if-
+        // responsible) the moment a caller also passed `subject_id`, a
+        // visibility bypass this fix must not introduce while fixing
+        // something else. `AND` composes them safely as separate fragments.
+        AND: [
+          // R109 — at the caller's tier, exactly as the Events and Exams
+          // above. The tier still applies on a personal calendar: being
+          // enrolled in the class does not widen what she may see of it.
+          sessionTierWhere(actor),
+          ...(personal ? [personal.session] : []),
+          // An occurrence's own Subject override (Revision 161) answers
+          // this filter when it has one, not only the schedule's: filtering
+          // by the Subject a session was RETAUGHT as must find it, and
+          // filtering by the schedule's ordinary Subject must not still
+          // find a session retaught away from it. `subjectId: null` is the
+          // ordinary case, *inherit*.
+          ...(query.subjectId
+            ? [
+                {
+                  OR: [
+                    { subjectId: query.subjectId },
+                    { subjectId: null, schedule: { subjectId: query.subjectId } },
+                  ],
+                },
+              ]
+            : []),
+        ],
         // **R83.1** — the ordinary projection is what is ON. A history screen
         // passes `include_cancelled` and gets them back; nothing else does.
         ...(query.includeCancelled === true
           ? {}
           : { status: { not: "cancelled" } }),
-        ...(personal ? { AND: [personal.session] } : {}),
         schedule: {
           deletedAt: null,
           ...(query.branchId ? { branchId: query.branchId } : {}),
@@ -1442,7 +1617,6 @@ export async function readCalendar(
           ...(query.academicYearId
             ? { academicYearId: query.academicYearId }
             : {}),
-          ...(query.subjectId ? { subjectId: query.subjectId } : {}),
           ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
         },
         // The session's OWN staffing snapshot, not the schedule's (R43.4): a
@@ -1455,7 +1629,18 @@ export async function readCalendar(
       include: SESSION_OCCURRENCE_INCLUDE,
     });
 
-    for (const session of sessions) {
+    // **Codex review, 2026-09-20 — restores exact personal-audience
+    // precision** after the necessarily over-inclusive `personal.session`
+    // filter above (see `personalFilters`'s own comment). A pure staff actor
+    // is left untouched: her sessions already match exactly through the
+    // `staff` arm alone, with no override ambiguity to resolve — the same
+    // `isBeneficiary` gate `filterExamsByAudience`'s own call site uses.
+    const sessionsForActor =
+      personal !== null && personal.isBeneficiary && actor !== null
+        ? await filterSessionsByPersonalAudience(prisma, actor.userId, sessions)
+        : sessions;
+
+    for (const session of sessionsForActor) {
       const sch = session.schedule;
       const level =
         sch.level ??

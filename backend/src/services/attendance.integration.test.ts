@@ -614,6 +614,44 @@ describe('5–8 · marking, and what is NOT recorded', () => {
     ).toBe(1);
   });
 
+  it('codex review, 2026-09-20 — MEDIUM: a genuine race between two concurrent marks answers idempotently, never 409 DUPLICATE', async () => {
+    // The migration's own comment already says the check-then-insert inside
+    // `markPresent` is "not enough under a double-tap" and leans on
+    // `attendance_occurrence_student_unique` to keep the DATA correct; this
+    // proves the RESPONSE contract now agrees too. A dedicated session and a
+    // never-before-marked beneficiary, so both concurrent calls genuinely
+    // start from "no row exists" rather than one already having the fast
+    // path from a prior test in this file.
+    const racer = await person('امرأة متسابقة', { beneficiary: true });
+    const raceSessionId = await classOccurrence(
+      'سباق التسجيل',
+      womenLevelId,
+      womenGroupId,
+      classTypeId,
+      'staff_only',
+      new Date('2026-05-16'),
+    );
+
+    const [first, second] = await Promise.all([
+      markPresent(prisma, teacher(), session(raceSessionId), racer),
+      markPresent(prisma, teacher(), session(raceSessionId), racer),
+    ]);
+
+    // Exactly one side created the row; the other answers with the SAME id
+    // and `created: false` — never a thrown DUPLICATE error, whichever side
+    // the database's unique index happened to let through first.
+    const results = [first, second];
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    expect(results.filter((r) => !r.created)).toHaveLength(1);
+    expect(first.id).toBe(second.id);
+
+    expect(
+      await prisma.attendance.count({
+        where: { sessionId: raceSessionId, studentId: racer, deletedAt: null },
+      }),
+    ).toBe(1);
+  });
+
   it('needs NO absence row for an expected person who was not marked', async () => {
     const sheet = await attendanceSheet(prisma, teacher(), session(staffOnlySessionId));
     // `otherWomanId` is expected and unmarked. The model records nothing at all

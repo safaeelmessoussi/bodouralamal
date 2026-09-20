@@ -9,7 +9,7 @@ import {
   statObjectStrict,
   type StorageClients,
 } from '../lib/storage.js';
-import { audienceForSession, resolveAudience } from '../policies/roster-resolution.js';
+import { audienceForSession, audienceWhere, resolveAudience } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import {
   isCurrentPublicObject,
@@ -236,6 +236,7 @@ export async function consentSessionIdsForStudent(
         levelId: true,
         branchId: true,
         administrativeGroupId: true,
+        level: { select: { categoryId: true } },
       },
     }),
     tx.studentTeachingGroup.findMany({
@@ -245,6 +246,8 @@ export async function consentSessionIdsForStudent(
   ]);
 
   const levelIds = [...new Set(enrolments.map((row) => row.levelId))];
+  const categoryIds = [...new Set(enrolments.map((row) => row.level.categoryId))];
+  const branchIds = [...new Set(enrolments.map((row) => row.branchId))];
   const administrativeGroupIds = enrolments
     .map((row) => row.administrativeGroupId)
     .filter((id): id is string => id !== null);
@@ -257,67 +260,120 @@ export async function consentSessionIdsForStudent(
     return [];
   }
 
+  /**
+   * **Codex review, 2026-09-20 — this candidate set previously covered only
+   * `entire_level`/`administrative_group`/`teaching_group`, and its own
+   * precision pass (below, now removed) re-derived R92's branch-only rule by
+   * hand.** Neither ever learned about `multi_dimension` (Revision 155) or
+   * Revision 161's other four occurrence-override tables: a public
+   * recording on either could survive a withdrawal with NO reevaluation
+   * obligation ever created — BR-2's gate would keep answering `false`
+   * indefinitely, not merely until the next startup sweep.
+   *
+   * This candidate set is now a deliberate SUPERSET — broad enough to never
+   * miss a session her audience might resolve to — and precision is
+   * restored below through the SAME `audienceForSession` + `audienceWhere`
+   * every other reader composes (R92 §B7), never a second hand-rolled
+   * evaluation of the combination rules.
+   */
   const candidates = await tx.session.findMany({
     where: {
       deletedAt: null,
-      schedule: {
-        OR: [
-          ...(levelIds.length === 0
-            ? []
-            : [{ teachingMode: 'entire_level' as const, levelId: { in: levelIds } }]),
-          ...(administrativeGroupIds.length === 0
-            ? []
-            : [
-                {
-                  teachingMode: 'administrative_group' as const,
-                  administrativeGroupId: { in: administrativeGroupIds },
-                },
-              ]),
-          ...(teachingGroupIds.length === 0
-            ? []
-            : [
-                {
-                  teachingMode: 'teaching_group' as const,
-                  teachingGroupId: { in: teachingGroupIds },
-                },
-              ]),
-        ],
-      },
-    },
-    select: {
-      id: true,
-      audienceBranches: { select: { branchId: true } },
-      schedule: {
-        select: {
-          teachingMode: true,
-          levelId: true,
-          branchId: true,
+      OR: [
+        {
+          schedule: {
+            OR: [
+              ...(levelIds.length === 0
+                ? []
+                : [{ teachingMode: 'entire_level' as const, levelId: { in: levelIds } }]),
+              ...(administrativeGroupIds.length === 0
+                ? []
+                : [
+                    {
+                      teachingMode: 'administrative_group' as const,
+                      administrativeGroupId: { in: administrativeGroupIds },
+                    },
+                  ]),
+              ...(teachingGroupIds.length === 0
+                ? []
+                : [
+                    {
+                      teachingMode: 'teaching_group' as const,
+                      teachingGroupId: { in: teachingGroupIds },
+                    },
+                  ]),
+              {
+                teachingMode: 'multi_dimension' as const,
+                OR: [
+                  ...(branchIds.length ? [{ branchScopes: { some: { branchId: { in: branchIds } } } }] : []),
+                  ...(categoryIds.length
+                    ? [{ categoryScopes: { some: { categoryId: { in: categoryIds } } } }]
+                    : []),
+                  ...(levelIds.length ? [{ levelScopes: { some: { levelId: { in: levelIds } } } }] : []),
+                  ...(administrativeGroupIds.length
+                    ? [
+                        {
+                          administrativeGroupScopes: {
+                            some: { administrativeGroupId: { in: administrativeGroupIds } },
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(teachingGroupIds.length
+                    ? [{ teachingGroupScopes: { some: { teachingGroupId: { in: teachingGroupIds } } } }]
+                    : []),
+                ],
+              },
+            ],
+          },
         },
-      },
+        // R92/Revision 161 — an occurrence's own override names one of her
+        // ids directly, in ANY of the five tables, whatever the schedule's
+        // mode: REPLACEMENT semantics, not implied by any arm above.
+        ...(branchIds.length ? [{ audienceBranches: { some: { branchId: { in: branchIds } } } }] : []),
+        ...(categoryIds.length ? [{ audienceCategories: { some: { categoryId: { in: categoryIds } } } }] : []),
+        ...(levelIds.length ? [{ audienceLevels: { some: { levelId: { in: levelIds } } } }] : []),
+        ...(administrativeGroupIds.length
+          ? [
+              {
+                audienceAdministrativeGroups: {
+                  some: { administrativeGroupId: { in: administrativeGroupIds } },
+                },
+              },
+            ]
+          : []),
+        ...(teachingGroupIds.length
+          ? [{ audienceTeachingGroups: { some: { teachingGroupId: { in: teachingGroupIds } } } }]
+          : []),
+      ],
     },
+    select: { id: true },
   });
 
-  const branchesByLevel = new Map<string, Set<string>>();
-  for (const row of enrolments) {
-    const branches = branchesByLevel.get(row.levelId) ?? new Set<string>();
-    branches.add(row.branchId);
-    branchesByLevel.set(row.levelId, branches);
-  }
-  const affected = candidates
-    .filter((session) => {
-      if (session.schedule?.teachingMode !== 'entire_level') return true;
-      if (session.schedule.levelId === null) return false;
-      const enrolledBranches = branchesByLevel.get(session.schedule.levelId);
-      if (!enrolledBranches) return false;
-      const audienceBranches =
-        session.audienceBranches.length > 0
-          ? session.audienceBranches.map((row) => row.branchId)
-          : [session.schedule.branchId];
-      return audienceBranches.some((branchId) => enrolledBranches.has(branchId));
-    })
-    .map((session) => session.id);
+  // Narrow the (deliberately over-inclusive) candidate set to sessions whose
+  // CANONICAL audience actually contains this student. One row at a time,
+  // because a consent withdrawal is a rare, non-hot-path event — never on a
+  // request a browser is waiting on — and the extra round trips are a small
+  // and bounded price for reusing the single resolver every other consumer
+  // (calendar, notifications, teacher scope) already trusts, rather than
+  // drifting from it a second way.
+  const checks = await Promise.all(
+    candidates.map(async (candidate) => {
+      const spec = await audienceForSession(tx, candidate.id);
+      if (spec === null) return null;
+      // `deletedAt: null` is redundant — every arm `audienceWhere` returns
+      // already states it — but kept explicit here anyway, matching
+      // `filterExamsByAudience`'s own established convention: the trash-
+      // coverage guard cannot trace a `where` composed from a variable into
+      // another file.
+      const member = await tx.user.count({
+        where: { AND: [audienceWhere(spec), { id: studentId, deletedAt: null }] },
+      });
+      return member > 0 ? candidate.id : null;
+    }),
+  );
 
-  return affected;
+  return checks.filter((id): id is string => id !== null);
 }
 
 function latestMediaConsent(

@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { assertExamInTeacherScope } from "../policies/roster-resolution.js";
 
 /**
  * **The exams a مؤطِّرة can see (§4.4c, R70.4, R91; SRS Revision 106.6b).**
@@ -76,6 +77,10 @@ let superAdmin: string;
 let teacherToken: string;
 let subsetTeacherToken: string;
 let endedTeacherToken: string;
+let multiDimGroupTeacherToken: string;
+let multiDimGroupTeacherId: string;
+let multiDimWholeLevelTeacherToken: string;
+let multiDimWholeLevelTeacherId: string;
 let branchId: string;
 let otherBranchId: string;
 let roomId: string;
@@ -97,6 +102,10 @@ async function clear(): Promise<void> {
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: scheduleIds } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+  // Codex review, 2026-09-20 — the multi_dimension fixtures' own scope join
+  // rows, RESTRICT against the schedule they name.
+  await prisma.courseScheduleLevel.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+  await prisma.courseScheduleAdministrativeGroup.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
 
   const examRows = await prisma.exam.findMany({
@@ -346,6 +355,89 @@ beforeAll(async () => {
     subjectId,
     administrativeGroupId: groupId,
   });
+
+  /**
+   * **Codex review, 2026-09-20 — the identical two questions, asked of a
+   * `multi_dimension` assignment instead of the legacy modes above.**
+   *
+   * `assertExamInTeacherScope`/`examScopeWhereForTeacher` derived a
+   * schedule's Level from three legacy singular fields alone — all `NULL`
+   * by construction on a `multi_dimension` row — so a مؤطِّرة whose only
+   * assignment used Revision 155's newer mode was refused every exam
+   * question here, `EXAM_OUT_OF_SCOPE`/`WHOLE_LEVEL_OUT_OF_SCOPE` and an
+   * empty list alike, for a Level and group she demonstrably teaches.
+   */
+  const multiDimGroupTeacher = await person("مؤطرة المجموعة متعددة الأبعاد", "teacher");
+  multiDimGroupTeacherId = multiDimGroupTeacher;
+  multiDimGroupTeacherToken = bearer(multiDimGroupTeacher, [{ role: "teacher", branches: null }]);
+  // **One transaction per schedule.** `course_schedule_multi_dimension_
+  // nonempty` is a `DEFERRABLE INITIALLY DEFERRED` constraint trigger,
+  // checked at COMMIT — exactly so the schedule row and its join row(s) can
+  // be written together. Two separate top-level `prisma.create()` calls
+  // each auto-commit on their own, so the schedule's own commit fires the
+  // trigger before its join row exists at all.
+  const multiDimGroupSchedule = await prisma.$transaction(async (tx) => {
+    const schedule = await tx.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة مجموعة متعددة الأبعاد`,
+        subjectId,
+        teachingMode: "multi_dimension",
+        branchId,
+        academicYearId: yearId,
+        startTime: new Date("1970-01-01T12:00:00Z"),
+        endTime: new Date("1970-01-01T13:00:00Z"),
+        recurrence: "weekly",
+        weekdays: ["sunday"],
+        anchorDate: day(-180),
+      },
+      select: { id: true },
+    });
+    await tx.courseScheduleAdministrativeGroup.create({
+      data: { scheduleId: schedule.id, administrativeGroupId: groupId },
+    });
+    return schedule;
+  });
+  await prisma.courseScheduleStaff.create({
+    data: { scheduleId: multiDimGroupSchedule.id, userId: multiDimGroupTeacher, position: "teacher" },
+  });
+
+  // Scoped ONLY by `level_ids` — no group, no circle — the multi_dimension
+  // shape that `audienceWhere` itself resolves identically to `entire_level`
+  // (no administrative-group constraint applied), and so must carry the
+  // SAME whole-Level exam authority.
+  const multiDimWholeLevelTeacher = await person("مؤطرة المستوى متعددة الأبعاد", "teacher");
+  multiDimWholeLevelTeacherId = multiDimWholeLevelTeacher;
+  multiDimWholeLevelTeacherToken = bearer(multiDimWholeLevelTeacher, [
+    { role: "teacher", branches: null },
+  ]);
+  const multiDimWholeLevelSchedule = await prisma.$transaction(async (tx) => {
+    const schedule = await tx.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة مستوى متعددة الأبعاد`,
+        subjectId,
+        teachingMode: "multi_dimension",
+        branchId,
+        academicYearId: yearId,
+        startTime: new Date("1970-01-01T13:00:00Z"),
+        endTime: new Date("1970-01-01T14:00:00Z"),
+        recurrence: "weekly",
+        weekdays: ["sunday"],
+        anchorDate: day(-180),
+      },
+      select: { id: true },
+    });
+    await tx.courseScheduleLevel.create({
+      data: { scheduleId: schedule.id, levelId },
+    });
+    return schedule;
+  });
+  await prisma.courseScheduleStaff.create({
+    data: {
+      scheduleId: multiDimWholeLevelSchedule.id,
+      userId: multiDimWholeLevelTeacher,
+      position: "teacher",
+    },
+  });
 });
 
 afterAll(async () => {
@@ -408,6 +500,61 @@ describe("and nothing else — the list agrees with assertExamInTeacherScope", (
     for (const key of ["pastMine", "futureMine", "beforeShe", "otherBranch"]) {
       expect(ids, key).toContain(exams[key]);
     }
+  });
+});
+
+describe("Codex review, 2026-09-20 — a multi_dimension assignment carries the identical scope its legacy-mode equivalent already does", () => {
+  it("a group-scoped multi_dimension teacher sees HER group's sitting and not the whole Level — the LIST half", async () => {
+    const ids = await idsFor(multiDimGroupTeacherToken);
+    expect(ids).toContain(exams["forHerGroup"]);
+    expect(ids).not.toContain(exams["pastMine"]);
+    expect(ids).not.toContain(exams["futureMine"]);
+  });
+
+  it("a Level-scoped multi_dimension teacher (no group, no circle) sees the WHOLE Level's sittings", async () => {
+    const ids = await idsFor(multiDimWholeLevelTeacherToken);
+    expect(ids).toContain(exams["pastMine"]);
+    expect(ids).toContain(exams["futureMine"]);
+  });
+
+  it("the WRITE half agrees: assertExamInTeacherScope no longer refuses either assignment", async () => {
+    // Before the fix both calls threw EXAM_OUT_OF_SCOPE — every legacy field
+    // `forThisLevel` read is NULL by construction on a multi_dimension row.
+    await expect(
+      assertExamInTeacherScope(prisma, multiDimGroupTeacherId, {
+        branchId,
+        levelId,
+        subjectId,
+        administrativeGroupId: groupId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertExamInTeacherScope(prisma, multiDimWholeLevelTeacherId, {
+        branchId,
+        levelId,
+        subjectId,
+        administrativeGroupId: null,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("but a GROUP-scoped multi_dimension assignment does NOT itself grant whole-Level authority", async () => {
+    // Authority over everyone is held, never inferred from authority over
+    // some (the same rule the legacy `entire_level`-only whole-Level test
+    // above states) — proved here for the newer mode specifically, since it
+    // is the one whose "does this schedule narrow no further than the
+    // Level" test this fix had to add.
+    await expect(
+      assertExamInTeacherScope(prisma, multiDimGroupTeacherId, {
+        branchId,
+        levelId,
+        subjectId,
+        administrativeGroupId: null,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      details: { reason: "WHOLE_LEVEL_OUT_OF_SCOPE" },
+    });
   });
 });
 

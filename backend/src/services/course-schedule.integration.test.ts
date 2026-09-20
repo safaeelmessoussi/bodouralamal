@@ -1254,6 +1254,49 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       expect(after.roomId).toBe(roomA);
     });
 
+    it("codex review, 2026-09-20 — overwriting ALSO clears a manually-overridden Subject, not only room/delivery/visibility", async () => {
+      // The Subject override (Revision 161) is governed by the SAME
+      // `overridden` flag as room/delivery/visibility, so "overwrite" — this
+      // occurrence is no longer a human's individual decision — must reset
+      // it exactly like the others. Before the fix `subjectId` was left out
+      // of the overwrite's field list: the flag cleared while a stale
+      // Subject override survived underneath it.
+      const otherSubjectId = (
+        await prisma.subject.create({ data: { name: `${TAG} مادة أخرى للتجاوز` } })
+      ).id;
+      await prisma.levelSubject.create({ data: { levelId, subjectId: otherSubjectId } });
+
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ title: `${TAG} حلقة تجاوز المادة` }),
+        NOW,
+      );
+      const target = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day("2026-06-16") },
+      });
+      await overrideSession(prisma, superAdmin(), target.id, {
+        subjectId: otherSubjectId,
+        version: target.version,
+      });
+      const overridden = await prisma.session.findUniqueOrThrow({ where: { id: target.id } });
+      expect(overridden.overridden).toBe(true);
+      expect(overridden.subjectId).toBe(otherSubjectId);
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { title: `${TAG} حلقة تجاوز المادة`, overwriteManuallyEdited: true, version: 0 },
+        NOW,
+      );
+      expect(result.materialized.overwritten).toBe(1);
+
+      const after = await prisma.session.findUniqueOrThrow({ where: { id: target.id } });
+      expect(after.overridden).toBe(false);
+      expect(after.subjectId).toBeNull();
+    });
+
     it("a Session ALSO protected by recorded attendance is NEVER overwritten, regardless of the flag", async () => {
       const { id } = await createCourseSchedule(
         prisma,

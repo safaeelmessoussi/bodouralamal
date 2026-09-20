@@ -113,6 +113,10 @@ let subjectId2: string;
 let subjectNotTaughtHere: string;
 let groupA: string;
 let academicYearId: string;
+/** Codex review, 2026-09-20 — a GROUP-ONLY `multi_dimension` schedule (no
+ *  `level_ids` of its own): the exact shape `scheduleLevelIds` silently
+ *  under-resolved to `[]`, skipping Subject-override validation entirely. */
+let multiDimensionScheduleId: string;
 let scheduleId: string;
 let contentId: string;
 
@@ -145,6 +149,9 @@ async function clear(): Promise<void> {
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
   }
+  // Codex review, 2026-09-20 — the group-only `multi_dimension` fixture
+  // schedule's own scope join row, RESTRICT against the schedule it names.
+  await prisma.courseScheduleAdministrativeGroup.deleteMany({ where: { scheduleId: { in: ids } } });
   /**
    * **Re-sweep immediately before the schedule delete, and retry once.**
    *
@@ -310,6 +317,33 @@ beforeAll(async () => {
     );
   }
   scheduleId = created.body.schedule!.id;
+
+  // Codex review, 2026-09-20 — a GROUP-ONLY multi_dimension schedule: no
+  // `level_ids` of its own, its Level implied entirely by `groupA`.
+  const multiDimensionCreated = await call(
+    "POST",
+    "/admin/course-schedules",
+    superAdmin,
+    {
+      title: `${TAG} حصة متعددة الأبعاد`,
+      subject_id: subjectId,
+      teaching_mode: "multi_dimension",
+      dimensions: { administrative_group_ids: [groupA] },
+      branch_id: branchA,
+      room_id: roomA,
+      start_time: "09:00",
+      end_time: "10:00",
+      recurrence: "weekly",
+      weekdays: ["thursday"],
+      academic_year_id: academicYearId,
+    },
+  );
+  if (multiDimensionCreated.status !== 201) {
+    throw new Error(
+      `multi_dimension fixture schedule failed: ${multiDimensionCreated.status} ${JSON.stringify(multiDimensionCreated.body)}`,
+    );
+  }
+  multiDimensionScheduleId = multiDimensionCreated.body.schedule!.id;
 });
 
 afterAll(async () => {
@@ -536,6 +570,84 @@ describe("Owner-reported, 2026-09-17 — this occurrence's own Subject", () => {
     });
     expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);
     expect(unrelated.body.subject_id).toBe(subjectId2);
+  });
+
+  it("codex review, 2026-09-20 — the calendar reads and filters by THIS occurrence's Subject, not only the schedule's", async () => {
+    const s = await dedicatedSession();
+    const day = (await prisma.session.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { date: true },
+    })).date.toISOString().slice(0, 10);
+
+    const set = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      subject_id: subjectId2,
+    });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+
+    const bySchedulesSubject = await call(
+      "GET",
+      `/calendar?from=${day}&to=${day}&subject_id=${subjectId}`,
+      superAdmin,
+    );
+    expect(bySchedulesSubject.status, JSON.stringify(bySchedulesSubject.body)).toBe(200);
+    const rows = (bySchedulesSubject.body as unknown as { data: { id: string }[] }).data;
+    // Retaught AWAY from the schedule's own Subject: filtering by the
+    // schedule's Subject must no longer find it — the calendar used to read
+    // `schedule.subject` unconditionally and would still have matched here.
+    expect(rows.map((r) => r.id)).not.toContain(s.id);
+
+    const byOverrideSubject = await call(
+      "GET",
+      `/calendar?from=${day}&to=${day}&subject_id=${subjectId2}`,
+      superAdmin,
+    );
+    expect(byOverrideSubject.status, JSON.stringify(byOverrideSubject.body)).toBe(200);
+    const overrideRows = (
+      byOverrideSubject.body as unknown as { data: { id: string; title: string; subject_id: string }[] }
+    ).data;
+    const row = overrideRows.find((r) => r.id === s.id);
+    expect(row, JSON.stringify(overrideRows)).toBeDefined();
+    expect(row?.subject_id).toBe(subjectId2);
+  });
+
+  describe("codex review, 2026-09-20 — a group-only multi_dimension schedule's IMPLIED Level, not only a Level it names directly", () => {
+    async function dedicatedMultiDimensionSession(): Promise<{ id: string; version: number }> {
+      nextYear += 1;
+      return prisma.session.create({
+        data: {
+          scheduleId: multiDimensionScheduleId,
+          date: new Date(`${nextYear}-01-01T00:00:00Z`),
+          startTime: new Date("1970-01-01T09:00:00Z"),
+          endTime: new Date("1970-01-01T10:00:00Z"),
+          status: "scheduled",
+        },
+        select: { id: true, version: true },
+      });
+    }
+
+    it("MEDIUM: refuses a Subject the group's implied Level does not teach — this schedule names no level_ids of its own", async () => {
+      // Before the fix, `scheduleLevelIds` returned `dims.levelIds` alone —
+      // empty for a group-only schedule — so the validation loop ran zero
+      // times and silently ACCEPTED this write.
+      const s = await dedicatedMultiDimensionSession();
+      const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+        version: s.version,
+        subject_id: subjectNotTaughtHere,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(409);
+      expect(res.body.error?.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
+    });
+
+    it("still accepts a Subject the implied Level DOES teach — the fix does not over-refuse", async () => {
+      const s = await dedicatedMultiDimensionSession();
+      const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+        version: s.version,
+        subject_id: subjectId2,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.subject_id).toBe(subjectId2);
+    });
   });
 });
 

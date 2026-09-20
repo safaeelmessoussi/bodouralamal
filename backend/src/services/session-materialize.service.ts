@@ -299,7 +299,16 @@ export async function materializeSchedule(
         // individual decision.** Clearing the flag is what makes that true
         // rather than merely stated, exactly as `regenerateOne`'s own single-
         // session path already does.
-        ...(isOverwritable ? { overridden: false } : {}),
+        //
+        // **Codex review, 2026-09-20 — `subject_id` is one of the fields
+        // `overridden` governs (Revision 161) and was left out here.**
+        // Without this an "overwrite manually edited" resync could clear the
+        // flag while a stale Subject override survived underneath it — the
+        // record would say *no longer a human's decision* while still
+        // serving a human's decision. Reset alongside `overridden` for
+        // exactly the same reason the other override fields above are: this
+        // occurrence follows the schedule's own Subject again.
+        ...(isOverwritable ? { overridden: false, subjectId: null } : {}),
       },
     });
     // **The occurrence's own date decides, not the edit's** (R91). Resyncing

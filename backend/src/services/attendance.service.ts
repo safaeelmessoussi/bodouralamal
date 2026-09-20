@@ -517,6 +517,44 @@ export async function markPresent(
 ): Promise<{ id: string; created: boolean }> {
   const occurrence = await resolveOccurrence(prisma, ref);
 
+  try {
+    return await markPresentTx(prisma, actor, occurrence, studentId, options);
+  } catch (error) {
+    /**
+     * **Codex review, 2026-09-20 — the losing side of a genuine race now
+     * answers like a repeat, not like a failure.**
+     *
+     * The migration's own comment already says the check-then-insert below is
+     * "not enough under a double-tap" and leans on
+     * `attendance_occurrence_student_unique` to keep the DATA correct — it
+     * never closed the loop on the RESPONSE. Two concurrent marks can both
+     * see no existing row under READ COMMITTED, both attempt `create`, and
+     * the unique index then lets exactly one succeed; the loser's `create`
+     * throws P2002, which `normalize()` maps to `409 DUPLICATE` — contradicting
+     * this very function's own docstring ("Idempotent by construction") and
+     * the controller's documented contract ("`200` on a repeat, `201` on a
+     * new row"). The loser did not send a bad request; she lost a race
+     * against an identical one. Re-read the row the winner just committed and
+     * answer exactly as if she had found it already there.
+     */
+    if ((error as { code?: unknown } | null)?.code === 'P2002') {
+      const existing = await prisma.attendance.findFirst({
+        where: { ...occurrenceWhere(occurrence), studentId, deletedAt: null },
+        select: { id: true },
+      });
+      if (existing) return { id: existing.id, created: false };
+    }
+    throw error;
+  }
+}
+
+async function markPresentTx(
+  prisma: PrismaClient,
+  actor: Actor,
+  occurrence: ResolvedOccurrence,
+  studentId: string,
+  options: { self?: boolean },
+): Promise<{ id: string; created: boolean }> {
   return prisma.$transaction(async (tx) => {
     if (options.self === true) {
       if (studentId !== actor.userId) {

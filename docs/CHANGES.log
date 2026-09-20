@@ -9934,3 +9934,93 @@ new `20260917090000_r161_session_audience_dimensions_and_subject` migration clea
 components, 12/12 workers) on the first check, no error-level log lines in the following
 minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No Production
 action of any kind.
+
+**Fixed (SRS Revision 162) — an independent codex review of Revision 161 found eight real
+defects, seven of them pre-existing and independent of R161 itself; all eight fixed, no
+schema change.** Three HIGH: `consentSessionIdsForStudent` and `personalFilters`'s own
+Session predicate both hand-derived their own audience test, built before `multi_dimension`
+(Revision 155) existed and never extended to it or to R161's four newer override tables — a
+consent withdrawal against such a beneficiary created NO reevaluation obligation at all
+(BR-2's gate could stay wrong indefinitely, not merely until the next sweep), and a
+beneficiary of such a class or override could be entirely absent from her own personal
+calendar. Both rewritten as a deliberately over-inclusive SQL candidate set, narrowed to an
+exact answer by resolving each candidate through the SAME `audienceForSession` +
+`audienceWhere` every other reader composes — never a second hand-rolled evaluation of the
+combination rules. The third HIGH: `readSessionRoster` fell back to the schedule's own venue
+branch whenever a mode genuinely has no branch dimension of its own, so saving from that
+state (even touching only another dimension) silently invited every enrolled beneficiary at
+the venue branch — a population nobody chose. Fallback removed.
+
+Five MEDIUM: (1) `teacherEventScope`/`assertExamInTeacherScope`/`examScopeWhereForTeacher`
+all derived a schedule's Level (and the exam pair's reachable groups) from three legacy
+singular columns alone, `NULL` by construction on a `multi_dimension` row — a مؤطِّرة whose
+only assignment for a Level used the newer mode was refused exam authoring, saw an empty exam
+list, and missed Hidden events scoped to her own teaching; all three now also read the five
+`multi_dimension` scope tables, unioning in Levels IMPLIED by a named group or circle where
+the schedule names no `level_ids` of its own — the exact gap that made `examScopeWhereForTeacher`
+still skip a group-only assignment on the first attempt at this fix, caught by its own new
+integration test. A Level-only `multi_dimension` schedule now carries whole-Level exam
+authority, the same audience `entire_level` mode reaches for that shape. (2) A session's own
+Subject override (R161) is now read by the calendar's title/`subject_id`/filter,
+`teachesQuran`'s occurrence arm, and `studentsTaughtBy`'s occurrence arm — all four preferred
+the schedule's Subject unconditionally before. `updateCourseSchedule`'s "overwrite manually
+edited" resync now also clears a Subject override alongside `overridden`, the same footing
+room/delivery/visibility already had. (3) `scheduleLevelIds` returned a `multi_dimension`
+schedule's directly-named `level_ids` alone, empty for a valid group-only or circle-only
+class, silently skipping Subject-override curriculum validation; now unions in the Levels a
+named group or circle implies, reusing `course-schedule.service.ts`'s own `effectiveLevelIds`
+computation. (4) `markPresent`'s check-then-insert could lose a genuine concurrent race to an
+unhandled `409 DUPLICATE`, contradicting its own "idempotent by construction" docstring and
+the controller's documented `200`-on-repeat contract; the loser now re-reads the winner's row.
+LOW: الحضور's group/circle pickers called `listAdministrativeGroups`/`listCircles` once with
+`meta.total` discarded and no failure notice; a new `fetchAllPages` walks every page, and a
+failed load now sets a notice. Not addressed: the pre-existing, separately-tracked Library↔
+calendar cancelled-Session backlink inconsistency ("Calendar/media regression correction —
+2026-09-07") — unrelated to R161, not a regression from it, its own entry already asking for
+a deliberate lifecycle/navigation-contract decision this pass did not make.
+
+One additional defect was found and fixed during THIS pass's own verification, before any
+commit: the first draft of the calendar's `subject_id` filter spread a second top-level `OR`
+key onto the same `where` object `sessionTierWhere(actor)` already spreads one onto —
+silently overwriting R109's visibility-tier filter for any Admin/Teacher/Student/Parent actor
+who also passed `subject_id`. Found by re-reading the diff, not by a failing test (no
+existing test covered `subject_id` combined with a non-super-admin actor). Fixed by composing
+every OR-bearing condition through one `AND` array instead of sibling top-level spreads —
+recorded here because it is exactly the kind of self-introduced regression this reporting
+step exists to catch before it reaches review.
+
+Verification, in full: backend/frontend typecheck/lint/build clean throughout; backend unit
+342/342 (unchanged — every one of these eight fixes needed real PostgreSQL to exercise,
+so none is reachable from the unit suite); frontend unit 1,361/1,361 (5 new — a genuine
+behavioural test of the new `fetchAllPages` pagination helper, not a source-string pin).
+New/extended integration coverage, 22 tests across eight files (two new:
+`personal-calendar-r161.integration.test.ts`, `roster-resolution-r161-subject.integration
+.test.ts`; six extended: `consent.integration.test.ts`, `session-audience.http.integration
+.test.ts`, `session.http.integration.test.ts`, `teacher-exam-scope.http.integration.test.ts`,
+`attendance.integration.test.ts`, `course-schedule.integration.test.ts`). Three rounds of the
+full disposable-stack suite were needed before every test passed: the first round (before any
+test existed) established the pre-existing 2,648-test baseline was unaffected; the second
+round, run against the corrected source, surfaced nine test-authoring defects of its own — two
+new fixture helpers created a `multi_dimension` schedule and its scope row as separate
+top-level `prisma.create()` calls, each auto-committing before the OTHER existed, which a
+`DEFERRABLE INITIALLY DEFERRED` constraint trigger (`course_schedule_multi_dimension_nonempty`)
+only catches at commit; two tests wrongly expected a Level-only override to add a student
+outside an `administrative_group`-mode schedule's own natural Group constraint, which stays
+active unless THAT SAME dimension is what gets combined (corrected to combine
+Administrative Groups, matching the established R92/multi_dimension "combine within the
+same kind" rule); a new test created a second Subject with `tracks_quran_progress = true`,
+colliding with the platform-wide `subject_one_quran_tracker` unique index and the seed's own
+existing row (corrected to reuse the seeded Subject, the same pattern `journey.integration
+.test.ts` already establishes), which in turn broke `clearTeachingContext`'s own by-Subject
+schedule cleanup once a test reassigned that schedule's Subject away from its own TAG (fixed
+with an explicit by-branch sweep first); and the static trash-coverage guard flagged four new
+Prisma calls for not visibly stating `deletedAt: null` in a traceable literal (fixed by
+spelling it out explicitly, the established convention beside `filterExamsByAudience`, plus
+two genuinely missing `deletedAt: null` filters in `scheduleLevelIds`). The third round found
+one more defect in the PRODUCTION fix itself (`examScopeWhereForTeacher`'s Level derivation
+unioned in `level_ids` but not the Levels implied by a named group/circle, unlike its sibling
+`assertExamInTeacherScope`) and one more test-cleanup ordering bug, both fixed. The fourth and
+final round: **2,670 passed / 18 skipped (2,688)**, all-table isolation intact, no leftover
+disposable containers/networks/volumes. All 31 CI guards, `check-openapi-current.sh`
+(179 paths / 230 operations, unchanged — no route or contract shape changed), documentation
+links (1,095) and `git diff --check` pass. No migration.

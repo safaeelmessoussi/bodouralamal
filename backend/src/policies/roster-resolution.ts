@@ -701,16 +701,41 @@ export async function studentsTaughtBy(
     where: {
       deletedAt: null,
       date: calendarDay(on),
-      schedule: { deletedAt: null, ...subject },
-      OR: [
-        // She took this one specifically — a cover, or the snapshot
-        // materialization wrote for her.
-        { staff: { some: { userId: teacherId, deletedAt: null } } },
-        // Or she staffs the schedule it came from, effective on that day. This
-        // half is what carries R92 to a teacher who is NOT a cover: without it
-        // the combined audience would reach a substitute and not the regular
-        // مؤطِّرة.
-        { schedule: { staff: staffed } },
+      schedule: { deletedAt: null },
+      AND: [
+        {
+          OR: [
+            // She took this one specifically — a cover, or the snapshot
+            // materialization wrote for her.
+            { staff: { some: { userId: teacherId, deletedAt: null } } },
+            // Or she staffs the schedule it came from, effective on that day.
+            // This half is what carries R92 to a teacher who is NOT a cover:
+            // without it the combined audience would reach a substitute and
+            // not the regular مؤطِّرة.
+            { schedule: { staff: staffed } },
+          ],
+        },
+        /**
+         * **Codex review, 2026-09-20 — R73's Subject narrowing must read the
+         * OCCURRENCE's own Subject override (Revision 161) when it has one,
+         * not only the schedule's.** This filtered on `schedule: {...subject}`
+         * alone, so a مؤطِّرة scoped to حفظ القرآن (`assertCanManageQuranProgress`)
+         * could not reach a one-off retaught as Quran on a schedule that
+         * ordinarily teaches something else, and — the direction that
+         * actually widens access if left unfixed — kept reaching a session
+         * retaught AWAY from Quran, because its schedule still named the
+         * Quran Subject. `subjectId: null` is the ordinary case, *inherit*.
+         */
+        ...(filter.subjectId === undefined
+          ? []
+          : [
+              {
+                OR: [
+                  { subjectId: filter.subjectId },
+                  { subjectId: null, schedule: { subjectId: filter.subjectId } },
+                ],
+              },
+            ]),
       ],
     },
     select: { id: true },
@@ -1007,6 +1032,20 @@ export async function teacherEventScope(
       teachingGroup: {
         select: { levelId: true, level: { select: { categoryId: true } } },
       },
+      // **Codex review, 2026-09-20 — a `multi_dimension` schedule's own five
+      // join tables**, which is its target exactly as the singular fields
+      // above are a legacy mode's. Every field above this comment is `NULL`
+      // by construction on a `multi_dimension` row, so such a schedule
+      // contributed only its `branchId` to this derivation and NOTHING else
+      // — a teacher whose sole assignment names an Administrative Group
+      // through `multi_dimension` (Revision 155's own new mode) had no
+      // matching level, category or group here at all, which is the scope
+      // hole behind both the exam-authoring gap and the Hidden-event
+      // visibility gap the review found.
+      categoryScopes: { select: { categoryId: true } },
+      levelScopes: { select: { levelId: true } },
+      administrativeGroupScopes: { select: { administrativeGroupId: true } },
+      teachingGroupScopes: { select: { teachingGroupId: true } },
     },
   });
 
@@ -1030,6 +1069,14 @@ export async function teacherEventScope(
       null;
     if (levelId) levelIds.add(levelId);
     if (level) categoryIds.add(level.categoryId);
+
+    // A `multi_dimension` schedule's own scope, unioned in the same way as
+    // the legacy single target above — empty on every other mode, since
+    // those join tables are populated only for `multi_dimension` rows.
+    for (const r of s.categoryScopes) categoryIds.add(r.categoryId);
+    for (const r of s.levelScopes) levelIds.add(r.levelId);
+    for (const r of s.administrativeGroupScopes) groupIds.add(r.administrativeGroupId);
+    for (const r of s.teachingGroupScopes) teachingGroupIds.push(r.teachingGroupId);
   }
 
   // The administrative groups behind a subject-specific split. Without this a
@@ -1184,7 +1231,16 @@ export async function teachesQuran(
     where: {
       deletedAt: null,
       date: calendarDay(on),
-      schedule: { subjectId, deletedAt: null },
+      schedule: { deletedAt: null },
+      // **Codex review, 2026-09-20 — an occurrence's own Subject override
+      // (Revision 161) REPLACES the schedule's for exactly this sitting.**
+      // This read only `schedule: { subjectId }`, so a one-off retaught as
+      // حفظ القرآن for one week never opened the menu, and — the more
+      // consequential direction — a session on an ordinarily-Quran schedule
+      // retaught as something else kept opening it, handing a مؤطرة a
+      // memorisation-entry screen for a sitting she is not teaching Quran
+      // at. `session.subjectId === null` is the ordinary case, *inherit*.
+      OR: [{ subjectId }, { subjectId: null, schedule: { subjectId } }],
       staff: { some: { userId, deletedAt: null } },
     },
   });
@@ -1322,16 +1378,41 @@ export async function assertExamInTeacherScope(
       administrativeGroupId: true,
       administrativeGroup: { select: { levelId: true } },
       teachingGroup: { select: { levelId: true } },
+      /**
+       * **Codex review, 2026-09-20 — a `multi_dimension` schedule's own
+       * level scope, and the levels a named group or circle scope IMPLY.**
+       * All three legacy fields above are `NULL` by construction on such a
+       * row (`course_schedule_mode_target_check`), so a schedule using
+       * Revision 155's newer mode contributed no level at all here — a
+       * teacher whose only assignment for this Level is `multi_dimension`
+       * was refused every exam question below, `EXAM_OUT_OF_SCOPE` and
+       * `WHOLE_LEVEL_OUT_OF_SCOPE` alike, for a Level she demonstrably
+       * teaches.
+       */
+      levelScopes: { select: { levelId: true } },
+      administrativeGroupScopes: {
+        select: { administrativeGroupId: true, administrativeGroup: { select: { levelId: true } } },
+      },
+      teachingGroupScopes: {
+        select: { teachingGroupId: true, teachingGroup: { select: { levelId: true } } },
+      },
     },
   });
 
-  const forThisLevel = schedules.filter(
-    (s) =>
-      (s.levelId ??
-        s.administrativeGroup?.levelId ??
-        s.teachingGroup?.levelId ??
-        null) === spec.levelId,
-  );
+  /** This schedule's own effective Level(s), whatever its mode — the same
+   *  union `scheduleLevelIds`/`effectiveLevelIds` compute elsewhere for the
+   *  identical question, asked here per candidate row instead of once. */
+  const scheduleLevels = (s: (typeof schedules)[number]): Set<string> => {
+    const ids = new Set<string>();
+    const legacy = s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null;
+    if (legacy) ids.add(legacy);
+    for (const r of s.levelScopes) ids.add(r.levelId);
+    for (const r of s.administrativeGroupScopes) ids.add(r.administrativeGroup.levelId);
+    for (const r of s.teachingGroupScopes) ids.add(r.teachingGroup.levelId);
+    return ids;
+  };
+
+  const forThisLevel = schedules.filter((s) => scheduleLevels(s).has(spec.levelId));
 
   if (forThisLevel.length === 0) {
     throw new AppError(
@@ -1344,8 +1425,26 @@ export async function assertExamInTeacherScope(
   }
 
   if (spec.administrativeGroupId === null) {
-    // The whole Level — held, never inferred. See the docstring.
-    if (!forThisLevel.some((s) => s.teachingMode === "entire_level")) {
+    /**
+     * **The whole Level — held, never inferred.** `entire_level` mode IS
+     * that by construction. A `multi_dimension` schedule holds the
+     * identical authority when its OWN scope narrows no further than the
+     * Level itself — no Administrative Group and no Teaching Circle named —
+     * because `audienceWhere`'s own `multi_dimension` arm then applies no
+     * group/circle constraint either and reaches every enrolled student in
+     * the Level, the same audience `entire_level` mode reaches. A schedule
+     * that ALSO names a group or circle is a narrower assignment and must
+     * not grant whole-Level authority, for the same reason a single group's
+     * teacher never has (§4.4c).
+     */
+    const wholeLevel = forThisLevel.some(
+      (s) =>
+        s.teachingMode === "entire_level" ||
+        (s.teachingMode === "multi_dimension" &&
+          s.administrativeGroupScopes.length === 0 &&
+          s.teachingGroupScopes.length === 0),
+    );
+    if (!wholeLevel) {
       throw new AppError("FORBIDDEN", "you do not teach this whole level", {
         reason: "WHOLE_LEVEL_OUT_OF_SCOPE",
       });
@@ -1431,6 +1530,23 @@ export async function examScopeWhereForTeacher(
           teachingGroupId: true,
           administrativeGroup: { select: { levelId: true } },
           teachingGroup: { select: { levelId: true } },
+          /**
+           * **Codex review, 2026-09-20 — a `multi_dimension` schedule's own
+           * scope.** All five legacy fields above are `NULL` by construction
+           * on such a row, so it previously matched `levelId === null` and
+           * was `continue`d past outright — a مؤطِّرة whose only assignment
+           * for a Level uses Revision 155's newer mode saw an empty exam
+           * list, the identical empty-`200` shape this function's own
+           * docstring already names as the symptom it exists to fix, one
+           * mode over.
+           */
+          levelScopes: { select: { levelId: true } },
+          administrativeGroupScopes: {
+            select: { administrativeGroupId: true, administrativeGroup: { select: { levelId: true } } },
+          },
+          teachingGroupScopes: {
+            select: { teachingGroupId: true, teachingGroup: { select: { levelId: true } } },
+          },
         },
       },
     },
@@ -1462,9 +1578,16 @@ export async function examScopeWhereForTeacher(
    * exactly as `teacherEventScope` does — enrolment carries no history here, and
    * inventing one would be a second answer to a question §4.4c already owns.
    */
-  const teachingGroupIds = staffed
-    .map((row) => row.schedule.teachingGroupId)
-    .filter((id): id is string => id !== null);
+  const teachingGroupIds = [
+    ...new Set([
+      ...staffed.map((row) => row.schedule.teachingGroupId).filter((id): id is string => id !== null),
+      // Codex review, 2026-09-20 — a `multi_dimension` schedule's own Circle
+      // scope reaches its members' administrative groups exactly as the
+      // legacy `teaching_group` mode's single target already does; omitting
+      // it here left those groups unresolved below.
+      ...staffed.flatMap((row) => row.schedule.teachingGroupScopes.map((r) => r.teachingGroupId)),
+    ]),
+  ];
   const groupsBehindTeachingGroup = new Map<string, string[]>();
   if (teachingGroupIds.length > 0) {
     const seats = await prisma.studentTeachingGroup.findMany({
@@ -1494,9 +1617,26 @@ export async function examScopeWhereForTeacher(
   const clauses: Prisma.ExamWhereInput[] = [];
   for (const row of staffed) {
     const s = row.schedule;
-    const levelId =
+    // **Codex review, 2026-09-20 — the schedule's OWN effective Level(s)**,
+    // whichever field names them. The legacy modes always name exactly one;
+    // a `multi_dimension` schedule may name several (say, two Levels folded
+    // into one class, or a group-only class whose Level is IMPLIED by that
+    // group and not named directly at all), so this loop pushes one clause
+    // per Level rather than forcing a single-valued `levelId` to stand for
+    // all of them.
+    const legacyLevelId =
       s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null;
-    if (levelId === null || s.subjectId === null) continue;
+    const levelIds =
+      legacyLevelId !== null
+        ? [legacyLevelId]
+        : [
+            ...new Set([
+              ...s.levelScopes.map((r) => r.levelId),
+              ...s.administrativeGroupScopes.map((r) => r.administrativeGroup.levelId),
+              ...s.teachingGroupScopes.map((r) => r.teachingGroup.levelId),
+            ]),
+          ];
+    if (levelIds.length === 0 || s.subjectId === null) continue;
 
     const window: Prisma.ExamWhereInput =
       row.effectiveFrom || row.effectiveUntil
@@ -1509,64 +1649,90 @@ export async function examScopeWhereForTeacher(
         : {};
 
     /**
-     * **A sitting carries a branch and a Subject; a PAPER carries neither.**
-     *
-     * This clause was `branchId: s.branchId` outright, which is right for a
-     * sitting and excludes **every** online assessment: R124's paper has no
-     * branch by construction (`exam_online_has_no_room_check` forbids one) and
-     * an optional Subject, so an equality on either matched nothing. A مؤطِّرة's
-     * assessment library came back empty — the same empty-`200` shape this
-     * function was written to fix for sittings, one delivery mode over.
-     *
-     * `assertExamInTeacherScope` has always known this: it drops the branch and
-     * subject constraints on its `''` sentinel, *"does she teach anybody in this
-     * Level"*. That is the assertion half of the rule and this is the list half,
-     * which is the drift this pair's own docstring warns about. Written as two
-     * explicit arms so the sitting rule is **unchanged** rather than loosened:
-     * a physical exam must still match both.
+     * **The whole Level — held, never inferred**, the identical rule
+     * `assertExamInTeacherScope` states: `entire_level` mode IS that by
+     * construction, and a `multi_dimension` schedule holds the same
+     * authority only when its OWN scope narrows no further — no
+     * Administrative Group and no Teaching Circle named.
      */
-    const base: Prisma.ExamWhereInput = {
-      levelId,
-      ...window,
-      OR: [
-        { mode: 'physical', branchId: s.branchId, subjectId: s.subjectId },
-        {
-          mode: 'online',
-          OR: [{ subjectId: s.subjectId }, { subjectId: null }],
-        },
-      ],
-    };
+    const isWholeLevel =
+      s.teachingMode === "entire_level" ||
+      (s.teachingMode === "multi_dimension" &&
+        s.administrativeGroupScopes.length === 0 &&
+        s.teachingGroupScopes.length === 0);
 
-    if (s.teachingMode === "entire_level") {
-      // She teaches the whole Level, so every target within it is hers — the
-      // whole-Level sitting and any group carved out of it alike.
-      clauses.push(base);
-      continue;
-    }
+    // The groups THIS assignment reaches when it is not whole-Level: its own
+    // named group (legacy or `multi_dimension`), plus the groups behind any
+    // Circle it names (legacy or `multi_dimension`) — the same union
+    // `teacherEventScope` composes for the identical question.
+    const reachableGroups = [
+      ...(s.administrativeGroupId !== null ? [s.administrativeGroupId] : []),
+      ...s.administrativeGroupScopes.map((r) => r.administrativeGroupId),
+      ...(s.teachingGroupId !== null ? (groupsBehindTeachingGroup.get(s.teachingGroupId) ?? []) : []),
+      ...s.teachingGroupScopes.flatMap((r) => groupsBehindTeachingGroup.get(r.teachingGroupId) ?? []),
+    ];
 
-    // She teaches a subset, so the whole-Level sitting is NOT hers (authority
-    // over everyone is held, never inferred from authority over some) and a
-    // named group must be one THIS assignment reaches.
-    const reachable =
-      s.administrativeGroupId !== null
-        ? [s.administrativeGroupId]
-        : s.teachingGroupId !== null
-          ? (groupsBehindTeachingGroup.get(s.teachingGroupId) ?? [])
-          : [];
-    if (reachable.length > 0) {
-      clauses.push({ ...base, administrativeGroupId: { in: [...new Set(reachable)] } });
-    }
+    for (const levelId of levelIds) {
+      /**
+       * **A sitting carries a branch and a Subject; a PAPER carries neither.**
+       *
+       * This clause was `branchId: s.branchId` outright, which is right for a
+       * sitting and excludes **every** online assessment: R124's paper has no
+       * branch by construction (`exam_online_has_no_room_check` forbids one) and
+       * an optional Subject, so an equality on either matched nothing. A مؤطِّرة's
+       * assessment library came back empty — the same empty-`200` shape this
+       * function was written to fix for sittings, one delivery mode over.
+       *
+       * `assertExamInTeacherScope` has always known this: it drops the branch and
+       * subject constraints on its `''` sentinel, *"does she teach anybody in this
+       * Level"*. That is the assertion half of the rule and this is the list half,
+       * which is the drift this pair's own docstring warns about. Written as two
+       * explicit arms so the sitting rule is **unchanged** rather than loosened:
+       * a physical exam must still match both.
+       */
+      const base: Prisma.ExamWhereInput = {
+        levelId,
+        ...window,
+        OR: [
+          { mode: 'physical', branchId: s.branchId, subjectId: s.subjectId },
+          {
+            mode: 'online',
+            OR: [{ subjectId: s.subjectId }, { subjectId: null }],
+          },
+        ],
+      };
 
-    /**
-     * **R136 (Codex B5) — a `teaching_group` target names the group, not one
-     * of its members' administrative groups.** The clause above only ever
-     * constrains `administrativeGroupId`, so it can never match a
-     * `teaching_group`-targeted exam (`administrative_group_id IS NULL` by
-     * `exam_target_check`); this row's own list stayed empty for exactly the
-     * assignments `staffsTeachingGroup` now admits by direct id.
-     */
-    if (s.teachingGroupId !== null) {
-      clauses.push({ ...base, teachingGroupId: s.teachingGroupId });
+      if (isWholeLevel) {
+        // She teaches the whole Level, so every target within it is hers —
+        // the whole-Level sitting and any group carved out of it alike.
+        clauses.push(base);
+        continue;
+      }
+
+      // She teaches a subset, so the whole-Level sitting is NOT hers (authority
+      // over everyone is held, never inferred from authority over some) and a
+      // named group must be one THIS assignment reaches.
+      if (reachableGroups.length > 0) {
+        clauses.push({ ...base, administrativeGroupId: { in: [...new Set(reachableGroups)] } });
+      }
+
+      /**
+       * **R136 (Codex B5) — a `teaching_group` target names the group, not one
+       * of its members' administrative groups.** The clause above only ever
+       * constrains `administrativeGroupId`, so it can never match a
+       * `teaching_group`-targeted exam (`administrative_group_id IS NULL` by
+       * `exam_target_check`); this row's own list stayed empty for exactly the
+       * assignments `staffsTeachingGroup` now admits by direct id.
+       */
+      if (s.teachingGroupId !== null) {
+        clauses.push({ ...base, teachingGroupId: s.teachingGroupId });
+      }
+      // Codex review, 2026-09-20 — the same match for each Circle a
+      // `multi_dimension` schedule names directly, unreached by the legacy
+      // field above.
+      for (const r of s.teachingGroupScopes) {
+        clauses.push({ ...base, teachingGroupId: r.teachingGroupId });
+      }
     }
   }
 

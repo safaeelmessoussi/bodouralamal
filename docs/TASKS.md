@@ -4592,3 +4592,84 @@ the Owner's own report named.
       green on the first check, no leftover disposable containers.
       §2/§3/§4 remain open pending Owner confirmation — see above.
       Full detail in CHANGES.log.
+
+## SRS Revision 162 — independent codex review of Revision 161, fixed — 2026-09-20
+
+- [x] **Built: §1 HIGH — consent withdrawal now discovers `multi_dimension`
+      and R161-override sessions.** `consentSessionIdsForStudent` hand-
+      derived its own audience test, blind to `multi_dimension` (Revision
+      155) and Revision 161's four newer override tables — a withdrawal
+      against a beneficiary reached only through either created NO
+      reevaluation obligation, so BR-2's gate could stay wrong indefinitely.
+      Rewritten as a superset candidate query narrowed by the SAME
+      `audienceForSession`/`audienceWhere` every other reader composes.
+- [x] **Built: §2 HIGH — personal calendars reach `multi_dimension` Sessions
+      and all five R161 override dimensions.** `personalFilters`'s own
+      Session predicate never learned either; a beneficiary could be
+      entirely absent from her own calendar. Superset SQL restored to exact
+      precision by a new `filterSessionsByPersonalAudience`, mirroring
+      `filterExamsByAudience`'s established pattern.
+- [x] **Built: §3 HIGH — الحضور no longer synthesises the venue as a chosen
+      branch.** `readSessionRoster` fell back to the schedule's own branch
+      whenever a mode genuinely has none — saving from that state (even
+      touching only another dimension) silently invited the whole venue
+      branch. Fallback removed; an empty dimension now reaches the editor
+      empty.
+- [x] **Built: §4 MEDIUM — a `multi_dimension` assignment now carries the
+      same exam/Hidden-event scope its legacy-mode equivalent does.**
+      `teacherEventScope`, `assertExamInTeacherScope` and
+      `examScopeWhereForTeacher` all read three legacy singular columns
+      alone, all `NULL` on a `multi_dimension` row. Now also read its five
+      scope tables; a Level-only `multi_dimension` schedule (no group, no
+      circle) carries whole-Level authority, matching what `audienceWhere`
+      itself already resolves for that shape.
+- [x] **Built: §5 MEDIUM — a session's own Subject override is now read by
+      every consumer, not only the record itself.** The calendar's title,
+      `subject_id` and its filter, `teachesQuran`'s occurrence arm and
+      `studentsTaughtBy`'s occurrence arm all preferred the schedule's
+      Subject unconditionally. Also: `updateCourseSchedule`'s "overwrite
+      manually edited" resync now clears a Subject override alongside
+      `overridden`, the same footing room/delivery/visibility already had.
+- [x] **Built: §6 MEDIUM — a Subject override against a group-only/circle-
+      only `multi_dimension` class validates against the Level that group
+      or circle actually implies.** `scheduleLevelIds` returned the
+      schedule's own directly-named levels alone — empty for such a class —
+      silently skipping curriculum validation. Now unions in the implied
+      Levels, reusing `course-schedule.service.ts`'s own `effectiveLevelIds`
+      computation.
+- [x] **Built: §7 MEDIUM — a genuine concurrent double-mark on «تسجيل
+      حضوري» now always answers idempotently.** `markPresent`'s check-then-
+      insert could lose a real race to `409 DUPLICATE`, contradicting its
+      own "idempotent by construction" claim. The loser now re-reads the
+      winner's row instead of propagating the constraint error. Proved with
+      an actual `Promise.all` race against PostgreSQL.
+- [x] **Built: §8 LOW — الحضور's group/circle pickers walk every page.**
+      `listAdministrativeGroups`/`listCircles` were each called once with
+      `meta.total` discarded and no failure notice. A new `fetchAllPages`
+      walks every page; a failed load now sets the same notice the roster
+      read already used.
+- [x] **Not addressed, left as already tracked:** the pre-existing Library↔
+      calendar cancelled-Session backlink inconsistency ("Calendar/media
+      regression correction — 2026-09-07" above) — unrelated to Revision
+      161, not a regression from it, and its own entry already asks for a
+      deliberate lifecycle/navigation-contract decision.
+- [x] **Additional defect found and fixed during this pass, not one of the
+      eight reported:** the first draft of §5's calendar `subject_id` filter
+      spread a second top-level `OR` key onto the SAME `where` object
+      `sessionTierWhere(actor)` already spreads one onto — silently
+      overwriting R109's visibility-tier filter (public/private/hidden-if-
+      responsible) whenever a caller also passed `subject_id`, for any
+      Admin/Teacher/Student/Parent actor. Found by re-reading the diff
+      before verification, not by a failing test. Fixed by composing every
+      OR-bearing condition through one `AND` array instead of sibling
+      top-level spreads.
+- [x] Verification: backend/frontend typecheck/lint/build clean; backend
+      unit 342/342 (unchanged — every fix needed real PostgreSQL, so none
+      is unit-testable); frontend unit 1,361/1,361 (5 new, behavioural, not
+      source-string pins); full disposable-stack integration suite,
+      full disposable-stack integration suite **2,670/2,688 (18
+      pre-existing skips)**, up from 2,648 by exactly the 22 tests this
+      pass added, all-table isolation intact;
+      all 31 guards, `check-openapi-current.sh`, doc-links and
+      `git diff --check` pass. No schema change, no migration. Full detail
+      in CHANGES.log and SRS Revision 162.

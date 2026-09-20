@@ -15,6 +15,7 @@ import {
   readConsent,
   recordStaffConsent,
 } from "./consent.service.js";
+import { setSessionAudienceOverrides } from "./session.service.js";
 import {
   deleteTestConsentText,
   installTestConsentText,
@@ -134,6 +135,63 @@ async function queuedFor(groupId: string): Promise<number> {
   return Number(rows[0]?.count ?? 0);
 }
 
+/** Jobs queued for one specific session — the R161/multi_dimension tests
+ *  below have no `contexts`-tracked group to key off, unlike `queuedFor`. */
+async function queuedForSession(sessionId: string): Promise<number> {
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT count(*)::bigint AS count FROM pgboss.job
+    WHERE name = 'consent.reevaluate' AND data->>'session_id' = ${sessionId}
+  `;
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * A genuine `multi_dimension`-mode schedule, scoped to one Administrative
+ * Group — the mode `consentSessionIdsForStudent` never discovered at all
+ * before the codex-review fix (2026-09-20).
+ */
+async function makeMultiDimensionSchedule(
+  groupId: string,
+  branchId: string,
+): Promise<string> {
+  const ctx = contexts.get(groupId)!;
+  const academicYear = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+  // **One transaction.** `course_schedule_multi_dimension_nonempty` is a
+  // `DEFERRABLE INITIALLY DEFERRED` constraint trigger, checked at COMMIT —
+  // exactly so the service can write the schedule row, then its join rows,
+  // inside one transaction. Two separate top-level `prisma.create()` calls
+  // each auto-commit on their own, so the schedule's own commit fires the
+  // trigger before its join row exists at all.
+  const sessionId = await prisma.$transaction(async (tx) => {
+    const schedule = await tx.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة متعددة الأبعاد`,
+        subjectId: ctx.subjectId,
+        teachingMode: "multi_dimension",
+        branchId,
+        startTime: new Date(Date.UTC(1970, 0, 1, 9, 0, 0)),
+        endTime: new Date(Date.UTC(1970, 0, 1, 10, 30, 0)),
+        recurrence: "weekly",
+        weekdays: ["saturday" as never],
+        academicYearId: academicYear.id,
+      },
+    });
+    await tx.courseScheduleAdministrativeGroup.create({
+      data: { scheduleId: schedule.id, administrativeGroupId: groupId },
+    });
+    const session = await tx.session.create({
+      data: {
+        scheduleId: schedule.id,
+        date: new Date("2026-09-12"),
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+      },
+    });
+    return session.id;
+  });
+  return sessionId;
+}
+
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -147,6 +205,17 @@ async function clear(): Promise<void> {
   for (const s of sessions) {
     await prisma.$executeRaw`DELETE FROM pgboss.job WHERE name = 'consent.reevaluate' AND data->>'session_id' = ${s.id}`;
   }
+  const sessionIds = sessions.map((s) => s.id);
+  // Codex review, 2026-09-20 — the R161 occurrence-override tables and the
+  // `multi_dimension` scope join this file's own new fixtures write to.
+  await prisma.sessionAudienceBranch.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.sessionAudienceCategory.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.sessionAudienceLevel.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.sessionAudienceAdministrativeGroup.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.sessionAudienceTeachingGroup.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.courseScheduleAdministrativeGroup.deleteMany({
+    where: { administrativeGroup: { name: { startsWith: TAG } } },
+  });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
   });
@@ -475,6 +544,71 @@ describe("§4.1a + TD-4 — the re-evaluation enqueue", () => {
       await prisma.consentRecord.count({ where: { studentId: student } }),
     ).toBe(0);
     expect(await queuedFor(groupId)).toBe(0);
+  });
+});
+
+describe("Codex review, 2026-09-20 — the re-evaluation enqueue reaches multi_dimension and Revision 161's occurrence overrides", () => {
+  it("a multi_dimension schedule's session is discovered — HIGH: this mode was never discovered at all before the fix", async () => {
+    const { admin, student, groupId, branchId } = await scenario();
+    const sessionId = await makeMultiDimensionSchedule(groupId, branchId);
+    expect(await queuedForSession(sessionId)).toBe(0);
+
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
+      consentType: "media_release",
+      granted: false,
+    });
+
+    expect(result.reevaluatedSessions).toContain(sessionId);
+    expect(await queuedForSession(sessionId)).toBeGreaterThan(0);
+  });
+
+  it("a student NOT in the multi_dimension schedule's scope does not trigger it", async () => {
+    const { admin, groupId, branchId } = await scenario();
+    const otherGroupId = await makeGroupInOwnLevel(branchId, "مجموعة أخرى");
+    const outsider = await person("طالبة خارج النطاق");
+    await enrol(otherGroupId, outsider);
+    const sessionId = await makeMultiDimensionSchedule(groupId, branchId);
+
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), outsider, {
+      consentType: "media_release",
+      granted: true,
+    });
+
+    expect(result.reevaluatedSessions).not.toContain(sessionId);
+    expect(await queuedForSession(sessionId)).toBe(0);
+  });
+
+  it("an occurrence's own Administrative Group override is discovered, for a student the schedule's own group does not naturally reach", async () => {
+    // The session belongs to `groupId`'s ordinary (administrative_group-mode)
+    // schedule; the student is enrolled in a DIFFERENT group entirely, and
+    // reaches this exact session only through an R161 occurrence-level
+    // override COMBINING the two groups — the fifth of the five override
+    // tables, and one this discovery query previously consulted not at all.
+    // (An override on an UNRELATED dimension, e.g. Level alone, would leave
+    // this mode's own natural Administrative-Group constraint active and
+    // AND against it — the combination has to name the SAME kind the mode
+    // already constrains by, exactly as `session-audience.http.integration
+    // .test.ts`'s own "the mode restriction is GONE" case does.)
+    const { admin, groupId, branchId } = await scenario();
+    const secondGroupId = await makeGroupInOwnLevel(branchId, "مجموعة الإضافة");
+    const added = await person("طالبة أُضيفت بتجاوز المجموعة");
+    await enrol(secondGroupId, added);
+    const sessionId = contexts.get(groupId)!.sessionId;
+
+    await setSessionAudienceOverrides(prisma, await actorFor(prisma, admin), sessionId, 0, {
+      branchIds: [],
+      categoryIds: [],
+      levelIds: [],
+      administrativeGroupIds: [groupId, secondGroupId],
+      teachingGroupIds: [],
+    });
+
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), added, {
+      consentType: "media_release",
+      granted: false,
+    });
+
+    expect(result.reevaluatedSessions).toContain(sessionId);
   });
 });
 
