@@ -10491,3 +10491,48 @@ One frontend unit test (`admin-modules`, an async import) failed once in a full 
 passed alone and in three consecutive full runs afterwards; noted, not chased. No Production
 action; «دخول الحصة» on Staging still answers «غير مهيّأة» until the Owner decides the media
 provider (Revision 163 §4).
+
+**Built (SRS Revision 164) — online classes are self-hosted, on one architecture, on every tier
+(Owner decision, 2026-09-20). LiveKit Cloud is not used; beneficiaries' media and recordings never
+leave this infrastructure. No schema or application-contract change.**
+
+*Measured first, as instructed.* Real rooms and real recordings, sampled from `docker stats`: the
+media server peaks at 0.35 core / 140 MiB; a 720p/30 room recording costs the recorder 1.7–1.9
+cores / ~700 MiB; an audio-only one a two-second start spike and then 0.2–0.35 core / ~360 MiB.
+With all seven containers pinned to two cores the video still landed as true 30 fps (888 frames in
+29.6 s, against 893 unconfined) using 1.98 of 2 cores and 1.33 GiB. My first "constrained" run was
+not constrained at all — zsh passed the container list as one string and `docker update` failed —
+and I caught it from the error line rather than reporting its numbers.
+
+*The defect the measurement found.* A pinned cpuset hid it, because Egress counts the host's cores;
+restarting Egress under a true 2-CPU quota showed `not enough cpu for some egress types — minimum 4,
+available 2`, and every VIDEO recording then answered `503` while audio worked. Egress prices a room
+recording at 4 cores by default and refuses what it believes the host cannot afford. The costs are
+now written from measurement (2.0 video / 1.0 audio; 1.5 / 0.5 on Staging), through a small shell
+in front of the image's entrypoint because Compose can only merge per-tier values as container
+environment, which Egress does not read. That shell runs `set -e`, never `-x`: it holds the secret.
+
+*One model.* `livekit`, `livekit-egress` and `redis` moved from the dev overlay into
+`docker-compose.yml`, each with a health check, bounded logs and a restart policy; configuration is
+passed as environment bodies with the key pair arriving separately, so no secret is in Git, and the
+two dev-only files under `infra/` are deleted. The release overlay adds exactly 7881/tcp and
+7882/udp; the dev overlay adds loopback ports only. Signalling is same-origin — a new Nginx `/rtc`
+location — so 7880 is never published and the CSP entry became `wss://$host`, right for every tier
+with nobody editing a file on a host. `use_external_ip: false` plus `LIVEKIT_NODE_IP` means no
+public STUN server is asked for the host's address. The provider seam sets `disableManifest`, so a
+recording no longer leaves an orphan `EG_*.json` in the staging bucket.
+
+*Guards.* Host preflight validates nine services, the exact four published ports and their owners,
+one key pair across the API, the media server and the recorder, a dedicated ≥32-byte secret, a
+same-origin `LIVEKIT_URL`, the stated address against the approved IPv4, no external STUN, and CPU
+floors (Staging 2, Production 4). `check-host-preflight.sh` gained seven mutation tests. Writing
+them, apostrophes in my Python comments ended the validator's single-quoted shell string early;
+`bash -n` caught it before anything ran.
+
+*Verified on Localhost in a real browser.* `verify-livekit-join` 61/61 with a real MP4 and OGG
+through the same-origin route (its first run failed 43/61 because Nginx still held its old
+configuration — the routing file is bind-mounted and needed a reload; a release deployment
+recreates Nginx, so this cannot occur there); `verify-livekit-ingest` 27/27 with the staging bucket
+at 17 objects before and after; and 61/61 again with a stated LAN address and media ports on every
+interface, which is the release network shape and proves the recorder container reaches the media
+server through the host's own address. All guards, documentation links and `git diff --check` pass.

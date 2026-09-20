@@ -223,6 +223,12 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
     const output = new EncodedFileOutput({
       fileType,
       filepath: request.key,
+      // **No `EG_*.json` manifest beside the recording** (SRS Revision 164).
+      // The platform never read it, and ingestion deliberately sweeps only the
+      // media object it asked for — so every recording left one orphan in a
+      // bucket nothing lists. On a test tier that is litter; in Production,
+      // where recordings accumulate for years, it is unbounded residue.
+      disableManifest: true,
       output: {
         case: "s3",
         value: new S3Upload({

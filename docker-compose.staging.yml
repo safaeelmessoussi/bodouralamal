@@ -19,9 +19,10 @@
 # `shared_buffers=256MB`). Soft budgets keep a runtime tidy; a hard ceiling is
 # what stops one container taking the box down with the other three on it.
 #
-# Sized for 2 vCPU / 3.7 GiB usable: 1024 + 768 + 768 + 96 ≈ 2.6 G, leaving
-# roughly 1.1 G for the kernel, the host and page cache. Swap (4 G) is a safety
-# net for the build peak, not part of this budget.
+# Sized for 2 vCPU / 3.7 GiB usable: 1024 + 768 + 768 + 96 ≈ 2.6 G for the
+# application, leaving roughly 1.1 G for the kernel, the host and page cache.
+# The media services' ceilings at the end of this file are budgeted separately,
+# from measurement, and say plainly where they exceed that headroom.
 
 services:
   api:
@@ -53,3 +54,31 @@ services:
 
   certbot:
     mem_limit: 128m
+
+  # ── Online classes on a 2-vCPU / 3.7-GiB host (SRS Revision 164) ───────────
+  #
+  # MEASURED on 2026-09-20 with the whole stack confined to two cores: one 720p
+  # room recording peaks at ~1.9 cores and ~700 MiB and still lands as true
+  # 30 fps (888 frames in 29.6 s); an audio-only one settles at ~0.3 core and
+  # ~360 MiB; the entire stack peaks at 1.33 GiB while a video records.
+  #
+  # So this host records ONE thing at a time, and the API is slow while that one
+  # thing is a video — acceptable for a test tier, and stated rather than hidden.
+  # These ceilings now SUM past the RAM this host has (they are caps, not
+  # reservations); real use is a third of that, and the 4-GiB swap is the net.
+  livekit:
+    mem_limit: 256m
+    memswap_limit: 384m
+
+  redis:
+    mem_limit: 64m
+
+  livekit-egress:
+    mem_limit: 1280m
+    memswap_limit: 2048m
+    environment:
+      # Below the general 2.0 because this host HAS only two cores, and Egress
+      # admits a recording only while at least this many are idle. 1.5 admits one
+      # video recording and refuses a second, which is the protection wanted.
+      EGRESS_VIDEO_CPU_COST: "1.5"
+      EGRESS_AUDIO_CPU_COST: "0.5"

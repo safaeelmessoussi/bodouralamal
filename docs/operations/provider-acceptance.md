@@ -50,7 +50,7 @@ required row has a written answer or an executed technical proof.
 | Host storage | Approximately 200 GB NVMe, usable capacity, filesystem, stated IOPS/throughput and contention model | Persistent storage suitable for PostgreSQL and the selected object store |
 | Expansion | Increment, maximum size, lead time, downtime and whether shrinking/rebuild is involved | Growth path documented before purchase |
 | Snapshots | Crash/application consistency, schedule, retention, encryption, restore method and physical location | Supplemental only; never a substitute for the §6 recovery point |
-| Network | Public IPv4, bandwidth/transfer allowance, port policy and stable-IP behavior during resize/recovery | One preserved public IPv4; SSH and TCP 80/443 permitted |
+| Network | Public IPv4, bandwidth/transfer allowance, port policy and stable-IP behavior during resize/recovery | One preserved public IPv4; SSH, TCP 80/443 **and the online-class media ports 7881/tcp and 7882/udp (inbound UDP must not be filtered)** permitted |
 | Administration | Root/sudo, key-only SSH, serial/VNC console, rescue mode and reinstall workflow | Repository host contract can be implemented without an auth bypass |
 | Network defence | Provider firewall, anti-DDoS scope and response process | Controls documented; PostgreSQL/object storage remain unpublished |
 | Reliability | SLA, maintenance notice, host redundancy and incident escalation | Written service and escalation boundaries |

@@ -64,72 +64,23 @@ services:
       # substitutes one value rather than a different security posture.
       - ./nginx/snippets/media-origin.dev.conf:/etc/nginx/snippets/media-origin.conf:ro
 
-  # ── R98: a REAL LiveKit server, locally, on no paid credentials ────────────
+  # ── Online classes on Localhost (SRS Revision 164) ─────────────────────────
   #
-  # `--dev` runs the whole signalling stack in one container with a fixed key
-  # pair, which is what lets `verify-livekit-join` prove an actual join instead
-  # of asserting that a mock was called. It is a DEV OVERLAY service and is
-  # deliberately absent from docker-compose.yml: production points at LiveKit
-  # Cloud (or a self-hosted deployment) through LIVEKIT_URL and never at this.
+  # The media server, its recorder and Redis are defined ONCE, in
+  # docker-compose.yml, and run here exactly as they do on Staging and in
+  # Production. This overlay adds only what is Localhost's: loopback ports.
   #
-  # **No Egress and no Redis.** Recording is Section C, and `--dev` carries
-  # neither — see `docs/development/online-class-provider.md`, which recorded
-  # that finding before this container existed.
+  # `.env` for Localhost (docs/development/online-class-provider.md):
+  #   LIVEKIT_URL=ws://localhost          the same same-origin /rtc route as release
+  #   LIVEKIT_API_URL=http://livekit:7880
+  #   LIVEKIT_API_KEY / LIVEKIT_API_SECRET  any local pair (secret >= 32 chars)
+  #   LIVEKIT_NODE_IP=                     empty: the container's own address is
+  #                                        advertised, which this machine reaches
   livekit:
-    image: livekit/livekit-server:v1.9.1
-    # **A config file, not `--dev`** (R99): the flag cannot express the Redis
-    # address Egress needs to receive jobs, nor the webhook target that tells
-    # the platform a recording finished. The key pair is fixed and committed ON
-    # PURPOSE — it authorises nothing beyond these loopback containers, and a
-    # generated one could not be written into .env.example.
-    command: --config /etc/livekit.yaml
-    volumes:
-      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
-    depends_on:
-      - redis
     ports:
-      # The BROWSER connects to LiveKit directly, so unlike db and minio this
-      # one has to be reachable from the host — that is what LIVEKIT_URL points
-      # at in development (`ws://127.0.0.1:7880`). Loopback-bound, as everything
-      # in this overlay is.
-      - "127.0.0.1:7880:7880"
+      # Media, on loopback only — a developer's laptop is not a media server.
       - "127.0.0.1:7881:7881"
       - "127.0.0.1:7882:7882/udp"
-    restart: unless-stopped
-
-  # ── R99: Redis, and a REAL Egress worker ──────────────────────────────────
-  #
-  # `livekit-server --dev` records nothing: Egress is a SEPARATE service and it
-  # needs Redis to receive jobs — the finding `online-class-provider.md` recorded
-  # before either container existed, now paid for rather than rediscovered.
-  #
-  # Both are DEV-OVERLAY services and are deliberately absent from
-  # docker-compose.yml. A production deployment points at LiveKit Cloud (or a
-  # self-hosted stack) and does not run these; the API talks to whatever
-  # LIVEKIT_URL names.
-  redis:
-    image: redis:8.2-alpine
-    # Recording jobs are transient work, not data: an AOF/RDB file here would be
-    # a durability promise nothing depends on.
-    command: redis-server --save "" --appendonly no
-    restart: unless-stopped
-
-  # The Egress worker runs a headless browser to composite the room, which is
-  # why the image is large and why it needs the shared-memory bump: the default
-  # 64 MB /dev/shm makes Chrome crash part-way through a long lesson.
-  livekit-egress:
-    image: livekit/egress:v1.9.1
-    environment:
-      EGRESS_CONFIG_FILE: /etc/egress.yaml
-    volumes:
-      - ./infra/egress/egress.yaml:/etc/egress.yaml:ro
-    shm_size: 1gb
-    # It reaches LiveKit and MinIO by SERVICE NAME on the internal network —
-    # this is the architecture LiveKit Cloud cannot have, and it is why local
-    # verification can write a real object into the platform's own MinIO while
-    # a Cloud deployment must be ingested from the provider's bucket instead.
-    depends_on:
-      - redis
-      - livekit
-      - minio
-    restart: unless-stopped
+      # Signalling reaches the browser through Nginx (/rtc) like every tier;
+      # this direct port exists only for debugging the proxy itself.
+      - "127.0.0.1:7880:7880"

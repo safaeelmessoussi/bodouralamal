@@ -12,12 +12,12 @@ deliberately narrow:
 | Concern | Required state |
 |---|---|
 | OS | Ubuntu Server **22.04 LTS or 24.04 LTS**, x86_64/AMD64; no derivative distribution |
-| Capacity | At least 4 GB RAM, swap present, and an **Owner-approved free-disk floor** on the filesystem holding Docker's data root |
+| Capacity | At least 4 GB RAM, swap present, and an **Owner-approved free-disk floor** on the filesystem holding Docker's data root. **CPUs: at least 2 on Staging and at least 4 in Production** — measured, not a vendor default: one 720p class recording peaks at ~1.9 cores ([evidence](../development/online-class-provider.md#what-it-actually-costs-measured)); preflight refuses a smaller host |
 | Runtime | Docker Engine from Docker's official Ubuntu repository, local rootful system daemon enabled at boot; Docker Compose **2.24.4 or newer** |
 | Operator | One dedicated non-root deployment account, SSH public-key access only, member of `docker`, with non-interactive root authority for the read-only `/usr/sbin/sshd -T -C …` preflight inspection; no shared login |
 | Checkout | `/opt/bodour`, owned by that account, not group/world-writable; approved commit checked out detached and clean |
 | State | Docker named volumes `bodour_db-data`, `bodour_seaweedfs-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage — the same four names for every tier (Owner decision, 2026-09-20) |
-| Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; only SSH and TCP 80/443 admitted externally |
+| Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; admitted externally: SSH, TCP 80/443, and the two online-class media ports **7881/tcp and 7882/udp** — nothing else |
 | Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics |
 | Secrets | `.env` and `infra.env` are regular, deployment-user-owned mode-`0600` files; an optional Docker credential file is held to the same rule |
 
@@ -101,6 +101,8 @@ sudo ufw default allow outgoing
 sudo ufw allow <ssh-port>/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw allow 7881/tcp   # online-class media, TCP fallback (SRS R164)
+sudo ufw allow 7882/udp   # online-class media, the one multiplexed UDP port
 sudo ufw enable
 sudo systemctl enable --now docker containerd ssh ufw systemd-timesyncd apt-daily-upgrade.timer
 sudo dpkg-reconfigure --priority=low unattended-upgrades
@@ -112,10 +114,14 @@ Reboot after the initial upgrade when `/var/run/reboot-required` exists, then re
 `bodour-deploy`; preflight refuses to deploy across a pending kernel/system reboot.
 
 Docker-published ports bypass ordinary UFW forwarding rules. The release therefore relies on
-the stronger structural fact checked in CI and again by host preflight: **only Nginx publishes
-ports, and only 80/443**. PostgreSQL and object storage never receive a host binding. Verify the
-provider's network firewall independently with the same three admitted ports; do not expose a
-management console or Docker socket.
+the stronger structural fact checked in CI and again by host preflight: **exactly four ports are
+published, and each has one owner — Nginx 80/443, and the self-hosted media server 7881/tcp and
+7882/udp** (SRS Revision 164). WebRTC media is UDP with a TCP fallback and cannot pass through a web
+proxy, which is the whole reason the two exist; the media server's *signalling* port (7880) is
+proxied by Nginx as `/rtc` and is never published, and PostgreSQL, the object store, Redis and the
+recorder never receive a host binding. Verify the provider's network firewall independently with
+the same admitted ports — SSH, 80, 443, 7881/tcp, 7882/udp; do not expose a management console or
+Docker socket.
 
 Container stdout/stderr is already bounded per service at 10 MB × 5 through Docker's `local`
 driver. Bound the host journal as well in `/etc/systemd/journald.conf.d/60-bodour.conf` with
@@ -184,7 +190,7 @@ bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PU
 #    defines the one SeaweedFS model every tier shares (Owner decision,
 #    2026-09-20).
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml pull api nginx minio minio-init
+  -f docker-compose.production.yml pull api nginx minio minio-init livekit livekit-egress redis
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
@@ -236,6 +242,17 @@ bash scripts/deploy/enable-tls.sh <domain> production
 curl --fail-with-body --silent --show-error --max-time 15 https://<domain>/healthz
 #    Any non-200 response, including a truthful 503 from a dependency/worker
 #    failure, stops the deployment verification instead of looking successful.
+
+#    Online classes (SRS R164). `/healthz` is TD-14's fixed contract and does not
+#    cover the media stack, so it is verified on its own: three healthy
+#    containers, the recorder accepting this host's CPU budget, and signalling
+#    answering THROUGH the edge (401 is the media server refusing a request that
+#    carries no room token — index.html here would mean the route is missing).
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml ps livekit livekit-egress redis
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml logs livekit-egress | grep -E 'cpu available|not enough cpu'
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 https://<domain>/rtc/validate)" = 401
 
 # 10 The Super Admin performs their first Google login
 #    (the identity binds to the pre-provisioned account)

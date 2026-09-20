@@ -38,12 +38,18 @@ if valid_public_ipv4 127.0.0.1 || valid_public_ipv4 10.0.0.1; then
 fi
 
 release='ffffffffffffffffffffffffffffffffffffffff'
+# A globally routable documentation-style address the validator is handed as the
+# host's approved public IPv4, and the media server as its NODE_IP.
+public_ipv4='196.70.1.1'
 # One SeaweedFS model for every tier (Owner decision, 2026-09-20):
 # docker-compose.yml alone already defines it, so there is no longer a
 # separate storage file for either tier's resolved graph to include or omit.
 resolved="$({
   MINIO_ACCESS_KEY=preflight-access \
   MINIO_SECRET_KEY=preflight-secret-password \
+  LIVEKIT_API_KEY=preflight-media-key \
+  LIVEKIT_API_SECRET=preflight-media-secret-more-than-thirty-two-bytes \
+  LIVEKIT_NODE_IP="$public_ipv4" \
   BODOUR_RELEASE_TAG="$release" \
     docker compose \
       --file "$repo_root/docker-compose.yml" \
@@ -53,16 +59,35 @@ resolved="$({
       --profile production config --format json
 })"
 printf '%s' "$resolved" |
-  validate_resolved_compose production preflight.invalid "$release" production fresh ||
+  validate_resolved_compose production preflight.invalid "$release" production fresh "$public_ipv4" ||
   fail 'the real release graph no longer satisfies host preflight'
 
 # Prove the semantic validator can fail on the bypass it exists to prevent:
 # one host-published API port must be rejected even when every other field is valid.
 if printf '%s' "$resolved" |
   python3 -c 'import json,sys; value=json.load(sys.stdin); value["services"]["api"]["ports"]=[{"published":"3000","target":3000,"protocol":"tcp"}]; json.dump(value,sys.stdout)' |
-  validate_resolved_compose production preflight.invalid "$release" production fresh 2>/dev/null; then
+  validate_resolved_compose production preflight.invalid "$release" production fresh "$public_ipv4" 2>/dev/null; then
   fail 'resolved-topology validator did not reject a host-published API port'
 fi
+# **The media rule must be able to fail** (SRS Revision 164): exactly two media
+# ports and never the signalling one, a stated public address, one key pair
+# shared by the application, the media server and the recorder, and no STUN.
+for mutation in signalling-port extra-port loopback node-ip keys stun url; do
+  if printf '%s' "$resolved" |
+    python3 -c 'import json,sys; value=json.load(sys.stdin); lk=value["services"]["livekit"]
+m=sys.argv[1]
+if m == "signalling-port": lk["ports"].append({"published":"7880","target":7880,"protocol":"tcp"})
+elif m == "extra-port": value["services"]["redis"]["ports"]=[{"published":"6379","target":6379,"protocol":"tcp"}]
+elif m == "loopback": lk["ports"][0]["host_ip"]="127.0.0.1"
+elif m == "node-ip": lk["environment"]["NODE_IP"]="203.0.113.9"
+elif m == "keys": value["services"]["livekit-egress"]["environment"]["LIVEKIT_API_SECRET"]="a-different-secret-than-the-application-holds"
+elif m == "stun": lk["environment"]["LIVEKIT_CONFIG"]=lk["environment"]["LIVEKIT_CONFIG"].replace("use_external_ip: false","use_external_ip: true")
+else: value["services"]["api"]["environment"]["LIVEKIT_URL"]="wss://media.example.cloud"
+json.dump(value,sys.stdout)' "$mutation" |
+    validate_resolved_compose production preflight.invalid "$release" production fresh "$public_ipv4" 2>/dev/null; then
+    fail "resolved-topology validator did not reject an unsafe media $mutation"
+  fi
+done
 # Replacement storage must not be a tag-only substitution or reuse MinIO bytes.
 for mutation in image volume copy; do
   if printf '%s' "$resolved" |
@@ -73,7 +98,7 @@ else:
     for mount in value["services"]["minio"]["volumes"]:
         if mount["target"] == "/data": mount["volume"]["nocopy"] = False
 json.dump(value,sys.stdout)' "$mutation" |
-    validate_resolved_compose production preflight.invalid "$release" production fresh 2>/dev/null; then
+    validate_resolved_compose production preflight.invalid "$release" production fresh "$public_ipv4" 2>/dev/null; then
     fail "resolved-topology validator did not reject unsafe storage $mutation"
   fi
 done
@@ -87,6 +112,9 @@ unset resolved
 resolved="$({
   MINIO_ACCESS_KEY=preflight-access \
   MINIO_SECRET_KEY=preflight-secret-password \
+  LIVEKIT_API_KEY=preflight-media-key \
+  LIVEKIT_API_SECRET=preflight-media-secret-more-than-thirty-two-bytes \
+  LIVEKIT_NODE_IP="$public_ipv4" \
   BODOUR_RELEASE_TAG="$release" \
     docker compose \
       --file "$repo_root/docker-compose.yml" \
@@ -96,7 +124,7 @@ resolved="$({
       --profile production config --format json
 })"
 printf '%s' "$resolved" |
-  validate_resolved_compose staging preflight.invalid "$release" development fresh ||
+  validate_resolved_compose staging preflight.invalid "$release" development fresh "$public_ipv4" ||
   fail 'the real Staging release graph no longer satisfies host preflight'
 unset resolved
 
@@ -127,6 +155,10 @@ for invariant in \
   "resolved application images do not match the approved commit" \
   "non-edge service publishes host ports" \
   "Nginx must publish exactly TCP 80 and 443" \
+  "the media server must publish exactly 7881/tcp and 7882/udp, and never its signalling port" \
+  "LIVEKIT_NODE_IP must be the approved public IPv4 of this host" \
+  "the media server must not discover its address through an external STUN service" \
+  "MIN_CPUS_PRODUCTION=4" \
   "persistent volume catalogue differs from the recovery-point contract" \
   "docker manifest inspect"; do
   grep -Fq "$invariant" "$preflight" || fail "preflight lost invariant: $invariant"

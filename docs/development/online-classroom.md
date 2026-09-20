@@ -392,8 +392,10 @@ Redis**. Both are dev-overlay containers, absent from `docker-compose.yml`:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis livekit livekit-egress
 ```
 
-LiveKit runs from `infra/livekit/livekit.yaml` rather than `--dev`, because the
-flag cannot express a Redis address or a webhook target. The Egress worker runs
+LiveKit runs from an explicit configuration rather than `--dev`, because the
+flag cannot express a Redis address or a webhook target. Since SRS Revision 164 that
+configuration lives in `docker-compose.yml` itself and is the same on every tier
+([how it is deployed](online-class-provider.md#how-it-is-deployed-srs-revision-164)). The Egress worker runs
 a headless browser to composite the room, so it needs `shm_size: 1gb` — the
 default 64 MB makes Chrome crash part-way through a long lesson.
 

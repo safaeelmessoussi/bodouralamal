@@ -140,7 +140,8 @@ The same service topology as Production, through `docker-compose`; API and web i
 built from the working source rather than pulled from GHCR:
 
 ```
-nginx   ← the only public edge (release tiers: 80/443; Local: loopback HTTP 80 only)
+nginx   ← the only public WEB edge (release tiers: 80/443; Local: loopback HTTP 80 only)
+livekit ← online-class MEDIA only: 7881/tcp + 7882/udp (release tiers; Local: loopback). Signalling comes through nginx as /rtc
 api     ← Node + Express, pg-boss workers in-process
 db      ← PostgreSQL 18.4, with the production memory and pool pins
 minio   ← dual buckets, created idempotently by a one-shot init container

@@ -19,6 +19,13 @@ services:
       SUPER_ADMIN_EMAIL: safae.elmessoussi@gmail.com
       SUPER_ADMIN_SEX: female
       BACKUP_TARGET_SSH: restic@backup.invalid:/srv/bodour-preflight
+      # SRS Revision 164 — the application half of the media settings. The media
+      # server and the recorder read the SAME values from the variables the
+      # guard exports, exactly as a host's `.env` feeds both halves.
+      LIVEKIT_URL: wss://preflight.invalid
+      LIVEKIT_API_URL: http://livekit:7880
+      LIVEKIT_API_KEY: preflight-media-key
+      LIVEKIT_API_SECRET: preflight-media-secret-more-than-thirty-two-bytes
 
   db:
     env_file: !reset []

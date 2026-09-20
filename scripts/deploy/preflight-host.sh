@@ -6,6 +6,13 @@ set -euo pipefail
 
 MIN_COMPOSE_VERSION='2.24.4'
 MIN_MEMORY_KIB=3700000
+# **CPU floors, MEASURED — not the media vendor's default** (SRS Revision 164,
+# `docs/development/online-class-provider.md`). One 720p room recording peaks at
+# ~1.9 cores. Two cores therefore carry ONE recording with the rest of the stack
+# slowed for its length — acceptable where the data is synthetic, and not where
+# real beneficiaries are being served at the same moment.
+MIN_CPUS_STAGING=2
+MIN_CPUS_PRODUCTION=4
 EXPECTED_CHECKOUT='/opt/bodour'
 
 fail() {
@@ -51,6 +58,7 @@ require_private_file() {
 
 validate_resolved_compose() {
   local tier="$1" domain="$2" release="$3" expected_node_env="$4" deployment_state="$5"
+  local expected_ipv4="$6"
   local storage_image
   storage_image="$(awk '/^    image: chrislusf\/seaweedfs:/ { print $2 }' "$(dirname "${BASH_SOURCE[0]}")/../../docker-compose.yml")"
   python3 -c '
@@ -58,10 +66,14 @@ import json
 import sys
 from urllib.parse import unquote, urlparse
 
-tier, domain, release, expected_node_env, deployment_state, storage_image = sys.argv[1:]
+tier, domain, release, expected_node_env, deployment_state, storage_image, expected_ipv4 = sys.argv[1:]
 model = json.load(sys.stdin)
 services = model.get("services", {})
-expected_services = {"api", "certbot", "db", "minio", "minio-init", "nginx"}
+expected_services = {
+    "api", "certbot", "db", "minio", "minio-init", "nginx",
+    # SRS Revision 164 — the self-hosted media stack, the same on every tier.
+    "livekit", "livekit-egress", "redis",
+}
 if set(services) != expected_services:
     raise SystemExit("resolved service catalogue differs from the audited release topology")
 
@@ -76,6 +88,8 @@ required = (
     "DATABASE_URL", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "JWT_SIGNING_KEY",
     "ONBOARDING_TOKEN_KEY", "EMAIL_LOCK_KEY", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
     "PUBLIC_BASE_URL", "STORAGE_BASE_URL",
+    # SRS Revision 164 — online classes are part of every release tier.
+    "LIVEKIT_URL", "LIVEKIT_API_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET",
 )
 if any(not api_env.get(name) for name in required):
     raise SystemExit("one or more required application settings are empty")
@@ -139,24 +153,68 @@ web_image = f"ghcr.io/safaeelmessoussi/bodouralamal-web:{release}"
 if api.get("image") != api_image or nginx.get("image") != web_image:
     raise SystemExit("resolved application images do not match the approved commit")
 
+# **Exactly four host ports, and which service owns each** (SRS Revision 164).
+# WebRTC media is UDP with a TCP fallback and cannot pass through a web proxy, so
+# the media server owns two; the signalling port (7880) is proxied by Nginx as
+# `/rtc` and must NEVER be published, and nothing else may publish anything.
+livekit = services["livekit"]
 for name, service in services.items():
     ports = service.get("ports", [])
-    if name != "nginx" and ports:
+    if name not in ("nginx", "livekit") and ports:
         raise SystemExit(f"non-edge service publishes host ports: {name}")
-edge_ports = {(str(item.get("published")), item.get("target"), item.get("protocol")) for item in nginx.get("ports", [])}
-if edge_ports != {("80", 80, "tcp"), ("443", 443, "tcp")}:
+def published(service):
+    return {(str(item.get("published")), item.get("target"), item.get("protocol")) for item in service.get("ports", [])}
+if published(nginx) != {("80", 80, "tcp"), ("443", 443, "tcp")}:
     raise SystemExit("Nginx must publish exactly TCP 80 and 443")
+if published(livekit) != {("7881", 7881, "tcp"), ("7882", 7882, "udp")}:
+    raise SystemExit("the media server must publish exactly 7881/tcp and 7882/udp, and never its signalling port")
+if any(item.get("host_ip") not in (None, "", "0.0.0.0") for item in livekit.get("ports", [])):
+    raise SystemExit("release media ports must not be bound to loopback")
+
+# The settings of the media stack, held to those of the application.
+egress = services["livekit-egress"]
+livekit_env = livekit.get("environment", {})
+egress_env = egress.get("environment", {})
+if api_env["LIVEKIT_URL"] != f"wss://{domain}":
+    raise SystemExit("LIVEKIT_URL must be the same-origin wss:// address of this domain (signalling is proxied as /rtc)")
+if api_env["LIVEKIT_API_URL"] != "http://livekit:7880":
+    raise SystemExit("LIVEKIT_API_URL must remain the internal media-server address")
+if len(api_env["LIVEKIT_API_SECRET"].encode()) < 32:
+    raise SystemExit("LIVEKIT_API_SECRET must be at least 32 bytes")
+if api_env["LIVEKIT_API_SECRET"] in (
+    api_env["JWT_SIGNING_KEY"], api_env["ONBOARDING_TOKEN_KEY"], api_env["EMAIL_LOCK_KEY"], api_env["MINIO_SECRET_KEY"]
+):
+    raise SystemExit("LIVEKIT_API_SECRET must be a dedicated secret")
+if livekit_env.get("LIVEKIT_KEYS") != "{}: {}".format(api_env["LIVEKIT_API_KEY"], api_env["LIVEKIT_API_SECRET"]):
+    raise SystemExit("media-server key pair does not match the application key pair")
+if any(egress_env.get(key) != api_env[key] for key in ("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")):
+    raise SystemExit("recorder key pair does not match the application key pair")
+# Stated, never discovered: asking a public STUN service for the address of this
+# host would be the one third-party call in the whole media path.
+if livekit_env.get("NODE_IP") != expected_ipv4:
+    raise SystemExit("LIVEKIT_NODE_IP must be the approved public IPv4 of this host")
+if "use_external_ip: false" not in livekit_env.get("LIVEKIT_CONFIG", ""):
+    raise SystemExit("the media server must not discover its address through an external STUN service")
+if "udp_port: 7882" not in livekit_env.get("LIVEKIT_CONFIG", "") or "tcp_port: 7881" not in livekit_env.get("LIVEKIT_CONFIG", ""):
+    raise SystemExit("the media server must use the single published UDP and TCP media ports")
+for key in ("EGRESS_VIDEO_CPU_COST", "EGRESS_AUDIO_CPU_COST"):
+    try:
+        cost = float(egress_env.get(key, ""))
+    except ValueError:
+        raise SystemExit(f"{key} must be a number of CPU cores")
+    if cost <= 0:
+        raise SystemExit(f"{key} must be positive")
 
 for name, service in services.items():
     logging = service.get("logging", {})
     if logging.get("driver") != "local" or logging.get("options") != {"max-file": "5", "max-size": "10m"}:
         raise SystemExit(f"service lacks the bounded log policy: {name}")
-for name in ("api", "certbot", "db", "minio", "nginx"):
+for name in ("api", "certbot", "db", "minio", "nginx", "livekit", "livekit-egress", "redis"):
     if services[name].get("restart") != "unless-stopped":
         raise SystemExit(f"long-running service lacks reboot recovery: {name}")
 if set(model.get("volumes", {})) != {"db-data", "minio-data", "certbot-conf", "certbot-www"}:
     raise SystemExit("persistent volume catalogue differs from the recovery-point contract")
-' "$tier" "$domain" "$release" "$expected_node_env" "$deployment_state" "$storage_image"
+' "$tier" "$domain" "$release" "$expected_node_env" "$deployment_state" "$storage_image" "$expected_ipv4"
 }
 
 main() {
@@ -245,6 +303,12 @@ main() {
   compose_version="$(docker compose version --short)" || fail 'Docker Compose plugin is unavailable'
   version_at_least "$compose_version" "$MIN_COMPOSE_VERSION" ||
     fail "Docker Compose $MIN_COMPOSE_VERSION or newer is required (found $compose_version)"
+
+  local cpus minimum_cpus
+  cpus="$(nproc)"
+  if [[ "$tier" == production ]]; then minimum_cpus="$MIN_CPUS_PRODUCTION"; else minimum_cpus="$MIN_CPUS_STAGING"; fi
+  [[ "$cpus" =~ ^[0-9]+$ && "$cpus" -ge "$minimum_cpus" ]] ||
+    fail "host has ${cpus:-unknown} CPU(s); a $tier host recording online classes needs at least $minimum_cpus"
 
   memory_kib="$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
   swap_kib="$(awk '/^SwapTotal:/ { print $2 }' /proc/meminfo)"
@@ -341,7 +405,7 @@ main() {
   resolved_json="$("${compose[@]}" --profile production config --format json)" ||
     fail 'release Compose model does not resolve with the installed secret files'
   if ! printf '%s' "$resolved_json" |
-    validate_resolved_compose "$tier" "$domain" "$release_tag" "$expected_node_env" "$deployment_state"; then
+    validate_resolved_compose "$tier" "$domain" "$release_tag" "$expected_node_env" "$deployment_state" "$expected_ipv4"; then
     unset resolved_json
     fail 'resolved release configuration violates the audited deployment boundary'
   fi

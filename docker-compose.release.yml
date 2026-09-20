@@ -25,3 +25,12 @@ services:
 
   minio-init:
     image: ${BODOUR_STORAGE_INIT_IMAGE:-ghcr.io/safaeelmessoussi/bodouralamal-api:${BODOUR_RELEASE_TAG:-unset}}
+
+  # **The only host ports besides Nginx's 80/443** (SRS Revision 164). WebRTC
+  # media is UDP with a TCP fallback, not HTTP, so it cannot pass through the web
+  # edge; signalling does, as `wss://<domain>/rtc`, and 7880 is never published.
+  # Open exactly these two in the host and provider firewalls — nothing else.
+  livekit:
+    ports:
+      - "7881:7881/tcp"
+      - "7882:7882/udp"

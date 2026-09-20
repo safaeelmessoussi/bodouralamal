@@ -11,8 +11,12 @@
 # Image majors locked at M1 per §3.1a (see docs/CHANGES.log M1.1):
 #   postgres 18 (floor 17; Debian variant — ICU required for ar-x-icu, TD-6a)
 #   nginx stable branch
-# Only Nginx publishes host ports — db/minio are reachable exclusively on the
-# internal network (§19.1 posture; local tooling uses `docker compose exec`).
+# Host ports (§19.1 as revised by SRS Revision 164): Nginx publishes 80/443, and
+# the self-hosted media server publishes exactly TWO more — 7881/tcp and
+# 7882/udp — because WebRTC media is not HTTP and cannot come through a web
+# proxy. Those two are added by the release overlay, never here. Everything
+# else — db, the object store, Redis, Egress, and the media server's own
+# signalling port — is reachable on the internal network only.
 #
 # Object storage: ONE SeaweedFS 4.46 model for Localhost, Staging and
 # Production (Owner decision, 2026-09-20 — see docs/architecture/storage.md).
@@ -186,6 +190,142 @@ services:
     depends_on:
       - api
       - minio
+    logging: *bounded-local-logging
+    restart: unless-stopped
+
+  # ── Online classes: SELF-HOSTED, and the same three services on every tier ──
+  #
+  # SRS Revision 164 (Owner decision, 2026-09-20): Localhost, Staging and
+  # Production run one media architecture — LiveKit, its Egress recorder and the
+  # Redis they coordinate through — and beneficiaries' audio, video and
+  # recordings never leave this infrastructure. No LiveKit Cloud, no third-party
+  # STUN/TURN, no external bucket: Egress writes each recording straight into
+  # THIS deployment's object store over the internal network (`minio:9000`),
+  # using the target the API hands it per request (`online-class-provider.ts`).
+  #
+  # Defined HERE, not in an overlay, for the reason object storage is: a tier
+  # must not run a different media model because a file was included or omitted.
+  # The API does not `depends_on` any of them — the platform serves everything
+  # else while the media server is down, and says so on «دخول الحصة» (R98).
+  livekit:
+    image: livekit/livekit-server:v1.9.1
+    environment:
+      # The whole configuration, with NO secret in it: the key pair arrives
+      # separately through LIVEKIT_KEYS, so nothing in Git or in
+      # `docker compose config` of this block names a credential.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        bind_addresses:
+          - "0.0.0.0"
+        rtc:
+          tcp_port: 7881
+          # ONE multiplexed UDP port for every participant, so the firewall
+          # opens a single UDP port rather than a range.
+          udp_port: 7882
+          # Never ask a public STUN server (Google's, by default) what this
+          # host's address is: release tiers STATE it (NODE_IP below).
+          use_external_ip: false
+        redis:
+          address: redis:6379
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:-}
+          urls:
+            - http://api:3000/api/v1/integrations/online-class/callback
+        logging:
+          level: info
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+      # The address browsers are told to send media to. Release tiers set the
+      # host's public IPv4 (host preflight holds it to the approved one);
+      # Localhost leaves it empty and the container's own address is
+      # advertised, which the same machine's browser reaches directly.
+      NODE_IP: ${LIVEKIT_NODE_IP:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    logging: *bounded-local-logging
+    restart: unless-stopped
+
+  # Room and recording state shared between the media server and Egress.
+  # Ephemeral by design: it persists nothing and a restart loses no recording —
+  # the recording's own lifecycle lives in PostgreSQL.
+  redis:
+    image: redis:8.2-alpine
+    command: redis-server --save "" --appendonly no --maxmemory 48mb --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *bounded-local-logging
+    restart: unless-stopped
+
+  # The recorder. It joins a room as a hidden participant, composites it in a
+  # headless browser and uploads the finished file to the object store.
+  livekit-egress:
+    image: livekit/egress:v1.9.1
+    # A shell in front of the image's own entrypoint, for one reason: the CPU
+    # costs below differ per tier and Compose can only merge them as container
+    # environment, which Egress does not read — so they are written into its
+    # config here. `set -e` only, never `-x`: this script holds the API secret.
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$${LIVEKIT_API_KEY}" || { echo "egress: LIVEKIT_API_KEY is required" >&2; exit 1; }
+        test -n "$${LIVEKIT_API_SECRET}" || { echo "egress: LIVEKIT_API_SECRET is required" >&2; exit 1; }
+        export EGRESS_CONFIG_BODY="
+        api_key: $${LIVEKIT_API_KEY}
+        api_secret: $${LIVEKIT_API_SECRET}
+        ws_url: ws://livekit:7880
+        insecure: true
+        health_port: 9090
+        log_level: info
+        redis:
+          address: redis:6379
+        cpu_cost:
+          room_composite_cpu_cost: $${EGRESS_VIDEO_CPU_COST}
+          audio_room_composite_cpu_cost: $${EGRESS_AUDIO_CPU_COST}
+          web_cpu_cost: $${EGRESS_VIDEO_CPU_COST}
+          audio_web_cpu_cost: $${EGRESS_AUDIO_CPU_COST}
+          participant_cpu_cost: $${EGRESS_VIDEO_CPU_COST}
+          track_composite_cpu_cost: $${EGRESS_VIDEO_CPU_COST}
+          track_cpu_cost: $${EGRESS_AUDIO_CPU_COST}
+        "
+        exec /entrypoint.sh
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      # **What Egress believes a recording costs, in CPU cores — MEASURED, not
+      # the upstream default** (2026-09-20, `online-class-provider.md`). Egress
+      # refuses a request when fewer than this many cores are idle, and its
+      # default for a room recording is 4: on a 2-vCPU host every VIDEO
+      # recording was refused with `503` while audio worked. A real 720p/30
+      # room recording peaks at ~1.9 cores and ~700 MiB; an audio-only one
+      # settles at ~0.3 core and ~360 MiB. These are the general values; a
+      # smaller tier states its own in its overlay.
+      EGRESS_VIDEO_CPU_COST: "2.0"
+      EGRESS_AUDIO_CPU_COST: "1.0"
+    # The compositing browser crashes part-way through a long lesson on Docker's
+    # default 64 MB of shared memory (found in R99, not assumed).
+    shm_size: 1gb
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
     logging: *bounded-local-logging
     restart: unless-stopped
 

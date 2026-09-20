@@ -5006,7 +5006,9 @@ changed destructively; Production go-live remains on hold.
       «from this date onward» split). Full local gate: 2,674 passed, one
       failure — the static soft-delete guard's forty-line look-back, fixed
       by hoisting a select into a constant. Full detail in CHANGES.log.
-- [ ] **§4 — OWNER DECISION: a media provider for Staging and Production.**
+- [x] **§4 — DECIDED by the Owner on 2026-09-20: self-hosted, on every tier —
+      built as SRS Revision 164 (section below).** Original note, kept for the
+      record — OWNER DECISION: a media provider for Staging and Production.
       «خدمة الحصص عن بُعد غير مهيّأة بعد» is the truthful answer, not a
       defect: no release tier has ever had a provider. LiveKit Cloud (account,
       cost, media outside Morocco, no recording into our store) or
@@ -5060,3 +5062,46 @@ changed destructively; Production go-live remains on hold.
       still reads its Subject, its dialog reads what was typed) and an
       anonymous reader is offered no attendance anywhere. No Production
       action.
+
+## SRS Revision 164 — self-hosted online classes on every tier — 2026-09-20
+
+Owner decision: LiveKit + Egress + Redis, self-hosted, one architecture on
+Localhost, Staging and Production; no LiveKit Cloud; media and recordings stay
+in our infrastructure; the 80/443-only rule relaxed to the minimum WebRTC needs.
+
+- [x] **Resources verified BEFORE building**, with real rooms and recordings:
+      video recording 1.7–1.9 cores / ~700 MiB, audio-only 0.2–0.35 core /
+      ~360 MiB, media server 0.35 core / 140 MiB. Whole stack confined to two
+      cores: still true 30 fps (888 frames in 29.6 s), 1.98 of 2 cores,
+      1.33 GiB.
+- [x] **The defect that measurement found:** Egress prices a room recording at
+      4 cores by default and refuses what it thinks the host cannot afford —
+      under a 2-CPU quota every VIDEO recording answered `503` while audio
+      worked. Costs now set from measurement (2.0 / 1.0; Staging 1.5 / 0.5).
+- [x] **One model in `docker-compose.yml`** (not an overlay): `livekit`,
+      `livekit-egress`, `redis`, each with a health check, bounded logs and a
+      restart policy; configuration passed as environment bodies, no secret in
+      Git; the two dev-only config files deleted.
+- [x] **Ports: exactly 7881/tcp and 7882/udp added**, by the release overlay.
+      Signalling is same-origin (`wss://<domain>/rtc` through Nginx); 7880 is
+      never published; one multiplexed UDP port, no range.
+- [x] **No third-party STUN:** the host's address is stated
+      (`LIVEKIT_NODE_IP`), and preflight holds it to the approved public IPv4.
+- [x] **Preflight and CI enforce the new rule** — nine services, the exact four
+      ports, one key pair across API/media server/recorder, a dedicated secret,
+      a same-origin `LIVEKIT_URL`, CPU floors (Staging 2, Production 4) — with
+      seven mutation tests proving each can fail.
+- [x] **Recordings leave no residue:** Egress's unused `EG_*.json` manifest is
+      switched off; the staging bucket is left exactly as it was found.
+- [x] Localhost, real browser: `verify-livekit-join` **61/61** with a real MP4
+      and OGG through the same-origin route; `verify-livekit-ingest` **27/27**;
+      and **61/61 again with a stated host address and media ports on every
+      interface** — the release network shape, recordings included.
+- [x] Documentation: SRS R164 (and TD-13), provider decision page rewritten
+      around the measurements, deployment runbook (host contract, firewall,
+      pull list, media verification step), configuration and rotation tables,
+      environments, provider matrix, readiness ledger, `.env.example`.
+- [ ] **PRODUCTION PREREQUISITES (host not yet provisioned):** at least 4
+      vCPU; 7881/tcp and 7882/udp admitted by the host AND the provider
+      firewall with inbound UDP unfiltered; `LIVEKIT_NODE_IP`; a dedicated
+      `LIVEKIT_API_SECRET`. Go-live itself remains on hold (Owner).
