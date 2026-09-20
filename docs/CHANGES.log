@@ -10659,3 +10659,20 @@ contacts, as that page requires: 4 vCPU / 8 GB meet the measured requirement; th
 limit (≈25–30 h of video or ≈250–330 h of audio before it must grow, given same-host recovery
 points); six written questions for the provider, UDP 7882 through the anti-DDoS layer first. Nothing
 ordered; Production go-live remains on hold.
+
+**Hosted CI REFUSED `ff304fb` (run `35540709338`): 7 of 8 jobs green, the seed drill red, so no
+release image was published and nothing was deployed.** I had changed the Production seed and did not
+run `verify-production-seed.sh` before pushing; its suites passed (13 + 339 + 199) and its final loop —
+every scenario seed against a freshly seeded database — did not. Two scenario seeds schedule the REAL
+seeded by-Surah Subjects through the real service: `seed-r91-scenario` (تفسير القرآن) and
+`seed-quran-scenario` (حفظ القرآن and تفسير القرآن, five classes). Both now name a Surah of their
+Level's «مقرر الحفظ» (the R91 scenario gains a one-Surah syllabus and unwinds it), which is what the
+rule asks of anybody. My first patch of the Quran scenario also landed inside a
+`studentTeachingGroup` row, and the typecheck I ran reported the exit status of the `head` it was
+piped into; removed, and re-checked on the typecheck's own exit code.
+
+Running the drill locally then failed twice on «address already in use» for a port nothing was
+listening on: its defaults (55437, 59004) sat inside Linux's ephemeral range, and a browser's
+long-lived outbound connection held local port 59004. Defaults moved to 25437 and 29004; the drill
+passes on them (exit 0, scenario seeds included). The integration stack and the backup drill default
+to the same range (55438, 58083, 59005, 59006) — recorded in TASKS, not changed here.

@@ -4,9 +4,14 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 compose_file="$repo_root/scripts/seed/fixtures/docker-compose.yml"
 project="bodour-production-seed-drill-$$"
-db_port="${PRODUCTION_SEED_DB_PORT:-55437}"
+# **Below the ephemeral range, deliberately** (2026-09-20). These defaulted to
+# 55437 and 59004, inside Linux's 32768–60999, where any outbound connection may
+# be handed the same number: a browser's long-lived connection from local port
+# 59004 made this drill fail twice with «address already in use» on a port
+# nothing was listening on. Still overridable, for a machine that needs it.
+db_port="${PRODUCTION_SEED_DB_PORT:-25437}"
 api_port="${PRODUCTION_SEED_API_PORT:-18082}"
-minio_port="${PRODUCTION_SEED_MINIO_PORT:-59004}"
+minio_port="${PRODUCTION_SEED_MINIO_PORT:-29004}"
 api_pid=""
 api_log="/tmp/${project}-api.log"
 

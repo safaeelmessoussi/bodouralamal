@@ -253,6 +253,8 @@ const wholeLevel = await createCourseSchedule(prisma, actor, {
   ...base,
   title: `${TAG} حفظ كل المستوى`,
   subjectId: quran.id,
+  // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
+  surahIds: [AL_FATIHA],
   teachingMode: 'entire_level' as const,
   targetId: levelOne.id,
   branchId: branchA.id,
@@ -269,6 +271,8 @@ const groupClass = await createCourseSchedule(prisma, actor, {
   ...base,
   title: `${TAG} حفظ المجموعة`,
   subjectId: quran.id,
+  // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
+  surahIds: [AL_FATIHA],
   teachingMode: 'administrative_group' as const,
   targetId: group.id,
   branchId: branchA.id,
@@ -282,6 +286,8 @@ const circleClass = await createCourseSchedule(prisma, actor, {
   ...base,
   title: `${TAG} حفظ الحلقة`,
   subjectId: quran.id,
+  // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
+  surahIds: [AL_FATIHA],
   teachingMode: 'teaching_group' as const,
   targetId: circle.id,
   branchId: branchA.id,
@@ -295,6 +301,8 @@ await createCourseSchedule(prisma, actor, {
   ...base,
   title: `${TAG} تفسير`,
   subjectId: tafseer.id,
+  // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
+  surahIds: [AL_FATIHA],
   teachingMode: 'entire_level' as const,
   targetId: levelOne.id,
   branchId: branchA.id,
@@ -312,6 +320,8 @@ const replaced = await createCourseSchedule(prisma, actor, {
   ...base,
   title: `${TAG} حفظ المستوى 2`,
   subjectId: quran.id,
+  // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
+  surahIds: [AL_FATIHA],
   teachingMode: 'entire_level' as const,
   targetId: levelTwo.id,
   branchId: branchA.id,

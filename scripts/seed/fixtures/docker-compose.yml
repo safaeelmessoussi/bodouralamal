@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: production-seed-drill-password
       POSTGRES_DB: bodour
     ports:
-      - "${PRODUCTION_SEED_DB_PORT:-55437}:5432"
+      - "${PRODUCTION_SEED_DB_PORT:-25437}:5432"
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
@@ -28,7 +28,7 @@ services:
       AWS_ACCESS_KEY_ID: production-seed-fixture
       AWS_SECRET_ACCESS_KEY: production-seed-fixture-secret
     ports:
-      - "${PRODUCTION_SEED_MINIO_PORT:-59004}:9000"
+      - "${PRODUCTION_SEED_MINIO_PORT:-29004}:9000"
 
 volumes:
   db-data:

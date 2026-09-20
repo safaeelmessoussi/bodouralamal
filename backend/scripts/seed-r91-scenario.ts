@@ -63,6 +63,7 @@ async function wipe(): Promise<void> {
   });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.levelSurah.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -84,6 +85,9 @@ const level = await prisma.level.create({
 // R107: Tafsir is an ordinary atomic Subject, separate from memorisation.
 const subject = await requireSeededSubject(prisma, 'تفسير القرآن');
 await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject.id } });
+// R165 §2 — تفسير القرآن works by Surah, so the class below must name one, and
+// it may only name a Surah of its Level's «مقرر الحفظ»: الفاتحة, put there here.
+await prisma.levelSurah.create({ data: { levelId: level.id, surahId: 1 } });
 const room = await prisma.room.create({
   data: { name: `${TAG} قاعة`, branchId: branch.id, capacity: 20 },
 });
@@ -133,6 +137,7 @@ const actor = {
 const created = await createCourseSchedule(prisma, actor, {
   title: `${TAG} تفسير المستوى 1`,
   subjectId: subject.id,
+  surahIds: [1],
   teachingMode: 'entire_level',
   targetId: level.id,
   branchId: branch.id,

@@ -5198,3 +5198,14 @@ editor, المواد and the browser harnesses. One migration
 - [x] `verify-class-filters` 16/16 — names not counts, one branch question,
       the required Surah, the suggested title, the inherited Surah, and the
       first-session split answering `200` and leaving one class.
+- [x] **Hosted CI refused `ff304fb`** (seed drill red, 7/8 green; no image
+      published, nothing deployed). I changed the Production seed without
+      running the drill: two scenario seeds (`seed-r91-scenario`,
+      `seed-quran-scenario`) schedule the real by-Surah Subjects through the
+      real service and named no Surah. Fixed; the drill passes locally to exit 0.
+- [x] **The seed drill's default ports moved below the ephemeral range**
+      (25437, 29004): a browser's outbound connection from local port 59004 made
+      it fail «address already in use» twice on a port nobody listened on.
+- [ ] **Same latent fragility, not changed here:** the integration stack and the
+      backup drill also default to ephemeral-range host ports (55438, 58083,
+      59005, 59006). They passed today; moving them touches CI and its docs.
