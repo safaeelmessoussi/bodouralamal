@@ -119,7 +119,11 @@ async function make(title: string, maxGrade: number): Promise<string> {
       date: new Date('2026-08-20T00:00:00Z'),
       startTime: new Date('1970-01-01T09:00:00Z'),
       endTime: new Date('1970-01-01T11:00:00Z'),
-      questions: [],
+      // R124 — a physical sitting is `published` from creation (as
+      // `exam.service` writes it); a `draft` never reaches the sittings list
+      // or the grading picker this harness drives.
+      status: 'published',
+      publishedAt: new Date(),
     },
     select: { id: true },
   });

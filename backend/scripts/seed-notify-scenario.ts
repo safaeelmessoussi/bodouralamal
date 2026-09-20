@@ -299,9 +299,11 @@ const exam = await prisma.exam.create({
     startTime: new Date('1970-01-01T09:00:00Z'),
     endTime: new Date('1970-01-01T10:00:00Z'),
     maxGrade: 20,
-    // R58/R81 — a physical sitting is organised in the platform and carries no
-    // question set; the column is a required JSON, so an empty list says so.
-    questions: [],
+    // R124 — a physical sitting is `published` from creation (as
+    // `exam.service` writes it) and carries no paper, so no `questions`; a
+    // `draft` never reaches the sittings list or the grading picker.
+    status: 'published',
+    publishedAt: new Date(),
   },
   select: { id: true },
 });

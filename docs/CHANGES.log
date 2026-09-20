@@ -10183,3 +10183,51 @@ normalized `questions` from a JSONB column into a proper relation.
 way. Neither script was touched by this pass; this is unrelated to object storage and is
 recorded here rather than fixed, since fixing it would broaden this task beyond the
 storage-backend consistency work it was scoped to.
+
+**Fixed — the two seed scripts left stale by the R124 assessment-builder migration
+(`backend/scripts/seed-notify-scenario.ts`, `backend/scripts/seed-grading-exams.ts`), recorded
+as unfixed in the storage-unification entry above. No SRS change, no application, schema or
+migration change; two fixture scripts and their ledgers only.**
+
+Reproduced before touching anything, against a disposable PostgreSQL 18 (all migrations, the
+production seed, the dev fixtures, and the pg-boss schema and queues created the way
+`startJobRunner` does): both scripts exit 1 with ``Argument `questions`: Invalid value
+provided. Expected ExamQuestionUncheckedCreateNestedManyWithoutExamInput, provided ()``.
+`questions` has been an `ExamQuestion[]` relation since R124 normalized the old JSON column;
+`questions: []` is not a valid nested-write input.
+
+The fix drops `questions: []` from both `prisma.exam.create()` calls and sets
+`status: 'published'` and `publishedAt`, which is how `exam.service` and the maintained dev
+fixture (`prisma/seed/fixtures.ts`) both write a physical sitting (R124). Removing the key
+alone would have left the schema default `draft`, and `listExams` excludes drafts by design —
+they are the assessment builder's reusable papers — so the seeded sittings would have been
+invisible to the sittings list and the grading picker these harnesses exist to drive.
+Verified rather than argued: with the real `listExams`, the two seeded grading exams are
+listed while published and absent once forced back to `draft`. The now-false comment in the
+notify script ("the column is a required JSON, so an empty list says so") was replaced.
+
+Verification: `seed-grading-exams.ts` and `seed-notify-scenario.ts` produce published,
+physical, level-targeted rows and `--clean` removes them; all eight scripts in the seed
+drill's scenario loop (delivery, dev, notify, online-join, quran, r82, r91, r92) run and
+`--clean` with exit 0 — the last five had never been reached since R124 because the loop stops
+at the first failure, and none was stale. `bash scripts/seed/verify-production-seed.sh` exits
+**0** end to end: the SQL bootstrap assertions, **547/547** Vitest tests (13 + 335 + 199) and
+the full scenario loop. ESLint is clean on both scripts. The disposable database and the
+drill's own stack were removed afterwards; the running Localhost stack was not touched.
+
+**Correction to this log's storage-unification entry and its report.** That pass called this
+drill green on the strength of its 547/547 test count. It had exited non-zero at the final
+scenario-loop step — which the entry above does record — so "all green" overstated it. It is
+green now, for the first time since R124.
+
+**Why it went unnoticed, and what was deliberately not changed.** `backend/scripts/*.ts` is in
+neither `tsconfig.json` nor `tsconfig.typecheck.json` (`include` is `src` and `prisma/seed`),
+so the compiler never saw the stale shape; and `verify-production-seed.sh`, the only routine
+that executes these scripts, is not run by hosted CI. An ad-hoc typecheck of the scripts
+directory shows the two repaired scripts clean and four type-only errors in three others, all
+of which run correctly: `generate-openapi.ts` (the synthetic config lacks
+`RECORDING_STAGING_BUCKET`; `/auth/switch-role` is defined twice, lines 261 and 273, the later
+definition winning), `seed-dev-scenario.ts:108` and `seed-r82-scenario.ts:267`. Bringing
+`scripts/` into the typecheck, and wiring the drill into CI, are recorded as open items in
+`docs/TASKS.md` rather than done here: the first needs a documentation call on the duplicated
+contract prose (that file drives `docs/openapi.json`), the second changes the CI job set.

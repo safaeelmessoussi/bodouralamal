@@ -4785,12 +4785,67 @@ the Owner's own report named.
       production-seed drill **547/547** across three suites plus SQL
       bootstrap assertions; Production-mode bootstrap dress rehearsal.
       Full detail in `docs/CHANGES.log`.
-- [x] One pre-existing, unrelated defect found and **not fixed** (out of
-      scope): `backend/scripts/seed-notify-scenario.ts` and
+- [x] One pre-existing, unrelated defect found and **not fixed here** (out
+      of scope): `backend/scripts/seed-notify-scenario.ts` and
       `seed-grading-exams.ts` both pass `questions: []` to
       `prisma.exam.create()`, which the current schema rejects since the
       R124 assessment-builder migration normalized `questions` into a
-      relation. Neither script was touched by this pass.
-- [ ] Not pushed, not deployed (Owner instruction: no remote environment
-      changes as part of this task). Production go-live remains a
-      separate, still-open decision, unaffected by this change.
+      relation. Neither script was touched by this pass. **Fixed
+      afterwards — see "Fixture-script repair after R124" below.** Note
+      that `verify-production-seed.sh` therefore did not exit clean in this
+      pass: its Vitest batches passed 547/547 but its final scenario-fixture
+      loop failed on this defect.
+- [x] Pushed to `develop` (`cd82fe6`); hosted CI 7/7 green including the
+      exact-commit image publication. **Not deployed** to any remote
+      environment (Owner instruction: no remote environment changes as part
+      of this task). Production go-live remains a separate, still-open
+      decision, unaffected by this change.
+
+## Fixture-script repair after R124 — 2026-09-20
+
+- [x] **Reproduced first**, against a disposable PostgreSQL 18 (every
+      migration applied, production seed, dev fixtures, pg-boss schema
+      created): `seed-grading-exams.ts` and `seed-notify-scenario.ts` both
+      exit 1 with ``Argument `questions`: Invalid value provided. Expected
+      ExamQuestionUncheckedCreateNestedManyWithoutExamInput, provided ()``.
+      `questions` has been an `ExamQuestion[]` relation since R124, not a
+      JSON column.
+- [x] **Fixed both** (`backend/scripts/`): dropped `questions: []` and set
+      `status: 'published'` + `publishedAt`, exactly as `exam.service` and
+      the maintained dev fixture write a physical sitting. Removing the key
+      alone would have left a `draft`, which `listExams` excludes (drafts
+      belong to the assessment builder) — invisible to the sittings list and
+      grading picker these harnesses drive. Proved against the real
+      `listExams`: published → both seeded exams listed; forced back to
+      `draft` → neither.
+- [x] All eight scripts in the seed drill's scenario loop run and `--clean`
+      with exit 0. Five (`online-join`, `quran`, `r82`, `r91`, `r92`) had
+      never been reached since R124 because the loop stops at the first
+      failure; none was stale.
+- [x] `scripts/seed/verify-production-seed.sh` now exits **0** end to end:
+      SQL bootstrap assertions, Vitest 13 + 335 + 199 = **547/547**, and the
+      full scenario loop.
+- [x] **Correction to the storage pass's report.** That pass described this
+      drill as green from its 547/547 test count; it had in fact exited
+      non-zero at its final loop step (recorded correctly in
+      `docs/CHANGES.log`, overstated in the chat summary).
+- [ ] **Open, not fixed — why this went unnoticed.** `backend/scripts/*.ts`
+      is outside both `tsconfig.json` and `tsconfig.typecheck.json`
+      (`include: ["src", "prisma/seed"]`), so the compiler could not flag
+      the stale `questions`. An ad-hoc typecheck of that directory (the two
+      repaired scripts now pass) shows four type-only errors in three other
+      scripts, all of which run correctly: `generate-openapi.ts` — the
+      synthetic config lacks `RECORDING_STAGING_BUCKET`, and
+      `/auth/switch-role` is defined twice (lines 261 and 273; the later
+      definition wins, the earlier is dead text — which prose is intended is
+      a documentation call, and this file drives `docs/openapi.json`);
+      `seed-dev-scenario.ts:108` — `sex` is optional where the create input
+      requires it; `seed-r82-scenario.ts:267` — `academicYearId` may be
+      `undefined` under `exactOptionalPropertyTypes`. Bringing `scripts/`
+      into `npm run typecheck` means fixing these first.
+- [ ] **Open, not fixed — the second gap.** `verify-production-seed.sh` is
+      not run by hosted CI (no reference under `.github/`), so a red
+      scenario loop reaches nobody until someone runs it by hand. Wiring it
+      in adds several minutes and a job to the CI set that
+      `.github/workflows/ci.yml` and `docs/development/ci-cd.md` define —
+      a pipeline decision, not made here.
