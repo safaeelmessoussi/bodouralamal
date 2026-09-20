@@ -69,6 +69,7 @@ export function override(prisma: PrismaClient) {
         // it untouched, the same distinction every field above already
         // makes.
         ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
+        ...(body.surah_ids !== undefined ? { surahIds: body.surah_ids } : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.

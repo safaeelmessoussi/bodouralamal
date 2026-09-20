@@ -498,10 +498,22 @@ if (audioContentId) {
   const titles = [...(page.body.recordings ?? []), ...(page.body.linked_content ?? [])].map(
     (c) => c.title,
   );
+  // **SRS Revision 165 §1 — the platform's own capture is no longer called
+  // «Subject — date»**: it is named for what it is (type, Subject, Surah, main
+  // teacher, the minute it was stopped), so it no longer occupies the browser
+  // recorder's base name and that suggestion is no longer pushed to « 2». The
+  // PROPERTY is unchanged and is what is asserted: whatever the recorder is
+  // offered is a name nothing linked to this occurrence already carries.
   check(
-    'the browser recorder is offered a name the imported recording has already taken into account',
-    typeof suggested === 'string' && !titles.includes(suggested) && /\s2$/.test(suggested),
+    'the browser recorder is offered a name no recording of this occurrence already carries',
+    typeof suggested === 'string' && suggested !== '' && !titles.includes(suggested),
     `${suggested} vs ${JSON.stringify(titles)}`,
+  );
+  const imported = (page.body.recordings ?? []).map((c) => c.title);
+  check(
+    'and the imported recording is titled for what it is — its Subject, and the date and time it was stopped',
+    imported.some((title) => /\d{4}-\d{2}-\d{2} \d{2}:\d{2}( \d+)?$/.test(title)),
+    JSON.stringify(imported),
   );
 }
 

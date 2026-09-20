@@ -37,8 +37,15 @@ export interface ScopeOptionsPayload {
      */
     self_attendance_allowed: boolean;
     subject_ids: string[];
+    /** SRS Revision 165 §2 — this Level's «مقرر الحفظ», as Surah numbers.
+     *  Optional: an older server does not send it, which reads as "none". */
+    surah_ids?: number[];
   }[];
-  subjects: { id: string; name: string }[];
+  /** `requires_surahs` (R165 §2) — a class or an exam of this Subject must say
+   *  which Surah. A column on the Subject; no screen reads a Subject's name. */
+  subjects: { id: string; name: string; requires_surahs?: boolean }[];
+  /** R165 §2 — the name of every Surah some offered Level's syllabus holds. */
+  surahs?: { id: number; name: string }[];
   academic_years: { id: string; label: string; is_current: boolean }[];
   branches: { id: string; name: string }[];
 }

@@ -1112,7 +1112,7 @@ model Category {
   /// Revision 155 (expand phase) — mirrors `eventScopes` above.
   courseScheduleScopes CourseScheduleCategory[]
   /// Revision 49 — applicants who asked for this stage. See `User`.
-  intendedBy           User[]                   @relation("UserIntendedCategory")
+  intendedBy           User[]                    @relation("UserIntendedCategory")
   /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
   /// occurrence at a time instead of a whole schedule (R92 generalised).
   sessionAudiences     SessionAudienceCategory[]
@@ -1197,6 +1197,13 @@ model Subject {
   /// configures nothing else: no tracking mode, no second engine, and no
   /// `subject_id` on `QuranProgressLog`.
   tracksQuranProgress Boolean @default(false) @map("tracks_quran_progress")
+
+  /// R165 §2 — **this Subject works by Surah**: a class or an exam of it must
+  /// name which Surah(s) of the Level's «مقرر الحفظ» (`LevelSurah`) it is
+  /// about. حفظ القرآن and تفسير القرآن carry it. A fact about the Subject, never
+  /// a match on its name (R27, §4.4b). The tracker necessarily carries it —
+  /// `subject_tracker_requires_surahs_check`, in SQL.
+  requiresSurahs Boolean @default(false) @map("requires_surahs")
 
   version Int @default(0)
 
@@ -1633,6 +1640,8 @@ model RecurringCourseSchedule {
   branchScopes              CourseScheduleBranch[]
   categoryScopes            CourseScheduleCategory[]
   levelScopes               CourseScheduleLevel[]
+  /// R165 §2 — the Surahs this class is about.
+  surahs                    CourseScheduleSurah[]
   administrativeGroupScopes CourseScheduleAdministrativeGroup[]
   teachingGroupScopes       CourseScheduleTeachingGroup[]
 
@@ -1680,6 +1689,39 @@ model CourseScheduleLevel {
 
   @@id([scheduleId, levelId])
   @@map("course_schedule_level")
+}
+
+/// R165 §2 — **the Surahs a class is about**, one row each. Required (at least
+/// one) when the class's Subject `requiresSurahs`, refused otherwise; each must
+/// belong to the «مقرر الحفظ» of a Level the class addresses. Hard rows, like
+/// the scope tables above: a plan corrected, not an event with a history.
+model CourseScheduleSurah {
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  surahId    Int                     @map("surah_id")
+  surah      QuranSurah              @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([scheduleId, surahId])
+  @@index([surahId], map: "course_schedule_surah_surah_idx")
+  @@map("course_schedule_surah")
+}
+
+/// R165 §2/§5 — **one occurrence's own Surahs.** No rows means *inherit the
+/// class's*; rows present REPLACE them for that occurrence — a Surah is what is
+/// taught that day, unlike an audience dimension, which is added to.
+model SessionSurah {
+  sessionId String     @map("session_id") @db.Uuid
+  session   Session    @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  surahId   Int        @map("surah_id")
+  surah     QuranSurah @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sessionId, surahId])
+  @@index([surahId], map: "session_surah_surah_idx")
+  @@map("session_surah")
 }
 
 model CourseScheduleAdministrativeGroup {
@@ -1970,14 +2012,14 @@ model Session {
 
   /// R123 — presence records for this occurrence. Their existence protects it
   /// from a schedule edit (§20 rule 24, via `session-protection.ts`).
-  attendance       Attendance[]
-  linkedContent    SessionContent[]
-  staff            SessionStaff[]
-  notifications    Notification[]
+  attendance                   Attendance[]
+  linkedContent                SessionContent[]
+  staff                        SessionStaff[]
+  notifications                Notification[]
   /// R92 — this occurrence's own audience branches, when it has them. Empty
   /// means *inherit from the schedule*, which is every occurrence but the rare
   /// combined one.
-  audienceBranches SessionAudienceBranch[]
+  audienceBranches             SessionAudienceBranch[]
   /// **Owner-reported, 2026-09-17 — R92 generalised from branches to every
   /// dimension `multi_dimension` schedules already resolve** (categories,
   /// levels, administrative groups, teaching circles). Each is independent
@@ -1986,12 +2028,14 @@ model Session {
   /// how the five combine.
   audienceCategories           SessionAudienceCategory[]
   audienceLevels               SessionAudienceLevel[]
+  /// R165 §2/§5 — this occurrence's own Surahs; none means the class's.
+  surahs                       SessionSurah[]
   audienceAdministrativeGroups SessionAudienceAdministrativeGroup[]
   audienceTeachingGroups       SessionAudienceTeachingGroup[]
   /// R99 — attempts to record this occurrence. Usually none: recording is
   /// optional and explicit, and a class that nobody recorded has no rows here.
-  recordings       SessionRecording[]
-  exams            Exam[]
+  recordings                   SessionRecording[]
+  exams                        Exam[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.
@@ -2985,10 +3029,13 @@ model QuranSurah {
   nameTransliterated String @map("name_transliterated") @db.VarChar(120)
   totalAyahs         Int    @map("total_ayahs")
 
-  logs     QuranProgressLog[]
-  progress StudentSurahProgress[]
-  levels   LevelSurah[]
-  exams    Exam[]
+  logs            QuranProgressLog[]
+  progress        StudentSurahProgress[]
+  levels          LevelSurah[]
+  exams           Exam[]
+  /// R165 §2 — the classes and single occurrences that are about this Surah.
+  courseSchedules CourseScheduleSurah[]
+  sessions        SessionSurah[]
 
   @@map("quran_surah")
 }

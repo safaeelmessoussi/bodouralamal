@@ -140,6 +140,15 @@ export function EventDetailsDialog({
               </>
             ) : null}
 
+            {/* SRS Revision 165 §2 — which Surah(s) a by-Surah class or exam is
+                about; absent wherever the Subject has none. */}
+            {(occurrence.surah_names ?? []).length > 0 ? (
+              <>
+                <dt>{t('calendar.detailsSurahs')}</dt>
+                <dd>{(occurrence.surah_names ?? []).join('، ')}</dd>
+              </>
+            ) : null}
+
             <dt>{t('calendar.detailsDate')}</dt>
             <dd>
               <time dateTime={occurrence.date}>

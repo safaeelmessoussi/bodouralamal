@@ -885,8 +885,8 @@ describe("ingestion happens EXACTLY once (R99.15)", () => {
 
 /* ── Mixed-origin naming ─────────────────────────────────────────────────── */
 
-describe("one Session, one naming namespace (R75.6)", () => {
-  it("browser + provider recordings number base / « 2» / « 3» without duplicates", async () => {
+describe("one Session, one naming namespace (R75.6) — and what the platform's own capture is called (R165 §1)", () => {
+  it("names its capture for what it is — Subject and the minute it was stopped — and numbers a same-minute second one « 2»", async () => {
     const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
 
     // A مؤطِّرة's browser recording, saved and linked exactly as R75 does it.
@@ -910,11 +910,16 @@ describe("one Session, one naming namespace (R75.6)", () => {
       data: { sessionId, contentId: browser.id },
     });
 
+    // Both stopped at ONE stated instant, so the same-minute collision this
+    // namespace exists for is what is tested rather than left to the clock.
+    const stoppedAt = new Date(2026, 5, 2, 18, 5, 0);
     const one = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    await prisma.sessionRecording.update({ where: { id: one.id }, data: { stoppedAt } });
     await ingestRecording(prisma, clients, one.id);
     // The first live recording per occurrence is unique only among LIVE states,
     // so a second completed one is an ordinary second attempt.
     const two = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    await prisma.sessionRecording.update({ where: { id: two.id }, data: { stoppedAt } });
     await ingestRecording(prisma, clients, two.id);
 
     const titles = (
@@ -925,10 +930,33 @@ describe("one Session, one naming namespace (R75.6)", () => {
       })
     ).map((c) => c.title);
 
+    // This class has no catalogue type, no Surah and no staff, so the title is
+    // exactly the parts it DOES have: Subject — date and time (R165 §1 omits an
+    // absent part rather than leaving an empty separator).
+    const subject = await prisma.subject.findUniqueOrThrow({
+      where: { id: subjectAudio },
+      select: { name: true },
+    });
+    const captured = `${subject.name} — 2026-06-02 18:05`;
     expect(new Set(titles).size).toBe(3);
     expect(titles).toContain(browser.title);
-    expect(titles).toContain(`${browser.title} 2`);
-    expect(titles).toContain(`${browser.title} 3`);
+    expect(titles).toContain(captured);
+    expect(titles).toContain(`${captured} 2`);
+  });
+
+  it("the storage key stays person-free and identical on a retry, whatever the title says", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const done = await ingestRecording(prisma, clients, rec.id);
+    const content = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: done.contentId! },
+      select: { storageKey: true, originalFilename: true, title: true },
+    });
+    // A key carries a slug of its file name (TD-9): Subject and date only —
+    // never the time of day the title carries, and never a person's name.
+    expect(content.originalFilename).toMatch(/— \d{4}-\d{2}-\d{2}\.ogg$/);
+    expect(content.title).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(content.originalFilename).not.toContain(":");
   });
 });
 

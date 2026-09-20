@@ -687,6 +687,9 @@ describe('the journey · 6 · the مؤطِّرة is assigned to teach LEVEL A', 
       staff: [{ user_id: teacherUserId, position: 'teacher' }],
       title: `${TAG} حلقة القرآن`,
       subject_id: subjectId,
+      // R165 §2 — حفظ القرآن works by Surah, so the class names which one: the
+      // Surah step 2 put in LEVEL A's «مقرر الحفظ», the only one it may name.
+      surah_ids: [SURAH_ID],
       teaching_mode: 'entire_level',
       target_id: levelAId,
       branch_id: branchId,
@@ -788,6 +791,8 @@ describe('the journey · 7 · the Super Admin sets an ONLINE assessment on LEVEL
       source_exam_id: draftId,
       target: { kind: 'level' },
       date: EXAM_DATE,
+      // R165 §2 — a sitting of a by-Surah Subject names its one Surah.
+      surah_id: SURAH_ID,
       availability: { policy: 'custom', at: '1970-01-01T00:00:00.000Z' },
     });
     expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(201);

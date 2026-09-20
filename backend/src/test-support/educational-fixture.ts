@@ -174,6 +174,8 @@ export async function clearTeachingContext(prisma: PrismaClient, tag: string): P
 
   await prisma.sessionContent.deleteMany({ where: { session: bySubject } });
   await prisma.sessionStaff.deleteMany({ where: { session: bySubject } });
+  // R165 — an occurrence's own Surahs are RESTRICT against the Session too.
+  await prisma.sessionSurah.deleteMany({ where: { session: bySubject } });
   // R77 — `notification.session_id` is RESTRICT, like every other reference
   // to a Session: a cancellation notice whose session vanished is unreadable.
   // Fixtures therefore unwind notices before the occurrences they name.

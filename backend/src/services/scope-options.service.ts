@@ -102,10 +102,36 @@ export interface ScopeOptions {
      * so a client that kept it would have traded three `403`s for one.
      */
     subjectIds: string[];
+    /**
+     * R165 §2 — **this Level's «مقرر الحفظ»** (`LevelSurah`), as Surah numbers.
+     * Inline for the reason `subjectIds` is: the alternative is
+     * `/admin/levels/{id}/surahs`, a read a مؤطِّرة scheduling her own class is
+     * refused.
+     */
+    surahIds: number[];
   }[];
-  subjects: { id: string; name: string }[];
+  /** `requiresSurahs` (R165 §2) — the Subject works by Surah, so a class or an
+   *  exam of it must name which. A column, never the Subject's name. */
+  subjects: { id: string; name: string; requiresSurahs: boolean }[];
+  /** R165 §2 — the names of every Surah some offered Level's syllabus holds. */
+  surahs: { id: number; name: string }[];
   academicYears: { id: string; label: string; isCurrent: boolean }[];
   branches: { id: string; name: string }[];
+}
+
+/** R165 §2 — names for the Surahs some offered Level's syllabus holds: the
+ *  static lookup (`QuranSurah`), in Mushaf order. */
+async function surahNames(
+  prisma: PrismaClient,
+  ids: readonly number[],
+): Promise<{ id: number; name: string }[]> {
+  if (ids.length === 0) return [];
+  const rows = await prisma.quranSurah.findMany({
+    where: { surahId: { in: [...new Set(ids)] } },
+    select: { surahId: true, nameArabic: true },
+    orderBy: { surahId: 'asc' },
+  });
+  return rows.map((row) => ({ id: row.surahId, name: row.nameArabic }));
 }
 
 export async function readScopeOptions(
@@ -133,12 +159,18 @@ export async function readScopeOptions(
           where: { deletedAt: null, subject: { deletedAt: null } },
           select: { subjectId: true },
         },
+        // R165 §2 — the Level's «مقرر الحفظ», in Mushaf order.
+        surahs: {
+          where: { deletedAt: null },
+          select: { surahId: true },
+          orderBy: { surahId: 'asc' },
+        },
       },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
     prisma.subject.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true },
+      select: { id: true, name: true, requiresSurahs: true },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
     prisma.academicYear.findMany({
@@ -188,8 +220,10 @@ export async function readScopeOptions(
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
       selfAttendanceAllowed: l.category.selfAttendanceAllowed,
       subjectIds: l.subjects.map((s) => s.subjectId),
+      surahIds: l.surahs.map((row) => row.surahId),
     })),
     subjects,
+    surahs: await surahNames(prisma, levels.flatMap((l) => l.surahs.map((row) => row.surahId))),
     academicYears: years.map((y) => ({
       id: y.id,
       label: y.label,
@@ -310,6 +344,12 @@ export async function readCourseScheduleOptions(
           where: { deletedAt: null, subject: { deletedAt: null } },
           select: { subjectId: true },
         },
+        // R165 §2 — the Level's «مقرر الحفظ», in Mushaf order.
+        surahs: {
+          where: { deletedAt: null },
+          select: { surahId: true },
+          orderBy: { surahId: 'asc' },
+        },
       },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
@@ -347,13 +387,14 @@ export async function readCourseScheduleOptions(
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
       selfAttendanceAllowed: l.category.selfAttendanceAllowed,
       subjectIds,
+      surahIds: l.surahs.map((row) => row.surahId),
     };
   });
 
   const referencedSubjectIds = new Set(narrowedLevels.flatMap((l) => l.subjectIds));
   const subjects = await prisma.subject.findMany({
     where: { deletedAt: null, id: { in: [...referencedSubjectIds] } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, requiresSurahs: true },
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
   });
 
@@ -361,6 +402,7 @@ export async function readCourseScheduleOptions(
     categories,
     levels: narrowedLevels,
     subjects,
+    surahs: await surahNames(prisma, narrowedLevels.flatMap((l) => l.surahIds)),
     academicYears: years.map((y) => ({
       id: y.id,
       label: y.label,

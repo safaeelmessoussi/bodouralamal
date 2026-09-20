@@ -11,9 +11,11 @@ import {
   type AcceptedMime,
 } from "../lib/file-types.js";
 import { verifyStoredObject } from "../lib/object-verification.js";
+import { publicDisplayName } from "../lib/display-name.js";
 import {
   nextRecordingName,
   recordingBaseName,
+  sessionRecordingBaseName,
 } from "../lib/recording-name.js";
 import {
   copyObject,
@@ -121,8 +123,26 @@ export class RecordingStagingCleanupFailure extends Error {
 const RECORDING_INCLUDE = {
   session: {
     include: {
+      // R165 §1 — what the recording is CALLED: this occurrence's own Subject
+      // and Surahs where it has them (else the class's), and who led it.
+      subject: { select: { name: true } },
+      surahs: {
+        select: { surah: { select: { nameArabic: true } } },
+        orderBy: { surahId: "asc" },
+      },
+      staff: {
+        where: { deletedAt: null, position: "teacher" },
+        select: { user: { select: { nameArabic: true, publicDisplayName: true } } },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
       schedule: {
         include: {
+          schedulingType: { select: { name: true } },
+          surahs: {
+            select: { surah: { select: { nameArabic: true } } },
+            orderBy: { surahId: "asc" },
+          },
           subject: { select: { id: true, name: true } },
           level: { select: { id: true } },
           administrativeGroup: { select: { levelId: true } },
@@ -307,7 +327,27 @@ export async function ingestRecording(
     });
     if (fresh.educationalContentId !== null) return fresh.educationalContentId;
 
-    const title = nextRecordingName(baseName, await linkedTitles(tx, recording.sessionId));
+    /**
+     * **The TITLE is richer than the file's name, on purpose** (R165 §1): type,
+     * Subject, Surah, main teacher, and when she pressed «إيقاف التسجيل». The
+     * object key above keeps the person-free `baseName` — a key carries a slug
+     * of its filename (TD-9) and must never carry somebody's name, and it has
+     * to resolve identically on a retry.
+     */
+    const session = recording.session;
+    const lead = session.staff[0]?.user ?? null;
+    const title = nextRecordingName(
+      sessionRecordingBaseName({
+        typeName: session.schedule.schedulingType?.name ?? null,
+        subjectName: (session.subject ?? session.schedule.subject).name,
+        surahNames: (session.surahs.length > 0 ? session.surahs : session.schedule.surahs).map(
+          (row) => row.surah.nameArabic,
+        ),
+        teacherName: lead === null ? null : publicDisplayName(lead),
+        at: recording.stoppedAt ?? recording.startedAt,
+      }),
+      await linkedTitles(tx, recording.sessionId),
+    );
 
     await tx.educationalContent.create({
       data: {

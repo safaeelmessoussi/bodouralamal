@@ -42,9 +42,12 @@ describe('the control keeps the selection bounded and, collapsed, out of the way
     expect(code(CONTROL)).toContain('aria-expanded={open}');
   });
 
-  it("the closed trigger reads as a plain-language summary («٣ محددة»), not the roster itself", () => {
-    expect(code(CONTROL)).toContain("t('common.selectedCount')");
+  it('the closed trigger NAMES what was chosen, comma-separated — never a bare count (SRS Revision 165 §7)', () => {
+    expect(code(CONTROL)).toContain("chosenLabels.join('، ')");
+    expect(code(CONTROL)).not.toContain("t('common.selectedCount')");
+    // Still one line in the trigger, not a second roster of chips beneath it.
     expect(code(CONTROL)).not.toMatch(/multi-select__chosen/);
+    expect(code(CONTROL)).toContain('title={summary}');
   });
 
   it('searches only above a threshold, so a short list is not cluttered', () => {

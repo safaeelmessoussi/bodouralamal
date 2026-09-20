@@ -52,6 +52,9 @@ export interface Exam {
   level_name: string | null;
   subject_id: string | null;
   subject_name: string | null;
+  /** SRS Revision 165 §2 — the Surah this sitting examines, and its name. */
+  surah_id?: number | null;
+  surah_name?: string | null;
   /** R110 — the catalogue row, `null` on a pre-catalogue row. */
   scheduling_type_id: string | null;
   academic_year_id: string | null;
@@ -103,6 +106,8 @@ export interface ExamInput {
   /** R81 — required on create: an exam with no maximum cannot be marked. */
   max_grade: number;
   staff?: ExamStaffRef[];
+  /** SRS Revision 165 §2 — required when the Subject is examined by Surah. */
+  surah_id?: number | null;
 }
 
 export interface ExamFilters {
@@ -242,6 +247,8 @@ export interface ScheduleExamInput {
   staff?: ExamStaffRef[];
   /** Remote only. Absent means `manual`. */
   availability?: ExamAvailabilityPolicy;
+  /** SRS Revision 165 §2 — the Surah this sitting examines. */
+  surah_id?: number | null;
   /** Required exactly when `source_exam_id` is absent on a `physical`
    *  sitting — its own title/Level/Subject/year, since there is no source to
    *  take them from. */
@@ -289,6 +296,8 @@ export interface UpdateExamScheduleInput {
   visibility?: string;
   staff?: ExamStaffRef[];
   availability?: ExamAvailabilityPolicy;
+  /** SRS Revision 165 §2 — absent leaves it as it is. */
+  surah_id?: number | null;
 }
 
 export async function updateExamSchedule(

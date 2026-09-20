@@ -100,3 +100,42 @@ export function localDateIso(now: Date = new Date()): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
+
+/**
+ * **What the platform's own capture of a class is called** (Owner, 2026-09-20 —
+ * SRS Revision 165 §1): *the type of the session, the Subject, the Surah, the
+ * main teacher, and the date and time she pressed «إيقاف التسجيل»*.
+ *
+ * `at` is the recording's own `stopped_at`, never *now*: the ingestion worker
+ * derives the object's storage key from this name, and a retry after a partial
+ * failure must find the object it already wrote rather than mint a second key
+ * beside it (R99.15). A stored instant answers the same on every attempt.
+ *
+ * The time is the association's wall clock — the runtime pins `TZ` to
+ * `Africa/Casablanca`, so the local getters *are* that clock (`localDateIso`).
+ * Absent parts are omitted rather than left as empty separators, as above.
+ */
+export interface SessionRecordingNameSource {
+  /** The catalogue type's name («حصة», «درس»…); `null` for a pre-catalogue row. */
+  typeName: string | null;
+  subjectName: string;
+  /** In Mushaf order; empty wherever the Subject is not taught by Surah. */
+  surahNames: readonly string[];
+  /** Her public display name (§20 rule 12) — never her civil name. */
+  teacherName: string | null;
+  at: Date;
+}
+
+export function sessionRecordingBaseName(source: SessionRecordingNameSource): string {
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const time = `${pad(source.at.getHours())}:${pad(source.at.getMinutes())}`;
+  return [
+    (source.typeName ?? '').trim(),
+    source.subjectName.trim(),
+    source.surahNames.join('، '),
+    (source.teacherName ?? '').trim(),
+    `${localDateIso(source.at)} ${time}`,
+  ]
+    .filter((part) => part !== '')
+    .join(' — ');
+}

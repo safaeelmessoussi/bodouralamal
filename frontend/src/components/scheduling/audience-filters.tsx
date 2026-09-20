@@ -4,8 +4,6 @@ import { listAdministrativeGroups } from '../../adapters/administrative-groups.j
 import { listCircles } from '../../adapters/teaching-groups.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
-import { SelectField } from '../ui/field.js';
-import { Feedback } from '../ui/feedback.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { fetchAllPages } from './session-audience-dialog.js';
 
@@ -53,6 +51,13 @@ export interface AudienceChoices {
   levels: { id: string; name: string }[];
   groups: { id: string; name: string }[];
   circles: { id: string; name: string }[];
+  /**
+   * SRS Revision 165 §2 — **the Levels the selection actually addresses**: the
+   * ones chosen, plus the Level of every chosen group and circle (the server's
+   * `effectiveLevelIds`, mirrored). The Surahs a by-Surah class may name are
+   * drawn from these Levels' «مقرر الحفظ».
+   */
+  levelIdsInPlay: string[];
 }
 
 /**
@@ -156,24 +161,7 @@ export function useAudienceFilters({
     }
   }, [active, allCircles.length, circleChoices, teachingGroupIds, setTeachingGroupIds]);
 
-  /**
-   * **The class's own branch follows the filter when the filter names one.**
-   * `branch_id` is still a single required fact (§4.4: whose administration
-   * runs it, where its room is booked). Exactly one branch chosen IS that
-   * answer; with «الكل» or several, `AudienceFilters` asks for it outright —
-   * and a previous answer the narrowed filter no longer contains is cleared
-   * rather than kept out of sight.
-   */
-  const homeBranchId = scope.value.branchId;
   const setScope = scope.set;
-  useEffect(() => {
-    if (!active) return;
-    if (branchIds.length === 1) {
-      if (homeBranchId !== branchIds[0]) setScope('branchId', branchIds[0]!);
-    } else if (branchIds.length > 1 && homeBranchId !== '' && !branchIds.includes(homeBranchId)) {
-      setScope('branchId', '');
-    }
-  }, [active, branchIds, homeBranchId, setScope]);
 
   /**
    * **A representative Level, purely to drive the Subject list.** Several
@@ -199,11 +187,47 @@ export function useAudienceFilters({
     if (representativeLevelId !== scopeLevelId) setScope('levelId', representativeLevelId);
   }, [active, awaitingRosters, representativeLevelId, scopeLevelId, setScope]);
 
+  const levelIdsInPlay = useMemo(
+    () => [
+      ...new Set([
+        ...levelIds,
+        ...allGroups.filter((g) => groupIds.includes(g.id)).map((g) => g.levelId),
+        ...allCircles.filter((c) => teachingGroupIds.includes(c.id)).map((c) => c.levelId),
+      ]),
+    ],
+    [levelIds, groupIds, teachingGroupIds, allGroups, allCircles],
+  );
+
   return {
     levels: levelChoices.map((o) => ({ id: o.value, name: o.label })),
     groups: groupChoices.map((g) => ({ id: g.id, name: g.name })),
     circles: circleChoices.map((c) => ({ id: c.id, name: c.name })),
+    levelIdsInPlay,
   };
+}
+
+/**
+ * **The class's own branch, DERIVED — never a second «فروع» question** (Owner,
+ * 2026-09-20 — SRS Revision 165 §6).
+ *
+ * A class still belongs to one branch (`branch_id`: whose administration runs
+ * it, and where its room is booked — §4.4), but asking for it beside the «فروع»
+ * filter read as the same question twice. It follows from what she already
+ * said, in this order: the ONE branch she chose; else the branch of the room she
+ * chose; else the branch the class already belongs to, while her choice still
+ * includes it; else the first branch she chose; else the first she may act on.
+ */
+export function homeBranchOf(
+  selection: Pick<AudienceSelection, 'branchIds'>,
+  context: { roomBranchId?: string | null; currentBranchId?: string | null; permitted: readonly string[] },
+): string {
+  const chosen = selection.branchIds;
+  if (chosen.length === 1) return chosen[0]!;
+  const within = (id: string | null | undefined): id is string =>
+    typeof id === 'string' && id !== '' && (chosen.length === 0 || chosen.includes(id));
+  if (within(context.roomBranchId)) return context.roomBranchId;
+  if (within(context.currentBranchId)) return context.currentBranchId;
+  return chosen[0] ?? context.permitted[0] ?? '';
 }
 
 /** The payload half: a filter left at «الكل» is ABSENT, never an empty array
@@ -289,25 +313,6 @@ export function AudienceFilters({
         options={asOptions(choices.circles)}
         emptyLabel={t('common.all')}
       />
-      <Feedback>{t('admin.calendar.multiDimensionHint')}</Feedback>
-      {/* **Where the class is run from.** A class still belongs to ONE branch —
-          it is what an administrator's reach is measured against and where its
-          room is booked (§4.4). Naming exactly one branch above already answers
-          that, so this is asked only when the filter says «الكل» or several. */}
-      {selection.branchIds.length === 1 ? null : (
-        <SelectField
-          label={t('admin.schedules.homeBranch')}
-          hint={t('admin.schedules.homeBranchHint')}
-          value={scope.value.branchId}
-          onChange={(v: string) => scope.set('branchId', v)}
-          options={[
-            { value: '', label: t('common.choose') },
-            ...scope.options.branchId.filter(
-              (o) => selection.branchIds.length === 0 || selection.branchIds.includes(o.value),
-            ),
-          ]}
-        />
-      )}
     </>
   );
 }

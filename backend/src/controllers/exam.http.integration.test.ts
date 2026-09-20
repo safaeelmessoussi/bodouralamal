@@ -54,6 +54,10 @@ const EXAM_KEYS = [
   "start_time",
   "subject_id",
   "subject_name",
+  // SRS Revision 165 §2 — the one Surah this sitting examines and its name;
+  // both `null` wherever its Subject is not examined by Surah.
+  "surah_id",
+  "surah_name",
   // R136 (H1) — the unified grading list's own audience arm, since an online
   // occurrence's target is not always an administrative group. Listed
   // deliberately: this set is asserted exactly.

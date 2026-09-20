@@ -50,7 +50,7 @@ const baseProps = {
 };
 
 describe('each dimension is independent, always visible, and takes several at once', () => {
-  it('reflects the chosen COUNT in the branch trigger, for more than one', () => {
+  it('names the chosen branches in the trigger, for more than one', () => {
     const html = renderToStaticMarkup(
       <ActivitySection
         {...baseProps}
@@ -58,7 +58,7 @@ describe('each dimension is independent, always visible, and takes several at on
         values={{ branch: dim(['b1', 'b2']), category: dim(), level: dim(), group: dim() }}
       />,
     );
-    expect(html).toContain(t('common.selectedCount').replace('{n}', '2'));
+    expect(html).toContain('[تجريبي] مقر أمرشيش، [تجريبي] مقر تاركة');
   });
 
   it('renders BOTH dimensions at once — branch and category are not mutually exclusive', () => {

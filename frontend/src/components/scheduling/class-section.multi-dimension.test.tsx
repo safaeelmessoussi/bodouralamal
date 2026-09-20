@@ -7,7 +7,7 @@ import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import SCHEDULING_SOURCE from '../../pages/admin/scheduling.tsx?raw';
 import SESSIONS_RAW from '../../pages/admin/schedule-sessions.tsx?raw';
 import FILTERS_RAW from './audience-filters.tsx?raw';
-import { audienceDimensions, namesATeachingPopulation } from './audience-filters.js';
+import { audienceDimensions, homeBranchOf, namesATeachingPopulation } from './audience-filters.js';
 
 /**
  * **SRS Revision 155 — completed end to end, 2026-09-16.** The backend has
@@ -54,6 +54,9 @@ const EMPTY_SCOPE: ScopeOptions = {
   ready: true,
   levelTeachesNothing: false,
   levelCategoryIds: {},
+  subjectsBySurah: new Set<string>(),
+  levelSurahIds: {},
+  surahNames: {},
   defaultVisibility: null,
   selfAttendanceAllowed: null,
 };
@@ -75,7 +78,7 @@ const CHOICES = [
 const audienceOf = (teachingGroupIds: string[] = []) => ({
   selection: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], teachingGroupIds },
   setters: SETTERS,
-  choices: { levels: CHOICES, groups: CHOICES, circles: CHOICES },
+  choices: { levels: CHOICES, groups: CHOICES, circles: CHOICES, levelIdsInPlay: [] },
 });
 const emptyAudience = audienceOf();
 
@@ -107,7 +110,8 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
     expect(html).toContain(t('admin.calendar.scopeLevel'));
     expect(html).toContain(t('admin.calendar.scopeGroup'));
     expect(html).toContain(t('admin.calendar.scopeCircle'));
-    expect(html).toContain(t('admin.calendar.multiDimensionHint'));
+    // SRS Revision 165 §8 — the intersection sentence is gone from the form.
+    expect(html).not.toContain('تتقاطع فيما بينها');
   });
 
   it('reads «الكل» on every filter, and never offers a «نمط التدريس» (SRS Revision 163 §5)', () => {
@@ -117,17 +121,9 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
     expect(html).not.toContain(t('admin.schedules.mode_multi_dimension'));
   });
 
-  it('asks for the class\'s own branch only while the branch filter does not name exactly one', () => {
-    const open = renderToStaticMarkup(<ClassSection {...baseProps} audience={emptyAudience} />);
-    expect(open).toContain(t('admin.schedules.homeBranch'));
-    const one = audienceOf();
-    const named = renderToStaticMarkup(
-      <ClassSection
-        {...baseProps}
-        audience={{ ...one, selection: { ...one.selection, branchIds: ['b1'] } }}
-      />,
-    );
-    expect(named).not.toContain(t('admin.schedules.homeBranch'));
+  it('never asks a second branch question beside «فروع» (SRS Revision 165 §6)', () => {
+    const html = renderToStaticMarkup(<ClassSection {...baseProps} audience={emptyAudience} />);
+    expect(html).not.toContain('الفرع المنظِّم');
   });
 
   it('every other mode still renders the ordinary branch/Level pair, unaffected', () => {
@@ -135,17 +131,17 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
       <ClassSection {...baseProps} mode="entire_level" audience={emptyAudience} />,
     );
     expect(html).not.toContain(t('admin.calendar.scopeCircle'));
-    expect(html).not.toContain(t('admin.calendar.multiDimensionHint'));
+    expect(html).not.toContain('تتقاطع فيما بينها');
   });
 
-  it('reflects the chosen COUNT in the circle trigger — the one dimension Event never had', () => {
+  it('names the chosen circles in the trigger — the one dimension Event never had', () => {
     const html = renderToStaticMarkup(
       <ClassSection
         {...baseProps}
         audience={audienceOf(['l1', 'l2'])}
       />,
     );
-    expect(html).toContain(t('common.selectedCount').replace('{n}', '2'));
+    expect(html).toContain('[تجريبي] مستوى 1، [تجريبي] مستوى 2');
   });
 });
 
@@ -156,7 +152,7 @@ describe('locked (editing) states the fixed-at-creation notice, never five empty
     );
     expect(html).toContain(t('admin.calendar.scopeFixed'));
     expect(html).not.toContain(t('admin.calendar.scopeCircle'));
-    expect(html).not.toContain(t('admin.calendar.multiDimensionHint'));
+    expect(html).not.toContain('تتقاطع فيما بينها');
   });
 
   it('every other mode keeps its own existing locked behaviour (the ordinary pair, disabled)', () => {
@@ -241,9 +237,20 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     expect(FILTERS).toContain('row.branchId === null || branchIds.includes(row.branchId)');
   });
 
-  it('takes the class\'s own branch from the filter only when the filter names exactly one', () => {
-    expect(FILTERS).toContain('if (branchIds.length === 1) {');
-    expect(FILTERS).toContain("setScope('branchId', branchIds[0]!)");
+  it('derives the class\'s own branch from what she already said, in one fixed order', () => {
+    const permitted = ['p1', 'p2'];
+    // The one branch she chose — whatever else is known.
+    expect(homeBranchOf({ branchIds: ['b1'] }, { roomBranchId: 'b9', currentBranchId: 'b8', permitted })).toBe('b1');
+    // «الكل»: the chosen room's branch decides.
+    expect(homeBranchOf({ branchIds: [] }, { roomBranchId: 'b9', permitted })).toBe('b9');
+    // Several: a room (or the class's current branch) inside them wins…
+    expect(homeBranchOf({ branchIds: ['b1', 'b2'] }, { roomBranchId: 'b2', permitted })).toBe('b2');
+    expect(homeBranchOf({ branchIds: ['b1', 'b2'] }, { currentBranchId: 'b2', permitted })).toBe('b2');
+    // …and one OUTSIDE them never does.
+    expect(homeBranchOf({ branchIds: ['b1', 'b2'] }, { roomBranchId: 'b9', currentBranchId: 'b8', permitted })).toBe('b1');
+    // Nothing chosen, no room: the first branch she may act on; none at all is ''.
+    expect(homeBranchOf({ branchIds: [] }, { permitted })).toBe('p1');
+    expect(homeBranchOf({ branchIds: [] }, { permitted: [] })).toBe('');
   });
 
   it('never clears the Level while a chosen group\'s own Level is still unknown', () => {

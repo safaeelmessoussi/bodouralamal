@@ -240,10 +240,23 @@ configuration. The Production seed establishes and asserts exactly one for launc
 refuses a different marked Subject or duplicate live حفظ القرآن rows rather than guessing
 or rewriting Owner-managed reference data.
 
-`LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows
-pedagogically. `QuranProgressLog` remains keyed by student and Surah with no Subject foreign
+`LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows.
+`QuranProgressLog` remains keyed by student and Surah with no Subject foreign
 key, because the marker answers *who may write* while the log answers *what was memorised*.
-Tafsir remains unmarked and does not participate in the coverage engine; أحكام القرآن,
+
+**`Subject.requires_surahs` — a second, separate marker** (SRS Revision 165 §2): the Subject
+works by Surah, so scheduling a class or an exam of it must name which. حفظ القرآن and
+تفسير القرآن carry it (the migration sets both once, against the seeded baseline; no runtime
+rule reads a name). `subject_tracker_requires_surahs_check` — `NOT tracks_quran_progress OR
+requires_surahs` — makes a tracker that names no Surah unrepresentable, and the service
+refuses un-marking the tracker with a coded `TRACKER_REQUIRES_SURAHS` so the CHECK never
+surfaces as a `500`. The Surahs themselves live in two hard-row joins — `course_schedule_surah`
+(a class's, cascading with its schedule) and `session_surah` (one occurrence's own, which
+**replace** the class's for that date; RESTRICT, like every other reference to a Session) —
+and in `exam.surah_id`, one per sitting. Neither join soft-deletes: changing a planned Surah
+is a correction to a plan, and the audit row records who made it.
+
+Tafsir still carries no `tracks_quran_progress` and does not participate in the coverage engine; أحكام القرآن,
 ترتيل وتجويد القرآن and any later unmarked Quran-domain Subject use ordinary
 `LevelSubject` curriculum. The eight-row Production seed is an additive baseline and does
 not constrain or rewrite later Super-Admin additions.

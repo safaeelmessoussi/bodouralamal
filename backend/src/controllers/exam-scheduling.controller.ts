@@ -41,6 +41,7 @@ export function schedule(prisma: PrismaClient) {
       ...(b.staff === undefined
         ? {}
         : { staff: b.staff.map((s) => ({ userId: s.user_id, position: s.position })) }),
+      ...(b.surah_id === undefined ? {} : { surahId: b.surah_id }),
       ...(availability === undefined ? {} : { availability }),
       ...(b.bare === undefined
         ? {}
@@ -86,6 +87,7 @@ export function updateSchedule(prisma: PrismaClient) {
       ...(b.staff === undefined
         ? {}
         : { staff: b.staff.map((s) => ({ userId: s.user_id, position: s.position })) }),
+      ...(b.surah_id === undefined ? {} : { surahId: b.surah_id }),
       ...(availability === undefined ? {} : { availability }),
     });
     res.status(204).end();

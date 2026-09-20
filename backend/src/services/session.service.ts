@@ -11,7 +11,11 @@ import {
 import { AppError } from "../lib/errors.js";
 import { atMidnightUtc } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
-import { assertSubjectTaughtAtLevel } from "../policies/curriculum.js";
+import {
+  assertSubjectTaughtAtLevel,
+  resolveSurahs,
+  subjectRequiresSurahs,
+} from "../policies/curriculum.js";
 import { resolveDelivery } from "../policies/delivery.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
 import {
@@ -20,6 +24,7 @@ import {
   audienceWhere,
   naturalDimensions,
   scheduleDimensions,
+  scheduleLevelIds,
   staffsSession,
 } from "../policies/roster-resolution.js";
 import * as audit from "../repositories/audit.repository.js";
@@ -107,6 +112,7 @@ export async function loadForWrite(
   Session & {
     schedule: {
       branchId: string;
+      subjectId: string;
       teachingMode: string;
       levelId: string | null;
       administrativeGroupId: string | null;
@@ -120,6 +126,8 @@ export async function loadForWrite(
       schedule: {
         select: {
           branchId: true,
+          // R165 §2 — what this occurrence teaches unless it says otherwise.
+          subjectId: true,
           teachingMode: true,
           levelId: true,
           administrativeGroupId: true,
@@ -209,77 +217,17 @@ export interface SessionOverride {
    * independent of who is being asked to attend.
    */
   subjectId?: string | null;
+  /**
+   * R165 §2/§5 — **this occurrence's own Surahs.** Named, they REPLACE the
+   * class's for this date; `[]` clears the override (inherit the class's
+   * again); absent leaves it alone. Validated against the Subject this
+   * occurrence will teach AFTER the edit and the schedule's own Level(s).
+   */
+  surahIds?: number[];
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
   staff?: { userId: string; position: "teacher" | "assistant" }[];
   version: number;
-}
-
-/**
- * **Owner-reported, 2026-09-17 — the schedule's OWN Level(s), whatever its
- * teaching mode.** A Subject override is validated against what the
- * SCHEDULE teaches, never against this occurrence's own audience-dimension
- * override — the two are independent questions (what is taught vs who is
- * asked to attend), and conflating them would let an audience change
- * silently invalidate an unrelated Subject override, or vice versa.
- */
-async function scheduleLevelIds(
-  prisma: PrismaClient,
-  scheduleId: string,
-  schedule: {
-    teachingMode: string;
-    levelId: string | null;
-    administrativeGroupId: string | null;
-    teachingGroupId: string | null;
-  },
-): Promise<string[]> {
-  if (schedule.teachingMode === "entire_level") {
-    return schedule.levelId ? [schedule.levelId] : [];
-  }
-  if (schedule.teachingMode === "administrative_group" && schedule.administrativeGroupId) {
-    const group = await prisma.administrativeGroup.findUnique({
-      where: { id: schedule.administrativeGroupId },
-      select: { levelId: true },
-    });
-    return group ? [group.levelId] : [];
-  }
-  if (schedule.teachingMode === "teaching_group" && schedule.teachingGroupId) {
-    const circle = await prisma.teachingGroup.findUnique({
-      where: { id: schedule.teachingGroupId },
-      select: { levelId: true },
-    });
-    return circle ? [circle.levelId] : [];
-  }
-  if (schedule.teachingMode === "multi_dimension") {
-    const dims = await scheduleDimensions(prisma, scheduleId, schedule.teachingMode as never);
-    if (!dims) return [];
-    // **Codex review, 2026-09-20 — the levels a group or circle scope IMPLY,
-    // unioned in.** This returned `dims.levelIds` alone, which is empty for a
-    // valid group-only or circle-only `multi_dimension` class (naming an
-    // Administrative Group or a Circle carries no `CourseScheduleLevel` row
-    // of its own), so the validation loop below silently ran zero times and
-    // accepted a Subject the Level never teaches. `course-schedule.service.ts`
-    // computes this same union at creation (`effectiveLevelIds`); reused here
-    // in spirit rather than re-derived a third way.
-    const [groups, circles] = await Promise.all([
-      dims.administrativeGroupIds.length === 0
-        ? []
-        : prisma.administrativeGroup.findMany({
-            where: { id: { in: dims.administrativeGroupIds }, deletedAt: null },
-            select: { levelId: true },
-          }),
-      dims.teachingGroupIds.length === 0
-        ? []
-        : prisma.teachingGroup.findMany({
-            where: { id: { in: dims.teachingGroupIds }, deletedAt: null },
-            select: { levelId: true },
-          }),
-    ]);
-    return [
-      ...new Set([...dims.levelIds, ...groups.map((g) => g.levelId), ...circles.map((c) => c.levelId)]),
-    ];
-  }
-  return [];
 }
 
 /**
@@ -356,6 +304,55 @@ export async function overrideSession(
     }
   }
 
+  /**
+   * **R165 §2/§5 — the Surahs of this one occurrence.** Asked whenever the edit
+   * names Surahs OR moves the Subject, because either can leave a by-Surah
+   * Subject with no Surah (a fiqh class retaught as تفسير for one day) or a
+   * Surah on a Subject that has none. `surahPlan` is what to store: `undefined`
+   * leaves the rows alone, `[]` clears them (inherit the class's).
+   */
+  let surahPlan: number[] | undefined;
+  let surahsBefore: number[] = [];
+  // **What it teaches, before and after — not whether the key was sent.** The
+  // occurrence editor sends `subject_id` on every save (the class's own when
+  // nothing was retaught), so "the key is present" would hold every unrelated
+  // edit of a class scheduled before this rule existed — a room change
+  // included — to a Surah nobody on that screen may be able to choose.
+  const taughtBefore = session.subjectId ?? session.schedule.subjectId;
+  const taughtAfter =
+    data.subjectId === undefined ? taughtBefore : (data.subjectId ?? session.schedule.subjectId);
+  if (data.surahIds !== undefined || taughtAfter !== taughtBefore) {
+    const [own, inherited] = await Promise.all([
+      prisma.sessionSurah.findMany({ where: { sessionId }, select: { surahId: true } }),
+      prisma.courseScheduleSurah.findMany({
+        where: { scheduleId: session.scheduleId },
+        select: { surahId: true },
+      }),
+    ]);
+    surahsBefore = own.map((row) => row.surahId).sort((a, b) => a - b);
+    const teaches = taughtAfter;
+    const named = data.surahIds ?? surahsBefore;
+    if (!(await subjectRequiresSurahs(prisma, teaches))) {
+      // Refuses a Surah NAMED on a Subject that has none; one merely left over
+      // from a previous Subject override is cleared instead.
+      await resolveSurahs(prisma, { subjectId: teaches, levelIds: [], surahIds: data.surahIds ?? [] });
+      surahPlan = [];
+    } else if (named.length > 0) {
+      const resolved = await resolveSurahs(prisma, {
+        subjectId: teaches,
+        levelIds: await scheduleLevelIds(prisma, session.scheduleId, session.schedule),
+        surahIds: named,
+      });
+      if (data.surahIds !== undefined) surahPlan = resolved;
+    } else if (inherited.length === 0) {
+      throw new AppError("VALIDATION_FAILED", "this subject needs at least one surah", {
+        reason: "SURAHS_REQUIRED",
+      });
+    } else if (data.surahIds !== undefined) {
+      surahPlan = [];
+    }
+  }
+
   // Plain strings so the payload is a valid JSON value for the audit column,
   // and so a reviewer reading the row sees exactly what an operator saw.
   const changed: Record<string, { from: string | null; to: string | null }> =
@@ -397,6 +394,10 @@ export async function overrideSession(
   // Owner-reported, 2026-09-17 — *what was actually taught* is a curriculum
   // fact the record has to keep, on the same footing as room/delivery/tier.
   track("subject_id", session.subjectId, data.subjectId);
+  // R165 — Surah NUMBERS (1–114, a public lookup), never names.
+  if (surahPlan !== undefined) {
+    track("surah_ids", surahsBefore.join(",") || null, surahPlan.join(",") || null);
+  }
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -430,6 +431,15 @@ export async function overrideSession(
         overridden: true,
       },
     });
+
+    if (surahPlan !== undefined) {
+      await tx.sessionSurah.deleteMany({ where: { sessionId } });
+      if (surahPlan.length > 0) {
+        await tx.sessionSurah.createMany({
+          data: surahPlan.map((surahId) => ({ sessionId, surahId })),
+        });
+      }
+    }
 
     if (
       data.staff !== undefined ||

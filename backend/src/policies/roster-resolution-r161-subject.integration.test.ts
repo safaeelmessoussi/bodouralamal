@@ -67,6 +67,7 @@ async function clear(): Promise<void> {
   });
   const orphanableIds = orphanable.map((s) => s.id);
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: orphanableIds } } } });
+  await prisma.sessionSurah.deleteMany({ where: { session: { scheduleId: { in: orphanableIds } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: orphanableIds } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: orphanableIds } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: orphanableIds } } });
@@ -81,6 +82,7 @@ async function clear(): Promise<void> {
   // subject-scoped `levelSubject` cleanup (the Quran Subject itself carries
   // no TAG).
   await prisma.levelSubject.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
+  await prisma.levelSurah.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await clearTeachingContext(prisma, TAG);
 
   const users = await prisma.user.findMany({
@@ -93,6 +95,9 @@ async function clear(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
+
+/** الفاتحة — the one Surah this fixture's Level has reached. */
+const SURAH = 1;
 
 let ctx: TeachingFixture;
 let quranSubjectId: string;
@@ -115,6 +120,9 @@ beforeEach(async () => {
     })
   ).id;
   await prisma.levelSubject.create({ data: { levelId: ctx.levelId, subjectId: quranSubjectId } });
+  // R165 §2 — حفظ القرآن works by Surah, so an occurrence retaught TO it must
+  // say which; the Level's «مقرر الحفظ» is where that Surah has to come from.
+  await prisma.levelSurah.create({ data: { levelId: ctx.levelId, surahId: SURAH } });
   studentId = await person("مستفيدة");
   await enrol(prisma, ctx, studentId);
   admin = await person("مديرة");
@@ -137,6 +145,7 @@ describe("Codex review, 2026-09-20 — a one-off occurrence's OWN Subject overri
 
     await overrideSession(prisma, superAdmin(admin), ctx.sessionId, {
       subjectId: quranSubjectId,
+      surahIds: [SURAH],
       version: 0,
     });
 

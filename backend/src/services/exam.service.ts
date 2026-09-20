@@ -4,7 +4,7 @@ import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
-import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
+import { assertSubjectTaughtAtLevel, resolveSurahs } from '../policies/curriculum.js';
 import {
   assertExamInTeacherScope,
   examScopeWhereForTeacher,
@@ -130,6 +130,12 @@ export interface PhysicalExamInput {
   /** `null` is **the whole Level** (R58), never "no target". */
   administrativeGroupId?: string | null;
   /**
+   * R165 §2 — **the Surah this sitting examines.** Required when the Subject
+   * `requiresSurahs`, refused otherwise, and within the «مقرر الحفظ» of the
+   * exam's Level (`resolveSurahs` — the one home of that rule).
+   */
+  surahId?: number | null;
+  /**
    * **R109 — the sitting's own visibility tier**, superseding §4.6's *"an exam
    * has no visibility tier of its own"*. That clause described the **audience**
    * — who the paper is for — and answered nothing about whether the arrangement
@@ -252,9 +258,16 @@ export async function createPhysicalExam(
     if (input.schedulingTypeId) {
       await assertTypeOfKind(tx, input.schedulingTypeId, ['exam'] as const);
     }
+    // R165 §2 — which Surah, when the Subject is examined by Surah.
+    const [surahId] = await resolveSurahs(tx, {
+      subjectId: input.subjectId,
+      levelIds: [input.levelId],
+      surahIds: input.surahId == null ? [] : [input.surahId],
+    });
     const exam = await tx.exam.create({
       data: {
         mode: 'physical',
+        surahId: surahId ?? null,
         title: input.title,
         maxGrade: input.maxGrade,
         description: input.description ?? null,
@@ -478,12 +491,26 @@ export async function updatePhysicalExam(
       }
     }
 
+    // R165 §2 — validated only when this edit names it. Level and Subject are
+    // not editable on a sitting, so the rule is asked of the row's own.
+    const surahChange =
+      input.surahId === undefined
+        ? undefined
+        : ((
+            await resolveSurahs(tx, {
+              subjectId: existing.subjectId,
+              levelIds: [existing.levelId],
+              surahIds: input.surahId === null ? [] : [input.surahId],
+            })
+          )[0] ?? null);
+
     // **Every editable field is listed here or it is silently dropped.** R57
     // found exactly that shape: a validator accepting a key while the update
     // omitted it answers `200 OK`, bumps the version, and changes nothing.
     await tx.exam.update({
       where: { id },
       data: {
+        ...(surahChange === undefined ? {} : { surahId: surahChange }),
         ...(input.title === undefined ? {} : { title: input.title }),
         // **Editable, and deliberately so.** A maximum typed wrongly at
         // creation would otherwise strand every score on that exam; the service
@@ -780,6 +807,8 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
  * and a field added to the query is a field the DTO immediately sees.
  */
 const EXAM_INCLUDE = {
+  // R165 §2 — the one Surah this sitting examines, by name.
+  surah: { select: { nameArabic: true } },
   // **Names, resolved server-side.** A timetable cannot be read from ids — the
   // rule `libraryItemDto` states and R55.1 applied to schedules.
   level: { select: { name: true } },

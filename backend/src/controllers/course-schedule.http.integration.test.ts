@@ -63,6 +63,10 @@ const SCHEDULE_KEYS = [
   "start_time",
   "subject_id",
   "subject_name",
+  // SRS Revision 165 §2 — the Surahs the class is about, numbers and names;
+  // both empty wherever its Subject is not taught by Surah.
+  "surah_ids",
+  "surah_names",
   "target_id",
   "target_name",
   "teaching_mode",

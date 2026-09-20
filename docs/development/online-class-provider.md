@@ -94,6 +94,22 @@ egress  ──joins the room, composites it──▶ http://minio:9000       the
 | Removing one | the ordinary content lifecycle (Trash → retention → storage retirement) | identical |
 | Volume | a handful of test recordings; the whole object store may be discarded and recreated (Owner, 2026-09-20) | grows — see the capacity figures below |
 
+### What a recording is called, and what she sees while it is made (SRS Revision 165 §1)
+
+The **title** of the platform's own capture is *type — Subject — Surah(s) — main teacher's
+public display name — date and time «إيقاف التسجيل» was pressed* (`sessionRecordingBaseName`,
+`lib/recording-name.ts`), with R75.6's ` 2`, ` 3` for later recordings of one occurrence. The
+instant is the recording's own `stopped_at`, never *now*, so a retried ingestion answers the
+same. **The storage key and file name deliberately keep the older, person-free *Subject —
+date***: a key carries a slug of its file name (TD-9) and must not carry somebody's name, and
+it has to resolve identically on a retry (R99.15).
+
+In the classroom the recording's state is **re-read every three seconds while it is
+transitional** (`starting`, `stopping`, `processing`, `importing`) and no longer once it
+settles; and the state line is not printed when it would only repeat the live «جاري التسجيل»
+banner. Before this it was read once, so «جارٍ بدء التسجيل…» stayed beside a banner that
+already said the recording was running.
+
 ## What it actually costs (MEASURED)
 
 Measured on 2026-09-20 with real rooms and real recordings (three participants,

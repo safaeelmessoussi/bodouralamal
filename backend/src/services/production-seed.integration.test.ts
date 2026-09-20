@@ -134,6 +134,13 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
       })),
     ).toEqual(EXPECTED_SUBJECTS);
     expect(firstRun).toHaveLength(EXPECTED_SUBJECTS.length);
+    // R165 §2 — exactly the two Subjects that work by Surah say so.
+    const bySurah = await prisma.subject.findMany({
+      where: { requiresSurahs: true, deletedAt: null, name: { in: EXPECTED_SUBJECTS.map((s) => s.name) } },
+      select: { name: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    expect(bySurah.map((s) => s.name)).toEqual(['حفظ القرآن', 'تفسير القرآن']);
     expect(
       await prisma.subject.count({
         where: { deletedAt: null, tracksQuranProgress: true },
@@ -395,7 +402,9 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
         data: { tracksQuranProgress: false },
       }),
       prisma.subject.create({
-        data: { name: `${TAG} conflicting marker`, tracksQuranProgress: true },
+        // R165 — both, or `subject_tracker_requires_surahs_check` refuses the
+        // row before the conflict this test is about is ever reached.
+        data: { name: `${TAG} conflicting marker`, tracksQuranProgress: true, requiresSurahs: true },
       }),
       // seedRoles runs after seedSubjects. Removing an otherwise unused role
       // proves the conflicting marker stops the invocation before unrelated

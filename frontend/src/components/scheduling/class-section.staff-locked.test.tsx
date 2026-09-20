@@ -49,6 +49,9 @@ const EMPTY_SCOPE: ScopeOptions = {
   ready: true,
   levelTeachesNothing: false,
   levelCategoryIds: {},
+  subjectsBySurah: new Set<string>(),
+  levelSurahIds: {},
+  surahNames: {},
   defaultVisibility: null,
   selfAttendanceAllowed: null,
 };
@@ -96,6 +99,10 @@ describe('§2 — scheduling.tsx wires the Teacher-scoped class-creation grant c
 
   it('reads her declared-capability scope, not the platform-wide vocabulary, for the class chain', () => {
     expect(source).toContain('restrictToOwnCapability: !canAssignStaff');
+  });
+
+  it('…and ONLY for a class: an exam takes its Level from the class she names (R94), which the narrowing would clear', () => {
+    expect(source).toContain("restrictToOwnCapability: !canAssignStaff && type === 'class',");
   });
 
   it('stores her class as entire_level — the only shape her grant covers, and never a choice she is shown', () => {

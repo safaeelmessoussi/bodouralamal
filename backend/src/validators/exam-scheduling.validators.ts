@@ -81,6 +81,9 @@ export const scheduleExamSchema = z
     scheduling_type_id: uuid.nullable().optional(),
     visibility: visibility.optional(),
     staff: staff.optional(),
+    /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
+     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
     availability,
     /** Required exactly when `source_exam_id` is absent for a `physical`
      *  exam — its own title/maximum/Level/Subject/year, since there is no
@@ -110,6 +113,9 @@ export const updateExamScheduleSchema = z
     scheduling_type_id: uuid.nullable().optional(),
     visibility: visibility.optional(),
     staff: staff.optional(),
+    /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
+     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
     availability,
   })
   .strict();

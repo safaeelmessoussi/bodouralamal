@@ -150,6 +150,8 @@ describe("GET /admin/subjects", () => {
       "id",
       "levels",
       "name",
+      // SRS Revision 165 §2 — the Subject works by Surah; shown and set on المواد.
+      "requires_surahs",
       // R73 — Owner-reported, 2026-09-15: the marker is now admin-settable,
       // so المواد's list has to be able to see it.
       "tracks_quran_progress",

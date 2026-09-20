@@ -67,6 +67,9 @@ export interface ScheduleSession {
    * means *inherit from the schedule*, on exactly the footing `room_id` has.
    */
   subject_id: string | null;
+  /** SRS Revision 165 §2/§5 — this occurrence's OWN Surahs; empty means it
+   *  inherits the class's. Optional for a server that predates it. */
+  surah_ids?: number[];
   /** TD-15: sent back on a single-occurrence edit. */
   version: number;
   staff: { user_id: string; position: string; user_name: string | null }[];
@@ -142,6 +145,9 @@ export interface SessionEdit {
    * and returns this occurrence to the schedule's own Subject.
    */
   subject_id?: string | null;
+  /** SRS Revision 165 §2/§5 — named, they REPLACE the class's for this date;
+   *  `[]` returns the occurrence to the class's own; absent leaves it alone. */
+  surah_ids?: number[];
 }
 
 /**

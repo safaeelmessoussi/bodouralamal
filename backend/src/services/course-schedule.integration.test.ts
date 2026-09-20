@@ -2161,6 +2161,107 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
     expect(e.details?.["reason"]).toBe("FROM_DATE_REQUIRED");
   });
 
+  describe("SRS Revision 165 §4 — a split at the class's FIRST session", () => {
+    /** The first Tuesday on or after NOW, named as the class's own first date —
+     *  which is what makes `effective_until = split − 1` fall before
+     *  `anchor_date` and `course_schedule_effective_until_check` refuse it. */
+    const FIRST = "2026-06-02";
+
+    it("no longer answers 500: the successor takes the whole series and the empty predecessor is retired", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ anchorDate: day(FIRST) }),
+        NOW,
+      );
+      const before = await datesOf(id);
+      expect(before[0]).toBe(FIRST);
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { version: 0, roomId: roomB, scope: "this_and_future", fromDate: day(FIRST) },
+        NOW,
+      );
+
+      // The whole series, every date, now under the successor — once each.
+      expect(await datesOf(result.successorId!)).toEqual(before);
+      expect(await datesOf(id)).toEqual([]);
+      const predecessor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+        where: { id },
+      });
+      // Retired, not left as a second empty «حصة» beside the one she edited…
+      expect(predecessor.deletedAt).not.toBeNull();
+      // …and not offered for restore: nothing was deleted, and a restore would
+      // re-materialize the series on top of its own successor.
+      expect(
+        await prisma.trash.count({ where: { targetId: id } }),
+      ).toBe(0);
+      const row = await prisma.auditLog.findFirstOrThrow({
+        where: { actionType: "courseschedule.update", targetId: id },
+        orderBy: { createdAt: "desc" },
+      });
+      expect((row.detail as { predecessor_retired?: boolean }).predecessor_retired).toBe(true);
+    });
+
+    it("keeps the predecessor alive when its first session is protected history", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ anchorDate: day(FIRST) }),
+        NOW,
+      );
+      const before = await datesOf(id);
+      const first = await prisma.session.findFirstOrThrow({
+        where: { scheduleId: id, date: day(FIRST) },
+      });
+      // Protected, and in another room so it does not clash with the successor.
+      await prisma.session.update({
+        where: { id: first.id },
+        data: { overridden: true, roomId: roomB },
+      });
+
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { version: 0, scope: "this_and_future", fromDate: day(FIRST) },
+        NOW,
+      );
+
+      const predecessor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+        where: { id },
+      });
+      // `readSessionPage` hides the sessions of a deleted schedule, so the one
+      // that owns held history must stay — closed on the earliest date the
+      // CHECK allows.
+      expect(predecessor.deletedAt).toBeNull();
+      expect(predecessor.effectiveUntil?.toISOString().slice(0, 10)).toBe(FIRST);
+      expect(await datesOf(id)).toEqual([FIRST]);
+      // No duplicate of the retained date under the successor.
+      expect(await datesOf(result.successorId!)).toEqual(before.slice(1));
+    });
+
+    it("a split BEFORE the first session is the same case, not a second 500", async () => {
+      const { id } = await createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ anchorDate: day(FIRST) }),
+        NOW,
+      );
+      const before = await datesOf(id);
+      const result = await updateCourseSchedule(
+        prisma,
+        superAdmin(),
+        id,
+        { version: 0, scope: "this_and_future", fromDate: day("2026-06-01") },
+        NOW,
+      );
+      expect(await datesOf(result.successorId!)).toEqual(before);
+    });
+  });
+
   it("leaves `all_sessions` behaving exactly as before", async () => {
     // The default is unchanged by R50, and that is worth a test rather than an
     // assumption: the whole revision is additive.

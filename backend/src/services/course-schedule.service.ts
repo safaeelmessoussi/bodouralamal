@@ -26,12 +26,20 @@ import {
   timesOverlap,
 } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
-import { assertSubjectTaughtAtLevel } from "../policies/curriculum.js";
+import {
+  assertSubjectTaughtAtLevel,
+  resolveSurahs,
+  subjectRequiresSurahs,
+} from "../policies/curriculum.js";
 import {
   resolveDelivery,
   type Delivery,
 } from "../policies/delivery.js";
-import { resolveAudience, scheduleDimensions } from "../policies/roster-resolution.js";
+import {
+  resolveAudience,
+  scheduleDimensions,
+  scheduleLevelIds,
+} from "../policies/roster-resolution.js";
 import * as audit from "../repositories/audit.repository.js";
 import * as trash from "../repositories/trash.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
@@ -480,6 +488,12 @@ export interface CourseScheduleInput {
   schedulingTypeId?: string | null;
   /** R123 — who may record presence at this class's occurrences. */
   attendanceMarking?: 'staff_only' | 'self_or_staff';
+  /**
+   * R165 §2 — **the Surahs this class is about.** Required (one or more) when
+   * the Subject `requiresSurahs`, refused otherwise; each must sit in the
+   * «مقرر الحفظ» of a Level the class addresses (`resolveSurahs`).
+   */
+  surahIds?: number[];
   academicYearId: string;
   staff?: ScheduleStaffInput[];
 }
@@ -908,7 +922,6 @@ export async function createCourseSchedule(
     for (const levelId of target.effectiveLevelIds) {
       await assertSubjectTaughtAtLevel(tx, levelId, input.subjectId);
     }
-
     // **§2 — the declared-capability check, now that the target is resolved.**
     // Reached only for `entire_level` (`assertTeacherEntireLevelOnly` above
     // already refuses a self-service Teacher every other mode), so exactly
@@ -921,6 +934,17 @@ export async function createCourseSchedule(
         input.subjectId,
       );
     }
+
+    // R165 §2 — which Surah(s), when the Subject works by Surah. **After the
+    // capability check above, deliberately**: asked first, a مؤطِّرة with no
+    // authority over this Level was answered `400 SURAHS_REQUIRED` — a fact
+    // about a class she may not create — instead of the refusal she is owed
+    // (§20 rule 17; caught by the journey test, 2026-09-20).
+    const surahIds = await resolveSurahs(tx, {
+      subjectId: input.subjectId,
+      levelIds: target.effectiveLevelIds,
+      surahIds: input.surahIds ?? [],
+    });
 
     // **`effectiveLevelIds`/`scopeRows` are derived, never columns.**
     // Separated here because the row below is built by spreading `target`,
@@ -1075,6 +1099,12 @@ export async function createCourseSchedule(
               })),
             }),
       ]);
+    }
+    // R165 §2 — the Surahs this class is about, validated above.
+    if (surahIds.length > 0) {
+      await tx.courseScheduleSurah.createMany({
+        data: surahIds.map((surahId) => ({ scheduleId: schedule.id, surahId })),
+      });
     }
 
     await assertStaffIntervals(tx, schedule.id, staff, {
@@ -1234,6 +1264,9 @@ export async function updateCourseSchedule(
     /** Revision 157 — see `splitCourseSchedule`'s own field of the same
      *  name; forwarded through unchanged when `scope: 'this_and_future'`. */
     dimensions?: CourseScheduleInput["dimensions"];
+    /** R165 §2 — the class's Surahs, REPLACED whole when named (either scope).
+     *  Absent leaves them as they are; a split's successor then inherits them. */
+    surahIds?: number[];
   },
   now: Date = new Date(),
 ): Promise<{
@@ -1280,6 +1313,13 @@ export async function updateCourseSchedule(
     select: {
       branchId: true,
       roomId: true,
+      // R165 §2 — what the class teaches and to which Level(s): what a change
+      // of Surahs is validated against. None of it is editable here (§4.4).
+      subjectId: true,
+      teachingMode: true,
+      levelId: true,
+      administrativeGroupId: true,
+      teachingGroupId: true,
       // R97 — read so a partial edit resolves against what the class IS, not
       // against a default. Patching only `online_media_mode` on a class that is
       // already online must not silently make it in-person.
@@ -1455,6 +1495,23 @@ export async function updateCourseSchedule(
           : { schedulingTypeId: data.schedulingTypeId }),
       },
     });
+
+    // R165 §2 — the class's Surahs, replaced whole when this edit names them.
+    // The Subject and the Levels are frozen on this scope (§4.4), so they are
+    // read from the row rather than from the request.
+    if (data.surahIds !== undefined) {
+      const surahIds = await resolveSurahs(tx, {
+        subjectId: existing.subjectId,
+        levelIds: await scheduleLevelIds(tx, id, existing),
+        surahIds: data.surahIds,
+      });
+      await tx.courseScheduleSurah.deleteMany({ where: { scheduleId: id } });
+      if (surahIds.length > 0) {
+        await tx.courseScheduleSurah.createMany({
+          data: surahIds.map((surahId) => ({ scheduleId: id, surahId })),
+        });
+      }
+    }
 
     /**
      * **Replaced whole, and written BEFORE materialization** (R90).
@@ -1636,6 +1693,9 @@ async function splitCourseSchedule(
      *  into or within `multi_dimension`. Named together with `teachingMode`,
      *  exactly as `targetId` already is (validator-enforced). */
     dimensions?: CourseScheduleInput["dimensions"];
+    /** R165 §2 — the successor's Surahs; absent, it inherits the
+     *  predecessor's (or drops them, when its new Subject is not by Surah). */
+    surahIds?: number[];
   },
   now: Date,
 ): Promise<{
@@ -1672,6 +1732,8 @@ async function splitCourseSchedule(
       anchorDate: true,
       effectiveUntil: true,
       academicYearId: true,
+      // R165 §2 — inherited by the successor unless this edit names its own.
+      surahs: { select: { surahId: true } },
       // R91 — carried onto the successor unchanged by the split below.
       staff: {
         where: { deletedAt: null },
@@ -1731,6 +1793,23 @@ async function splitCourseSchedule(
     );
   }
   const closeAt = addDays(splitOn, -1);
+  /**
+   * **A split at the class's FIRST occurrence leaves the predecessor no life**
+   * (Owner-reported, 2026-09-20 — SRS Revision 165 §4). `closeAt` then falls
+   * before the predecessor's own `anchor_date`, which
+   * `course_schedule_effective_until_check` refuses — and a CHECK violation
+   * is not a coded error, so «this session and all later ones» answered `500`
+   * from exactly one place: the first session. It is not a mistake on her
+   * part; it means "the whole series, identity included", which no other scope
+   * can say (§4.4 freezes identity on `all_sessions`). How the predecessor is
+   * closed in that case is decided in the transaction below, once it is known
+   * whether it still owns protected history.
+   */
+  const predecessorAnchor = existing.anchorDate
+    ? atMidnightUtc(existing.anchorDate)
+    : null;
+  const predecessorHasNoLifeLeft =
+    predecessorAnchor !== null && closeAt < predecessorAnchor;
   const horizon = await horizonFor(prisma, now);
 
   const successorDelivery = resolveDelivery(existing, {
@@ -1864,6 +1943,28 @@ async function splitCourseSchedule(
         ...(existingDimensions ? { scopeRows: existingDimensions } : {}),
       };
     }
+    /**
+     * **R165 §2 — the successor's Surahs.** Named by this edit, they are
+     * validated like a new class's. Unnamed, the successor IS the same class
+     * and inherits the predecessor's — re-checked only when the identity moved
+     * (a Surah outside the new Levels' «مقرر الحفظ» is named rather than
+     * carried silently), and dropped when the new Subject is not taught by
+     * Surah at all: keeping them would be the invented value the rule refuses.
+     */
+    const inheritedSurahs = existing.surahs.map((row) => row.surahId);
+    let successorSurahs = inheritedSurahs;
+    if (data.surahIds !== undefined || identityChanged) {
+      const carries =
+        data.surahIds !== undefined ||
+        (await subjectRequiresSurahs(tx, successorSubjectId));
+      successorSurahs = await resolveSurahs(tx, {
+        subjectId: successorSubjectId,
+        levelIds:
+          target.effectiveLevelIds ?? (await scheduleLevelIds(tx, id, existing)),
+        surahIds: carries ? (data.surahIds ?? inheritedSurahs) : [],
+      });
+    }
+
     if (
       successorDelivery.roomId &&
       successorBranchId !== existing.branchId &&
@@ -1929,17 +2030,6 @@ async function splitCourseSchedule(
       effectiveUntil: existing.effectiveUntil,
     };
 
-    // **Close the original first**, so the conflict check below compares the
-    // successor against a predecessor that has already stopped — otherwise a
-    // schedule would collide with the half of itself it is replacing.
-    await updateWithVersion({
-      delegate: tx.recurringCourseSchedule,
-      id,
-      expectedVersion: data.version,
-      requireNotDeleted: true,
-      data: { effectiveUntil: closeAt },
-    });
-
     // The predecessor's occurrences from the split date onward now belong to the
     // successor — except the protected ones, which stay exactly where they are.
     // **The same predicate every other scheduling path asks** (R43.6): a session
@@ -1980,6 +2070,51 @@ async function splitCourseSchedule(
         .filter((s) => !removableIds.has(s.id))
         .map((s) => s.date.toISOString().slice(0, 10)),
     );
+
+    // **Close the original before the conflict check**, so that check compares
+    // the successor against a predecessor that has already stopped — otherwise
+    // a schedule would collide with the half of itself it is replacing.
+    //
+    // Ordinarily it ends the day before the split. When the split is at its
+    // first occurrence (`predecessorHasNoLifeLeft`) there is no such day, and
+    // what happens depends on what it still owns:
+    //
+    // - **Nothing** — every occurrence moved to the successor. The predecessor
+    //   never met and never will, so it is RETIRED: a second, empty «حصة» in
+    //   the class list beside the one she just edited would be a lie about how
+    //   many classes there are. No Trash snapshot, deliberately — nothing was
+    //   deleted from anybody's point of view (the class continues as the
+    //   successor), and a restore would re-materialize the series on top of it.
+    // - **Protected history** (held, attended, or carrying content from the
+    //   first date on) — those sessions stay with it, exactly as in any split,
+    //   and `readSessionPage` hides the sessions of a deleted schedule, so it
+    //   must stay alive to own them. It closes on its anchor date, the earliest
+    //   the CHECK allows. That cannot mint a duplicate: materialization skips a
+    //   date holding ANY row of the same schedule, removed ones included
+    //   (`existingByDate`), and a date already past is never regenerated.
+    // A live session BEFORE the split is history too. None can exist by the
+    // rule (nothing is generated before the anchor), but a row is cheaper to
+    // count than a held session is to lose behind a retired schedule.
+    const earlier = await tx.session.count({
+      where: { scheduleId: id, deletedAt: null, date: { lt: splitOn } },
+    });
+    const keepsHistory = future.length > removable.length || earlier > 0;
+    const retiresPredecessor = predecessorHasNoLifeLeft && !keepsHistory;
+    await updateWithVersion({
+      delegate: tx.recurringCourseSchedule,
+      id,
+      expectedVersion: data.version,
+      requireNotDeleted: true,
+      data: !predecessorHasNoLifeLeft
+        ? { effectiveUntil: closeAt }
+        : retiresPredecessor
+          ? {
+              effectiveUntil: predecessorAnchor,
+              deletedAt: new Date(),
+              deletedById: actor.userId,
+            }
+          : { effectiveUntil: predecessorAnchor },
+    });
 
     // Only the sessions about to be removed (immediately below) may be
     // excluded from this check — see the comment above `future`.
@@ -2048,6 +2183,11 @@ async function splitCourseSchedule(
             }),
       ]);
     }
+    if (successorSurahs.length > 0) {
+      await tx.courseScheduleSurah.createMany({
+        data: successorSurahs.map((surahId) => ({ scheduleId: successor.id, surahId })),
+      });
+    }
     // §4.4: without this the teacher silently disappears from every future
     // session of the successor.
     if (existing.staff.length > 0) {
@@ -2103,6 +2243,9 @@ async function splitCourseSchedule(
         // other scheduling write reports (§4.4).
         sessions_released: removable.length,
         sessions_left_alone: future.length - removable.length,
+        // R165 §4 — a split at the first occurrence that left the predecessor
+        // nothing to own retired it; the class continues as the successor.
+        ...(retiresPredecessor ? { predecessor_retired: true } : {}),
         // R109 — the tier the tail of the series runs at from the split date on.
         visibility: successorValues.visibility,
       },
@@ -2293,6 +2436,13 @@ export async function listScheduleSessions(
         // R109 — the occurrence's own tier, so the timetable can show which
         // dates of a series were decided about individually.
         visibility: true,
+        // R161 — this occurrence's own Subject override (`null` = the class's).
+        // The editor's row type has declared it since R161, but this select
+        // never sent it, so a saved override reopened as the class's Subject
+        // and the next unrelated save silently cleared it (found 2026-09-20).
+        subjectId: true,
+        // R165 §2/§5 — this occurrence's own Surahs; none means the class's.
+        surahs: { select: { surahId: true }, orderBy: { surahId: "asc" } },
         version: true,
         // **`SessionStaff` carries NO period** (R91). The snapshot IS the
         // occurrence's own truth — who took this class — so a date on it would
@@ -2323,6 +2473,7 @@ export async function listScheduleSessions(
   return page(
     rows.map((r) => ({
       ...r,
+      surahIds: r.surahs.map((row) => row.surahId),
       staff: r.staff.map((s) => ({
         userId: s.userId,
         position: s.position,
@@ -2355,6 +2506,10 @@ export interface ScheduleSessionRow {
    *  schedule*. What "this session only" leaves behind. */
   overridden: boolean;
   roomId: string | null;
+  /** R161 — this occurrence's own Subject; `null` inherits the class's. */
+  subjectId: string | null;
+  /** R165 §2/§5 — this occurrence's own Surahs; empty inherits the class's. */
+  surahIds: number[];
   version: number;
   staff: { userId: string; position: string; name: string | null }[];
   /** Stable codes from the R43.6 rule set. Empty means a schedule edit or a
@@ -2512,6 +2667,11 @@ export async function listCourseSchedules(
         // Revision 155 — a `multi_dimension` row's real target; empty
         // arrays (never included at all) for every other mode's rows.
         ...DIMENSION_SCOPES_WITH_NAMES,
+        // R165 §2 — the Surahs the class is about, in Mushaf order.
+        surahs: {
+          select: { surahId: true, surah: { select: { nameArabic: true } } },
+          orderBy: { surahId: "asc" },
+        },
       },
     }),
     prisma.recurringCourseSchedule.count({ where }),
@@ -2528,6 +2688,25 @@ export async function listCourseSchedules(
       })),
       targetSummary:
         row.teachingMode === "multi_dimension" ? dimensionSummary(row) : null,
+      surahIds: row.surahs.map((r) => r.surahId),
+      surahNames: row.surahs.map((r) => r.surah.nameArabic),
+      /**
+       * **A filter-built class's `level_id`** (found 2026-09-20 by the
+       * first-session journey of `verify-class-filters`). It has no single
+       * target column, so `level_id` was `null` — and the «from this date
+       * onward» editor, which seeds its Subject list from that Level, opened
+       * such a class with its Subject EMPTY and refused to save until she
+       * chose it again. The first Level it addresses, in the same order the
+       * form's own `representativeLevelId` uses; `dimensions` stays the
+       * authority on the whole audience.
+       */
+      representativeLevelId:
+        row.teachingMode === "multi_dimension"
+          ? (row.levelScopes[0]?.levelId ??
+            row.administrativeGroupScopes[0]?.administrativeGroup.levelId ??
+            row.teachingGroupScopes[0]?.teachingGroup.levelId ??
+            null)
+          : null,
       dimensions:
         row.teachingMode === "multi_dimension"
           ? {
@@ -2560,11 +2739,17 @@ const DIMENSION_SCOPES_WITH_NAMES = {
   branchScopes: { select: { branchId: true, branch: { select: { name: true } } } },
   categoryScopes: { select: { categoryId: true, category: { select: { name: true } } } },
   levelScopes: { select: { levelId: true, level: { select: { name: true } } } },
+  // `levelId` beside each name: a group or a circle is scoped to ONE Level
+  // (§2.2), and that is how a class addressed by group or circle alone still
+  // answers *which Level* (`representativeLevelId`, below).
   administrativeGroupScopes: {
-    select: { administrativeGroupId: true, administrativeGroup: { select: { name: true } } },
+    select: {
+      administrativeGroupId: true,
+      administrativeGroup: { select: { name: true, levelId: true } },
+    },
   },
   teachingGroupScopes: {
-    select: { teachingGroupId: true, teachingGroup: { select: { name: true } } },
+    select: { teachingGroupId: true, teachingGroup: { select: { name: true, levelId: true } } },
   },
 } as const;
 

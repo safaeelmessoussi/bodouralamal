@@ -95,6 +95,8 @@ export interface SubjectWithLevels extends SubjectRef {
   levels: { id: string; name: string; categoryName: string }[];
   /** R73's structural marker — see `SubjectWithLevelsDto`'s own note. */
   tracksQuranProgress: boolean;
+  /** R165 §2 — the Subject works by Surah. */
+  requiresSurahs: boolean;
 }
 
 /**
@@ -135,6 +137,7 @@ export async function listSubjects(
       displayOrder: true,
       version: true,
       tracksQuranProgress: true,
+      requiresSurahs: true,
       // Live pairings only, and live Levels only: a soft-deleted Level does not
       // block anything, so listing it would name a dependency that is not there.
       levels: {
@@ -159,6 +162,7 @@ export async function listSubjects(
     displayOrder: subject.displayOrder,
     version: subject.version,
     tracksQuranProgress: subject.tracksQuranProgress,
+    requiresSurahs: subject.requiresSurahs,
     levels: subject.levels
       // Category then Level, the reading order of the hierarchy — and the
       // Category first because `Level.displayOrder` is scoped WITHIN its Category
@@ -207,15 +211,44 @@ export async function updateSubject(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; displayOrder?: number | null; tracksQuranProgress?: boolean },
+  data: {
+    name?: string;
+    displayOrder?: number | null;
+    tracksQuranProgress?: boolean;
+    requiresSurahs?: boolean;
+  },
 ): Promise<Subject> {
   assertCanWrite(actor);
+  /**
+   * **R165 §2 — the tracker necessarily works by Surah**
+   * (`subject_tracker_requires_surahs_check`). Marking a Subject as the tracker
+   * therefore marks it by-Surah too, and un-marking by-Surah on the tracker is
+   * refused HERE, with a code — a CHECK violation would otherwise reach her as
+   * a bare `500`. Existing classes and exams are never rewritten by either
+   * change: the rule is asked when a class or an exam is written, not of rows
+   * already there.
+   */
+  const next = { ...data };
+  if (next.tracksQuranProgress === true && next.requiresSurahs === undefined) {
+    next.requiresSurahs = true;
+  }
+  if (next.requiresSurahs === false) {
+    const current = await prisma.subject.findFirst({
+      where: { id, deletedAt: null },
+      select: { tracksQuranProgress: true },
+    });
+    if (next.tracksQuranProgress ?? current?.tracksQuranProgress ?? false) {
+      throw new AppError('VALIDATION_FAILED', 'the memorisation subject is always taught by surah', {
+        reason: 'TRACKER_REQUIRES_SURAHS',
+      });
+    }
+  }
   return updateWithVersion<Subject>({
     delegate: prisma.subject,
     id,
     expectedVersion,
     requireNotDeleted: true,
-    data: { ...data },
+    data: next,
   });
 }
 

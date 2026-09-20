@@ -159,6 +159,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     title: o.title,
     // SRS Revision 163 §2 — the item's own typed title («العنوان»).
     item_title: o.itemTitle,
+    // R165 §2 — the Surah(s) this occurrence is about; empty when it has none.
+    surah_names: o.surahNames,
     date: o.date,
     start_time: o.startTime,
     end_time: o.endTime,

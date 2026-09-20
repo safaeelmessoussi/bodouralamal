@@ -211,6 +211,12 @@ export const createCourseScheduleSchema = z
      *  never both, never neither). */
     target_id: uuid.optional(),
     dimensions: courseScheduleDimensions.optional(),
+    /**
+     * R165 §2 — the Surahs this class is about (1–114). Whether any is
+     * REQUIRED is the Subject's `requires_surahs`, decided by the service
+     * (`resolveSurahs`); the shape alone is checked here.
+     */
+    surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),
     branch_id: uuid,
     room_id: uuid.nullable().optional(),
     /** R97 — the DEFAULT delivery for the Sessions this schedule materializes.
@@ -419,6 +425,12 @@ export const updateCourseScheduleSchema = z
      * own `courseScheduleDimensions` field is — see the refinements below.
      */
     dimensions: courseScheduleDimensions.optional(),
+    /**
+     * R165 §2 — the Surahs this class is about (1–114). Whether any is
+     * REQUIRED is the Subject's `requires_surahs`, decided by the service
+     * (`resolveSurahs`); the shape alone is checked here.
+     */
+    surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),
   })
   .strict()
   .refine((v) => v.scope !== "this_and_future" || v.from_date !== undefined, {

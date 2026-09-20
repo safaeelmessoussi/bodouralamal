@@ -311,14 +311,30 @@ let safaTab = null;
     // a chip renders the Subject name, and the dev fixtures carry an in-person
     // تفسير القرآن class earlier in the month — matched by text alone, it was
     // that class this opened, and its dialog rightly offers no «دخول الحصة».
-    const chips = [...document.querySelectorAll('.is-today .event-chip--interactive')];
-    const chip = chips.find(
-      (c) => c.innerText.includes('تفسير') && c.querySelector('.event-chip__delivery'),
-    );
-    if (!chip) return 'no chip';
-    chip.click();
-    await new Promise((r) => setTimeout(r, 900));
-    return document.body.innerText.includes('دخول الحصة') ? 'has join' : 'no join';
+    //
+    // **And the scenario's OWN class, not merely the first online تفسير today**
+    // (2026-09-20): a populated Localhost can hold somebody's real online
+    // تفسير class on the same date, and a chip carries no id. Each candidate
+    // is opened in turn and kept only if its «دخول الحصة» leads to this
+    // scenario's occurrence; anybody else's is closed again, untouched.
+    const wanted = ${JSON.stringify(`/classroom/${S.tafseerToday}`)};
+    const candidates = () =>
+      [...document.querySelectorAll('.is-today .event-chip--interactive')].filter(
+        (c) => c.innerText.includes('تفسير') && c.querySelector('.event-chip__delivery'),
+      );
+    const count = candidates().length;
+    if (count === 0) return 'no chip';
+    for (let i = 0; i < count; i += 1) {
+      const chip = candidates()[i];
+      if (!chip) break;
+      chip.click();
+      await new Promise((r) => setTimeout(r, 900));
+      const join = [...document.querySelectorAll('a')].find((a) => a.innerText.includes('دخول الحصة'));
+      if (join && join.getAttribute('href') === wanted) return 'has join';
+      document.querySelector('dialog[open] button[aria-label="إغلاق"]')?.click();
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return 'no join among ' + count + ' online chips';
   })()`);
   check('صفاء opens the occurrence and sees «دخول الحصة»', opened === 'has join', opened);
 

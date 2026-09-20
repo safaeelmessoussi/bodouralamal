@@ -44,6 +44,29 @@ edit then leaves it alone — as it leaves alone any session carrying a note, a 
 content link or a grade — and reports what it skipped. Silently discarding a human decision
 is the failure this rule exists to prevent.
 
+**A split at a class's first session is the whole series** (SRS Revision 165 §4). «هذه الحصة
+وكل ما بعدها» closes the predecessor the day before the split; at the first occurrence that
+day is before the class's own `anchor_date`, which a database CHECK refuses. It used to
+answer `500`. Now a predecessor left with nothing is **retired** (soft-deleted,
+`predecessor_retired` in the audit row, deliberately **no Trash snapshot** — a restore would
+re-materialize the series on top of its own successor), and one that still owns protected
+history stays alive to own it, closed on its anchor date.
+
+**Subjects that work by Surah say which Surah** (Revision 165 §2/§5). Whether a Subject works
+by Surah is its `requires_surahs` column — حفظ القرآن and تفسير القرآن carry it; no code reads
+a Subject's name. One rule, `resolveSurahs` in `policies/curriculum.ts`, is asked wherever
+something is scheduled: a class names one or more Surahs of the «مقرر الحفظ» of a Level it
+addresses (`course_schedule_surah`), an exam names exactly one (`exam.surah_id`), and one
+occurrence may name its own (`session_surah`). **An occurrence's Surahs REPLACE the class's for
+that date, where its audience dimensions are ADDED** — a Surah is what is taught that day.
+Calendar occurrences carry `surah_names`; the scheduling forms read the marker, each Level's
+syllabus and the Surah names from `/me/scope-options`, so a مؤطِّرة has them too.
+
+**A class's own branch is derived, never asked twice** (Revision 165 §6). «فروع» says who the
+class is for; `branch_id` says whose administration runs it. إضافة عنصر asks only the first
+and derives the second (`homeBranchOf`): the one branch chosen, else the chosen room's, else
+the branch the class already has while the choice still includes it, else the first chosen.
+
 The calendar renders a unified grid of both sessions and events, in one list. **It is
 public**: anonymous visitors get the same filter set as signed-in users.
 Identical filters never means identical results — every result set stays visibility-filtered.

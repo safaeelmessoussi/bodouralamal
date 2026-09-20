@@ -267,10 +267,36 @@ async function main(): Promise<void> {
             create: { levelId, subjectId },
             update: {},
           });
+          /**
+           * **R165 §2 — a class of a Subject that works by Surah names its
+           * Surah**, from its Level's «مقرر الحفظ». This seed writes rows
+           * directly, so the service's rule (`resolveSurahs`) never sees it;
+           * a fixture that contradicted the rule would be test data no screen
+           * could have produced. The Level's own first Surah if it has a
+           * syllabus, else الفاتحة added to it.
+           */
+          const bySurah = subjects[i % subjects.length]?.requiresSurahs === true;
+          let surahId: number | null = null;
+          if (bySurah) {
+            const first = await prisma.levelSurah.findFirst({
+              where: { levelId, deletedAt: null },
+              orderBy: { surahId: 'asc' },
+              select: { surahId: true },
+            });
+            surahId = first?.surahId ?? 1;
+            if (!first) {
+              await prisma.levelSurah.upsert({
+                where: { levelId_surahId: { levelId, surahId } },
+                create: { levelId, surahId },
+                update: { deletedAt: null, deletedById: null },
+              });
+            }
+          }
           await prisma.recurringCourseSchedule.create({
             data: {
               title: `${FIXTURE_TAG} حلقة`,
               subjectId,
+              ...(surahId === null ? {} : { surahs: { create: [{ surahId }] } }),
               teachingMode: 'administrative_group',
               administrativeGroupId: group.id,
               branchId: branch.id,

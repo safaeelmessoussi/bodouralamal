@@ -66,6 +66,12 @@ export interface ClassSectionProps {
   mediaMode: OnlineMediaMode;
   onMediaMode: (v: OnlineMediaMode) => void;
   teachers: DirectoryEntry[];
+  /**
+   * SRS Revision 165 §2 — «السور», rendered directly under the Subject it
+   * depends on. Supplied by the form only when the chosen Subject works by
+   * Surah; absent, nothing is asked (`components/scheduling/surahs.tsx`).
+   */
+  surahs?: ReactNode;
   /** R91 — one row per assignment, each with its own effective period. */
   staffing: StaffingPeriod[];
   onStaffing: (next: StaffingPeriod[]) => void;
@@ -116,6 +122,7 @@ export function ClassSection({
   mediaMode,
   onMediaMode,
   teachers,
+  surahs,
   staffing,
   onStaffing,
   appraisal,
@@ -176,6 +183,7 @@ export function ClassSection({
         mode="form"
         locked={locked ? ['subjectId', 'academicYearId'] : []}
       />
+      {surahs ?? null}
 
       {/* **R97 — delivery, and the room that only an in-person class has.**
           One section, shared with the occurrence editor: a class scheduled

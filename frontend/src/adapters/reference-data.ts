@@ -48,6 +48,9 @@ export interface SubjectRef {
    * `SubjectRef` (a plain selector) ignores it.
    */
   tracks_quran_progress?: boolean;
+  /** SRS Revision 165 §2 — this Subject works by Surah (shown and set on
+   *  المواد; the scheduling forms read it from `/me/scope-options`). */
+  requires_surahs?: boolean;
 }
 
 export interface AcademicYearRef {

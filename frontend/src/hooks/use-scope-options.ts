@@ -106,6 +106,15 @@ export interface ScopeOptions {
    * it narrows them itself, from this.
    */
   levelCategoryIds: Record<string, string>;
+  /**
+   * **SRS Revision 165 §2 — what a form needs to ask «أي سورة؟».** Which
+   * Subjects work by Surah (a column the server sends — never a Subject's
+   * name), each Level's «مقرر الحفظ», and the Surahs' names. All three come
+   * from the one scope read, so a مؤطِّرة scheduling her own class has them too.
+   */
+  subjectsBySurah: ReadonlySet<string>;
+  levelSurahIds: Record<string, number[]>;
+  surahNames: Record<number, string>;
   /** §4.9's default content visibility for the chosen Level, through its
    *  Category (§15.1). `null` when no Level is chosen or the lists have not
    *  arrived — never guessed, and never `public` on absence. */
@@ -232,6 +241,12 @@ export function useScopeOptions({
    *  The narrowing below is a lookup rather than a second (Admin-only) request. */
   const [allSubjects, setAllSubjects] = useState<SubjectRef[]>([]);
   const [levelSubjects, setLevelSubjects] = useState<Map<string, string[]>>(new Map());
+  // R165 §2 — one state, because the three always arrive (and change) together.
+  const [surahFacts, setSurahFacts] = useState<{
+    subjectsBySurah: ReadonlySet<string>;
+    levelSurahIds: Record<string, number[]>;
+    surahNames: Record<number, string>;
+  }>({ subjectsBySurah: new Set(), levelSurahIds: {}, surahNames: {} });
 
   const [ready, setReady] = useState(false);
   /**
@@ -319,6 +334,13 @@ export function useScopeOptions({
         new Map(payload.levels.map((l) => [l.id, l.subject_ids])),
       );
       setAllSubjects(payload.subjects.map((x) => ({ id: x.id, name: x.name }) as SubjectRef));
+      setSurahFacts({
+        subjectsBySurah: new Set(
+          payload.subjects.filter((x) => x.requires_surahs === true).map((x) => x.id),
+        ),
+        levelSurahIds: Object.fromEntries(payload.levels.map((l) => [l.id, l.surah_ids ?? []])),
+        surahNames: Object.fromEntries((payload.surahs ?? []).map((x) => [x.id, x.name])),
+      });
       setCategories(cats);
       setLevels(lvls);
       setBranches(brs);
@@ -553,6 +575,7 @@ export function useScopeOptions({
     levelTeachesNothing:
       wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
     levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
+    ...surahFacts,
     /**
      * §4.9's default content visibility for the currently chosen Level, through
      * its Category (§15.1) — `null` until both lists have arrived.

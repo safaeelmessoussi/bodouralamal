@@ -2026,3 +2026,70 @@ export async function examAudienceWhere(
           });
   }
 }
+
+/**
+ * **Owner-reported, 2026-09-17 — the schedule's OWN Level(s), whatever its
+ * teaching mode.** A Subject override is validated against what the
+ * SCHEDULE teaches, never against this occurrence's own audience-dimension
+ * override — the two are independent questions (what is taught vs who is
+ * asked to attend), and conflating them would let an audience change
+ * silently invalidate an unrelated Subject override, or vice versa.
+ */
+export async function scheduleLevelIds(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  scheduleId: string,
+  schedule: {
+    teachingMode: string;
+    levelId: string | null;
+    administrativeGroupId: string | null;
+    teachingGroupId: string | null;
+  },
+): Promise<string[]> {
+  if (schedule.teachingMode === "entire_level") {
+    return schedule.levelId ? [schedule.levelId] : [];
+  }
+  if (schedule.teachingMode === "administrative_group" && schedule.administrativeGroupId) {
+    const group = await prisma.administrativeGroup.findUnique({
+      where: { id: schedule.administrativeGroupId },
+      select: { levelId: true },
+    });
+    return group ? [group.levelId] : [];
+  }
+  if (schedule.teachingMode === "teaching_group" && schedule.teachingGroupId) {
+    const circle = await prisma.teachingGroup.findUnique({
+      where: { id: schedule.teachingGroupId },
+      select: { levelId: true },
+    });
+    return circle ? [circle.levelId] : [];
+  }
+  if (schedule.teachingMode === "multi_dimension") {
+    const dims = await scheduleDimensions(prisma, scheduleId, schedule.teachingMode as TeachingMode);
+    if (!dims) return [];
+    // **Codex review, 2026-09-20 — the levels a group or circle scope IMPLY,
+    // unioned in.** This returned `dims.levelIds` alone, which is empty for a
+    // valid group-only or circle-only `multi_dimension` class (naming an
+    // Administrative Group or a Circle carries no `CourseScheduleLevel` row
+    // of its own), so the validation loop below silently ran zero times and
+    // accepted a Subject the Level never teaches. `course-schedule.service.ts`
+    // computes this same union at creation (`effectiveLevelIds`); reused here
+    // in spirit rather than re-derived a third way.
+    const [groups, circles] = await Promise.all([
+      dims.administrativeGroupIds.length === 0
+        ? []
+        : prisma.administrativeGroup.findMany({
+            where: { id: { in: dims.administrativeGroupIds }, deletedAt: null },
+            select: { levelId: true },
+          }),
+      dims.teachingGroupIds.length === 0
+        ? []
+        : prisma.teachingGroup.findMany({
+            where: { id: { in: dims.teachingGroupIds }, deletedAt: null },
+            select: { levelId: true },
+          }),
+    ]);
+    return [
+      ...new Set([...dims.levelIds, ...groups.map((g) => g.levelId), ...circles.map((c) => c.levelId)]),
+    ];
+  }
+  return [];
+}

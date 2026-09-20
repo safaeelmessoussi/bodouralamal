@@ -72,24 +72,53 @@ export function RecordingPanel({
   const [problem, setProblem] = useState<string | null>(null);
 
   /**
-   * Read once on entry, so a مؤطِّرة who reloads mid-class sees «إيقاف التسجيل»
-   * rather than an invitation to start a second recording. The banner does not
-   * depend on this succeeding.
+   * **Follow the recording while it is BETWEEN states** (Owner-reported,
+   * 2026-09-20 — SRS Revision 165 §1).
+   *
+   * `state` was set once, from the answer to «بدء» or «إيقاف» — which is
+   * `starting` or `stopping` by construction — and never read again. So «جارٍ بدء
+   * التسجيل…» stayed on screen beside «جاري التسجيل» for the rest of the class,
+   * and «جارٍ إيقاف التسجيل…» long after the recording had ended: two sentences
+   * contradicting each other, one of them frozen. The recorder takes several
+   * seconds to join a room, and that wait is real — the sentence describing it
+   * simply has to end when it does.
+   *
+   * It also runs once on entry, so a مؤطِّرة who reloads mid-class sees «إيقاف
+   * التسجيل» rather than an invitation to start a second recording.
+   *
+   * Two triggers, because they are two facts: the ROOM announcing that recording
+   * began or ended (`live`), and the clock, for the states the room says nothing
+   * about (the provider finishing, the platform importing the file).
    */
+  const settled =
+    state === null ||
+    (state.status !== 'starting' &&
+      state.status !== 'stopping' &&
+      state.availability !== 'processing' &&
+      state.availability !== 'importing');
   useEffect(() => {
     if (!mayRecord) return;
     let alive = true;
-    void readRecordingState(sessionId, accessToken, null)
-      .then((found) => {
-        if (alive) setState(found);
-      })
-      .catch(() => {
-        /* The banner is the room's; a failed read must not hide it. */
-      });
-    return () => {
+    const read = (): void => {
+      void readRecordingState(sessionId, accessToken, null)
+        .then((found) => {
+          if (alive && found !== null) setState(found);
+        })
+        .catch(() => {
+          /* A missed poll is retried by the next one; the banner is the room's. */
+        });
+    };
+    // The room changed its mind: ask at once rather than at the next tick.
+    read();
+    if (settled) return () => {
       alive = false;
     };
-  }, [sessionId, accessToken, mayRecord]);
+    const timer = setInterval(read, 3000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [sessionId, accessToken, mayRecord, live, settled]);
 
   const act = useCallback(
     async (run: () => Promise<RecordingState>) => {
@@ -157,7 +186,9 @@ export function RecordingPanel({
            * `status`: the provider finishing means an object is in a staging
            * bucket, which is not availability.
            */}
-          {state ? <p className="classroom__recording-state">{statusLabel(state)}</p> : null}
+          {state && !(live && statusLabel(state) === t('classroom.recordingLive')) ? (
+            <p className="classroom__recording-state">{statusLabel(state)}</p>
+          ) : null}
 
           {/* Said once, where the decision is made: recording is a choice. */}
           {!live && !state ? (

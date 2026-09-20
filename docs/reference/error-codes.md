@@ -136,13 +136,17 @@ generic message for all of these is hiding the only useful part of the answer.**
 | `TARGET_ID_REQUIRED` · `DATE_REQUIRED` | Creating an assessment | Four of the five targets name something; and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122) |
 | `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
 
-Two more travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a
+These travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a
 malformed request rather than a state that moved on:
 
 | `details.reason` | Raised by | The user's next step |
 |---|---|---|
 | `ENROLLMENT_REQUIRED` | Approval | §4.1: every admitted student needs a Level and a group **in the approval itself**. `missing_user_ids` names who — on a family bundle that is the only way to know which of them |
 | `NOT_IN_BUNDLE` | Approval | A placement named somebody this approval does not admit. Without the check, approval would be an unscoped enrolment endpoint |
+| `SURAHS_REQUIRED` | Scheduling or editing a class, one occurrence, or an exam (SRS Revision 165 §2) | The Subject works by Surah: name which. A class names one or more, an exam exactly one. If none is on offer, the Level's «مقرر الحفظ» is empty — the Super Admin sets it first |
+| `SURAH_NOT_IN_SYLLABUS` | The same writes | `details.surah_ids` names the Surahs outside the «مقرر الحفظ» of every Level the item addresses |
+| `SURAHS_NOT_APPLICABLE` | The same writes | A Surah was named for a Subject that is not taught by Surah — remove it; it is never stored as a harmless extra |
+| `TRACKER_REQUIRES_SURAHS` | Editing a Subject | The memorisation Subject always works by Surah; un-mark it as the tracker first |
 
 **Deletion blocked by references is different**: it carries `details.blocked_by`, an object of
 `{ relationship: count }` naming every blocker at once, so a screen can say *which* rather than

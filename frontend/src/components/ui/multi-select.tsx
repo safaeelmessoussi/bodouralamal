@@ -79,8 +79,17 @@ export function MultiSelectField({
   const [query, setQuery] = useState('');
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const chosenCount = useMemo(
-    () => options.filter((o) => selected.includes(o.value)).length,
+  /**
+   * **The closed control names WHAT was chosen** (Owner, 2026-09-20 — SRS
+   * Revision 165 §7), in the options' own order: «تاركة، الداوديات», never
+   * «2 محددة». A count says a choice exists; the reader had to open the list to
+   * learn which — and on a form of five such filters that was five openings to
+   * re-read her own decisions. The trigger truncates a long list with an
+   * ellipsis (`.dropdown-trigger__label`) and carries the whole of it as its
+   * `title`.
+   */
+  const chosenLabels = useMemo(
+    () => options.filter((o) => selected.includes(o.value)).map((o) => o.label),
     [options, selected],
   );
 
@@ -96,9 +105,7 @@ export function MultiSelectField({
   }
 
   const summary =
-    chosenCount === 0
-      ? (emptyLabel ?? t('common.noneChosen'))
-      : t('common.selectedCount').replace('{n}', String(chosenCount));
+    chosenLabels.length === 0 ? (emptyLabel ?? t('common.noneChosen')) : chosenLabels.join('، ');
 
   return (
     <FieldShell label={label} error={error} hint={hint} required={required}>
@@ -116,7 +123,9 @@ export function MultiSelectField({
             aria-describedby={describedBy}
             onClick={toggle}
           >
-            <span className="dropdown-trigger__label">{summary}</span>
+            <span className="dropdown-trigger__label" title={summary}>
+              {summary}
+            </span>
             <Icon name="chevron" size={16} />
           </button>
 

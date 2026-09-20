@@ -455,6 +455,8 @@ const OCCURRENCE_KEYS = [
   // Owner-reported, 2026-09-16 — an exam's own ExamStaff; empty for a
   // Session/Event (`Occurrence.supervisors`'s own docstring).
   "supervisors",
+  // SRS Revision 165 §2 — the Surah(s) a class or an exam is about.
+  "surah_names",
   "teaching_mode",
   "title",
   // SRS Revision 163 §3 — advisory: may THIS reader open the attendance sheet.

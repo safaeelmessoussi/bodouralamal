@@ -77,6 +77,9 @@ export const createExamSchema = z
     scheduling_type_id: uuid.nullable().optional(),
     visibility: visibility.optional(),
     staff: staff.optional(),
+    /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
+     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
   })
   .strict();
 
@@ -116,6 +119,9 @@ export const updateExamSchema = z
     /** R109 — editable. **Omitting it leaves the tier alone**, never resets it. */
     visibility: visibility.optional(),
     staff: staff.optional(),
+    /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
+     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
   })
   .strict();
 

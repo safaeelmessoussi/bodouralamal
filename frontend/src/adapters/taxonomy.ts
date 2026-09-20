@@ -51,6 +51,9 @@ export interface TaxonomyInput {
   display_order?: number | null;
   /** R73 — Subjects only; omit to leave unchanged. See `SubjectRef`'s own note. */
   tracks_quran_progress?: boolean;
+  /** SRS Revision 165 §2 — Subjects only: a class or an exam of this Subject
+   *  must name which Surah. Omit to leave unchanged. */
+  requires_surahs?: boolean;
 }
 
 export async function listCategories(

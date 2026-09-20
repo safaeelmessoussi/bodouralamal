@@ -136,15 +136,18 @@ const LEVEL_GENDER: Record<string, GenderRestriction> = {
  * domain, never a row. This is an additive launch baseline rather than a closed
  * enumeration; only حفظ القرآن authorises §4.5 memorisation entry.
  */
+/** `requiresSurahs` (R165 §2) — حفظ القرآن memorises the Level's «مقرر الحفظ»
+ *  and تفسير القرآن studies the same Surahs, so a class or an exam of either
+ *  must name which. The tracker always carries it (a DB CHECK). */
 const SUBJECTS = [
-  { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false },
-  { name: 'حفظ القرآن', displayOrder: 2, tracksQuranProgress: true },
-  { name: 'ترتيل وتجويد القرآن', displayOrder: 3, tracksQuranProgress: false },
-  { name: 'تفسير القرآن', displayOrder: 4, tracksQuranProgress: false },
-  { name: 'فقه', displayOrder: 5, tracksQuranProgress: false },
-  { name: 'السيرة النبوية', displayOrder: 6, tracksQuranProgress: false },
-  { name: 'العقيدة', displayOrder: 7, tracksQuranProgress: false },
-  { name: 'الأذكار', displayOrder: 8, tracksQuranProgress: false },
+  { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false, requiresSurahs: false },
+  { name: 'حفظ القرآن', displayOrder: 2, tracksQuranProgress: true, requiresSurahs: true },
+  { name: 'ترتيل وتجويد القرآن', displayOrder: 3, tracksQuranProgress: false, requiresSurahs: false },
+  { name: 'تفسير القرآن', displayOrder: 4, tracksQuranProgress: false, requiresSurahs: true },
+  { name: 'فقه', displayOrder: 5, tracksQuranProgress: false, requiresSurahs: false },
+  { name: 'السيرة النبوية', displayOrder: 6, tracksQuranProgress: false, requiresSurahs: false },
+  { name: 'العقيدة', displayOrder: 7, tracksQuranProgress: false, requiresSurahs: false },
+  { name: 'الأذكار', displayOrder: 8, tracksQuranProgress: false, requiresSurahs: false },
 ] as const;
 
 const MEMORISATION_SUBJECT = SUBJECTS[1];
@@ -492,7 +495,8 @@ async function seedSubjects(): Promise<void> {
       } else if (subject.tracksQuranProgress && !existing.tracksQuranProgress) {
         await tx.subject.update({
           where: { id: existing.id },
-          data: { tracksQuranProgress: true },
+          // Both, in one write: `subject_tracker_requires_surahs_check`.
+          data: { tracksQuranProgress: true, requiresSurahs: true },
         });
       }
     }

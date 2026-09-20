@@ -5,18 +5,24 @@
  * The properties, each one something only a browser can show:
  *
  * 1. choosing «حصة دراسية» renders NO teaching-mode picker, five audience
- *    filters each reading «الكل», and — because the branch filter names no single
- *    branch yet — the class's own «الفرع المنظِّم»;
+ *    filters each reading «الكل», and NO second branch question — the class's
+ *    own branch is derived from «فروع» (SRS Revision 165 §6);
  * 2. a Category narrows the Levels on offer to its own;
- * 3. naming exactly one branch answers «الفرع المنظِّم», which disappears;
+ * 3. a filter names WHAT was chosen, never «1 محددة» (Revision 165 §7);
  * 4. leaving Level, group and circle at «الكل» is refused IN WORDS before any
  *    request — a class delivers a curriculum Subject;
- * 5. the saved row is filter-built, carries exactly what was chosen, and the
- *    list names its audience instead of a storage mode.
+ * 5. a Subject that works by Surah asks «السور», refuses to save without one,
+ *    and the title is SUGGESTED from type, Subject, Surah and time until she
+ *    types in it (Revision 165 §2);
+ *    the saved row is filter-built, carries exactly what was chosen — Surah
+ *    included — and the list names its audience instead of a storage mode.
  *
  * 6. (Journey B) the «from this date onward» editor offers the same filters,
  *    opens on the class as it stands, keeps its Subject, and its successor is
- *    filter-built while the predecessor keeps the target it always had.
+ *    filter-built while the predecessor keeps the target it always had — and
+ *    inherits the class's Surah;
+ * 7. a split at a class's FIRST session saves (it answered 500 before
+ *    Revision 165 §4) and leaves one class, not two.
  *
  * It owns its rows (P1.2): the dev scenario, plus one class under the scenario's
  * own tag, which the wrapper's `--clean` removes.
@@ -103,10 +109,10 @@ const opened = await page(`
   };
 `);
 check(
-  '1 · حصة asks no «نمط التدريس»: five filters, each reading «الكل», and the class’s own «الفرع المنظِّم»',
+  '1 · حصة asks no «نمط التدريس» and no second branch question: five filters, each reading «الكل»',
   opened.modeAsked === false &&
     JSON.stringify(opened.summaries) === JSON.stringify(['الكل', 'الكل', 'الكل', 'الكل', 'الكل']) &&
-    opened.homeBranchAsked === true,
+    opened.homeBranchAsked === false,
   JSON.stringify(opened),
 );
 
@@ -134,14 +140,16 @@ const branched = await page(`
            homeBranchAsked: labels.some((l) => l.indexOf('الفرع المنظِّم') === 0) };
 `);
 check(
-  '3 · naming exactly one branch answers «الفرع المنظِّم», so it is no longer asked',
-  branched.ticked === true && branched.homeBranchAsked === false,
+  '3 · a filter names what was chosen — never «1 محددة» — and the branch is still asked once',
+  branched.ticked === true &&
+    branched.summary === '[dev-scenario] تاركة' &&
+    narrowed.category === '[dev-scenario] المرأة' &&
+    branched.homeBranchAsked === false,
   JSON.stringify(branched),
 );
 
 const refused = await page(`
-  setInput('العنوان', ${JSON.stringify(TITLE)});
-  await wait(200);
+  // (The title is left alone: it is SUGGESTED, and check 5e reads it.)
   // The form names the FIRST thing missing, in its own order — so the date goes
   // in first, or this would be reading the start-date message instead.
   const dateField = fieldOf('تاريخ البداية');
@@ -179,7 +187,42 @@ check(
   JSON.stringify(filled),
 );
 
+const surah = await page(`
+  const asked = fieldOf('السور') !== undefined;
+  // Without a Surah the form must say so, and send nothing.
+  const save = [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
+  save.click();
+  await wait(1000);
+  const refusedInWords = dlg() !== null && (dlg().textContent ?? '').includes('اختاري السورة');
+  const offered = await multi('السور', 'الفاتحة');
+  await wait(500);
+  const title = fieldOf('العنوان')?.querySelector('input')?.value ?? null;
+  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, title };
+`);
+check(
+  '5e · a by-Surah Subject asks «السور» — the Level’s «مقرر الحفظ» and nothing else — and refuses to save without one',
+  surah.asked === true &&
+    surah.refusedInWords === true &&
+    JSON.stringify(surah.offered) === JSON.stringify(['الفاتحة', 'البقرة']) &&
+    surah.ticked === true &&
+    surah.summary === 'الفاتحة',
+  JSON.stringify(surah),
+);
+check(
+  '5f · the title is SUGGESTED from the form: type, Subject, Surah, then when',
+  typeof surah.title === 'string' &&
+    surah.title.includes('حصة دراسية') &&
+    surah.title.includes('[dev-scenario] تفسير القرآن') &&
+    surah.title.includes('الفاتحة') &&
+    surah.title.endsWith('07:00'),
+  JSON.stringify({ title: surah.title }),
+);
+
 const saved = await page(`
+  // Typing in the title is what stops it following the suggestion; the harness
+  // needs its own tag on the row so the wrapper's cleanup owns it.
+  setInput('العنوان', ${JSON.stringify(TITLE)});
+  await wait(300);
   const save = [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
   save.click();
   await wait(4000);
@@ -203,14 +246,16 @@ const stored = await page(`
   return row ? {
     teaching_mode: row.teaching_mode,
     dimensions: row.dimensions,
+    surah_ids: row.surah_ids,
     branch_id: row.branch_id,
     target_name: row.target_name,
     rowText: cell ? cell.textContent.replace(/\\s+/g, ' ') : null,
   } : null;
 `);
 check(
-  '5c · the row is filter-built and carries exactly what was chosen — one branch, one Category, one Level',
+  '5c · the row is filter-built and carries exactly what was chosen — one branch, one Category, one Level, one Surah',
   stored !== null &&
+    JSON.stringify(stored.surah_ids) === JSON.stringify([1]) &&
     stored.teaching_mode === 'multi_dimension' &&
     JSON.stringify(stored.dimensions?.branch_ids) === JSON.stringify([S.branchId]) &&
     JSON.stringify(stored.dimensions?.category_ids) === JSON.stringify([S.categoryId]) &&
@@ -242,10 +287,8 @@ await send('Page.navigate', { url: `${BASE}/admin/schedules/${S.scheduleId}/sess
 await new Promise((r) => setTimeout(r, 5000));
 
 const editor = await page(`
-  // The SECOND occurrence, deliberately: splitting at a class's very first one
-  // would close its predecessor before it begins, which the server currently
-  // answers with a 500 rather than a coded refusal (an older defect, recorded
-  // in docs/TASKS.md, unrelated to the filters this journey is about).
+  // The SECOND occurrence: this journey is about a predecessor that KEEPS part
+  // of its life. A split at the very first occurrence is journey C below.
   const edits = [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'تعديل');
   const edit = edits[1];
   if (!edit) return { noSecondOccurrence: true, found: edits.length };
@@ -265,14 +308,15 @@ const editor = await page(`
     levels: summary('مستويات'),
     groups: summary('مجموعات'),
     circles: summary('حلقات'),
+    surahs: summary('السور'),
     subjectKept: subject ? subject.value === ${JSON.stringify(S.subjectId)} : null,
   };
 `);
 check(
   'B1 · the «from this date onward» editor asks no «نمط التدريس» and opens on the class as it stands — its branch and its one group',
   editor.modeAsked === false &&
-    editor.branches === '1 محددة' &&
-    editor.groups === '1 محددة' &&
+    editor.branches === '[dev-scenario] تاركة' &&
+    editor.groups === '[dev-scenario] المجموعة 1' &&
     editor.levels === 'الكل' &&
     editor.circles === 'الكل',
   JSON.stringify(editor),
@@ -281,6 +325,11 @@ check(
   'B2 · and keeps the Subject it opened with while the group list arrives',
   editor.subjectKept === true,
   JSON.stringify(editor),
+);
+check(
+  'B2b · «السور» opens on the class’s own Surah',
+  editor.surahs === 'الفاتحة',
+  JSON.stringify({ surahs: editor.surahs }),
 );
 
 const split = await page(`
@@ -328,7 +377,7 @@ const split = await page(`
     namedTheYear,
     patch: seen.map((x) => ({ status: x.status, body: x.body.slice(0, 400) })),
     tail: (dlg()?.textContent ?? '').split(' ').join(' ').slice(-260),
-    rows: rows.map((x) => ({ id: x.id, mode: x.teaching_mode, dims: x.dimensions, until: x.effective_until, target: x.target_name })),
+    rows: rows.map((x) => ({ id: x.id, mode: x.teaching_mode, dims: x.dimensions, until: x.effective_until, target: x.target_name, surahs: x.surah_ids })),
   };
 `);
 const successor = (split.rows ?? []).find((r) => r.id !== S.scheduleId);
@@ -344,10 +393,80 @@ check(
     predecessor?.mode === 'administrative_group' &&
     predecessor?.until !== null &&
     successor?.mode === 'multi_dimension' &&
+    JSON.stringify(successor?.surahs) === JSON.stringify([1]) &&
     JSON.stringify(successor?.dims?.administrative_group_ids) === JSON.stringify([S.groupId]) &&
     JSON.stringify(successor?.dims?.branch_ids) === JSON.stringify([S.branchId]),
   JSON.stringify(split),
 );
+
+/* ── Journey C — a split at a class's FIRST session (SRS Revision 165 §4) ────
+ *
+ * «هذه الحصة وكل ما بعدها» chosen on the first occurrence would have closed the
+ * class the day before it began; the database refuses that, and the refusal
+ * reached her as a bare 500. It now means what she meant — the whole series —
+ * and leaves ONE class behind, not an empty one beside its replacement.
+ */
+if (successor) {
+  await send('Page.navigate', { url: `${BASE}/admin/schedules/${successor.id}/sessions` });
+  await new Promise((r) => setTimeout(r, 5000));
+  const first = await page(`
+    const seen = [];
+    const realFetch = window.fetch;
+    window.fetch = async function (input, init) {
+      const response = await realFetch.apply(this, arguments);
+      if (init && init.method === 'PATCH') {
+        seen.push({ status: response.status, body: await response.clone().text().catch(() => '') });
+      }
+      return response;
+    };
+    const edit = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'تعديل');
+    if (!edit) return { noOccurrence: true };
+    edit.click();
+    await wait(1500);
+    const radio = dlg()?.querySelector('input[type="radio"][value="this_and_future"]');
+    if (!radio) return { noScopeRadio: true };
+    radio.click();
+    await wait(2500);
+    if ((fieldOf('السنة الدراسية')?.querySelector('select')?.value ?? '') === '') {
+      setSelect('السنة الدراسية', (o) => o.value !== '');
+      await wait(400);
+    }
+    [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ').click();
+    await wait(4500);
+    window.fetch = realFetch;
+    const r = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: '{}',
+    });
+    const { access_token } = await r.json();
+    const res = await fetch('/api/v1/admin/course-schedules?page_size=100', {
+      headers: { Authorization: 'Bearer ' + access_token },
+    });
+    const live = (await res.json()).data.map((x) => x.id);
+    let replacementId = null;
+    try { replacementId = JSON.parse(seen[seen.length - 1]?.body ?? '{}').schedule?.id ?? null; } catch { replacementId = null; }
+    return {
+      closed: dlg() === null,
+      statuses: seen.map((x) => x.status),
+      emptiedClassStillListed: live.includes(${JSON.stringify(successor.id)}),
+      replacementListed: replacementId !== null && live.includes(replacementId),
+      // Read only when it failed: what the dialog is saying instead of closing.
+      tail: (dlg()?.textContent ?? '').replace(/\\s+/g, ' ').slice(-300),
+    };
+  `);
+  check(
+    'C1 · a split at the class’s FIRST session saves — no 500 — and leaves one class, not an empty one beside it',
+    first.closed === true &&
+      JSON.stringify(first.statuses) === JSON.stringify([200]) &&
+      first.emptiedClassStillListed === false &&
+      first.replacementListed === true,
+    JSON.stringify(first),
+  );
+} else {
+  check('C1 · a split at the class’s FIRST session saves', false, 'journey B produced no successor to split');
+}
 
 close();
 process.exit(finish());

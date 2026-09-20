@@ -19,8 +19,14 @@ import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SessionAudienceDialog } from '../../components/scheduling/session-audience-dialog.js';
 import {
+  SurahsField,
+  subjectWorksBySurah,
+  surahChoices,
+} from '../../components/scheduling/surahs.js';
+import {
   AudienceFilters,
   audienceDimensions,
+  homeBranchOf,
   namesATeachingPopulation,
   useAudienceFilters,
 } from '../../components/scheduling/audience-filters.js';
@@ -78,6 +84,14 @@ interface SessionScopeEdit {
    * touches the schedule.
    */
   subject_id: string | null;
+  /**
+   * SRS Revision 165 §2/§5 — **the Surahs**, present only when the dialog
+   * asked for them (the Subject in play works by Surah and some are on offer).
+   * `this_session`: they REPLACE the class's for that date, and `[]` returns
+   * the occurrence to the class's own. The wider scopes: the class's (or the
+   * successor's) Surahs, replaced whole.
+   */
+  surah_ids?: number[];
   /**
    * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
    * §4.4 otherwise freezes**, present only for `this_and_future` (the split
@@ -221,6 +235,9 @@ export function ScheduleSessionsPage({
       administrative_group_ids: string[];
       teaching_group_ids: string[];
     } | null;
+    /** SRS Revision 165 §2 — the class's own Surahs: what an occurrence with
+     *  none of its own inherits, and what the editor opens on. */
+    surahIds: number[];
   } | null>(null);
   /** R75.6 — the class's own name and note, which a recording is named from.
    *  They belong to the schedule, not to the occurrence. */
@@ -276,6 +293,7 @@ export function ScheduleSessionsPage({
           // the raw target back — an `administrative_group` class's own group.
           targetId: mine.target_id,
           dimensions: mine.dimensions,
+          surahIds: mine.surah_ids ?? [],
         });
         setKlass({
           title: mine.title,
@@ -517,6 +535,8 @@ export function ScheduleSessionsPage({
       visibility: edit.visibility,
       title: edit.title,
       description: edit.description,
+      // R165 §2 — the class's (or the successor's) Surahs, when the dialog asked.
+      ...(edit.surah_ids !== undefined ? { surah_ids: edit.surah_ids } : {}),
       overwrite_manually_edited: overwriteManuallyEdited,
       // **Owner-reported, 2026-09-15 — only `this_and_future` may carry
       // these** (the server refuses them otherwise, §4.4); `edit.identity`
@@ -859,6 +879,8 @@ function ScopeDialog({
       administrative_group_ids: string[];
       teaching_group_ids: string[];
     } | null;
+    /** SRS Revision 165 §2 — the class's own Surahs. */
+    surahIds: number[];
   } | null;
   /**
    * **Owner-reported, 2026-09-17 — the schedule's own current Subject**, so
@@ -920,6 +942,14 @@ function ScopeDialog({
     fields: token ? (['subjectId'] as const) : [],
     mode: 'filter',
   });
+  /**
+   * **SRS Revision 165 §2/§5 — «السور», opened on what THIS occurrence is
+   * about**: its own Surahs where it has them, else the class's.
+   */
+  const classSurahIds = identity?.surahIds ?? [];
+  const [surahIds, setSurahIds] = useState<number[]>(
+    (session.surah_ids ?? []).length > 0 ? (session.surah_ids ?? []) : classSurahIds,
+  );
 
   /**
    * **Owner-reported, 2026-09-15 — the successor's identity, edited exactly
@@ -993,6 +1023,53 @@ function ScopeDialog({
     setters: { setLevelIds, setGroupIds, setTeachingGroupIds },
   });
   const [identityNotice, setIdentityNotice] = useState<string | null>(null);
+  /**
+   * Which Subject decides «أي سورة؟», and which Levels its Surahs come from,
+   * follow the scope she chose: this occurrence's own Subject; the successor's
+   * identity; or the class as it stands. A class whose Levels this dialog
+   * cannot read (a filter-built one, outside «from this date onward») is
+   * offered every Surah some Level's «مقرر الحفظ» holds — the server holds the
+   * choice to the class's real Levels either way (`resolveSurahs`).
+   */
+  const surahSubjectId =
+    scope === 'this_session'
+      ? subjectId || (identity?.subjectId ?? '')
+      : scope === 'this_and_future'
+        ? identityScope.value.subjectId
+        : (identity?.subjectId ?? '');
+  const asksSurahs = subjectWorksBySurah(subjectScope, surahSubjectId);
+  const classLevelIds = [
+    ...(identity?.dimensions?.level_ids ?? []),
+    ...(identity?.levelId ? [identity.levelId] : []),
+  ];
+  const knownLevelIds =
+    scope === 'this_and_future' ? audienceChoices.levelIdsInPlay : classLevelIds;
+  const surahLevelIds =
+    knownLevelIds.length > 0 ? knownLevelIds : Object.keys(subjectScope.levelSurahIds);
+  const offeredSurahKey = surahChoices(subjectScope, surahLevelIds)
+    .map((x) => x.id)
+    .join(',');
+  const surahsOnOffer = offeredSurahKey !== '';
+  // Each scope opens on ITS OWN current answer: this occurrence's Surahs for
+  // «this session», the class's for the two scopes that edit the class.
+  const ownSurahKey = (session.surah_ids ?? []).join(',');
+  const classSurahKey = classSurahIds.join(',');
+  useEffect(() => {
+    const parse = (key: string): number[] => (key === '' ? [] : key.split(',').map(Number));
+    setSurahIds(scope === 'this_session' && ownSurahKey !== '' ? parse(ownSurahKey) : parse(classSurahKey));
+  }, [scope, ownSurahKey, classSurahKey]);
+  // A Surah the Levels in play no longer hold is dropped, never sent unseen.
+  useEffect(() => {
+    if (!subjectScope.ready || offeredSurahKey === '') return;
+    const offered = new Set(offeredSurahKey.split(',').map(Number));
+    if (surahIds.some((id) => !offered.has(id))) setSurahIds(surahIds.filter((id) => offered.has(id)));
+  }, [subjectScope.ready, offeredSurahKey, surahIds]);
+  /** Derived, never asked (SRS Revision 165 §6) — and it stays the branch the
+   *  class already belongs to for as long as the filter still includes it. */
+  const identityBranchId = homeBranchOf(audienceSelection, {
+    currentBranchId: identity?.branchId ?? null,
+    permitted: identityScope.options.branchId.map((o) => o.value),
+  });
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -1102,6 +1179,18 @@ function ScopeDialog({
           />
         ) : null}
 
+        {/* SRS Revision 165 §2/§5 — «السور», on every scope: this occurrence's
+            own, the successor's, or the whole class's. Manager-only, on the
+            footing the Subject above has (`token`). */}
+        {token && asksSurahs ? (
+          <SurahsField
+            facts={subjectScope}
+            levelIds={surahLevelIds}
+            selected={surahIds}
+            onChange={setSurahIds}
+          />
+        ) : null}
+
         {/* **Owner-reported, 2026-09-15 — the good, simple design for editing
             what §4.4 otherwise freezes.** `this_and_future` splits the
             schedule regardless (R50); this is that split's successor
@@ -1153,7 +1242,7 @@ function ScopeDialog({
                   setIdentityNotice(t('scheduling.invalid.multiDimensionNeedsLevel'));
                   return;
                 }
-                if (identityScope.value.branchId === '') {
+                if (identityBranchId === '') {
                   setIdentityNotice(t('scheduling.invalid.branch'));
                   return;
                 }
@@ -1168,6 +1257,17 @@ function ScopeDialog({
                   return;
                 }
               }
+              // R165 §2 — required wherever a Surah CAN be chosen. A class
+              // scheduled before the rule, at a Level whose «مقرر الحفظ» is
+              // still empty, stays editable: nothing is asked and nothing sent.
+              const sendsSurahs = token !== null && asksSurahs && surahsOnOffer;
+              if (sendsSurahs && surahIds.length === 0) {
+                setIdentityNotice(t('scheduling.invalid.surahs'));
+                return;
+              }
+              const sameAsClass =
+                surahIds.length === classSurahIds.length &&
+                surahIds.every((id) => classSurahIds.includes(id));
               setIdentityNotice(null);
               onConfirm(scope, {
                 date: scope === 'this_session' ? date : session.date,
@@ -1187,11 +1287,16 @@ function ScopeDialog({
                 // Subject through `identity.subject_id` alone, and
                 // `performWideEdit` never reads this key.
                 subject_id: subjectId || null,
+                // One occurrence that names the class's own Surahs is not an
+                // override: `[]` keeps it following the class when that changes.
+                ...(sendsSurahs
+                  ? { surah_ids: scope === 'this_session' && sameAsClass ? [] : surahIds }
+                  : {}),
                 ...(scope === 'this_and_future' && identity
                   ? {
                       identity: {
                         subject_id: identityScope.value.subjectId,
-                        branch_id: identityScope.value.branchId,
+                        branch_id: identityBranchId,
                         academic_year_id: identityScope.value.academicYearId,
                         dimensions: audienceDimensions(audienceSelection),
                       },

@@ -197,6 +197,10 @@ export interface SchedulingIds {
    * have SENT that mode back and rewritten an `entire_level` class's audience.
    */
   teachingMode: string | null;
+  /** SRS Revision 165 §2 — the Surahs a class is about, or an exam's one; empty
+   *  wherever the Subject is not taught by Surah. Carried so Edit opens on what
+   *  the row has rather than on nothing (the `visibility` lesson, again). */
+  surahIds: number[];
   /** R91 — each assignment with its inclusive effective period; `null` at
    *  either end is open-ended there. */
   staff: {
@@ -247,6 +251,7 @@ const EMPTY_IDS: SchedulingIds = {
   levelId: null,
   groupId: null,
   teachingMode: null,
+  surahIds: [],
   subjectId: null,
   academicYearId: null,
   staff: [],
@@ -319,6 +324,7 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
       // from `target_id` is right only when the mode says it is a group.
       groupId: row.teaching_mode === 'administrative_group' ? row.target_id : null,
       teachingMode: row.teaching_mode,
+      surahIds: row.surah_ids ?? [],
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
       staff: row.staff.map((x) => ({
@@ -451,6 +457,8 @@ function fromExam(row: Exam): SchedulingItem {
       // An exam is not a course schedule: §4.4c's teaching mode is a property
       // of a recurring class, and an exam carries both ids directly.
       teachingMode: null,
+      // R165 §2 — one Surah per sitting, held in the same shape a class's are.
+      surahIds: row.surah_id == null ? [] : [row.surah_id],
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
       // **An exam sitting has no staffing PERIOD** (R91): it happens on one
@@ -637,6 +645,10 @@ export interface SchedulingInput {
     administrativeGroupIds?: string[];
     teachingGroupIds?: string[];
   };
+  /** SRS Revision 165 §2 — a class's Surahs (one or more), or an exam's one.
+   *  Sent only when the form asked for them. */
+  surahIds?: number[];
+  examSurahId?: number | null;
   branchId?: string;
   roomId?: string | null;
   /** R97 — sent as a unit with `onlineMediaMode`; the server refuses a
@@ -762,6 +774,8 @@ export async function saveSchedulingItem(
             : {}),
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.staff ? { staff: input.staff } : {}),
+          // R165 §2 — the class's Surahs, replaced whole when the form asked.
+          ...(input.surahIds !== undefined ? { surah_ids: input.surahIds } : {}),
           // R138 §4.4 item 5 — the caller has already asked, when it mattered.
           overwrite_manually_edited: input.overwriteManuallyEdited ?? false,
         },
@@ -830,6 +844,8 @@ export async function saveSchedulingItem(
           ? { attendance_marking: input.attendanceMarking }
           : {}),
         ...(input.staff ? { staff: input.staff } : {}),
+        // R165 §2 — which Surah(s), when the Subject works by Surah.
+        ...(input.surahIds !== undefined ? { surah_ids: input.surahIds } : {}),
       },
       token,
     );
@@ -858,6 +874,7 @@ export async function saveSchedulingItem(
               : {}),
             ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
             ...(input.examAvailability ? { availability: input.examAvailability } : {}),
+            ...(input.examSurahId !== undefined ? { surah_id: input.examSurahId } : {}),
           },
           token,
         );
@@ -891,6 +908,7 @@ export async function saveSchedulingItem(
           ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
           // R109 (§D) — the sitting's tier, on the same footing as the class's.
           ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+          ...(input.examSurahId !== undefined ? { surah_id: input.examSurahId } : {}),
         },
         token,
       );
@@ -939,6 +957,7 @@ export async function saveSchedulingItem(
           // supervisor/assistants, chosen in the same form, were silently
           // discarded.
           ...(input.examStaff ? { staff: input.examStaff } : {}),
+          ...(input.examSurahId !== undefined ? { surah_id: input.examSurahId } : {}),
         },
         token,
       );
@@ -971,6 +990,7 @@ export async function saveSchedulingItem(
           ? { scheduling_type_id: input.schedulingTypeId }
           : {}),
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        ...(input.examSurahId !== undefined ? { surah_id: input.examSurahId } : {}),
         ...(input.examSourceId
           ? {}
           : {

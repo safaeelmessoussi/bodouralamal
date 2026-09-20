@@ -109,19 +109,94 @@ check(
   JSON.stringify(calendarish),
 );
 
+/**
+ * **Page-side helpers, prepended to the evaluations that drive the form**
+ * (restated 2026-09-20, when all three of this harness's assumptions about the
+ * form had gone stale at once).
+ *
+ * - «نوع العنصر» is chosen by what the option SAYS. Its values are catalogue
+ *   ids (R110), so the literals this used to set matched nothing and the form
+ *   stayed on «اختاري نوع العنصر» — every later check failed from there.
+ * - A date is chosen through the platform's own picker: open it, step month by
+ *   month, press the day whose button carries its ISO date in its id. There is
+ *   no native date input to type into any more.
+ */
+const FORM_HELPERS = `
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const dlg = () => document.querySelector('dialog[open]');
+  const set = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const labelled = (text) => {
+    const l = [...dlg().querySelectorAll('label')].find((x) => x.textContent.trim() === text);
+    return l ? dlg().querySelector('#' + CSS.escape(l.getAttribute('for') || '')) : null;
+  };
+  const chooseType = async (text) => {
+    const select = labelled('نوع العنصر');
+    const option = select ? [...select.options].find((o) => o.textContent.trim() === text) : null;
+    if (!option) return false;
+    set(select, option.value);
+    await wait(1800);
+    return true;
+  };
+  const pickDate = async (iso) => {
+    let picked = 0;
+    for (const field of [...dlg().querySelectorAll('.field')]) {
+      const trigger = field.querySelector('.date-picker__trigger');
+      if (!trigger || trigger.disabled) continue;
+      trigger.click();
+      await wait(350);
+      for (let step = 0; step < 36; step += 1) {
+        const day = field.querySelector('button[id$="-d-' + iso + '"]');
+        if (day) { day.click(); picked += 1; break; }
+        const next = [...field.querySelectorAll('.date-picker__head button')]
+          .find((b) => (b.getAttribute('aria-label') ?? '') === 'الشهر التالي');
+        if (!next) break;
+        next.click();
+        await wait(120);
+      }
+      await wait(250);
+    }
+    return picked;
+  };
+`;
+
 await open('/teacher/schedules', '.admin-table, .state');
+// **Her classes live under «قائمة» now** (reworked 2026-09-15): the page opens
+// on تقويم, and the separate «حصصي» table that used to sit below it became the
+// list view of the same surface. So the month controls are read first, on the
+// view that has them, and the table after switching — waited for in its own
+// right, because `.state` is also the LOADING placeholder and proves nothing.
+const calendarSide = await evaluate(`(() => ({
+  monthNav: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'اليوم'),
+}))()`);
+await evaluate(`(() => {
+  const list = [...document.querySelectorAll('.cal-segmented [role="tab"]')]
+    .find((b) => b.textContent.trim() === 'قائمة');
+  if (list) list.click();
+  return list !== undefined;
+})()`);
+for (let i = 0; i < 40; i += 1) {
+  if (await evaluate(`document.querySelector('.admin-table') !== null`)) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
 const page = await evaluate(`(() => {
   const body = document.querySelector('main')?.textContent ?? '';
   return {
     heading: body.includes('الجدولة'),
     // The shared calendar surface: the two views, the month controls, filters.
     views: [...document.querySelectorAll('.cal-segmented [role="tab"]')].map((b) => b.textContent.trim()),
-    monthNav: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'اليوم'),
+    monthNav: ${JSON.stringify(calendarSide.monthNav)},
     filters: document.querySelector('.cal-header__filters') !== null,
     addItem: [...document.querySelectorAll('button')].some((b) => b.textContent.includes('إضافة عنصر')),
     // And the definitions table, which carries the roster action nothing else
     // offers her.
     table: document.querySelector('.admin-table') !== null,
+    // Read only on failure: what the list is saying instead of showing rows.
+    state: document.querySelector('.state')?.textContent?.trim().slice(0, 160) ?? null,
   };
 })()`);
 check(
@@ -140,18 +215,10 @@ const created = await evaluate(`(async () => {
   await new Promise((r) => setTimeout(r, 2500));
   let dialog = document.querySelector('dialog[open]');
   if (!dialog) return { noDialog: true };
-
-  const set = (el, value) => {
-    const proto = Object.getPrototypeOf(el);
-    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-  const labelled = (text) => {
-    const label = [...dialog.querySelectorAll('label')].find((l) => l.textContent.trim() === text);
-    if (!label) return null;
-    return dialog.querySelector('#' + CSS.escape(label.getAttribute('for') || ''));
-  };
+  ${FORM_HELPERS}
+  // The form opens on NO type (R110); an activity is what this journey creates.
+  if (!(await chooseType('نشاط'))) return { noActivityType: true };
+  dialog = dlg();
 
   // The responsible selector, and what it is willing to offer.
   const responsible = labelled('المؤطِّرة المسؤولة');
@@ -162,46 +229,64 @@ const created = await evaluate(`(async () => {
     (i) => (i.closest('.field') || {}).textContent?.includes('العنوان'),
   );
   if (title) set(title, '[notify] نشاط المؤطرة');
-  const dates = [...dialog.querySelectorAll('input[type=date]')];
-  for (const d of dates) set(d, ${JSON.stringify(S.spareDate)});
+  const datesPicked = await pickDate(${JSON.stringify(S.spareDate)});
   await new Promise((r) => setTimeout(r, 600));
 
   // **Her scope.** TD-2 grants a مؤطرة the Administrative Groups she teaches
   // and nothing wider, so an activity without one is a save the server refuses
   // — and the first run reported «تعذّر الحفظ» for exactly that reason.
   dialog = document.querySelector('dialog[open]');
-  // The scope selector is the one offering her own groups, labelled
-  // {Level} — {Group}. Matching on the word المجموعة tied the probe to a label
-  // and found nothing when the list was empty for an unrelated reason.
-  const scopeSelect = [...dialog.querySelectorAll('select')].find((sel) =>
-    [...sel.options].some((o) => o.textContent.includes('المجموعة 1')),
-  );
-  const scopeOptions = scopeSelect ? [...scopeSelect.options].map((o) => o.textContent.trim()) : [];
-  if (scopeSelect && scopeSelect.options.length > 1) {
-    set(scopeSelect, scopeSelect.options[1].value);
-    await new Promise((r) => setTimeout(r, 800));
+  // **Her scope is a multi-select now** (R139 — one filter per dimension, and a
+  // مؤطرة is offered the group dimension alone). The one that offers her own
+  // group is found by what it OFFERS, not by its label: opened, read, ticked.
+  let scopeOptions = [];
+  for (const field of [...dialog.querySelectorAll('.field')]) {
+    const trigger = field.querySelector('button.dropdown-trigger');
+    if (!trigger) continue;
+    trigger.click();
+    await wait(300);
+    const rows = [...field.querySelectorAll('.multi-select__options li')];
+    const mine = rows.find((li) => li.textContent.includes('المجموعة 1'));
+    if (mine) {
+      scopeOptions = rows.map((li) => li.textContent.trim());
+      mine.querySelector('input[type="checkbox"]')?.click();
+      await wait(300);
+    }
+    trigger.click();
+    await wait(300);
+    if (mine) break;
   }
+  await wait(800);
 
-  // One assistant, chosen from the shared multi-select. The options arrive from
-  // /me/event-scope-options' sibling read, so the list may still be loading when
-  // the scope is set — wait for her to appear rather than clicking into a gap.
-  dialog = document.querySelector('dialog[open]');
+  // One assistant, chosen from the shared multi-select — a checkbox list whose
+  // trigger then NAMES her (R165 §7). The options arrive from a sibling read of
+  // /me/event-scope-options, so the list may still be loading once the scope is
+  // set: it is reopened until she appears rather than clicked into a gap.
   let assistant;
-  for (let i = 0; i < 20; i += 1) {
-    dialog = document.querySelector('dialog[open]');
-    assistant = [...dialog.querySelectorAll('button')].find(
-      (b) => b.textContent.includes('[notify] أمينة') && b.textContent.trim().startsWith('＋'),
-    );
-    if (assistant) break;
-    await new Promise((r) => setTimeout(r, 400));
+  let chips = [];
+  for (let attempt = 0; attempt < 12 && !assistant; attempt += 1) {
+    dialog = dlg();
+    for (const field of [...dialog.querySelectorAll('.field')]) {
+      const label = field.querySelector('.field__label')?.textContent ?? '';
+      if (!label.includes('المساعد')) continue;
+      const trigger = field.querySelector('button.dropdown-trigger');
+      if (!trigger) continue;
+      trigger.click();
+      await wait(300);
+      const row = [...field.querySelectorAll('.multi-select__options li')]
+        .find((li) => li.textContent.includes('[notify] أمينة'));
+      if (row) {
+        row.querySelector('input[type="checkbox"]')?.click();
+        await wait(300);
+        assistant = true;
+      }
+      trigger.click();
+      await wait(300);
+      if (assistant) chips = [trigger.textContent.trim()];
+    }
+    if (!assistant) await wait(400);
   }
-  if (assistant) assistant.click();
-  await new Promise((r) => setTimeout(r, 900));
-  // Did the choice register in the form? A chosen person shows as a ✕ chip.
-  dialog = document.querySelector('dialog[open]');
-  const chips = [...dialog.querySelectorAll('button')]
-    .filter((b) => b.textContent.trim().endsWith('✕'))
-    .map((b) => b.textContent.replace('✕', '').trim());
+  await wait(600);
 
   dialog = document.querySelector('dialog[open]');
   const save = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
@@ -213,6 +298,7 @@ const created = await evaluate(`(async () => {
     options,
     locked,
     scopeOptions,
+    datesPicked,
     choseAssistant: assistant !== undefined,
     chips,
     saved: after === null || after.textContent.includes('إشعار'),
@@ -342,8 +428,9 @@ const types = await evaluate(`(async () => {
 
 check(
   '10 · her type selector offers نشاط, امتحان AND حصة',
-  (types.values ?? []).includes('activity') && (types.values ?? []).includes('exam') &&
-    (types.values ?? []).includes('class'),
+  // By what she READS: the values are catalogue ids (R110), not kind names.
+  (types.options ?? []).includes('نشاط') && (types.options ?? []).includes('اختبار') &&
+    (types.options ?? []).includes('حصة دراسية'),
   JSON.stringify(types),
 );
 check(
@@ -356,26 +443,13 @@ check(
    * proves the server still holds the line when she has declared nothing.
    */
   '11 · the option is offered because §2 grants it — not because §4.4c widened',
-  (types.values ?? []).includes('class'),
-  JSON.stringify(types.values),
+  (types.options ?? []).includes('حصة دراسية'),
+  JSON.stringify(types.options),
 );
 
 const examSaved = await evaluate(`(async () => {
-  const dialog = document.querySelector('dialog[open]');
-  const set = (el, value) => {
-    const proto = Object.getPrototypeOf(el);
-    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-  const labelled = (text) => {
-    const l = [...document.querySelectorAll('dialog[open] label')].find((x) => x.textContent.trim() === text);
-    return l ? document.querySelector('dialog[open] #' + CSS.escape(l.getAttribute('for') || '')) : null;
-  };
-
-  const typeSel = labelled('نوع العنصر');
-  set(typeSel, 'exam');
-  await new Promise((r) => setTimeout(r, 1800));
+  ${FORM_HELPERS}
+  if (!(await chooseType('اختبار'))) return { noExamType: true };
 
   // She names one of her OWN classes; its Level, Subject, Branch and Year come
   // with it, because the chain that would offer them answers 403 for her.
@@ -394,9 +468,7 @@ const examSaved = await evaluate(`(async () => {
   if (title) set(title, '[notify] امتحان المؤطرة');
   const maxGrade = labelled('النقطة القصوى*') || labelled('النقطة القصوى');
   if (maxGrade) set(maxGrade, '20');
-  for (const d of [...document.querySelectorAll('dialog[open] input[type=date]')]) {
-    set(d, ${JSON.stringify(S.spareDate)});
-  }
+  const datesPicked = await pickDate(${JSON.stringify(S.spareDate)});
   const room = labelled('القاعة');
   if (room && room.options.length > 1) set(room, room.options[1].value);
   await new Promise((r) => setTimeout(r, 800));
@@ -406,7 +478,7 @@ const examSaved = await evaluate(`(async () => {
   save.click();
   await new Promise((r) => setTimeout(r, 5000));
   const still = document.querySelector('dialog[open]');
-  return { closed: still === null, says: still ? still.textContent.slice(0, 260) : null };
+  return { closed: still === null, datesPicked, says: still ? still.textContent.slice(-260) : null };
 })()`);
 
 const examCalls = (await callsMatching('/exams')).filter((c) => c.method === 'POST');
@@ -427,21 +499,9 @@ const classForm = await evaluate(`(async () => {
   await new Promise((r) => setTimeout(r, 2000));
   let dialog = document.querySelector('dialog[open]');
   if (!dialog) return { noDialog: true };
-  const set = (el, value) => {
-    const proto = Object.getPrototypeOf(el);
-    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-  const labelled = (text) => {
-    const l = [...dialog.querySelectorAll('label')].find((x) => x.textContent.trim() === text);
-    return l ? dialog.querySelector('#' + CSS.escape(l.getAttribute('for') || '')) : null;
-  };
-  const typeSel = labelled('نوع العنصر');
-  if (!typeSel) return { noTypeSelect: true };
-  set(typeSel, 'class');
-  await new Promise((r) => setTimeout(r, 1800));
-  dialog = document.querySelector('dialog[open]');
+  ${FORM_HELPERS}
+  if (!(await chooseType('حصة دراسية'))) return { noClassType: true };
+  dialog = dlg();
 
   // SRS Revision 163 §5 — «نمط التدريس» is asked of nobody. Her class is one
   // whole Level (the only shape her grant covers), so she sees the ordinary

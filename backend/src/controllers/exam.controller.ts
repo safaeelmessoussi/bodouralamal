@@ -67,6 +67,7 @@ export function create(prisma: PrismaClient) {
         ? { administrativeGroupId: b.administrative_group_id }
         : {}),
       ...(b.staff ? { staff: b.staff.map((s) => ({ userId: s.user_id, position: s.position })) } : {}),
+      ...(b.surah_id === undefined ? {} : { surahId: b.surah_id }),
     });
     res.status(201).json({ id: result.id });
   };
@@ -96,6 +97,7 @@ export function update(prisma: PrismaClient) {
         ? { administrativeGroupId: b.administrative_group_id }
         : {}),
       ...(b.staff ? { staff: b.staff.map((s) => ({ userId: s.user_id, position: s.position })) } : {}),
+      ...(b.surah_id === undefined ? {} : { surahId: b.surah_id }),
     });
     res.status(204).end();
   };

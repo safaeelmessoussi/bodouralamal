@@ -53,6 +53,9 @@ export interface ExamSourceState {
   sourceId: string;
   sourceTitle: string;
   sourceLevelId: string;
+  /** SRS Revision 165 §2 — the paper's own Subject: what decides whether the
+   *  sitting must name a Surah when the form's own Subject field is not asked. */
+  sourceSubjectId: string;
   /** Remote only — see the arm-by-arm reasoning on `ExamSection` itself. */
   targetKind: TargetKind;
   targetId: string;
@@ -68,6 +71,7 @@ export const EXAM_SOURCE_INITIAL: ExamSourceState = {
   sourceId: '',
   sourceTitle: '',
   sourceLevelId: '',
+  sourceSubjectId: '',
   targetKind: 'level',
   targetId: '',
   availabilityChoice: 'manual',
@@ -312,6 +316,7 @@ export function ExamSection({
                 sourceId: row.id,
                 sourceTitle: row.title,
                 sourceLevelId: row.level_id,
+                sourceSubjectId: row.subject_id ?? '',
                 // A fresh pick starts the audience over — a stale target from
                 // a PREVIOUSLY selected paper (a different Level, most often)
                 // is not carried across.
@@ -446,6 +451,7 @@ export function ExamSection({
                 sourceId: row.id,
                 sourceTitle: row.title,
                 sourceLevelId: row.level_id,
+                sourceSubjectId: row.subject_id ?? '',
               });
               // The audience picker below is scoped by `scope.value.levelId`
               // (unchanged mechanism); a chosen source's own Level is what
@@ -453,7 +459,7 @@ export function ExamSection({
               scope.set('levelId', row.level_id);
             }}
             onClear={() => {
-              onSourceChange({ sourceId: '', sourceTitle: '', sourceLevelId: '' });
+              onSourceChange({ sourceId: '', sourceTitle: '', sourceLevelId: '', sourceSubjectId: '' });
               scope.set('levelId', '');
             }}
           />

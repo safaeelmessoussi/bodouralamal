@@ -10592,3 +10592,70 @@ media server over UDP through the host's public address. Probe recordings delete
 bucket is empty), test tooling images removed, zero error-level API lines. What no automated check
 can do on Staging — enter a class and record it through the real screens — is left for the Owner,
 because a Staging session can only come from Google sign-in.
+
+## 2026-09-20 — SRS Revision 165: nine reported items (recording UX and title, Surahs in scheduling, two harnesses repaired, the first-session split, one branch question, named multi-selects, the Production quote)
+
+Owner-reported batch. One migration, `20260920100000_r165_surahs_in_scheduling`: `subject.requires_surahs`
+(with a one-time data statement for the seeded baseline — the tracker, and تفسير القرآن — and the
+CHECK `NOT tracks_quran_progress OR requires_surahs`), `course_schedule_surah`, `session_surah`.
+Additive wire changes only; no new route, so `td3-routes.txt` and the generated OpenAPI are unchanged.
+
+**Surahs (§2, §5).** Which Subjects work by Surah is a column, never a name. One rule —
+`resolveSurahs` in `policies/curriculum.ts` — asked when a class is created, edited in place, split,
+when one occurrence is edited, and on all four exam writes: `SURAHS_REQUIRED`,
+`SURAHS_NOT_APPLICABLE`, `SURAH_NOT_IN_SYLLABUS`. A class names one or more, an exam exactly one
+(`exam.surah_id` existed and no route wrote it), and an occurrence's own Surahs REPLACE the class's
+for that date (its audience dimensions are added; a Surah is what is taught that day).
+`scheduleLevelIds` moved beside `scheduleDimensions` in `roster-resolution.ts` so the class edit and
+the occurrence edit validate against the same Levels. `/me/scope-options` and
+`/me/course-schedule-options` carry the marker, each Level's «مقرر الحفظ» and the Surah names, so a
+مؤطِّرة has them. The per-occurrence rule is asked only when Surahs are named or the taught Subject
+really changes: the occurrence editor sends `subject_id` on every save, and keying on its presence
+would have held every unrelated edit of an older class — a room change — to a Surah the screen might
+be unable to offer. The completion rule the Owner described (memorise the Level's Surahs AND pass
+their تفسير exams) is recorded as direction and not built.
+
+**Authorization answers before the Surah rule.** My first placement asked `resolveSurahs` ahead of
+the مؤطِّرة's declared-capability check on class creation (and ahead of `assertScope` on a bare
+physical exam), so a caller with no authority was answered `400 SURAHS_REQUIRED` — a fact about
+something she may not create — instead of the refusal she is owed (§20 rule 17). The journey test
+caught it in the full integration run; the rule now runs after every authorization check on all
+surfaces. That same run also restated what this revision legitimately changes: three exact key-set
+pins (class, exam and Subject rows), the journey's own حفظ القرآن class and sitting (they now name
+the Surah step 2 put in the Level's syllabus), the R161 occurrence-override test, and the recording
+naming test — which now also pins that the storage key stays person-free and time-free.
+
+**The suggested title.** Type — Subject — Surah(s) — main teacher — when, for a class and an exam,
+until she types. A repeating class carries its time and no date: its title is snapshotted onto every
+occurrence (R138), so a date would print the first session's on all the others.
+
+**The recording (§1).** Title as above with the main teacher's public display name and the recording's
+own `stopped_at`. The storage key and file name are left person-free and retry-stable on purpose. The
+classroom re-reads the recording's state every 3 s while it is transitional and stops printing the
+line that repeats the live banner.
+
+**The first-session split (§4).** `closeAt` fell before the predecessor's `anchor_date`; the CHECK
+refused it as an uncoded 500. A predecessor left with nothing is retired (no Trash snapshot — a
+restore would re-materialize the series over its successor); one that still owns protected history
+stays alive, closed on its anchor date. Materialization already skips a date holding any row of the
+same schedule, removed ones included, so neither can mint a duplicate.
+
+**Harnesses (§3).** `verify-schedule-edit` 13/13, `verify-teacher-scheduling` 14/14,
+`verify-class-filters` 16/16, each leaving zero residue (both scenario cleanups run explicitly to
+exit 0 — the wrappers still hide a failed `--clean` behind `|| true`). Repairing them found, and this
+change fixes: a مؤطِّرة's exam refused `400` (R140's capability narrowing, applied to every item type,
+cleared the Level and Subject her class supplied — now class-only); then refused `403
+WHOLE_LEVEL_OUT_OF_SCOPE` (the Admin-only group list dropped her class's group — it now comes from
+the class she named); the dev scenario's class on a soft-deleted academic year; a filter-built class
+addressed by group alone publishing `level_id: null`, which opened its editor with the Subject
+empty; and the series editor's rows never carrying the `subject_id` the client has declared since
+R161, so a saved Subject override reopened as the class's and was cleared by the next save.
+
+**Forms (§6–§8).** «الفرع المنظِّم» derived by `homeBranchOf`, rooms offered across the branches in
+play; multi-selects name what was chosen; the filters-combine sentence removed.
+
+**The Production quote (§9).** Assessed in `operations/provider-acceptance.md` without prices or
+contacts, as that page requires: 4 vCPU / 8 GB meet the measured requirement; the 100 GB disk is the
+limit (≈25–30 h of video or ≈250–330 h of audio before it must grow, given same-host recovery
+points); six written questions for the provider, UDP 7882 through the anti-DDoS layer first. Nothing
+ordered; Production go-live remains on hold.

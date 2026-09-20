@@ -4,6 +4,7 @@ import {
   localDateIso,
   nextRecordingName,
   recordingBaseName,
+  sessionRecordingBaseName,
 } from './recording-name.js';
 
 /**
@@ -97,5 +98,38 @@ describe('TD-11 — the association’s date, not UTC’s', () => {
     // offset is positive, which is the browser defect this replaced.
     const at = new Date(2026, 7, 24, 0, 30, 0);
     expect(localDateIso(at)).toBe('2026-08-24');
+  });
+});
+
+describe('SRS Revision 165 §1 — what the platform’s own capture of a class is called', () => {
+  const at = new Date(2026, 8, 20, 18, 5, 0);
+
+  it('type, Subject, Surah, main teacher, then the date and time she stopped it', () => {
+    expect(
+      sessionRecordingBaseName({
+        typeName: 'حصة',
+        subjectName: 'تفسير القرآن',
+        surahNames: ['البقرة', 'آل عمران'],
+        teacherName: 'الأستاذة صفاء',
+        at,
+      }),
+    ).toBe('حصة — تفسير القرآن — البقرة، آل عمران — الأستاذة صفاء — 2026-09-20 18:05');
+  });
+
+  it('omits what a class does not have rather than leaving empty separators', () => {
+    expect(
+      sessionRecordingBaseName({
+        typeName: null,
+        subjectName: 'فقه',
+        surahNames: [],
+        teacherName: null,
+        at,
+      }),
+    ).toBe('فقه — 2026-09-20 18:05');
+  });
+
+  it('answers the same on every attempt — the instant is the recording’s, never «now»', () => {
+    const source = { typeName: 'حصة', subjectName: 'فقه', surahNames: [], teacherName: null, at };
+    expect(sessionRecordingBaseName(source)).toBe(sessionRecordingBaseName(source));
   });
 });

@@ -73,6 +73,10 @@ export interface CourseSchedule {
     administrative_group_ids: string[];
     teaching_group_ids: string[];
   } | null;
+  /** SRS Revision 165 §2 — the Surahs this class is about (numbers and names,
+   *  Mushaf order). Optional: a narrower projection reads as "none". */
+  surah_ids?: number[];
+  surah_names?: string[];
   /**
    * **Which Level the class is for**, resolved server-side whatever the mode
    * names — for `entire_level` it equals `target_id`, and for the other two it
@@ -253,6 +257,9 @@ export interface CourseScheduleInput {
     administrative_group_ids?: string[];
     teaching_group_ids?: string[];
   };
+  /** SRS Revision 165 §2 — required (one or more) when the Subject works by
+   *  Surah, refused otherwise; the server holds each to the Levels' «مقرر الحفظ». */
+  surah_ids?: number[];
   branch_id: string;
   room_id?: string | null;
   /** **R97 — the DEFAULT delivery** for the Sessions this schedule
@@ -349,6 +356,8 @@ export async function updateCourseSchedule(
       | 'target_id'
       // SRS Revision 163 §5 — the successor is always filter-built now.
       | 'dimensions'
+      // SRS Revision 165 §2 — replaced whole when named, on either scope.
+      | 'surah_ids'
     >
   > & {
     scope?: 'all_sessions' | 'this_and_future';

@@ -138,6 +138,9 @@ export function updateSubjectHandler(prisma: PrismaClient) {
         ...(body.tracks_quran_progress !== undefined
           ? { tracksQuranProgress: body.tracks_quran_progress }
           : {}),
+        ...(body.requires_surahs !== undefined
+          ? { requiresSurahs: body.requires_surahs }
+          : {}),
       },
     );
     res.json({ data: subjectRefDto(updated) });

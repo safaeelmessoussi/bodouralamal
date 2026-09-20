@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { resolveSurahs } from '../policies/curriculum.js';
 import { wallClockInstant } from '../lib/wall-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -100,6 +101,13 @@ export interface ScheduleExamInput {
     subjectId: string;
     academicYearId: string;
   };
+  /**
+   * R165 §2 — **the Surah this sitting examines** (`Exam.surah_id`). Required
+   * when the exam's Subject `requiresSurahs`, refused otherwise, and it must
+   * sit in the «مقرر الحفظ» of the exam's Level (`resolveSurahs`). One Surah
+   * per sitting; any number of sittings may examine the same Surah.
+   */
+  surahId?: number | null;
 }
 
 function computeAvailableFrom(
@@ -367,6 +375,21 @@ export async function scheduleExam(
       );
     }
 
+    // R165 §2 — which Surah, for BOTH delivery modes and both paths above: it
+    // is a fact about the sitting, not about the paper it was copied from.
+    // **Asked after every authorization check above** (`assertMayAuthor`,
+    // `assertScope`): a caller with no authority over this Level is owed that
+    // refusal, not a `400` describing a sitting she may not create.
+    const [surahId] = await resolveSurahs(tx, {
+      subjectId: resolvedSubjectId,
+      levelIds: [resolvedLevelId],
+      surahIds: input.surahId == null ? [] : [input.surahId],
+    });
+    await tx.exam.update({
+      where: { id: occurrence.id },
+      data: { surahId: surahId ?? null },
+    });
+
     const fresh = await tx.exam.findUniqueOrThrow({
       where: { id: occurrence.id },
       select: {
@@ -496,6 +519,8 @@ export interface UpdateExamScheduleInput {
    *  to manual, which R136 clause 9's own "never becomes reachable on its
    *  own" rule would then apply to an already-open paper. */
   availability?: AvailabilityPolicy;
+  /** R165 §2 — see `ScheduleExamInput.surahId`. Absent leaves it alone. */
+  surahId?: number | null;
 }
 
 export async function updateExamSchedule(
@@ -590,9 +615,23 @@ export async function updateExamSchedule(
       );
     }
 
+    // R165 §2 — validated only when this edit names it; the Level and Subject
+    // of a scheduled sitting are not editable here, so they are the row's own.
+    const surahChange =
+      input.surahId === undefined
+        ? undefined
+        : ((
+            await resolveSurahs(tx, {
+              subjectId: existing.subjectId,
+              levelIds: [existing.levelId],
+              surahIds: input.surahId === null ? [] : [input.surahId],
+            })
+          )[0] ?? null);
+
     await tx.exam.update({
       where: { id: examId },
       data: {
+        ...(surahChange === undefined ? {} : { surahId: surahChange }),
         ...(input.date === undefined && input.target === undefined ? {} : { date: target.date }),
         ...(input.startTime === undefined ? {} : { startTime: input.startTime }),
         ...(input.endTime === undefined ? {} : { endTime: input.endTime }),

@@ -75,6 +75,8 @@ export function create(prisma: PrismaClient) {
         teachingMode: body.teaching_mode,
         ...(body.target_id !== undefined ? { targetId: body.target_id } : {}),
         // Revision 155 — `multi_dimension`'s own target shape.
+        // R165 §2 — the Surahs this class is about.
+        ...(body.surah_ids !== undefined ? { surahIds: body.surah_ids } : {}),
         ...(body.dimensions !== undefined
           ? {
               dimensions: {
@@ -228,6 +230,8 @@ export function update(prisma: PrismaClient) {
           : {}),
         ...(body.target_id !== undefined ? { targetId: body.target_id } : {}),
         // Revision 157 — the successor's own dimensions, this_and_future-only.
+        // R165 §2 — the Surahs this class is about.
+        ...(body.surah_ids !== undefined ? { surahIds: body.surah_ids } : {}),
         ...(body.dimensions !== undefined
           ? {
               dimensions: {

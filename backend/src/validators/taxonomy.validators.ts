@@ -42,6 +42,9 @@ export const updateSubjectSchema = z.object({
    * surfaces as.
    */
   tracks_quran_progress: z.boolean().optional(),
+  /** R165 §2 — this Subject works by Surah (حفظ القرآن, تفسير القرآن): a class
+   *  or an exam of it must name which Surah of the Level's «مقرر الحفظ». */
+  requires_surahs: z.boolean().optional(),
 });
 
 /**

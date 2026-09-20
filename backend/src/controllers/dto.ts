@@ -585,6 +585,10 @@ export interface CourseScheduleDto {
   }[];
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
   version: number;
+  /** R165 §2 — the Surahs this class is about (numbers and names, Mushaf
+   *  order); both empty when its Subject is not taught by Surah. */
+  surah_ids: number[];
+  surah_names: string[];
   /**
    * **Revision 155 — present only when `teaching_mode` is
    * `multi_dimension`**, `null` for every other mode (never the empty
@@ -688,6 +692,11 @@ export function courseScheduleDto(row: {
   /** SRS Revision 163 §5 — the named audience of a filter-built class; absent
    *  (or `null`) for every legacy mode, whose single target already names it. */
   targetSummary?: string | null;
+  /** R165 §2 — absent from a narrower projection reads as "none". */
+  surahIds?: number[];
+  surahNames?: string[];
+  /** A `multi_dimension` row's first addressed Level; `null` otherwise. */
+  representativeLevelId?: string | null;
   dimensions?: {
     branchIds: string[];
     categoryIds: string[];
@@ -712,6 +721,8 @@ export function courseScheduleDto(row: {
       row.levelId ??
       row.administrativeGroup?.levelId ??
       row.teachingGroup?.levelId ??
+      // A filter-built class: the first Level it addresses (see the service).
+      row.representativeLevelId ??
       null,
     // Whichever of the three the mode names (§4.4c) — the timetable reads *who
     // this class is for*, and the caller should not have to resolve that from
@@ -749,6 +760,8 @@ export function courseScheduleDto(row: {
       user_name: s.name ?? null,
     })),
     version: row.version,
+    surah_ids: row.surahIds ?? [],
+    surah_names: row.surahNames ?? [],
     dimensions: row.dimensions
       ? {
           branch_ids: row.dimensions.branchIds,
@@ -1192,6 +1205,9 @@ export interface SubjectWithLevelsDto extends SubjectRefDto {
    * names.
    */
   tracks_quran_progress: boolean;
+  /** R165 §2 — this Subject works by Surah: a class or an exam of it must name
+   *  which. The tracker always carries it (a DB CHECK). */
+  requires_surahs: boolean;
 }
 
 export function subjectWithLevelsDto(row: {
@@ -1200,6 +1216,7 @@ export function subjectWithLevelsDto(row: {
   displayOrder: number | null;
   version: number;
   tracksQuranProgress: boolean;
+  requiresSurahs: boolean;
   levels: { id: string; name: string; categoryName: string }[];
 }): SubjectWithLevelsDto {
   return {
@@ -1208,6 +1225,7 @@ export function subjectWithLevelsDto(row: {
     display_order: row.displayOrder,
     version: row.version,
     tracks_quran_progress: row.tracksQuranProgress,
+    requires_surahs: row.requiresSurahs,
     levels: row.levels.map((level) => ({
       id: level.id,
       name: level.name,
@@ -1851,6 +1869,10 @@ export interface ScheduleSessionDto {
    * row rather than from a hardcoded default — the defect NEW B §A found.
    */
   visibility: string;
+  /** R161 — this occurrence's own Subject; `null` inherits the class's. */
+  subject_id: string | null;
+  /** R165 §2/§5 — this occurrence's own Surahs; empty inherits the class's. */
+  surah_ids: number[];
   /** TD-15: sent back on a "this session only" edit. */
   version: number;
   /** Owner-reported, 2026-09-16 — المؤطِّرات showed a bare count; `user_name`
@@ -1873,6 +1895,8 @@ export function scheduleSessionDto(row: {
   deliveryMode: string;
   onlineMediaMode: string | null;
   visibility: string;
+  subjectId: string | null;
+  surahIds: number[];
   version: number;
   staff: { userId: string; position: string; name: string | null }[];
   protectedReasons: string[];
@@ -1890,6 +1914,8 @@ export function scheduleSessionDto(row: {
     delivery_mode: row.deliveryMode,
     online_media_mode: row.onlineMediaMode,
     visibility: String(row.visibility),
+    subject_id: row.subjectId,
+    surah_ids: row.surahIds,
     version: row.version,
     staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position, user_name: s.name })),
     protected_reasons: row.protectedReasons,
@@ -1923,8 +1949,14 @@ export interface ScopeOptionsDto {
     /** The Subjects this Level teaches (§4.4b). Inline so narrowing needs no
      *  second request — and that request was itself Admin-only. */
     subject_ids: string[];
+    /** R165 §2 — this Level's «مقرر الحفظ», as Surah numbers in Mushaf order. */
+    surah_ids: number[];
   }[];
-  subjects: { id: string; name: string }[];
+  /** `requires_surahs` (R165 §2) — a class or an exam of this Subject must name
+   *  which Surah. A column on the Subject, never its name. */
+  subjects: { id: string; name: string; requires_surahs: boolean }[];
+  /** R165 §2 — the name of every Surah some offered Level's syllabus holds. */
+  surahs: { id: number; name: string }[];
   academic_years: { id: string; label: string; is_current: boolean }[];
   branches: { id: string; name: string }[];
 }
@@ -1939,8 +1971,10 @@ export function scopeOptionsDto(row: {
     defaultVisibility: string;
     selfAttendanceAllowed: boolean;
     subjectIds: string[];
+    surahIds: number[];
   }[];
-  subjects: { id: string; name: string }[];
+  subjects: { id: string; name: string; requiresSurahs: boolean }[];
+  surahs: { id: number; name: string }[];
   academicYears: { id: string; label: string; isCurrent: boolean }[];
   branches: { id: string; name: string }[];
 }): ScopeOptionsDto {
@@ -1954,8 +1988,14 @@ export function scopeOptionsDto(row: {
       default_visibility: l.defaultVisibility,
       self_attendance_allowed: l.selfAttendanceAllowed,
       subject_ids: l.subjectIds,
+      surah_ids: l.surahIds,
     })),
-    subjects: row.subjects,
+    subjects: row.subjects.map((subject) => ({
+      id: subject.id,
+      name: subject.name,
+      requires_surahs: subject.requiresSurahs,
+    })),
+    surahs: row.surahs,
     academic_years: row.academicYears.map((y) => ({
       id: y.id,
       label: y.label,
@@ -2212,6 +2252,10 @@ export interface ExamDto {
   level_name: string | null;
   subject_id: string | null;
   subject_name: string | null;
+  /** R165 §2 — the Surah this sitting examines (1–114) and its name; `null`
+   *  when its Subject is not examined by Surah. */
+  surah_id: number | null;
+  surah_name: string | null;
   academic_year_id: string | null;
   branch_id: string | null;
   branch_name: string | null;
@@ -2265,6 +2309,8 @@ export function examDto(row: {
   level?: { name: string } | null;
   subjectId: string | null;
   subject?: { name: string } | null;
+  surahId?: number | null;
+  surah?: { nameArabic: string } | null;
   academicYearId: string | null;
   branchId: string | null;
   branch?: { name: string } | null;
@@ -2293,6 +2339,8 @@ export function examDto(row: {
     level_name: row.level?.name ?? null,
     subject_id: row.subjectId,
     subject_name: row.subject?.name ?? null,
+    surah_id: row.surahId ?? null,
+    surah_name: row.surah?.nameArabic ?? null,
     scheduling_type_id: row.schedulingTypeId ?? null,
     academic_year_id: row.academicYearId,
     branch_id: row.branchId,
@@ -2689,6 +2737,13 @@ export interface AssessmentPaperDto {
   mode: string;
   target_kind: string;
   level_id: string;
+  /**
+   * SRS Revision 165 §2 — the paper's own Subject, on the AUTHOR's read only
+   * (`null` wherever the read does not select it). الجدولة needs it to know
+   * whether a sitting of this paper must name a Surah: scheduled from a paper,
+   * the form's own Subject field is never asked.
+   */
+  subject_id: string | null;
   /** TD-11 calendar date — the day the paper belongs to, and the day its
    *  eligibility is resolved for (R122). */
   date: string;
@@ -2737,6 +2792,8 @@ export function assessmentPaperDto(row: {
     mode: string;
     targetKind: string;
     levelId: string;
+    /** R165 §2 — present only where the read selects it (the author's). */
+    subjectId?: string | null;
     date: Date;
     maxGrade: { toString(): string };
     /** TD-15 — no longer written by a target/version route (R136 retired
@@ -2784,6 +2841,7 @@ export function assessmentPaperDto(row: {
     mode: String(row.exam.mode),
     target_kind: String(row.exam.targetKind),
     level_id: row.exam.levelId,
+    subject_id: row.exam.subjectId ?? null,
     date: row.exam.date.toISOString().slice(0, 10),
     max_grade: row.exam.maxGrade.toString(),
     version: row.exam.version,

@@ -77,6 +77,8 @@ export interface Occurrence {
   /** SRS Revision 163 §2 — the item's own typed title («العنوان»). For a class
    *  `title` is its Subject's name; this is what somebody actually typed. */
   item_title?: string;
+  /** SRS Revision 165 §2 — the Surah(s) this class or exam is about. */
+  surah_names?: string[];
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */
   date: string;
   start_time: string | null;

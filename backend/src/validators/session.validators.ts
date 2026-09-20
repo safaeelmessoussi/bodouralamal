@@ -77,6 +77,11 @@ export const overrideSessionSchema = z
      */
     subject_id: uuid.nullable().optional(),
     /**
+     * R165 §2/§5 — this occurrence's own Surahs (1–114). Named, they REPLACE
+     * the class's for this date; `[]` clears the override; absent leaves it.
+     */
+    surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),
+    /**
      * Supplying this **replaces** this occurrence's staffing snapshot; omitting
      * it leaves the snapshot untouched. An empty array is therefore a real
      * instruction — *this session has no staff* — and is deliberately not the

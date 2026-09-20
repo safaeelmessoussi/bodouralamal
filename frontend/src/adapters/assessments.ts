@@ -48,6 +48,8 @@ export interface AssessmentPaper {
   mode: 'physical' | 'online';
   target_kind: TargetKind;
   level_id: string;
+  /** SRS Revision 165 §2 — the paper's own Subject (author's read only). */
+  subject_id?: string | null;
   date: string;
   max_grade: string;
   /** TD-15 optimistic-locking coordinate. */

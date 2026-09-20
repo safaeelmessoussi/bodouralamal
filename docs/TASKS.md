@@ -5031,8 +5031,8 @@ changed destructively; Production go-live remains on hold.
       because a class's Subject must be taught at every Level it reaches
       (R43/R155). The alternative — «الكل» meaning *every Level that teaches
       this Subject* — is a new audience rule.
-- [ ] **Defect found, not fixed — a «from this date onward» edit at a class's
-      FIRST occurrence answers `500`.** The split closes the predecessor the
+- [x] **Fixed by SRS Revision 165 §4 (section below)** — *a «from this date
+      onward» edit at a class's FIRST occurrence answered `500`.* The split closes the predecessor the
       day before `from_date`; at the first occurrence that is before its own
       anchor, `course_schedule_effective_until_check` refuses it, and the
       service lets the database error through instead of answering a coded
@@ -5046,8 +5046,8 @@ changed destructively; Production go-live remains on hold.
       never saw it and it pinned the scenario's branch, Subject, Level and six
       users on Localhost while the wrapper's `|| true` hid the failure.
       Residue removed; the wipe also finds schedules by tagged Subject/branch.
-- [ ] **Two stale harnesses, unrelated to this revision** (`qa-inventory.md`
-      has the detail): `verify-schedule-edit` still drives a native date
+- [x] **Repaired by SRS Revision 165 §3 (section below)** — *two stale
+      harnesses* (`qa-inventory.md` has the detail): `verify-schedule-edit` still drives a native date
       input the platform retired; `verify-teacher-scheduling` still selects
       the item type by a value that became a catalogue id under R110. The
       assertions this revision touched were restated in both; neither is
@@ -5130,3 +5130,71 @@ in our infrastructure; the 80/443-only rule relaxed to the minimum WebRTC needs.
       vCPU; 7881/tcp and 7882/udp admitted by the host AND the provider
       firewall with inbound UDP unfiltered; `LIVEKIT_NODE_IP`; a dedicated
       `LIVEKIT_API_SECRET`. Go-live itself remains on hold (Owner).
+
+## SRS Revision 165 — nine reported items — 2026-09-20
+
+Owner-reported batch across the online classroom, إضافة عنصر, the series
+editor, المواد and the browser harnesses. One migration
+(`20260920100000_r165_surahs_in_scheduling`); additive wire changes; no new route.
+
+- [x] **§1a — the recording line follows the recording.** «جارٍ بدء التسجيل…»
+      and «جارٍ إيقاف التسجيل…» stayed on screen after the state had moved on:
+      it was read once. Re-read every 3 s while transitional, stopped once
+      settled; not printed at all when it would repeat the live banner.
+- [x] **§1b — the recording's TITLE** is type — Subject — Surah(s) — main
+      teacher (public display name) — date and time «إيقاف التسجيل» was pressed
+      (`stopped_at`, never *now*, so a retry answers the same). The storage key
+      and file name are unchanged on purpose: a key must not carry a person's
+      name and must resolve identically on a retry. Import, linking and
+      «التسجيلات» were already R99's.
+- [x] **§2 — a Subject that works by Surah names WHICH Surah.**
+      `subject.requires_surahs` (a column, never the name; set on حفظ القرآن and
+      تفسير القرآن; the tracker must carry it — CHECK plus a coded
+      `TRACKER_REQUIRES_SURAHS`). One rule, `resolveSurahs`, asked when a class
+      is created, edited, split, when one occurrence is edited, and on every
+      exam write: `SURAHS_REQUIRED` · `SURAHS_NOT_APPLICABLE` ·
+      `SURAH_NOT_IN_SYLLABUS`. A class names one or more
+      (`course_schedule_surah`); an exam exactly one (`exam.surah_id`, now
+      writable), any number of exams per Surah. `/me/scope-options` carries the
+      marker, each Level's «مقرر الحفظ» and the Surah names, so a مؤطِّرة has
+      them too. المواد shows and edits the marker.
+- [x] **§2 — the title is SUGGESTED** for a class and an exam and follows the
+      form until she types. A repeating class carries its time and NO date (its
+      title is copied onto every occurrence); a one-off carries both.
+- [ ] **Recorded, not built:** completing a Level = memorising its Surahs AND
+      passing the تفسير exams of the same Surahs. The data now exists to
+      compute it; nothing computes it yet.
+- [x] **§3 — `verify-schedule-edit` 13/13 and `verify-teacher-scheduling`
+      14/14**, both driving the real date picker and choosing the item type by
+      what it says. Running them again found three defects, all fixed:
+      a مؤطِّرة's exam refused `400` (R140's capability narrowing applied to every
+      item type cleared the Level/Subject her class supplied — now class-only);
+      then refused `403 WHOLE_LEVEL_OUT_OF_SCOPE` (the group list she cannot
+      read dropped her class's group — it now comes from the class she named);
+      and the dev scenario used a soft-deleted academic year.
+- [x] **§4 — the first-session split saves.** Nothing left to the predecessor →
+      retired (soft-deleted, `predecessor_retired` in the audit row, no Trash
+      snapshot: a restore would re-materialize the series over its successor).
+      Protected history left → it stays alive, closed on its anchor date.
+- [x] **§5 — the Surah is editable for ONE occurrence** (`session_surah`):
+      it REPLACES the class's for that date; `[]` returns to the class's; naming
+      the class's own is stored as inherit. Asked only when Surahs are named or
+      the taught Subject really changes, so an unrelated edit of an older class
+      is never held to a Surah the screen cannot offer. The series editor's rows
+      now carry `subject_id` (a saved override used to reopen as the class's
+      Subject and be cleared by the next save) and `surah_ids`.
+- [x] **§6 — one branch question.** «الفرع المنظِّم» is derived
+      (`homeBranchOf`); rooms are offered across the branches in play.
+- [x] **§7 — a multi-choice dropdown names what was chosen**, never «1 محددة».
+- [x] **§8 — the filters-combine sentence removed.**
+- [x] **§9 — the Production hosting quote assessed** in
+      [provider acceptance](operations/provider-acceptance.md#assessment-of-one-quotation-against-this-matrix-2026-09-20):
+      enough to launch on; the 100 GB disk is the limit (≈25–30 h of video or
+      ≈250–330 h of audio before it must grow); six questions for the provider,
+      UDP 7882 through the anti-DDoS layer first. Nothing ordered; go-live on hold.
+- [x] **Also fixed:** a filter-built class addressed by group or circle alone
+      published `level_id: null`, so its «from this date onward» editor opened
+      with the Subject empty. `level_id` now names the first Level it addresses.
+- [x] `verify-class-filters` 16/16 — names not counts, one branch question,
+      the required Surah, the suggested title, the inherited Surah, and the
+      first-session split answering `200` and leaving one class.

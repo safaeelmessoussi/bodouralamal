@@ -56,6 +56,8 @@ async function clean(): Promise<void> {
   await prisma.notification.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.sessionContent.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  // R165 — an occurrence's own Surahs are RESTRICT against the Session.
+  await prisma.sessionSurah.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
   // A filter-built class (SRS Revision 163 §5) owns rows in the five scope
@@ -84,6 +86,8 @@ async function clean(): Promise<void> {
   });
   await prisma.teachingGroup.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
+  // R165 — the scenario Level's «مقرر الحفظ».
+  await prisma.levelSurah.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -151,8 +155,19 @@ const level = await prisma.level.create({
     genderRestriction: 'girls_only',
   },
 });
-const subject = await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } });
+// R165 §2 — تفسير works by Surah: the marker is a column (never the name), so
+// the scenario sets it, gives the Level a two-Surah «مقرر الحفظ», and the class
+// below names one of them — what «إضافة عنصر» would have required of it.
+const subject = await prisma.subject.create({
+  data: { name: `${TAG} تفسير القرآن`, requiresSurahs: true },
+});
 await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject.id } });
+await prisma.levelSurah.createMany({
+  data: [
+    { levelId: level.id, surahId: 1 },
+    { levelId: level.id, surahId: 2 },
+  ],
+});
 const group = await prisma.administrativeGroup.create({
   data: { name: `${TAG} المجموعة 1`, levelId: level.id, branchId: branch.id },
 });
@@ -175,9 +190,16 @@ for (const [i, name] of ['ج الحلقة', 'أ الحلقة', 'ب الحلقة'
   );
 }
 
+// **A LIVE year, and the current one where there is one** (2026-09-20). This
+// took the highest label with no `deletedAt` filter, so on a database holding a
+// soft-deleted «2146-2147» the scenario's class belonged to a year no form
+// offers: every edit of it was refused with «اختاري السنة الدراسية», which is
+// what kept `verify-schedule-edit` red after its date step was repaired.
 const year =
-  (await prisma.academicYear.findFirst({ orderBy: { label: 'desc' } })) ??
-  (await prisma.academicYear.create({ data: { label: '2026-2027' } }));
+  (await prisma.academicYear.findFirst({
+    where: { deletedAt: null },
+    orderBy: [{ isCurrent: 'desc' }, { label: 'desc' }],
+  })) ?? (await prisma.academicYear.create({ data: { label: '2026-2027' } }));
 
 const superAdmin = await person('مديرة النظام', 'super_admin');
 const safa = await person('صفاء', 'teacher');
@@ -209,6 +231,7 @@ const schedule = await prisma.recurringCourseSchedule.create({
   data: {
     title: `${TAG} حلقة التفسير`,
     subjectId: subject.id,
+    surahs: { create: [{ surahId: 1 }] },
     teachingMode: 'administrative_group',
     // `level_id` stays NULL — `course_schedule_mode_target_check` (R43) allows
     // exactly one target per mode, and the Level is reached through the Group.

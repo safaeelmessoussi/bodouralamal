@@ -236,6 +236,19 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
             <span className="muted">—</span>
           ),
       },
+      {
+        /** SRS Revision 165 §2 — which Subjects work by Surah, shown for the
+         *  same reason the marker beside it is: it changes what scheduling a
+         *  class or an exam of this Subject will ask for. */
+        key: 'requires_surahs',
+        header: 'admin.taxonomy.colRequiresSurahs',
+        cell: (r) =>
+          (r as SubjectRef).requires_surahs ? (
+            <span className="badge badge--ok">{t('admin.taxonomy.requiresSurahsYes')}</span>
+          ) : (
+            <span className="muted">—</span>
+          ),
+      },
     ],
   },
 };
@@ -457,6 +470,7 @@ function TaxonomyFormDialog({
     description?: string | null;
     display_order: number | null;
     tracks_quran_progress?: boolean;
+    requires_surahs?: boolean;
   } | null;
   withDescription?: boolean;
   withQuranFlag?: boolean;
@@ -468,14 +482,16 @@ function TaxonomyFormDialog({
     name: initial?.name ?? '',
     description: initial?.description ?? '',
     tracksQuranProgress: initial?.tracks_quran_progress ?? false,
+    requiresSurahs: initial?.requires_surahs ?? false,
   };
   const [name, setName] = useState(pristine.name);
   const [description, setDescription] = useState(pristine.description);
   const [tracksQuranProgress, setTracksQuranProgress] = useState(pristine.tracksQuranProgress);
+  const [requiresSurahs, setRequiresSurahs] = useState(pristine.requiresSurahs);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
   // Only user-modified data is dirty; a validation error is not a change.
-  const dirty = isDirty({ name, description, tracksQuranProgress }, pristine);
+  const dirty = isDirty({ name, description, tracksQuranProgress, requiresSurahs }, pristine);
 
   function submit(): void {
     setTouched(true);
@@ -496,6 +512,10 @@ function TaxonomyFormDialog({
       // `description` above: a Category has no such column, and sending it
       // regardless would be refused by the `.strict()` schema on that route.
       ...(withQuranFlag ? { tracks_quran_progress: tracksQuranProgress } : {}),
+      // R165 §2 — the memorisation Subject ALWAYS works by Surah (a database
+      // CHECK), so the pair is sent consistent rather than left for the server
+      // to refuse: ticking the first ticks the second.
+      ...(withQuranFlag ? { requires_surahs: requiresSurahs || tracksQuranProgress } : {}),
     });
   }
 
@@ -531,6 +551,15 @@ function TaxonomyFormDialog({
           checked={tracksQuranProgress}
           onChange={setTracksQuranProgress}
           hint={t('admin.taxonomy.tracksQuranHint')}
+        />
+      ) : null}
+      {withQuranFlag ? (
+        <CheckboxField
+          label={t('admin.taxonomy.requiresSurahsLabel')}
+          checked={requiresSurahs || tracksQuranProgress}
+          onChange={setRequiresSurahs}
+          disabled={tracksQuranProgress}
+          hint={t('admin.taxonomy.requiresSurahsHint')}
         />
       ) : null}
     </FormDialog>

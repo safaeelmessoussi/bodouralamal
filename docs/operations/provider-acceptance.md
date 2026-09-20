@@ -92,6 +92,69 @@ preflight already accepts an explicit whole-GiB floor and must continue to recei
 value rather than embedding this recommendation in code. Runtime disk alert delivery also depends
 on the still-open TD-14/TD-3 operational-alert decision.
 
+## Assessment of one quotation against this matrix (2026-09-20)
+
+Requested by the Owner for a Moroccan «Cloud» VM offer: **4 vCPU, 8 GB RAM, 100 GB SSD,
+1 Gbps best-effort port with unmetered monthly transfer, Linux, high-availability
+virtualisation with hardware redundancy, an ISO 27001 / Tier III datacentre, 99.9 %
+availability and anti-DDoS**, with a separate **100 GB external backup** line (agent
+licence, automatic backup to a remote server, daily report, configurable frequency and
+retention, web restore console). Prices, the quotation reference and contacts stay in the
+private procurement record, as this page requires. **This is an assessment, not a selection:
+nothing was ordered and Production go-live remains on hold.**
+
+**Verdict — enough to LAUNCH on, with one known limit and three answers that must arrive in
+writing first.**
+
+| Area | The offer | Against what this platform needs |
+|---|---|---|
+| Compute | 4 vCPU | **Meets it.** The Production preflight floor is 4 CPUs (SRS Revision 164 §5). Measured: the media server peaks at 0.35 core; one 720p recording costs the recorder 1.7–1.9 cores, an audio one 0.2–0.35. So **one video recording at a time** with the platform still responsive, plus audio recordings beside it; a second simultaneous video recording is *refused by the recorder's own admission control* rather than degrading the first — which is the designed behaviour, and worth the Owner knowing before two classes are recorded in video at once. **Only true if the vCPUs are not burst-only** (question 2). |
+| Memory | 8 GB | **Meets it.** The whole stack with one video recording in progress sits well inside 8 GB (recorder ≈ 700 MiB, media server ≈ 140 MiB). The matrix asks for the 16 GB path to be stated before purchase; the quotation does not state it (question 5). |
+| Disk | 100 GB SSD | **The limit.** The matrix planned for *approximately 200 GB*, and the [disk recommendation](#production-disk-recommendation-awaiting-owner-approval) below was sized for that. It is enough to launch; it is not enough to stop thinking about. See the arithmetic under this table. |
+| Network | 1 Gbps best effort, unmetered | **Meets it** for this audience. «Best effort» is a shared port, which suits class traffic; nothing here depends on a guaranteed rate. |
+| Media ports | *not stated* | **Must be confirmed (question 1).** Online classes need inbound **UDP 7882** and **TCP 7881** beside 80/443 (SRS Revision 164 §2). An anti-DDoS layer that drops or rate-limits unsolicited inbound UDP would leave every class on the TCP fallback, or unreachable. This is the single answer most likely to decide the offer. |
+| Residency | «Cloud Maroc», Tier III datacentre | **Not yet evidence.** A Moroccan company and a product name do not state where the bytes are. The matrix needs the physical site of the VM disks **and of the backup line's remote server**, and every subprocessor, in writing (question 3, and the [reject gates](#reject-gates)). |
+| Backup line | 100 GB, agent-based, remote server | **Potentially valuable — it could be the second Moroccan copy the temporary B8 exception is waiting for** — but three things decide that: where the remote server physically is; that the agent can be limited to the already-encrypted recovery repository (`/var/lib/bodour-backups`) so the provider never holds readable personal data; and what a provider's agent running as root on the host means for the [host contract](deployment.md#supported-host-contract). 100 GB is the same size as the disk, so it fits by construction. |
+| Platform / access | «Linux» | **Must be confirmed (question 4):** Ubuntu 24.04 LTS AMD64, root with key-only SSH, Docker permitted, a rescue or serial console. |
+| Availability | 99.9 %, HA infrastructure | Acceptable. Note what it covers: the *infrastructure*. It is not a backup and does not replace the recovery point. |
+
+**The disk, in numbers.** Roughly: the operating system and two exact release generations of
+the images take about **25 GB** (the recorder image alone is 4 GB, and two generations are kept
+so a deployment can roll back). A deployment floor sized like Staging's (20 GiB) leaves about
+**50 GB** for PostgreSQL, the object store and the same-host recovery repository together.
+Recordings are already compressed, so the recovery repository cannot shrink them: with up to
+two retained generations plus the working room a backup needs, every gigabyte of media costs
+roughly **two to three** on this disk. That puts the practical media budget near **15–20 GB**.
+At the measured rates — about **0.63 GB per hour of video** and **59 MB per hour of audio** —
+that is on the order of **25–30 hours of video**, or **250–330 hours of audio**, before the
+disk must grow. Everything that is not a recording (documents, images, the database) is small
+beside that. Three levers, in order of effect: record in **audio** unless the picture matters
+(the form already defaults to it, SRS Revision 163 §1); move the recovery repository's second
+copy onto the backup line once question 3 is answered, which returns a large share of the disk;
+and buy the disk increment early — the [growth warning](#production-disk-recommendation-awaiting-owner-approval)
+exists so that is a purchase, not an incident. The 50 GiB floor recommended below was sized
+for 200 GB and **cannot** be carried onto a 100 GB disk unchanged; the Owner-approved floor for
+this host would be set when it is provisioned.
+
+**Questions to put to the provider, in writing, before ordering:**
+
+1. Does the anti-DDoS / firewall layer pass **inbound UDP 7882 and TCP 7881** to the VM,
+   unfiltered and without a rate limit that a sustained media stream would trip?
+2. Are the 4 vCPUs **dedicated or shared**, and is there a fair-use or burst policy? A
+   recording needs about two cores *continuously* for the length of a class.
+3. **Where, physically, are the VM's disks and the backup line's remote server** — city and
+   site — and which legal entities operate each? (Loi 09-08; the reject gates above.)
+4. Is **Ubuntu 24.04 LTS (AMD64)** offered, with root access, key-only SSH, Docker permitted
+   and a rescue/serial console?
+5. What is the **upgrade path** — disk to 200 GB and memory to 16 GB: increment, price,
+   downtime, and whether the public IPv4 and the data survive it?
+6. For the backup line: can the agent be restricted to **one directory**; is the data
+   **encrypted before it leaves the VM**; what are the retention and restore terms; and is
+   restore billed?
+
+Also worth noticing before signing: the quotation's customer identification field for the
+association was blank, and the offer is for twelve months.
+
 ## Technical acceptance after shortlisting
 
 Before an empty deployment is accepted on the selected host:

@@ -477,3 +477,30 @@ describe('SRS Revision 164 — the classroom contacts no third-party ICE server'
     expect(code).not.toMatch(/stun:|turn:|stun\.l\.google|twilio/i);
   });
 });
+
+/**
+ * **SRS Revision 165 §1 — «جارٍ بدء التسجيل…» must END.** Owner-reported: the
+ * starting and stopping sentences stayed on screen for the rest of the class,
+ * beside a banner saying the opposite.
+ */
+describe('SRS Revision 165 §1 — the recording line follows the recording', () => {
+  const code = recordingSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+  it('keeps reading the state while it is between states, and stops once it has settled', () => {
+    expect(code).toContain("state.status !== 'starting'");
+    expect(code).toContain("state.status !== 'stopping'");
+    expect(code).toContain("state.availability !== 'importing'");
+    expect(code).toContain('const timer = setInterval(read, 3000);');
+    expect(code).toContain('clearInterval(timer);');
+  });
+
+  it('re-reads at once when the ROOM announces that recording began or ended', () => {
+    // `live` in the dependency list is what ends «جارٍ بدء التسجيل…» the moment
+    // the banner appears, rather than up to three seconds later.
+    expect(code).toMatch(/\[sessionId, accessToken, mayRecord, live, settled\]/);
+  });
+
+  it('never says «جاري التسجيل» twice — the banner everybody sees already says it', () => {
+    expect(code).toContain("!(live && statusLabel(state) === t('classroom.recordingLive'))");
+  });
+});

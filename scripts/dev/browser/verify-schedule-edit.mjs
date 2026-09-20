@@ -114,13 +114,40 @@ const saved = await evaluate(`(async () => {
    *
    * The property is unchanged and the selector is.
    */
-  const labelOf = (el) => el.closest('.field')?.querySelector('label')?.textContent?.trim() ?? '';
-  const dates = [...dialog.querySelectorAll('input[type="date"]')];
-  const field = dates.find((el) => labelOf(el).includes('نهاية')) ?? dates[dates.length - 1];
-  const label = labelOf(field);
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-  setter.call(field, '2027-06-30');
-  field.dispatchEvent(new Event('input', { bubbles: true }));
+  /**
+   * **Through the date picker the form really has** (restated 2026-09-20).
+   *
+   * This wrote into a native date input, which the platform's own picker
+   * replaced: there is no such input any more, so nothing was found and the
+   * harness died reading a property of undefined before reaching a single
+   * assertion about saving. (No backticks here: this is a template literal.) The field is still found by its LABEL; the
+   * date is chosen the way a person chooses it — open, step month by month, and
+   * press the day, whose button carries its own ISO date in its id.
+   */
+  const field = [...dialog.querySelectorAll('.field')].find((f) => {
+    const l = f.querySelector('.field__label');
+    return l && l.textContent.trim().includes('نهاية');
+  });
+  const label = field?.querySelector('.field__label')?.textContent?.trim() ?? '';
+  const trigger = field?.querySelector('.date-picker__trigger');
+  let picked = false;
+  if (trigger) {
+    trigger.click();
+    await new Promise((r) => setTimeout(r, 350));
+    for (let step = 0; step < 36 && !picked; step += 1) {
+      const day = field.querySelector('button[id$="-d-2027-06-30"]');
+      if (day) {
+        day.click();
+        picked = true;
+        break;
+      }
+      const next = [...field.querySelectorAll('.date-picker__head button')]
+        .find((b) => (b.getAttribute('aria-label') ?? '') === 'الشهر التالي');
+      if (!next) break;
+      next.click();
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  }
   await new Promise((r) => setTimeout(r, 400));
   const save = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
   save.click();
@@ -134,11 +161,12 @@ const saved = await evaluate(`(async () => {
     .map((h) => h.textContent.trim())
     .find((tx) => tx.includes('تعديل') || tx.includes('إضافة'));
   const notice = document.querySelector('.admin-notice, .field__error, [role="alert"]');
-  return { label, stillOpen: heading !== undefined, heading: heading ?? null,
+  return { label, picked, stillOpen: heading !== undefined, heading: heading ?? null,
            notice: notice ? notice.textContent.trim() : null };
 })()`);
 
 check('the field changed was «نهاية التكرار»', saved.label.includes('نهاية'), saved.label);
+check('30 June 2027 was chosen in the date picker itself', saved.picked === true, JSON.stringify(saved));
 check(
   'saving does NOT refuse with «اختاري الحلقة المعنية»',
   !(saved.notice ?? '').includes('اختاري الحلقة'),

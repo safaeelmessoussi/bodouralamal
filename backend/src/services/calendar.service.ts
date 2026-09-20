@@ -155,6 +155,13 @@ export interface Occurrence {
    * own title.
    */
   itemTitle: string;
+  /**
+   * R165 §2 — **the Surah(s) this occurrence is about**, by name, in Mushaf
+   * order. A class's own (one occurrence may name its own, which REPLACE the
+   * class's for that date), or an exam's one Surah. Empty wherever the Subject
+   * is not taught by Surah, and always for an Event.
+   */
+  surahNames: string[];
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
   date: string;
   startTime: string | null;
@@ -493,6 +500,11 @@ const SESSION_OCCURRENCE_INCLUDE = {
   // the SCHEDULE's Subject unconditionally, silently ignoring an override
   // meant to change exactly what a reader sees this class as teaching.
   subject: { select: { id: true, name: true } },
+  // R165 §2/§5 — this occurrence's own Surahs; none means the class's.
+  surahs: {
+    select: { surah: { select: { surahId: true, nameArabic: true } } },
+    orderBy: { surahId: 'asc' },
+  },
   staff: {
     where: { deletedAt: null },
     select: {
@@ -510,6 +522,11 @@ const SESSION_OCCURRENCE_INCLUDE = {
 
       branch: { select: { name: true } },
       subject: { select: { id: true, name: true } },
+      // R165 §2 — the Surahs the class is about.
+      surahs: {
+        select: { surah: { select: { surahId: true, nameArabic: true } } },
+        orderBy: { surahId: 'asc' },
+      },
       teachingMode: true,
       level: {
         select: {
@@ -580,6 +597,9 @@ function sessionOccurrence(
     id: session.id,
     title: subject.name,
     itemTitle: session.title,
+    surahNames: (session.surahs.length > 0 ? session.surahs : sch.surahs).map(
+      (row) => row.surah.nameArabic,
+    ),
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -1307,6 +1327,7 @@ export async function readCalendar(
         attendanceMarking: event.attendanceMarking,
         viewerMayMarkAttendance: false,
         itemTitle: event.title,
+        surahNames: [],
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -1405,6 +1426,8 @@ export async function readCalendar(
               : {}),
           },
           include: {
+            // R165 §2 — the one Surah this sitting examines, by name.
+            surah: { select: { nameArabic: true } },
             // The category NAME travels with its id, as it does for a session: an id
             // with no name is unreadable on a grid, and the filter chip beside the
             // calendar is drawn from exactly this pair (R55.1).
@@ -1472,6 +1495,7 @@ export async function readCalendar(
       id: exam.id,
       title: exam.title,
       itemTitle: exam.title,
+      surahNames: exam.surah ? [exam.surah.nameArabic] : [],
       date: iso(exam.date),
       startTime: hhmm(exam.startTime),
       endTime: hhmm(exam.endTime),

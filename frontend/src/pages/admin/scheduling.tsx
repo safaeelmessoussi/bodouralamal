@@ -48,9 +48,18 @@ import {
 } from '../../components/scheduling/class-section.js';
 import {
   audienceDimensions,
+  homeBranchOf,
   namesATeachingPopulation,
   useAudienceFilters,
 } from '../../components/scheduling/audience-filters.js';
+import {
+  SurahField,
+  SurahsField,
+  subjectWorksBySurah,
+  suggestedTitle,
+  surahChoices,
+  surahNamesOf,
+} from '../../components/scheduling/surahs.js';
 import {
   initialMediaMode,
   type DeliveryMode,
@@ -1044,6 +1053,15 @@ export function SchedulingDialog({
     item?.type ?? (initialType && types.includes(initialType) ? initialType : types[0] ?? 'class'),
   );
   const [title, setTitle] = useState(item?.title ?? '');
+  /**
+   * SRS Revision 165 §2 — the title opens as a SUGGESTION (type, Subject,
+   * Surah, main teacher, date and time) and follows the form until she types
+   * in it. An existing item keeps the title it has: nothing rewrites a name
+   * somebody already gave.
+   */
+  const [titleTouched, setTitleTouched] = useState(item !== null);
+  /** R165 §2 — a class's Surahs (one or more) or an exam's one, in one shape. */
+  const [surahIds, setSurahIds] = useState<number[]>(item?.ids.surahIds ?? []);
   const [description, setDescription] = useState(item?.description ?? '');
   const [allDay, setAllDay] = useState(item ? item.startTime === null : false);
   const [startTime, setStartTime] = useState(item?.startTime ?? '09:00');
@@ -1107,7 +1125,9 @@ export function SchedulingDialog({
   const [mediaMode, setMediaMode] = useState<OnlineMediaMode>(
     initialMediaMode(item?.ids.onlineMediaMode),
   );
-  const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
+  const [rooms, setRooms] = useState<
+    { id: string; name: string; capacity: number | null; branchId: string }[]
+  >([]);
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
   // enforced nowhere, so putting it on this wire is a further contract change
   // and is recorded as such rather than smuggled in here.
@@ -1404,18 +1424,25 @@ export function SchedulingDialog({
   );
 
   /**
-   * **SRS §2 — a مؤطِّرة's own declared-capability scope for a class, never the
+   * **SRS §2 — a مؤطِّرة's own declared-capability scope for a CLASS, never the
    * platform's whole curriculum** (`/me/course-schedule-options`, distinct
    * from the unscoped `/me/scope-options` every other caller of this hook
-   * still reads). Harmless for every OTHER item type: only `ClassSection`
-   * reads `scope.options.levelId`/`subjectId` at all, so a Teacher composing
-   * an activity or an exam is unaffected by this narrowing.
+   * still reads).
+   *
+   * **Only while she is composing a class** (found 2026-09-20, by
+   * `verify-teacher-scheduling` once it ran again). This was applied to every
+   * item type on the reasoning that *only `ClassSection` reads the Level and
+   * Subject options* — but the hook also DROPS a chosen value its options do
+   * not contain. An exam's Level and Subject come from the class she names
+   * (R94), not from her declared capability, so a مؤطِّرة who teaches a class
+   * without having declared its Category had both silently cleared and her
+   * exam refused with a bare `400` naming `bare.level_id`.
    */
   const scope = useScopeOptions({
     token,
     fields: SCOPE_FIELDS,
     defaultCurrentYear: true,
-    restrictToOwnCapability: !canAssignStaff,
+    restrictToOwnCapability: !canAssignStaff && type === 'class',
   });
 
   /**
@@ -1453,6 +1480,7 @@ export function SchedulingDialog({
           sourceId: paper.id,
           sourceTitle: paper.title,
           sourceLevelId: paper.level_id,
+          sourceSubjectId: paper.subject_id ?? '',
         });
         if (initialExamSource.mode === 'physical') {
           scope.set('levelId', paper.level_id);
@@ -1577,15 +1605,54 @@ export function SchedulingDialog({
 
   // Rooms belong to a branch, so the list follows the branch choice — a room at
   // another branch is one the class cannot meet in (§4.4).
+  //
+  // **A filter-built class has no single branch question any more** (SRS
+  // Revision 165 §6), so its rooms come from every branch in play — the ones
+  // chosen in «فروع», or every branch she may act on while it says «الكل» — each
+  // named with its branch once there is more than one. The room she picks is
+  // then what decides the class's own branch (`homeBranchOf`).
+  const filteringRooms = type === 'class' && !editing && canAssignStaff;
+  const roomBranchKey = filteringRooms
+    ? (branchIds.length > 0 ? branchIds : scope.options.branchId.map((o) => o.value)).join(',')
+    : scope.value.branchId;
   useEffect(() => {
-    if (scope.value.branchId === '') {
+    const candidates = roomBranchKey === '' ? [] : roomBranchKey.split(',');
+    if (candidates.length === 0) {
       setRooms([]);
       return;
     }
-    void listRooms(scope.value.branchId, token)
-      .then((p) => setRooms(p.data.map((r) => ({ id: r.id, name: r.name, capacity: null }))))
-      .catch(() => setRooms([]));
-  }, [scope.value.branchId, token]);
+    let live = true;
+    const nameOf = (id: string): string =>
+      scope.options.branchId.find((o) => o.value === id)?.label ?? '';
+    void Promise.all(
+      candidates.map((branchId) =>
+        listRooms(branchId, token)
+          .then((p) =>
+            p.data.map((r) => ({
+              id: r.id,
+              name: candidates.length > 1 ? `${nameOf(branchId)} — ${r.name}` : r.name,
+              capacity: null,
+              branchId,
+            })),
+          )
+          .catch(() => []),
+      ),
+    ).then((lists) => {
+      if (live) setRooms(lists.flat());
+    });
+    return () => {
+      live = false;
+    };
+    // `scope.options.branchId` only supplies labels here; keying on it would
+    // refetch every room whenever the option list's identity changed.
+  }, [roomBranchKey, token]);
+
+  // A room whose branch left the filter is no longer offered, so it is no
+  // longer chosen either — never submitted out of sight.
+  useEffect(() => {
+    if (!filteringRooms || roomId === '' || rooms.length === 0) return;
+    if (!rooms.some((r) => r.id === roomId)) setRoomId('');
+  }, [filteringRooms, rooms, roomId]);
 
   /**
    * **The five audience filters** — loading every group and circle, narrowing
@@ -1603,6 +1670,87 @@ export function SchedulingDialog({
     selection: audienceSelection,
     setters: { setLevelIds, setGroupIds, setTeachingGroupIds },
   });
+  /** A filter-built class's own branch is derived, never asked (§6). Every
+   *  other case keeps the single branch selector it always had. */
+  const homeBranchId = filtering
+    ? homeBranchOf(audienceSelection, {
+        roomBranchId: rooms.find((r) => r.id === roomId)?.branchId ?? null,
+        permitted: scope.options.branchId.map((o) => o.value),
+      })
+    : scope.value.branchId;
+
+  /**
+   * **«أي سورة؟» — SRS Revision 165 §2.** Asked when the Subject works by Surah
+   * (a column the server sends, never a Subject's name): a class names one or
+   * more, an exam names exactly one. The Subject and the Levels are the form's
+   * own — or, for an exam scheduled from an authored paper, the paper's, since
+   * the form's Subject field is not asked then. On Edit both are frozen (§4.4)
+   * and come from the row.
+   */
+  const surahSubjectId =
+    type === 'class'
+      ? scope.value.subjectId || (item?.ids.subjectId ?? '')
+      : type === 'exam'
+        ? editing
+          ? (item?.ids.subjectId ?? '')
+          : examSource.sourceId !== ''
+            ? examSource.sourceSubjectId
+            : scope.value.subjectId
+        : '';
+  const asksSurahs = subjectWorksBySurah(scope, surahSubjectId);
+  const knownLevelIds = (
+    type === 'class' && filtering
+      ? audienceChoices.levelIdsInPlay
+      : [examSource.sourceLevelId || scope.value.levelId || (item?.ids.levelId ?? '')]
+  ).filter((id) => id !== '');
+  // A filter-built class opened for Edit names no single Level the form can
+  // read; every Surah some Level's «مقرر الحفظ» holds is then offered, and the
+  // server holds the choice to the class's real Levels either way.
+  const surahLevelIds =
+    knownLevelIds.length > 0 || !editing ? knownLevelIds : Object.keys(scope.levelSurahIds);
+  const offeredSurahs = surahChoices(scope, surahLevelIds);
+  const offeredSurahKey = offeredSurahs.map((x) => x.id).join(',');
+  useEffect(() => {
+    // Hidden means CLEARED, not merely unsubmitted (§13); and a Surah the
+    // Levels in play no longer hold is dropped rather than submitted unseen.
+    if (!scope.ready) return;
+    const offered = new Set(offeredSurahKey === '' ? [] : offeredSurahKey.split(',').map(Number));
+    const kept = asksSurahs ? surahIds.filter((id) => offered.has(id)) : [];
+    const bounded = type === 'exam' ? kept.slice(0, 1) : kept;
+    if (bounded.length !== surahIds.length) setSurahIds(bounded);
+  }, [scope.ready, asksSurahs, offeredSurahKey, surahIds, type]);
+
+  /**
+   * **The title she is offered** (Owner, 2026-09-20 — R165 §2): type, Subject,
+   * Surah, main teacher, date and time — `suggestedTitle` states the rule and
+   * why a repeating class carries its time but no date. A class and an exam
+   * only: an activity's title IS its identity («حفل ختم القرآن») and nothing
+   * here could compose it. A مؤطِّرة scheduling her own class is its teacher, but
+   * her session carries no name to print, so hers is simply left out.
+   */
+  const leadId =
+    type === 'class'
+      ? (staffing.find((p) => p.position === 'teacher')?.user_id ?? '')
+      : supervisorId;
+  const titleSuggestion =
+    type === 'class' || type === 'exam'
+      ? suggestedTitle({
+          typeName: catalogue.find((r) => r.id === schedulingTypeId)?.name ?? null,
+          subjectName:
+            scope.options.subjectId.find((o) => o.value === surahSubjectId)?.label ?? null,
+          surahNames: asksSurahs ? surahNamesOf(scope, surahIds) : [],
+          teacherName: canAssignStaff
+            ? (teachers.find((x) => x.id === leadId)?.name_arabic ?? null)
+            : null,
+          date: recurrence.startDate,
+          time: allDay ? null : startTime,
+          repeats: type === 'class' && recurrence.type !== 'none',
+        })
+      : '';
+  useEffect(() => {
+    if (titleTouched || !spec.hasTitle) return;
+    setTitle(titleSuggestion);
+  }, [titleTouched, spec.hasTitle, titleSuggestion]);
 
   const targetId =
     mode === 'entire_level'
@@ -1750,6 +1898,9 @@ export function SchedulingDialog({
        * hides that whole picker for `mode === 'online' && locked` rather
        * than showing a required control with nothing chosen against it.
        */
+      // R165 §2 — asked on Edit too: a sitting saved before the rule existed
+      // opens without a Surah, and the server will require one on save.
+      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
       if (item) return null;
       if (examSource.sourceId === '') return t('scheduling.exam.paperRequired');
       if (examSource.targetKind !== 'level' && examSource.targetId === '') {
@@ -1813,6 +1964,7 @@ export function SchedulingDialog({
           if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
         }
       }
+      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
       if (roomId === '') return t('scheduling.invalid.room');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
       if (canAssignStaff && supervisorId === '') return t('scheduling.invalid.supervisor');
@@ -1857,7 +2009,7 @@ export function SchedulingDialog({
       return null;
     }
     if (type === 'class') {
-      if (scope.value.branchId === '') return t('scheduling.invalid.branch');
+      if (homeBranchId === '') return t('scheduling.invalid.branch');
       /**
        * **Owner-reported, 2026-09-16 — `multi_dimension`'s own check, never
        * on edit** (§4.4 populates the five join tables at creation only —
@@ -1883,6 +2035,7 @@ export function SchedulingDialog({
       if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
       if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
       if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.surahs');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
       // A weekday-set pattern IS its days (§4.4) — an empty set produces a
       // schedule that materializes nothing, which looks like a silent failure.
@@ -1970,7 +2123,20 @@ export function SchedulingDialog({
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
-          examGroupId: scope.value.groupId || null,
+          //
+          // **A مؤطِّرة's group comes from the class she NAMED, not from the
+          // scope hook** (found 2026-09-20 by `verify-teacher-scheduling`). The
+          // hook fills its group list from `/admin/administrative-groups`, which
+          // answers 403 for her; with no options it dropped the group her class
+          // had set, the sitting went out addressed to the whole Level, and the
+          // server refused it — rightly — as `WHOLE_LEVEL_OUT_OF_SCOPE`. Her
+          // class already states its group (R94), so that is what is sent.
+          examGroupId:
+            !canAssignStaff && teachingContexts !== undefined
+              ? (teachingContexts.find((c) => c.id === examContextId)?.groupId ?? null)
+              : scope.value.groupId || null,
+          // R165 §2 — the one Surah this sitting examines, when it has one.
+          ...(type === 'exam' && asksSurahs ? { examSurahId: surahIds[0] ?? null } : {}),
           // **Her own sitting** (R94): a مؤطرة supervises what she organises,
           // and the server refuses any other name through
           // `assertExamInTeacherScope` regardless of what the form sends.
@@ -2072,7 +2238,10 @@ export function SchedulingDialog({
           ...(mode === 'multi_dimension'
             ? { dimensions: audienceDimensions(audienceSelection) }
             : { targetId }),
-          branchId: scope.value.branchId,
+          // R165 §2 — sent only when the form asked: a Subject that has no
+          // Surahs sends none, rather than an empty list to be interpreted.
+          ...(type === 'class' && asksSurahs ? { surahIds } : {}),
+          branchId: homeBranchId,
           // **R97 — hidden means CLEARED, not merely unsubmitted** (§13). An
           // online class sends no room whatever was chosen before the switch,
           // and an in-person one sends no media mode; the server refuses either
@@ -2185,7 +2354,10 @@ export function SchedulingDialog({
         visibility={visibility}
         onVisibility={setVisibility}
         title={title}
-        onTitle={setTitle}
+        onTitle={(next: string) => {
+          setTitleTouched(true);
+          setTitle(next);
+        }}
         // **R57 — every schedulable item is named by something a person typed.**
         // A class used to borrow its name from its Subject, which identifies it
         // and does not name it: two classes in one Subject for one group were
@@ -2221,6 +2393,18 @@ export function SchedulingDialog({
             mediaMode={mediaMode}
             onMediaMode={setMediaMode}
             teachers={teachers}
+            {...(asksSurahs
+              ? {
+                  surahs: (
+                    <SurahsField
+                      facts={scope}
+                      levelIds={surahLevelIds}
+                      selected={surahIds}
+                      onChange={setSurahIds}
+                    />
+                  ),
+                }
+              : {})}
             staffing={staffing}
             onStaffing={setStaffing}
             appraisal={appraisal}
@@ -2306,6 +2490,17 @@ export function SchedulingDialog({
             }
             leadLocked={!canAssignStaff}
             />
+            {/* SRS Revision 165 §2 — the ONE Surah this sitting examines, asked
+                when its Subject is examined by Surah. Any number of sittings may
+                name the same Surah. */}
+            {asksSurahs ? (
+              <SurahField
+                facts={scope}
+                levelIds={surahLevelIds}
+                value={surahIds[0] ?? null}
+                onChange={(next) => setSurahIds(next === null ? [] : [next])}
+              />
+            ) : null}
           </>
         ) : (
           <ActivitySection
