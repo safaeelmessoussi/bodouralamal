@@ -685,6 +685,9 @@ export function courseScheduleDto(row: {
    *  `multi_dimension` row; every caller building one already has it from
    *  `scheduleDimensions`, so there is no narrower-projection reason to
    *  make it optional the way the resolved NAMES above are. */
+  /** SRS Revision 163 §5 — the named audience of a filter-built class; absent
+   *  (or `null`) for every legacy mode, whose single target already names it. */
+  targetSummary?: string | null;
   dimensions?: {
     branchIds: string[];
     categoryIds: string[];
@@ -717,6 +720,8 @@ export function courseScheduleDto(row: {
       row.level?.name ??
       row.administrativeGroup?.name ??
       row.teachingGroup?.name ??
+      // SRS Revision 163 §5 — a filter-built class names its whole audience.
+      row.targetSummary ??
       null,
     branch_id: row.branchId,
     branch_name: row.branch?.name ?? null,

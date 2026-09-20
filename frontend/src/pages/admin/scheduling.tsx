@@ -7,14 +7,12 @@ import {
   type HijriDay,
   type Occurrence,
 } from '../../adapters/calendar.js';
-import { listAdministrativeGroups } from '../../adapters/administrative-groups.js';
 import { listRooms } from '../../adapters/branches-admin.js';
 import {
   listEventScopeOptions,
   listEventStaffOptions,
   notifyEventChange,
 } from '../../adapters/events.js';
-import { listCircles } from '../../adapters/teaching-groups.js';
 import { AVAILABLE_TYPES, specOfKind } from '../../adapters/scheduling-types.js';
 import {
   listSchedulingTypes,
@@ -48,9 +46,15 @@ import {
   HOLIDAY_SCOPE_DIMENSIONS,
   TEACHER_SCOPE_DIMENSIONS,
 } from '../../components/scheduling/class-section.js';
-import type {
-  DeliveryMode,
-  OnlineMediaMode,
+import {
+  audienceDimensions,
+  namesATeachingPopulation,
+  useAudienceFilters,
+} from '../../components/scheduling/audience-filters.js';
+import {
+  initialMediaMode,
+  type DeliveryMode,
+  type OnlineMediaMode,
 } from '../../components/scheduling/delivery.js';
 import {
   ExamSection,
@@ -128,15 +132,6 @@ import { Feedback } from '../../components/ui/feedback.js';
  */
 type View = 'list' | 'calendar';
 
-/**
- * **Owner-reported, 2026-09-16 — `multi_dimension` (SRS Revision 155),
- * completed end to end.** Offered only where `canAssignStaff` already
- * gates the other two (a self-service Teacher stays `entire_level`-only —
- * the server's own `TEACHER_ENTIRE_LEVEL_ONLY` refusal), matching the
- * SelectField's existing `modes={canAssignStaff ? MODES : ['entire_level']}`
- * gate below.
- */
-const MODES = ['administrative_group', 'entire_level', 'multi_dimension'] as const;
 /** R91 — the three interval refusals, each with its own sentence. */
 const STAFFING_REFUSALS: Record<string, string> = {
   OVERLAPPING_MAIN_TEACHER: 'admin.schedules.overlappingMain',
@@ -440,15 +435,11 @@ export function SchedulingPage(): ReactNode {
       key: 'audience',
       header: t('admin.schedules.target'),
       // An activity has no audience of that kind (§4.4) — absent, not invented.
-      // **`multi_dimension` has no single target name to show** (SRS
-      // Revision 155 — `target_name` is `''`, deliberately, never `null`):
-      // the mode's own label is a plain, honest fallback rather than a
-      // blank cell (Owner-reported, 2026-09-16). The five-dimension
-      // breakdown itself is seen by opening the class, not in this list.
+      // A filter-built class names its whole audience server-side (SRS
+      // Revision 163 §5); this column used to print the storage mode's own
+      // label for it, which every new class would now have shared.
       cell: (r) =>
-        r.ids.teachingMode === 'multi_dimension' ? (
-          t('admin.schedules.mode_multi_dimension')
-        ) : r.audienceLabel ? (
+        r.audienceLabel ? (
           r.audienceLabel
         ) : (
           <span className="muted">—</span>
@@ -697,7 +688,13 @@ export function SchedulingPage(): ReactNode {
           {truncated ? <p className="muted">{t('scheduling.truncated')}</p> : null}
         </>
       ) : (
-        <CalendarView view={view} onView={setView} filters={filters} filterRow={filterRow} />
+        <CalendarView
+          view={view}
+          onView={setView}
+          filters={filters}
+          filterRow={filterRow}
+          token={accessToken}
+        />
       )}
 
       {editing ? (
@@ -824,7 +821,18 @@ function CalendarView({
   onView,
   filters,
   filterRow,
+  token,
 }: {
+  /**
+   * **The caller's own credential — this view read the calendar ANONYMOUSLY**
+   * (found 2026-09-20 while verifying SRS Revision 163 §3 in a real browser).
+   * The comment below claimed *"the adapter reads the session itself"*; it does
+   * not, and never did. So the back office's own calendar showed an
+   * administrator the PUBLIC tier only — every private or hidden class and
+   * activity was simply missing from it — and the server, asked by nobody in
+   * particular, rightly answered that nobody may mark attendance.
+   */
+  token: string | null;
   view: View;
   onView: (view: View) => void;
   /** The page's filters — **not this view's**. See `useCalendarFilters`. */
@@ -847,12 +855,13 @@ function CalendarView({
     const to = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0));
     // `GET /calendar` is public with optional authentication: the credential
     // travels on the request and REORDERS nothing here, it only widens the tier
-    // a staff caller sees (§5.2). The adapter reads the session itself.
+    // a staff caller sees (§5.2) — so it must actually be sent (`token`).
     // **The filters the list uses, applied here too** — the defect this fixes
     // was that this call took a date range and nothing else.
     void fetchOccurrences({
       from: iso(from),
       to: iso(to),
+      token,
       ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
       ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
       ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
@@ -877,6 +886,7 @@ function CalendarView({
       .then(setBootstrap)
       .catch(() => setBootstrap(null));
   }, [
+    token,
     month,
     filters.value.branchId,
     filters.value.categoryId,
@@ -1085,7 +1095,6 @@ export function SchedulingDialog({
    * * `teachingMode: mode` is **sent on save**, so saving an unrelated edit —
    *   a new end date, say — would have rewritten that class's audience.
    */
-  const [mode, setMode] = useState<string>(item?.ids.teachingMode ?? 'entire_level');
   const [roomId, setRoomId] = useState(item?.ids.roomId ?? '');
   /**
    * **R97 — طريقة الحضور**, defaulting to حضوري: that is the column's default,
@@ -1096,7 +1105,7 @@ export function SchedulingDialog({
     item?.ids.deliveryMode === 'online' ? 'online' : 'in_person',
   );
   const [mediaMode, setMediaMode] = useState<OnlineMediaMode>(
-    item?.ids.onlineMediaMode === 'audio_only' ? 'audio_only' : 'audio_video',
+    initialMediaMode(item?.ids.onlineMediaMode),
   );
   const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
@@ -1178,6 +1187,16 @@ export function SchedulingDialog({
   // control the server will refuse. R71.4 keeps event staffing with Admins.
   const { activeRoles } = useActiveRole();
   const canAssignStaff = activeRoles.some((r) => r === 'admin' || r === 'super_admin');
+  /**
+   * **How the audience is STORED, decided by who is asking — never offered as a
+   * choice** (SRS Revision 163 §5). The «نمط التدريس» picker is gone. A row
+   * being edited keeps the mode it was created with (the block above explains
+   * why that must never be re-defaulted); an administrator creating a class
+   * always builds it from the five filters; a self-service مؤطِّرة always
+   * schedules one whole Level, the only shape her grant covers
+   * (`TEACHER_ENTIRE_LEVEL_ONLY`).
+   */
+  const mode = item?.ids.teachingMode ?? (canAssignStaff ? 'multi_dimension' : 'entire_level');
   // **Her own identity**, so a مؤطرة's event carries her as responsible without
   // a control that could name anybody else. The server refuses any other name
   // regardless (`RESPONSIBLE_MUST_BE_SELF`) — this is the honest payload, not
@@ -1309,12 +1328,11 @@ export function SchedulingDialog({
     },
     // Pristine mirrors the state above expression for expression, or `dirty`
     // would report every edited class as changed before it was touched.
-    mode: item?.ids.teachingMode ?? 'entire_level',
     roomId: item?.ids.roomId ?? '',
     // R97 — delivery joins the dirty check (rule U): a form holding an unsaved
     // switch to عن بُعد must not close on a stray backdrop click.
     delivery: item?.ids.deliveryMode === 'online' ? 'online' : 'in_person',
-    mediaMode: item?.ids.onlineMediaMode === 'audio_only' ? 'audio_only' : 'audio_video',
+    mediaMode: initialMediaMode(item?.ids.onlineMediaMode),
     teacherId: item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
     // **R91 — the dated assignments join the dirty check** (rule U). A form
     // holding an unsaved replacement must not close on a stray click, and
@@ -1361,7 +1379,6 @@ export function SchedulingDialog({
       endTime,
       endDate,
       recurrence,
-      mode,
       roomId,
       delivery,
       mediaMode,
@@ -1571,48 +1588,21 @@ export function SchedulingDialog({
   }, [scope.value.branchId, token]);
 
   /**
-   * **Owner-reported, 2026-09-16 — the multi_dimension picker's own
-   * administrative-group/circle options, UNSCOPED.** `scope.options.groupId`
-   * (used by `ActivitySection`'s "group" dimension above) is chained on
-   * `scope.value.levelId`/`branchId` (§4.4c: a group is a roster at a
-   * premises), and this dialog sets neither singular value for
-   * `multi_dimension` — the real target lives in the five plural arrays
-   * instead. A class naming several Levels/branches at once needs every
-   * group/circle reachable, not one Level's, so this is a SEPARATE,
-   * independent read rather than a second use of the chained one.
+   * **The five audience filters** — loading every group and circle, narrowing
+   * each filter from the ones above it, the class's own branch and the
+   * representative Level that drives the Subject list all live in
+   * `audience-filters.tsx` (SRS Revision 163 §5), shared with the «from this
+   * date onward» editor so the two cannot drift.
    */
-  const [allGroups, setAllGroups] = useState<{ id: string; name: string; levelId: string }[]>([]);
-  const [allCircles, setAllCircles] = useState<{ id: string; name: string; levelId: string }[]>([]);
-
-  useEffect(() => {
-    if (mode !== 'multi_dimension') return;
-    void listAdministrativeGroups(token, 1, {}, null, 100)
-      .then((p) => setAllGroups(p.data.map((g) => ({ id: g.id, name: g.name, levelId: g.level_id }))))
-      .catch(() => setAllGroups([]));
-    void listCircles(token, 1, {}, null, 100)
-      .then((p) => setAllCircles(p.data.map((c) => ({ id: c.id, name: c.name, levelId: c.level_id }))))
-      .catch(() => setAllCircles([]));
-  }, [mode, token]);
-
-  /**
-   * **A representative Level, synced into the singular `scope.value.levelId`
-   * purely to drive the Subject picker** (`ClassSection`'s `ScopeSelectors
-   * fields={['subjectId', ...]}` chain, unchanged and shared with every
-   * other mode). `multi_dimension` can name several Levels at once; the
-   * server validates the Subject against every effective one on save
-   * (`assertSubjectTaughtAtLevel`, looped) — this is a FORM CONVENIENCE
-   * only, narrowing the Subject list to something sensible while the
-   * dialog is open, never the authority on which Levels are correct.
-   */
-  useEffect(() => {
-    if (mode !== 'multi_dimension') return;
-    const representative =
-      levelIds[0] ??
-      allGroups.find((g) => groupIds.includes(g.id))?.levelId ??
-      allCircles.find((c) => teachingGroupIds.includes(c.id))?.levelId ??
-      '';
-    if (representative !== scope.value.levelId) scope.set('levelId', representative);
-  }, [mode, levelIds, groupIds, teachingGroupIds, allGroups, allCircles, scope.value.levelId, scope.set]);
+  const filtering = type === 'class' && mode === 'multi_dimension' && !editing;
+  const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds };
+  const audienceChoices = useAudienceFilters({
+    active: filtering,
+    token,
+    scope,
+    selection: audienceSelection,
+    setters: { setLevelIds, setGroupIds, setTeachingGroupIds },
+  });
 
   const targetId =
     mode === 'entire_level'
@@ -1879,12 +1869,7 @@ export function SchedulingDialog({
        * Teaching Circle is required.
        */
       if (mode === 'multi_dimension') {
-        if (
-          !editing &&
-          levelIds.length === 0 &&
-          groupIds.length === 0 &&
-          teachingGroupIds.length === 0
-        ) {
+        if (!editing && !namesATeachingPopulation(audienceSelection)) {
           return t('scheduling.invalid.multiDimensionNeedsLevel');
         }
       } else {
@@ -2085,15 +2070,7 @@ export function SchedulingDialog({
                 ],
           teachingMode: mode,
           ...(mode === 'multi_dimension'
-            ? {
-                dimensions: {
-                  ...(branchIds.length > 0 ? { branchIds } : {}),
-                  ...(categoryIds.length > 0 ? { categoryIds } : {}),
-                  ...(levelIds.length > 0 ? { levelIds } : {}),
-                  ...(groupIds.length > 0 ? { administrativeGroupIds: groupIds } : {}),
-                  ...(teachingGroupIds.length > 0 ? { teachingGroupIds } : {}),
-                },
-              }
+            ? { dimensions: audienceDimensions(audienceSelection) }
             : { targetId }),
           branchId: scope.value.branchId,
           // **R97 — hidden means CLEARED, not merely unsubmitted** (§13). An
@@ -2236,15 +2213,6 @@ export function SchedulingDialog({
             scope={scope}
             locked={editing}
             mode={mode}
-            onMode={setMode}
-            /**
-             * **SRS §2 — self-service class creation is `entire_level` only.**
-             * `assertTeacherEntireLevelOnly` (`course-schedule.service.ts`)
-             * refuses any other mode from her server-side; not offering the
-             * choice is what keeps the form from presenting one that always
-             * fails (rule O).
-             */
-            modes={canAssignStaff ? MODES : (['entire_level'] as const)}
             rooms={rooms}
             roomId={roomId}
             onRoom={setRoomId}
@@ -2264,33 +2232,21 @@ export function SchedulingDialog({
                from the one it saves. */
             scheduleFrom={recurrence.startDate}
             scheduleUntil={recurrence.endDate}
-            multiDimension={{
-              branch: {
-                selected: branchIds,
-                onChange: setBranchIds,
-                options: scope.options.branchId.map((o) => ({ id: o.value, name: o.label })),
-              },
-              category: {
-                selected: categoryIds,
-                onChange: setCategoryIds,
-                options: scope.options.categoryId.map((o) => ({ id: o.value, name: o.label })),
-              },
-              level: {
-                selected: levelIds,
-                onChange: setLevelIds,
-                options: scope.options.levelId.map((o) => ({ id: o.value, name: o.label })),
-              },
-              administrativeGroup: {
-                selected: groupIds,
-                onChange: setGroupIds,
-                options: allGroups.map((g) => ({ id: g.id, name: g.name })),
-              },
-              teachingGroup: {
-                selected: teachingGroupIds,
-                onChange: setTeachingGroupIds,
-                options: allCircles.map((c) => ({ id: c.id, name: c.name })),
-              },
-            }}
+            {...(filtering
+              ? {
+                  audience: {
+                    selection: audienceSelection,
+                    setters: {
+                      setBranchIds,
+                      setCategoryIds,
+                      setLevelIds,
+                      setGroupIds,
+                      setTeachingGroupIds,
+                    },
+                    choices: audienceChoices,
+                  },
+                }
+              : {})}
           />
         ) : type === 'exam' ? (
           <>

@@ -347,6 +347,8 @@ export async function updateCourseSchedule(
       | 'academic_year_id'
       | 'teaching_mode'
       | 'target_id'
+      // SRS Revision 163 §5 — the successor is always filter-built now.
+      | 'dimensions'
     >
   > & {
     scope?: 'all_sessions' | 'this_and_future';

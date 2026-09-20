@@ -21,6 +21,17 @@ import { t } from '../../i18n/index.js';
 export type DeliveryMode = 'in_person' | 'online';
 export type OnlineMediaMode = 'audio_video' | 'audio_only';
 
+/**
+ * **SRS Revision 163 §1 — «صوت فقط» is what an online class starts as** (Owner,
+ * 2026-09-20). Most of the association's remote teaching is voice, and a
+ * beneficiary at home is not asked for her camera unless somebody chose that.
+ * An explicit «صوت وصورة» already saved is kept; only an UNSET value reads as
+ * audio-only, on creation and when an in-person occurrence is moved online.
+ */
+export function initialMediaMode(stored: string | null | undefined): OnlineMediaMode {
+  return stored === 'audio_video' ? 'audio_video' : 'audio_only';
+}
+
 /** The wire shape every surface receives — sessions carry it, an Event does not
  *  and sends `null`, which reads as *this kind has no delivery model*. */
 export interface DeliveryFacts {

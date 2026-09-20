@@ -2511,11 +2511,7 @@ export async function listCourseSchedules(
         teachingGroup: { select: { name: true, levelId: true } },
         // Revision 155 — a `multi_dimension` row's real target; empty
         // arrays (never included at all) for every other mode's rows.
-        branchScopes: { select: { branchId: true } },
-        categoryScopes: { select: { categoryId: true } },
-        levelScopes: { select: { levelId: true } },
-        administrativeGroupScopes: { select: { administrativeGroupId: true } },
-        teachingGroupScopes: { select: { teachingGroupId: true } },
+        ...DIMENSION_SCOPES_WITH_NAMES,
       },
     }),
     prisma.recurringCourseSchedule.count({ where }),
@@ -2530,6 +2526,8 @@ export async function listCourseSchedules(
         effectiveFrom: s.effectiveFrom,
         effectiveUntil: s.effectiveUntil,
       })),
+      targetSummary:
+        row.teachingMode === "multi_dimension" ? dimensionSummary(row) : null,
       dimensions:
         row.teachingMode === "multi_dimension"
           ? {
@@ -2546,6 +2544,55 @@ export async function listCourseSchedules(
     window,
     total,
   );
+}
+
+/**
+ * A filter-built class's five scope joins, **names beside the ids** (SRS
+ * Revision 163 §5): with the teaching-mode picker gone every new class is
+ * stored this way, so the list states WHO it is for instead of naming a
+ * storage mode. Empty arrays for every legacy mode's row.
+ *
+ * Module-level on purpose: inlined, these lines pushed `listCourseSchedules`'s
+ * `count({ where })` more than forty lines below the `where` that carries its
+ * `deletedAt: null`, which is the distance `trash-coverage` reads.
+ */
+const DIMENSION_SCOPES_WITH_NAMES = {
+  branchScopes: { select: { branchId: true, branch: { select: { name: true } } } },
+  categoryScopes: { select: { categoryId: true, category: { select: { name: true } } } },
+  levelScopes: { select: { levelId: true, level: { select: { name: true } } } },
+  administrativeGroupScopes: {
+    select: { administrativeGroupId: true, administrativeGroup: { select: { name: true } } },
+  },
+  teachingGroupScopes: {
+    select: { teachingGroupId: true, teachingGroup: { select: { name: true } } },
+  },
+} as const;
+
+/**
+ * **Who a filter-built class is for, in one line** (SRS Revision 163 §5).
+ *
+ * The teaching population first — Levels, groups, circles — then the
+ * organisational filters that narrow it, in brackets. A dimension left at
+ * «الكل» contributes nothing, which is what unfiltered means.
+ */
+function dimensionSummary(row: {
+  branchScopes: { branch: { name: string } }[];
+  categoryScopes: { category: { name: string } }[];
+  levelScopes: { level: { name: string } }[];
+  administrativeGroupScopes: { administrativeGroup: { name: string } }[];
+  teachingGroupScopes: { teachingGroup: { name: string } }[];
+}): string {
+  const population = [
+    ...row.levelScopes.map((r) => r.level.name),
+    ...row.administrativeGroupScopes.map((r) => r.administrativeGroup.name),
+    ...row.teachingGroupScopes.map((r) => r.teachingGroup.name),
+  ];
+  const narrowedBy = [
+    ...row.categoryScopes.map((r) => r.category.name),
+    ...row.branchScopes.map((r) => r.branch.name),
+  ];
+  const head = population.join("، ");
+  return narrowedBy.length === 0 ? head : `${head} (${narrowedBy.join("، ")})`;
 }
 
 /**

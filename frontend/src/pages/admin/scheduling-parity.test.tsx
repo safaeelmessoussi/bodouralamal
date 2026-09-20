@@ -101,10 +101,13 @@ describe('the form shell stays generic', () => {
 });
 
 describe('new scheduling-item defaults', () => {
-  it('starts a new class at the whole-Level teaching mode while preserving edits', () => {
+  it('keeps an edited class on the mode it was created with, and never re-defaults it', () => {
+    // The mode is sent on save, so re-defaulting it would rewrite an existing
+    // class's audience on an unrelated edit (2026-08-18). Since SRS Revision
+    // 163 §5 it is derived once and is no longer part of the dirty check.
     const source = code(SCHEDULING);
-    expect(source).toContain("item?.ids.teachingMode ?? 'entire_level'");
-    expect(source.match(/item\?\.ids\.teachingMode \?\? 'entire_level'/g) ?? []).toHaveLength(2);
+    expect(source.match(/item\?\.ids\.teachingMode \?\?/g) ?? []).toHaveLength(1);
+    expect(source).toContain('teachingMode: mode,');
   });
 
   it('uses the shared dirty comparison and passes its result to FormDialog', () => {

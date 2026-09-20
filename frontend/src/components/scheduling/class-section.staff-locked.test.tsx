@@ -48,6 +48,7 @@ const EMPTY_SCOPE: ScopeOptions = {
   },
   ready: true,
   levelTeachesNothing: false,
+  levelCategoryIds: {},
   defaultVisibility: null,
   selfAttendanceAllowed: null,
 };
@@ -97,8 +98,10 @@ describe('§2 — scheduling.tsx wires the Teacher-scoped class-creation grant c
     expect(source).toContain('restrictToOwnCapability: !canAssignStaff');
   });
 
-  it('locks the mode selector to entire_level for her — never offers a choice the server refuses', () => {
-    expect(source).toContain("modes={canAssignStaff ? MODES : (['entire_level'] as const)}");
+  it('stores her class as entire_level — the only shape her grant covers, and never a choice she is shown', () => {
+    expect(source).toContain(
+      "const mode = item?.ids.teachingMode ?? (canAssignStaff ? 'multi_dimension' : 'entire_level');",
+    );
   });
 
   it('locks the staffing editor for her', () => {

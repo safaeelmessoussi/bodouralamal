@@ -49,7 +49,19 @@ import { Feedback } from '../ui/feedback.js';
  */
 const STAFF_ROLES = ['admin', 'super_admin', 'teacher'];
 
-export function AttendancePanel({ occurrence }: { occurrence: Occurrence }): ReactNode {
+export function AttendancePanel({
+  occurrence,
+  canManage = true,
+}: {
+  occurrence: Occurrence;
+  /**
+   * **SRS Revision 163 §3 — never the staff sheet on the PUBLIC calendar.**
+   * `EventDetailsDialog`'s own flag, forwarded: an administrator or a مؤطِّرة
+   * who happens to be signed in while browsing `/calendar` is a reader there,
+   * and «الحضور» appeared beside every public occurrence for her.
+   */
+  canManage?: boolean;
+}): ReactNode {
   const session = useContext(SessionContext);
   /**
    * **Optional, like `SessionContext` beside it.** This dialog is the one the
@@ -67,7 +79,18 @@ export function AttendancePanel({ occurrence }: { occurrence: Occurrence }): Rea
   if (accessToken === null) return null;
 
   const isStaff = activeRoles.some((role) => STAFF_ROLES.includes(role));
-  if (isStaff) return <StaffSheet occurrence={occurrence} token={accessToken} />;
+  if (isStaff) {
+    /**
+     * **Offered only to whoever the sheet will answer** (SRS Revision 163 §3):
+     * the administration within its reach, and the main and assistant staff of
+     * THIS occurrence. A role alone used to be enough, so every مؤطِّرة saw
+     * «الحضور» on every class in the association and met a refusal on opening
+     * it. The server decides (`viewer_may_mark_attendance`); nothing is derived
+     * here, and an absent flag offers nothing.
+     */
+    if (!canManage || occurrence.viewer_may_mark_attendance !== true) return null;
+    return <StaffSheet occurrence={occurrence} token={accessToken} />;
+  }
 
   const mayCheckIn =
     occurrence.attendance_marking === 'self_or_staff' &&

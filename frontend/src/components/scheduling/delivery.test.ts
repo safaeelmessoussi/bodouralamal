@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deliveryLabel, mediaLabel, venueLabel } from './delivery.js';
+import { deliveryLabel, initialMediaMode, mediaLabel, venueLabel } from './delivery.js';
 import DELIVERY from './delivery.tsx?raw';
 import CLASS_SECTION from './class-section.tsx?raw';
 import SESSIONS_PAGE from '../../pages/admin/schedule-sessions.tsx?raw';
@@ -156,7 +156,15 @@ describe('the occurrence editor opens on the OCCURRENCE, not on its schedule', (
     // After an override the two differ, and seeding from the schedule would let
     // an unrelated re-save silently undo the override.
     expect(code(SESSIONS_PAGE)).toContain("session.delivery_mode === 'online'");
-    expect(code(SESSIONS_PAGE)).toContain("session.online_media_mode === 'audio_only'");
+    expect(code(SESSIONS_PAGE)).toContain('initialMediaMode(session.online_media_mode)');
+  });
+
+  it('starts an online class at «صوت فقط», and keeps an explicit «صوت وصورة» (SRS Revision 163 §1)', () => {
+    expect(initialMediaMode(null)).toBe('audio_only');
+    expect(initialMediaMode(undefined)).toBe('audio_only');
+    expect(initialMediaMode('audio_only')).toBe('audio_only');
+    expect(initialMediaMode('audio_video')).toBe('audio_video');
+    expect(code(SCHEDULING_PAGE)).toContain('initialMediaMode(item?.ids.onlineMediaMode)');
   });
 
   it('joins the dirty check so unsaved work is not lost (rule U)', () => {

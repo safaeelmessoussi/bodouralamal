@@ -130,6 +130,16 @@ export function EventDetailsDialog({
           ) : null}
 
           <dl className="details">
+            {/* **SRS Revision 163 §2 — «العنوان», for every kind.** The heading
+                above is what the calendar chip shows, which for a class is its
+                Subject; the title somebody typed (R57) was shown nowhere. */}
+            {occurrence.item_title ? (
+              <>
+                <dt>{t('calendar.detailsItemTitle')}</dt>
+                <dd>{occurrence.item_title}</dd>
+              </>
+            ) : null}
+
             <dt>{t('calendar.detailsDate')}</dt>
             <dd>
               <time dateTime={occurrence.date}>
@@ -287,7 +297,7 @@ export function EventDetailsDialog({
             * sheet because the server allows the read, a beneficiary gets one
             * button and never the roster, and a عطلة or a حفل renders neither.
             */}
-          <AttendancePanel occurrence={occurrence} />
+          <AttendancePanel occurrence={occurrence} canManage={canManage} />
 
           <OccurrenceMaterials key={occurrence.id} occurrence={occurrence} canManage={canManage} />
         </>

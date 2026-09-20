@@ -1,10 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ClassSection, type ClassDimensionValue } from './class-section.js';
+import { ClassSection } from './class-section.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import SCHEDULING_SOURCE from '../../pages/admin/scheduling.tsx?raw';
+import SESSIONS_RAW from '../../pages/admin/schedule-sessions.tsx?raw';
+import FILTERS_RAW from './audience-filters.tsx?raw';
+import { audienceDimensions, namesATeachingPopulation } from './audience-filters.js';
 
 /**
  * **SRS Revision 155 — completed end to end, 2026-09-16.** The backend has
@@ -50,33 +53,36 @@ const EMPTY_SCOPE: ScopeOptions = {
   },
   ready: true,
   levelTeachesNothing: false,
+  levelCategoryIds: {},
   defaultVisibility: null,
   selfAttendanceAllowed: null,
 };
 
-const dim = (selected: string[] = []): ClassDimensionValue => ({
-  selected,
-  onChange: () => {},
-  options: [
-    { id: 'l1', name: '[تجريبي] مستوى 1' },
-    { id: 'l2', name: '[تجريبي] مستوى 2' },
-  ],
-});
-
-const emptyMultiDimension = {
-  branch: dim(),
-  category: dim(),
-  level: dim(),
-  administrativeGroup: dim(),
-  teachingGroup: dim(),
+const NOOP = (): void => {};
+const SETTERS = {
+  setBranchIds: NOOP,
+  setCategoryIds: NOOP,
+  setLevelIds: NOOP,
+  setGroupIds: NOOP,
+  setTeachingGroupIds: NOOP,
 };
+const CHOICES = [
+  { id: 'l1', name: '[تجريبي] مستوى 1' },
+  { id: 'l2', name: '[تجريبي] مستوى 2' },
+];
+
+/** The five filters as the page hands them over — everything at «الكل». */
+const audienceOf = (teachingGroupIds: string[] = []) => ({
+  selection: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], teachingGroupIds },
+  setters: SETTERS,
+  choices: { levels: CHOICES, groups: CHOICES, circles: CHOICES },
+});
+const emptyAudience = audienceOf();
 
 const baseProps = {
   scope: EMPTY_SCOPE,
   locked: false,
   mode: 'multi_dimension',
-  onMode: () => {},
-  modes: ['entire_level', 'administrative_group', 'multi_dimension'],
   rooms: [],
   roomId: '',
   onRoom: () => {},
@@ -94,7 +100,7 @@ const baseProps = {
 describe('multi_dimension renders five independent pickers, never the legacy branch/level pair', () => {
   it('renders all five dimensions at once — they are not mutually exclusive', () => {
     const html = renderToStaticMarkup(
-      <ClassSection {...baseProps} multiDimension={emptyMultiDimension} />,
+      <ClassSection {...baseProps} audience={emptyAudience} />,
     );
     expect(html).toContain(t('admin.calendar.scopeBranch'));
     expect(html).toContain(t('admin.calendar.scopeCategory'));
@@ -104,9 +110,29 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
     expect(html).toContain(t('admin.calendar.multiDimensionHint'));
   });
 
+  it('reads «الكل» on every filter, and never offers a «نمط التدريس» (SRS Revision 163 §5)', () => {
+    const html = renderToStaticMarkup(<ClassSection {...baseProps} audience={emptyAudience} />);
+    expect(html.split(t('common.all')).length - 1).toBeGreaterThanOrEqual(5);
+    expect(html).not.toContain(t('admin.schedules.mode'));
+    expect(html).not.toContain(t('admin.schedules.mode_multi_dimension'));
+  });
+
+  it('asks for the class\'s own branch only while the branch filter does not name exactly one', () => {
+    const open = renderToStaticMarkup(<ClassSection {...baseProps} audience={emptyAudience} />);
+    expect(open).toContain(t('admin.schedules.homeBranch'));
+    const one = audienceOf();
+    const named = renderToStaticMarkup(
+      <ClassSection
+        {...baseProps}
+        audience={{ ...one, selection: { ...one.selection, branchIds: ['b1'] } }}
+      />,
+    );
+    expect(named).not.toContain(t('admin.schedules.homeBranch'));
+  });
+
   it('every other mode still renders the ordinary branch/Level pair, unaffected', () => {
     const html = renderToStaticMarkup(
-      <ClassSection {...baseProps} mode="entire_level" multiDimension={emptyMultiDimension} />,
+      <ClassSection {...baseProps} mode="entire_level" audience={emptyAudience} />,
     );
     expect(html).not.toContain(t('admin.calendar.scopeCircle'));
     expect(html).not.toContain(t('admin.calendar.multiDimensionHint'));
@@ -116,7 +142,7 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
     const html = renderToStaticMarkup(
       <ClassSection
         {...baseProps}
-        multiDimension={{ ...emptyMultiDimension, teachingGroup: dim(['l1', 'l2']) }}
+        audience={audienceOf(['l1', 'l2'])}
       />,
     );
     expect(html).toContain(t('common.selectedCount').replace('{n}', '2'));
@@ -126,7 +152,7 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
 describe('locked (editing) states the fixed-at-creation notice, never five empty-looking pickers', () => {
   it('renders the same scopeFixed sentence Event\'s own locked scope uses, and no picker', () => {
     const html = renderToStaticMarkup(
-      <ClassSection {...baseProps} locked multiDimension={emptyMultiDimension} />,
+      <ClassSection {...baseProps} locked audience={emptyAudience} />,
     );
     expect(html).toContain(t('admin.calendar.scopeFixed'));
     expect(html).not.toContain(t('admin.calendar.scopeCircle'));
@@ -135,11 +161,16 @@ describe('locked (editing) states the fixed-at-creation notice, never five empty
 
   it('every other mode keeps its own existing locked behaviour (the ordinary pair, disabled)', () => {
     const html = renderToStaticMarkup(
-      <ClassSection {...baseProps} mode="entire_level" locked multiDimension={emptyMultiDimension} />,
+      <ClassSection {...baseProps} mode="entire_level" locked audience={emptyAudience} />,
     );
     expect(html).not.toContain(t('admin.calendar.scopeFixed'));
   });
 });
+
+const stripped = (raw: string): string => raw.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+const source = stripped(SCHEDULING_SOURCE);
+const SESSIONS_SOURCE = stripped(SESSIONS_RAW);
+const FILTERS = stripped(FILTERS_RAW);
 
 /**
  * **The submitted payload and the validation rule, pinned against the
@@ -148,40 +179,86 @@ describe('locked (editing) states the fixed-at-creation notice, never five empty
  * block for Events — the same shape, for a class's fifth dimension.
  */
 describe('scheduling.tsx wires multi_dimension end to end', () => {
-  const source = SCHEDULING_SOURCE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
   it('sends dimensions, never target_id, for multi_dimension — the reverse for every other mode', () => {
     expect(source).toContain("...(mode === 'multi_dimension'");
     expect(source).toContain(': { targetId }),');
   });
 
-  it('builds dimensions from whichever of the five arrays are non-empty', () => {
-    expect(source).toContain('...(branchIds.length > 0 ? { branchIds } : {})');
-    expect(source).toContain('...(categoryIds.length > 0 ? { categoryIds } : {})');
-    expect(source).toContain('...(levelIds.length > 0 ? { levelIds } : {})');
-    expect(source).toContain('...(groupIds.length > 0 ? { administrativeGroupIds: groupIds } : {})');
-    expect(source).toContain('...(teachingGroupIds.length > 0 ? { teachingGroupIds } : {})');
+  it('builds the payload and the create-only rule from the shared module, never a second copy', () => {
+    expect(source).toContain('? { dimensions: audienceDimensions(audienceSelection) }');
+    expect(source).toContain('if (!editing && !namesATeachingPopulation(audienceSelection)) {');
   });
 
-  it('requires at least a Level, group or circle on create — never on edit', () => {
-    expect(source).toMatch(
-      /!editing &&\s*\n\s*levelIds\.length === 0 &&\s*\n\s*groupIds\.length === 0 &&\s*\n\s*teachingGroupIds\.length === 0/,
-    );
-  });
-
-  it('reads administrative groups and circles UNSCOPED, never through the chained scope.options.groupId', () => {
-    // §4.4c's own chain needs a Level AND a branch before it answers
-    // anything; a class naming several at once needs every group/circle
-    // reachable, which is why this is a SEPARATE read.
-    expect(source).toContain("mode !== 'multi_dimension') return;");
-    expect(source).toContain('listAdministrativeGroups(token, 1, {}, null, 100)');
-    expect(source).toContain('listCircles(token, 1, {}, null, 100)');
-  });
-
-  it('offers the mode only where the other two are already offered — never to a self-service Teacher', () => {
+  it('runs the filters only where they are on screen — a new class, for an administrator', () => {
     expect(source).toContain(
-      "const MODES = ['administrative_group', 'entire_level', 'multi_dimension'] as const;",
+      "const filtering = type === 'class' && mode === 'multi_dimension' && !editing;",
     );
-    expect(source).toContain("modes={canAssignStaff ? MODES : (['entire_level'] as const)}");
+    expect(source).toContain('active: filtering,');
+  });
+
+  it('never offers a teaching mode — the actor decides how the audience is stored (SRS Revision 163 §5)', () => {
+    expect(source).not.toContain('const MODES');
+    // The exam section keeps its own physical/online `onMode`; only the
+    // class's teaching-mode setter is gone.
+    expect(source).not.toContain('onMode={setMode}');
+    expect(source).not.toContain('setMode(');
+    expect(source).toContain(
+      "const mode = item?.ids.teachingMode ?? (canAssignStaff ? 'multi_dimension' : 'entire_level');",
+    );
+  });
+
+});
+
+/**
+ * **The shared module — one copy of the rule, used by «إضافة عنصر» and by the
+ * «from this date onward» editor** (SRS Revision 163 §5).
+ */
+describe('audience-filters — the payload, the rule, and the narrowing', () => {
+  const none = { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], teachingGroupIds: [] };
+
+  it('leaves a filter at «الكل» OUT of the payload — never an empty array to interpret', () => {
+    expect(audienceDimensions(none)).toEqual({});
+    expect(
+      audienceDimensions({ ...none, branchIds: ['b1'], groupIds: ['g1', 'g2'], teachingGroupIds: ['c1'] }),
+    ).toEqual({ branchIds: ['b1'], administrativeGroupIds: ['g1', 'g2'], teachingGroupIds: ['c1'] });
+  });
+
+  it('holds a class to a real teaching population — a branch or a Category alone names none', () => {
+    expect(namesATeachingPopulation(none)).toBe(false);
+    expect(namesATeachingPopulation({ ...none, branchIds: ['b1'], categoryIds: ['k1'] })).toBe(false);
+    expect(namesATeachingPopulation({ ...none, levelIds: ['l1'] })).toBe(true);
+    expect(namesATeachingPopulation({ ...none, groupIds: ['g1'] })).toBe(true);
+    expect(namesATeachingPopulation({ ...none, teachingGroupIds: ['c1'] })).toBe(true);
+  });
+
+  it('reads every page of groups and circles, narrows child from parent, and drops what is no longer offered', () => {
+    expect(FILTERS).toContain('fetchAllPages((page) => listAdministrativeGroups(token, page, {}, null, 100))');
+    expect(FILTERS).toContain('fetchAllPages((page) => listCircles(token, page, {}, null, 100))');
+    expect(FILTERS).toContain('categoryIds.includes(scope.levelCategoryIds[o.value]');
+    expect(FILTERS).toContain('setGroupIds(groupIds.filter((id) => offered.has(id)))');
+    // A circle spans branches (Subject + Level only), so a branch never hides it.
+    expect(FILTERS).toContain('row.branchId === null || branchIds.includes(row.branchId)');
+  });
+
+  it('takes the class\'s own branch from the filter only when the filter names exactly one', () => {
+    expect(FILTERS).toContain('if (branchIds.length === 1) {');
+    expect(FILTERS).toContain("setScope('branchId', branchIds[0]!)");
+  });
+
+  it('never clears the Level while a chosen group\'s own Level is still unknown', () => {
+    // The «from this date onward» editor opens on a group-targeted class with a
+    // Subject already chosen; an empty Level pushed before the groups arrive
+    // would silently drop that Subject.
+    expect(FILTERS).toContain('(groupIds.length > 0 && allGroups.length === 0)');
+    expect(FILTERS).toContain('if (!active || awaitingRosters) return;');
+  });
+
+  it('is the one module both editors use', () => {
+    expect(source).toContain('useAudienceFilters({');
+    expect(SESSIONS_SOURCE).toContain('useAudienceFilters({');
+    expect(SESSIONS_SOURCE).toContain('<AudienceFilters');
+    expect(SESSIONS_SOURCE).not.toContain("t('admin.schedules.mode')");
+    expect(SESSIONS_SOURCE).toContain("teaching_mode: 'multi_dimension',");
   });
 });

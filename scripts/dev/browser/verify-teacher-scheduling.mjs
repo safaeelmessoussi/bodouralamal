@@ -443,8 +443,13 @@ const classForm = await evaluate(`(async () => {
   await new Promise((r) => setTimeout(r, 1800));
   dialog = document.querySelector('dialog[open]');
 
-  const modeSel = labelled('نمط التدريس');
-  const modeOptions = modeSel ? [...modeSel.options].map((o) => o.value) : null;
+  // SRS Revision 163 §5 — «نمط التدريس» is asked of nobody. Her class is one
+  // whole Level (the only shape her grant covers), so she sees the ordinary
+  // branch/Level pair and NONE of the administrator's five audience filters.
+  const modeAsked = labelled('نمط التدريس') !== null;
+  const adminFilters = ['فئات', 'مجموعات', 'حلقات'].filter((name) =>
+    [...dialog.querySelectorAll('.field__label, label')].some((l) =>
+      (l.textContent ?? '').trim().startsWith(name)));
 
   // **§2 — no declared TeacherCategoryCapability/TeacherSubjectCapability in
   // this scenario, so her Level picker must be empty**: proof, in the real
@@ -456,15 +461,17 @@ const classForm = await evaluate(`(async () => {
   const levelOptions = levelSel ? [...levelSel.options].map((o) => o.textContent.trim()) : null;
 
   return {
-    modeOptions,
+    modeAsked,
+    adminFilters,
     staffLockedShown: dialog.textContent.includes('أنتِ المؤطّرة المسؤولة عن هذه الحصة.'),
     levelOptions,
   };
 })()`);
 
 check(
-  '13a · حصة offers entire_level ONLY, and states she is its responsible مؤطِّرة — no picker offered for it',
-  JSON.stringify(classForm.modeOptions) === JSON.stringify(['entire_level']) &&
+  '13a · حصة asks her no «نمط التدريس» and offers none of the administrator\'s filters — one whole Level, and she is its responsible مؤطِّرة',
+  classForm.modeAsked === false &&
+    JSON.stringify(classForm.adminFilters) === '[]' &&
     classForm.staffLockedShown === true,
   JSON.stringify(classForm),
 );

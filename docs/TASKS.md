@@ -4535,8 +4535,10 @@ the Owner's own report named.
 - [x] **Built: content library §8** — «تنزيل الملف» now mints its own
       `attachment`-disposed presigned URL instead of reusing the
       previewer's `inline` one, so it actually downloads.
-- [ ] **§2 — filter UX overhaul, investigated and explained; redesign
-      held pending confirmation.** `multiDimensionHint`'s intersection
+- [x] **§2 — filter UX overhaul: confirmed by the Owner on 2026-09-20 and
+      built for classes as SRS Revision 163 §5 (see that section below).**
+      Original note, kept for the record — investigated and explained; redesign
+      held pending confirmation. `multiDimensionHint`'s intersection
       rule matches what the Owner described (SRS Revision 160 §2's
       full explanation). Collapsing the three teaching modes into
       always-shown filters is mechanically possible but changes what
@@ -4964,3 +4966,87 @@ changed destructively; Production go-live remains on hold.
 - [ ] Not changed, stated for completeness: `verify-backup-restore.sh` is
       still outside hosted CI (the Production dress rehearsal that is in CI
       already exercises backup and restore against the real release graph).
+
+## SRS Revision 163 — five Owner-reported items — 2026-09-20
+
+- [x] **§1 — «صوت فقط» is the default «نوع الاتصال».** One shared
+      `initialMediaMode`: an unset value reads audio-only in إضافة عنصر and
+      when an in-person occurrence is moved online; a saved «صوت وصورة» is
+      kept.
+- [x] **§2 — «العنوان» in every item's dialog.** New `item_title` on the
+      occurrence (a class's own typed title; `title` stays its Subject, so
+      every chip, filter and harness reading it is unaffected).
+- [x] **§3 — «الحضور» only for the administration and the main/assistant
+      staff of that occurrence, and never on the public calendar.** New
+      advisory `viewer_may_mark_attendance`, the server's own answer in batch
+      form; `assertMayMark` remains the authority and an integration test
+      holds the two together, occurrence by occurrence and actor by actor.
+      **An Event's and an Exam's assistants may now mark** (a Session's
+      already could); `assertMayEdit` is untouched, so R71.3 stands.
+- [x] **Found and fixed while verifying §3 in a browser: the management
+      calendar read `GET /calendar` with no credential.** Its comment said the
+      adapter read the session itself; it never did. An administrator's own
+      calendar therefore showed the PUBLIC tier only — every private or hidden
+      class and activity was missing from it.
+- [x] **§5 — classes are addressed through five «الكل» filters; «نمط
+      التدريس» is asked nowhere.** In إضافة عنصر and in the «from this date
+      onward» editor, through one shared module
+      (`components/scheduling/audience-filters.tsx`): parent-to-child
+      narrowing, dropped orphan choices, every group/circle page loaded, the
+      class's own branch taken from the filter when it names exactly one and
+      asked as «الفرع المنظِّم» otherwise. The schedule list names the
+      audience instead of printing «أبعاد متعددة». A self-service مؤطِّرة
+      keeps her one-whole-Level form and is offered none of the filters.
+- [x] Verification: backend typecheck/lint, unit 342/342; frontend
+      typecheck/lint, unit 1,371/1,371; focused integration on a disposable
+      stack (attendance, calendar, course-schedule 145/145; four HTTP suites
+      including the pinned calendar key set); real browser on Localhost —
+      `verify-attendance` 6/6, `verify-unsaved-guard` 24/24, new
+      `verify-class-filters` 12/12 (create through the filters, then a real
+      «from this date onward» split). Full local gate: 2,674 passed, one
+      failure — the static soft-delete guard's forty-line look-back, fixed
+      by hoisting a select into a constant. Full detail in CHANGES.log.
+- [ ] **§4 — OWNER DECISION: a media provider for Staging and Production.**
+      «خدمة الحصص عن بُعد غير مهيّأة بعد» is the truthful answer, not a
+      defect: no release tier has ever had a provider. LiveKit Cloud (account,
+      cost, media outside Morocco, no recording into our store) or
+      self-hosting (media ports published, reversing §19.1's 80/443-only rule,
+      and tight memory on Staging). Recorded in `deployment-readiness.md`.
+      Nothing was provisioned.
+- [ ] **§5 (i) — OWNER DECISION: should activities intersect like classes?**
+      Their dimensions are UNIONED today (R139), so an unselected one means
+      *nobody through this one*, not «الكل». «الكل»-by-default filters for
+      activities means changing who existing multi-dimension activities reach.
+      Labels deliberately left alone: «الكل» over a union would be false. A
+      circle dimension for activities would also be a new table.
+- [ ] **§5 (ii) — OWNER DECISION: exams and «سورة».** An exam is single-Level
+      by schema, and grading, the grade sheet's audience and a مؤطِّرة's exam
+      scope all read that one Level. `exam.surah_id` exists but no route has
+      ever accepted it — new API surface whose placement (exam only, or a حفظ
+      class too) is the Owner's.
+- [ ] **Kept, for the Owner to confirm or overturn:** a class must still name
+      a Level, a group or a circle. «الكل» on all three is refused in words,
+      because a class's Subject must be taught at every Level it reaches
+      (R43/R155). The alternative — «الكل» meaning *every Level that teaches
+      this Subject* — is a new audience rule.
+- [ ] **Defect found, not fixed — a «from this date onward» edit at a class's
+      FIRST occurrence answers `500`.** The split closes the predecessor the
+      day before `from_date`; at the first occurrence that is before its own
+      anchor, `course_schedule_effective_until_check` refuses it, and the
+      service lets the database error through instead of answering a coded
+      refusal (or treating it as the whole series). Older than this revision
+      and independent of the filters — it needs a decision on which of those
+      two it should be. The new harness splits at the second occurrence.
+- [x] **The «from this date onward» editor names a missing Subject or year**
+      instead of sending an empty id and showing a bare `400`.
+- [x] **`seed-dev-scenario`'s cleanup is ownership-based now.** A split's
+      successor takes the occurrence's title («حصة»), so the title-keyed wipe
+      never saw it and it pinned the scenario's branch, Subject, Level and six
+      users on Localhost while the wrapper's `|| true` hid the failure.
+      Residue removed; the wipe also finds schedules by tagged Subject/branch.
+- [ ] **Two stale harnesses, unrelated to this revision** (`qa-inventory.md`
+      has the detail): `verify-schedule-edit` still drives a native date
+      input the platform retired; `verify-teacher-scheduling` still selects
+      the item type by a value that became a catalogue id under R110. The
+      assertions this revision touched were restated in both; neither is
+      reported as passing.

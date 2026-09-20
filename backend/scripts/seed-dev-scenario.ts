@@ -37,8 +37,19 @@ const prisma = createPrismaClient(config.DATABASE_URL, 4);
 const TAG = '[dev-scenario]';
 
 async function clean(): Promise<void> {
+  // **By what it OWNS, not only by what it is called.** A «from this date
+  // onward» split gives its successor the OCCURRENCE's title («حصة»), not the
+  // schedule's — so a title-keyed wipe never saw it, and it then pinned this
+  // scenario's branch, Subject, Level and people behind RESTRICT foreign keys
+  // while the wrapper's `|| true` hid the failed cleanup (found 2026-09-20).
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    where: {
+      OR: [
+        { title: { startsWith: TAG } },
+        { subject: { name: { startsWith: TAG } } },
+        { branch: { name: { startsWith: TAG } } },
+      ],
+    },
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);
@@ -47,6 +58,13 @@ async function clean(): Promise<void> {
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
+  // A filter-built class (SRS Revision 163 §5) owns rows in the five scope
+  // tables; `verify-class-filters` creates one under this tag.
+  await prisma.courseScheduleBranch.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleCategory.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleLevel.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleAdministrativeGroup.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleTeachingGroup.deleteMany({ where: { scheduleId: { in: ids } } });
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });

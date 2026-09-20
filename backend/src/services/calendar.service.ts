@@ -132,8 +132,29 @@ export interface Occurrence {
    */
   attendanceMode: string;
   attendanceMarking: string;
+  /**
+   * **SRS Revision 163 §3 — may THIS reader open the attendance sheet.**
+   *
+   * Advisory, and only ever a rendering hint: `attendance.service.ts`'s
+   * `assertMayMark` remains the authority on every read and write, and this
+   * states the same rule in batch form (`flagAttendanceAuthority`) so the
+   * details dialog can decline to offer «الحضور» to somebody the sheet would
+   * only refuse. `false` for an anonymous reader and for every occurrence
+   * whose type keeps no register.
+   */
+  viewerMayMarkAttendance: boolean;
   id: string;
   title: string;
+  /**
+   * **SRS Revision 163 §2 — the item's OWN typed title («العنوان»).**
+   *
+   * `title` above is what a calendar chip shows, and for a class that is its
+   * Subject's name (R43). The title somebody actually typed (R57; snapshotted
+   * per occurrence by R138) reached no reader at all. An Event and an Exam
+   * carry the same value in both fields, because their chip already is their
+   * own title.
+   */
+  itemTitle: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
   date: string;
   startTime: string | null;
@@ -555,8 +576,10 @@ function sessionOccurrence(
     // service answers such a row — one rule, two places that must agree.
     attendanceMode: sch.schedulingType?.attendanceMode ?? 'disabled',
     attendanceMarking: sch.attendanceMarking,
+    viewerMayMarkAttendance: false,
     id: session.id,
     title: subject.name,
+    itemTitle: session.title,
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -1282,6 +1305,8 @@ export async function readCalendar(
         structuralKind: event.schedulingType?.structuralKind ?? null,
         attendanceMode: event.schedulingType?.attendanceMode ?? 'disabled',
         attendanceMarking: event.attendanceMarking,
+        viewerMayMarkAttendance: false,
+        itemTitle: event.title,
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -1443,8 +1468,10 @@ export async function readCalendar(
       attendanceMode: exam.schedulingType?.attendanceMode ?? 'disabled',
       // An exam sitting is invigilated — no column, and none is wanted (R123).
       attendanceMarking: 'staff_only',
+      viewerMayMarkAttendance: false,
       id: exam.id,
       title: exam.title,
+      itemTitle: exam.title,
       date: iso(exam.date),
       startTime: hhmm(exam.startTime),
       endTime: hhmm(exam.endTime),
@@ -1657,6 +1684,8 @@ export async function readCalendar(
     }
   }
 
+  await flagAttendanceAuthority(prisma, actor, out);
+
   // Deterministic order: date, then time, then id (TD-10's tiebreaker habit).
   return out.sort(
     (a, b) =>
@@ -1664,6 +1693,130 @@ export async function readCalendar(
       (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
       a.id.localeCompare(b.id),
   );
+}
+
+/**
+ * **SRS Revision 163 §3 — who is offered «الحضور», decided once per read.**
+ *
+ * `attendance.service.ts`'s `assertMayMark` is the authority and stays it; this
+ * is the same rule over rows this read has already loaded, so the dialog need
+ * neither probe the sheet for every occurrence anybody merely looked at nor
+ * offer a control that can only refuse (rule O, read the way R123's own
+ * `attendance_mode` note reads it). Three arms, as there:
+ *
+ * 1. **Super Admin** — every occurrence that keeps a register.
+ * 2. **An Admin in scope** — the Session's or sitting's own branch inside her
+ *    reach; an Event only when EVERY branch it names is, and never one naming
+ *    no branch at all (`event.service.ts` `assertMayEdit`).
+ * 3. **Whoever staffs it** — a Session's snapshot, then its schedule as it
+ *    stands on that date (`staffsSession`'s two arms, in the same order); any
+ *    `EventStaff` or `ExamStaff` position; and R72's older rule, a مؤطِّرة's
+ *    event scoped to nothing but groups she teaches.
+ *
+ * `attendance-authority.integration.test.ts` holds this to the service's own
+ * answer, occurrence by occurrence, so the two cannot drift silently.
+ */
+async function flagAttendanceAuthority(
+  prisma: PrismaClient,
+  actor: CalendarActor | null,
+  occurrences: Occurrence[],
+): Promise<void> {
+  if (actor === null) return;
+  const candidates = occurrences.filter((o) => o.attendanceMode !== "disabled");
+  if (candidates.length === 0) return;
+  if (isSuperAdmin(actor)) {
+    for (const o of candidates) o.viewerMayMarkAttendance = true;
+    return;
+  }
+
+  if (scope.hasRole(actor.roleScopes, "admin")) {
+    const reachable = scope.reachableBranches(actor.roleScopes, ["admin"]);
+    const within = (branchId: string) => reachable === null || reachable.includes(branchId);
+    for (const o of candidates) {
+      o.viewerMayMarkAttendance =
+        o.kind === "event"
+          ? reachable === null || (o.branchIds.length > 0 && o.branchIds.every(within))
+          : o.branchId !== null && within(o.branchId);
+    }
+  }
+
+  const pending = candidates.filter((o) => !o.viewerMayMarkAttendance);
+  for (const o of pending) {
+    if (o.kind === "session" && o.instructors.some((i) => i.id === actor.userId)) {
+      o.viewerMayMarkAttendance = true;
+    }
+    if (o.kind === "exam" && o.supervisors.some((i) => i.id === actor.userId)) {
+      o.viewerMayMarkAttendance = true;
+    }
+  }
+
+  // A Session with no snapshot row for her yet: the schedule's own assignment,
+  // effective on THAT occurrence's date (`effectiveOn`'s inclusive bounds).
+  const unsnapshotted = pending.filter((o) => o.kind === "session" && !o.viewerMayMarkAttendance);
+  if (unsnapshotted.length > 0) {
+    const rows = await prisma.session.findMany({
+      where: {
+        id: { in: unsnapshotted.map((o) => o.id) },
+        deletedAt: null,
+        schedule: { deletedAt: null, staff: { some: { userId: actor.userId, deletedAt: null } } },
+      },
+      select: {
+        id: true,
+        date: true,
+        schedule: {
+          select: {
+            staff: {
+              where: { userId: actor.userId, deletedAt: null },
+              select: { effectiveFrom: true, effectiveUntil: true },
+            },
+          },
+        },
+      },
+    });
+    const staffed = new Set(
+      rows
+        .filter((row) =>
+          row.schedule.staff.some(
+            (a) =>
+              (a.effectiveFrom === null || a.effectiveFrom <= row.date) &&
+              (a.effectiveUntil === null || a.effectiveUntil >= row.date),
+          ),
+        )
+        .map((row) => row.id),
+    );
+    for (const o of unsnapshotted) if (staffed.has(o.id)) o.viewerMayMarkAttendance = true;
+  }
+
+  const events = pending.filter((o) => o.kind === "event" && !o.viewerMayMarkAttendance);
+  if (events.length > 0) {
+    const eventIds = [...new Set(events.map((o) => o.id))];
+    const staffedRows = await prisma.eventStaff.findMany({
+      where: { eventId: { in: eventIds }, userId: actor.userId, deletedAt: null },
+      select: { eventId: true },
+    });
+    const allowed = new Set(staffedRows.map((r) => r.eventId));
+    if (scope.hasRole(actor.roleScopes, "teacher")) {
+      const own = (await teacherEventScope(prisma, actor.userId)).administrativeGroupIds;
+      if (own.length > 0) {
+        const groupOnly = await prisma.event.findMany({
+          where: {
+            id: { in: eventIds.filter((id) => !allowed.has(id)) },
+            deletedAt: null,
+            branchScopes: { none: {} },
+            categoryScopes: { none: {} },
+            levelScopes: { none: {} },
+            administrativeGroupScopes: {
+              some: {},
+              every: { administrativeGroupId: { in: own } },
+            },
+          },
+          select: { id: true },
+        });
+        for (const row of groupOnly) allowed.add(row.id);
+      }
+    }
+    for (const o of events) if (allowed.has(o.id)) o.viewerMayMarkAttendance = true;
+  }
 }
 
 /**

@@ -99,6 +99,13 @@ export interface ScopeOptions {
   /** The chosen Level teaches no Subjects. A real curriculum state, and the one
    *  a screen must explain rather than present as an empty dropdown. */
   levelTeachesNothing: boolean;
+  /**
+   * **Level id → its Category id** (SRS Revision 163 §5). `options.levelId`
+   * carries labels only, and a form whose Category filter holds SEVERAL values
+   * cannot use the single-valued `value.categoryId` chain to narrow its Levels —
+   * it narrows them itself, from this.
+   */
+  levelCategoryIds: Record<string, string>;
   /** §4.9's default content visibility for the chosen Level, through its
    *  Category (§15.1). `null` when no Level is chosen or the lists have not
    *  arrived — never guessed, and never `public` on absence. */
@@ -545,6 +552,7 @@ export function useScopeOptions({
     ready,
     levelTeachesNothing:
       wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
+    levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
     /**
      * §4.9's default content visibility for the currently chosen Level, through
      * its Category (§15.1) — `null` until both lists have arrived.

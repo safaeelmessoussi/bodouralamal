@@ -196,6 +196,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
       loading: {},
       ready: true,
       levelTeachesNothing: false,
+      levelCategoryIds: {},
     },
     rooms: [],
     roomId: '',

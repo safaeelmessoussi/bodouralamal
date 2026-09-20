@@ -10402,3 +10402,75 @@ removed; preflight still passes on the final state; 26 GiB free against the 20-G
 stale across several deployments; it now names `a6b599d` with this evidence and keeps the first
 accepted release as history. Its B1 row now says SeaweedFS runs on Localhost and Staging.
 Production go-live remains on hold by Owner decision and was not touched.
+
+**Built (SRS Revision 163) — five Owner-reported items, 2026-09-20: «صوت فقط» by default, «العنوان»
+in every dialog, «الحضور» only where it belongs, classes addressed through five «الكل» filters with
+no «نمط التدريس», and a finding rather than a fix for «دخول الحصة».** Two additive keys on the
+calendar occurrence and one fallback on a schedule's `target_name`; no schema change, no migration.
+
+*§1.* An unset «نوع الاتصال» reads «صوت فقط» in إضافة عنصر and when an occurrence is moved online;
+one shared `initialMediaMode`, so three call sites cannot disagree. A saved «صوت وصورة» is kept.
+
+*§2.* `item_title` carries the item's own typed title; the dialog shows «العنوان» first, for every
+kind. `title` is untouched, so chips, filters and harnesses that read it are unaffected.
+
+*§3.* `viewer_may_mark_attendance` is the server's own answer, computed in batch from rows the
+calendar read already loads (`flagAttendanceAuthority`); the panel offers «الحضور» only when it is
+true and never on the public page. It is advisory — `assertMayMark` stays the authority — and an
+integration test compares the two for seven actors across every occurrence kind, asserting the
+comparison is not vacuous. An Event's and an Exam's assistants may now mark; `assertMayEdit` is
+untouched and the same test proves an assistant is still refused the Event itself.
+
+*§5, classes.* `components/scheduling/audience-filters.tsx` is the one module both editors use: the
+five filters, parent-to-child narrowing, dropped orphan choices, every group/circle page, the
+class's own branch taken from the filter when it names exactly one and asked as «الفرع المنظِّم»
+otherwise, and the representative Level that drives the Subject list. The stored mode is derived
+from who is asking and never offered. The schedule list's audience column now names the audience
+(`dimensionSummary`) instead of the mode's label.
+
+*Found by driving it in a real browser, not by any test.* (1) `/admin/schedules?view=calendar`
+called `GET /calendar` with no credential; its comment said the adapter read the session itself, and
+it never had. The back office's own calendar therefore showed an administrator the public tier
+only. It surfaced because the new flag was, correctly, `false` for nobody-in-particular. (2) The
+dev stack serves the frontend from a bind-mounted `frontend/dist`, not from the image, so a
+rebuilt `bodour-web:dev` changes nothing on Localhost until `npm run build` runs on the host — my
+first browser run exercised the old bundle and I nearly read its failures as product defects.
+
+*Reported, not built — the Owner's decisions* (SRS R163 §4, §5; `docs/TASKS.md`): a media provider
+for Staging and Production (no release tier has ever had one, so «غير مهيّأة» is the truth);
+whether activities should intersect like classes (their dimensions are unioned today, so «الكل»
+would be a false label there); several Levels per exam and where «سورة» belongs; and whether a
+class may leave Level, group and circle all at «الكل».
+
+*Harnesses.* `verify-attendance` restated (nothing on the public page, the sheet from the management
+calendar) — 6/6. `verify-unsaved-guard` restated — 24/24. New `verify-class-filters` — 8/8; its own
+first two failures were mine (it read the start-date refusal as the Level refusal; a regex lost its
+backslashes inside a template string), not the product's. `verify-schedule-edit` and
+`verify-teacher-scheduling` were found stale for unrelated, older reasons (a retired native date
+input; an item-type value that became a catalogue id under R110); the assertions this revision
+touched were restated in both, and `qa-inventory.md` records them as stale rather than passing.
+
+Verification: backend typecheck/lint clean, unit 342/342; frontend typecheck/lint clean, unit
+1,371/1,371 (from 1,361); focused integration on a disposable stack — attendance, calendar and
+course-schedule 145/145, and four HTTP suites including the calendar's pinned wire key set, which
+failed first on the two new keys exactly as it is meant to; `docs/openapi.json` regenerates without
+a diff; all guards, documentation links and `git diff --check` pass.
+
+*Addendum to the Revision 163 entry above, from carrying the verification further.* The full
+disposable-stack gate ran 2,674 tests with ONE failure: `trash-coverage`'s static soft-delete
+guard, which accepts a named `where` only when `deletedAt` appears within forty lines above the
+call. The five named-scope selects I had inlined pushed `listCourseSchedules`'s `count({ where })`
+past that distance — the read was always filtered. Hoisted to a module-level
+`DIMENSION_SCOPES_WITH_NAMES`; the guard's exact rule was then replayed over the three services
+this revision touched and found nothing. `verify-class-filters` grew a second journey and is
+**12/12**: the «from this date onward» editor offers the same five filters, opens on a
+group-targeted class as *one branch, one group*, keeps the Subject it opened with (a guard added
+for exactly that: the representative Level is not cleared while a chosen group's own Level is
+still unknown), names an unchosen year on screen instead of sending an empty id, and performs a
+real split whose successor is filter-built while the predecessor keeps the target it always had.
+Two older defects surfaced on the way and are recorded in `docs/TASKS.md`: a split at a class's
+FIRST occurrence answers `500` (the predecessor would end before it begins, and the CHECK's
+refusal is not translated) — left open, because whether that should be a coded refusal or the
+whole series is a decision; and `seed-dev-scenario`'s title-keyed cleanup missed a split's
+successor, which takes the occurrence's title, leaving scenario residue on Localhost behind a
+`|| true` — fixed to clean by ownership, residue removed. Frontend unit is 1,372/1,372.

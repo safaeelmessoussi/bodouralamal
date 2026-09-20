@@ -498,6 +498,7 @@ export const ar = {
     kindEvent: 'نشاط',
     hijriUnavailable: 'لم يُسجَّل التاريخ الهجري لهذا الشهر بعد.',
     detailsTitle: 'تفاصيل النشاط',
+    detailsItemTitle: 'العنوان',
     detailsDate: 'التاريخ',
     detailsTime: 'التوقيت',
     detailsKind: 'النوع',
@@ -2585,6 +2586,10 @@ export const ar = {
       subject: 'المادة',
       mode: 'نمط التدريس',
       branch: 'الفرع',
+      // SRS Revision 163 §5 — يُسأل عنه فقط حين لا يحدّد مرشِّح «فروع» فرعاً واحداً.
+      homeBranch: 'الفرع المنظِّم',
+      homeBranchHint:
+        'الفرع الذي تُدار منه الحصة وتُحجز فيه قاعتها. يُحدَّد تلقائياً عند اختيار فرع واحد في «فروع».',
       room: 'القاعة',
       time: 'التوقيت',
       recurrence: 'التكرار',

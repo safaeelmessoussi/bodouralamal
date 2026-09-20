@@ -6,9 +6,15 @@ import {
   type DeliveryMode,
   type OnlineMediaMode,
 } from './delivery.js';
-import { CheckboxField, SelectField } from '../ui/field.js';
+import { CheckboxField } from '../ui/field.js';
 import { Feedback } from '../ui/feedback.js';
 import { MultiSelectField } from '../ui/multi-select.js';
+import {
+  AudienceFilters,
+  type AudienceChoices,
+  type AudienceSelection,
+  type AudienceSetters,
+} from './audience-filters.js';
 import { StaffPicker } from './staff-picker.js';
 import { StaffingPeriods, type StaffingPeriod } from './staffing-periods.js';
 import { t } from '../../i18n/index.js';
@@ -36,9 +42,16 @@ export interface ClassSectionProps {
    *  taught, to whom and where*, and changing them would re-point Sessions
    *  already materialized against the old answer (§4.4). */
   locked: boolean;
+  /**
+   * **How the class's audience is STORED — never a choice on screen** (SRS
+   * Revision 163 §5). «نمط التدريس» is gone: an administrator always builds a
+   * class from the five filters below (`multi_dimension`), a self-service
+   * مؤطِّرة always schedules one whole Level (`entire_level`, the only shape her
+   * grant covers — `TEACHER_ENTIRE_LEVEL_ONLY`), and a row being edited keeps
+   * the mode it was created with, which decides only how its locked target is
+   * shown.
+   */
   mode: string;
-  onMode: (v: string) => void;
-  modes: readonly string[];
   rooms: { id: string; name: string; capacity: number | null }[];
   roomId: string;
   onRoom: (v: string) => void;
@@ -79,41 +92,22 @@ export interface ClassSectionProps {
    */
   staffLocked?: boolean;
   /**
-   * **`mode === 'multi_dimension'` only** (SRS Revision 155, completed
-   * end-to-end 2026-09-16). Five independent controls, mirroring
-   * `ActivitySection`'s own dimension pattern — but never that component
-   * directly: its "all dimensions OR together" composition (`scopeAllLevelsHint`)
-   * is the WRONG rule here (branch/category/level/administrative-group
-   * AND-across-kind, a Teaching Circle UNIONS instead — `multiDimensionHint`
-   * states it). Absent for every other mode.
+   * **The five audience filters** (SRS Revision 155; the ONLY way an
+   * administrator targets a class since Revision 163 §5). State, narrowing and
+   * rendering all live in `audience-filters.tsx`, shared with the «from this
+   * date onward» editor. Absent for a self-service مؤطِّرة and for a locked row.
    */
-  multiDimension?: {
-    branch: ClassDimensionValue;
-    category: ClassDimensionValue;
-    level: ClassDimensionValue;
-    administrativeGroup: ClassDimensionValue;
-    teachingGroup: ClassDimensionValue;
+  audience?: {
+    selection: AudienceSelection;
+    setters: AudienceSetters;
+    choices: AudienceChoices;
   };
-}
-
-/** One dimension's own selection, options and setter — mirrors
- *  `ScopeDimensionValue` below (`ActivitySection`'s own shape), restated
- *  under its own name rather than shared: a class's fifth dimension
- *  (Teaching Circle) has no `ScopeDimensionKey` to belong to, and giving
- *  the two the same type would invite passing one where the other's
- *  composition rule applies. */
-export interface ClassDimensionValue {
-  selected: readonly string[];
-  onChange: (next: string[]) => void;
-  options: { id: string; name: string }[];
 }
 
 export function ClassSection({
   scope,
   locked,
   mode,
-  onMode,
-  modes,
   rooms,
   roomId,
   onRoom,
@@ -128,7 +122,7 @@ export function ClassSection({
   scheduleFrom,
   scheduleUntil,
   staffLocked,
-  multiDimension,
+  audience,
 }: ClassSectionProps): ReactNode {
   return (
     <>
@@ -149,56 +143,13 @@ export function ClassSection({
          * scope already uses.
          */
         <p className="muted">{t('admin.calendar.scopeFixed')}</p>
-      ) : mode === 'multi_dimension' && multiDimension ? (
-        <>
-          <MultiSelectField
-            label={t('admin.calendar.scopeBranch')}
-            selected={multiDimension.branch.selected}
-            onChange={multiDimension.branch.onChange}
-            options={multiDimension.branch.options.map((o) => ({ value: o.id, label: o.name }))}
-            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-            disabled={locked}
-          />
-          <MultiSelectField
-            label={t('admin.calendar.scopeCategory')}
-            selected={multiDimension.category.selected}
-            onChange={multiDimension.category.onChange}
-            options={multiDimension.category.options.map((o) => ({ value: o.id, label: o.name }))}
-            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-            disabled={locked}
-          />
-          <MultiSelectField
-            label={t('admin.calendar.scopeLevel')}
-            selected={multiDimension.level.selected}
-            onChange={multiDimension.level.onChange}
-            options={multiDimension.level.options.map((o) => ({ value: o.id, label: o.name }))}
-            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-            disabled={locked}
-          />
-          <MultiSelectField
-            label={t('admin.calendar.scopeGroup')}
-            selected={multiDimension.administrativeGroup.selected}
-            onChange={multiDimension.administrativeGroup.onChange}
-            options={multiDimension.administrativeGroup.options.map((o) => ({
-              value: o.id,
-              label: o.name,
-            }))}
-            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-            disabled={locked}
-          />
-          <MultiSelectField
-            label={t('admin.calendar.scopeCircle')}
-            selected={multiDimension.teachingGroup.selected}
-            onChange={multiDimension.teachingGroup.onChange}
-            options={multiDimension.teachingGroup.options.map((o) => ({
-              value: o.id,
-              label: o.name,
-            }))}
-            emptyLabel={t('admin.calendar.scopeTargetEmpty')}
-            disabled={locked}
-          />
-          <Feedback>{t('admin.calendar.multiDimensionHint')}</Feedback>
-        </>
+      ) : mode === 'multi_dimension' && audience ? (
+        <AudienceFilters
+          scope={scope}
+          selection={audience.selection}
+          setters={audience.setters}
+          choices={audience.choices}
+        />
       ) : (
         <ScopeSelectors
           scope={scope}
@@ -208,19 +159,8 @@ export function ClassSection({
         />
       )}
 
-      <SelectField
-        label={t('admin.schedules.mode')}
-        value={mode}
-        onChange={onMode}
-        disabled={locked}
-        options={modes.map((m) => ({ value: m, label: t(`admin.schedules.mode_${m}`) }))}
-      />
-
-      {/* The target IS one of the scope values, chosen by the mode (§4.4c):
-          *entire level* delivers to the Level already selected, so it asks
-          nothing further; *administrative group* asks which roster at that
-          Level and Branch. A generic "target" list of mixed entity kinds is
-          what once let a group from another branch be chosen. */}
+      {/* Only ever a LOCKED row now: a class created for one Administrative
+          Group before Revision 163 still shows which one. */}
       {mode === 'administrative_group' ? (
         <ScopeSelectors
           scope={scope}

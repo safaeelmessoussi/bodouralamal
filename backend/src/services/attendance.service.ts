@@ -302,6 +302,17 @@ const MANAGING_ROLE = 'admin';
  * supervisor or an Admin in the branch. Attendance invents no reach of its own,
  * so widening any of those later widens attendance with them rather than
  * leaving a second matrix behind.
+ *
+ * **SRS Revision 163 §3 — the ASSISTANTS of an Event and of an Exam mark too**
+ * (Owner, 2026-09-20: «الحضور» belongs to the administration and to *the main
+ * and assistant staff of that occurrence*). A Session already worked this way
+ * (`staffsSession` counts co-teachers and assistants alike); an Event and an
+ * Exam admitted only their lead. Marking who came is not editing the item:
+ * R71.3's *"an assistant sees the event and does not change it"* stands —
+ * `assertMayEdit` is untouched and still refuses her every write to the Event
+ * itself. `calendar.service.ts`'s advisory `viewerMayMarkAttendance` states the
+ * same rule in batch form; `attendance-authority.integration.test.ts` pins the
+ * two to each other.
  */
 async function assertMayMark(
   prisma: PrismaClient,
@@ -312,6 +323,10 @@ async function assertMayMark(
   if (scope.isSuperAdmin(actor.roleScopes)) return;
 
   if (occurrence.kind === 'event') {
+    const staffsIt = await tx.eventStaff.count({
+      where: { eventId: occurrence.id, userId: actor.userId, deletedAt: null },
+    });
+    if (staffsIt > 0) return;
     await assertMayEditEvent(tx, actor, occurrence.id);
     return;
   }
@@ -322,15 +337,10 @@ async function assertMayMark(
     return;
   }
 
-  const supervises = await tx.examStaff.count({
-    where: {
-      examId: occurrence.id,
-      userId: actor.userId,
-      position: 'supervisor',
-      deletedAt: null,
-    },
+  const staffsIt = await tx.examStaff.count({
+    where: { examId: occurrence.id, userId: actor.userId, deletedAt: null },
   });
-  if (supervises > 0) return;
+  if (staffsIt > 0) return;
   await assertAdminInOccurrenceBranch(tx, actor, occurrence);
 }
 

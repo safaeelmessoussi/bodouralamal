@@ -65,8 +65,18 @@ export interface Occurrence {
    */
   attendance_mode: 'disabled' | 'optional' | 'required';
   attendance_marking: 'staff_only' | 'self_or_staff';
+  /**
+   * **SRS Revision 163 §3 — may THIS reader open the attendance sheet.** The
+   * server's own answer, in batch form; advisory only (the sheet still
+   * authorizes every read and write). Optional on the type because `api<T>()`
+   * is an unchecked cast: an older response simply offers no «الحضور».
+   */
+  viewer_may_mark_attendance?: boolean;
   id: string;
   title: string;
+  /** SRS Revision 163 §2 — the item's own typed title («العنوان»). For a class
+   *  `title` is its Subject's name; this is what somebody actually typed. */
+  item_title?: string;
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */
   date: string;
   start_time: string | null;

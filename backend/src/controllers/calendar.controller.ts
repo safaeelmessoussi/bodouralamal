@@ -153,8 +153,12 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
      */
     attendance_mode: o.attendanceMode,
     attendance_marking: o.attendanceMarking,
+    // SRS Revision 163 §3 — advisory; `assertMayMark` stays the authority.
+    viewer_may_mark_attendance: o.viewerMayMarkAttendance,
     id: o.id,
     title: o.title,
+    // SRS Revision 163 §2 — the item's own typed title («العنوان»).
+    item_title: o.itemTitle,
     date: o.date,
     start_time: o.startTime,
     end_time: o.endTime,

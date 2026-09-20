@@ -431,6 +431,9 @@ const OCCURRENCE_KEYS = [
   "hijri_month_ar",
   "id",
   "instructors",
+  // SRS Revision 163 §2 — the item's own typed title («العنوان»): `title` is
+  // what a chip shows, and for a class that is its Subject.
+  "item_title",
   "kind",
   "level_id",
   "level_ids",
@@ -454,6 +457,9 @@ const OCCURRENCE_KEYS = [
   "supervisors",
   "teaching_mode",
   "title",
+  // SRS Revision 163 §3 — advisory: may THIS reader open the attendance sheet.
+  // `assertMayMark` stays the authority on every read and write.
+  "viewer_may_mark_attendance",
   "visibility",
 ];
 

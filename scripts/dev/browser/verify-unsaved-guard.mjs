@@ -288,22 +288,27 @@ if (sched === 'ready') {
     await new Promise((r) => setTimeout(r, 1500));
     const dlg = document.querySelector('dialog[open]');
     if (!dlg) return { noDialog: true };
-    const modeField = [...dlg.querySelectorAll('.field')].find((field) =>
-      (field.querySelector('.field__label')?.textContent ?? '').trim().startsWith('نمط التدريس'));
-    const defaultMode = modeField?.querySelector('select')?.value ?? null;
+    // SRS Revision 163 §5 — «نمط التدريس» is asked nowhere; an administrator's
+    // new class opens on five audience filters, each reading «الكل».
+    const labels = [...dlg.querySelectorAll('.field__label, legend, label')].map((l) =>
+      (l.textContent ?? '').trim());
+    const modeAsked = labels.some((l) => l.startsWith('نمط التدريس'));
+    const filters = ['فروع', 'فئات', 'مستويات', 'مجموعات', 'حلقات'].filter((name) =>
+      labels.some((l) => l.startsWith(name)));
+    const allCount = (dlg.textContent.match(/الكل/g) ?? []).length;
     const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
     if (!close) return { noCloseButton: true };
     close.click();
     await new Promise((r) => setTimeout(r, 800));
-    return { closed: true, defaultMode };
+    return { closed: true, modeAsked, filters, allCount };
   })()`);
 
   if (opened.closed !== true) {
     check('PRISTINE الجدولة: the add form could be opened', false, JSON.stringify(opened));
   } else {
     check(
-      'NEW الجدولة: نمط التدريس defaults to المستوى كامل in the rendered form',
-      opened.defaultMode === 'entire_level',
+      'NEW الجدولة: no «نمط التدريس» is asked — five audience filters, each reading «الكل»',
+      opened.modeAsked === false && opened.filters.length === 5 && opened.allCount >= 5,
       JSON.stringify(opened),
     );
     const after = await state();

@@ -4,6 +4,8 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import { sessionProtectionRules } from '../policies/session-protection.js';
+import { readCalendar, type CalendarActor } from './calendar.service.js';
+import { assertMayEdit as assertMayEditEvent } from './event.service.js';
 import {
   attendanceCandidates,
   attendanceSheet,
@@ -1063,5 +1065,130 @@ describe('R123 × R124 · an exam sheet resolves through the ONE exam-audience r
     expect(sheet.expected.map((e) => e.id)).toEqual([womanId]);
     // The other woman is enrolled in the same Level and is NOT expected here.
     expect(sheet.expected.map((e) => e.id)).not.toContain(otherWomanId);
+  });
+});
+
+/**
+ * **SRS Revision 163 §3 — «الحضور» belongs to the administration and to the
+ * main AND assistant staff of the occurrence**, and the calendar says so before
+ * the dialog offers it.
+ */
+describe('SRS Revision 163 §3 — assistants mark, and the calendar\'s advisory flag agrees with the sheet', () => {
+  let assistantId = '';
+
+  const may = async (actor: Actor, ref: OccurrenceRef): Promise<boolean> => {
+    try {
+      await attendanceSheet(prisma, actor, ref);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const scopedAdmin = (branches: string[]): Actor => ({
+    userId: superAdminId,
+    roles: ['admin'],
+    roleScopes: [{ role: 'admin', branches }],
+    activeRole: 'admin',
+  });
+
+  beforeAll(async () => {
+    assistantId = await person('مساعدة النشاط والاختبار');
+    await prisma.eventStaff.create({
+      data: { eventId: activityEventId, userId: assistantId, position: 'assistant' },
+    });
+    await prisma.examStaff.create({
+      data: { examId, userId: assistantId, position: 'assistant' },
+    });
+    // The calendar lists sittings, never drafts (R136) — and a physical sitting
+    // is published from creation everywhere the application writes one.
+    await prisma.exam.update({
+      where: { id: examId },
+      data: { status: 'published', publishedAt: new Date() },
+    });
+  });
+
+  it('lets an Event\'s assistant open its sheet — and still refuses her the Event itself', async () => {
+    const assistant = actorOf(assistantId, 'teacher');
+    expect(await may(assistant, event(activityEventId))).toBe(true);
+    // R71.3 stands: marking who came is not editing the item.
+    await expect(
+      prisma.$transaction((tx) => assertMayEditEvent(tx, assistant, activityEventId)),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('lets an Exam\'s assistant open its sheet, not only its supervisor', async () => {
+    expect(await may(actorOf(assistantId, 'teacher'), exam(examId))).toBe(true);
+    expect(await may(teacher(), exam(examId))).toBe(true);
+  });
+
+  it('still refuses a مؤطِّرة who staffs none of it', async () => {
+    expect(await may(outsider(), event(activityEventId))).toBe(false);
+    expect(await may(outsider(), exam(examId))).toBe(false);
+    expect(await may(outsider(), session(staffOnlySessionId))).toBe(false);
+  });
+
+  it('flags every occurrence exactly as the sheet answers it, actor by actor', async () => {
+    const known = new Set([
+      selfSessionId,
+      staffOnlySessionId,
+      lectureSessionId,
+      activityEventId,
+      recurringEventId,
+      holidayEventId,
+      partyEventId,
+      examId,
+    ]);
+    const actors: [string, Actor][] = [
+      ['super admin', superAdmin()],
+      ['the staffing مؤطِّرة', teacher()],
+      ['the assistant', actorOf(assistantId, 'teacher')],
+      ['an unrelated مؤطِّرة', outsider()],
+      ['an Admin scoped to this branch', scopedAdmin([branchId])],
+      ['an Admin scoped elsewhere', scopedAdmin(['00000000-0000-4000-8000-000000000001'])],
+      ['a beneficiary', woman()],
+    ];
+
+    let compared = 0;
+    let offered = 0;
+    for (const [label, actor] of actors) {
+      const viewer: CalendarActor = {
+        userId: actor.userId,
+        roles: actor.roles,
+        roleScopes: actor.roleScopes,
+        accountStatus: 'active',
+      };
+      const occurrences = (await readCalendar(prisma, viewer, { from: TODAY, to: TODAY })).filter(
+        (o) => known.has(o.id),
+      );
+      for (const o of occurrences) {
+        const ref: OccurrenceRef =
+          o.kind === 'session' ? session(o.id) : o.kind === 'exam' ? exam(o.id) : event(o.id, TODAY);
+        expect(o.viewerMayMarkAttendance, `${label} · ${o.kind} · ${o.itemTitle}`).toBe(
+          await may(actor, ref),
+        );
+        compared += 1;
+        if (o.viewerMayMarkAttendance) offered += 1;
+      }
+    }
+    // Not vacuous: all three kinds were compared, and both answers occurred.
+    expect(compared).toBeGreaterThan(20);
+    expect(offered).toBeGreaterThan(0);
+    expect(offered).toBeLessThan(compared);
+  });
+
+  it('offers an anonymous reader nothing, and names each item by its own typed title', async () => {
+    const occurrences = await readCalendar(prisma, null, { from: TODAY, to: TODAY });
+    expect(occurrences.some((o) => o.viewerMayMarkAttendance)).toBe(false);
+
+    const asStaff = await readCalendar(
+      prisma,
+      { userId: superAdminId, roles: ['super_admin'], roleScopes: superAdmin().roleScopes, accountStatus: 'active' },
+      { from: TODAY, to: TODAY },
+    );
+    const aClass = asStaff.find((o) => o.id === staffOnlySessionId);
+    // `title` stays the Subject (what the chip shows); `itemTitle` is R57's.
+    expect(aClass?.title).not.toBe(aClass?.itemTitle);
+    expect(asStaff.find((o) => o.id === activityEventId)?.itemTitle).toBe(`${TAG} نشاط`);
+    expect(asStaff.find((o) => o.id === examId)?.itemTitle).toBe(`${TAG} اختبار`);
   });
 });

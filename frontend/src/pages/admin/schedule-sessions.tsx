@@ -19,8 +19,15 @@ import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SessionAudienceDialog } from '../../components/scheduling/session-audience-dialog.js';
 import {
+  AudienceFilters,
+  audienceDimensions,
+  namesATeachingPopulation,
+  useAudienceFilters,
+} from '../../components/scheduling/audience-filters.js';
+import {
   DeliverySection,
   deliveryLabel,
+  initialMediaMode,
   mediaLabel,
   type DeliveryMode,
   type OnlineMediaMode,
@@ -78,12 +85,13 @@ interface SessionScopeEdit {
    * fields CREATE takes, resolved server-side exactly the same way. Absent
    * for `this_session`/`all_sessions`, which never touch identity.
    */
+  /** SRS Revision 163 §5 — always the five filters; «نمط التدريس» is no longer
+   *  asked here either, and `multi_dimension` is how the successor is stored. */
   identity?: {
     subject_id: string;
     branch_id: string;
     academic_year_id: string;
-    teaching_mode: 'entire_level' | 'administrative_group';
-    target_id: string;
+    dimensions: ReturnType<typeof audienceDimensions>;
   };
 }
 
@@ -204,6 +212,15 @@ export function ScheduleSessionsPage({
      *  `administrative_group` mode only, so `ScopeDialog`'s identity section
      *  can pre-fill the target it edits. */
     targetId: string;
+    /** SRS Revision 163 §5 — a filter-built class's own five filters, `null`
+     *  for a class created under a single target before that revision. */
+    dimensions: {
+      branch_ids: string[];
+      category_ids: string[];
+      level_ids: string[];
+      administrative_group_ids: string[];
+      teaching_group_ids: string[];
+    } | null;
   } | null>(null);
   /** R75.6 — the class's own name and note, which a recording is named from.
    *  They belong to the schedule, not to the occurrence. */
@@ -258,6 +275,7 @@ export function ScheduleSessionsPage({
           // Unlike the upload/recording use above, the identity SECTION needs
           // the raw target back — an `administrative_group` class's own group.
           targetId: mine.target_id,
+          dimensions: mine.dimensions,
         });
         setKlass({
           title: mine.title,
@@ -508,8 +526,24 @@ export function ScheduleSessionsPage({
             subject_id: edit.identity.subject_id,
             branch_id: edit.identity.branch_id,
             academic_year_id: edit.identity.academic_year_id,
-            teaching_mode: edit.identity.teaching_mode,
-            target_id: edit.identity.target_id,
+            teaching_mode: 'multi_dimension',
+            dimensions: {
+              ...(edit.identity.dimensions.branchIds
+                ? { branch_ids: edit.identity.dimensions.branchIds }
+                : {}),
+              ...(edit.identity.dimensions.categoryIds
+                ? { category_ids: edit.identity.dimensions.categoryIds }
+                : {}),
+              ...(edit.identity.dimensions.levelIds
+                ? { level_ids: edit.identity.dimensions.levelIds }
+                : {}),
+              ...(edit.identity.dimensions.administrativeGroupIds
+                ? { administrative_group_ids: edit.identity.dimensions.administrativeGroupIds }
+                : {}),
+              ...(edit.identity.dimensions.teachingGroupIds
+                ? { teaching_group_ids: edit.identity.dimensions.teachingGroupIds }
+                : {}),
+            },
           }
         : {}),
     };
@@ -816,6 +850,15 @@ function ScopeDialog({
     academicYearId: string;
     targetId: string;
     teachingMode: string;
+    /** SRS Revision 163 §5 — a filter-built class's own five filters, `null`
+     *  for a class created under a single target before that revision. */
+    dimensions: {
+      branch_ids: string[];
+      category_ids: string[];
+      level_ids: string[];
+      administrative_group_ids: string[];
+      teaching_group_ids: string[];
+    } | null;
   } | null;
   /**
    * **Owner-reported, 2026-09-17 — the schedule's own current Subject**, so
@@ -839,7 +882,7 @@ function ScopeDialog({
     session.delivery_mode === 'online' ? 'online' : 'in_person',
   );
   const [mediaMode, setMediaMode] = useState<OnlineMediaMode>(
-    session.online_media_mode === 'audio_only' ? 'audio_only' : 'audio_video',
+    initialMediaMode(session.online_media_mode),
   );
   const [roomId, setRoomId] = useState(session.room_id ?? '');
   /**
@@ -892,21 +935,64 @@ function ScopeDialog({
    */
   const identityScope = useScopeOptions({
     token,
-    fields: identity ? (['branchId', 'levelId', 'subjectId', 'academicYearId', 'groupId'] as const) : [],
+    // `categoryId` and `levelId` are requested for their OPTION lists (the
+    // filters read them); `levelId`'s own value is only the representative
+    // Level `useAudienceFilters` keeps, which drives the Subject list.
+    fields: identity
+      ? (['branchId', 'categoryId', 'levelId', 'subjectId', 'academicYearId'] as const)
+      : [],
     initial: identity
       ? {
           branchId: identity.branchId ?? '',
           levelId: identity.levelId,
           subjectId: identity.subjectId,
           academicYearId: identity.academicYearId,
-          groupId: identity.teachingMode === 'administrative_group' ? identity.targetId : '',
         }
       : {},
     mode: 'form',
   });
-  const [identityMode, setIdentityMode] = useState<'entire_level' | 'administrative_group'>(
-    identity?.teachingMode === 'administrative_group' ? 'administrative_group' : 'entire_level',
+  /**
+   * **Seeded from the class as it stands, whatever it was stored as** (SRS
+   * Revision 163 §5). A filter-built class brings its own five filters; a class
+   * created under a single target says the same thing in the new vocabulary —
+   * one whole Level at its branch, or one Administrative Group. «نمط التدريس»
+   * is asked nowhere any more.
+   */
+  const seeded = identity?.dimensions ?? null;
+  const [branchIds, setBranchIds] = useState<string[]>(
+    seeded ? seeded.branch_ids : identity?.branchId ? [identity.branchId] : [],
   );
+  const [categoryIds, setCategoryIds] = useState<string[]>(seeded ? seeded.category_ids : []);
+  const [levelIds, setLevelIds] = useState<string[]>(
+    seeded
+      ? seeded.level_ids
+      : identity && identity.teachingMode === 'entire_level' && identity.levelId
+        ? [identity.levelId]
+        : [],
+  );
+  const [groupIds, setGroupIds] = useState<string[]>(
+    seeded
+      ? seeded.administrative_group_ids
+      : identity && identity.teachingMode === 'administrative_group' && identity.targetId
+        ? [identity.targetId]
+        : [],
+  );
+  const [teachingGroupIds, setTeachingGroupIds] = useState<string[]>(
+    seeded
+      ? seeded.teaching_group_ids
+      : identity && identity.teachingMode === 'teaching_group' && identity.targetId
+        ? [identity.targetId]
+        : [],
+  );
+  const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds };
+  const audienceChoices = useAudienceFilters({
+    active: identity !== null && scope === 'this_and_future',
+    token,
+    scope: identityScope,
+    selection: audienceSelection,
+    setters: { setLevelIds, setGroupIds, setTeachingGroupIds },
+  });
+  const [identityNotice, setIdentityNotice] = useState<string | null>(null);
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -1030,26 +1116,18 @@ function ScopeDialog({
             <p className="field__hint">
               {t('admin.sessions.identityHint').replace('{date}', session.date)}
             </p>
-            <ScopeSelectors
+            <AudienceFilters
               scope={identityScope}
-              fields={['branchId', 'levelId']}
-              mode="form"
+              selection={audienceSelection}
+              setters={{
+                setBranchIds,
+                setCategoryIds,
+                setLevelIds,
+                setGroupIds,
+                setTeachingGroupIds,
+              }}
+              choices={audienceChoices}
             />
-            <SelectField
-              label={t('admin.schedules.mode')}
-              value={identityMode}
-              onChange={(v) => setIdentityMode(v as 'entire_level' | 'administrative_group')}
-              options={[
-                { value: 'entire_level', label: t('admin.schedules.mode_entire_level') },
-                {
-                  value: 'administrative_group',
-                  label: t('admin.schedules.mode_administrative_group'),
-                },
-              ]}
-            />
-            {identityMode === 'administrative_group' ? (
-              <ScopeSelectors scope={identityScope} fields={['groupId']} mode="form" />
-            ) : null}
             <ScopeSelectors
               scope={identityScope}
               fields={['subjectId', 'academicYearId']}
@@ -1058,6 +1136,8 @@ function ScopeDialog({
           </fieldset>
         ) : null}
 
+        {identityNotice ? <Feedback tone="warn">{identityNotice}</Feedback> : null}
+
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
             {t('common.cancel')}
@@ -1065,7 +1145,30 @@ function ScopeDialog({
           <Button
             variant="primary"
             disabled={busy}
-            onClick={() =>
+            onClick={() => {
+              // The server's own rules, said before the request rather than
+              // after it (`MULTI_DIMENSION_NEEDS_A_LEVEL`; `branch_id` required).
+              if (scope === 'this_and_future' && identity) {
+                if (!namesATeachingPopulation(audienceSelection)) {
+                  setIdentityNotice(t('scheduling.invalid.multiDimensionNeedsLevel'));
+                  return;
+                }
+                if (identityScope.value.branchId === '') {
+                  setIdentityNotice(t('scheduling.invalid.branch'));
+                  return;
+                }
+                // An unchosen Subject or year used to travel as an empty id and
+                // come back as a bare `400` naming no field.
+                if (identityScope.value.subjectId === '') {
+                  setIdentityNotice(t('scheduling.invalid.subject'));
+                  return;
+                }
+                if (identityScope.value.academicYearId === '') {
+                  setIdentityNotice(t('scheduling.invalid.year'));
+                  return;
+                }
+              }
+              setIdentityNotice(null);
               onConfirm(scope, {
                 date: scope === 'this_session' ? date : session.date,
                 start_time: startTime,
@@ -1090,16 +1193,12 @@ function ScopeDialog({
                         subject_id: identityScope.value.subjectId,
                         branch_id: identityScope.value.branchId,
                         academic_year_id: identityScope.value.academicYearId,
-                        teaching_mode: identityMode,
-                        target_id:
-                          identityMode === 'administrative_group'
-                            ? identityScope.value.groupId
-                            : identityScope.value.levelId,
+                        dimensions: audienceDimensions(audienceSelection),
                       },
                     }
                   : {}),
-              })
-            }
+              });
+            }}
           >
             {t('common.save')}
           </Button>

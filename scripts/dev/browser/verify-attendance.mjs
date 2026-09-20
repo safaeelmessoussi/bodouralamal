@@ -14,7 +14,9 @@
  *
  * Five checks, in the order a مؤطِّرة meets them:
  *
- * 1. the occurrence dialog opens and offers **الحضور** on a class;
+ * 0. **the PUBLIC calendar offers «الحضور» to nobody** — not even the signed-in
+ *    administrator this harness is (SRS Revision 163 §3): she is a reader there;
+ * 1. the MANAGEMENT calendar's occurrence dialog offers **الحضور** on a class;
  * 2. opening it renders the sheet, with the expected roster on a `required` one;
  * 3. marking somebody sends the request and the row reads **حاضرة**;
  * 4. a **عطلة** offers no attendance control at all — the exclusion, on screen;
@@ -38,7 +40,10 @@ await send('Network.setCookie', {
 });
 
 const MONTH = process.env.ATTENDANCE_MONTH;
-await send('Page.navigate', { url: `${BASE}/calendar?month=${MONTH}` });
+const PUBLIC_CALENDAR = `${BASE}/calendar?month=${MONTH}`;
+// The back office's own calendar view of الجدولة — where an administrator works.
+const MANAGEMENT_CALENDAR = `${BASE}/admin/schedules?view=calendar&month=${MONTH}`;
+await send('Page.navigate', { url: PUBLIC_CALENDAR });
 await new Promise((r) => setTimeout(r, 5000));
 
 /** Opens the occurrence whose title contains `needle`, and reports the dialog. */
@@ -75,9 +80,24 @@ const closeDialog = () =>
 // public grid labels a session by its Subject (§4.4), and a needle taken from
 // the schedule's own title found nothing at all — which is the harness reading
 // the wrong field rather than the feature being absent.
+const onPublic = await openOccurrence(`${TAG} مادة`);
+check(
+  '0 · the PUBLIC calendar offers no الحضور — a signed-in administrator is a reader there',
+  onPublic.notFound !== true && onPublic.noDialog !== true && onPublic.hasAttendance === false,
+  JSON.stringify(onPublic),
+);
+check(
+  '0b · and the dialog names the class by its own typed title («العنوان»), beside its Subject',
+  typeof onPublic.text === 'string' && onPublic.text.includes('العنوان'),
+  JSON.stringify(onPublic),
+);
+await closeDialog();
+
+await send('Page.navigate', { url: MANAGEMENT_CALENDAR });
+await new Promise((r) => setTimeout(r, 5000));
 const klass = await openOccurrence(`${TAG} مادة`);
 check(
-  '1 · a class occurrence offers الحضور in the dialog every calendar opens',
+  '1 · the management calendar offers الحضور on a class occurrence',
   klass.hasAttendance === true,
   JSON.stringify(klass),
 );

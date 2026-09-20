@@ -48,7 +48,7 @@ describe('R123 — a beneficiary gets one button and never the roster', () => {
   it('never renders the sheet for a non-staff reader', () => {
     // The staff branch returns before the self branch is reached, so a
     // beneficiary cannot fall through into the roster.
-    const staffFirst = panel.indexOf('if (isStaff) return <StaffSheet');
+    const staffFirst = panel.indexOf('if (isStaff) {');
     const selfLater = panel.indexOf('function SelfCheckIn');
     expect(staffFirst).toBeGreaterThan(0);
     expect(selfLater).toBeGreaterThan(staffFirst);
@@ -119,7 +119,28 @@ describe('R137 item 10 — self-attendance wording is explicitly additive', () =
 
 describe('R123 — the register is reachable from the occurrence everyone opens', () => {
   it('is mounted in the shared details dialog, not behind a menu node', () => {
-    expect(dialog).toContain('<AttendancePanel occurrence={occurrence} />');
+    expect(dialog).toContain('<AttendancePanel occurrence={occurrence} canManage={canManage} />');
+  });
+});
+
+describe('SRS Revision 163 §3 — «الحضور» is offered only to whoever the sheet will answer', () => {
+  it('never offers the staff sheet on the public calendar, whoever is signed in', () => {
+    // `canManage` is `false` only where the PUBLIC page opened the dialog; an
+    // administrator browsing it is a reader there.
+    expect(panel).toContain('canManage = true');
+    expect(panel).toContain('if (!canManage || occurrence.viewer_may_mark_attendance !== true) return null;');
+  });
+
+  it('asks the server rather than the role — a مؤطِّرة who does not staff it is offered nothing', () => {
+    // An absent flag offers nothing: `!== true`, never `=== false`.
+    const staffBranch = panel.slice(panel.indexOf('if (isStaff) {'), panel.indexOf('const mayCheckIn'));
+    expect(staffBranch).toContain('viewer_may_mark_attendance !== true');
+    expect(staffBranch.indexOf('return null')).toBeLessThan(staffBranch.indexOf('<StaffSheet'));
+  });
+
+  it('shows «العنوان» in the dialog, from the item\'s own typed title', () => {
+    expect(dialog).toContain("t('calendar.detailsItemTitle')");
+    expect(dialog).toContain('occurrence.item_title');
   });
 });
 

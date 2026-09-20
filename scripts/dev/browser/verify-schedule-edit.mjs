@@ -76,9 +76,12 @@ const modeSel = byLabel('نمط');
 const groupSel = byLabel('الحلقة');
 const levelSel = byLabel('المستوى');
 
+// SRS Revision 163 §5 — «نمط التدريس» is asked nowhere. The row's own mode is
+// still what is SENT on save (asserted at the end, against the database); on
+// screen, the class's target is stated by the locked الحلقة select below.
 check(
-  'the MODE select shows the row’s own mode, not a default',
-  modeSel !== undefined && modeSel.value === 'administrative_group',
+  'no «نمط التدريس» select is rendered — the mode is the row’s own and is never offered',
+  modeSel === undefined,
   JSON.stringify(modeSel),
 );
 check(
