@@ -10676,3 +10676,22 @@ listening on: its defaults (55437, 59004) sat inside Linux's ephemeral range, an
 long-lived outbound connection held local port 59004. Defaults moved to 25437 and 29004; the drill
 passes on them (exit 0, scenario seeds included). The integration stack and the backup drill default
 to the same range (55438, 58083, 59005, 59006) — recorded in TASKS, not changed here.
+
+**Hosted CI green on `886aac6`, all 8 jobs (run `35541675670`), seed drill included; the exact-commit
+images were published. Deployed to `staging.bodouralamal.com` at
+`886aac697733963c3df1261ee2c145d1c415a79b` (SRS Revision 165), upgrading from `f4d2a61`, by the
+documented Staging pipeline. No Production action.** Database dump taken first
+(`~/bodour-predeploy/pre-886aac6-…dump`); host preflight PASS against the 20-GiB floor (24 GiB free
+before and after); both image revision labels exact before and after start; migration
+`20260920100000_r165_surahs_in_scheduling` applied and its effect read back from the database —
+`requires_surahs` true on exactly حفظ القرآن and تفسير القرآن, both new join tables present; the
+Production seed reported Subjects «already initialized — the database is authoritative» and changed
+nothing; fixtures complete; TLS active. Verified from outside: `/healthz` 200 with 12/12 workers,
+`/rtc/validate` 401, zero error-level API lines, every one of the month's 27 public occurrences
+carrying `surah_names` (none has a Surah yet — nothing on Staging was rewritten), and the served
+bundle containing «اختاري السورة» and «تُدرَّس بالسور» and no longer «الفرع المنظِّم» or the
+filters-combine sentence. What only a signed-in person can do on Staging — schedule a تفسير class
+with its Surah, edit one occurrence's Surah, record a class and read its title under «التسجيلات» —
+is left for the Owner, because a Staging session can only come from Google sign-in; the same paths
+were driven in a real browser on Localhost (16/16, 13/13, 14/14, 28/28, 61/61).
+

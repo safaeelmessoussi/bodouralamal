@@ -5209,3 +5209,16 @@ editor, المواد and the browser harnesses. One migration
 - [ ] **Same latent fragility, not changed here:** the integration stack and the
       backup drill also default to ephemeral-range host ports (55438, 58083,
       59005, 59006). They passed today; moving them touches CI and its docs.
+- [x] **Hosted CI green on `886aac6`, 8/8 (run `35541675670`); deployed to
+      Staging** from `f4d2a61` by the documented pipeline: dump, preflight PASS
+      (24 GiB free), exact revision labels, migration applied and read back
+      (`requires_surahs` on exactly حفظ القرآن and تفسير القرآن; both joins
+      present), `/healthz` 200 with 12/12 workers, `/rtc/validate` 401, zero
+      error-level API lines, `surah_names` on all 27 public occurrences, the
+      new strings served and the removed ones gone. No Production action.
+- [ ] **For the Owner to try on Staging** (a session there needs Google
+      sign-in): set a Level's «مقرر الحفظ», schedule a تفسير or حفظ class — the
+      form asks «السور» and suggests the title — edit one occurrence's Surah,
+      split a class at its first session, and record an online class to read
+      its new title under «التسجيلات».
+
