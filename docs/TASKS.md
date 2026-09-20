@@ -4554,6 +4554,18 @@ the Owner's own report named.
       /sessions/{id}`, validated against the schedule's own Level(s).
       «الحضور» dialog is now five independent pickers; «تعديل» gains
       a Subject select. Route renamed `PUT /sessions/{id}/audience`.
+- [x] Verification: backend/frontend typecheck/lint/build clean;
+      backend unit 342/342; frontend unit 1,356/1,356; full
+      disposable-stack integration suite, 2,648/2,666 (18
+      pre-existing skips), all-table isolation intact; all 31 guards,
+      doc-links and `git diff --check` pass. Full detail in
+      CHANGES.log and SRS Revision 161.
+- [x] Pushed as `88fee22`; hosted CI green, all 7 jobs (run
+      `35501918178`), Release included. Deployed to Staging,
+      upgrading from `325e360`: pre-migration dump taken, `prisma
+      migrate deploy` applied the new R161 migration cleanly,
+      `/healthz` green on the first check, no leftover disposable
+      containers. Full detail in CHANGES.log.
 - [ ] **§4 — multi-role registration, investigated.** The blocker is
       `User.requestedRole`, a single scalar column read/written
       everywhere a registration is created, listed or approved.

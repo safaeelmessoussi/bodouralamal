@@ -9923,3 +9923,14 @@ paths, 230 operations); a mid-pass documentation error (this pass's own draft ha
 `SUBJECT_NOT_IN_LEVEL` under `400` instead of the established `409 STATE_CONFLICT` every
 other curriculum surface already uses for it) was caught by the focused integration run
 itself and corrected before commit.
+
+Pushed as `88fee22`; hosted CI green, all 7 jobs (run `35501918178`), Release included.
+Deployed to `staging.bodouralamal.com`, upgrading from `325e360`: host preflight passed
+cleanly, both exact-commit images pulled and their `org.opencontainers.image.revision` label
+confirmed before recreation, a pre-migration dump taken
+(`predeploy-325e360-to-88fee22-20260920T092929Z.dump`), `prisma migrate deploy` applied the
+new `20260917090000_r161_session_audience_dimensions_and_subject` migration cleanly,
+`api`/`nginx` recreated and verified on the exact commit's label, `/healthz` green (4/4
+components, 12/12 workers) on the first check, no error-level log lines in the following
+minutes, TLS/HSTS/CSP headers reconfirmed, no leftover disposable containers. No Production
+action of any kind.
