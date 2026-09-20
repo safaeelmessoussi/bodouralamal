@@ -10574,3 +10574,21 @@ Localhost: 61/61 with recordings. Also on Staging: preflight refused the redeplo
 against the 20-GiB floor — the recorder image alone is 4 GB — so four superseded release
 generations (GHCR keeps every exact-commit image), an unused Node base image and leftover build
 cache were removed, to 24 GiB free, rather than lowering or bypassing the floor.
+
+**Deployed to `staging.bodouralamal.com` at `f4d2a61ab38149735e1a4d0be7a66f2460481ecc` (SRS Revision
+164 — self-hosted online classes), after `6c5d4fe` and `cfbbc9e` the same day; hosted CI 8/8 before
+each. No Production action.** Host changes, all under the Owner's Staging authorization: the
+`LIVEKIT_*` group set in `.env` with the secret generated on the host and never printed; 7881/tcp
+and 7882/udp allowed in UFW; UDP socket buffers raised to 5 MB persistently; superseded release
+images removed when preflight refused 19 GiB against the 20-GiB floor. Verified on the final
+configuration from OUTSIDE, by a real browser behind home NAT: signalling over `wss://` on 443
+through Nginx, media over UDP to 7882 — for a client honouring the server's ICE list (twice) and for
+one passing the classroom's empty list — with the only ICE server handed out being a dead port on
+this host; 7880 and 3478 closed to the internet, 7881 open; `/healthz` 200, `/rtc/validate` 401.
+**A real recording was made on the 2-vCPU host and read back from its own object store:** 1280x720
+H.264 with AAC, 1,064 frames in 35.48 s (29.99 fps), recorder at 1.1–1.4 cores and ~750 MiB, host
+never above 166% of its 200% with 2.7 GB of memory still available; the recorder itself reached the
+media server over UDP through the host's public address. Probe recordings deleted (the staging
+bucket is empty), test tooling images removed, zero error-level API lines. What no automated check
+can do on Staging — enter a class and record it through the real screens — is left for the Owner,
+because a Staging session can only come from Google sign-in.

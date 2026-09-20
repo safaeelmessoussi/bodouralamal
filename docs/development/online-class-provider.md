@@ -116,7 +116,7 @@ is Opus at ~130 kbit/s. So:
 | Tier | Host | Verdict |
 |---|---|---|
 | Localhost | 8 threads, 15.7 GiB | ample |
-| Staging | 2 vCPU, 3.8 GiB | memory comfortable; CPU **saturated for the length of a video recording**, which still records cleanly. One recording at a time, and the API is slow while it is a video. Acceptable for a test tier; stated, not hidden |
+| Staging | 2 vCPU, 3.8 GiB | memory comfortable; CPU heavily used for the length of a video recording, which still records cleanly. One recording at a time. **Confirmed on the host itself (2026-09-20):** a real recording of a participant connected across the internet came back from Staging's own store as 1280x720 at 29.99 fps (1,064 frames in 35.48 s), with the recorder at 1.1-1.4 cores / ~750 MiB, the host at 130-166% of its 200%, and 2.7 GB of memory still available. Acceptable for a test tier; stated, not hidden |
 | Production | not yet provisioned | **at least 4 vCPU** (the provider matrix already asks for 4 vCPU / 8 GiB). On 2 vCPU every video recording would saturate a host serving real users. Preflight refuses a Production host with fewer than 4 |
 
 **The trap this measurement found.** Egress refuses a recording when fewer cores are
@@ -132,7 +132,9 @@ wanted, not a side effect.
 ≈ **59 MB per recorded hour**; 720p video ≈ **0.63 GB per recorded hour**. A year of
 ten recorded hours a week is therefore ≈ 31 GB if audio and ≈ 330 GB if video —
 which is why audio-only is the default «نوع الاتصال» (Revision 163 §1), and why the
-Owner-approved free-disk floor must be set with video in mind.
+Owner-approved free-disk floor must be set with video in mind. **The recorder image itself
+is 4 GB on disk** — it carries a browser — and took Staging below its 20-GiB floor until
+superseded release images were removed; count it when sizing a host.
 
 ## The comparison
 

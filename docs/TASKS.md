@@ -5101,6 +5101,31 @@ in our infrastructure; the 80/443-only rule relaxed to the minimum WebRTC needs.
       around the measurements, deployment runbook (host contract, firewall,
       pull list, media verification step), configuration and rotation tables,
       environments, provider matrix, readiness ledger, `.env.example`.
+- [x] **No third-party STUN, from either end** — found only by joining Staging
+      from outside: LiveKit's default hands every client Twilio's and Google's
+      STUN servers. The media server now names only a dead port on its own
+      host (3478) and the classroom passes an explicit empty ICE list. My first
+      fix named the media port itself and an outside A/B test showed it forcing
+      media onto TCP; corrected, with a preflight mutation test for that
+      mistake.
+- [x] **Deployed to Staging at `f4d2a61`** (after `6c5d4fe` and `cfbbc9e`), by
+      the documented pipeline; hosted CI 8/8 before each. Host changes, all
+      authorized: `LIVEKIT_*` set in `.env` with the secret generated on the
+      host; 7881/tcp and 7882/udp allowed in UFW; `net.core.rmem_max`/
+      `wmem_max` raised to 5 MB persistently (LiveKit warned the default was
+      too small); superseded release images removed when preflight refused
+      19 GiB against the 20-GiB floor.
+- [x] **Verified on Staging from OUTSIDE** (a real browser behind home NAT):
+      signalling on 443, media on **UDP 7882**, a client handed only our own
+      host, 7880 and 3478 closed. **A real recording made on the 2-vCPU host**
+      came back from its own store as 1280x720 at 29.99 fps; recorder 1.1-1.4
+      cores / ~750 MiB; host never above 166% of 200%; the recorder itself
+      reached the media server over UDP through the host's public address.
+      Probe recordings and tooling removed; zero error-level API lines.
+- [ ] **For the Owner to try:** «دخول الحصة» on Staging with a real Google
+      login, and one audio and one video recording through the real screens —
+      the only part an automated check cannot do there, because Staging
+      sessions cannot be minted (Google sign-in only, by design).
 - [ ] **PRODUCTION PREREQUISITES (host not yet provisioned):** at least 4
       vCPU; 7881/tcp and 7882/udp admitted by the host AND the provider
       firewall with inbound UDP unfiltered; `LIVEKIT_NODE_IP`; a dedicated

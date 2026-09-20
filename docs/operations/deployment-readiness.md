@@ -46,15 +46,16 @@ base, Production profile, Staging overlay, and Local Development overlay.
 Staging and current `develop` are different facts:
 
 - `https://staging.bodouralamal.com` is deployed at
-  `4ec1a2765ad6d338381b4a59e856ddea899f240d` (2026-09-20, SRS Revision 163). Hosted run
-  `35524209891` passed all seven verification jobs and exact-image publication before promotion;
-  host preflight passed; the real edge then passed 15/15 anonymous browser assertions
-  (`scripts/deploy/verify-production-browser.mjs`), `/healthz` with 12/12 workers, and a signed
-  PUT/GET round trip through the TLS proxy on the unified SeaweedFS store (that round trip was
-  proved at `a6b599d`, the release that moved Staging onto SeaweedFS; storage is unchanged since).
-  The first accepted
-  Staging release was `4fd620de2cf182aa8a8342d48641c054ea76002e` (hosted run `33262358687`,
-  attempt 2, six verification jobs at the time).
+  `f4d2a61ab38149735e1a4d0be7a66f2460481ecc` (2026-09-20, SRS Revision 164 — self-hosted online
+  classes). Hosted run `35530662292` passed all seven verification jobs and exact-image publication
+  before promotion; host preflight passed, including the media rules. Verified from OUTSIDE, by a
+  real browser behind home NAT: signalling over `wss://` on 443, media over **UDP to 7882**, and the
+  only ICE server a client is handed is a dead port on this host — no third party. A **real recording
+  was made on this 2-vCPU host** and read back from its own object store: 1280x720 H.264, 1,064 frames
+  in 35.48 s (29.99 fps), with the recorder at 1.1-1.4 cores and ~750 MiB and the host never above
+  166% of its 200%. 7880 and 3478 are closed to the internet; `/healthz` 200 with 12/12 workers. The
+  first accepted Staging release was `4fd620de2cf182aa8a8342d48641c054ea76002e` (hosted run
+  `33262358687`, attempt 2, six verification jobs at the time).
 - Acceptance belongs to that deployed commit. Later `develop` documentation or application
   commits do **not** inherit it.
 - Revision 115 authorises the next exact-release transition from strict synthetic-only Staging
