@@ -5221,4 +5221,3 @@ editor, المواد and the browser harnesses. One migration
       form asks «السور» and suggests the title — edit one occurrence's Surah,
       split a class at its first session, and record an online class to read
       its new title under «التسجيلات».
-
