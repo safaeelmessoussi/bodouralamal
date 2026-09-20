@@ -62,6 +62,11 @@ export interface ScheduleSession {
    * override — the same trap `delivery_mode` documents above.
    */
   visibility: string;
+  /**
+   * **Owner-reported, 2026-09-17 — this occurrence's OWN Subject.** `null`
+   * means *inherit from the schedule*, on exactly the footing `room_id` has.
+   */
+  subject_id: string | null;
   /** TD-15: sent back on a single-occurrence edit. */
   version: number;
   staff: { user_id: string; position: string; user_name: string | null }[];
@@ -131,6 +136,12 @@ export interface SessionEdit {
    * There is no separate hide-one-occurrence endpoint, because this is it.
    */
   visibility?: string;
+  /**
+   * **Owner-reported, 2026-09-17 — this occurrence's own Subject** (§D). On
+   * exactly the footing `room_id` has: `null` clears an existing override
+   * and returns this occurrence to the schedule's own Subject.
+   */
+  subject_id?: string | null;
 }
 
 /**
@@ -229,15 +240,31 @@ export async function notifySessionChange(
   return body.data;
 }
 
-/** R92 — this occurrence's audience branches, and where it physically happens. */
+/** One dimension's currently effective value. */
+export interface RosterDimensionEntry {
+  id: string;
+  name: string;
+}
+
+/**
+ * **R92 — this occurrence's own audience, along five dimensions, and where
+ * it physically happens** (Owner-reported 2026-09-17, generalised from
+ * branches alone).
+ */
 export interface SessionRoster {
   session_id: string;
   /** **Where the class meets.** A different fact from the audience, and the
    *  reason the two are separate fields rather than one branch. */
   venue: { branch_id: string; branch_name: string; room_name: string | null };
-  /** The branch populations expected there — the schedule's own unless this
-   *  occurrence states otherwise. */
-  audience_branches: { id: string; name: string }[];
+  /** Each dimension's currently effective value — the schedule's own unless
+   *  this occurrence states otherwise, independently per dimension. */
+  audience: {
+    branches: RosterDimensionEntry[];
+    categories: RosterDimensionEntry[];
+    levels: RosterDimensionEntry[];
+    administrative_groups: RosterDimensionEntry[];
+    teaching_groups: RosterDimensionEntry[];
+  };
   overridden: boolean;
   students: { id: string; name: string; branch_id: string | null }[];
 }
@@ -250,20 +277,53 @@ export async function fetchSessionRoster(
   return res.data;
 }
 
+export interface SessionAudienceOverride {
+  branchIds: string[];
+  categoryIds: string[];
+  levelIds: string[];
+  administrativeGroupIds: string[];
+  teachingGroupIds: string[];
+}
+
 /**
- * **Replacement, never addition**: the list submitted IS this occurrence's
- * audience, and an empty list clears the override so the audience returns to the
- * schedule's.
+ * **Replacement per dimension, never addition**: each submitted list IS that
+ * dimension's contribution for this occurrence, and an empty list clears
+ * THAT dimension's override — independently, so clearing the Level override
+ * while a Circle override stays set is an ordinary call.
  */
-export async function setSessionAudienceBranches(
+export async function setSessionAudienceOverrides(
   id: string,
   version: number,
-  branchIds: string[],
+  override: SessionAudienceOverride,
   token: string | null,
-): Promise<{ branch_ids: string[]; overridden: boolean }> {
-  const res = await api<{ data: { branch_ids: string[]; overridden: boolean } }>(
-    `/sessions/${id}/audience-branches`,
-    { method: 'PUT', token, body: { version, branch_ids: branchIds } },
-  );
-  return res.data;
+): Promise<SessionAudienceOverride & { overridden: boolean }> {
+  const res = await api<{
+    data: {
+      branch_ids: string[];
+      category_ids: string[];
+      level_ids: string[];
+      administrative_group_ids: string[];
+      teaching_group_ids: string[];
+      overridden: boolean;
+    };
+  }>(`/sessions/${id}/audience`, {
+    method: 'PUT',
+    token,
+    body: {
+      version,
+      branch_ids: override.branchIds,
+      category_ids: override.categoryIds,
+      level_ids: override.levelIds,
+      administrative_group_ids: override.administrativeGroupIds,
+      teaching_group_ids: override.teachingGroupIds,
+    },
+  });
+  return {
+    branchIds: res.data.branch_ids,
+    categoryIds: res.data.category_ids,
+    levelIds: res.data.level_ids,
+    administrativeGroupIds: res.data.administrative_group_ids,
+    teachingGroupIds: res.data.teaching_group_ids,
+    overridden: res.data.overridden,
+  };
 }

@@ -9882,3 +9882,44 @@ confirmed nothing pending (expected — no migration in this batch), `api`/`ngin
 and verified on the exact commit's label, `/healthz` green (4/4 components, 12/12 workers) on
 the first check, no error-level log lines in the following minutes, TLS/HSTS/CSP headers
 reconfirmed, no leftover disposable containers. No Production action of any kind.
+
+**Built (Revision 161) — SRS Revision 160 §3 implemented on explicit Owner instruction:
+R92's per-occurrence audience override generalised from branches alone to every dimension
+`multi_dimension` schedules already resolve (category, Level, administrative group, Circle),
+plus a per-occurrence Subject override.** Four new tables mirror `SessionAudienceBranch`
+exactly; `audienceForSession` is the ONE function that changed — when any of the five
+override tables carries a row, it returns a synthetic `multi_dimension` spec whose
+dimensions fall back per-dimension to the schedule's own natural value (a new
+`naturalDimensions()` helper), so `audienceWhere`'s existing arms and every OTHER caller of
+`audienceForSession` (calendar, notifications, roster, teacher scope) needed no changes at
+all. The old `AUDIENCE_OVERRIDE_MODE_UNSUPPORTED` refusal (branches-only, `entire_level`-only)
+is removed; `setSessionAudienceOverrides` now accepts every teaching mode, writing all five
+dimensions in one transaction. `Session.subjectId` (nullable, no default) joins the existing
+`PATCH /sessions/{id}` field set, validated against the schedule's own effective Level(s)
+through the same `assertSubjectTaughtAtLevel` CREATE already uses. The frontend's «الحضور»
+dialog is now five independent `MultiSelectField`s instead of one; its own row action no
+longer gates on `entire_level`; «تعديل»'s own form gains a manager-only Subject picker. The
+route itself is renamed `PUT /sessions/{id}/audience` (from `/audience-branches`), since it
+now sets all five.
+
+Two findings along the way: administrative-group/circle override options are read UNSCOPED
+(`pageSize: 100`), the identical pattern Revision 157's own multi_dimension class picker
+already established — combining across a Level or branch boundary is exactly the case a
+chained list cannot answer. A pre-existing teardown gap in `session-audience.http.
+integration.test.ts`'s own `beforeEach` (`deleteMany({ where })` shorthand — the repository's
+static isolation guard cannot see through a variable reference) was found and fixed
+alongside, once this pass's own new tests made that file exercise the guard for the first
+time on four more tables.
+
+Verification: backend/frontend typecheck/lint/build clean; backend unit 342/342; frontend
+unit 1,356/1,356; focused integration 73/73 (`session-audience.http.integration.test.ts`
+27 tests, `session.http.integration.test.ts` including a new 4-test Subject-override block
+using dedicated far-future sessions rather than the file's own shared pool, and
+`consent-safeguarding.integration.test.ts` re-verified against the renamed route),
+all-table isolation intact. Migration `20260917090000_r161_session_audience_dimensions_and_
+subject`: four `CREATE TABLE`s, one `ALTER TABLE ... ADD COLUMN` plus its `RESTRICT` FK — no
+existing table altered destructively, no data migrated. `docs/openapi.json` regenerated (179
+paths, 230 operations); a mid-pass documentation error (this pass's own draft had
+`SUBJECT_NOT_IN_LEVEL` under `400` instead of the established `409 STATE_CONFLICT` every
+other curriculum surface already uses for it) was caught by the focused integration run
+itself and corrected before commit.

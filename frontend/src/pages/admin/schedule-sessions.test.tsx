@@ -25,6 +25,9 @@ const WIRE: ScheduleSession = {
   // R109 (§D) — the occurrence carries its own tier; the fixture states one so
   // the editor cannot be seen to hydrate from a default.
   visibility: 'public',
+  // Owner-reported, 2026-09-17 — this occurrence's OWN Subject, on exactly
+  // the footing `room_id` has.
+  subject_id: null,
   version: 0,
   staff: [
     {
@@ -55,6 +58,9 @@ describe('the adapter type matches the wire contract', () => {
       'staff',
       'start_time',
       'status',
+      // Owner-reported, 2026-09-17 — this occurrence's OWN Subject, pinned
+      // so it cannot join the contract by accident either.
+      'subject_id',
       // R138 — this occurrence's OWN name, snapshotted at materialization and
       // resynced from the rule unless `overridden` protects it.
       'title',

@@ -64,6 +64,11 @@ export function override(prisma: PrismaClient) {
         ...(body.visibility !== undefined
           ? { visibility: body.visibility }
           : {}),
+        // Owner-reported, 2026-09-17 — this occurrence's own Subject.
+        // `null` is a real instruction (clear the override); absent leaves
+        // it untouched, the same distinction every field above already
+        // makes.
+        ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.
@@ -163,19 +168,32 @@ export function roster(prisma: PrismaClient) {
   };
 }
 
-/** R92 — set this occurrence's audience branches, or clear the override. */
+/** R92 — set this occurrence's own audience along all five dimensions, or clear any override. */
 export function setAudience(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(sessionAudienceSchema, req.body ?? {});
-    const result = await sessions.setSessionAudienceBranches(
+    const result = await sessions.setSessionAudienceOverrides(
       prisma,
       requireActor(req),
       idParam(req, "id"),
       body.version,
-      body.branch_ids,
+      {
+        branchIds: body.branch_ids,
+        categoryIds: body.category_ids,
+        levelIds: body.level_ids,
+        administrativeGroupIds: body.administrative_group_ids,
+        teachingGroupIds: body.teaching_group_ids,
+      },
     );
     res.json({
-      data: { branch_ids: result.branchIds, overridden: result.overridden },
+      data: {
+        branch_ids: result.branchIds,
+        category_ids: result.categoryIds,
+        level_ids: result.levelIds,
+        administrative_group_ids: result.administrativeGroupIds,
+        teaching_group_ids: result.teachingGroupIds,
+        overridden: result.overridden,
+      },
     });
   };
 }

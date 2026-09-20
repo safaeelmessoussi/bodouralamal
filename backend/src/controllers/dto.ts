@@ -915,6 +915,12 @@ export interface SessionDto {
    * row rather than from a hardcoded default — the defect NEW B §A found.
    */
   visibility: string;
+  /**
+   * **Owner-reported, 2026-09-17 — this occurrence's OWN Subject.** `null`
+   * means *inherit from the schedule* (every occurrence but a deliberately
+   * retaught one), on exactly the footing `room_id` already has.
+   */
+  subject_id: string | null;
   /** TD-1 lifecycle. Moved only by `/cancel` and `/restore`, never by `PATCH`. */
   status: string;
   /**
@@ -954,6 +960,9 @@ export function sessionDto(row: {
   onlineMediaMode: string | null;
   /** R109 — this occurrence's OWN tier, snapshotted at materialization. */
   visibility: string;
+  /** Owner-reported, 2026-09-17 — this occurrence's OWN Subject, or `null`
+   *  to inherit the schedule's. */
+  subjectId: string | null;
   status: string;
   overridden: boolean;
   cancellationReason: string | null;
@@ -971,6 +980,7 @@ export function sessionDto(row: {
     delivery_mode: row.deliveryMode,
     online_media_mode: row.onlineMediaMode,
     visibility: String(row.visibility),
+    subject_id: row.subjectId,
     status: row.status,
     overridden: row.overridden,
     cancellation_reason: row.cancellationReason,
@@ -2302,20 +2312,33 @@ export function examDto(row: {
 /**
  * **R92 — the occurrence's roster, with venue and audience kept apart.**
  *
- * `venue` says *where*; `audience_branches` says *who from where*. A single
+ * `venue` says *where*; `audience` says *who, along five dimensions*
+ * (Owner-reported 2026-09-17, generalised from branches alone). A single
  * `branch` would make the combined case unsayable, which is the whole reason the
  * revision exists.
  */
 export function sessionRosterDto(row: {
   sessionId: string;
   venue: { branchId: string; branchName: string; roomName: string | null };
-  audienceBranches: { id: string; name: string }[];
+  audience: {
+    branches: { id: string; name: string }[];
+    categories: { id: string; name: string }[];
+    levels: { id: string; name: string }[];
+    administrativeGroups: { id: string; name: string }[];
+    teachingGroups: { id: string; name: string }[];
+  };
   overridden: boolean;
   students: { id: string; name: string; branchId: string | null }[];
 }): {
   session_id: string;
   venue: { branch_id: string; branch_name: string; room_name: string | null };
-  audience_branches: { id: string; name: string }[];
+  audience: {
+    branches: { id: string; name: string }[];
+    categories: { id: string; name: string }[];
+    levels: { id: string; name: string }[];
+    administrative_groups: { id: string; name: string }[];
+    teaching_groups: { id: string; name: string }[];
+  };
   overridden: boolean;
   students: { id: string; name: string; branch_id: string | null }[];
 } {
@@ -2326,7 +2349,13 @@ export function sessionRosterDto(row: {
       branch_name: row.venue.branchName,
       room_name: row.venue.roomName,
     },
-    audience_branches: row.audienceBranches,
+    audience: {
+      branches: row.audience.branches,
+      categories: row.audience.categories,
+      levels: row.audience.levels,
+      administrative_groups: row.audience.administrativeGroups,
+      teaching_groups: row.audience.teachingGroups,
+    },
     overridden: row.overridden,
     students: row.students.map((s) => ({
       id: s.id,

@@ -80,6 +80,25 @@ let studentB: string;
 let studentC: string;
 let safa: string;
 let amina: string;
+
+// Owner-reported, 2026-09-17 — R92 generalised to four more dimensions.
+/** A second Level, own Category — proves "a second Level folded in". */
+let levelId2: string;
+let studentD: string;
+/** A second Administrative Group — proves the mode restriction is gone AND
+ *  that naming two groups unions their members, exactly as two Branches
+ *  already do for `entire_level`. */
+let group1: string;
+let group2: string;
+let studentE: string;
+let groupSchedule: string;
+let groupOccurrence: string;
+/** A Circle on the ORIGINAL Level/Subject — proves "two circles combined
+ *  for one sitting" without needing a `teaching_group`-mode schedule of
+ *  its own: the OR-with-the-rest rule a circle always gets applies
+ *  regardless of which mode the occurrence's own schedule uses. */
+let circle1: string;
+let studentF: string;
 let helper: string;
 
 async function clear(): Promise<void> {
@@ -94,6 +113,19 @@ async function clear(): Promise<void> {
   });
   const sessionIds = sessions.map((s) => s.id);
   await prisma.sessionAudienceBranch.deleteMany({
+    where: { sessionId: { in: sessionIds } },
+  });
+  // Owner-reported, 2026-09-17 — R92 generalised to four more dimensions.
+  await prisma.sessionAudienceCategory.deleteMany({
+    where: { sessionId: { in: sessionIds } },
+  });
+  await prisma.sessionAudienceLevel.deleteMany({
+    where: { sessionId: { in: sessionIds } },
+  });
+  await prisma.sessionAudienceAdministrativeGroup.deleteMany({
+    where: { sessionId: { in: sessionIds } },
+  });
+  await prisma.sessionAudienceTeachingGroup.deleteMany({
     where: { sessionId: { in: sessionIds } },
   });
   await prisma.notification.deleteMany({
@@ -116,11 +148,19 @@ async function clear(): Promise<void> {
   });
   const uids = users.map((u) => u.id);
   await prisma.notification.deleteMany({ where: { userId: { in: uids } } });
+  // Owner-reported, 2026-09-17 — a Circle seat is RESTRICT against the
+  // student it names, exactly like Enrollment; cleared before the user.
+  await prisma.studentTeachingGroup.deleteMany({ where: { studentId: { in: uids } } });
   await prisma.enrollment.deleteMany({ where: { studentId: { in: uids } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: uids } } });
   await prisma.auditLog.deleteMany({ where: { targetId: { in: uids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: uids } } });
   await prisma.user.deleteMany({ where: { id: { in: uids } } });
+
+  // Owner-reported, 2026-09-17 — R92 generalised: a second Administrative
+  // Group and a Circle, both RESTRICT against the Level they clear before.
+  await prisma.administrativeGroup.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.teachingGroup.deleteMany({ where: { name: { startsWith: TAG } } });
 
   await prisma.levelSubject.deleteMany({
     where: {
@@ -224,14 +264,27 @@ const calendarOf = async (userId: string): Promise<string[]> => {
 const setAudience = async (
   sessionId: string,
   branchIds: string[],
+  // Owner-reported, 2026-09-17 — R92 generalised to four more dimensions;
+  // every existing caller of `setAudience` names branches alone, exactly as
+  // before, and now sends the other four as empty (no override).
+  rest: {
+    categoryIds?: string[];
+    levelIds?: string[];
+    administrativeGroupIds?: string[];
+    teachingGroupIds?: string[];
+  } = {},
 ): Promise<Res> => {
   const row = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
     select: { version: true },
   });
-  return call("PUT", `/sessions/${sessionId}/audience-branches`, adminToken, {
+  return call("PUT", `/sessions/${sessionId}/audience`, adminToken, {
     version: row.version,
     branch_ids: branchIds,
+    category_ids: rest.categoryIds ?? [],
+    level_ids: rest.levelIds ?? [],
+    administrative_group_ids: rest.administrativeGroupIds ?? [],
+    teaching_group_ids: rest.teachingGroupIds ?? [],
   });
 };
 
@@ -292,6 +345,84 @@ beforeAll(async () => {
   combined = await session(targaSchedule, day(7), [safa]);
   nextWeek = await session(targaSchedule, day(14), [safa]);
   await session(branch2Schedule, day(7), [helper]);
+
+  // Owner-reported, 2026-09-17 — R92 generalised to four more dimensions.
+  const category2 = await prisma.category.create({
+    data: { name: `${TAG} فئة ثانية`, displayOrder: 98 },
+  });
+  levelId2 = (
+    await prisma.level.create({
+      data: {
+        name: `${TAG} المستوى 2`,
+        categoryId: category2.id,
+        genderRestriction: "any",
+      },
+    })
+  ).id;
+  await prisma.levelSubject.create({ data: { levelId: levelId2, subjectId } });
+  studentD = await person("د المستوى 2", "student", true);
+  await prisma.enrollment.create({
+    data: { studentId: studentD, levelId: levelId2, branchId: targa },
+  });
+
+  // **Deliberately at `elsewhere`, never `targa`** — this file's own
+  // targa-branch tests (branch/Level overrides) must not accidentally
+  // sweep her in just because she shares a Level with them; her group
+  // membership is what the group-mode test below actually exercises, and
+  // that clause never filters by branch at all (§7 — a group IS at one
+  // branch, its own).
+  group1 = (
+    await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة أولى`, levelId, branchId: elsewhere },
+    })
+  ).id;
+  group2 = (
+    await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة ثانية`, levelId, branchId: elsewhere },
+    })
+  ).id;
+  studentE = await person("هـ مجموعة ثانية", "student", true);
+  await prisma.enrollment.create({
+    data: { studentId: studentE, levelId, branchId: elsewhere, administrativeGroupId: group2 },
+  });
+  groupSchedule = await prisma.recurringCourseSchedule
+    .create({
+      data: {
+        title: `${TAG} حصة المجموعة الأولى`,
+        subjectId,
+        teachingMode: "administrative_group",
+        administrativeGroupId: group1,
+        branchId: targa,
+        academicYearId: yearId,
+        startTime: new Date("1970-01-01T09:00:00Z"),
+        endTime: new Date("1970-01-01T10:00:00Z"),
+        recurrence: "weekly",
+        weekdays: ["monday"],
+        anchorDate: day(-30),
+      },
+      select: { id: true },
+    })
+    .then((r) => r.id);
+  groupOccurrence = await session(groupSchedule, day(8), []);
+
+  circle1 = (
+    await prisma.teachingGroup.create({
+      data: { name: `${TAG} حلقة أولى`, levelId, subjectId },
+    })
+  ).id;
+  studentF = await person("و الحلقة الأولى", "student", true);
+  // **`elsewhere`, not `targa`** — the SAME reasoning as `group2`'s member
+  // above: her Circle seat is what the roster read actually resolves
+  // through (`teachingGroupSeats`, period-blind here), never her own
+  // ordinary enrolment, so keeping it off `targa`+`levelId` is what stops
+  // her also being counted as an ordinary Level member in the branch/Level
+  // override tests.
+  await prisma.enrollment.create({
+    data: { studentId: studentF, levelId, branchId: elsewhere },
+  });
+  await prisma.studentTeachingGroup.create({
+    data: { studentId: studentF, teachingGroupId: circle1, subjectId, levelId },
+  });
 });
 
 afterAll(async () => {
@@ -300,9 +431,13 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await prisma.sessionAudienceBranch.deleteMany({
-    where: { session: { schedule: { title: { startsWith: TAG } } } },
-  });
+  const where = { session: { schedule: { title: { startsWith: TAG } } } };
+  await prisma.sessionAudienceBranch.deleteMany({ where: where });
+  // Owner-reported, 2026-09-17 — R92 generalised to four more dimensions.
+  await prisma.sessionAudienceCategory.deleteMany({ where: where });
+  await prisma.sessionAudienceLevel.deleteMany({ where: where });
+  await prisma.sessionAudienceAdministrativeGroup.deleteMany({ where: where });
+  await prisma.sessionAudienceTeachingGroup.deleteMany({ where: where });
 });
 
 /* ── the inherited audience, which is every occurrence but one ───────────── */
@@ -316,9 +451,8 @@ describe("without an override, nothing whatever changes", () => {
 
   it("and its audience branch is the schedule's own", async () => {
     const roster = await rosterOf(combined);
-    expect(
-      (roster["audience_branches"] as { id: string }[]).map((b) => b.id),
-    ).toEqual([targa]);
+    const audience = roster["audience"] as { branches: { id: string }[] };
+    expect(audience.branches.map((b) => b.id)).toEqual([targa]);
   });
 
   it("the second branch's beneficiary sees her OWN branch's occurrence, not Targa's", async () => {
@@ -512,42 +646,26 @@ describe("what the write refuses", () => {
     expect(res.body.error?.details?.["reason"]).toBe("UNKNOWN_BRANCH");
   });
 
-  it("a schedule that is not whole-Level — semantics nobody asked for", async () => {
-    const group = await prisma.administrativeGroup.create({
-      data: { name: `${TAG} مجموعة`, levelId, branchId: targa },
-      select: { id: true },
+  it("an unknown level/group/circle, exactly like an unknown branch", async () => {
+    const dead = "00000000-0000-4000-8000-00000000dead";
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: combined },
+      select: { version: true },
     });
-    const grouped = await prisma.recurringCourseSchedule.create({
-      data: {
-        title: `${TAG} حصة المجموعة`,
-        subjectId,
-        teachingMode: "administrative_group",
-        administrativeGroupId: group.id,
-        branchId: targa,
-        academicYearId: yearId,
-        startTime: new Date("1970-01-01T09:00:00Z"),
-        endTime: new Date("1970-01-01T10:00:00Z"),
-        recurrence: "weekly",
-        weekdays: ["monday"],
-        anchorDate: day(-30),
-      },
-      select: { id: true },
-    });
-    const occ = await session(grouped.id, day(8), []);
-    const res = await setAudience(occ, [targa, branch2]);
-    expect(res.status).toBe(400);
-    expect(res.body.error?.details?.["reason"]).toBe(
-      "AUDIENCE_OVERRIDE_MODE_UNSUPPORTED",
-    );
+    const level = await setAudience(combined, [], { levelIds: [dead] });
+    expect(level.status).toBe(400);
+    expect(level.body.error?.details?.["reason"]).toBe("UNKNOWN_LEVEL");
 
-    await prisma.sessionAudienceBranch.deleteMany({
-      where: { sessionId: occ },
+    const group = await call("PUT", `/sessions/${combined}/audience`, adminToken, {
+      version: row.version,
+      branch_ids: [],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [dead],
+      teaching_group_ids: [],
     });
-    await prisma.session.deleteMany({ where: { id: occ } });
-    await prisma.recurringCourseSchedule.deleteMany({
-      where: { id: grouped.id },
-    });
-    await prisma.administrativeGroup.deleteMany({ where: { id: group.id } });
+    expect(group.status).toBe(400);
+    expect(group.body.error?.details?.["reason"]).toBe("UNKNOWN_ADMINISTRATIVE_GROUP");
   });
 
   it("a stale version — the Session's own, never a second mechanism", async () => {
@@ -555,25 +673,16 @@ describe("what the write refuses", () => {
       where: { id: combined },
       select: { version: true },
     });
-    const first = await call(
-      "PUT",
-      `/sessions/${combined}/audience-branches`,
-      adminToken,
-      {
-        version: row.version,
-        branch_ids: [targa, branch2],
-      },
-    );
+    const first = await setAudience(combined, [targa, branch2]);
     expect(first.status).toBe(200);
-    const second = await call(
-      "PUT",
-      `/sessions/${combined}/audience-branches`,
-      adminToken,
-      {
-        version: row.version,
-        branch_ids: [targa],
-      },
-    );
+    const second = await call("PUT", `/sessions/${combined}/audience`, adminToken, {
+      version: row.version,
+      branch_ids: [targa],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [],
+      teaching_group_ids: [],
+    });
     // Two administrators must not silently lose one another's change.
     expect(second.status).toBe(409);
   });
@@ -583,17 +692,71 @@ describe("what the write refuses", () => {
       where: { id: combined },
       select: { version: true },
     });
-    const res = await call(
-      "PUT",
-      `/sessions/${combined}/audience-branches`,
-      adminToken,
-      {
-        version: row.version,
-        branch_ids: [targa],
-        student_ids: [studentB],
-      },
-    );
+    const res = await call("PUT", `/sessions/${combined}/audience`, adminToken, {
+      version: row.version,
+      branch_ids: [targa],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [],
+      teaching_group_ids: [],
+      student_ids: [studentB],
+    });
     expect(res.status).toBe(400);
+  });
+});
+
+/* ── R92 generalised: every dimension, every mode ─────────────────────────── */
+
+describe("Owner-reported, 2026-09-17 — generalised beyond branches and beyond entire_level", () => {
+  it("a second Level folds into an entire_level occurrence's audience", async () => {
+    const res = await setAudience(combined, [], { levelIds: [levelId, levelId2] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const roster = await rosterOf(combined);
+    // studentA (levelId, targa) stays; studentD (levelId2, targa) joins.
+    expect(studentIds(roster).sort()).toEqual([studentA, studentD].sort());
+    expect(roster["overridden"]).toBe(true);
+  });
+
+  it("two Circles combine for one sitting, on the SAME union rule branches already use", async () => {
+    // A circle with no override elsewhere on this occurrence's roster — a
+    // NEW population entirely, on top of studentA's ordinary Level audience.
+    const res = await setAudience(combined, [], { teachingGroupIds: [circle1] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const roster = await rosterOf(combined);
+    // studentA (the Level's own) AND studentF (the Circle's own) both attend.
+    expect(studentIds(roster).sort()).toEqual([studentA, studentF].sort());
+  });
+
+  it("the mode restriction is GONE — an administrative_group occurrence accepts an override too", async () => {
+    // R92's own branch-only override refused this outright
+    // (AUDIENCE_OVERRIDE_MODE_UNSUPPORTED); the generalised write resolves
+    // through multi_dimension's own composition regardless of mode.
+    const res = await setAudience(groupOccurrence, [], {
+      administrativeGroupIds: [group1, group2],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const roster = await rosterOf(groupOccurrence);
+    // group1 has no member of its own in this fixture; group2's does, and
+    // she is now expected — naming two groups unions them, exactly as
+    // naming two Branches already does for entire_level.
+    expect(studentIds(roster)).toEqual([studentE]);
+  });
+
+  it("clearing one dimension's override leaves another's untouched", async () => {
+    expect((await setAudience(nextWeek, [], { levelIds: [levelId, levelId2] })).status).toBe(200);
+    expect((await setAudience(nextWeek, [], { teachingGroupIds: [circle1], levelIds: [levelId, levelId2] })).status).toBe(200);
+
+    // Clear the Level override alone — branch_ids/level_ids empty, circle kept.
+    const cleared = await setAudience(nextWeek, [], { teachingGroupIds: [circle1] });
+    expect(cleared.status).toBe(200);
+
+    const roster = await rosterOf(nextWeek);
+    // Back to studentA's ordinary Level audience, PLUS the Circle that
+    // stayed — studentD (levelId2) is gone, studentF (circle1) remains.
+    expect(studentIds(roster).sort()).toEqual([studentA, studentF].sort());
   });
 });
 

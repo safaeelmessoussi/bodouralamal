@@ -9,21 +9,35 @@ function code(source: string): string {
 }
 
 /**
- * **R92 — the audience override's interface half.**
+ * **R92, generalised — the audience override's interface half** (Owner-
+ * reported, 2026-09-17: level, category, group and circle, in addition to
+ * the branches R92 already had).
  *
  * The properties guarded are the ones that would fail silently: an ambiguous
  * override rule, a venue that looks editable, an action offered where the server
  * would refuse it, and copy that lets an administrator believe she moved the
  * class.
  */
-describe('replacement, not addition — and the control says which', () => {
-  it('seeds the selection with the INHERITED branch', () => {
+describe('replacement per dimension, not addition — and the control says which', () => {
+  it('seeds each of the five controls with its own INHERITED value', () => {
     // This is what makes *replacement* the only rule anybody has to hold: to
-    // combine, you add the second branch to one already chosen. An empty start
-    // would make the same submission mean "instead of", and nobody could tell
-    // the two apart from the screen.
-    expect(code(DIALOG)).toContain('r.audience_branches.map((b) => b.id)');
-    expect(code(DIALOG)).toContain('setChosen(ids)');
+    // combine, you add the second value to what is already chosen. An empty
+    // start would make the same submission mean "instead of", and nobody
+    // could tell the two apart from the screen.
+    expect(code(DIALOG)).toContain('branches: r.audience.branches.map((b) => b.id)');
+    expect(code(DIALOG)).toContain('categories: r.audience.categories.map((c) => c.id)');
+    expect(code(DIALOG)).toContain('levels: r.audience.levels.map((l) => l.id)');
+    expect(code(DIALOG)).toContain('groups: r.audience.administrative_groups.map((g) => g.id)');
+    expect(code(DIALOG)).toContain('circles: r.audience.teaching_groups.map((c) => c.id)');
+  });
+
+  it('submits all five as one call, never five requests', () => {
+    expect(code(DIALOG)).toContain('setSessionAudienceOverrides(');
+    expect(code(DIALOG)).toContain('branchIds: chosenBranches');
+    expect(code(DIALOG)).toContain('categoryIds: chosenCategories');
+    expect(code(DIALOG)).toContain('levelIds: chosenLevels');
+    expect(code(DIALOG)).toContain('administrativeGroupIds: chosenGroups');
+    expect(code(DIALOG)).toContain('teachingGroupIds: chosenCircles');
   });
 
   it('says that clearing every branch restores the usual audience', () => {
@@ -36,6 +50,14 @@ describe('replacement, not addition — and the control says which', () => {
     expect(ar.admin.sessions.audienceHint).toContain('هذه الحصة وحدها');
     expect(ar.admin.sessions.audienceHint).toContain('القادمة');
   });
+
+  it('reads groups and circles UNSCOPED, never through the ordinary Level+branch-chained list', () => {
+    // Combining across a Level or a branch boundary is exactly the case that
+    // chained list cannot answer — the same reasoning the multi_dimension
+    // class picker's own unscoped reads already established (Revision 157).
+    expect(code(DIALOG)).toContain('listAdministrativeGroups(token, 1, {}, null, 100)');
+    expect(code(DIALOG)).toContain('listCircles(token, 1, {}, null, 100)');
+  });
 });
 
 describe('the venue is a different fact, and is not editable here', () => {
@@ -46,16 +68,19 @@ describe('the venue is a different fact, and is not editable here', () => {
   });
 
   it('names it separately from the audience in the copy', () => {
-    expect(ar.admin.sessions.audienceVenue).not.toBe(ar.admin.sessions.audienceBranches);
     expect(ar.admin.sessions.audienceHint).toContain('مكانها المعتاد');
   });
 });
 
-describe('the action is offered only where the server would accept it', () => {
-  it('whole-Level classes only (§14.4 — never offer a refusal)', () => {
-    // In the other two modes the branch is carried by the target itself, so a
-    // branch list has no meaning and the write refuses it.
-    expect(code(PAGE)).toContain("klass?.teachingMode === 'entire_level'");
+describe('the action is offered for every teaching mode now (§14.4 — never offer a refusal)', () => {
+  it('the whole-Level-only gate is gone — the write no longer refuses any mode', () => {
+    // R92's own branch-only override refused every mode but `entire_level`;
+    // the generalised write resolves through `multi_dimension`'s own
+    // composition regardless of the schedule's real mode, so the action is
+    // never offered where the server would refuse it (§14.4 still holds —
+    // there is simply nothing left for it to refuse on mode grounds).
+    expect(code(PAGE)).not.toContain("klass?.teachingMode === 'entire_level'");
+    expect(code(PAGE)).toContain('available: () => !isTeacherPortal');
   });
 
   it('and it lives on the OCCURRENCE screen, not the recurring form', () => {
@@ -78,15 +103,16 @@ describe('the roster is shown, not inferred', () => {
 });
 
 describe('unsaved work is not lost to a stray click (rule U)', () => {
-  it('passes dirty, computed against what it opened with', () => {
+  it('passes dirty, computed against what it opened with, across all five controls', () => {
     expect(code(DIALOG)).toContain('dirty={dirty}');
-    // **The property, restated 2026-08-27** — this pinned the literal
-    // `[...chosen].sort().join`, which is a mechanism, and it failed when the
-    // comparison moved to the shared `isDirty`. What must hold is that `dirty`
-    // is computed **against the values the dialog opened with**, so the two
-    // things asserted are that `initial` participates and that the shared
-    // comparison is the one used. A form comparing against emptiness instead is
-    // the NEW E defect, and it would fail both.
-    expect(code(DIALOG)).toMatch(/const dirty = isDirty\([^;]*initial[^;]*\)/s);
+    // **The property, restated 2026-08-27, extended 2026-09-17** — what must
+    // hold is that `dirty` is computed against the values the dialog opened
+    // with, for EVERY dimension, using the shared `isDirty` comparison. A
+    // form comparing against emptiness instead is the NEW E defect.
+    expect(code(DIALOG)).toMatch(/const dirty =\s*\n?\s*isDirty\([^;]*initial\.branches[^;]*\)/s);
+    expect(code(DIALOG)).toContain('initial.categories');
+    expect(code(DIALOG)).toContain('initial.levels');
+    expect(code(DIALOG)).toContain('initial.groups');
+    expect(code(DIALOG)).toContain('initial.circles');
   });
 });

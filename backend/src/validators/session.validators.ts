@@ -70,6 +70,13 @@ export const overrideSessionSchema = z
      */
     visibility: visibility.optional(),
     /**
+     * **Owner-reported, 2026-09-17 — this occurrence's own Subject**, on
+     * exactly the footing `room_id`/`delivery_mode`/`visibility` above:
+     * supplying it overrides the schedule's default for this date and
+     * nothing else. `null` clears an existing override.
+     */
+    subject_id: uuid.nullable().optional(),
+    /**
      * Supplying this **replaces** this occurrence's staffing snapshot; omitting
      * it leaves the snapshot untouched. An empty array is therefore a real
      * instruction — *this session has no staff* — and is deliberately not the
@@ -124,19 +131,26 @@ export const linkContentSchema = z
   .strict();
 
 /**
- * **R92 — this occurrence's audience branches.**
+ * **R92 — this occurrence's own audience, along five dimensions**
+ * (Owner-reported 2026-09-17, generalised from branches alone).
  *
  * `.strict()`, and the version is required: the concurrency control is the
  * Session's own (TD-15), never a second mechanism.
  *
- * **An empty list is meaningful and is accepted**: it clears the override and
- * returns the audience to the schedule's, which is what «العودة إلى الوضع
- * المعتاد» does. That is why there is no `.min(1)`.
+ * **An empty list is meaningful per dimension and is accepted**: it clears
+ * THAT dimension's override and returns it to the schedule's, which is what
+ * «العودة إلى الوضع المعتاد» does — independently for each of the five, so
+ * clearing the Level override while a Circle override stays set is an
+ * ordinary call. That is why there is no `.min(1)` on any of them.
  */
 export const sessionAudienceSchema = z
   .object({
     version: z.number().int().min(0),
     branch_ids: z.array(uuid).max(20),
+    category_ids: z.array(uuid).max(20),
+    level_ids: z.array(uuid).max(20),
+    administrative_group_ids: z.array(uuid).max(20),
+    teaching_group_ids: z.array(uuid).max(20),
   })
   .strict();
 

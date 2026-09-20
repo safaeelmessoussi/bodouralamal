@@ -11,12 +11,14 @@ import {
 import { AppError } from "../lib/errors.js";
 import { atMidnightUtc } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
+import { assertSubjectTaughtAtLevel } from "../policies/curriculum.js";
 import { resolveDelivery } from "../policies/delivery.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
 import {
   audienceForSession,
   audienceSize,
   audienceWhere,
+  naturalDimensions,
   scheduleDimensions,
   staffsSession,
 } from "../policies/roster-resolution.js";
@@ -190,10 +192,69 @@ export interface SessionOverride {
    * may see it is one of the things there is to decide.
    */
   visibility?: "public" | "private" | "hidden" | undefined;
+  /**
+   * **Owner-reported, 2026-09-17 — this occurrence's OWN Subject.**
+   *
+   * Exactly the footing `roomId`/`deliveryMode`/`visibility` already have:
+   * supplying it decides THIS date and nothing else, and the `overridden`
+   * flag this function always sets is what keeps the next schedule edit
+   * from resyncing it away. `null` clears an existing override and returns
+   * this occurrence to the schedule's own Subject.
+   *
+   * Validated against the schedule's own effective Level(s) exactly as
+   * CREATE validates a new schedule's Subject (`assertSubjectTaughtAtLevel`,
+   * looped where a `multi_dimension` schedule names more than one) — the
+   * schedule's OWN level(s), never this occurrence's audience-dimension
+   * override: retaught content must still be something the Level teaches,
+   * independent of who is being asked to attend.
+   */
+  subjectId?: string | null;
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
   staff?: { userId: string; position: "teacher" | "assistant" }[];
   version: number;
+}
+
+/**
+ * **Owner-reported, 2026-09-17 — the schedule's OWN Level(s), whatever its
+ * teaching mode.** A Subject override is validated against what the
+ * SCHEDULE teaches, never against this occurrence's own audience-dimension
+ * override — the two are independent questions (what is taught vs who is
+ * asked to attend), and conflating them would let an audience change
+ * silently invalidate an unrelated Subject override, or vice versa.
+ */
+async function scheduleLevelIds(
+  prisma: PrismaClient,
+  scheduleId: string,
+  schedule: {
+    teachingMode: string;
+    levelId: string | null;
+    administrativeGroupId: string | null;
+    teachingGroupId: string | null;
+  },
+): Promise<string[]> {
+  if (schedule.teachingMode === "entire_level") {
+    return schedule.levelId ? [schedule.levelId] : [];
+  }
+  if (schedule.teachingMode === "administrative_group" && schedule.administrativeGroupId) {
+    const group = await prisma.administrativeGroup.findUnique({
+      where: { id: schedule.administrativeGroupId },
+      select: { levelId: true },
+    });
+    return group ? [group.levelId] : [];
+  }
+  if (schedule.teachingMode === "teaching_group" && schedule.teachingGroupId) {
+    const circle = await prisma.teachingGroup.findUnique({
+      where: { id: schedule.teachingGroupId },
+      select: { levelId: true },
+    });
+    return circle ? [circle.levelId] : [];
+  }
+  if (schedule.teachingMode === "multi_dimension") {
+    const dims = await scheduleDimensions(prisma, scheduleId, schedule.teachingMode as never);
+    return dims?.levelIds ?? [];
+  }
+  return [];
 }
 
 /**
@@ -259,6 +320,17 @@ export async function overrideSession(
     // BR-23: capacity is not consulted here either.
   }
 
+  // **Owner-reported, 2026-09-17 — a Subject override is validated against
+  // the SCHEDULE's own Level(s)**, never this occurrence's own audience
+  // override: whether a subject is taught somewhere is a curriculum fact
+  // about the Level, independent of who this particular sitting invites.
+  if (data.subjectId) {
+    const levelIds = await scheduleLevelIds(prisma, session.scheduleId, session.schedule);
+    for (const levelId of levelIds) {
+      await assertSubjectTaughtAtLevel(prisma, levelId, data.subjectId);
+    }
+  }
+
   // Plain strings so the payload is a valid JSON value for the audit column,
   // and so a reviewer reading the row sees exactly what an operator saw.
   const changed: Record<string, { from: string | null; to: string | null }> =
@@ -297,6 +369,9 @@ export async function overrideSession(
   // R109 — *who could see this occurrence, and from when* is an access fact the
   // record has to keep.
   track("visibility", session.visibility, data.visibility);
+  // Owner-reported, 2026-09-17 — *what was actually taught* is a curriculum
+  // fact the record has to keep, on the same footing as room/delivery/tier.
+  track("subject_id", session.subjectId, data.subjectId);
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -321,6 +396,12 @@ export async function overrideSession(
         ...(data.visibility === undefined
           ? {}
           : { visibility: data.visibility }),
+        // Owner-reported, 2026-09-17 — absent leaves this occurrence's
+        // Subject alone, on the identical `visibility` reasoning just
+        // above: an override is a decision about one date, and re-reading
+        // the schedule here would undo a previous override this edit never
+        // mentioned. `null` is a real instruction — clear it.
+        ...(data.subjectId === undefined ? {} : { subjectId: data.subjectId }),
         overridden: true,
       },
     });
@@ -907,13 +988,22 @@ async function regenerateOne(
   });
 }
 
+/** One dimension's currently effective value, resolved to its display name. */
+export interface RosterDimensionEntry {
+  id: string;
+  name: string;
+}
+
 /**
- * **Who is expected at this occurrence, and where it happens** (R92).
+ * **Who is expected at this occurrence, and where it happens** (R92, and
+ * Owner-reported 2026-09-17 generalised to every dimension `multi_dimension`
+ * schedules already resolve).
  *
  * Two facts, deliberately reported separately: the **venue** is the schedule's
- * branch and the occurrence's room; the **audience** is the branch populations
- * expected there. They were one field for as long as an occurrence had one
- * branch, and a combined lesson is exactly the case that separates them.
+ * branch and the occurrence's room; the **audience** is the populations
+ * expected there, along all five dimensions. They were one field for as long
+ * as an occurrence had one branch, and a combined lesson is exactly the case
+ * that separates them.
  */
 export async function readSessionRoster(
   prisma: PrismaClient,
@@ -922,7 +1012,13 @@ export async function readSessionRoster(
 ): Promise<{
   sessionId: string;
   venue: { branchId: string; branchName: string; roomName: string | null };
-  audienceBranches: { id: string; name: string }[];
+  audience: {
+    branches: RosterDimensionEntry[];
+    categories: RosterDimensionEntry[];
+    levels: RosterDimensionEntry[];
+    administrativeGroups: RosterDimensionEntry[];
+    teachingGroups: RosterDimensionEntry[];
+  };
   overridden: boolean;
   students: { id: string; name: string; branchId: string | null }[];
 }> {
@@ -933,47 +1029,70 @@ export async function readSessionRoster(
   const spec = await audienceForSession(prisma, sessionId);
   if (spec === null) throw new AppError("NOT_FOUND", "no such session");
 
-  const branchIds =
-    spec.audienceBranchIds && spec.audienceBranchIds.length > 0
-      ? spec.audienceBranchIds
-      : [spec.branchId];
+  // **Effective, whether or not anything is overridden** — the SAME
+  // fallback `audienceForSession` itself uses, so the picker seeds exactly
+  // what the schedule already resolves for a session with no override at
+  // all, and adding a second value is what "combine" means.
+  const effective = spec.dimensions ?? naturalDimensions(spec, null);
+  const branchIds = effective.branchIds.length > 0 ? effective.branchIds : [spec.branchId];
 
-  const [branches, venueRow, students] = await Promise.all([
-    prisma.branch.findMany({
+  const [branches, categories, levels, administrativeGroups, teachingGroups, venueRow, students] =
+    await Promise.all([
       // **`deletedAt` constrained, like every other read** — the trash-coverage
       // guard caught this one, and it is right to: a soft-deleted row must not
       // reappear through a new screen. Safe here rather than merely consistent,
-      // because `session_audience_branch` holds a RESTRICT foreign key, so a
-      // branch named by an override cannot be deleted at all.
-      where: { id: { in: branchIds }, deletedAt: null },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.session.findUniqueOrThrow({
-      where: { id: sessionId },
-      select: {
-        room: { select: { name: true } },
-        schedule: {
-          select: { branchId: true, branch: { select: { name: true } } },
+      // because every `session_audience_*` table holds a RESTRICT foreign key,
+      // so a value named by an override cannot be deleted at all.
+      prisma.branch.findMany({
+        where: { id: { in: branchIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.category.findMany({
+        where: { id: { in: effective.categoryIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.level.findMany({
+        where: { id: { in: effective.levelIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.administrativeGroup.findMany({
+        where: { id: { in: effective.administrativeGroupIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.teachingGroup.findMany({
+        where: { id: { in: effective.teachingGroupIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: {
+          room: { select: { name: true } },
+          schedule: {
+            select: { branchId: true, branch: { select: { name: true } } },
+          },
         },
-      },
-    }),
-    // **Through the shared resolver**, so the roster cannot disagree with the
-    // calendar or the notification list (R92 §B7).
-    prisma.user.findMany({
-      where: audienceWhere(spec),
-      select: {
-        id: true,
-        nameArabic: true,
-        levelEnrollments: {
-          where: { deletedAt: null, branchId: { in: branchIds } },
-          select: { branchId: true },
-          take: 1,
+      }),
+      // **Through the shared resolver**, so the roster cannot disagree with the
+      // calendar or the notification list (R92 §B7).
+      prisma.user.findMany({
+        where: audienceWhere(spec),
+        select: {
+          id: true,
+          nameArabic: true,
+          levelEnrollments: {
+            where: { deletedAt: null, branchId: { in: branchIds } },
+            select: { branchId: true },
+            take: 1,
+          },
         },
-      },
-      orderBy: { nameArabic: "asc" },
-    }),
-  ]);
+        orderBy: { nameArabic: "asc" },
+      }),
+    ]);
 
   return {
     sessionId,
@@ -982,9 +1101,15 @@ export async function readSessionRoster(
       branchName: venueRow.schedule.branch.name,
       roomName: venueRow.room?.name ?? null,
     },
-    audienceBranches: branches,
+    audience: { branches, categories, levels, administrativeGroups, teachingGroups },
+    // True the moment ANY dimension carries a real override row — not merely
+    // "spec.dimensions exists", which is also true for an unmodified
+    // multi_dimension schedule that has never been overridden at all.
     overridden:
-      spec.audienceBranchIds !== null && spec.audienceBranchIds !== undefined,
+      spec.audienceBranchIds !== null && spec.audienceBranchIds !== undefined
+        ? true
+        : spec.teachingMode === "multi_dimension" &&
+          (await sessionHasAnyAudienceOverride(prisma, sessionId)),
     students: students.map((s) => ({
       id: s.id,
       name: s.nameArabic,
@@ -996,54 +1121,104 @@ export async function readSessionRoster(
 }
 
 /**
- * **Set this occurrence's audience branches** (R92) — or clear the override.
+ * Whether THIS session carries an override row on any of the four
+ * generalised dimension tables (branches are checked separately by the
+ * caller, via `spec.audienceBranchIds`, since that one already travels on
+ * the spec). Kept as one small read rather than four, because the caller
+ * only needs to know whether the count is nonzero, never which rows.
+ */
+async function sessionHasAnyAudienceOverride(
+  prisma: PrismaClient,
+  sessionId: string,
+): Promise<boolean> {
+  const [categories, levels, administrativeGroups, teachingGroups] = await Promise.all([
+    prisma.sessionAudienceCategory.count({ where: { sessionId } }),
+    prisma.sessionAudienceLevel.count({ where: { sessionId } }),
+    prisma.sessionAudienceAdministrativeGroup.count({ where: { sessionId } }),
+    prisma.sessionAudienceTeachingGroup.count({ where: { sessionId } }),
+  ]);
+  return categories + levels + administrativeGroups + teachingGroups > 0;
+}
+
+/** One reusable existence check, shared by every dimension `setSessionAudienceOverrides`
+ *  validates — the same "refused, never silently dropped" rule stated once. */
+async function assertKnown(
+  delegate: {
+    count(args: { where: { id: { in: string[] }; deletedAt: null } }): Promise<number>;
+  },
+  ids: string[],
+  reason: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const found = await delegate.count({ where: { id: { in: ids }, deletedAt: null } });
+  if (found !== ids.length) {
+    throw new AppError("VALIDATION_FAILED", "unknown value named in the audience override", {
+      reason,
+    });
+  }
+}
+
+/**
+ * **Set this occurrence's own audience, along all five dimensions** (R92,
+ * generalised Owner-reported 2026-09-17) — or clear any one override.
  *
- * **Replacement semantics, stated in one place**: the submitted list *is* the
- * occurrence's audience. An empty list removes the override and the audience
- * returns to the schedule's, which is what «العودة إلى الوضع المعتاد» does.
+ * **Replacement semantics per dimension, stated in one place**: each
+ * submitted list *is* that dimension's contribution for this occurrence. An
+ * empty list removes THAT dimension's override and it returns to the
+ * schedule's own value — every dimension decides independently, so clearing
+ * the Level override while a Circle override stays set is an ordinary,
+ * expected call.
  *
- * **Only `entire_level`.** In the other two modes the branch is carried by the
- * target itself (§7 — a group IS at one branch), so a branch list has no
- * meaning; R92 §B6 implements the whole-Level case and refuses the rest rather
- * than inventing semantics nobody asked for.
+ * **Every teaching mode, not `entire_level` alone.** R92's original branch-
+ * only override refused every other mode (§B6: *"implement the whole-Level
+ * case and report the rest rather than invent semantics nobody asked for"*)
+ * — reported, and now built: `audienceForSession`'s own generalisation
+ * resolves an override through `multi_dimension`'s composition regardless
+ * of the schedule's real mode, so there is no longer a mode this write need
+ * refuse.
  *
  * **Concurrency is the Session's own `version`** (TD-15) — no second mechanism.
  * The row is bumped inside the same transaction that rewrites the override, so
  * two administrators cannot silently lose one another's change.
  */
-export async function setSessionAudienceBranches(
+export interface SessionAudienceOverrideInput {
+  branchIds: string[];
+  categoryIds: string[];
+  levelIds: string[];
+  administrativeGroupIds: string[];
+  teachingGroupIds: string[];
+}
+
+export async function setSessionAudienceOverrides(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
   version: number,
-  branchIds: string[],
-): Promise<{ branchIds: string[]; overridden: boolean }> {
-  const session = await loadForWrite(prisma, actor, sessionId);
+  input: SessionAudienceOverrideInput,
+): Promise<SessionAudienceOverrideInput & { overridden: boolean }> {
+  await loadForWrite(prisma, actor, sessionId);
 
-  if (session.schedule.teachingMode !== "entire_level") {
-    throw new AppError(
-      "VALIDATION_FAILED",
-      "audience override applies to whole-Level classes",
-      {
-        reason: "AUDIENCE_OVERRIDE_MODE_UNSUPPORTED",
-        teaching_mode: session.schedule.teachingMode,
-      },
-    );
-  }
+  const wanted: SessionAudienceOverrideInput = {
+    branchIds: [...new Set(input.branchIds)],
+    categoryIds: [...new Set(input.categoryIds)],
+    levelIds: [...new Set(input.levelIds)],
+    administrativeGroupIds: [...new Set(input.administrativeGroupIds)],
+    teachingGroupIds: [...new Set(input.teachingGroupIds)],
+  };
 
-  const wanted = [...new Set(branchIds)];
-  if (wanted.length > 0) {
-    const found = await prisma.branch.count({
-      where: { id: { in: wanted }, deletedAt: null },
-    });
-    // Refused rather than silently dropped: an administrator must never plan
-    // against a branch the platform did not record.
-    if (found !== wanted.length) {
-      throw new AppError("VALIDATION_FAILED", "unknown branch", {
-        reason: "UNKNOWN_BRANCH",
-      });
-    }
-  }
+  // Refused rather than silently dropped: an administrator must never plan
+  // against a value the platform did not record.
+  await Promise.all([
+    assertKnown(prisma.branch, wanted.branchIds, "UNKNOWN_BRANCH"),
+    assertKnown(prisma.category, wanted.categoryIds, "UNKNOWN_CATEGORY"),
+    assertKnown(prisma.level, wanted.levelIds, "UNKNOWN_LEVEL"),
+    assertKnown(
+      prisma.administrativeGroup,
+      wanted.administrativeGroupIds,
+      "UNKNOWN_ADMINISTRATIVE_GROUP",
+    ),
+    assertKnown(prisma.teachingGroup, wanted.teachingGroupIds, "UNKNOWN_TEACHING_GROUP"),
+  ]);
 
   return prisma.$transaction(async (tx) => {
     await updateWithVersion<Session>({
@@ -1058,9 +1233,36 @@ export async function setSessionAudienceBranches(
     });
 
     await tx.sessionAudienceBranch.deleteMany({ where: { sessionId } });
-    if (wanted.length > 0) {
+    if (wanted.branchIds.length > 0) {
       await tx.sessionAudienceBranch.createMany({
-        data: wanted.map((branchId) => ({ sessionId, branchId })),
+        data: wanted.branchIds.map((branchId) => ({ sessionId, branchId })),
+      });
+    }
+    await tx.sessionAudienceCategory.deleteMany({ where: { sessionId } });
+    if (wanted.categoryIds.length > 0) {
+      await tx.sessionAudienceCategory.createMany({
+        data: wanted.categoryIds.map((categoryId) => ({ sessionId, categoryId })),
+      });
+    }
+    await tx.sessionAudienceLevel.deleteMany({ where: { sessionId } });
+    if (wanted.levelIds.length > 0) {
+      await tx.sessionAudienceLevel.createMany({
+        data: wanted.levelIds.map((levelId) => ({ sessionId, levelId })),
+      });
+    }
+    await tx.sessionAudienceAdministrativeGroup.deleteMany({ where: { sessionId } });
+    if (wanted.administrativeGroupIds.length > 0) {
+      await tx.sessionAudienceAdministrativeGroup.createMany({
+        data: wanted.administrativeGroupIds.map((administrativeGroupId) => ({
+          sessionId,
+          administrativeGroupId,
+        })),
+      });
+    }
+    await tx.sessionAudienceTeachingGroup.deleteMany({ where: { sessionId } });
+    if (wanted.teachingGroupIds.length > 0) {
+      await tx.sessionAudienceTeachingGroup.createMany({
+        data: wanted.teachingGroupIds.map((teachingGroupId) => ({ sessionId, teachingGroupId })),
       });
     }
 
@@ -1069,17 +1271,25 @@ export async function setSessionAudienceBranches(
     // part of this transaction so no committed audience can lose its obligation.
     await enqueueConsentReevaluationForSessions(tx, [sessionId]);
 
+    const overridden = Object.values(wanted).some((list) => list.length > 0);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
       actionType: "session.audience",
       targetEntity: "Session",
       targetId: sessionId,
-      // *Who decided that both branches attend this lesson* is a question
-      // somebody asks later, and the override table itself keeps no history.
-      detail: { branch_ids: wanted, cleared: wanted.length === 0 },
+      // *Who decided this occurrence's audience combines these* is a question
+      // somebody asks later, and the override tables themselves keep no history.
+      detail: {
+        branch_ids: wanted.branchIds,
+        category_ids: wanted.categoryIds,
+        level_ids: wanted.levelIds,
+        administrative_group_ids: wanted.administrativeGroupIds,
+        teaching_group_ids: wanted.teachingGroupIds,
+        cleared: !overridden,
+      },
     });
 
-    return { branchIds: wanted, overridden: wanted.length > 0 };
+    return { ...wanted, overridden };
   });
 }

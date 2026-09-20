@@ -27,6 +27,7 @@ function session(overrides: Partial<ScheduleSession>): ScheduleSession {
     delivery_mode: 'in_person',
     online_media_mode: null,
     visibility: 'public',
+    subject_id: null,
     version: 0,
     staff: [],
     protected_reasons: [],

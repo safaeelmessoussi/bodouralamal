@@ -403,6 +403,58 @@ export async function scheduleDimensions(
   };
 }
 
+/**
+ * **Owner-reported, 2026-09-17 — one schedule, of ANY mode, expressed as the
+ * five `multi_dimension` dimensions.**
+ *
+ * `audienceForSession`'s occurrence override (below) is built once, as a
+ * `multi_dimension` composition, regardless of which mode the underlying
+ * schedule actually uses — an `entire_level` occurrence that gains an
+ * overridden second Level, and a `multi_dimension` occurrence that gains an
+ * overridden second Level, resolve through the identical code. This is what
+ * makes that possible: it restates each legacy mode's own single target as
+ * the one-element dimension array that means the same thing, so "no
+ * override for this dimension" can fall back to "the schedule's own value"
+ * uniformly — never a per-mode branch inside `audienceForSession` itself.
+ *
+ * A legacy mode's OTHER dimensions are genuinely empty, not "unknown": an
+ * `entire_level` schedule has no Administrative-Group or Circle of its own
+ * to fall back to, so an override naming one is the only source for it.
+ */
+export function naturalDimensions(
+  scheduleFields: Pick<AudienceSpec, 'teachingMode' | 'levelId' | 'administrativeGroupId' | 'teachingGroupId' | 'branchId'>,
+  multiDimensionDimensions: AudienceSpec['dimensions'] | null,
+): NonNullable<AudienceSpec['dimensions']> {
+  if (scheduleFields.teachingMode === 'multi_dimension') {
+    return (
+      multiDimensionDimensions ?? {
+        branchIds: [],
+        categoryIds: [],
+        levelIds: [],
+        administrativeGroupIds: [],
+        teachingGroupIds: [],
+      }
+    );
+  }
+  return {
+    branchIds: scheduleFields.teachingMode === 'entire_level' ? [scheduleFields.branchId] : [],
+    categoryIds: [],
+    levelIds:
+      scheduleFields.teachingMode === 'entire_level' && scheduleFields.levelId !== null
+        ? [scheduleFields.levelId]
+        : [],
+    administrativeGroupIds:
+      scheduleFields.teachingMode === 'administrative_group' &&
+      scheduleFields.administrativeGroupId !== null
+        ? [scheduleFields.administrativeGroupId]
+        : [],
+    teachingGroupIds:
+      scheduleFields.teachingMode === 'teaching_group' && scheduleFields.teachingGroupId !== null
+        ? [scheduleFields.teachingGroupId]
+        : [],
+  };
+}
+
 export async function audienceForSession(
   prisma: Prisma.TransactionClient | PrismaClient,
   sessionId: string,
@@ -422,6 +474,10 @@ export async function audienceForSession(
     select: {
       date: true,
       audienceBranches: { select: { branchId: true } },
+      audienceCategories: { select: { categoryId: true } },
+      audienceLevels: { select: { levelId: true } },
+      audienceAdministrativeGroups: { select: { administrativeGroupId: true } },
+      audienceTeachingGroups: { select: { teachingGroupId: true } },
       schedule: {
         select: {
           id: true,
@@ -438,14 +494,60 @@ export async function audienceForSession(
 
   const { id: scheduleId, ...scheduleFields } = session.schedule;
   const override = session.audienceBranches.map((b) => b.branchId);
+  const overrideCategoryIds = session.audienceCategories.map((r) => r.categoryId);
+  const overrideLevelIds = session.audienceLevels.map((r) => r.levelId);
+  const overrideAdministrativeGroupIds = session.audienceAdministrativeGroups.map(
+    (r) => r.administrativeGroupId,
+  );
+  const overrideTeachingGroupIds = session.audienceTeachingGroups.map((r) => r.teachingGroupId);
   const dimensions = await scheduleDimensions(prisma, scheduleId, scheduleFields.teachingMode);
+  const on_ = on === 'occurrence' ? session.date : null;
+
+  /**
+   * **Owner-reported, 2026-09-17 — ANY of the five overrides puts this
+   * occurrence through `multi_dimension`'s own composition, whatever the
+   * schedule's real mode is.** Every OTHER dimension falls back to
+   * `naturalDimensions` — the schedule's own value, restated as a
+   * one-element array — so overriding just the Level, say, leaves the
+   * branch/category/group/circle exactly as the schedule already resolves
+   * them. `audienceWhere`'s `entire_level`/`administrative_group`/
+   * `teaching_group` arms stay exactly as they were for every occurrence
+   * that carries no override at all — this branch never reaches them.
+   */
+  const hasOverride =
+    override.length > 0 ||
+    overrideCategoryIds.length > 0 ||
+    overrideLevelIds.length > 0 ||
+    overrideAdministrativeGroupIds.length > 0 ||
+    overrideTeachingGroupIds.length > 0;
+  if (hasOverride) {
+    const natural = naturalDimensions(scheduleFields, dimensions);
+    return {
+      ...scheduleFields,
+      audienceBranchIds: override.length > 0 ? override : null,
+      teachingMode: 'multi_dimension',
+      dimensions: {
+        branchIds: override.length > 0 ? override : natural.branchIds,
+        categoryIds: overrideCategoryIds.length > 0 ? overrideCategoryIds : natural.categoryIds,
+        levelIds: overrideLevelIds.length > 0 ? overrideLevelIds : natural.levelIds,
+        administrativeGroupIds:
+          overrideAdministrativeGroupIds.length > 0
+            ? overrideAdministrativeGroupIds
+            : natural.administrativeGroupIds,
+        teachingGroupIds:
+          overrideTeachingGroupIds.length > 0 ? overrideTeachingGroupIds : natural.teachingGroupIds,
+      },
+      on: on_,
+    };
+  }
+
   return {
     ...scheduleFields,
     // Empty means INHERIT — the ordinary case, and every occurrence but the
     // rare combined one.
-    audienceBranchIds: override.length > 0 ? override : null,
+    audienceBranchIds: null,
     ...(dimensions ? { dimensions } : {}),
-    on: on === 'occurrence' ? session.date : null,
+    on: on_,
   };
 }
 

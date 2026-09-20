@@ -43,7 +43,10 @@ const SESSION_KEYS = [
   "schedule_id",
   "start_time",
   "status",
-  // **R138 — this occurrence's OWN title**, sorted after `status`.
+  // **Owner-reported, 2026-09-17 — this occurrence's OWN Subject.** `null`
+  // means inherit the schedule's, on exactly the footing `room_id` has.
+  "subject_id",
+  // **R138 — this occurrence's OWN title**, sorted after `subject_id`.
   "title",
   "version",
   // **R109 — this occurrence's OWN visibility tier**, on exactly the footing
@@ -101,6 +104,13 @@ let branchA: string;
 let roomA: string;
 let levelId: string;
 let subjectId: string;
+/** Owner-reported, 2026-09-17 — taught at the Level too, but NOT the
+ *  schedule's own Subject — proves an override changes the OCCURRENCE
+ *  alone, never the schedule it belongs to. */
+let subjectId2: string;
+/** Owner-reported, 2026-09-17 — taught NOWHERE (`level_subject` names it at
+ *  no Level), for the Subject-override refusal test. */
+let subjectNotTaughtHere: string;
 let groupA: string;
 let academicYearId: string;
 let scheduleId: string;
@@ -237,6 +247,13 @@ beforeAll(async () => {
   subjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة` } }))
     .id;
   await prisma.levelSubject.create({ data: { levelId, subjectId } });
+  subjectNotTaughtHere = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة غير مُدرَّسة هنا` } })
+  ).id;
+  subjectId2 = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة ثانية` } })
+  ).id;
+  await prisma.levelSubject.create({ data: { levelId, subjectId: subjectId2 } });
   groupA = (
     await prisma.administrativeGroup.create({
       data: { name: `${TAG} مجموعة`, levelId, branchId: branchA },
@@ -426,6 +443,99 @@ describe("PATCH is a field edit, not a second entrance to the state machine", ()
     });
     expect(stale.status).toBe(409);
     expect(stale.body.error?.code).toBe("VERSION_CONFLICT");
+  });
+});
+
+describe("Owner-reported, 2026-09-17 — this occurrence's own Subject", () => {
+  // **Dedicated sessions, never `freshSession()`'s shared pool.** Each of
+  // these four tests does more than one write against the SAME row, and a
+  // far-future, uniquely-dated row this describe block alone creates and
+  // owns is what keeps that safe against every other test in this file
+  // that also draws from the one schedule's own materialized horizon.
+  let nextYear = 2090;
+  async function dedicatedSession(): Promise<{ id: string; version: number }> {
+    nextYear += 1;
+    return prisma.session.create({
+      data: {
+        scheduleId,
+        date: new Date(`${nextYear}-01-01T00:00:00Z`),
+        startTime: new Date("1970-01-01T09:00:00Z"),
+        endTime: new Date("1970-01-01T10:00:00Z"),
+        status: "scheduled",
+      },
+      select: { id: true, version: true },
+    });
+  }
+
+  it("overrides THIS occurrence's Subject alone, on the same footing room_id has", async () => {
+    const s = await dedicatedSession();
+    const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      subject_id: subjectId2,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.subject_id).toBe(subjectId2);
+    expect(res.body.overridden).toBe(true);
+
+    // The SCHEDULE's own Subject is untouched — only this occurrence changed.
+    const schedule = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+      select: { subjectId: true },
+    });
+    expect(schedule.subjectId).toBe(subjectId);
+    expect(schedule.subjectId).not.toBe(subjectId2);
+  });
+
+  it("refuses a Subject the schedule's own Level does not teach (SUBJECT_NOT_IN_LEVEL)", async () => {
+    const s = await dedicatedSession();
+    const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      subject_id: subjectNotTaughtHere,
+    });
+    // `assertSubjectTaughtAtLevel` (`policies/curriculum.ts`) throws
+    // STATE_CONFLICT, the SAME code CREATE-time validation already answers
+    // for this reason — 409, not 400: the request is well-formed, the
+    // Subject and Level both exist, they simply do not agree.
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.error?.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
+
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { subjectId: true },
+    });
+    expect(row.subjectId).toBeNull();
+  });
+
+  it("`null` clears an existing override and returns this occurrence to the schedule's own Subject", async () => {
+    const s = await dedicatedSession();
+    const set = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      subject_id: subjectId2,
+    });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+
+    const cleared = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: (set.body.version as number),
+      subject_id: null,
+    });
+    expect(cleared.status, JSON.stringify(cleared.body)).toBe(200);
+    expect(cleared.body.subject_id).toBeNull();
+  });
+
+  it("omitting the key leaves a previous Subject override untouched", async () => {
+    const s = await dedicatedSession();
+    const set = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: s.version,
+      subject_id: subjectId2,
+    });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+
+    const unrelated = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
+      version: (set.body.version as number),
+      title: `${TAG} تعديل آخر لا يخص المادة`,
+    });
+    expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);
+    expect(unrelated.body.subject_id).toBe(subjectId2);
   });
 });
 

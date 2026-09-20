@@ -1006,7 +1006,7 @@ describe('B-01 consent safeguarding', () => {
     ).token;
 
     const changed = await fetch(
-      `${apiBase}/sessions/${s.fixture.sessionId}/audience-branches`,
+      `${apiBase}/sessions/${s.fixture.sessionId}/audience`,
       {
         method: 'PUT',
         headers: {
@@ -1016,6 +1016,10 @@ describe('B-01 consent safeguarding', () => {
         body: JSON.stringify({
           version: version.version,
           branch_ids: [s.branchId, secondBranch.id],
+          category_ids: [],
+          level_ids: [],
+          administrative_group_ids: [],
+          teaching_group_ids: [],
         }),
       },
     );

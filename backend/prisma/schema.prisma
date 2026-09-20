@@ -1113,6 +1113,9 @@ model Category {
   courseScheduleScopes CourseScheduleCategory[]
   /// Revision 49 — applicants who asked for this stage. See `User`.
   intendedBy           User[]                   @relation("UserIntendedCategory")
+  /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
+  /// occurrence at a time instead of a whole schedule (R92 generalised).
+  sessionAudiences     SessionAudienceCategory[]
 
   @@index([displayOrder])
   @@map("category")
@@ -1161,6 +1164,9 @@ model Level {
   eventScopes          EventLevel[]
   /// Revision 155 (expand phase) — mirrors `eventScopes` above.
   courseScheduleScopes CourseScheduleLevel[]
+  /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
+  /// occurrence at a time instead of a whole schedule (R92 generalised).
+  sessionAudiences     SessionAudienceLevel[]
 
   @@index([categoryId, displayOrder])
   @@map("level")
@@ -1208,6 +1214,11 @@ model Subject {
   teachingGroupSeats StudentTeachingGroup[]
   exams              Exam[]
   content            EducationalContent[]
+  /// Owner-reported, 2026-09-17 — Sessions that RETAUGHT a different
+  /// Subject for this one occurrence (`Session.subjectId`), never the
+  /// ordinary case: an un-overridden occurrence inherits its schedule's
+  /// Subject and holds no row here at all.
+  sessionOverrides   Session[]
 
   @@index([displayOrder])
   @@map("subject")
@@ -1303,6 +1314,9 @@ model AdministrativeGroup {
   eventScopes          EventAdministrativeGroup[]
   /// Revision 155 (expand phase) — mirrors `eventScopes` above.
   courseScheduleScopes CourseScheduleAdministrativeGroup[]
+  /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
+  /// occurrence at a time instead of a whole schedule (R92 generalised).
+  sessionAudiences     SessionAudienceAdministrativeGroup[]
 
   // Redundant against the primary key ON PURPOSE: PostgreSQL requires a unique
   // constraint on the referenced column pair before `Enrollment` can declare
@@ -1360,6 +1374,10 @@ model TeachingGroup {
   /// this circle among its dimensions. Distinct from `schedules` above,
   /// which is the LEGACY single-target `teaching_group` mode's own FK.
   courseScheduleScopes CourseScheduleTeachingGroup[]
+  /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
+  /// occurrence at a time instead of a whole schedule (R92 generalised) —
+  /// "two circles combined for one sitting" is two rows here.
+  sessionAudiences     SessionAudienceTeachingGroup[]
 
   // Same technique as `AdministrativeGroup(id, level_id)`: the referenced pair
   // a composite FK needs. `StudentTeachingGroup` carries subject+level and this
@@ -1733,6 +1751,71 @@ model SessionAudienceBranch {
   @@map("session_audience_branch")
 }
 
+/// **Owner-reported, 2026-09-17 — R92 generalised: a category.** Same shape
+/// and rule as `SessionAudienceBranch` above: no rows means *inherit from
+/// the schedule*; rows present name the category populations this ONE
+/// occurrence draws from, in addition to whatever `SessionAudienceLevel`/
+/// `SessionAudienceAdministrativeGroup`/`SessionAudienceTeachingGroup` name.
+model SessionAudienceCategory {
+  sessionId  String   @map("session_id") @db.Uuid
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  categoryId String   @map("category_id") @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sessionId, categoryId])
+  @@index([categoryId])
+  @@map("session_audience_category")
+}
+
+/// **Owner-reported, 2026-09-17 — R92 generalised: a Level.** Same shape as
+/// `SessionAudienceBranch` — see that model's own docstring. Naming a second
+/// Level here is what "combine two Levels for one occurrence" means.
+model SessionAudienceLevel {
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  levelId   String  @map("level_id") @db.Uuid
+  level     Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sessionId, levelId])
+  @@index([levelId])
+  @@map("session_audience_level")
+}
+
+/// **Owner-reported, 2026-09-17 — R92 generalised: an Administrative Group.**
+/// Same shape as `SessionAudienceBranch` — see that model's own docstring.
+model SessionAudienceAdministrativeGroup {
+  sessionId             String              @map("session_id") @db.Uuid
+  session               Session             @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  administrativeGroupId String              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sessionId, administrativeGroupId])
+  @@index([administrativeGroupId])
+  @@map("session_audience_administrative_group")
+}
+
+/// **Owner-reported, 2026-09-17 — R92 generalised: a Teaching Circle.** Same
+/// shape as `SessionAudienceBranch` — see that model's own docstring. Naming
+/// two circles here is what "two circles combined for one sitting" means.
+model SessionAudienceTeachingGroup {
+  sessionId       String        @map("session_id") @db.Uuid
+  session         Session       @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  teachingGroupId String        @map("teaching_group_id") @db.Uuid
+  teachingGroup   TeachingGroup @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sessionId, teachingGroupId])
+  @@index([teachingGroupId])
+  @@map("session_audience_teaching_group")
+}
+
 /// §4.4c — **the resolution table for ALL teacher scoping.** Replaces
 /// `GroupTeacher`.
 ///
@@ -1855,6 +1938,19 @@ model Session {
   /// second override marker**, because the platform already has one.
   visibility Visibility @default(public)
 
+  /// **Owner-reported, 2026-09-17 — this occurrence's OWN subject**, on the
+  /// same snapshot-plus-`overridden` footing as `room_id`/`delivery_mode`/
+  /// `visibility` above. `NULL` means *inherit from the schedule* (every
+  /// occurrence but a deliberately retaught one); `session.materialize`
+  /// never writes it, so a fresh occurrence always inherits until a human
+  /// overrides it through `session.override`, which then protects the row
+  /// from the next schedule edit exactly as it already does for every other
+  /// field. Never `NOT NULL`: unlike `title` (which every Session must show
+  /// something for), an un-overridden subject has an honest "ask the
+  /// schedule" answer that a materialized copy would only let drift.
+  subjectId String?  @map("subject_id") @db.Uuid
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
   status SessionStatus @default(scheduled)
 
   /// Distinguishes a human's deliberate change from a `session.materialize`
@@ -1882,6 +1978,16 @@ model Session {
   /// means *inherit from the schedule*, which is every occurrence but the rare
   /// combined one.
   audienceBranches SessionAudienceBranch[]
+  /// **Owner-reported, 2026-09-17 — R92 generalised from branches to every
+  /// dimension `multi_dimension` schedules already resolve** (categories,
+  /// levels, administrative groups, teaching circles). Each is independent
+  /// and empty-means-inherit on the identical footing as `audienceBranches`
+  /// above; see `audienceForSession`'s own "effective dimensions" doc for
+  /// how the five combine.
+  audienceCategories           SessionAudienceCategory[]
+  audienceLevels               SessionAudienceLevel[]
+  audienceAdministrativeGroups SessionAudienceAdministrativeGroup[]
+  audienceTeachingGroups       SessionAudienceTeachingGroup[]
   /// R99 — attempts to record this occurrence. Usually none: recording is
   /// optional and explicit, and a class that nobody recorded has no rows here.
   recordings       SessionRecording[]

@@ -706,11 +706,14 @@ export function createApp(
   guarded.patch('/sessions/:id', sessionsCtl.override(prisma));
   guarded.post('/sessions/:id/cancel', sessionsCtl.cancel(prisma));
   guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
-  // R92 — one occurrence's audience, when two branches meet together. The
-  // roster reports the venue and the audience as SEPARATE facts, because they
-  // coincide for every occurrence but the combined one.
+  // R92 — one occurrence's audience, when it draws from more than the
+  // schedule's own along any of five dimensions (Owner-reported 2026-09-17,
+  // generalised from branches alone). The roster reports the venue and the
+  // audience as SEPARATE facts, because they coincide for every occurrence
+  // but the combined one. `/audience` (never `/audience-branches`, its own
+  // pre-generalisation name) is deliberate: the route now sets all five.
   guarded.get('/sessions/:id/roster', sessionsCtl.roster(prisma));
-  guarded.put('/sessions/:id/audience-branches', sessionsCtl.setAudience(prisma));
+  guarded.put('/sessions/:id/audience', sessionsCtl.setAudience(prisma));
 
   /**
    * **Attendance — the register, §4.7 as built by R123.**

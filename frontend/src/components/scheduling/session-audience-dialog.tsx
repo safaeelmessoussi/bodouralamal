@@ -2,37 +2,49 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import {
   fetchSessionRoster,
-  setSessionAudienceBranches,
+  setSessionAudienceOverrides,
   type SessionRoster,
 } from '../../adapters/sessions.js';
+import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
+import { listCircles, type TeachingGroupRow } from '../../adapters/teaching-groups.js';
 import { Badge } from '../ui/badge.js';
 import { FormDialog } from '../ui/form-dialog.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { MultiSelectField } from '../ui/multi-select.js';
+import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
 
 /**
- * **الحضور من الفروع — who is expected at THIS occurrence** (R92).
+ * **الحضور — who is expected at THIS occurrence, along five dimensions**
+ * (R92, generalised Owner-reported 2026-09-17 from branches alone).
  *
- * The association occasionally delivers a lesson once instead of twice: two
- * branches' classes meet together, physically at one of them, for that
- * occurrence only.
+ * The association occasionally delivers a lesson once instead of twice, folds
+ * a second Level in for one week, or combines two Circles for one sitting
+ * while the rest stay split — the same shape, five times: a second
+ * population is EXPECTED for this occurrence, on top of the schedule's own.
  *
- * ## Two facts, never one control
+ * ## Five facts, five independent controls
  *
- * The dialog shows the **venue** as read-only text — *where the class meets* is
- * decided by the schedule and the room, and this screen does not change it — and
- * the **audience branches** as the thing being edited. They coincide for every
- * occurrence but the combined one, and separating them here is what stops an
- * administrator believing she has moved the class.
+ * Each dimension is its own `MultiSelectField`, seeded with the schedule's
+ * own currently-effective value(s) and editable independently — clearing the
+ * Level control while a Circle override stays chosen is an ordinary save.
+ * The dialog shows the **venue** as read-only text — *where the class meets*
+ * is decided by the schedule and the room, and this screen does not change it.
  *
- * ## Replacement, not addition
+ * ## Replacement per dimension, not addition
  *
- * The chosen list **is** the audience. To avoid the ambiguity an additive rule
- * would create — *does the schedule's own branch still count?* — the control
- * opens with the inherited branch **already selected**, so *combine* is
- * expressed by adding the second one. Clearing every branch removes the override
- * and the audience returns to the schedule's.
+ * Each control's chosen list **is** that dimension's contribution. To avoid
+ * the ambiguity an additive rule would create — *does the schedule's own
+ * value still count?* — every control opens with the inherited value(s)
+ * **already selected**, so *combine* is expressed by adding the second one.
+ * Clearing a control's every value removes THAT dimension's override alone.
+ *
+ * ## Every teaching mode now, not `entire_level` alone
+ *
+ * R92's own branch-only override refused every other schedule mode and
+ * reported the rest rather than inventing semantics nobody asked for; that
+ * generalisation is this dialog, reached through `audienceForSession`'s own
+ * `multi_dimension` composition regardless of the schedule's real mode.
  *
  * ## This occurrence only
  *
@@ -57,34 +69,73 @@ export function SessionAudienceDialog({
   onSaved: (message: string) => void;
   token: string | null;
 }): ReactNode {
+  const scope = useScopeOptions({ token, fields: ['categoryId', 'levelId'], mode: 'form' });
+  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
+
   const [roster, setRoster] = useState<SessionRoster | null>(null);
-  const [chosen, setChosen] = useState<string[]>([]);
-  const [initial, setInitial] = useState<string[]>([]);
+  const [chosenBranches, setChosenBranches] = useState<string[]>([]);
+  const [chosenCategories, setChosenCategories] = useState<string[]>([]);
+  const [chosenLevels, setChosenLevels] = useState<string[]>([]);
+  const [chosenGroups, setChosenGroups] = useState<string[]>([]);
+  const [chosenCircles, setChosenCircles] = useState<string[]>([]);
+  const [initial, setInitial] = useState<{
+    branches: string[];
+    categories: string[];
+    levels: string[];
+    groups: string[];
+    circles: string[];
+  }>({ branches: [], categories: [], levels: [], groups: [], circles: [] });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Unscoped, like the multi_dimension class picker's own reads (Revision
+  // 157): this dialog offers every group/circle on the platform, never the
+  // ordinary Level+branch-chained list — combining across boundaries is
+  // exactly the case that list cannot answer.
+  useEffect(() => {
+    void listAdministrativeGroups(token, 1, {}, null, 100).then((page) => setGroups(page.data));
+    void listCircles(token, 1, {}, null, 100).then((page) => setCircles(page.data));
+  }, [token]);
 
   useEffect(() => {
     void fetchSessionRoster(sessionId, token)
       .then((r) => {
         setRoster(r);
-        // **Seeded with the inherited branch**, which is what makes
+        // **Seeded with the inherited value(s)**, which is what makes
         // *replacement* the only rule anybody has to hold in their head.
-        const ids = r.audience_branches.map((b) => b.id);
-        setChosen(ids);
-        setInitial(ids);
+        const seeded = {
+          branches: r.audience.branches.map((b) => b.id),
+          categories: r.audience.categories.map((c) => c.id),
+          levels: r.audience.levels.map((l) => l.id),
+          groups: r.audience.administrative_groups.map((g) => g.id),
+          circles: r.audience.teaching_groups.map((c) => c.id),
+        };
+        setChosenBranches(seeded.branches);
+        setChosenCategories(seeded.categories);
+        setChosenLevels(seeded.levels);
+        setChosenGroups(seeded.groups);
+        setChosenCircles(seeded.circles);
+        setInitial(seeded);
       })
       .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
   }, [sessionId, token]);
 
-  // Through the shared comparison rather than a hand-rolled join. Sorted first,
-  // because the picker returns ids in click order and choosing A then B is the
-  // same audience as choosing B then A — `isDirty` is deliberately
+  // Through the shared comparison rather than a hand-rolled join. Sorted
+  // first, because a picker returns ids in click order and choosing A then B
+  // is the same audience as choosing B then A — `isDirty` is deliberately
   // order-sensitive, so the sort is what makes it mean *changed*.
-  const dirty = isDirty([...chosen].sort(), [...initial].sort());
+  const dirty =
+    isDirty([...chosenBranches].sort(), [...initial.branches].sort()) ||
+    isDirty([...chosenCategories].sort(), [...initial.categories].sort()) ||
+    isDirty([...chosenLevels].sort(), [...initial.levels].sort()) ||
+    isDirty([...chosenGroups].sort(), [...initial.groups].sort()) ||
+    isDirty([...chosenCircles].sort(), [...initial.circles].sort());
 
   return (
     <FormDialog
       open
+      wide
       title={t('admin.sessions.audienceTitle').replace('{date}', date)}
       notice={notice}
       busy={busy}
@@ -93,7 +144,18 @@ export function SessionAudienceDialog({
       onSubmit={async () => {
         setBusy(true);
         try {
-          await setSessionAudienceBranches(sessionId, version, chosen, token);
+          await setSessionAudienceOverrides(
+            sessionId,
+            version,
+            {
+              branchIds: chosenBranches,
+              categoryIds: chosenCategories,
+              levelIds: chosenLevels,
+              administrativeGroupIds: chosenGroups,
+              teachingGroupIds: chosenCircles,
+            },
+            token,
+          );
           onSaved(t('admin.sessions.audienceSaved'));
         } catch {
           setNotice(t('admin.sessions.audienceSaveFailed'));
@@ -116,11 +178,35 @@ export function SessionAudienceDialog({
       ) : null}
 
       <MultiSelectField
-        label={t('admin.sessions.audienceBranches')}
+        label={t('admin.calendar.scopeBranch')}
         options={branches.map((b) => ({ value: b.id, label: b.name }))}
-        selected={chosen}
-        onChange={setChosen}
+        selected={chosenBranches}
+        onChange={setChosenBranches}
         hint={t('admin.sessions.audienceBranchesHint')}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeCategory')}
+        options={scope.options.categoryId}
+        selected={chosenCategories}
+        onChange={setChosenCategories}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeLevel')}
+        options={scope.options.levelId}
+        selected={chosenLevels}
+        onChange={setChosenLevels}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeGroup')}
+        options={groups.map((g) => ({ value: g.id, label: g.name }))}
+        selected={chosenGroups}
+        onChange={setChosenGroups}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeCircle')}
+        options={circles.map((c) => ({ value: c.id, label: c.name }))}
+        selected={chosenCircles}
+        onChange={setChosenCircles}
       />
 
       {roster ? (

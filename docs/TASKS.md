@@ -4543,15 +4543,17 @@ the Owner's own report named.
       a self-service Teacher is offered (`MODES` gates both); true
       mutual cascading needs a faceted-options read that does not
       exist today. Awaiting confirmation of the exact shape.
-- [ ] **§3 — تعديل الحصة per-occurrence overrides, investigated.**
-      طريقة الحضور/القاعة (`this_session` scope) and staff (`طاقم
-      التدريس` action) are ALREADY per-occurrence editable — found
-      while checking, not built new. فروع has a narrow existing
-      override (branches only, R92). فئات/مستويات/مجموعات مستوى/
-      حلقات/نمط التدريس/المادة have none. Generalising R92 to these
-      does not conflict with §20 rule 22 (confirmed: not a snapshot),
-      but is a new schema decision on the exact boundary R92's own
-      comment deferred. Awaiting confirmation before building it.
+- [x] **Built: §3 — تعديل الحصة per-occurrence overrides** (SRS
+      Revision 161), on explicit Owner instruction. R92's branch-only
+      audience override generalised to level/category/administrative-
+      group/circle (four new join tables mirroring the existing one;
+      `audienceForSession` is the only function that changed — every
+      other caller and `audienceWhere`'s own arms are untouched) and
+      the mode restriction lifted (works for every teaching mode
+      now). A per-occurrence Subject override added to `PATCH
+      /sessions/{id}`, validated against the schedule's own Level(s).
+      «الحضور» dialog is now five independent pickers; «تعديل» gains
+      a Subject select. Route renamed `PUT /sessions/{id}/audience`.
 - [ ] **§4 — multi-role registration, investigated.** The blocker is
       `User.requestedRole`, a single scalar column read/written
       everywhere a registration is created, listed or approved.

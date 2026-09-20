@@ -63,6 +63,15 @@ interface SessionScopeEdit {
   title: string;
   description: string | null;
   /**
+   * **Owner-reported, 2026-09-17 — this occurrence's own Subject** (§4.4),
+   * on exactly the footing `room_id` has: `null` clears an existing
+   * override and returns THIS occurrence to the schedule's own Subject.
+   * Distinct from `identity.subject_id` below, which replaces the SCHEDULE's
+   * own Subject going forward (`this_and_future` only) — this field never
+   * touches the schedule.
+   */
+  subject_id: string | null;
+  /**
    * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
    * §4.4 otherwise freezes**, present only for `this_and_future` (the split
    * REPLACES these too, which is what makes changing them safe): the same
@@ -392,15 +401,17 @@ export function ScheduleSessionsPage({
       available: () => scope !== null,
     },
     {
-      // **R92 — who attends this one, which is not who teaches it.** Only for a
-      // whole-Level class: in the other modes the branch is carried by the
-      // target itself, so a branch list has no meaning and the server refuses
-      // it. An action that can only be refused is not offered (§14.4).
+      // **R92 — who attends this one, which is not who teaches it.**
+      // Owner-reported, 2026-09-17 — generalised to every teaching mode:
+      // the override now resolves through `multi_dimension`'s own
+      // composition regardless of the schedule's real mode, so every
+      // mode's occurrence may gain a Level/Category/Group/Circle addition,
+      // not whole-Level classes alone.
       label: t('admin.sessions.audienceAction'),
       onSelect: (r) => setAudienceFor(r),
       // Administrative, like the staffing action beside it: R92's cross-branch
       // audience is the association deciding who a lesson is delivered to.
-      available: () => !isTeacherPortal && klass?.teachingMode === 'entire_level',
+      available: () => !isTeacherPortal,
     },
     {
       label: t('admin.sessions.cancel'),
@@ -606,6 +617,7 @@ export function ScheduleSessionsPage({
            */
           token={isTeacherPortal ? null : accessToken}
           identity={isTeacherPortal || !scope || !klass ? null : { ...scope, ...klass }}
+          scheduleSubjectId={isTeacherPortal ? null : scope?.subjectId ?? null}
         />
       ) : null}
 
@@ -780,6 +792,7 @@ function ScopeDialog({
   onCancel,
   token,
   identity,
+  scheduleSubjectId,
 }: {
   session: ScheduleSession;
   total: number;
@@ -804,6 +817,14 @@ function ScopeDialog({
     targetId: string;
     teachingMode: string;
   } | null;
+  /**
+   * **Owner-reported, 2026-09-17 — the schedule's own current Subject**, so
+   * the this-session-only Subject picker below can seed a real value rather
+   * than an empty-looking select when this occurrence carries no override
+   * of its own yet. `null` on the identical footing `token` already has
+   * (teacher portal, or not yet loaded) — manager-only, same as `identity`.
+   */
+  scheduleSubjectId: string | null;
 }): ReactNode {
   const [scope, setScope] = useState<EditScope>('this_session');
   const [date, setDate] = useState(session.date);
@@ -835,6 +856,27 @@ function ScopeDialog({
    */
   const [title, setTitle] = useState(session.title);
   const [description, setDescription] = useState(session.description ?? '');
+  /**
+   * **Owner-reported, 2026-09-17 — opened on THIS occurrence's effective
+   * Subject**: its own override if it has one, else the schedule's current
+   * Subject — the identical fallback `audienceForSession` itself uses, so
+   * the picker never opens on an empty-looking value for an occurrence that
+   * has simply never been retaught.
+   */
+  const [subjectId, setSubjectId] = useState(session.subject_id ?? scheduleSubjectId ?? '');
+  // Unscoped (`mode: 'filter'`), the same reasoning the multi_dimension
+  // class picker's own reads already established: this list offers every
+  // Subject on the platform rather than one chained to a Level this dialog
+  // does not otherwise track, and the server is the real boundary regardless
+  // (`assertSubjectTaughtAtLevel`, looped over the schedule's own Level(s)).
+  // `fields: []` when `token` is null (teacher portal) — manager-only, same
+  // as `identity` below, and the same "no request for a control that will
+  // not render" rule that section's own comment states.
+  const subjectScope = useScopeOptions({
+    token,
+    fields: token ? (['subjectId'] as const) : [],
+    mode: 'filter',
+  });
 
   /**
    * **Owner-reported, 2026-09-15 — the successor's identity, edited exactly
@@ -955,6 +997,25 @@ function ScopeDialog({
           onRoom={setRoomId}
         />
 
+        {/* **Owner-reported, 2026-09-17 — this occurrence's own Subject**,
+            on the same footing `room_id`/`delivery_mode` have above: THIS
+            date only, manager-only (same as `identity` below), and absent
+            for the wider scopes — a rule has no single occurrence to
+            retach, only `this_and_future`'s own identity replacement
+            (below) touches the SCHEDULE's Subject. */}
+        {scope === 'this_session' && token ? (
+          <SelectField
+            label={t('admin.sessions.subjectLabel')}
+            value={subjectId}
+            onChange={setSubjectId}
+            hint={t('admin.sessions.subjectHint')}
+            options={[
+              { value: '', label: t('admin.sessions.subjectInherit') },
+              ...subjectScope.options.subjectId,
+            ]}
+          />
+        ) : null}
+
         {/* **Owner-reported, 2026-09-15 — the good, simple design for editing
             what §4.4 otherwise freezes.** `this_and_future` splits the
             schedule regardless (R50); this is that split's successor
@@ -1018,6 +1079,11 @@ function ScopeDialog({
                 visibility,
                 title,
                 description: description.trim() === '' ? null : description,
+                // Owner-reported, 2026-09-17 — only `this_session` carries a
+                // Subject override; the wider scopes touch the schedule's
+                // Subject through `identity.subject_id` alone, and
+                // `performWideEdit` never reads this key.
+                subject_id: subjectId || null,
                 ...(scope === 'this_and_future' && identity
                   ? {
                       identity: {

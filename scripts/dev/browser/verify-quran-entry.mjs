@@ -419,13 +419,20 @@ check(
  * and زينب must disappear from the roster without any enrolment changing.
  */
 const dropped = await evaluate(`(async () => {
-  const res = await fetch('/api/v1/sessions/' + ${JSON.stringify(S.combined)} + '/audience-branches', {
+  const res = await fetch('/api/v1/sessions/' + ${JSON.stringify(S.combined)} + '/audience', {
     method: 'PUT',
     headers: {
       Authorization: 'Bearer ' + ${JSON.stringify(adminToken)},
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ version: ${JSON.stringify(S.combinedVersion ?? 0)}, branch_ids: [] }),
+    body: JSON.stringify({
+      version: ${JSON.stringify(S.combinedVersion ?? 0)},
+      branch_ids: [],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [],
+      teaching_group_ids: [],
+    }),
   });
   return { status: res.status, body: (await res.text()).slice(0, 200) };
 })()`);
