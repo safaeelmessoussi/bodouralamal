@@ -4870,11 +4870,10 @@ the Owner's own report named.
       wording for the object store in `testing.md` and `resilience.md` was
       reworded; dated history and the accurate legacy-volume refusals were
       left as written.
-- [ ] **Staging, next authorized deployment:** host preflight refuses to run
-      while the legacy `bodour_minio-data` volume exists, so an operator must
-      first stop the old `minio` container and `docker volume rm
-      bodour_minio-data` (Staging object data is already Owner-authorized to
-      be discarded). Not done — no remote environment was touched.
+- [x] **Staging's deployment: done, 2026-09-20** — see "Storage unification
+      finished end to end" below. (Preflight does refuse a host that still
+      carries `bodour_minio-data`; that is now recorded in
+      `deployment-readiness.md` for any future host.)
 - [x] **Correction, found by the first hosted run of the new job.** This
       pass first recorded the `mc` (MinIO client) users as "working,
       verified". That held only where the image was already cached: on a clean
@@ -4929,3 +4928,39 @@ changed destructively; Production go-live remains on hold.
       `job runner failed to start` occurred when a migration command was
       launched one second after the API started; the identical startup
       succeeded by hand and on restart. Cause not proven.)
+- [x] **Staging deployed at `a6b599d9148cff7732db7511a4ddf07f428682e4`,
+      through the documented Staging pipeline** (base + release + staging
+      overlay only). Hosted CI 8/8 green first, images published. Order:
+      exact detached checkout → `pg_dump` outside the checkout → writers and
+      the hand-started MinIO stopped → legacy volume copied into a holding
+      volume and verified (38 files, identical tree SHA-256) → legacy
+      container and `bodour_minio-data` removed → **host preflight PASS** →
+      pull, both revision labels verified → `db` + SeaweedFS up, explicit
+      bucket bootstrap → `migrate deploy` (no pending migration) →
+      `seed:production` → `seed:fixtures` → app up → `enable-tls.sh` →
+      verification. The `migrate deploy` step that recreated the object store
+      in this morning's incident left it untouched: there is one storage
+      model now, so nothing differs to reconcile. The database container was
+      never recreated.
+- [x] **Staging's UAT objects preserved, not discarded.** Discarding was
+      authorized, but the copy was cheap: **5 of 5 objects, 151,132,392
+      bytes, verified by size, SHA-256 and content type, zero mismatches**
+      (that figure plus the four fixture rows' nominal sizes equals the
+      database's 144 MB total exactly). Run from a one-off container, not
+      inside the live API, with a streamed verification read.
+- [x] **Staging verified on the real edge.** `/healthz` 200, four components
+      ok, 12/12 workers; both containers carry the exact revision label;
+      TLS/HSTS/CSP intact; zero error-level API lines; the three public
+      objects served at their exact lengths; an unsigned private read denied
+      (Nginx answers the store's 403 with its designed `302
+      /content-unavailable`); a **signed PUT/GET round trip through the TLS
+      proxy with the application's own presigner** passes, including the
+      migrated 33,231,224-byte private file; **15/15** anonymous browser
+      assertions. Temporary server, holding volume and both cached `minio/*`
+      images removed; preflight still PASS on the final state; 26 GiB free.
+- [ ] **Production go-live: on hold (Owner).** Nothing in this pass touched
+      Production. It will launch on the identical storage model; that decision
+      remains separate and open.
+- [ ] Not changed, stated for completeness: `verify-backup-restore.sh` is
+      still outside hosted CI (the Production dress rehearsal that is in CI
+      already exercises backup and restore against the real release graph).

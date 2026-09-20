@@ -10357,3 +10357,48 @@ unproven rather than assumed.
 Verification: all 31 `scripts/ci/check-*.sh` guards, documentation links and `git diff --check`
 pass. The backup drill is still not part of hosted CI; the Production dress rehearsal that is
 already exercises backup and restore against the real release graph.
+
+**Deployed to `staging.bodouralamal.com` at `a6b599d9148cff7732db7511a4ddf07f428682e4`, upgrading
+from `c5f1006` — Staging now runs the one SeaweedFS model, its legacy MinIO volume is gone, and
+its UAT objects were preserved. Owner authorization, 2026-09-20. No Production action.**
+
+Hosted run `35517908293` passed all seven verification jobs and published both exact-commit
+images first. The documented Staging pipeline was followed as written — base + release + staging
+overlay, nothing else — with one necessary preparation, because host preflight refuses to run
+while a legacy `bodour_minio-data` volume exists: a `pg_dump` was taken outside the checkout;
+`nginx`, `api` and the MinIO container started by hand during this morning's incident were
+stopped with plain `docker stop`; the legacy volume was copied into a holding volume and verified
+(38 files, identical tree SHA-256); the hand-started container and `bodour_minio-data` were
+removed. **Preflight then passed in full, before any release container changed.** Pull with both
+revision labels verified; `db` and SeaweedFS up; explicit bucket bootstrap through the exact API
+image; `migrate deploy` (101 migrations, none pending); `seed:production`; `seed:fixtures`; the
+application up; `enable-tls.sh`. The checkout stayed clean throughout, and the database container
+was never recreated.
+
+The step that caused this morning's incident is the proof the restructuring worked: `run --rm api
+npx prisma migrate deploy` reconciled its `minio` dependency again, and left it untouched, because
+no `-f` combination can now resolve a different storage backend.
+
+Discarding Staging's objects was authorized; they were kept anyway because it was cheap. A
+temporary MinIO on the holding volume, reachable on the internal network only, served as the
+source, and a one-off container from the exact API image copied every object and re-read it as a
+stream: **5 of 5 objects, 151,132,392 bytes, verified by size, SHA-256 and content type, zero
+mismatches** — which, with the four fixture rows' nominal sizes, equals the database's 144 MB
+total exactly.
+
+Verification on the real edge: `/healthz` 200 with database, storage, jobs and queue ok and 12/12
+workers; both containers carry the exact revision label; TLS, HSTS and CSP intact; zero
+error-level API lines; the three public objects served at their exact `Content-Length`; an
+unsigned private read denied (the store's 403 is answered by Nginx's designed
+`302 /content-unavailable` — my first expectation of a raw 403 was wrong for the edge path); a
+**signed PUT/GET round trip through the TLS proxy using the application's own presigner** passes
+with identical bytes, the object is gone after delete, and the migrated 33,231,224-byte private
+file reads back at exactly its recorded size; and `scripts/deploy/verify-production-browser.mjs`
+passes **15/15** anonymous assertions against the real origin with its real certificate.
+Afterwards the temporary server, the holding volume and both cached `minio/*` images were
+removed; preflight still passes on the final state; 26 GiB free against the 20-GiB floor.
+
+`deployment-readiness.md` had stated as a present fact that Staging was deployed at `4fd620de…`,
+stale across several deployments; it now names `a6b599d` with this evidence and keeps the first
+accepted release as history. Its B1 row now says SeaweedFS runs on Localhost and Staging.
+Production go-live remains on hold by Owner decision and was not touched.
