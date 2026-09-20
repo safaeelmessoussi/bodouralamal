@@ -54,12 +54,19 @@ egress  ──joins the room, composites it──▶ http://minio:9000       the
   browser would have disclosed its address to two third parties before class. It
   was found on Staging by reading a real browser's own `RTCPeerConnection`, after an
   earlier version of this page had claimed the opposite. There is no "none"
-  setting, so it is closed from both ends: the media server names **only its own
-  media port** (`stun_servers`, enforced by preflight), which covers the recorder
-  and any other client; and the classroom passes an explicit empty list
-  (`online-classroom.tsx`), so a browser does not attempt STUN at all. Nothing is
-  lost — a publicly addressed media server is reached by a client behind NAT
-  without STUN.
+  setting, so it is closed from both ends: the media server names **only a dead
+  port on its own host** (`stun_servers`, port 3478, enforced by preflight), which
+  covers the recorder and any other client; and the classroom passes an explicit
+  empty list (`online-classroom.tsx`), so a browser does not attempt STUN at all.
+  Nothing is lost — a publicly addressed media server is reached by a client behind
+  NAT without STUN.
+* **Why a dead port and not the media port — measured, because the obvious choice
+  was wrong.** Naming the media port itself (7882) was the first fix. Tested from
+  outside, A/B, twice each: with the server's list naming 7882, media fell back to
+  **TCP every time**; with an empty list, or with a dead port named, it used **UDP
+  every time** and connected within four seconds. A browser's plain STUN request to
+  the media port spoils that port's handling of the same client's real connection.
+  Port 3478 is not published and is opened in no firewall.
 * **One key pair, three readers.** The API, the media server and the recorder all
   read `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; preflight refuses a release whose
   three copies differ. No secret is in Git: the media server's configuration is

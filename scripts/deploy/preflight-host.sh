@@ -196,15 +196,17 @@ if livekit_env.get("NODE_IP") != expected_ipv4:
 if "use_external_ip: false" not in livekit_env.get("LIVEKIT_CONFIG", ""):
     raise SystemExit("the media server must not discover its address through an external STUN service")
 # With an empty list the media server hands every client the public STUN servers
-# of Twilio and Google. The only entry allowed is the media port of this host.
+# of Twilio and Google. The only entry allowed is on this host.
 stun_block = []
 for line in livekit_env.get("LIVEKIT_CONFIG", "").split("stun_servers:")[-1].splitlines()[1:]:
     if line.strip().startswith("- "):
         stun_block.append(line.strip()[2:].strip())
     elif line.strip() and not line.strip().startswith("#"):
         break
-if stun_block != [f"{expected_ipv4}:7882"]:
-    raise SystemExit("the media server must name only its own media port as a STUN server, never a third party")
+# Port 3478 on this host, where nothing listens - never the media port, which a
+# plain STUN request spoils for the real connection of the same client (measured).
+if stun_block != [f"{expected_ipv4}:3478"]:
+    raise SystemExit("the media server must name only a dead port on this host as its STUN server, never a third party and never the media port")
 if "udp_port: 7882" not in livekit_env.get("LIVEKIT_CONFIG", "") or "tcp_port: 7881" not in livekit_env.get("LIVEKIT_CONFIG", ""):
     raise SystemExit("the media server must use the single published UDP and TCP media ports")
 for key in ("EGRESS_VIDEO_CPU_COST", "EGRESS_AUDIO_CPU_COST"):

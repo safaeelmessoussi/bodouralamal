@@ -10556,3 +10556,21 @@ the host: LiveKit warned that the UDP receive buffer was too small for productio
 suggested 5 MB); `net.core.rmem_max`/`wmem_max` are now 5 MB persistently there, and the step is in
 the provisioning runbook. `lk room join` could not be used as the outside client because it only
 mints its own token from the secret, and the secret does not leave the host — hence the browser.
+
+*Second addendum to the Revision 164 entry — my first STUN fix was itself wrong, and only an
+outside measurement showed it.* After `cfbbc9e` a client was handed only `stun:<host>:7882`, which
+met the goal (no third party) — and a real recording completed on Staging (recorder 142% CPU /
+743 MiB, whole host 166% of 200%, 2.7 GB still available). But the outside browser's media was now
+on **TCP 7881**, where the session before the fix had used UDP. `tcpdump` showed UDP 7882 reaching
+the media server, so the network was not the cause. A controlled A/B from outside, twice each:
+server list naming 7882 → TCP every time; explicit empty list (what the real classroom sends) → UDP
+every time; a dead port on our own host named instead → UDP every time, connected within four
+seconds. A browser's plain STUN request to the media port spoils that port's handling of the same
+client's real connection. Real participants were never affected (the classroom passes an empty
+list), but the recorder and any other client would have been held on the TCP fallback. The media
+server now names port 3478, where nothing listens and which no firewall opens; preflight requires
+exactly that and gained a tenth mutation test for the mistake itself (the media port named as STUN).
+Localhost: 61/61 with recordings. Also on Staging: preflight refused the redeploy at 19 GiB free
+against the 20-GiB floor — the recorder image alone is 4 GB — so four superseded release
+generations (GHCR keeps every exact-commit image), an unused Node base image and leftover build
+cache were removed, to 24 GiB free, rather than lowering or bypassing the floor.

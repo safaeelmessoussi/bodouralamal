@@ -229,11 +229,17 @@ services:
           # server sends every browser — and the recorder — Twilio's and
           # Google's public STUN servers (found on Staging, 2026-09-20, in the
           # browser's own RTCPeerConnection). There is no "none" setting, so the
-          # only address named is THIS host's own media port: nothing third-party
-          # is ever contacted, and nothing needs to answer, because a client
-          # reaches a publicly addressed media server without STUN at all.
+          # one address named is on THIS host: nothing third-party is contacted.
+          #
+          # **Port 3478, where nothing listens — deliberately NOT the media port.**
+          # Naming 7882 was tried first and measured from outside, A/B, twice: a
+          # browser's plain STUN request to the media port spoils that port's
+          # handling of the same client's real connection, and media fell back to
+          # TCP every time. A dead port costs a client nothing — a publicly
+          # addressed media server is reached without STUN — and media stays on
+          # UDP. 3478 is not published and not opened in any firewall.
           stun_servers:
-            - ${LIVEKIT_NODE_IP:-127.0.0.1}:7882
+            - ${LIVEKIT_NODE_IP:-127.0.0.1}:3478
         redis:
           address: redis:6379
         webhook:
