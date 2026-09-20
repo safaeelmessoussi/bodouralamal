@@ -225,6 +225,15 @@ services:
           # Never ask a public STUN server (Google's, by default) what this
           # host's address is: release tiers STATE it (NODE_IP below).
           use_external_ip: false
+          # **And never hand one to a client either.** With this list empty the
+          # server sends every browser — and the recorder — Twilio's and
+          # Google's public STUN servers (found on Staging, 2026-09-20, in the
+          # browser's own RTCPeerConnection). There is no "none" setting, so the
+          # only address named is THIS host's own media port: nothing third-party
+          # is ever contacted, and nothing needs to answer, because a client
+          # reaches a publicly addressed media server without STUN at all.
+          stun_servers:
+            - ${LIVEKIT_NODE_IP:-127.0.0.1}:7882
         redis:
           address: redis:6379
         webhook:

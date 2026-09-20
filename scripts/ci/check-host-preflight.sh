@@ -72,7 +72,7 @@ fi
 # **The media rule must be able to fail** (SRS Revision 164): exactly two media
 # ports and never the signalling one, a stated public address, one key pair
 # shared by the application, the media server and the recorder, and no STUN.
-for mutation in signalling-port extra-port loopback node-ip keys stun url; do
+for mutation in signalling-port extra-port loopback node-ip keys stun third-party-stun no-stun-list url; do
   if printf '%s' "$resolved" |
     python3 -c 'import json,sys; value=json.load(sys.stdin); lk=value["services"]["livekit"]
 m=sys.argv[1]
@@ -82,6 +82,8 @@ elif m == "loopback": lk["ports"][0]["host_ip"]="127.0.0.1"
 elif m == "node-ip": lk["environment"]["NODE_IP"]="203.0.113.9"
 elif m == "keys": value["services"]["livekit-egress"]["environment"]["LIVEKIT_API_SECRET"]="a-different-secret-than-the-application-holds"
 elif m == "stun": lk["environment"]["LIVEKIT_CONFIG"]=lk["environment"]["LIVEKIT_CONFIG"].replace("use_external_ip: false","use_external_ip: true")
+elif m == "third-party-stun": lk["environment"]["LIVEKIT_CONFIG"]=lk["environment"]["LIVEKIT_CONFIG"].replace(":7882\n", ":7882\n    - stun.l.google.com:19302\n", 1)
+elif m == "no-stun-list": lk["environment"]["LIVEKIT_CONFIG"]=lk["environment"]["LIVEKIT_CONFIG"].replace("stun_servers:", "unused_key:")
 else: value["services"]["api"]["environment"]["LIVEKIT_URL"]="wss://media.example.cloud"
 json.dump(value,sys.stdout)' "$mutation" |
     validate_resolved_compose production preflight.invalid "$release" production fresh "$public_ipv4" 2>/dev/null; then
@@ -158,6 +160,7 @@ for invariant in \
   "the media server must publish exactly 7881/tcp and 7882/udp, and never its signalling port" \
   "LIVEKIT_NODE_IP must be the approved public IPv4 of this host" \
   "the media server must not discover its address through an external STUN service" \
+  "the media server must name only its own media port as a STUN server, never a third party" \
   "MIN_CPUS_PRODUCTION=4" \
   "persistent volume catalogue differs from the recovery-point contract" \
   "docker manifest inspect"; do

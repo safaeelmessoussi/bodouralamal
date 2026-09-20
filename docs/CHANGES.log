@@ -10536,3 +10536,23 @@ recreates Nginx, so this cannot occur there); `verify-livekit-ingest` 27/27 with
 at 17 objects before and after; and 61/61 again with a stated LAN address and media ports on every
 interface, which is the release network shape and proves the recorder container reaches the media
 server through the host's own address. All guards, documentation links and `git diff --check` pass.
+
+*Addendum to the Revision 164 entry — found by testing Staging FROM OUTSIDE, and a correction to
+what that entry and the provider page first claimed.* A real browser on a laptop behind home NAT
+joined Staging across the internet: signalling over `wss://` on 443 through Nginx, media by **UDP
+to 92.222.65.141:7882**, two published tracks, 1.86 MB sent in twelve seconds; 7881/tcp is
+reachable from outside and 7880 is closed. But the browser's own candidate type was `srflx`, which
+means it had asked a STUN server for its address — and reading its `RTCPeerConnection` showed the
+media server had handed it **Twilio's and Google's public STUN servers**. That is LiveKit's default
+ICE list whenever `stun_servers` is empty. No audio or video goes there, but every beneficiary's
+browser would have disclosed its address to two third parties, and I had written that no
+third-party STUN was involved. There is no setting for "none", so it is closed from both ends: the
+media server names only its own media port (`stun_servers`, which also covers the recorder), and the
+classroom passes an explicit empty ICE list so a browser attempts no STUN at all — a publicly
+addressed media server needs none. Preflight refuses a missing list or any third-party entry (two
+more mutation tests, nine in all); a frontend test pins the classroom half. Localhost: 61/61 again,
+recordings included, with the media server naming only itself. Also found on Staging and fixed on
+the host: LiveKit warned that the UDP receive buffer was too small for production (416 KB against a
+suggested 5 MB); `net.core.rmem_max`/`wmem_max` are now 5 MB persistently there, and the step is in
+the provisioning runbook. `lk room join` could not be used as the outside client because it only
+mints its own token from the secret, and the secret does not leave the host — hence the browser.

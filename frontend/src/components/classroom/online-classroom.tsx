@@ -54,6 +54,9 @@ import { RecordingPanel } from './recording.js';
  * button that starts an unconsented recording is precisely the thing that must
  * not exist first.
  */
+/** Stable across renders: a new object each time would reconnect the room. */
+const NO_THIRD_PARTY_ICE = { rtcConfig: { iceServers: [] } };
+
 export function OnlineClassroom({
   credentials,
   accessToken,
@@ -84,6 +87,20 @@ export function OnlineClassroom({
       serverUrl={credentials.url}
       token={credentials.token}
       connect
+      /**
+       * **No STUN server — ours or anybody's** (SRS Revision 164).
+       *
+       * A media server hands its clients a list of ICE servers, and LiveKit's
+       * default list is Twilio's and Google's public STUN servers: every
+       * beneficiary's browser would have told two third parties its address
+       * before the class began. An explicit list — even an empty one — replaces
+       * the server's (`livekit-client` only adopts the server's when none was
+       * given). Nothing is lost: this deployment's media server sits on a public
+       * address, so a browser behind NAT reaches it directly. The media server
+       * is ALSO configured to name only itself (`docker-compose.yml`), so the
+       * recorder and any other client are covered too.
+       */
+      connectOptions={NO_THIRD_PARTY_ICE}
       /**
        * **`video` is false for an audio-only class, and that is the whole
        * mechanism** (R98.22).

@@ -46,10 +46,20 @@ egress  ──joins the room, composites it──▶ http://minio:9000       the
   published 7880, or a loopback-bound media port on a release tier.
 * **The host's address is stated, never discovered.** LiveKit's default is to ask a
   public STUN server (Google's) what the host's address is. `use_external_ip: false`
-  plus `LIVEKIT_NODE_IP` removes the one third-party call in the media path;
-  preflight holds the value to the host's approved public IPv4. No STUN or TURN
-  servers are handed to browsers either — the media server is itself on a public
-  address, which is all a client behind NAT needs.
+  plus `LIVEKIT_NODE_IP` removes that call; preflight holds the value to the host's
+  approved public IPv4.
+* **No third-party STUN reaches a client either — and this one was NOT true at
+  first.** LiveKit hands every client an ICE-server list, and with none configured
+  that list is **Twilio's and Google's public STUN servers**: each beneficiary's
+  browser would have disclosed its address to two third parties before class. It
+  was found on Staging by reading a real browser's own `RTCPeerConnection`, after an
+  earlier version of this page had claimed the opposite. There is no "none"
+  setting, so it is closed from both ends: the media server names **only its own
+  media port** (`stun_servers`, enforced by preflight), which covers the recorder
+  and any other client; and the classroom passes an explicit empty list
+  (`online-classroom.tsx`), so a browser does not attempt STUN at all. Nothing is
+  lost — a publicly addressed media server is reached by a client behind NAT
+  without STUN.
 * **One key pair, three readers.** The API, the media server and the recorder all
   read `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; preflight refuses a release whose
   three copies differ. No secret is in Git: the media server's configuration is

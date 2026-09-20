@@ -453,3 +453,27 @@ describe('recording is optional, explicit, and visible to everyone (R99)', () =>
     expect(ar.classroom.recordingHint).toContain('اختياري');
   });
 });
+
+/**
+ * **SRS Revision 164 — no beneficiary's browser is told about a third-party STUN
+ * server.** Found on Staging, in a real browser's own `RTCPeerConnection`: the
+ * media server's default ICE list is Twilio's and Google's public STUN servers.
+ */
+describe('SRS Revision 164 — the classroom contacts no third-party ICE server', () => {
+  const code = CLASSROOM.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+  it('gives the room an EXPLICIT empty ICE list, which is what stops the server\'s default being adopted', () => {
+    // `livekit-client` takes the server's list only when none was given, and an
+    // empty array is a given one — omitting the option would restore the default.
+    expect(code).toContain('const NO_THIRD_PARTY_ICE = { rtcConfig: { iceServers: [] } };');
+    expect(code).toContain('connectOptions={NO_THIRD_PARTY_ICE}');
+  });
+
+  it('keeps that object outside the component, so a re-render cannot reconnect the class', () => {
+    expect(code.indexOf('const NO_THIRD_PARTY_ICE')).toBeLessThan(code.indexOf('export function OnlineClassroom'));
+  });
+
+  it('names no STUN or TURN host anywhere in the classroom', () => {
+    expect(code).not.toMatch(/stun:|turn:|stun\.l\.google|twilio/i);
+  });
+});

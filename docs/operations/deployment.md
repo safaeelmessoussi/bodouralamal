@@ -108,6 +108,11 @@ sudo systemctl enable --now docker containerd ssh ufw systemd-timesyncd apt-dail
 sudo dpkg-reconfigure --priority=low unattended-upgrades
 sudo timedatectl set-timezone Etc/UTC
 sudo timedatectl set-ntp true
+# Online-class media (SRS R164): the media server asks for a 5 MB UDP receive
+# buffer and warns on the kernel default (~200-400 KB), which drops packets in a
+# busy room. Persistent, host-wide, and the only kernel setting this stack needs.
+printf 'net.core.rmem_max=5000000\nnet.core.wmem_max=5000000\n' | sudo tee /etc/sysctl.d/60-bodour-media.conf
+sudo sysctl --system
 ```
 
 Reboot after the initial upgrade when `/var/run/reboot-required` exists, then reconnect as
