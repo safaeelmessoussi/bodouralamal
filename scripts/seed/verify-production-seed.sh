@@ -25,6 +25,12 @@ trap cleanup EXIT INT TERM
 
 export PRODUCTION_SEED_DB_PORT="$db_port"
 export PRODUCTION_SEED_MINIO_PORT="$minio_port"
+# The fixture's `minio` service extends docker-compose.yml's own definition,
+# whose `${MINIO_ACCESS_KEY}`/`${MINIO_SECRET_KEY}` substitution must resolve
+# before Compose brings that service up — export these ahead of the first
+# `docker compose` call, not only ahead of the later host-side process env.
+export MINIO_ACCESS_KEY='production-seed-fixture'
+export MINIO_SECRET_KEY='production-seed-fixture-secret'
 docker compose --project-name "$project" --file "$compose_file" up -d --wait db minio
 docker compose --project-name "$project" --file "$compose_file" run --rm minio-init
 
@@ -35,8 +41,6 @@ export JWT_SIGNING_KEY='production-seed-fixture-signing-key-with-more-than-thirt
 export ONBOARDING_TOKEN_KEY='production-seed-fixture-onboarding-key-with-more-than-thirty-two-bytes'
 export EMAIL_LOCK_KEY='email-lock-isolated-fixture-key-at-least-32-bytes'
 export MINIO_ENDPOINT="http://127.0.0.1:${minio_port}"
-export MINIO_ACCESS_KEY='production-seed-fixture'
-export MINIO_SECRET_KEY='production-seed-fixture-secret'
 export PUBLIC_BASE_URL="http://127.0.0.1:${api_port}"
 # The drill reaches MinIO directly only through the server-side endpoint above.
 # Browser-facing capability URLs must retain the same-origin /storage shape the

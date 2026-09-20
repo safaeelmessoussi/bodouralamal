@@ -184,16 +184,17 @@ publishes a legal name where someone asked for a kunya.
 ## The integration job
 
 `scripts/ci/test-integration.sh` creates a uniquely named disposable Compose project from the
-base service graph plus the Production SeaweedFS selection in `docker-compose.storage.yml`
-and `scripts/ci/fixtures/docker-compose.integration.yml`. Database,
+base service graph in `docker-compose.yml` (which already defines the one SeaweedFS model
+every tier shares, Owner decision 2026-09-20) and
+`scripts/ci/fixtures/docker-compose.integration.yml`. Database,
 S3 and Nginx ports bind to loopback only; the overlay removes inherited env files, supplies
 fixture-only credentials, runs all migrations and the actual Production and development seeds,
 and waits for the real whole-application health contract before Vitest starts. The trap always
 removes the project's containers, networks, volumes and its uniquely tagged images.
 
 Production-mode bootstrap/restart/restore and the focused storage-lifecycle drill use the
-same store definition and explicit S3 initializer. Local/Staging MinIO configuration is not
-switched by running these tests. See [B1 evidence](testing.md#b1-seaweedfs-compatibility-and-recovery).
+same store definition and explicit S3 initializer. See
+[B1 evidence](testing.md#b1-seaweedfs-compatibility-and-recovery).
 
 Both Local Development and CI execute the same `scripts/test/run-integration-suite.sh`. It
 digests every application table before and after the serial suite and fails on residue,

@@ -110,7 +110,7 @@ columns speculatively is prohibited.**
 | Validation | **Zod 4.4.3** | One place where field limits are encoded, shared with the client |
 | Jobs | **pg-boss 12.26.2** | Postgres-backed, so **no Redis container**. On a 4 GB box, container count is a real budget — and it is what lets a job be enqueued *inside* the transaction that triggers it |
 | Database | **PostgreSQL 18.4** | ICU collation for correct Arabic sorting; partial and functional indexes; the job queue and rate-limit counters live here too |
-| Storage | **S3-compatible object store** | Production Compose selects self-hosted SeaweedFS; existing Local/Staging MinIO remains isolated pending an authorized migration. [Storage](storage.md#b1-candidate-verification-checkpoint) owns the pin, compatibility and Moroccan primary/backup residency requirements |
+| Storage | **S3-compatible object store** | Self-hosted SeaweedFS, identical for Localhost, Staging and Production (Owner decision, 2026-09-20). [Storage](storage.md#b1-candidate-verification-checkpoint) owns the pin, compatibility and Moroccan primary/backup residency requirements |
 | Client | **React 19.2.8** + **Vite 8.1.5** | Vite because the build is fast and the output is static. **Next.js is prohibited** — server-rendering would break the same-origin routing model |
 | Edge | **Nginx** stable-alpine + Certbot | Same-origin routing, TLS, rate limits, error-page mapping |
 | Tests | **Vitest 4.1.10** | Unit and integration in one runner |

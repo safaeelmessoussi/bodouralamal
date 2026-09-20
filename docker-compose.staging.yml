@@ -44,9 +44,12 @@ services:
     mem_limit: 96m
     memswap_limit: 128m
 
-  # One-shot; it exits immediately after creating buckets and policies.
+  # One-shot; it exits immediately after creating buckets and policies. Runs
+  # the API's own Node/AWS-SDK image now (previously the tiny static `mc`
+  # client), so the ceiling is sized for a short-lived Node process rather
+  # than a static Go binary.
   minio-init:
-    mem_limit: 64m
+    mem_limit: 256m
 
   certbot:
     mem_limit: 128m

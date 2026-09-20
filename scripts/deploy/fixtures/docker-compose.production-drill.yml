@@ -32,14 +32,11 @@ services:
     environment:
       POSTGRES_PASSWORD: production-drill-password
 
-  minio:
-    environment:
-      MINIO_ROOT_USER: production-drill-access-key
-      MINIO_ROOT_PASSWORD: production-drill-secret-password
-
-  minio-init:
-    environment:
-      MC_HOST_local: http://production-drill-access-key:production-drill-secret-password@minio:9000
+  # No override needed here: `docker-compose.yml`'s own
+  # `${MINIO_ACCESS_KEY}`/`${MINIO_SECRET_KEY}` substitution resolves from the
+  # `production-drill-access-key`/`production-drill-secret-password` pair
+  # `scripts/deploy/verify-production-bootstrap.sh` exports before resolving
+  # this graph.
 
   nginx:
     image: ${BODOUR_PRODUCTION_DRILL_WEB_IMAGE:?set the disposable web image name}

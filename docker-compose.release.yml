@@ -10,6 +10,11 @@
 #
 # Every release command uses --no-build. A missing image therefore stops the
 # deployment instead of silently compiling a different artifact on the VPS.
+#
+# `minio-init` selects the same exact-commit API image here too: both Staging
+# and Production pull `docker-compose.yml`'s API image through this overlay
+# (never build one), so its default storage-bootstrap image must follow suit
+# rather than fall back to the Local-only `bodour-api:dev` tag.
 
 services:
   api:
@@ -17,3 +22,6 @@ services:
 
   nginx:
     image: ghcr.io/safaeelmessoussi/bodouralamal-web:${BODOUR_RELEASE_TAG:?set BODOUR_RELEASE_TAG to the exact 40-character commit}
+
+  minio-init:
+    image: ${BODOUR_STORAGE_INIT_IMAGE:-ghcr.io/safaeelmessoussi/bodouralamal-api:${BODOUR_RELEASE_TAG:-unset}}

@@ -10084,3 +10084,102 @@ Once `bodour-minio-1` was corrected, the originally intended upgrade completed c
 `api`/`nginx` recreated on `c5f1006`, both revision labels verified, `/healthz` green
 (4/4 components, 12/12 workers), no error-level log lines in the following minutes,
 TLS/HSTS/CSP headers reconfirmed. No Production action of any kind.
+
+**Owner decision, 2026-09-20 — one SeaweedFS model for Localhost, Staging and Production;
+`docker-compose.storage.yml`'s accidental-activation gap retired structurally.** Directly
+resolves the open item above. The Owner explicitly authorized discarding the
+Localhost/Staging MinIO data that existed at the time and running SeaweedFS 4.46 identically
+on all three tiers, defined exactly once. This was a pure infrastructure/tooling change: no
+backend or frontend source file, Prisma schema, migration or route changed.
+
+**The structural fix.** `docker-compose.storage.yml` no longer exists. Its `minio`/`minio-init`
+service definitions (pinned SeaweedFS 4.46 digest, disabled telemetry/Admin UI/WebDAV/Iceberg/
+Lance/IAM/auto-bucket-creation, `volume.nocopy` empty-restore-target, the Node/AWS-SDK
+`storage-init.mjs` initializer) moved verbatim into `docker-compose.yml`'s own `minio`/
+`minio-init` services, replacing the base file's previous real-MinIO definitions entirely.
+There is therefore no longer a separate storage overlay for any tier's Compose invocation to
+silently include or omit — the exact mechanism behind the incident above cannot recur, because
+the file it depended on does not exist. `docker-compose.production.yml` shrank to a single
+`NODE_ENV=production` line (its `minio`/`minio-init extends:` blocks and volume-name override
+are gone, both now redundant). `docker-compose.release.yml` gained a `minio-init` image
+default (falls back to the exact-commit API image the same way `api`/`nginx` already do),
+since Staging — like Production — now needs the storage initializer to run the real release
+image rather than the Local-only `bodour-api:dev` tag. `docker-compose.staging.yml`'s
+`minio-init` memory ceiling rose from 64m to 256m: it now runs the API's Node/SDK image, not
+the previous tiny static `mc` client.
+
+**Every script/fixture that referenced the retired file or the retired real-MinIO credential
+shape was updated:** `scripts/deploy/preflight-host.sh` (its semantic validator's
+tier-conditional storage checks — pinned image, empty `nocopy` volume, disabled auxiliary
+flags, matching credentials, exact-image initializer, legacy-volume refusal — are now
+unconditional for both tiers; the `MC_HOST_local`/`MINIO_ROOT_USER` Staging-only branch is
+gone); `scripts/ci/check-host-preflight.sh` (both resolved graphs — Staging and Production —
+now assert through the same unified validator); `scripts/deploy/enable-tls.sh`,
+`scripts/ci/check-release-artifacts.sh`, `scripts/backup/run-scheduled.sh`,
+`scripts/deploy/verify-production-bootstrap.sh`, `scripts/ci/test-integration.sh` (each
+dropped its now-nonexistent `-f/--compose-file docker-compose.storage.yml` reference);
+`scripts/ci/fixtures/docker-compose.integration.yml`,
+`scripts/ci/fixtures/docker-compose.host-preflight.yml`,
+`scripts/deploy/fixtures/docker-compose.production-drill.yml` (their `minio`/`minio-init`
+credential overrides were dead weight once the base file's own `${MINIO_ACCESS_KEY}`
+substitution — already exported by each caller — does the same job; removed rather than left
+as misleading no-ops); `scripts/backup/fixtures/docker-compose.yml`,
+`scripts/storage/fixtures/docker-compose.yml` (their `extends:` target moved from the deleted
+file to `docker-compose.yml`); `scripts/seed/fixtures/docker-compose.yml` (rewritten from a
+hand-rolled real-MinIO service to `extends:` the same shared definition; its caller,
+`scripts/seed/verify-production-seed.sh`, now exports `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`
+before the first `docker compose up`, not only before the later host-side process, since
+Compose interpolates a file's own `${VAR:?}` defaults independently of what an `extends:`ing
+file later overrides).
+
+**Documentation updated to describe the unified architecture rather than the retired split:**
+`docs/architecture/storage.md` (the "OWNER DECISION REQUIRED" heading now records the
+2026-09-20 resolution; the B1 checkpoint section drops its "not authorization to deploy
+Production" qualifier for the Localhost/Staging half of that sentence and gains a new "One
+SeaweedFS model for every tier" subsection recording the authorized data destruction and
+retiring the legacy-image paragraph), `docs/operations/deployment.md` (the Staging section's
+two-file substitution instruction is now a one-file substitution; the four-file pipeline
+commands drop their `-f docker-compose.storage.yml`; the supported-host-contract volume row
+and the object-store paragraph no longer split Staging from Production),
+`docs/operations/recovery.md` (the restore command drops the now-nonexistent file),
+`docs/operations/environments.md` (the version-pin table and the Staging-VM-backup coverage
+table each collapse their split Production/Legacy-Staging rows into one), `docs/development/
+ci-cd.md`, `docs/compliance/personal-data-audit.md`, `docs/README.md`, `docs/architecture/
+README.md` (vendor naming corrected). `docs/development/testing.md`'s dated B1 evidence
+entries were deliberately left untouched as historical record of what was tested in
+2026-09-12, per standing documentation policy — they describe what was true then, not a
+current-architecture claim.
+
+**Verification.** Backend/frontend typecheck, lint and build all clean. All three tiers'
+resolved Compose graphs inspected directly (`docker compose config`): Localhost, Staging and
+Production each resolve to the identical pinned SeaweedFS image, credentials, `nocopy` volume
+and healthcheck; Staging's and Production's `minio-init` both correctly resolve to the
+exact-commit API image; the `bodour_seaweedfs-data` physical volume name resolves identically
+in all three. `scripts/ci/check-host-preflight.sh` and `scripts/ci/check-release-artifacts.sh`
+both pass against the rewritten scripts. Five full disposable-stack drills run end-to-end: the
+CI integration gate (`scripts/ci/test-integration.sh`) — **117 files passed / 2 skipped (119),
+2,670 tests passed / 18 skipped (2,688), 193/193 browser checks** — exactly the pre-change
+baseline, zero regression, all-table isolation intact; `scripts/storage/verify-storage-
+lifecycle.sh` — **5/5**; `scripts/backup/verify-backup-restore.sh` — full disk/lock/credential/
+corruption-refusal, verify-before-prune, two-generation-cap and monthly-skip matrix, then a
+complete raw + logical PostgreSQL and object-volume restore, **160s** (well inside the 1-hour
+RTO), proving the rewritten `extends:` path in both the backup and restore direction;
+`scripts/seed/verify-production-seed.sh` — the fresh-install scheduling-type catalogue and
+Platform Owner bootstrap SQL assertions both pass, **547/547** tests across three Vitest
+batches (production-seed integration; the ten-file educational/scheduling/trash/delivery/
+online-class/recording suite; the seven-file HTTP integration suite), the disposable API
+booted and passed `/healthz` — all against the rewritten `extends:`-based fixture and the
+moved credential-export ordering; `scripts/deploy/verify-production-bootstrap.sh` — the
+Production-mode dress rehearsal, exercising the simplified fixture with its now-redundant
+credential overrides removed.
+
+**One pre-existing, unrelated defect surfaced, not fixed here.**
+`scripts/seed/verify-production-seed.sh`'s own scenario-fixture loop failed on
+`backend/scripts/seed-notify-scenario.ts`: `prisma.exam.create()` passes `questions: []`,
+which the current schema rejects (`Expected ExamQuestionUncheckedCreateNestedManyWithoutExam
+Input, provided ()`) — evidently unreconciled since the R124 assessment-builder migration
+normalized `questions` from a JSONB column into a proper relation.
+`backend/scripts/seed-grading-exams.ts` carries the identical pattern and would fail the same
+way. Neither script was touched by this pass; this is unrelated to object storage and is
+recorded here rather than fixed, since fixing it would broaden this task beyond the
+storage-backend consistency work it was scoped to.

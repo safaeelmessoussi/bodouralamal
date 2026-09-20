@@ -38,14 +38,9 @@ if valid_public_ipv4 127.0.0.1 || valid_public_ipv4 10.0.0.1; then
 fi
 
 release='ffffffffffffffffffffffffffffffffffffffff'
-# docker-compose.storage.yml MUST be an explicit top-level --file here, never
-# left to docker-compose.production.yml's own `extends:`. Confirmed against
-# both the sandbox's Compose and the hosted runner's exact 2.38.2: `extends`
-# silently drops an !override-tagged map (environment/volumes) when the base
-# file being merged over already declares the same key — a real Compose
-# defect/incompatibility, not a version floor issue (2.38.2 exceeds
-# MIN_COMPOSE_VERSION). Passing this file directly puts the override through
-# ordinary multi-file merging, which resolves correctly on both.
+# One SeaweedFS model for every tier (Owner decision, 2026-09-20):
+# docker-compose.yml alone already defines it, so there is no longer a
+# separate storage file for either tier's resolved graph to include or omit.
 resolved="$({
   MINIO_ACCESS_KEY=preflight-access \
   MINIO_SECRET_KEY=preflight-secret-password \
@@ -53,7 +48,6 @@ resolved="$({
     docker compose \
       --file "$repo_root/docker-compose.yml" \
       --file "$repo_root/docker-compose.release.yml" \
-      --file "$repo_root/docker-compose.storage.yml" \
       --file "$repo_root/docker-compose.production.yml" \
       --file "$fixture" \
       --profile production config --format json
@@ -86,6 +80,10 @@ done
 node --test "$repo_root/scripts/storage/policy.test.mjs"
 unset resolved
 
+# The Staging graph is now validated by the exact same storage assertions as
+# Production's above — same pinned image, same empty nocopy restore target,
+# same exact-commit S3 initializer image — because both tiers share one
+# SeaweedFS model; nothing here is Staging-specific any more except NODE_ENV.
 resolved="$({
   MINIO_ACCESS_KEY=preflight-access \
   MINIO_SECRET_KEY=preflight-secret-password \

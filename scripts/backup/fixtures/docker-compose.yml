@@ -27,7 +27,7 @@ services:
 
   minio:
     extends:
-      file: ../../../docker-compose.storage.yml
+      file: ../../../docker-compose.yml
       service: minio
 
   minio-init:

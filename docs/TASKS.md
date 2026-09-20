@@ -4686,9 +4686,9 @@ the Owner's own report named.
       `/healthz` green (4/4 components, 12/12 workers), no error-level
       log lines, TLS/HSTS/CSP headers reconfirmed. No Production action.
 
-## OPEN — Document Owner decision required: `docker-compose.storage.yml`'s `minio` service is not actually tier-scoped (discovered 2026-09-20)
+## RESOLVED — Document Owner decision: one SeaweedFS model for every tier (2026-09-20)
 
-- [ ] **Found while deploying SRS Revision 162 to Staging, not part of that
+- [x] **Found while deploying SRS Revision 162 to Staging, not part of that
       task.** Commit `d9c25e6` ("B1 — maintained object store",
       2026-09-12) replaced the `minio` service's image with SeaweedFS in
       `docker-compose.storage.yml`. That commit's own `docs/TASKS.md`/
@@ -4696,26 +4696,101 @@ the Owner's own report named.
       **local engineering acceptance only** — "no live rollout occurred,"
       "legacy Local/Staging MinIO configuration unchanged," "live
       provisioning… require[s] separate authorization." But the compose
-      file itself does not encode that distinction: `minio`'s definition
-      in `docker-compose.storage.yml` is identical regardless of which
-      tier overlay sits beside it, so the documented deployment runbook's
-      own unmodified commands perform exactly the "live rollout" that
-      commit's documentation says requires separate authorization and did
-      not happen — proven when running the routine `prisma migrate
+      file itself did not encode that distinction: `minio`'s definition
+      in `docker-compose.storage.yml` was identical regardless of which
+      tier overlay sat beside it, so the documented deployment runbook's
+      own commands could perform exactly the "live rollout" that
+      commit's documentation said requires separate authorization —
+      proven when running the routine `prisma migrate
       deploy` step against Staging recreated `bodour-minio-1` on the new
       image against a fresh, empty volume, causing `/healthz` `503`s
       within seconds. Recovered within minutes with zero data loss
       (original `bodour_minio-data` volume was never touched); full
       timeline in `docs/CHANGES.log`'s "SRS Revision 162" deployment
       entry.
-- [ ] **Not fixed here — a real schema/infrastructure decision, not a
-      rendering choice.** Needs: (1) whether and when the SeaweedFS
-      rollout is actually authorized for Staging (and separately,
-      Production), and if so the documented populated-migration/backup/
-      verification/rollback process `docs/architecture/storage.md`
-      already describes; (2) until authorized, how the compose structure
-      should PREVENT `docker-compose.storage.yml` from silently applying
-      to a tier that has not approved it — today nothing stops the exact
-      sequence above from recurring on the next deployment (Staging or
-      Production) that lets Compose reconcile its `db`/`minio`
-      dependencies, which is every ordinary migration step.
+- [x] **Owner decision, 2026-09-20: explicitly authorize discarding
+      Localhost and Staging object-storage data and run SeaweedFS 4.46
+      identically on Localhost, Staging and Production.** Resolves both
+      open questions this item left: SeaweedFS is now authorized for
+      Localhost and Staging immediately (data recreated, not migrated —
+      the Owner explicitly waived object-by-object migration/rollback for
+      those two tiers); Production will run the same implementation
+      whenever its own separate go-live is authorized (unchanged by this
+      decision). The structural fix: `docker-compose.storage.yml` no
+      longer exists — its content now lives directly in
+      `docker-compose.yml`, so there is no longer a separate file for any
+      tier's compose invocation to silently include or omit. Full
+      implementation, file list and verification: see "SeaweedFS
+      unification" below and `docs/CHANGES.log`.
+
+## SeaweedFS unification — one object-storage model for every tier (2026-09-20)
+
+- [x] Merged `docker-compose.storage.yml`'s `minio`/`minio-init` service
+      definitions directly into `docker-compose.yml`, replacing the base
+      file's previous real-MinIO services entirely; deleted
+      `docker-compose.storage.yml`. Preserved verbatim: the pinned
+      SeaweedFS 4.46 digest, disabled telemetry/Admin UI/WebDAV/Iceberg/
+      Lance/IAM/auto-bucket-creation, `volume.nocopy` empty-restore
+      target, the `weed mini -s3.port=9000` healthcheck, and the Node/
+      AWS-SDK `storage-init.mjs` initializer (bucket creation, policy
+      checks, versioning/lifecycle/Object Lock refusal).
+- [x] `docker-compose.production.yml` reduced to its one remaining line
+      (`NODE_ENV=production`) — its `minio`/`minio-init extends:` blocks
+      and volume-name override are gone, now redundant with the base
+      file. `docker-compose.release.yml` gained a `minio-init` image
+      default (the exact-commit API image, matching `api`/`nginx`) so
+      Staging gets the real release image there too, not
+      `bodour-api:dev`. `docker-compose.staging.yml`'s `minio-init`
+      memory ceiling raised 64m → 256m (Node/SDK image, not the former
+      static `mc` client).
+- [x] Updated every script/fixture referencing the retired file or the
+      retired real-MinIO credential shape: `scripts/deploy/
+      preflight-host.sh` (unified its semantic validator's storage checks
+      across both tiers; removed the `MC_HOST_local`/`MINIO_ROOT_USER`
+      Staging-only branch and the tier-conditional legacy-volume
+      refusal — now unconditional for both), `scripts/ci/
+      check-host-preflight.sh`, `scripts/deploy/enable-tls.sh`,
+      `scripts/ci/check-release-artifacts.sh`, `scripts/backup/
+      run-scheduled.sh`, `scripts/deploy/verify-production-bootstrap.sh`,
+      `scripts/ci/test-integration.sh` (dropped the retired `-f`
+      reference), `scripts/ci/fixtures/docker-compose.integration.yml`,
+      `scripts/ci/fixtures/docker-compose.host-preflight.yml`,
+      `scripts/deploy/fixtures/docker-compose.production-drill.yml`
+      (removed now-dead credential overrides), `scripts/backup/
+      fixtures/docker-compose.yml`, `scripts/storage/
+      fixtures/docker-compose.yml` (retargeted `extends:` to
+      `docker-compose.yml`), `scripts/seed/fixtures/docker-compose.yml`
+      + `scripts/seed/verify-production-seed.sh` (rewritten onto the
+      shared `extends:`-based definition; moved the credential export
+      before the first `docker compose up`).
+- [x] Updated documentation to describe the unified architecture:
+      `docs/architecture/storage.md`, `docs/operations/deployment.md`,
+      `docs/operations/recovery.md`, `docs/operations/environments.md`,
+      `docs/development/ci-cd.md`, `docs/compliance/
+      personal-data-audit.md`, `docs/README.md`,
+      `docs/architecture/README.md`. `docs/development/testing.md`'s
+      dated B1 evidence entries deliberately left untouched as historical
+      record (documentation policy).
+- [x] Verified: backend/frontend typecheck/lint/build clean. All three
+      tiers' resolved Compose graphs inspected directly — identical
+      pinned image, credentials, `nocopy` volume, healthcheck and
+      `bodour_seaweedfs-data` physical volume name in all three; Staging's
+      and Production's `minio-init` both resolve to the exact-commit API
+      image. `check-host-preflight.sh` and `check-release-artifacts.sh`
+      pass. Five full disposable-stack drills, all green: CI integration
+      gate **117 files / 2 skipped (119), 2,670 tests / 18 skipped
+      (2,688), 193/193 browser checks** — the exact pre-change baseline,
+      zero regression; storage-lifecycle **5/5**; backup/restore drill
+      full matrix plus a complete raw+logical restore in **160s**;
+      production-seed drill **547/547** across three suites plus SQL
+      bootstrap assertions; Production-mode bootstrap dress rehearsal.
+      Full detail in `docs/CHANGES.log`.
+- [x] One pre-existing, unrelated defect found and **not fixed** (out of
+      scope): `backend/scripts/seed-notify-scenario.ts` and
+      `seed-grading-exams.ts` both pass `questions: []` to
+      `prisma.exam.create()`, which the current schema rejects since the
+      R124 assessment-builder migration normalized `questions` into a
+      relation. Neither script was touched by this pass.
+- [ ] Not pushed, not deployed (Owner instruction: no remote environment
+      changes as part of this task). Production go-live remains a
+      separate, still-open decision, unaffected by this change.

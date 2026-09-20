@@ -152,11 +152,11 @@ hosts do not trust that editable default: `docker-compose.production.yml` forces
 
 ### One example of that discipline in the compose file
 
-Legacy Local/Staging MinIO initialization uses `MC_HOST_local`; Production's SeaweedFS
-service receives `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, and its shared S3 initializer
-uses the existing TD-13 `MINIO_*` settings. All come from the operator's unchanged private
-environment files, not command-line credential arguments. **Resolved Compose and Docker
-inspect output still contain environment secrets**: never publish that output.
+Every tier's SeaweedFS `minio` service receives `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`,
+and its shared S3 initializer uses the existing TD-13 `MINIO_*` settings, identically for
+Localhost, Staging and Production (Owner decision, 2026-09-20). All come from the operator's
+unchanged private environment files, not command-line credential arguments. **Resolved Compose
+and Docker inspect output still contain environment secrets**: never publish that output.
 `BODOUR_STORAGE_INIT_IMAGE` is a test-harness override; Production preflight requires the
 initializer image to equal the exact release API image. See
 [Storage](../architecture/storage.md#b1-candidate-verification-checkpoint) for the single pin,

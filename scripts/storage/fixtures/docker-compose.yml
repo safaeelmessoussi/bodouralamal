@@ -19,7 +19,7 @@ services:
 
   minio:
     extends:
-      file: ../../../docker-compose.storage.yml
+      file: ../../../docker-compose.yml
       service: minio
     ports:
       - "127.0.0.1:${STORAGE_LIFECYCLE_MINIO_PORT:-59003}:9000"

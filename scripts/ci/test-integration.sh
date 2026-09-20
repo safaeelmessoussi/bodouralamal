@@ -62,7 +62,6 @@ compose=(
   docker compose
   --project-name "$project"
   --file "$repo_root/docker-compose.yml"
-  --file "$repo_root/docker-compose.storage.yml"
   --file "$overlay"
 )
 

@@ -91,7 +91,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [Database](architecture/database.md) | Schema, constraints, migrations, collation, concurrency |
 | [Identity and access](architecture/identity-and-access.md) | OAuth, sessions, tokens, roles, branch scope, child context |
 | [Security](architecture/security.md) | The posture as a whole — CSRF, CSP, existence leaks, PII, residency |
-| [Storage](architecture/storage.md) | Dual-bucket MinIO, presigned URLs, immutable keys, consent gating |
+| [Storage](architecture/storage.md) | Dual-bucket SeaweedFS (S3-compatible), presigned URLs, immutable keys, consent gating |
 | [Background jobs](architecture/background-jobs.md) | pg-boss, the job catalog, transactional enqueue |
 | [Calendar and Hijri](architecture/calendar-and-hijri.md) | Scheduling, recurrence, wall-clock time, the official Hijri calendar |
 | [Design system](architecture/design-system.md) | Tokens, the cascade, RTL, the visual language |

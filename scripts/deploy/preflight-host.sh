@@ -52,7 +52,7 @@ require_private_file() {
 validate_resolved_compose() {
   local tier="$1" domain="$2" release="$3" expected_node_env="$4" deployment_state="$5"
   local storage_image
-  storage_image="$(awk '/^    image: chrislusf\/seaweedfs:/ { print $2 }' "$(dirname "${BASH_SOURCE[0]}")/../../docker-compose.storage.yml")"
+  storage_image="$(awk '/^    image: chrislusf\/seaweedfs:/ { print $2 }' "$(dirname "${BASH_SOURCE[0]}")/../../docker-compose.yml")"
   python3 -c '
 import json
 import sys
@@ -94,35 +94,31 @@ if api_env["STORAGE_BASE_URL"] != f"https://{domain}/storage":
     raise SystemExit("STORAGE_BASE_URL is not the exact same-origin storage path")
 if api_env["MINIO_ENDPOINT"] != "http://minio:9000":
     raise SystemExit("MINIO_ENDPOINT must remain internal-only")
-if tier == "production":
-    if not storage_image or minio.get("image") != storage_image:
-        raise SystemExit("Production requires the accepted pinned object store")
-    if model.get("volumes", {}).get("minio-data", {}).get("name") != model.get("name", "") + "_seaweedfs-data":
-        raise SystemExit("Production must not mount legacy MinIO data")
-    data_mounts = [mount for mount in minio.get("volumes", []) if mount.get("target") == "/data"]
-    if len(data_mounts) != 1 or data_mounts[0].get("source") != "minio-data" or \
-       data_mounts[0].get("volume", {}).get("nocopy") is not True:
-        raise SystemExit("Production storage requires an empty, separately named restore target")
-    command = " ".join(minio.get("command", []))
-    for flag in ("-master.telemetry=false", "-admin.ui=false", "-webdav=false", "-s3.port.iceberg=0", "-s3.port.lance=0", "-s3.iam=false"):
-        if flag not in command:
-            raise SystemExit("Production storage exposes an unsupported auxiliary service")
-    if minio.get("environment", {}).get("AWS_ACCESS_KEY_ID") != api_env["MINIO_ACCESS_KEY"] or \
-       minio.get("environment", {}).get("AWS_SECRET_ACCESS_KEY") != api_env["MINIO_SECRET_KEY"]:
-        raise SystemExit("object-store bootstrap credentials do not match application credentials")
-    init_env = minio_init.get("environment", {})
-    if any(init_env.get(key) != api_env[key] for key in ("MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")):
-        raise SystemExit("S3 initializer credentials do not match application credentials")
-    if minio_init.get("image") != api.get("image"):
-        raise SystemExit("S3 initializer must use the exact accepted API image")
-elif minio.get("environment", {}).get("MINIO_ROOT_USER") != api_env["MINIO_ACCESS_KEY"] or \
-   minio.get("environment", {}).get("MINIO_ROOT_PASSWORD") != api_env["MINIO_SECRET_KEY"]:
-    raise SystemExit("MinIO bootstrap credentials do not match application credentials")
-expected_mc_host = "http://{}:{}@minio:9000".format(
-    api_env["MINIO_ACCESS_KEY"], api_env["MINIO_SECRET_KEY"]
-)
-if tier != "production" and minio_init.get("environment", {}).get("MC_HOST_local") != expected_mc_host:
-    raise SystemExit("MinIO policy initializer credentials do not match application credentials")
+# One SeaweedFS model for every tier (Owner decision, 2026-09-20): these
+# checks used to run only for tier == "production" while Staging kept real
+# MinIO. There is no such split any more — the same pinned image, empty
+# separately-named restore target, disabled auxiliary services and
+# exact-image S3 initializer are required everywhere.
+if not storage_image or minio.get("image") != storage_image:
+    raise SystemExit("the accepted pinned object store is required")
+if model.get("volumes", {}).get("minio-data", {}).get("name") != model.get("name", "") + "_seaweedfs-data":
+    raise SystemExit("must not mount legacy MinIO data")
+data_mounts = [mount for mount in minio.get("volumes", []) if mount.get("target") == "/data"]
+if len(data_mounts) != 1 or data_mounts[0].get("source") != "minio-data" or \
+   data_mounts[0].get("volume", {}).get("nocopy") is not True:
+    raise SystemExit("storage requires an empty, separately named restore target")
+command = " ".join(minio.get("command", []))
+for flag in ("-master.telemetry=false", "-admin.ui=false", "-webdav=false", "-s3.port.iceberg=0", "-s3.port.lance=0", "-s3.iam=false"):
+    if flag not in command:
+        raise SystemExit("storage exposes an unsupported auxiliary service")
+if minio.get("environment", {}).get("AWS_ACCESS_KEY_ID") != api_env["MINIO_ACCESS_KEY"] or \
+   minio.get("environment", {}).get("AWS_SECRET_ACCESS_KEY") != api_env["MINIO_SECRET_KEY"]:
+    raise SystemExit("object-store bootstrap credentials do not match application credentials")
+init_env = minio_init.get("environment", {})
+if any(init_env.get(key) != api_env[key] for key in ("MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")):
+    raise SystemExit("S3 initializer credentials do not match application credentials")
+if minio_init.get("image") != api.get("image"):
+    raise SystemExit("S3 initializer must use the exact accepted API image")
 if api_env["JWT_SIGNING_KEY"] == api_env["ONBOARDING_TOKEN_KEY"]:
     raise SystemExit("access and onboarding signing keys must be distinct")
 if len(api_env["EMAIL_LOCK_KEY"].encode()) < 32 or api_env["EMAIL_LOCK_KEY"] in (
@@ -304,14 +300,15 @@ main() {
   [[ "$available_bytes" =~ ^[0-9]+$ && "$available_bytes" -ge "$minimum_free_bytes" ]] ||
     fail "Docker data filesystem has ${available_gib:-unknown} GiB free; approved floor is $minimum_free_gib GiB"
 
-  local object_volume='bodour_minio-data'
-  if [[ "$tier" == production ]]; then
-    object_volume='bodour_seaweedfs-data'
-    if docker volume inspect bodour_minio-data >/dev/null 2>&1; then
-      fail 'legacy MinIO volume found; finish the authorized storage migration review first'
-    fi
+  # One SeaweedFS model for every tier (Owner decision, 2026-09-20): both
+  # Staging and Production now expect the same physical volume name, and
+  # neither tolerates a legacy real-MinIO volume left over from before that
+  # decision — this pipeline does not perform an in-place cross-vendor
+  # migration, so an operator must explicitly remove the old volume first.
+  if docker volume inspect bodour_minio-data >/dev/null 2>&1; then
+    fail 'legacy MinIO volume found; remove it explicitly before this pipeline runs (Owner-authorized migration, 2026-09-20)'
   fi
-  for volume in bodour_db-data "$object_volume" bodour_certbot-conf bodour_certbot-www; do
+  for volume in bodour_db-data bodour_seaweedfs-data bodour_certbot-conf bodour_certbot-www; do
     if docker volume inspect "$volume" >/dev/null 2>&1; then
       existing_volume_count=$((existing_volume_count + 1))
     fi
@@ -329,15 +326,13 @@ main() {
   [[ "${#resolved_aaaa[@]}" -eq 0 ]] ||
     fail 'IPv4-only launch host must not publish an unverified AAAA record'
 
+  # One SeaweedFS model for every tier (Owner decision, 2026-09-20):
+  # docker-compose.yml already defines it, so there is no longer a separate
+  # storage overlay for either tier to include or omit — Staging and
+  # Production differ only by which single tier overlay sits beside the
+  # shared release overlay.
   if [[ "$tier" == 'production' ]]; then
-    # docker-compose.storage.yml MUST be an explicit -f here, never left to
-    # docker-compose.production.yml's own `extends:` — `extends` silently
-    # drops an !override-tagged environment/volumes map when merged over a
-    # base file that already declares the same service key (confirmed against
-    # real Compose 2.38.2, well above this file's own MIN_COMPOSE_VERSION
-    # floor). An explicit -f puts the override through ordinary multi-file
-    # merging, which resolves correctly.
-    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.storage.yml -f docker-compose.production.yml)
+    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)
   else
     compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)
   fi

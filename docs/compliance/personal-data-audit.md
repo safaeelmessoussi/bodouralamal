@@ -378,7 +378,7 @@ from `data_processing` — the right structure.
 | Party | Data | Location | Status |
 |---|---|---|---|
 | **Google OAuth** | `openid email profile` **[CODE]** | Foreign | **[CONFIRM]** — see H.1 |
-| **MinIO** | All uploads | Self-hosted, same VPS **[SRS]** | OK |
+| **SeaweedFS (object storage)** | All uploads | Self-hosted, same VPS **[SRS]** | OK |
 | **PostgreSQL** | Everything | Self-hosted, same VPS **[SRS]** | OK |
 | Analytics / telemetry | — | — | **[CODE] None. No analytics, no Sentry, no tag manager.** |
 | Email / SMS | — | — | **[CODE] None exists.** No notification channel is built |

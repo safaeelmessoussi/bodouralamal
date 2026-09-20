@@ -2,10 +2,12 @@
 
 # Storage
 
-Production Compose selects self-hosted SeaweedFS on Moroccan infrastructure. Existing
-Local/Staging deployments retain their separate MinIO volumes and configuration until an
-explicitly authorized migration. Service/DNS and TD-13 `MINIO_*` names remain compatibility
-names, not a vendor assertion. Selection and rollout boundaries are recorded below.
+Localhost, Staging and Production all use the same self-hosted SeaweedFS model, defined once
+in `docker-compose.yml` (Owner decision, 2026-09-20 — see
+[§ one model for every tier](#one-seaweedfs-model-for-every-tier-owner-decision-2026-09-20)
+below). There is no longer a separate storage overlay file for any tier to include or omit, and
+no tier runs real MinIO. Service/DNS and TD-13 `MINIO_*` names remain compatibility names, not a
+vendor assertion. Selection and rollout boundaries are recorded below.
 
 > **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
 > recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
@@ -16,14 +18,21 @@ names, not a vendor assertion. Selection and rollout boundaries are recorded bel
 
 ## OWNER DECISION REQUIRED — OBJECT STORE
 
-Historical heading retained for existing links. The later Owner-authorized engineering
-selection below resolves the replacement choice; live provisioning/migration is separate.
+Historical heading retained for existing links. **Resolved, 2026-09-20:** the Owner selected
+SeaweedFS 4.46 as the single object-store implementation for Localhost, Staging and Production
+alike, explicitly authorizing destruction of the then-existing Localhost/Staging MinIO data as
+part of that unification (see
+[§ one model for every tier](#one-seaweedfs-model-for-every-tier-owner-decision-2026-09-20)).
+Production's own go-live remains a separate, still-open decision — this resolved which storage
+implementation Production will run when that happens, not that it has happened.
 
 ### B1 candidate verification checkpoint
 
 The Owner authorized engineering selection/evaluation of a maintained replacement
-on the planned single Moroccan VPS. **SeaweedFS 4.46 is the selected B1 replacement,
-not authorization to deploy Production.** Its [official release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.46)
+on the planned single Moroccan VPS. **SeaweedFS 4.46 is the selected B1 replacement.**
+As of 2026-09-20 it is authorized and running as the object store for Localhost and Staging, and
+is the implementation Production will run once Production's own separate go-live is authorized.
+Its [official release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.46)
 was published on 2026-09-08; the [security policy](https://github.com/seaweedfs/seaweedfs/security)
 targets the latest release. Upstream's [single-node guide](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini)
 documents the all-in-one process and credential-enabled S3 access. The candidate
@@ -32,12 +41,18 @@ This is maintenance evidence, not a claim that the software has no vulnerabiliti
 Garage's [own compatibility matrix](https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/)
 reports no S3 bucket-policy API, making it a larger integration change here.
 
-The shared `docker-compose.storage.yml` overlay preserves `minio:9000` and TD-13 setting names to avoid a
-wire-contract rewrite, but uses a **new `${COMPOSE_PROJECT_NAME}_seaweedfs-data`
+`docker-compose.yml`'s own `minio`/`minio-init` services preserve `minio:9000` and TD-13 setting
+names to avoid a wire-contract rewrite, but use a **new `${COMPOSE_PROJECT_NAME}_seaweedfs-data`
 physical volume**, never a MinIO-format mount. `volume.nocopy` prevents image scaffolding
 from populating an empty restore target. Backup tools resolve the physical name from Compose
-labels, preserving the logical `minio-data` recovery manifest coordinate. The overlay disables
-telemetry, Admin UI, WebDAV, Iceberg/Lance endpoints and embedded IAM. No storage host port is added.
+labels, preserving the logical `minio-data` recovery manifest coordinate. The service disables
+telemetry, Admin UI, WebDAV, Iceberg/Lance endpoints and embedded IAM. No storage host port is added
+beyond Local Development's own loopback-bound port remap. There used to be a separate
+`docker-compose.storage.yml` overlay that only Production's compose graph included — that split
+was itself the accidental-activation risk found and retired on 2026-09-20 (any command whose
+`-f` chain happened to include that file silently switched a tier's storage backend, which is
+exactly what happened once, against Staging); folding the definition directly into
+`docker-compose.yml` removes the file an invocation could wrongly include or omit.
 Container liveness is not acceptance: the API still checks authenticated access
 to all three buckets. The explicit initializer checks policies and refuses
 versioning/lifecycle/Object Lock drift rather than silently clearing it. Public policy permits
@@ -63,19 +78,27 @@ it does not suppress pipeline errors, invent a digest or disable checksums. Unit
 coverage require the error to remain a refusal without an unhandled rejection.
 See [B1 verification](../development/testing.md#b1-seaweedfs-compatibility-and-recovery).
 
-**No live switch is authorized by local acceptance.** Fresh Production has no historical
-objects to migrate. A future
-authorized populated Local/Staging switch requires stopped writers, a validated
-backup, separately initialized storage, explicit S3 object copy with full-byte
-checksum/metadata/count comparison, and rollback retention. Never mount raw
-MinIO data in SeaweedFS or delete a source solely because copying returned success.
+### One SeaweedFS model for every tier (Owner decision, 2026-09-20)
 
-The legacy Local/Staging image remains `minio/minio:RELEASE.2025-09-07T16-13-09Z`. MinIO's
+The Owner explicitly authorized discarding the Localhost and Staging MinIO data that existed at
+the time and recreating both tiers' object storage on SeaweedFS, so that Localhost, Staging and
+Production all run the identical model defined once in `docker-compose.yml`. This was a
+one-time, Owner-authorized destructive migration for Localhost/Staging specifically — it is not
+a general policy that future storage changes may discard data, and it does not itself authorize
+Production's go-live (that remains separate; Production holds no data yet regardless). No
+object-by-object copy, checksum comparison or rollback retention was built for the
+Localhost/Staging side of this change, because the Owner's authorization made that engineering
+unnecessary; Production's own eventual first launch still has nothing to migrate either, by the
+same "fresh Production" reasoning this section always carried. Never mount a raw legacy MinIO
+volume as SeaweedFS — the two are not interchangeable at the volume level, which is exactly why
+this was a recreate, not an in-place upgrade.
+
+The legacy `minio/minio:RELEASE.2025-09-07T16-13-09Z` image is retired everywhere as of this
+decision — no tier runs it. MinIO's
 [GHSA-hv4r-mvr4-25vw advisory](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw)
 states that this final OSS line is affected and identifies a fix only in the maintained AIStor
-release line. Production **must not launch on that legacy pin**: an edge filter reduces one
-known request shape but cannot turn an unsupported, affected object-store release into a
-maintained production dependency.
+release line; this was the original reason no tier may launch on it, and it is now moot for all
+three rather than only for Production.
 
 Collect each vendor's residency, support, administration, backup and commercial evidence through
 the single [Moroccan-provider acceptance matrix](../operations/provider-acceptance.md). This page

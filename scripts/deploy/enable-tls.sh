@@ -33,9 +33,7 @@ case "$TIER" in
     compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)
     ;;
   production)
-    # docker-compose.storage.yml is an explicit -f, never left to
-    # docker-compose.production.yml's own `extends:` (see preflight-host.sh).
-    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.storage.yml -f docker-compose.production.yml)
+    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)
     ;;
   *)
     echo "usage: $0 <domain> <staging|production>" >&2

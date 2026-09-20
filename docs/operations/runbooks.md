@@ -21,12 +21,12 @@ repository/password/SSH path is proved before any writer stops, so an unavailabl
 visibly without causing an application outage. The restic image is immutable by digest; the
 password file is root-only and is never included in the snapshot.
 
-Production's [SeaweedFS selection](../architecture/storage.md#b1-candidate-verification-checkpoint)
-keeps the logical `minio-data` backup coordinate but resolves it to
+Every tier's [SeaweedFS selection](../architecture/storage.md#b1-candidate-verification-checkpoint)
+(Owner decision, 2026-09-20) keeps the logical `minio-data` backup coordinate but resolves it to
 `<project>_seaweedfs-data` through Compose labels. The shared mount uses `nocopy` so
 `compose create` does not seed a restore target with image scaffolding. Keep the
-empty-volume guard intact. Restore raw data only to the same vendor/version; legacy
-MinIO requires a separately authorized S3-level migration, not a renamed volume.
+empty-volume guard intact. Restore raw data only to the same vendor/version; a legacy
+real-MinIO volume requires a separately authorized S3-level migration, not a renamed volume.
 
 This is intentionally host-scoped. The API and its pg-boss workers are unprivileged
 containers; mounting the Docker socket into either would grant root-equivalent control of the

@@ -195,8 +195,7 @@ The one coupling to remember: **the password in `infra.env` must match the one e
 |---|---|
 | Node | `24.11.0`, pinned in `.nvmrc` and the base image |
 | PostgreSQL | `postgres:18.4` — the Debian variant, because **ICU is required** for Arabic collation |
-| Production S3 | SeaweedFS `4.46`, digest-pinned in `docker-compose.storage.yml`; [selection and compatibility](../architecture/storage.md#b1-candidate-verification-checkpoint) |
-| Legacy Local/Staging MinIO | `RELEASE.2025-09-07T16-13-09Z`; not a supported Production choice, no live switch performed |
+| Object storage (Localhost, Staging, Production) | SeaweedFS `4.46`, digest-pinned in `docker-compose.yml`, identical for every tier (Owner decision, 2026-09-20); [selection and compatibility](../architecture/storage.md#b1-candidate-verification-checkpoint) |
 | Nginx | `stable-alpine` |
 
 One PostgreSQL detail that will waste an afternoon if unknown: **PG 18+ images require the
@@ -213,7 +212,7 @@ configuration:
 | | Covered? | Because |
 |---|---|---|
 | PostgreSQL data | yes | `bodour_db-data` is a Docker volume under `/var/lib/docker/volumes`, on the root filesystem |
-| MinIO objects | yes | `bodour_minio-data`, same place |
+| Object storage (SeaweedFS) | yes | `bodour_seaweedfs-data`, same place |
 | TLS certificate and ACME state | yes | `bodour_certbot-conf` / `bodour_certbot-www`, same place |
 | `/opt/bodour/.env` and `infra.env` | **yes — and this matters** | The snapshot therefore contains every staging secret. Treat a restored image as credential-bearing |
 

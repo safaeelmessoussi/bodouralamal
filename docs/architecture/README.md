@@ -45,7 +45,7 @@ Read these four in order and you will understand the system:
 ### Subsystems
 | | |
 |---|---|
-| [Storage](storage.md) | Dual-bucket MinIO, presigned URLs, immutable keys, consent gating |
+| [Storage](storage.md) | Dual-bucket SeaweedFS (S3-compatible), presigned URLs, immutable keys, consent gating |
 | [Background jobs](background-jobs.md) | pg-boss, the catalog, transactional enqueue |
 | [Calendar and Hijri](calendar-and-hijri.md) | Scheduling, recurrence, wall-clock time, official Hijri data |
 | [Design system](design-system.md) | Tokens, the cascade, components |
