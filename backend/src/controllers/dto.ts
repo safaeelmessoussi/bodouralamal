@@ -1056,6 +1056,9 @@ export interface LibraryItemDto {
   /** R167 §5 — addressed to EVERY Level of `category_id`; `level_id` is then
    *  only where it is filed. Rendered under «كل مستويات الفئة». */
   whole_category: boolean;
+  /** R169 §10 — the item's OTHER Levels, in the Levels' own order; `level_id`
+   *  is its home. `[]` for an item that belongs to one Level. */
+  additional_levels: { id: string; name: string }[];
   subject_id: string;
   academic_year_id: string;
   /** `null` is **Global**, not unknown (§7) — it renders as its own container. */
@@ -1103,6 +1106,7 @@ export function libraryItemDto(row: {
   origin: string;
   levelId: string;
   wholeCategory: boolean;
+  additionalLevels: { id: string; name: string }[];
   subjectId: string;
   academicYearId: string;
   branchId: string | null;
@@ -1126,6 +1130,9 @@ export function libraryItemDto(row: {
     origin: row.origin,
     level_id: row.levelId,
     whole_category: row.wholeCategory,
+    // R169 §10 — the item's OTHER Levels (`level_id` is its home), so a card can
+    // say every Level it belongs to and the edit dialog can hydrate them.
+    additional_levels: row.additionalLevels,
     subject_id: row.subjectId,
     academic_year_id: row.academicYearId,
     branch_id: row.branchId,

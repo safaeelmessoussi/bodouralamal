@@ -129,6 +129,10 @@ export interface ContentMetadataPatch {
   origin?: 'uploaded' | 'session_recording';
   /** R167 §5 — addressed to every Level of its Level's Category. */
   whole_category?: boolean;
+  /** R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` is its
+   *  home and may not be repeated here (`LEVEL_IS_HOME`); each must teach the
+   *  item's Subject (`SUBJECT_NOT_AT_LEVEL`). */
+  additional_level_ids?: string[];
 }
 
 export async function updateContent(

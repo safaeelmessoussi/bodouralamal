@@ -144,6 +144,9 @@ export interface LibraryItem {
   levelId: string;
   /** R167 §5 — addressed to every Level of `categoryId`, not to `levelId` alone. */
   wholeCategory: boolean;
+  /** R169 §10 — the item's OTHER Levels, in the Levels' own order. `levelId`
+   *  stays its home; an item with none here belongs to that Level alone. */
+  additionalLevels: { id: string; name: string }[];
   subjectId: string;
   academicYearId: string;
   branchId: string | null;
@@ -300,6 +303,8 @@ function tierPredicate(
     return Prisma.sql`(c."visibility" = 'public' AND c."consent_forced_private" = false)`;
   }
   const mine = Prisma.join(privateLevels.map((id) => Prisma.sql`${id}::uuid`));
+  // SRS Revision 169 §10 — an item may ALSO belong to other Levels
+  // (`educational_content_level`); it is hers when any of them is.
   // SRS Revision 167 §5 — an item addressed to EVERY Level of its Category is
   // hers when any of her Levels belongs to that Category. The Category is read
   // through the item's own Level, here, at the moment of the read.
@@ -307,6 +312,10 @@ function tierPredicate(
     (c."visibility" = 'public' AND c."consent_forced_private" = false)
     OR (c."visibility" = 'private' AND (
       c."level_id" IN (${mine})
+      OR EXISTS (
+        SELECT 1 FROM "educational_content_level" also
+        WHERE also."content_id" = c."id" AND also."level_id" IN (${mine})
+      )
       OR (c."whole_category" = true AND EXISTS (
         SELECT 1 FROM "level" home
         JOIN "level" own ON own."category_id" = home."category_id"
@@ -354,6 +363,10 @@ export async function listLibrary(
     conditions.push(
       Prisma.sql`(
         c."level_id" = ${filters.levelId}::uuid
+        OR EXISTS (
+          SELECT 1 FROM "educational_content_level" also
+          WHERE also."content_id" = c."id" AND also."level_id" = ${filters.levelId}::uuid
+        )
         OR (c."whole_category" = true AND EXISTS (
           SELECT 1 FROM "level" home
           JOIN "level" asked ON asked."category_id" = home."category_id"
@@ -376,7 +389,14 @@ export async function listLibrary(
     conditions.push(
       Prisma.sql`EXISTS (
         SELECT 1 FROM "level" l
-        WHERE l."id" = c."level_id" AND l."category_id" = ${filters.categoryId}::uuid
+        WHERE l."category_id" = ${filters.categoryId}::uuid
+          AND (
+            l."id" = c."level_id"
+            OR EXISTS (
+              SELECT 1 FROM "educational_content_level" also
+              WHERE also."content_id" = c."id" AND also."level_id" = l."id"
+            )
+          )
       )`,
     );
   }
@@ -403,6 +423,13 @@ export async function listLibrary(
              c."origin"::text            AS "origin",
              c."level_id"                AS "levelId",
              c."whole_category"          AS "wholeCategory",
+             COALESCE((
+               SELECT json_agg(json_build_object('id', al."id", 'name', al."name")
+                               ORDER BY al."display_order" NULLS LAST, al."name", al."id")
+               FROM "educational_content_level" also
+               JOIN "level" al ON al."id" = also."level_id" AND al."deleted_at" IS NULL
+               WHERE also."content_id" = c."id"
+             ), '[]'::json)              AS "additionalLevels",
              c."subject_id"              AS "subjectId",
              c."academic_year_id"        AS "academicYearId",
              c."branch_id"               AS "branchId",

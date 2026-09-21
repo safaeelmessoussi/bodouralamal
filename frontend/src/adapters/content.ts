@@ -161,25 +161,40 @@ export async function fetchContentLevels(token: string | null = null): Promise<L
   const byLevel = new Map<string, LevelSummary & { years: Set<string> }>();
   for (const row of rows) {
     // What was made for every Level of a Category is counted on the Category's
-    // own shelf — never on the one Level it happens to be filed under.
-    const shelf = row.whole_category ? `category:${row.category_id}` : row.level_id;
-    let entry = byLevel.get(shelf);
-    if (!entry) {
-      entry = {
-        kind: row.whole_category ? 'whole_category' : 'level',
-        level_id: row.whole_category ? row.category_id : row.level_id,
-        level_name: row.whole_category ? '' : row.level_name,
-        category_id: row.category_id,
-        category_name: row.category_name,
-        description: null,
-        content_count: 0,
-        academic_year_count: 0,
-        years: new Set<string>(),
-      };
-      byLevel.set(shelf, entry);
+    // own shelf — never on the one Level it happens to be filed under. An item
+    // that belongs to SEVERAL Levels (R169 §10) is on each of their shelves,
+    // because that is where a reader of any of them looks for it.
+    const shelves: { key: string; kind: 'level' | 'whole_category'; id: string; name: string }[] =
+      row.whole_category
+        ? [{ key: `category:${row.category_id}`, kind: 'whole_category', id: row.category_id, name: '' }]
+        : [
+            { key: row.level_id, kind: 'level', id: row.level_id, name: row.level_name },
+            ...(row.additional_levels ?? []).map((level) => ({
+              key: level.id,
+              kind: 'level' as const,
+              id: level.id,
+              name: level.name,
+            })),
+          ];
+    for (const shelf of shelves) {
+      let entry = byLevel.get(shelf.key);
+      if (!entry) {
+        entry = {
+          kind: shelf.kind,
+          level_id: shelf.id,
+          level_name: shelf.name,
+          category_id: row.category_id,
+          category_name: row.category_name,
+          description: null,
+          content_count: 0,
+          academic_year_count: 0,
+          years: new Set<string>(),
+        };
+        byLevel.set(shelf.key, entry);
+      }
+      entry.content_count = (entry.content_count ?? 0) + 1;
+      entry.years.add(row.academic_year_id);
     }
-    entry.content_count = (entry.content_count ?? 0) + 1;
-    entry.years.add(row.academic_year_id);
   }
 
   return [...byLevel.values()].map(({ years, ...level }) => ({
@@ -244,6 +259,9 @@ interface LibraryItemWire {
   visibility: string;
   level_id: string;
   whole_category: boolean;
+  /** R169 §10 — the item's OTHER Levels (`level_id` is its home), in the
+   *  Levels' own order. `[]` for an item that belongs to one Level. */
+  additional_levels?: { id: string; name: string }[];
   subject_id: string;
   academic_year_id: string;
   branch_id: string | null;

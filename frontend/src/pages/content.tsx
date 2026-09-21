@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent, updateContent } from '../adapters/uploads.js';
+import { MultiSelectField } from '../components/ui/multi-select.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { ContentRecorderForm } from '../components/content/content-recorder-form.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
@@ -64,6 +65,25 @@ import { Feedback } from '../components/ui/feedback.js';
  * change asks nothing (rule AY.1), and a value typed and undone is pristine
  * again.
  */
+/**
+ * What to send for the item's OTHER Levels (R169 §10): nothing when the set did
+ * not change; the new set when it did; and `[]` when «كل مستويات الفئة» was just
+ * ticked, because that statement already covers every Level and the two must
+ * not disagree.
+ */
+export function additionalLevelsPatch(
+  editing: { level_id: string; additional_levels?: { id: string }[] },
+  patch: { levelId: string; wholeCategory: boolean; additionalLevelIds: string[] },
+): { additional_level_ids?: string[] } {
+  const before = (editing.additional_levels ?? []).map((level) => level.id).sort();
+  const after = patch.wholeCategory
+    ? []
+    : [...new Set(patch.additionalLevelIds)].filter((id) => id !== patch.levelId).sort();
+  return before.length === after.length && before.every((id, i) => id === after[i])
+    ? {}
+    : { additional_level_ids: after };
+}
+
 function ContentEditDialog({
   row,
   levels,
@@ -87,6 +107,7 @@ function ContentEditDialog({
     visibility: string;
     isRecording: boolean;
     wholeCategory: boolean;
+    additionalLevelIds: string[];
   }) => void;
 }): ReactNode {
   const pristine = {
@@ -96,6 +117,8 @@ function ContentEditDialog({
     visibility: row.visibility,
     isRecording: row.origin === 'session_recording',
     wholeCategory: row.whole_category,
+    // R169 §10 — the item's OTHER Levels, hydrated from the row.
+    additionalLevelIds: (row.additional_levels ?? []).map((level) => level.id),
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -160,6 +183,22 @@ function ContentEditDialog({
         hint={t('content.edit.wholeCategoryHint')}
       />
 
+      {/* R169 §10 — the item's OTHER Levels: a recording of a class over two
+          Levels belongs to both, and a PRIVATE one then reaches both. The home
+          Level is the select above and is never offered here twice; «كل
+          مستويات الفئة» already covers every Level, so the two are not asked
+          together. The server still checks each Level teaches the Subject. */}
+      {form.wholeCategory ? null : (
+        <MultiSelectField
+          label={t('content.edit.additionalLevels')}
+          options={levels.filter((level) => level.value !== '' && level.value !== form.levelId)}
+          selected={form.additionalLevelIds.filter((id) => id !== form.levelId)}
+          onChange={(ids) => setForm((f) => ({ ...f, additionalLevelIds: ids }))}
+          emptyLabel={t('content.edit.additionalLevelsEmpty')}
+          hint={t('content.edit.additionalLevelsHint')}
+        />
+      )}
+
       {consentLocked ? (
         /**
          * **Shown as a fact, not as a disabled control** (rule AF). The server
@@ -192,6 +231,8 @@ interface LibraryRow {
   level_id: string;
   /** R167 §5 — «لكل مستويات الفئة». */
   whole_category: boolean;
+  /** R169 §10 — the item's OTHER Levels; `level_id` is its home. */
+  additional_levels?: { id: string; name: string }[];
   subject_id: string;
   academic_year_id: string;
   branch_id: string | null;
@@ -418,6 +459,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     visibility: string;
     isRecording: boolean;
     wholeCategory: boolean;
+    additionalLevelIds: string[];
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -441,6 +483,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           ...(patch.wholeCategory !== editing.whole_category
             ? { whole_category: patch.wholeCategory }
             : {}),
+          // R169 §10 — sent only when the SET changed, like every field here.
+          // «كل مستويات الفئة» makes naming Levels redundant, so it clears them.
+          ...additionalLevelsPatch(editing, patch),
         },
         accessToken,
       );

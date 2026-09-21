@@ -273,11 +273,16 @@ export async function ingestRecording(
    * one resolution every other surface already uses (the Subject and Surah
    * rules), so a filter-built class answers here exactly as it does there.
    *
-   * `EducationalContent.level_id` is single, so a class addressing SEVERAL
-   * Levels files its recording under the first in the Levels' own order —
-   * deterministic, so a retry after a partial failure writes the same row.
+   * `EducationalContent.level_id` is single — the item's HOME Level — so a class
+   * addressing SEVERAL Levels files its recording under the first in the
+   * Levels' own order (deterministic, so a retry after a partial failure writes
+   * the same row) and names the OTHERS as additional Levels (R169 §10): a
+   * PRIVATE recording of a class over two Levels reaches both.
    */
-  const { levelId, wholeCategory } = await recordingScope(prisma, recording.session);
+  const { levelId, wholeCategory, additionalLevelIds } = await recordingScope(
+    prisma,
+    recording.session,
+  );
   if (levelId === null) {
     // `EducationalContent.level_id` is NOT NULL, and §4.9 groups the library by
     // Level. Inventing one would file the class's recording under a curriculum
@@ -380,6 +385,9 @@ export async function ingestRecording(
         visibility: visibility as "public" | "private" | "hidden",
         levelId,
         wholeCategory,
+        ...(additionalLevelIds.length > 0
+          ? { additionalLevels: { create: additionalLevelIds.map((id) => ({ levelId: id })) } }
+          : {}),
         subjectId: recording.session.schedule.subjectId,
         academicYearId: recording.session.schedule.academicYearId,
         // §4.9's Global scope is a deliberate act; a recording belongs to the
@@ -480,23 +488,30 @@ async function recordingScope(
       teachingGroupId: string | null;
     };
   },
-): Promise<{ levelId: string | null; wholeCategory: boolean }> {
+): Promise<{ levelId: string | null; wholeCategory: boolean; additionalLevelIds: string[] }> {
   const ids = await scheduleLevelIds(prisma, session.scheduleId, session.schedule);
-  if (ids.length <= 1) return { levelId: ids[0] ?? null, wholeCategory: false };
+  if (ids.length <= 1) return { levelId: ids[0] ?? null, wholeCategory: false, additionalLevelIds: [] };
   const addressed = await prisma.level.findMany({
     where: { id: { in: ids }, deletedAt: null },
     orderBy: [{ displayOrder: { sort: "asc", nulls: "last" } }, { name: "asc" }, { id: "asc" }],
     select: { id: true, categoryId: true },
   });
   const first = addressed[0];
-  if (!first) return { levelId: null, wholeCategory: false };
+  if (!first) return { levelId: null, wholeCategory: false, additionalLevelIds: [] };
 
   const oneCategory = addressed.every((level) => level.categoryId === first.categoryId);
   const wholeCategory =
     oneCategory &&
     addressed.length ===
       (await prisma.level.count({ where: { categoryId: first.categoryId, deletedAt: null } }));
-  return { levelId: first.id, wholeCategory };
+  return {
+    levelId: first.id,
+    wholeCategory,
+    // «كل مستويات الفئة» already reaches every Level of the Category — including
+    // one added later — so naming them again would be a second copy of one fact.
+    // Otherwise the class's OTHER Levels are named, so its recording is theirs too.
+    additionalLevelIds: wholeCategory ? [] : addressed.slice(1).map((level) => level.id),
+  };
 }
 
 /**

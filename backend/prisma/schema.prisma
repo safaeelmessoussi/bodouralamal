@@ -662,15 +662,15 @@ model User {
   /// of truth for which name a person agreed to publish, and the wrong branch
   /// leaks a legal name. Distinct from `nickname`, which is an internal search
   /// convenience (TD-10).
-  publicDisplayName String?   @map("public_display_name") @db.VarChar(120)
-  phone             String?   @db.VarChar(20)
+  publicDisplayName      String?   @map("public_display_name") @db.VarChar(120)
+  phone                  String?   @db.VarChar(20)
   /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
   /// afterwards, because the registration exists before the User does.
   /// R80 — recorded at every creation, completed explicitly where missing, and
   /// required by the schema since `20260818220000_r80_sex_not_null`. A NULL has
   /// always meant *not eligible* for a restricted Level rather than
   /// *unknown-but-fine* (R27), which is why it could not stay optional.
-  sex               Sex       @map("sex")
+  sex                    Sex       @map("sex")
   /// R130 — **the beneficiary's full date of birth**, a TD-11 calendar date and
   /// never an instant. Required at the write boundary for every beneficiary and
   /// NOT collected from a guardian-only adult or a staff request — which is why
@@ -678,13 +678,13 @@ model User {
   /// (`user_beneficiary_birth_date_check`), with a MARKED placeholder where none
   /// was ever recorded (`birthDateIsPlaceholder`). **No age column exists** — an age
   /// is wrong the day after it is written, so `lib/birth-date.ts` derives it.
-  birthDate         DateTime? @map("birth_date") @db.Date
+  birthDate              DateTime? @map("birth_date") @db.Date
   /// R169 §9 — **`birth_date` above is NOT her date of birth**: it is the fixed
   /// 1900-01-01 the platform filled in so that every beneficiary carries a date
   /// (a CHECK in hand-written SQL: a live beneficiary has one). Every rule that
   /// reads an age treats a placeholder as UNKNOWN; recording the real date
   /// replaces it once and clears this. See `lib/birth-date.ts`.
-  birthDateIsPlaceholder Boolean @default(false) @map("birth_date_is_placeholder")
+  birthDateIsPlaceholder Boolean   @default(false) @map("birth_date_is_placeholder")
 
   /// **Is this person one of the institute's مستفيدات?** (Revision 79)
   ///
@@ -1209,7 +1209,9 @@ model Level {
   sessionAudiences     SessionAudienceLevel[]
 
   /// SRS Revision 167 §3 — «إتمام المستوى».
-  completionMarks LevelCompletionMark[]
+  completionMarks   LevelCompletionMark[]
+  /// R169 §10 — items that ALSO belong to this Level (their home is another).
+  additionalContent EducationalContentLevel[] @relation("ContentAdditionalLevels")
 
   @@index([categoryId, displayOrder])
   @@map("level")
@@ -3731,7 +3733,9 @@ model EducationalContent {
   /// The Category is read through `level` at the moment of the read and is
   /// never copied here, so a Level added to it later is included and the two
   /// can never disagree. `branchId` keeps its meaning: NULL is every branch.
-  wholeCategory Boolean @default(false) @map("whole_category")
+  /// R169 §10 — the item's OTHER Levels (the home Level is `levelId`).
+  additionalLevels EducationalContentLevel[]
+  wholeCategory    Boolean                   @default(false) @map("whole_category")
 
   /// NULL = the Global / بدون فرع scope. Assignable only by Admins and Super
   /// Admins; Teachers are locked to their own branch scope (BR-20, §4.9).
@@ -3782,6 +3786,24 @@ model EducationalContent {
   @@index([levelId, academicYearId, branchId])
   @@index([visibility])
   @@map("educational_content")
+}
+
+/// **An item's OTHER Levels** (SRS Revision 169 §10). `EducationalContent.levelId`
+/// stays the HOME Level — what the Subject is checked against and what the
+/// library is grouped by; these rows are the additional Levels a class's
+/// recording (or any item) also belongs to, so a PRIVATE recording of a class
+/// over two Levels reaches both. Additive: an item with none behaves as before.
+/// A trigger in hand-written SQL refuses the home Level here: one fact, one place.
+model EducationalContentLevel {
+  contentId String             @map("content_id") @db.Uuid
+  content   EducationalContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  levelId   String             @map("level_id") @db.Uuid
+  level     Level              @relation("ContentAdditionalLevels", fields: [levelId], references: [id], onDelete: Restrict)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([contentId, levelId])
+  @@index([levelId])
+  @@map("educational_content_level")
 }
 
 // ---------------------------------------------------------------------------

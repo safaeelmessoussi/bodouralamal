@@ -5265,7 +5265,7 @@ required; nothing dropped or rewritten).
       session; the database's default is `Africa/Casablanca`). Self-cancelling
       on a round trip, wrong everywhere else. Every application session is now
       UTC; a test asks what a round trip cannot and fails 3/3 without the fix.
-- [ ] **Known limit, not changed:** a recording belongs to ONE Level, so a
+- [x] **Known limit, not changed:** a recording belongs to ONE Level **[Closed 2026-09-21 — lifted, R169 §10 — an item keeps a home Level and names its OTHER Levels; a private recording of a class over two Levels reaches both]**, so a
       *private* recording of a class addressing two Levels is listed for the
       first Level's beneficiaries only.
 - [x] **§5 — the provider's written answers recorded** in
@@ -5487,7 +5487,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       gaps so it can be mandatory). To be built with a MARKER on a filled date:
       a placeholder that looks real would drive the 18-year rule (R132) for a
       child, and «completion, never correction» would stop anyone fixing it.
-- [ ] **Part five — a recording or content item belonging to several Levels**
+- [x] **Part five — BUILT, R169 §10: a recording or content item belonging to several Levels**
       (the Owner: do it if it can be done). It can; it is a join table and a
       wide read-side change (library predicate, consent re-evaluation, DTOs,
       the content form).
@@ -5536,3 +5536,15 @@ The Owner's six replies to Revision 167's report. One migration so far
       placeholder: 3 on Localhost, 9 on Staging. Recording the real date from
       «المستخدمون» (or each from her own «حسابي») replaces it once. A filter
       «بلا تاريخ ميلاد» on «المستخدمون» is NOT built — say if it is wanted.
+- [x] **Hosted CI 8/8 on `ede0770` (part four); deployed to Staging at
+      `ede0770`** from `aa9e879` — recordings asked first; one older release
+      image removed; migration `20260924090000` applied: 9 records marked, none
+      left without a date; `/healthz` 200; zero error lines.
+- [x] **Two browser harnesses were RED on Localhost, not caused by this
+      revision — both settled the same day.** `verify-library-recorder` check 10
+      was STALE: it asserted that an unset page filter REFUSES the recorder,
+      which `c393425` removed on purpose (a filter is not a precondition; the
+      recorder asks for its scope itself). Restated → 16/16.
+      `verify-content-scope` «the LIBRARY RESULTS change» read the table 0.9 s
+      after choosing a Level while the machine was running the integration
+      suite; alone it passes 14/14. Its detail now prints its numbers.

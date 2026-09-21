@@ -11204,3 +11204,51 @@ the new rule — she is given the MARKED placeholder, and nothing reads it as a 
 again: **2,773 passed, exit 0**, isolation passed. Seed drill **exit 0**. Disclosed: my API check on
 Localhost left one truthful `auth.refresh` audit line on a real account (the audit log is append-only
 and was not edited); the session itself was removed.
+
+**Hosted CI green on the first push — `ede0770` 8/8. Deployed to `staging.bodouralamal.com` at
+`ede077021885baf21a506a3a706fbfa47c4f03d4` (SRS Revision 169, part four), upgrading from `aa9e879`. No
+Production action.** Recordings asked first (`{"active":0}`, exit 0); dump taken; one older release image
+removed (22 GiB free); preflight PASS; both labels exact; migration
+`20260924090000_r169_beneficiary_birth_date_required` applied — **9** Staging records now carry the
+marked placeholder and **0** live beneficiaries are without a date; `/healthz` 200, `/rtc/validate`
+401; zero error-level lines.
+
+## 2026-09-21 — SRS Revision 169 (part five): a recording, or any library item, may belong to several Levels
+
+**What the Owner asked.** «If this can be changed to make any recording belonging to many levels, do it.»
+R166 had declared the limit: a private recording of a class over two Levels was listed for the first
+Level's beneficiaries only.
+
+**The shape chosen, and the one not.** `level_id` was NOT turned into a join table. It is the item's
+HOME Level — NOT NULL, what the Subject is checked against, what the library's shelves and R167's
+«whole Category» are read through, and what a dozen readers select. `educational_content_level` holds
+only the OTHER Levels, so every one of those readers is still right about the home Level, an item with
+no rows behaves as it always did, and three reads learn the new fact: the library's private tier, its
+`level_id` filter and its `category_id` filter. A trigger keeps the home Level out of the join.
+
+**Why widening the Levels cannot weaken the consent gate.** BR-2's gate on a recording is derived from
+the CLASS's audience, through `SessionContent` — never from the item's Level. The other Levels of a
+class ARE part of that audience; naming them changes who may see a private item, not whether a gated
+item is forced private.
+
+**Recordings.** The ingest names the class's other Levels — unless it covered every Level of one
+Category, where «كل مستويات الفئة» already says so. **Editing.** `additional_level_ids` replaces the
+set; each Level must teach the Subject; the home is refused (`LEVEL_IS_HOME`). The service clears the
+rows BEFORE moving an item's home and writes them AFTER, because the trigger compares with the home as
+it stands — found by thinking the second test case through, not by running it. **The library** counts
+an item on each of its Levels' shelves; the edit dialog asks «مستويات أخرى ينتمي إليها», never
+alongside «كل مستويات الفئة».
+
+**Verification (part five).** Disposable stack: library HTTP + content **91/91**; ingest and
+trash-coverage green in the first run (its two failures were my tests' own: a pinned key list is
+alphabetical, and the curriculum rule answers `STATE_CONFLICT`). Frontend: `additionalLevelsPatch` 4
+tests. On the rebuilt Localhost (migration applied) `verify-content-scope` **13/14** and
+`verify-library-recorder` **15/16** — two red checks this revision did not cause (no additional-Level
+row exists there; the scope hook's default is untouched), and both were settled before the commit. The
+recorder's check 10 was STALE — it asserted that an unset page filter refuses the recorder, which
+`c393425` removed on purpose; restated, **16/16**. The content-scope one had read the table 0.9 s after
+choosing a Level while the integration suite was loading the machine; alone, **14/14**.
+
+**Full gates, once, at the boundary (part five).** Backend unit **361/361**; frontend **1,465/1,465**; 32
+guards + doc links; OpenAPI regenerated, no drift; full disposable integration **2,775 passed, exit 0**,
+isolation passed; seed drill **exit 0**.

@@ -785,6 +785,47 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
    * to be private while its bytes stayed in the public bucket would be a
    * privacy hole rather than an inconsistency.
    */
+  it("R169 §10 — names the item's OTHER Levels: replaces the set, refuses the home Level and a Level that does not teach the Subject", async () => {
+    const { id } = await uploadPdf(admin(), "لعدة مستويات");
+    const home = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { levelId: true } });
+    const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
+    const make = async (label: string, teaches: boolean): Promise<string> => {
+      const level = await prisma.level.create({
+        data: { name: `${TAG} ${label}`, categoryId: category.categoryId, genderRestriction: "any" },
+      });
+      if (teaches) await prisma.levelSubject.create({ data: { levelId: level.id, subjectId } });
+      return level.id;
+    };
+    const second = await make("مستوى ثانٍ", true);
+    const third = await make("مستوى ثالث", true);
+    const untaught = await make("مستوى لا يدرّس المادة", false);
+    const also = async (): Promise<string[]> =>
+      (await prisma.educationalContentLevel.findMany({ where: { contentId: id }, select: { levelId: true } }))
+        .map((row) => row.levelId)
+        .sort();
+
+    await updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [second, third] });
+    expect(await also()).toEqual([second, third].sort());
+    // REPLACES the set — never appends to it.
+    await updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [third] });
+    expect(await also()).toEqual([third]);
+
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [home.levelId] }),
+    ).rejects.toMatchObject({ details: { reason: "LEVEL_IS_HOME" } });
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [untaught] }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" }); // the curriculum rule's own answer
+    expect(await also()).toEqual([third]);
+
+    // Moving the HOME onto a Level that was an additional one stops naming it twice.
+    await updateContentMetadata(prisma, clients, admin(), id, { levelId: third });
+    expect(await also()).toEqual([]);
+    // …and the Level it moved AWAY from may then be named as an additional one.
+    await updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [home.levelId] });
+    expect(await also()).toEqual([home.levelId]);
+  });
+
   it("changes title, Level and Subject without touching the stored object", async () => {
     const { id } = await uploadPdf(admin(), "عنوان خاطئ");
     const before = await prisma.educationalContent.findUniqueOrThrow({

@@ -193,7 +193,7 @@ const filtered = await rowCount();
 check(
   'and the LIBRARY RESULTS change — the filter filters, it does not merely enable',
   filtered !== unfiltered || unfiltered === 0,
-  { unfiltered, filtered },
+  JSON.stringify({ unfiltered, filtered, level: chosen.name }),
 );
 
 // Clearing restores the wider set, which is the other half of "it filters".

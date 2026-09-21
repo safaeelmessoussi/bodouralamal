@@ -93,6 +93,13 @@ const updateContentSchema = z
     origin: z.enum(['uploaded', 'session_recording']).optional(),
     // R167 §5 — «كل مستويات الفئة»: addressed to every Level of its Category.
     whole_category: z.boolean().optional(),
+    // R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` stays its
+    // home Level and may not be repeated here.
+    additional_level_ids: z
+      .array(z.uuid())
+      .max(40)
+      .refine((ids) => new Set(ids).size === ids.length, 'a level may be named once')
+      .optional(),
   })
   .strict();
 
@@ -105,6 +112,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       visibility?: 'public' | 'private' | 'hidden';
       origin?: 'uploaded' | 'session_recording';
       whole_category?: boolean;
+      additional_level_ids?: string[];
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.
@@ -125,6 +133,9 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
         ...(body.origin !== undefined ? { origin: body.origin } : {}),
         ...(body.whole_category !== undefined ? { wholeCategory: body.whole_category } : {}),
+        ...(body.additional_level_ids !== undefined
+          ? { additionalLevelIds: body.additional_level_ids }
+          : {}),
       },
     );
     res.status(204).end();

@@ -347,6 +347,27 @@ to the Category later is included and the two can never disagree. `branch_id` ke
 `NULL` is every branch. A partial index (`WHERE whole_category AND deleted_at IS NULL`) serves the
 «كل مستويات الفئة» shelf.
 
+### `EducationalContentLevel` — an item's OTHER Levels; the home Level stays a column (R169 §10)
+
+A class may address several Levels, and its recording — or any library item — may belong to all of
+them. `educational_content.level_id` was NOT turned into a join: it is the item's **home Level**,
+NOT NULL, what `assertSubjectTaughtAtLevel` checks the Subject against, what the library's shelves
+and R167's `whole_category` are read through, and what a dozen readers already select. The join
+holds only the ADDITIONAL Levels, so every reader that knows only `level_id` is still right about
+the home Level, and an item with no rows here behaves exactly as it always did.
+
+* **PK `(content_id, level_id)`**, `content_id` CASCADE (the rows mean nothing without the item,
+  purge included), `level_id` RESTRICT (a Level something still belongs to is not deleted from
+  beneath it — `deleteLevel`'s guard counts both).
+* **A trigger refuses the home Level** (`educational_content_level_not_home`): one fact, one place.
+  That is why the service clears the rows BEFORE moving an item's home Level and writes them AFTER.
+* **Three reads know about it, all in `library.service.ts`**: the private tier (hers when ANY of its
+  Levels is hers), the `level_id` filter and the `category_id` filter. The consent gate does not: it
+  is derived from the class's audience through `SessionContent`, never from the item's Level, so
+  widening the Levels cannot weaken it.
+* `whole_category` and additional Levels are not written together by the ingest: «every Level of
+  the Category» already reaches them all, including one added later.
+
 ### `SessionRecording.recovered_from_segments` — how the file was obtained, not a status (R168 §2)
 
 `true` where the recorder's final file never arrived and the recording was assembled from the
@@ -813,6 +834,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260923090000_r168_recording_recovered_from_segments
 20260923100000_r168_role_requests
 20260924090000_r169_beneficiary_birth_date_required
+20260924100000_r169_content_additional_levels
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

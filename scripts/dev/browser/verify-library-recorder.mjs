@@ -114,15 +114,22 @@ check('9 · the library offers the recorder beside its uploader', offered.hasRec
 const guarded = await evaluate(`(async () => {
   [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'تسجيل صوتي').click();
   await new Promise((r) => setTimeout(r, 900));
-  const text = document.body.textContent;
+  const dialog = document.querySelector('dialog[open]');
+  const labels = [...(dialog?.querySelectorAll('label') ?? [])].map((l) => l.textContent.trim());
   return {
-    saysChooseScope: text.includes('اختاري') || text.includes('المستوى'),
-    hasStart: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'بدء التسجيل'),
+    opened: dialog !== null,
+    ownsLevel: labels.some((l) => l.startsWith('المستوى')),
+    ownsSubject: labels.some((l) => l.startsWith('المادة')),
   };
 })()`);
 check(
-  '10 · with no scope chosen it explains rather than offering a control that would fail',
-  guarded.hasStart === false && guarded.saysChooseScope === true,
+  // Restated 2026-09-21. This used to assert that an unset page filter REFUSED
+  // the recorder («it explains rather than offering a control that would
+  // fail»). `c393425` removed that on purpose — a filter acting as a
+  // precondition is what rule A/F forbids — and gave the recorder form its OWN
+  // scope selectors (rule AX). The check had been red ever since, unnoticed.
+  '10 · with no page filter chosen the recorder still opens — and asks for its scope ITSELF',
+  guarded.opened && guarded.ownsLevel && guarded.ownsSubject,
   JSON.stringify(guarded),
 );
 

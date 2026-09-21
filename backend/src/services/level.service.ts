@@ -370,7 +370,14 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
         tx.teachingGroup.count({ where: { levelId: id, deletedAt: null } }),
         tx.recurringCourseSchedule.count({ where: { levelId: id, deletedAt: null } }),
         tx.exam.count({ where: { levelId: id, deletedAt: null } }),
-        tx.educationalContent.count({ where: { levelId: id, deletedAt: null } }),
+        // Filed under it — or ALSO belonging to it (R169 §10): either way the
+        // library still shows it on this Level's shelf.
+        tx.educationalContent.count({
+          where: {
+            deletedAt: null,
+            OR: [{ levelId: id }, { additionalLevels: { some: { levelId: id } } }],
+          },
+        }),
         // Per-group, because a Grade names its Administrative Group rather than
         // the Level. Reached through the group so the guard still describes the
         // Level as a whole. **No `deleted_at` term**: a Grade has no soft-delete

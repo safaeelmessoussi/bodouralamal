@@ -644,7 +644,7 @@ forbids inventing one.
 
 | | Path | Notes |
 |---|---|---|
-| `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10). Carries `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99) — `null` with no Subject in view |
+| `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10). Carries `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99) — `null` with no Subject in view **R169 §10:** every item carries `additional_levels[]` (`level_id` is its home); the private tier and the `level_id` / `category_id` filters read them, so an item is on each of its Levels' shelves |
 
 **`whole_category` (SRS Revision 167 §5) — «كل مستويات الفئة».** An item may be addressed to
 EVERY Level of its Level's Category; `level_id` is then only where it is filed. A private one is
@@ -653,6 +653,12 @@ readable by a member of ANY Level of that Category — and by nobody else: the t
 its Category's whole-category ones (filtering by her own Level must not hide exactly what was made
 for everybody); `?whole_category=true|false` isolates either set. The ingest sets it for a class
 addressing every live Level of exactly one Category; staff set it with `PATCH /content/{id}`.
+
+**An item may ALSO belong to other Levels (R169 §10).** `level_id` stays its home Level; `PATCH
+/content/{id}` accepts `additional_level_ids`, which REPLACES the item's OTHER Levels — each a live
+Level that teaches its Subject, never the home Level (`LEVEL_IS_HOME`). A class's recording is filed
+under the first Level it addressed and names the rest, unless it covered every Level of one
+Category («كل مستويات الفئة» already says so).
 
 **Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`,
 `level_name`, `subject_name`, `academic_year_label`, `branch_name`. That view groups

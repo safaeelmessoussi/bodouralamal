@@ -51,6 +51,8 @@ const YEAR_LABEL = "2097-2098";
 const ITEM_KEYS = [
   "academic_year_id",
   "academic_year_label",
+  // R169 §10 — the item's OTHER Levels (`level_id` is its home).
+  "additional_levels",
   "branch_id",
   "branch_name",
   "category_id",
@@ -422,6 +424,34 @@ describe("§4.9 tiers filter every result set", () => {
     expect(row).toMatchObject({ whole_category: true, level_id: otherLevelId });
     const foreignShelf = await call(`/library?level_id=${levelId}&page_size=100`, teacherToken);
     expect((foreignShelf.body.data as { id: string }[]).map((item) => item.id)).not.toContain(foreign);
+  });
+
+  it("R169 §10 — an item that ALSO belongs to her Level is hers, on her Level's shelf, and says every Level it belongs to", async () => {
+    // Home Level: the OTHER one. Her Level is named as an additional Level —
+    // the recording of a class that addressed both.
+    const both = await content("خاص-لمستويين", { visibility: "private", levelId: otherLevelId });
+    await prisma.educationalContentLevel.create({ data: { contentId: both, levelId } });
+
+    const seen = await titlesFor(studentToken);
+    expect(seen).toContain(both);
+    // The control: same home Level, same tier, no additional Level — not hers.
+    expect(seen).not.toContain(ids.privateOther);
+    // It widens WHICH Levels, never who: nobody outside them gains anything.
+    expect(await titlesFor()).not.toContain(both);
+    expect(await titlesFor(strangerToken)).not.toContain(both);
+    expect(await titlesFor(parentToken)).toContain(both);
+
+    const shelf = await call(`/library?level_id=${levelId}&page_size=100`, studentToken);
+    const row = (
+      shelf.body.data as { id: string; level_id: string; additional_levels: { id: string; name: string }[] }[]
+    ).find((item) => item.id === both);
+    expect(row?.level_id).toBe(otherLevelId);
+    expect(row?.additional_levels.map((level) => level.id)).toEqual([levelId]);
+
+    // The home Level is never ALSO an additional one — the database says so.
+    await expect(
+      prisma.educationalContentLevel.create({ data: { contentId: both, levelId: otherLevelId } }),
+    ).rejects.toThrow();
   });
 
   it("a parent of that student sees it too, with no child context header", async () => {

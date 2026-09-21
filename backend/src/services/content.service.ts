@@ -1218,6 +1218,8 @@ export interface ContentMetadataPatch {
   /** R167 §5 — addressed to EVERY Level of its Level's Category. A scope
    *  statement only: the file, its bucket and its tier are untouched. */
   wholeCategory?: boolean;
+  /** R169 §10 — the item's OTHER Levels; replaces the set. */
+  additionalLevelIds?: string[];
 }
 
 /**
@@ -1305,6 +1307,52 @@ export async function updateContentMetadata(
     }
   }
 
+  /**
+   * **R169 §10 — the item's OTHER Levels.** Each must be a live Level that
+   * TEACHES the item's Subject — the rule its home Level already meets
+   * (`SUBJECT_NOT_AT_LEVEL`) — and none may be the home Level itself, which is
+   * `level_id`'s one fact (a trigger refuses it too). Moving the HOME onto a
+   * Level that was an additional one simply stops naming it twice.
+   */
+  const placed = await prisma.educationalContent.findUniqueOrThrow({
+    where: { id: contentId },
+    select: { levelId: true, subjectId: true, additionalLevels: { select: { levelId: true } } },
+  });
+  const homeLevelId = patch.levelId ?? placed.levelId;
+  let additionalLevelIds: string[] | null = null;
+  if (patch.additionalLevelIds !== undefined) {
+    if (patch.additionalLevelIds.includes(homeLevelId)) {
+      throw new AppError('VALIDATION_FAILED', 'the home level is not also an additional one', {
+        reason: 'LEVEL_IS_HOME',
+      });
+    }
+    const live = await prisma.level.count({
+      where: { id: { in: patch.additionalLevelIds }, deletedAt: null },
+    });
+    if (live !== patch.additionalLevelIds.length) {
+      throw new AppError('VALIDATION_FAILED', 'no such level', { reason: 'UNKNOWN_LEVEL' });
+    }
+    for (const levelId of patch.additionalLevelIds) {
+      await assertSubjectTaughtAtLevel(prisma, levelId, patch.subjectId ?? placed.subjectId);
+    }
+    additionalLevelIds = patch.additionalLevelIds;
+  } else if (patch.levelId !== undefined && placed.additionalLevels.some((row) => row.levelId === patch.levelId)) {
+    additionalLevelIds = placed.additionalLevels.map((row) => row.levelId).filter((id) => id !== patch.levelId);
+  }
+  // In TWO steps around the row's own update, because the trigger compares each
+  // additional row with the home Level as it stands: cleared BEFORE the home
+  // moves (it may move onto one of them), written AFTER (one of them may be the
+  // Level it moved away from).
+  const clearAdditionalLevels = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (additionalLevelIds !== null) await tx.educationalContentLevel.deleteMany({ where: { contentId } });
+  };
+  const writeAdditionalLevels = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (additionalLevelIds === null) return;
+    await tx.educationalContentLevel.createMany({
+      data: additionalLevelIds.map((levelId) => ({ contentId, levelId })),
+    });
+  };
+
   const nextVisibility = patch.visibility ?? existing.visibility;
   const targetBucket = bucketFor(nextVisibility);
   const mustMove = targetBucket !== existing.storageBucket;
@@ -1326,6 +1374,7 @@ export async function updateContentMetadata(
     await prisma.$transaction(async (tx) => {
       const sessions = await lockRecordingSessions(tx);
       await lockEducationalContent(tx, [contentId]);
+      await clearAdditionalLevels(tx);
       const written = await tx.educationalContent.updateMany({
         where: { id: contentId, deletedAt: null, version: existing.version },
         data: {
@@ -1343,6 +1392,7 @@ export async function updateContentMetadata(
           reason: 'CONCURRENT_MODIFICATION',
         });
       }
+      await writeAdditionalLevels(tx);
       if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
     });
     return;
@@ -1386,6 +1436,7 @@ export async function updateContentMetadata(
           throw new AppError('STATE_CONFLICT', 'the object could not be moved', { reason: 'STORAGE_MOVE_FAILED' });
         }
         await hooks.beforePublish?.();
+        await clearAdditionalLevels(tx);
         await tx.educationalContent.update({ where: { id: contentId }, data: {
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
@@ -1395,6 +1446,7 @@ export async function updateContentMetadata(
           ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
           storageBucket: targetBucket, storageKey: destinationKey, version: { increment: 1 },
         } });
+        await writeAdditionalLevels(tx);
         if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
         await settlePlacementCopy(tx, attempt.id);
         await completeRetirement(tx, attempt.id); // canonical adoption, not deletion

@@ -1202,10 +1202,13 @@ describe("SRS Revision 167 §5 — a class given to EVERY Level of one Category 
     const wholeDone = await ingestRecording(prisma, clients, whole.id);
     const filed = await prisma.educationalContent.findUniqueOrThrow({
       where: { id: wholeDone.contentId! },
-      select: { wholeCategory: true, levelId: true },
+      select: { wholeCategory: true, levelId: true, additionalLevels: { select: { levelId: true } } },
     });
     expect(filed.wholeCategory).toBe(true);
     expect([levelId, second]).toContain(filed.levelId);
+    // «كل مستويات الفئة» already reaches every Level — naming them again would be
+    // a second copy of one fact (R169 §10).
+    expect(filed.additionalLevels).toEqual([]);
 
     // A third Level appears: the SAME two-Level class is no longer «every Level».
     await sibling("مستوى ثالث");
@@ -1219,9 +1222,16 @@ describe("SRS Revision 167 §5 — a class given to EVERY Level of one Category 
     const someDone = await ingestRecording(prisma, clients, some.id);
     const partial = await prisma.educationalContent.findUniqueOrThrow({
       where: { id: someDone.contentId! },
-      select: { wholeCategory: true },
+      select: { wholeCategory: true, levelId: true, additionalLevels: { select: { levelId: true } } },
     });
     expect(partial.wholeCategory).toBe(false);
+    // R169 §10 — a class over SOME Levels: filed under one, and the OTHER named
+    // as an additional Level, so a private recording reaches both. It used to be
+    // listed for the first Level's beneficiaries only.
+    expect([levelId, second]).toContain(partial.levelId);
+    expect(partial.additionalLevels.map((row) => row.levelId)).toEqual(
+      [levelId, second].filter((id) => id !== partial.levelId),
+    );
   });
 });
 
