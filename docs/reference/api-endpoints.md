@@ -205,7 +205,7 @@ specification says it is, and keeps the gap **visible rather than silent**.
 | | Path | Audience | Notes |
 |---|---|---|---|
 | `GET` | `/admin/trash` | 👤 | Soft-deleted records: entity, label, who deleted it, when, `purge_after`. Filters `entity` `deleted_by` `from` `to` `q` |
-| `POST` | `/admin/trash/{id}/restore` | 👤 | **Per entity type.** Refused loudly for anything that cascades |
+| `POST` | `/admin/trash/{id}/restore` | 👤 | **Per entity type.** Refused loudly for anything that cascades **R169 §8:** `Level`, `TeachingGroup` and `RecurringCourseSchedule` are restorable too, and the answer says what came back with the record — `seats_restored` / `seats_not_restored`, `sessions_restored` / `sessions_not_restored`, `event_links_restored` / `event_links_unknown`. A class schedule whose room or staff were booked since is refused whole, `409 SCHEDULE_CONFLICT` |
 | `DELETE` | `/admin/trash/{id}` | 👤 | Permanent deletion only for server-declared purgeable types; Super Admin and audited |
 
 **`restorable` is a server decision, published per row.** A client cannot know which deletions

@@ -11106,3 +11106,54 @@ Frontend hooks + scheduling **198/198**. On the rebuilt Localhost: `verify-class
 run lost `admin-modules.test.ts` to its 5 s timeout while Docker builds were running beside it — it
 passes alone in 1 s and the whole suite was re-run for a real exit 0); 32 guards + doc links; full
 disposable integration **2,767 passed, exit 0**, isolation passed; seed drill **exit 0**.
+
+**Hosted CI green on the first push — `8d87feb` 8/8 (run read by `gh run view … conclusion`). Deployed to
+`staging.bodouralamal.com` at `8d87febee62c17de8252c09832e81f4271844257` (SRS Revision 169, part two),
+upgrading from `6d7f2c1`. No Production action.** Recordings asked first (`{"active":0}`, exit 0); dump
+taken. **The host preflight refused, and was right to:** Docker's filesystem had 19 GiB free against the
+approved 20 GiB floor — seven releases' images (≈1.1 GB each since ffmpeg joined the API image) had
+accumulated. The five oldest UNUSED release images were removed, the running release and its
+predecessor kept as the rollback, nothing else touched → 23 GiB free, preflight PASS. Both revision
+labels exact; no pending migration; TLS active; `/healthz` 200, `/rtc/validate` 401; zero error-level
+lines. The deployment guide now says what to remove and that the floor is never lowered to get past it.
+
+## 2026-09-21 — SRS Revision 169 (part three): the Trash restores a Subject circle, a class schedule and a Level
+
+**What the Owner asked.** «Widening what can be restored from the Trash: build this.» TD-5's standing
+rule is that a cascading type joins the restorable set only when its reinstatement is WRITTEN AND
+TESTED — clearing `deleted_at` is the easy tenth, and every failure of the other nine is silent. Three
+types now meet it.
+
+**A circle** comes back with the seats its deletion released — but a released student may since have
+been seated elsewhere, and one live seat per (student, Subject, Level) is a database index. So seats
+return through `restoreCircleSeats`, not the generic «children removed by this deletion» path: only to
+a student still enrolled at the Level and holding no other circle for the Subject. The rest are
+COUNTED AND SAID. Consent re-evaluation is re-enqueued for each returning seat — the mirror of what
+the deletion enqueued.
+
+**A class schedule** comes back with exactly the occurrences its tombstone names that are still
+ahead; past ones stay deleted; and `findConflicts` — the scheduling form's own check — refuses the
+whole restore when the room or a member of staff was booked since. Nothing is materialised afresh.
+
+**A Level** comes back with its curriculum, its «مقرر الحفظ» and its groups through the existing
+snapshot-id path. The real blocker was elsewhere: the activities addressed to a Level are
+HARD-deleted with it, with no tombstone. `deleteLevel` now records them (ids only), and the restore
+re-addresses activities still live. A Level deleted before today restores without them and the
+screen says so — guessed audiences would be worse than a stated gap.
+
+`parents` generalises the «will not restore into a deleted parent» check to several foreign keys.
+`POST /admin/trash/{id}/restore` answers the counts, the audit row carries them, and the Trash screen
+says them. **A test I had to restate:** Decision B (2026-09-02) kept a schedule with held Sessions out
+of the actionable view because neither button could work. One now does, so the row is actionable
+again — and still un-purgeable, which is the half that protects history.
+
+**Verification (part three).** Trash lifecycle + Trash suites on the disposable stack **47/47**, isolation
+passed (first run: my new tests created circles, seats, enrolments and a room the suite's cleanup did
+not know, so every LATER test's cleanup failed — 25 red from one cause; the cleanup was extended).
+Frontend: `restoredNotice` 4 tests. On the rebuilt Localhost, the first Trash browser harness the
+project has had — `verify-trash-restore` **6/6**: a deleted circle is offered «استعادة» (it read «غير
+متاح — يتبعه سجلات أخرى»), asks first, comes back, says how many seats returned, and leaves the Trash.
+
+**Full gates, once, at the boundary (part three).** Backend unit **360/360**; frontend **1,461/1,461**; 32
+guards + doc links; OpenAPI regenerated, no drift; full disposable integration **2,772 passed, exit 0**,
+isolation passed; seed drill **exit 0** (the scenario seed now also makes and cleans a deletable circle).

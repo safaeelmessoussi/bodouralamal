@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listTrash, purgeTrashEntry, restoreTrashEntry, type TrashEntry } from '../../adapters/trash.js';
+import {
+  listTrash,
+  purgeTrashEntry,
+  restoreTrashEntry,
+  type RestoreResult,
+  type TrashEntry,
+} from '../../adapters/trash.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
@@ -64,6 +70,35 @@ export const TRASH_ENTITY_TYPES = [
  * columns no screen is entitled to. This page answers *what was deleted, by
  * whom, and when*.
  */
+/**
+ * **«تمت الاستعادة» — and what came back with it** (R169 §8). A circle's seats, a
+ * class schedule's occurrences and a Level's activities return only where they
+ * still fit, so the sentence carries the counts: a seat that could not return
+ * (she has since been seated elsewhere) or an occurrence whose date has passed
+ * is SAID, never hidden behind a plain success.
+ */
+export function restoredNotice(result: RestoreResult): string {
+  const parts = [t('admin.trash.restored')];
+  const count = (key: string, n: number): string => t(key).replace('{n}', String(n));
+  if (result.seats_restored !== undefined) {
+    parts.push(count('admin.trash.seatsRestored', result.seats_restored));
+    if ((result.seats_not_restored ?? 0) > 0) {
+      parts.push(count('admin.trash.seatsNotRestored', result.seats_not_restored!));
+    }
+  }
+  if (result.sessions_restored !== undefined) {
+    parts.push(count('admin.trash.sessionsRestored', result.sessions_restored));
+    if ((result.sessions_not_restored ?? 0) > 0) {
+      parts.push(count('admin.trash.sessionsNotRestored', result.sessions_not_restored!));
+    }
+  }
+  if (result.event_links_unknown === true) parts.push(t('admin.trash.eventLinksUnknown'));
+  else if ((result.event_links_restored ?? 0) > 0) {
+    parts.push(count('admin.trash.eventLinksRestored', result.event_links_restored!));
+  }
+  return parts.join(' ');
+}
+
 export function TrashPage(): ReactNode {
   const { accessToken } = useSession();
 
@@ -249,9 +284,9 @@ export function TrashPage(): ReactNode {
     setBusy(true);
     setNotice(null);
     try {
-      await restoreTrashEntry(restoring.id, accessToken);
+      const result = await restoreTrashEntry(restoring.id, accessToken);
       await load();
-      setNotice(t('admin.trash.restored'));
+      setNotice(restoredNotice(result));
     } catch (error) {
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
@@ -263,7 +298,13 @@ export function TrashPage(): ReactNode {
               ? 'admin.trash.alreadyPurged'
               : reason === 'NOT_DELETED'
                 ? 'admin.trash.notDeleted'
-                : 'admin.trash.restoreFailed',
+                : // R169 §8 — a class schedule whose room or staff were booked
+                  // since, and a tombstone too old to name what it took.
+                  reason === 'OVERLAPPING_SESSIONS'
+                  ? 'admin.trash.scheduleConflict'
+                  : reason === 'INCOMPLETE_SNAPSHOT'
+                    ? 'admin.trash.incompleteSnapshot'
+                    : 'admin.trash.restoreFailed',
         ),
       );
     } finally {

@@ -72,11 +72,22 @@ export async function listTrash(
 
 /** Refused loudly for an entity type whose restoration is not yet complete —
  *  the screen does not offer it, and the server refuses it anyway. */
-export async function restoreTrashEntry(
-  id: string,
-  token: string | null,
-): Promise<{ target_entity: string; target_id: string }> {
-  return api<{ target_entity: string; target_id: string }>(`/admin/trash/${id}/restore`, {
+/** What came back WITH the record (R169 §8) — present only for the types that
+ *  take something with them: a circle's seats, a class schedule's occurrences,
+ *  the activities re-addressed to a Level. */
+export interface RestoreResult {
+  target_entity: string;
+  target_id: string;
+  seats_restored?: number;
+  seats_not_restored?: number;
+  sessions_restored?: number;
+  sessions_not_restored?: number;
+  event_links_restored?: number;
+  event_links_unknown?: boolean;
+}
+
+export async function restoreTrashEntry(id: string, token: string | null): Promise<RestoreResult> {
+  return api<RestoreResult>(`/admin/trash/${id}/restore`, {
     method: 'POST',
     token,
   });

@@ -407,6 +407,11 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
       where: { levelId: id, deletedAt: null },
       data: { deletedAt: now, deletedById: actor.userId },
     });
+    // R169 §8 — an activity's audience joins are HARD-deleted (they have no
+    // tombstone of their own), so WHICH activities named this Level — and its
+    // groups, below — is recorded in the snapshot. Without it a restored Level
+    // would silently have dropped out of every activity addressed to it.
+    const eventLevels = await tx.eventLevel.findMany({ where: { levelId: id }, select: { eventId: true } });
     await tx.eventLevel.deleteMany({ where: { levelId: id } });
 
     const groups = await tx.administrativeGroup.findMany({
@@ -415,6 +420,10 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     });
     // The same owned audience joins removed by deleting one Administrative
     // Group must also follow when the Level removes those groups as a cascade.
+    const eventGroups = await tx.eventAdministrativeGroup.findMany({
+      where: { administrativeGroupId: { in: groups.map((group) => group.id) } },
+      select: { eventId: true, administrativeGroupId: true },
+    });
     await tx.eventAdministrativeGroup.deleteMany({
       where: { administrativeGroupId: { in: groups.map((group) => group.id) } },
     });
@@ -433,6 +442,12 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
           cascaded_level_subject_ids: levelSubjects.map((link) => link.id),
           cascaded_level_surah_ids: levelSurahs.map((link) => link.id),
           cascaded_administrative_group_ids: groups.map((group) => group.id),
+          // R169 §8 — ids only (TD-14): which activities to re-address on restore.
+          removed_event_level_event_ids: eventLevels.map((link) => link.eventId),
+          removed_event_group_links: eventGroups.map((link) => ({
+            event_id: link.eventId,
+            administrative_group_id: link.administrativeGroupId,
+          })),
         }),
       ) as object,
       deletedById: actor.userId,

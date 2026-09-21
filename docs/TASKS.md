@@ -1403,7 +1403,7 @@ was hiding behind it: the run went green on the first attempt.
   - Guards the SRS did not name: `PARENT_DELETED` and `ALREADY_PURGED`
   - R59.1 later added server-declared, audited permanent deletion; User remains
     de-identification, never row destruction
-- [ ] **Widen the remaining restorable set** — each type needs its TD-5 cascade reinstated and
+- [x] **Widen the remaining restorable set** **[Closed 2026-09-21 — built, R169 §8 — Level, TeachingGroup and RecurringCourseSchedule restore with what their deletion took; the other cascading types stay read-only and say so]** — each type needs its TD-5 cascade reinstated and
   tested before it joins: `Level` (its Administrative Groups), `TeachingGroup` (member seats),
   and `RecurringCourseSchedule` (future Sessions). Until then the screen says so per row
 
@@ -5480,7 +5480,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       the form still says «لم تُختَر جهة بعد» where a class says «الكل»); and a
       class addressed to «الكل» on Level, group AND circle = every Level that
       teaches its Subject at its branch(es).
-- [ ] **Part three — the Trash restores a Subject circle, a class schedule and
+- [x] **Part three — BUILT, R169 §8: the Trash restores a Subject circle, a class schedule and
       a Level** (the Owner: build). A Level's event-audience joins are hard-
       deleted today; they must be snapshotted from now on.
 - [ ] **Part four — a date of birth for every beneficiary** (the Owner: fill the
@@ -5521,3 +5521,9 @@ The Owner's six replies to Revision 167's report. One migration so far
       My first attempt started BEFORE the CI run had finished (I misread my own
       log line); the host preflight refused — the images were not published
       yet — and nothing on Staging changed. Redeployed once CI was green.
+- [x] **Hosted CI 8/8 on `8d87feb` (part two); deployed to Staging at
+      `8d87feb`** from `6d7f2c1`. The host preflight refused first: Docker's
+      disk had 19 GiB free against the approved 20 GiB floor — seven releases'
+      images had piled up. The five oldest UNUSED release images were removed
+      (re-pullable from the registry; the running release and its predecessor
+      kept) → 23 GiB free, preflight PASS. `/healthz` 200; zero error lines.

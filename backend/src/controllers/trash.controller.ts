@@ -60,7 +60,12 @@ export function list(prisma: PrismaClient) {
 export function restore(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const result = await restoreEntry(prisma, requireActor(req), idParam(req, 'id'));
-    res.json({ target_entity: result.targetEntity, target_id: result.targetId });
+    // R169 §8 — what came back WITH the record, in counts: a circle's seats, a
+    // class schedule's occurrences, the activities re-addressed to a Level. The
+    // screen SAYS them, because «تمت الاستعادة» alone would hide a seat that
+    // could not return or an occurrence whose date has passed.
+    const { targetEntity, targetId, ...consequence } = result;
+    res.json({ target_entity: targetEntity, target_id: targetId, ...consequence });
   };
 }
 

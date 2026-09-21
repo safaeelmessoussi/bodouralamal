@@ -73,6 +73,12 @@ async function wipe(): Promise<void> {
   const levels = (
     await prisma.level.findMany({ where: { name: { startsWith: TAG } }, select: { id: true } })
   ).map((level) => level.id);
+  const circleIds = (
+    await prisma.teachingGroup.findMany({ where: { levelId: { in: levels } }, select: { id: true } })
+  ).map((circle) => circle.id);
+  await prisma.trash.deleteMany({ where: { targetEntity: 'TeachingGroup', targetId: { in: circleIds } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'TeachingGroup', targetId: { in: circleIds } } });
+  await prisma.studentTeachingGroup.deleteMany({ where: { teachingGroupId: { in: circleIds } } });
   await prisma.teachingGroup.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.level.deleteMany({ where: { id: { in: levels } } });
@@ -150,6 +156,12 @@ for (const [index, circle] of circles.entries()) {
     },
   });
 }
+// R169 §8 — a circle with NO class, so it can be deleted (a scheduled one is
+// refused) and then restored from the Trash on the real screen.
+const spare = await prisma.teachingGroup.create({
+  data: { name: `${TAG} حلقة للحذف`, levelId: first.id, subjectId: tracker.id, displayOrder: 9 },
+});
+
 if (other) {
   // «للجميع»: the whole Level, no حلقة — shown for information, never a choice.
   await prisma.recurringCourseSchedule.create({
@@ -209,6 +221,7 @@ console.log(
     category: { id: category.id, name: category.name },
     firstLevel: { id: first.id, name: first.name },
     circles: circles.map((circle) => circle.name),
+    spareCircle: { id: spare.id, name: spare.name },
     fixedSubject: other?.name ?? null,
     fixturePeriod: !covering,
   }),

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
@@ -191,7 +192,17 @@ describe("restore is offered only where it is COMPLETE (§7)", () => {
     ).toBe(1);
   });
 
-  it("REFUSES a genuinely cascading entity loudly rather than half-restoring it", async () => {
+  it("REFUSES a type whose reinstatement is not written, loudly, rather than half-restoring it", async () => {
+    // An activity's audience joins are hard-deleted with it, so the row alone
+    // would come back addressed to nobody. (A Level used to be the example here;
+    // R169 §8 wrote and tested its reinstatement.)
+    const entryId = await bin("Event", randomUUID(), { title: `${TAG} نشاط` });
+    const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
+    expect(e.code).toBe("STATE_CONFLICT");
+    expect(e.details?.["reason"]).toBe("CASCADE_RELATIONSHIPS");
+  });
+
+  it("R169 §8 — refuses a Level whose OLD tombstone does not name what it took", async () => {
     const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
     const level = await prisma.level.create({
       data: { name: `${TAG} مستوى`, categoryId: category.id, deletedAt: new Date() },
@@ -199,7 +210,7 @@ describe("restore is offered only where it is COMPLETE (§7)", () => {
     const entryId = await bin("Level", level.id, { name: level.name });
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
     expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("CASCADE_CHILDREN");
+    expect(e.details?.["reason"]).toBe("INCOMPLETE_SNAPSHOT");
   });
 
   it("will not restore a child into a deleted parent", async () => {

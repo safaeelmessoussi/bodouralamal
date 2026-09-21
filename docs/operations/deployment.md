@@ -201,6 +201,14 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-web:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 
+#    Preflight refuses below the approved free-disk floor, and on a host that
+#    is deployed to often the cause is nearly always OLD RELEASE IMAGES (about
+#    1.1 GB each; seven had piled up on Staging by 2026-09-21). Keep the RUNNING
+#    release and its predecessor — the rollback — and remove the rest; they are
+#    re-pullable from the registry. Never lower the floor to get past it:
+#      docker images --format '{{.Repository}}:{{.Tag}}' | grep bodouralamal-
+#      docker rmi ghcr.io/safaeelmessoussi/bodouralamal-{api,web}:<old-commit>
+
 # 4b Existing deployment with online classes: NEVER restart the recorder under
 #    a class (SRS Revision 167 §5). It holds a class's file locally until the
 #    class ends; a restart loses the capture and nothing can bring it back.

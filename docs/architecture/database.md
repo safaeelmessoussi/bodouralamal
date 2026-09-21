@@ -953,6 +953,23 @@ Two rules follow, and both are cheap:
   and purge use only those ids. A legacy snapshot without them fails closed on restore and
   deletes no guessed child during purge; PostgreSQL then refuses the parent if a child remains.
 
+### What comes back with a Level, a circle and a class schedule (R169 §8)
+
+Three cascading types joined the restorable set, each because its reinstatement is now written
+and tested against PostgreSQL (`trash-lifecycle.integration.test.ts`), not assumed:
+
+| Type | Comes back with | What does NOT come back, and why |
+|---|---|---|
+| `TeachingGroup` | the seats its deletion released (`restoreCircleSeats`) | a seat whose student has since been seated in another circle of the same Subject and Level — one live seat per `(student, subject, level)` is a database index, and moving her back would undo a later decision — or who is no longer enrolled at the Level. Counted and said (`seats_not_restored`) |
+| `RecurringCourseSchedule` | the occurrences its deletion removed that are still AHEAD, by the ids the snapshot names (`removed_session_ids`) — never ones `session.materialize` would invent, never ones protection spared | occurrences whose date has passed (a class nobody held is not history). **Refused whole** with `SCHEDULE_CONFLICT` when the room or a member of staff was booked since — `findConflicts`, the scheduling form's own check, over exactly the span coming back |
+| `Level` | its `LevelSubject`, `LevelSurah` and `AdministrativeGroup` rows by snapshot id, and the ACTIVITIES that were addressed to it or its groups | an activity that has itself been deleted since. A Level deleted before R169 recorded no activity links — they are hard-deleted, with no tombstone — so it restores without them and says so (`event_links_unknown`) |
+
+Each refuses while something it hangs from is still in the Trash (`PARENT_DELETED`, now over several
+foreign keys — `parents` — not one). A returning seat re-enqueues consent re-evaluation for its
+student, the mirror of what the deletion enqueued. `AdministrativeGroup` on its own, `Session`,
+`Event`, `Enrollment`, `StudentTeachingGroup`, `FamilyLink` and `EducationalContent` stay
+read-only in the Trash: their reinstatement is not written.
+
 ### Hard deletion
 
 Two paths, and only two:

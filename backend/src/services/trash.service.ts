@@ -9,7 +9,9 @@ import { requireRetirement } from '../repositories/storage-retirement.repository
 import { lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
+import { enqueueConsentReevaluationForStudent } from './consent-reevaluation.service.js';
 import { deIdentifyAccountSystem } from './account-deletion.service.js';
+import { findConflicts } from './course-schedule.service.js';
 
 /**
  * The Trash — **soft-deleted records, browsable; restorable where restoration is
@@ -56,7 +58,13 @@ type ModelName =
   | 'exam'
   | 'hijriMonthStart'
   | 'partner'
-  | 'user';
+  | 'user'
+  // R169 §8 — the circle, its Level, and what a class schedule hangs from.
+  | 'teachingGroup'
+  | 'level'
+  | 'recurringCourseSchedule'
+  | 'academicYear'
+  | 'administrativeGroup';
 
 /** Delegates a purge plan may destroy. Separate from `ModelName` because the
  *  restorable set and the purgeable set are different questions. */
@@ -138,6 +146,13 @@ const RESTORABLE: Record<
   {
     model: ModelName;
     parent?: { field: string; model: ModelName };
+    /**
+     * R169 §8 — a record that hangs from SEVERAL things (a circle from its Level
+     * AND its Subject). Each named foreign key must point at a LIVE row, or the
+     * restore is refused with `PARENT_DELETED` naming which. A `null` key is
+     * «none» and is skipped.
+     */
+    parents?: { field: string; model: ModelName }[];
     /** Rows soft-deleted WITH the record, un-deleted with it. Only where the
      *  reinstatement is a single well-defined statement (R59.3). */
     children?: DeclaredChild[];
@@ -184,6 +199,70 @@ const RESTORABLE: Record<
    * the last month can be withdrawn, so restoring it appends rather than fills.
    */
   HijriMonthStart: { model: 'hijriMonthStart' },
+  /**
+   * **R169 §8 — a Subject circle (حلقة) comes back with its seats.**
+   *
+   * Deleting one stamps the circle and every member's seat from ONE clock
+   * reading, so the generic «children removed BY this deletion» scoping would
+   * be enough — except that a released student may since have been SEATED
+   * ELSEWHERE, and one live seat per (student, Subject, Level) is an index the
+   * database enforces. So the seats are reinstated by `restoreCircleSeats`
+   * below, not declared here: a seat returns only to a student who is still
+   * enrolled at the Level and holds no other circle for the Subject. The rest
+   * are counted and said, never forced.
+   */
+  TeachingGroup: {
+    model: 'teachingGroup',
+    parents: [
+      { field: 'levelId', model: 'level' },
+      { field: 'subjectId', model: 'subject' },
+    ],
+  },
+  /**
+   * **R169 §8 — a Level comes back with what its deletion took.** Its
+   * curriculum links, its «مقرر الحفظ» and its Administrative Groups are
+   * soft-deleted with it and named by id in the snapshot, so they return through
+   * the declared-children path, scoped to the rows THIS deletion removed. The
+   * activities that were addressed to it (or to its groups) are different: those
+   * joins are HARD-deleted, so they are re-created from the snapshot
+   * (`restoreLevelEventLinks`) — for an activity that is still live. A Level
+   * deleted BEFORE this revision recorded none, restores without them, and the
+   * result says so (`event_links_unknown`).
+   */
+  Level: {
+    model: 'level',
+    parents: [{ field: 'categoryId', model: 'category' }],
+    children: [
+      { model: 'levelSubject', fk: 'id', snapshotIdsKey: 'cascaded_level_subject_ids' },
+      { model: 'levelSurah', fk: 'id', snapshotIdsKey: 'cascaded_level_surah_ids' },
+      { model: 'administrativeGroup', fk: 'id', snapshotIdsKey: 'cascaded_administrative_group_ids' },
+    ],
+  },
+  /**
+   * **R169 §8 — a class schedule comes back with the occurrences its deletion
+   * removed — the ones still AHEAD — or not at all.**
+   *
+   * The deletion stamps the unprotected future Sessions and records their ids
+   * (`removed_session_ids`); protected ones were never touched. So a restore
+   * reinstates exactly those ids and nothing `session.materialize` would invent.
+   * Two things have moved on since, and both are respected: occurrences whose
+   * date has PASSED stay deleted (a class nobody held is not history), and the
+   * room and the staff may have been booked — `findConflicts`, the scheduling
+   * form's own check, refuses the restore (`SCHEDULE_CONFLICT`) rather than
+   * double-book. See `restoreScheduleSessions`.
+   */
+  RecurringCourseSchedule: {
+    model: 'recurringCourseSchedule',
+    parents: [
+      { field: 'branchId', model: 'branch' },
+      { field: 'roomId', model: 'room' },
+      { field: 'subjectId', model: 'subject' },
+      { field: 'academicYearId', model: 'academicYear' },
+      { field: 'levelId', model: 'level' },
+      { field: 'administrativeGroupId', model: 'administrativeGroup' },
+      { field: 'teachingGroupId', model: 'teachingGroup' },
+    ],
+  },
 };
 
 /**
@@ -193,13 +272,7 @@ const RESTORABLE: Record<
  * so renaming one changes what an administrator is told about their own data.
  */
 const BLOCKED_REASON: Record<string, string> = {
-  Level: 'CASCADE_CHILDREN',
   AdministrativeGroup: 'CASCADE_CHILDREN',
-  TeachingGroup: 'CASCADE_CHILDREN',
-  // Deleting a schedule takes its unprotected future occurrences with it, and a
-  // restore has to decide which of them to bring back — `session.materialize`
-  // would regenerate them, but not the ones protection deliberately spared.
-  RecurringCourseSchedule: 'CASCADE_CHILDREN',
   Session: 'CASCADE_CHILDREN',
   // An Event's scope joins are HARD deleted, so restoring the row alone would
   // produce an event with no audience — visible to nobody, which is worse than
@@ -701,11 +774,191 @@ export async function listTrash(
  * deletion is restorable because its soft-delete phase removes no relationship
  * rows; entity types whose deletion really cascades remain outside RESTORABLE.
  */
+/**
+ * **The seats a deleted circle released, given back where they still fit**
+ * (R169 §8). A seat returns to a student who (a) lost it TO this deletion —
+ * stamped at or after the circle's own tombstone, never an earlier removal,
+ * which was a different decision; (b) is still enrolled at the circle's Level;
+ * and (c) has not since been seated in another circle of the same Subject —
+ * `student_teaching_group_student_subject_level_unique` would refuse it, and
+ * moving her back would undo a decision somebody made after the deletion.
+ *
+ * Consent re-evaluation is enqueued for every student whose seat returns, AFTER
+ * it has: her audience just changed, and with it the gate of every recording of
+ * the classes this circle attends — the mirror of what the deletion enqueued.
+ */
+async function restoreCircleSeats(
+  tx: Prisma.TransactionClient,
+  teachingGroupId: string,
+  deletedAt: Date,
+): Promise<{ seats_restored: number; seats_not_restored: number }> {
+  const released = await tx.studentTeachingGroup.findMany({
+    where: { teachingGroupId, deletedAt: { gte: deletedAt } },
+    select: { id: true, studentId: true, subjectId: true, levelId: true },
+  });
+  if (released.length === 0) return { seats_restored: 0, seats_not_restored: 0 };
+
+  const studentIds = released.map((seat) => seat.studentId);
+  const { subjectId, levelId } = released[0]!;
+  const [seatedElsewhere, stillEnrolled] = await Promise.all([
+    tx.studentTeachingGroup.findMany({
+      where: { deletedAt: null, studentId: { in: studentIds }, subjectId, levelId },
+      select: { studentId: true },
+    }),
+    tx.enrollment.findMany({
+      where: { deletedAt: null, studentId: { in: studentIds }, levelId, student: { deletedAt: null } },
+      select: { studentId: true },
+    }),
+  ]);
+  const elsewhere = new Set(seatedElsewhere.map((seat) => seat.studentId));
+  const enrolled = new Set(stillEnrolled.map((enrolment) => enrolment.studentId));
+  const returning = released.filter((seat) => !elsewhere.has(seat.studentId) && enrolled.has(seat.studentId));
+
+  await tx.studentTeachingGroup.updateMany({
+    where: { id: { in: returning.map((seat) => seat.id) } },
+    data: { deletedAt: null, deletedById: null },
+  });
+  for (const seat of returning) await enqueueConsentReevaluationForStudent(tx, seat.studentId);
+
+  return { seats_restored: returning.length, seats_not_restored: released.length - returning.length };
+}
+
+/**
+ * **The activities that were addressed to a deleted Level, re-addressed**
+ * (R169 §8). Only for an activity that is still live, only for a group that came
+ * back with the Level, and never twice (`skipDuplicates`).
+ */
+async function restoreLevelEventLinks(
+  tx: Prisma.TransactionClient,
+  levelId: string,
+  snapshot: unknown,
+): Promise<{ event_links_restored: number; event_links_unknown: boolean }> {
+  const record = (snapshot ?? {}) as Record<string, unknown>;
+  const levelEventIds = record['removed_event_level_event_ids'];
+  const groupLinks = record['removed_event_group_links'];
+  if (!Array.isArray(levelEventIds) || !Array.isArray(groupLinks)) {
+    // A tombstone from before this revision: what it was addressed by was never
+    // written down. Said, rather than guessed.
+    return { event_links_restored: 0, event_links_unknown: true };
+  }
+  const wanted = [
+    ...levelEventIds.filter((id): id is string => typeof id === 'string'),
+    ...groupLinks.map((link) => (link as { event_id?: unknown }).event_id).filter((id): id is string => typeof id === 'string'),
+  ];
+  const live = new Set(
+    (await tx.event.findMany({ where: { id: { in: wanted }, deletedAt: null }, select: { id: true } })).map((e) => e.id),
+  );
+  const liveGroups = new Set(
+    (await tx.administrativeGroup.findMany({ where: { levelId, deletedAt: null }, select: { id: true } })).map((g) => g.id),
+  );
+  const levelRows = levelEventIds
+    .filter((id): id is string => typeof id === 'string' && live.has(id))
+    .map((eventId) => ({ eventId, levelId }));
+  const groupRows = groupLinks
+    .map((link) => link as { event_id?: unknown; administrative_group_id?: unknown })
+    .filter(
+      (link): link is { event_id: string; administrative_group_id: string } =>
+        typeof link.event_id === 'string' &&
+        typeof link.administrative_group_id === 'string' &&
+        live.has(link.event_id) &&
+        liveGroups.has(link.administrative_group_id),
+    )
+    .map((link) => ({ eventId: link.event_id, administrativeGroupId: link.administrative_group_id }));
+  const a = await tx.eventLevel.createMany({ data: levelRows, skipDuplicates: true });
+  const b = await tx.eventAdministrativeGroup.createMany({ data: groupRows, skipDuplicates: true });
+  return { event_links_restored: a.count + b.count, event_links_unknown: false };
+}
+
+/**
+ * **The occurrences a deleted class schedule took with it, given back where
+ * they still fit** (R169 §8) — see `RESTORABLE.RecurringCourseSchedule`.
+ */
+async function restoreScheduleSessions(
+  tx: Prisma.TransactionClient,
+  scheduleId: string,
+  row: Record<string, unknown>,
+  snapshot: unknown,
+): Promise<{ sessions_restored: number; sessions_not_restored: number }> {
+  if (!hasValidSnapshotIds(snapshot, 'removed_session_ids')) {
+    throw new AppError('STATE_CONFLICT', 'the legacy snapshot does not identify the removed occurrences', {
+      reason: 'INCOMPLETE_SNAPSHOT',
+      target_entity: 'RecurringCourseSchedule',
+    });
+  }
+  const removedIds = snapshotIds(snapshot, 'removed_session_ids', 'RecurringCourseSchedule');
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const ahead = await tx.session.findMany({
+    where: { id: { in: removedIds }, scheduleId, deletedAt: { not: null }, date: { gte: today } },
+    select: { id: true, date: true },
+    orderBy: { date: 'asc' },
+  });
+  if (ahead.length === 0) return { sessions_restored: 0, sessions_not_restored: removedIds.length };
+
+  const staff = await tx.courseScheduleStaff.findMany({
+    where: { scheduleId, deletedAt: null },
+    select: { userId: true, position: true, effectiveFrom: true, effectiveUntil: true },
+  });
+  // The people it names must still be able to teach it (suspended, deleted…).
+  await assertStaffAccountsAvailable(
+    tx,
+    staff.map((person) => person.userId),
+  );
+
+  // The scheduling form's OWN conflict check, over exactly the span coming
+  // back: the room or a مؤطِّرة may have been booked since the deletion.
+  const conflicts = await findConflicts(
+    tx,
+    {
+      branchId: row['branchId'] as string,
+      roomId: (row['roomId'] as string | null) ?? null,
+      startTime: row['startTime'] as Date,
+      endTime: row['endTime'] as Date,
+      recurrence: row['recurrence'] as string,
+      weekdays: (row['weekdays'] as string[] | null) ?? [],
+      dayOfMonth: (row['dayOfMonth'] as number | null) ?? null,
+      monthOfYear: (row['monthOfYear'] as number | null) ?? null,
+      anchorDate: (row['anchorDate'] as Date | null) ?? null,
+      effectiveUntil: (row['effectiveUntil'] as Date | null) ?? null,
+      staff: staff.map((person) => ({
+        userId: person.userId,
+        position: person.position,
+        effectiveFrom: person.effectiveFrom,
+        effectiveUntil: person.effectiveUntil,
+      })),
+    },
+    ahead[0]!.date,
+    ahead[ahead.length - 1]!.date,
+    scheduleId,
+  );
+  if (conflicts.length > 0) {
+    throw new AppError('SCHEDULE_CONFLICT', 'the room or a member of staff has been booked since', {
+      reason: 'OVERLAPPING_SESSIONS',
+      conflicts: conflicts.slice(0, 10),
+    });
+  }
+
+  await tx.session.updateMany({
+    where: { id: { in: ahead.map((session) => session.id) } },
+    data: { deletedAt: null, deletedById: null },
+  });
+  return { sessions_restored: ahead.length, sessions_not_restored: removedIds.length - ahead.length };
+}
+
 export async function restoreEntry(
   prisma: PrismaClient,
   actor: Actor,
   id: string,
-): Promise<{ targetEntity: string; targetId: string }> {
+): Promise<{
+  targetEntity: string;
+  targetId: string;
+  seats_restored?: number;
+  seats_not_restored?: number;
+  sessions_restored?: number;
+  sessions_not_restored?: number;
+  event_links_restored?: number;
+  event_links_unknown?: boolean;
+}> {
   await assertFreshSuperAdmin(prisma, actor);
 
   const entry = await prisma.trash.findUnique({ where: { id } });
@@ -782,6 +1035,20 @@ export async function restoreEntry(
       }
     }
 
+    for (const parent of plan.parents ?? []) {
+      const parentId = row[parent.field];
+      if (parentId === null || parentId === undefined) continue;
+      const parentDelegate = tx[parent.model] as unknown as {
+        findFirst: (a: unknown) => Promise<unknown>;
+      };
+      if (!(await parentDelegate.findFirst({ where: { id: parentId, deletedAt: null } }))) {
+        throw new AppError('STATE_CONFLICT', 'restore its parent first', {
+          reason: 'PARENT_DELETED',
+          parent_entity: String(parent.model),
+        });
+      }
+    }
+
     await delegate.update({
       where: { id: entry.targetId },
       data: { deletedAt: null, deletedById: null },
@@ -843,6 +1110,15 @@ export async function restoreEntry(
         data: { deletedAt: null, deletedById: null },
       });
     }
+    const consequence =
+      entry.targetEntity === 'TeachingGroup'
+        ? await restoreCircleSeats(tx, entry.targetId, row['deletedAt'] as Date)
+        : entry.targetEntity === 'RecurringCourseSchedule'
+          ? await restoreScheduleSessions(tx, entry.targetId, row, entry.snapshot)
+          : entry.targetEntity === 'Level'
+            ? await restoreLevelEventLinks(tx, entry.targetId, entry.snapshot)
+            : {};
+
     // The tombstone goes with the restoration: the record is no longer deleted,
     // so leaving it listed would make the Trash disagree with the platform. The
     // audit row below is what keeps the event answerable afterwards.
@@ -857,10 +1133,12 @@ export async function restoreEntry(
       detail: {
         deleted_at: entry.deletedAt.toISOString(),
         deleted_by: entry.deletedById,
+        // R169 §8 — what came back WITH it, in counts (TD-14: no names).
+        ...consequence,
       },
     });
 
-    return { targetEntity: entry.targetEntity, targetId: entry.targetId };
+    return { targetEntity: entry.targetEntity, targetId: entry.targetId, ...consequence };
   });
 }
 

@@ -6,7 +6,9 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import type { Actor } from '../policies/actor.js';
+import { deleteCourseSchedule } from './course-schedule.service.js';
 import { deleteLevel } from './level.service.js';
+import { deleteTeachingGroup } from './teaching-group.service.js';
 import { deletePartner } from './partner.service.js';
 import {
   assignSubjectToLevel,
@@ -118,6 +120,15 @@ async function cleanup(): Promise<void> {
   await prisma.quranProgressLog.deleteMany({
     where: { OR: [{ studentId: { in: userIds } }, { loggedById: { in: userIds } }] },
   });
+  // R169 §8 — what the restore tests add: circles and their seats, enrolments,
+  // consent re-evaluation queued for a returning seat, and a booked room.
+  await prisma.studentTeachingGroup.deleteMany({
+    where: { OR: [{ levelId: { in: levelIds } }, { studentId: { in: userIds } }] },
+  });
+  await prisma.teachingGroup.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.enrollment.deleteMany({
+    where: { OR: [{ levelId: { in: levelIds } }, { studentId: { in: userIds } }] },
+  });
   await prisma.levelSubject.deleteMany({
     where: { OR: [{ levelId: { in: levelIds } }, { subjectId: { in: subjectIds } }] },
   });
@@ -129,6 +140,7 @@ async function cleanup(): Promise<void> {
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.subject.deleteMany({ where: { id: { in: subjectIds } } });
   await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+  await prisma.room.deleteMany({ where: { branchId: { in: branchIds } } });
   await prisma.branch.deleteMany({ where: { id: { in: branchIds } } });
   await prisma.schedulingType.deleteMany({ where: { id: { in: schedulingTypeIds } } });
   await prisma.partner.deleteMany({ where: { id: { in: partnerIds } } });
@@ -261,6 +273,181 @@ describe('exact owned-child lifecycle plans', () => {
     expect(await prisma.levelSubject.count({ where: { id: link.id } })).toBe(1);
     expect(await prisma.trash.count({ where: { id: linkTrash.id } })).toBe(1);
     expect(await prisma.level.count({ where: { id: levelId } })).toBe(1);
+  });
+});
+
+describe('R169 §8 — a Level, a circle and a class schedule come back with what their deletion took', () => {
+  it('restores a Level with its curriculum, its «مقرر الحفظ», its groups — and re-addresses the activities that named it', async () => {
+    const { levelId, subjectId } = await curriculum();
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع` } });
+    const link = await prisma.levelSubject.create({ data: { levelId, subjectId } });
+    const surah = await prisma.levelSurah.create({ data: { levelId, surahId: 1 } });
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة`, levelId, branchId: branch.id },
+    });
+    const event = await prisma.event.create({
+      data: { title: `${TAG} نشاط`, startDate: new Date('2099-01-01') },
+    });
+    await prisma.eventLevel.create({ data: { eventId: event.id, levelId } });
+    await prisma.eventAdministrativeGroup.create({
+      data: { eventId: event.id, administrativeGroupId: group.id },
+    });
+    // Removed from the Level a moment EARLIER, by a different decision: it must
+    // stay removed.
+    const earlier = await prisma.levelSurah.create({
+      data: { levelId, surahId: 2, deletedAt: new Date(Date.now() - 60_000), deletedById: actorUserId },
+    });
+
+    await deleteLevel(prisma, superAdmin(), levelId);
+    expect(await prisma.eventLevel.count({ where: { levelId } })).toBe(0);
+    const entry = await prisma.trash.findFirstOrThrow({ where: { targetEntity: 'Level', targetId: levelId } });
+
+    const result = await restoreEntry(prisma, superAdmin(), entry.id);
+    expect(result).toMatchObject({ event_links_restored: 2, event_links_unknown: false });
+    expect((await prisma.level.findUniqueOrThrow({ where: { id: levelId } })).deletedAt).toBeNull();
+    expect((await prisma.levelSubject.findUniqueOrThrow({ where: { id: link.id } })).deletedAt).toBeNull();
+    expect((await prisma.levelSurah.findUniqueOrThrow({ where: { id: surah.id } })).deletedAt).toBeNull();
+    expect((await prisma.administrativeGroup.findUniqueOrThrow({ where: { id: group.id } })).deletedAt).toBeNull();
+    expect((await prisma.levelSurah.findUniqueOrThrow({ where: { id: earlier.id } })).deletedAt).not.toBeNull();
+    expect(await prisma.eventLevel.count({ where: { eventId: event.id, levelId } })).toBe(1);
+    expect(
+      await prisma.eventAdministrativeGroup.count({ where: { eventId: event.id, administrativeGroupId: group.id } }),
+    ).toBe(1);
+    expect(await prisma.trash.count({ where: { id: entry.id } })).toBe(0);
+  });
+
+  it('a Level deleted BEFORE this revision names no activities: it restores, and SAYS its audiences are unknown', async () => {
+    const { levelId } = await curriculum();
+    await prisma.level.update({ where: { id: levelId }, data: { deletedAt: new Date(), deletedById: actorUserId } });
+    const entry = await prisma.trash.create({
+      data: {
+        targetEntity: 'Level',
+        targetId: levelId,
+        snapshot: {
+          id: levelId,
+          cascaded_level_subject_ids: [],
+          cascaded_level_surah_ids: [],
+          cascaded_administrative_group_ids: [],
+        },
+        deletedById: actorUserId,
+        purgeAfter: new Date(Date.now() + 86_400_000),
+      },
+    });
+    expect(await restoreEntry(prisma, superAdmin(), entry.id)).toMatchObject({
+      event_links_restored: 0,
+      event_links_unknown: true,
+    });
+  });
+
+  it('restores a circle with the seats it released — except hers who has since been seated elsewhere', async () => {
+    const { levelId, subjectId } = await curriculum();
+    await prisma.levelSubject.create({ data: { levelId, subjectId } });
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع الحلقة` } });
+    const circle = await prisma.teachingGroup.create({ data: { name: `${TAG} حلقة أ`, levelId, subjectId } });
+    const other = await prisma.teachingGroup.create({ data: { name: `${TAG} حلقة ب`, levelId, subjectId } });
+    const student = async (label: string): Promise<string> => {
+      const user = await prisma.user.create({
+        data: { nameArabic: `${TAG} ${label}`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
+      });
+      await prisma.enrollment.create({ data: { studentId: user.id, levelId, branchId: branch.id } });
+      await prisma.studentTeachingGroup.create({
+        data: { studentId: user.id, teachingGroupId: circle.id, subjectId, levelId },
+      });
+      return user.id;
+    };
+    const stays = await student('تعود');
+    const moved = await student('انتقلت');
+
+    await deleteTeachingGroup(prisma, superAdmin(), circle.id);
+    // Somebody seated her in the other circle AFTER the deletion: that decision stands.
+    await prisma.studentTeachingGroup.create({
+      data: { studentId: moved, teachingGroupId: other.id, subjectId, levelId },
+    });
+
+    const entry = await prisma.trash.findFirstOrThrow({ where: { targetEntity: 'TeachingGroup', targetId: circle.id } });
+    const result = await restoreEntry(prisma, superAdmin(), entry.id);
+    expect(result).toMatchObject({ seats_restored: 1, seats_not_restored: 1 });
+    expect(
+      await prisma.studentTeachingGroup.count({ where: { teachingGroupId: circle.id, studentId: stays, deletedAt: null } }),
+    ).toBe(1);
+    expect(
+      await prisma.studentTeachingGroup.count({ where: { teachingGroupId: circle.id, studentId: moved, deletedAt: null } }),
+    ).toBe(0);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'trash.restore', targetId: circle.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit.detail).toMatchObject({ seats_restored: 1, seats_not_restored: 1 });
+  });
+
+  it('restores a class schedule with the FUTURE occurrences its deletion removed — and refuses when the room was booked since', async () => {
+    const { levelId, subjectId } = await curriculum();
+    await prisma.levelSubject.create({ data: { levelId, subjectId } });
+    const branch = await prisma.branch.create({ data: { name: `${TAG} مقر الجدولة` } });
+    const room = await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId: branch.id } });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const at = (h: number): Date => new Date(Date.UTC(1970, 0, 1, h, 0, 0));
+    const day = (offset: number): Date => {
+      const d = new Date();
+      d.setUTCHours(0, 0, 0, 0);
+      d.setUTCDate(d.getUTCDate() + offset);
+      return d;
+    };
+    const weekday = (['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const)[
+      day(7).getUTCDay()
+    ]!;
+    const make = async (): Promise<{ scheduleId: string; sessionId: string }> => {
+      const schedule = await prisma.recurringCourseSchedule.create({
+        data: {
+          title: `${TAG} حصة تعود`,
+          levelId,
+          subjectId,
+          branchId: branch.id,
+          roomId: room.id,
+          academicYearId: year.id,
+          teachingMode: 'entire_level',
+          recurrence: 'weekly',
+          weekdays: [weekday],
+          anchorDate: day(-14),
+          startTime: at(9),
+          endTime: at(10),
+        },
+      });
+      const session = await prisma.session.create({
+        data: { scheduleId: schedule.id, date: day(7), startTime: at(9), endTime: at(10), roomId: room.id },
+      });
+      return { scheduleId: schedule.id, sessionId: session.id };
+    };
+
+    const first = await make();
+    await deleteCourseSchedule(prisma, superAdmin(), first.scheduleId);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: first.sessionId } })).deletedAt).not.toBeNull();
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: 'RecurringCourseSchedule', targetId: first.scheduleId },
+    });
+    expect(await restoreEntry(prisma, superAdmin(), entry.id)).toMatchObject({
+      sessions_restored: 1,
+      sessions_not_restored: 0,
+    });
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: first.sessionId } })).deletedAt).toBeNull();
+
+    // Deleted again — and this time ANOTHER class takes the room at that hour.
+    await deleteCourseSchedule(prisma, superAdmin(), first.scheduleId);
+    const rival = await make();
+    const again = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: 'RecurringCourseSchedule', targetId: first.scheduleId },
+    });
+    let refusal: { code?: string; details?: Record<string, unknown> } = {};
+    try {
+      await restoreEntry(prisma, superAdmin(), again.id);
+    } catch (error) {
+      refusal = error as typeof refusal;
+    }
+    expect(refusal).toMatchObject({ code: 'SCHEDULE_CONFLICT', details: { reason: 'OVERLAPPING_SESSIONS' } });
+    // Refused WHOLE: the schedule is still deleted, and so is its occurrence.
+    expect((await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id: first.scheduleId } })).deletedAt).not.toBeNull();
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: first.sessionId } })).deletedAt).not.toBeNull();
+    void rival;
   });
 });
 
@@ -500,20 +687,23 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     expect(await prisma.administrativeGroup.count({ where: { id: group.id } })).toBe(0);
   });
 
-  it('keeps history-protected rows OUT of the actionable Trash view', async () => {
+  it('a history-protected schedule is ACTIONABLE again — by restoring it, never by destroying it (R169 §8)', async () => {
     /**
-     * Decision B. The row is neither moved nor hidden — it is the same row in
-     * the same table, and `all`/`retained` still reach it. What changes is that
-     * the default view stops offering two buttons that cannot work.
+     * Decision B (2026-09-02) kept such a row out of the default view because
+     * NEITHER button could work: its Sessions are history, so it cannot be
+     * purged, and no restore was written. R169 §8 wrote the restore — so one
+     * button works, and the row belongs where an action exists for it. What is
+     * unchanged is the half that protects history: it is still not purgeable.
      */
     const { scheduleId } = await deletedSchedule(true);
     const actionable = (await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule' })).data;
-    expect(actionable.some((r) => r.targetId === scheduleId)).toBe(false);
+    const row = actionable.find((r) => r.targetId === scheduleId);
+    expect(row).toMatchObject({ restorable: true, purgeable: false });
 
     const retained = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'retained' })
     ).data;
-    expect(retained.some((r) => r.targetId === scheduleId)).toBe(true);
+    expect(retained.some((r) => r.targetId === scheduleId)).toBe(false);
 
     const all = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
