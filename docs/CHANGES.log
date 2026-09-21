@@ -10826,3 +10826,22 @@ the wrapper); harnesses `verify-enrolments-dialog` **24/24**, `verify-class-filt
 **93/93**. pg-boss computes its `tz` crons from its own bundled zone data, so after a decree the nightly
 jobs may run an hour off until the image is rebuilt — housekeeping with no wall-clock meaning; recorded,
 not changed.
+
+**Hosted CI green on the first push — `7655a6b` 8/8 (run `35593444442`), seed drill and release
+images included. Deployed to `staging.bodouralamal.com` at
+`7655a6b447cc69bd3b4be631c5af1c6ad178efeb` (SRS Revision 167), upgrading from `c8d86c9`, by the
+documented Staging pipeline. No Production action.** Before anything stopped: no recording open on
+Staging (asked of the database — the running release predated `ops:active-recordings`); dump taken
+(`~/bodour-predeploy/pre-7655a6b-…dump`); preflight PASS; both revision labels exact before and after
+start; migration `20260922090000_r167_whole_category_content_and_level_completion_mark` applied;
+seeds idempotent; TLS active; `/healthz` 200, `/rtc/validate` 401, every service healthy, zero
+error-level API lines. **The clock, on Staging:** the host carries tzdata `2026c` with unattended
+upgrades enabled; `GET /api/v1/clock` → `utc_offset_minutes: 0`, `in_force_since:
+2026-09-20T01:00:00Z`, `next_change_at: null`, `source: host-zoneinfo` — while that same API
+container's own `Intl` (ICU `2025b`) still answers `GMT+1`, which is the defect, measured where it
+would have bitten. PostgreSQL's `Africa/Casablanca` reads `+00`. `session-recording-reconcile` is
+registered `*/15 * * * *` and completed its first run at 11:31 UTC (nothing open, nothing stranded);
+`ops:active-recordings` answers `{"active":0}` from inside the shipped image. From outside:
+`/manifest.json`, `/sw.js` and the icons are served with the right types, the shell links the
+manifest, `GET /library?whole_category=true` answers 200, `GET /students/me/certificates` answers 401
+to an anonymous caller, and the served bundle carries «إدارة التسجيلات».

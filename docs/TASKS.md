@@ -5350,6 +5350,11 @@ column, one table, one sequence; nothing dropped or rewritten).
 - [ ] **Not repaired:** `verify-scheduling-types`, `verify-visibility-ui` and
       `verify-exam-scheduling` still type «حصة دراسية» in assertions about the
       SEEDED catalogue; on the Owner's renamed Localhost they will report it.
+- [x] **Hosted CI 8/8 on `7655a6b` (first push); deployed to Staging at
+      `7655a6b`** by the documented pipeline, from `c8d86c9`. `/clock` there
+      answers offset 0 from `host-zoneinfo` (host tzdata `2026c`) while the
+      container's own ICU still says GMT+1; the reconciler ran at 11:31 UTC;
+      `/healthz` 200, zero error lines. No Production action.
 - [ ] **For the Owner to try on Staging:** المستفيدات → «إدارة التسجيلات» (mark a
       Level, read the warning, confirm the certificate); sign in as that
       مستفيدة → «شهاداتي» → «تحميل PDF»; «تثبيت التطبيق» from a phone; schedule a
