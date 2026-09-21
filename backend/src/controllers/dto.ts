@@ -1432,6 +1432,16 @@ export interface ApprovalDto {
    * assignment the approver states.
    */
   requested_role: string | null;
+  /**
+   * **R168 §1 — every role she asked for, each decided on its own**:
+   * `kind` ∈ `student | guardian | teaching | administration`, `status` ∈
+   * `pending | approved | declined`, and `first_time` (a مستفيدة only; `null`
+   * where nobody was asked). `[]` on item types that request no role.
+   */
+  role_requests: { kind: string; status: string; first_time: boolean | null }[];
+  /** The memorisation circles a first-time مستفيدة ranked, most convenient
+   *  first — a wish shown beside the placement control, never a seat. */
+  circle_preferences: { teaching_group_id: string; name: string; rank: number }[];
   framing: {
     mode: 'in_person' | 'online' | 'both';
     all_branches: boolean;
@@ -1546,6 +1556,8 @@ export function approvalDto(row: {
   }[];
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
+  roleRequests: { kind: string; status: string; firstTime: boolean | null }[];
+  circlePreferences: { teachingGroupId: string; name: string; rank: number }[];
   framing: {
     mode: 'in_person' | 'online' | 'both';
     allBranches: boolean;
@@ -1605,6 +1617,16 @@ export function approvalDto(row: {
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
     requested_role: row.requestedRole,
+    role_requests: row.roleRequests.map((request) => ({
+      kind: request.kind,
+      status: request.status,
+      first_time: request.firstTime,
+    })),
+    circle_preferences: row.circlePreferences.map((preference) => ({
+      teaching_group_id: preference.teachingGroupId,
+      name: preference.name,
+      rank: preference.rank,
+    })),
     framing: row.framing
       ? {
           mode: row.framing.mode,

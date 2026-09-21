@@ -142,6 +142,11 @@ malformed request rather than a state that moved on:
 | `details.reason` | Raised by | The user's next step |
 |---|---|---|
 | `ENROLLMENT_REQUIRED` | Approval | §4.1: every admitted student needs a Level and a group **in the approval itself**. `missing_user_ids` names who — on a family bundle that is the only way to know which of them |
+| `DECIDE_PER_ROLE` | `POST /admin/approvals/{id}/approve|reject` (SRS Revision 168 §1) | The registration asked for several roles, or for a place in the administration: there is no single decision. Decide each through `POST /admin/approvals/{id}/roles/{kind}/approve|decline` — the queue offers «البتّ في الصفات المطلوبة» for exactly these rows |
+| `ROLE_NOT_GRANTABLE_HERE` | `POST …/roles/{kind}/approve` | A request grants one of its OWN roles — `teaching` → `teacher`; `administration` → `admin` or `super_admin` (`details.allowed`). A teaching request is never turned into an administrative grant |
+| `SUPER_ADMIN_IS_UNSCOPED` | The same | `super_admin` was granted with a `branch_id`. It is never branch-scoped; send `null` |
+| `CIRCLE_NOT_OFFERED` | `POST /registrations` | A ranked حلقة is not among the circles on offer for her Category and branch — usually a class rescheduled while the form was open. The form tells her to choose again; `details.teaching_group_id` names it |
+| `GUARDIAN_REQUEST_DECLINED` | `POST /admin/child-applications/{id}/decide` — `409 STATE_CONFLICT` | Her request to register children was declined, so no child of hers can be approved under it. (A request still PENDING is no obstacle: approving a child is accepting her) |
 | `NOT_IN_BUNDLE` | Approval | A placement named somebody this approval does not admit. Without the check, approval would be an unscoped enrolment endpoint |
 | `REQUIREMENTS_NOT_MET` | `PUT /admin/students/{id}/level-completions/{levelId}` (SRS Revision 167 §3) — `409 STATE_CONFLICT` | BR-11 is not met for this Level and the caller has not said she has seen what is missing. The details carry `configured_surahs`, `memorised_surahs`, `examined_surahs` and `exams_required`; show them, ask, and resend with `acknowledge_unmet: true`. Marking anyway is allowed — never unknowingly |
 | `LEVEL_NOT_COMPLETED` | `PUT …/level-completions/{levelId}/certificate` — `409 STATE_CONFLICT` | A certificate is the second confirmation; record the completion first |

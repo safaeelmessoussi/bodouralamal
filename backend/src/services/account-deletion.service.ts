@@ -622,6 +622,11 @@ export async function deIdentifyAccount(
       await tx.userIdentity.deleteMany({ where: { userId: targetId } }),
       await tx.framingPreferenceBranch.deleteMany({ where: { userId: targetId } }),
       await tx.framingPreference.deleteMany({ where: { userId: targetId } }),
+      // R168 §1 — what she asked for at registration, and the circles she
+      // ranked: planning data with no institutional meaning once she is gone.
+      // Every decision taken on a request is in the audit log.
+      await tx.circlePreference.deleteMany({ where: { userId: targetId } }),
+      await tx.roleRequest.deleteMany({ where: { userId: targetId } }),
       await tx.userBranchRole.deleteMany({ where: { userId: targetId } }),
       await tx.refreshToken.deleteMany({ where: { userId: targetId } }),
       await tx.refreshSession.deleteMany({ where: { userId: targetId } }),

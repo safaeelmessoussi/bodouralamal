@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { ar } from '../../i18n/ar.js';
 import { FramingPreferenceValue } from '../../components/teaching/framing-preference-summary.js';
+import { ApiError } from '../../lib/api.js';
 import {
+  decisionFailure,
   initialPlacementChoices,
   registrationNeedsApplicantPlacement,
 } from './approvals.js';
@@ -122,19 +124,55 @@ describe('staff approval framing summary', () => {
  */
 const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
+const refused = (status: number, reason?: string): ApiError =>
+  new ApiError(status, {
+    code: status === 403 ? 'FORBIDDEN' : 'STATE_CONFLICT',
+    message: 'refused',
+    ...(reason ? { details: { reason } } : {}),
+  } as never);
+
 describe('a missing academic period gets its own explanation, not "already decided"', () => {
-  it('checks the specific reason before the generic gone/409 branch', () => {
-    expect(source).toMatch(
-      /const noPeriod =[\s\S]{0,120}NO_CURRENT_ACADEMIC_PERIOD[\s\S]{0,200}const gone =\s*\n\s*!noPeriod/,
-    );
+  it('reads the specific reason BEFORE the generic gone/409 branch it would otherwise fall into', () => {
+    expect(decisionFailure(refused(409, 'NO_CURRENT_ACADEMIC_PERIOD'))).toEqual({
+      key: 'admin.approvals.noCurrentPeriod',
+      gone: false,
+      noPeriod: true,
+    });
+    // The same status with no such reason IS somebody else's decision.
+    expect(decisionFailure(refused(409))).toMatchObject({
+      key: 'admin.approvals.alreadyDecided',
+      gone: true,
+    });
+    expect(decisionFailure(refused(404))).toMatchObject({ gone: true });
+    expect(decisionFailure(refused(403))).toMatchObject({
+      key: 'admin.approvals.roleForbidden',
+      gone: false,
+    });
+    expect(decisionFailure(new Error('network'))).toEqual({
+      key: 'admin.approvals.decisionFailed',
+      gone: false,
+      noPeriod: false,
+    });
   });
 
   it("names the real remedy — the Super Admin recording this semester — rather than 'refresh the page'", () => {
-    expect(source).toContain("'admin.approvals.noCurrentPeriod'");
     expect(ar.admin.approvals.noCurrentPeriod).not.toContain('يرجى تحديث الصفحة');
   });
 
   it('leaves the dialog open on a missing period — there is still a decision to make', () => {
-    expect(source).toMatch(/if \(!noPeriod\) \{\s*setDeciding\(null\);/);
+    expect(source).toMatch(/if \(!failure\.noPeriod\) \{\s*setDeciding\(null\);/);
+    // R168 §1 — and the per-role act keeps ITS dialog open the same way.
+    expect(source).toMatch(/if \(!failure\.noPeriod\) setRoleAct\(null\);/);
+  });
+});
+
+describe('R168 §1 — a row with no single decision offers the review, never a refusal', () => {
+  it('hides «موافقة» and «رفض» exactly where the server would answer DECIDE_PER_ROLE', () => {
+    expect(source).toMatch(/label: t\('admin\.approvals\.reviewRoles'\),\s*onSelect: setReviewing,\s*available: decidedPerRole/);
+    expect(source.match(/available: \(row\) => !decidedPerRole\(row\)/g)).toHaveLength(2);
+  });
+
+  it('never offers «الموافقة دون دور» when the act IS the decision on one requested role', () => {
+    expect(source).toMatch(/\{grantable \? null : \(/);
   });
 });

@@ -79,6 +79,16 @@ export interface ApprovalItem {
    * family-link item, which requests no role at all.
    */
   requestedRole: string | null;
+  /**
+   * **R168 §1 — every role she asked for, each with its own decision.** Empty
+   * on the item types that request no role (family link, child application,
+   * identity review) and on a registration written before the revision whose
+   * decision predates the back-fill.
+   */
+  roleRequests: { kind: string; status: string; firstTime: boolean | null }[];
+  /** The memorisation circles a first-time مستفيدة ranked, most convenient
+   *  first. A wish shown beside the placement control — never a seat. */
+  circlePreferences: { teachingGroupId: string; name: string; rank: number }[];
   /** General planning preference captured from هيئة التأطير registration. */
   framing: {
     mode: 'in_person' | 'online' | 'both';
@@ -274,10 +284,20 @@ export async function listApprovals(
     // else's pending child — the child is shown as part of its parent's bundle,
     // not as a separate queue entry, so an admin approves one thing once.
     const where = {
-      accountStatus: 'pending' as const,
       deletedAt: null,
       childLinks: { none: {} },
       ...(reviewUserId ? { id: reviewUserId } : {}),
+      // R168 §1 — an account becomes active with its FIRST approved role, and
+      // may still have others waiting: it stays in this queue until every role
+      // it asked for has been decided.
+      AND: [
+        {
+          OR: [
+            { accountStatus: 'pending' as const },
+            { accountStatus: 'active' as const, roleRequests: { some: { status: 'pending' as const } } },
+          ],
+        },
+      ],
       // Applied to the COUNT as well as the page, so `meta.total` describes the
       // filtered set. A total that ignored the filter would tell the client to
       // render pages that are empty.
@@ -336,6 +356,13 @@ export async function listApprovals(
             },
           },
         },
+        // R168 §1 — what she asked for, each with its own decision, and the
+        // circles a first-time مستفيدة ranked, most convenient first.
+        roleRequests: { orderBy: { createdAt: 'asc' }, select: { kind: true, status: true, firstTime: true } },
+        circlePreferences: {
+          orderBy: { rank: 'asc' },
+          select: { rank: true, teachingGroup: { select: { id: true, name: true } } },
+        },
       },
       orderBy: approvalOrder(options.sortBy, options.sortDir, (dir) => ({ nameArabic: dir })),
       skip,
@@ -381,6 +408,16 @@ export async function listApprovals(
           ? { id: requestedBranch.id, name: requestedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
+        roleRequests: applicant.roleRequests.map((request) => ({
+          kind: request.kind,
+          status: request.status,
+          firstTime: request.firstTime,
+        })),
+        circlePreferences: applicant.circlePreferences.map((preference) => ({
+          teachingGroupId: preference.teachingGroup.id,
+          name: preference.teachingGroup.name,
+          rank: preference.rank,
+        })),
         registrationDetails: { applicant: registrationPerson(applicant) },
         framing: applicant.framingPreference
           ? {
@@ -456,6 +493,8 @@ export async function listApprovals(
         // A link request concerns an existing child and asks for no role,
         // and no stage: the child's placement already exists.
         requestedRole: null,
+        roleRequests: [],
+        circlePreferences: [],
         registrationDetails: null,
         framing: null,
         children: [],
@@ -567,6 +606,8 @@ export async function listApprovals(
           ? { id: commonBranch.id, name: commonBranch.name }
           : null,
         requestedRole: null,
+        roleRequests: [],
+        circlePreferences: [],
         registrationDetails: { applicant: registrationPerson(first.parent) },
         framing: null,
         category: commonCategory
@@ -654,6 +695,8 @@ export async function listApprovals(
         bundle: { childCount: 0, linkCount: group.length },
         branch: null,
         requestedRole: null,
+        roleRequests: [],
+        circlePreferences: [],
         registrationDetails: null,
         framing: null,
         category: null,
@@ -772,6 +815,29 @@ export async function decide(
     });
 
     if (applicant) {
+      /**
+       * **R168 §1 — a registration that asked for SEVERAL roles is decided one
+       * role at a time** (`decideRoleRequest`), never here: this act approves or
+       * rejects an account whole, and «approve» for a person who asked to be a
+       * مستفيدة AND a member of the administration has no single meaning. A
+       * registration that asked for one thing is that one decision, and the
+       * request row is kept in step below.
+       *
+       * **A lone `administration` request is decided there too.** WHO may be
+       * given authority over the platform is a Super Admin's decision, and this
+       * act is open to every approver: an Admin could otherwise «approve» the
+       * request — granting nothing, the privilege guard sees to that — and leave
+       * it recorded as accepted by somebody who may not accept it.
+       */
+      const requests = await tx.roleRequest.findMany({
+        where: { userId: applicant.id },
+        select: { id: true, status: true, kind: true },
+      });
+      if (requests.length > 1 || requests.some((request) => request.kind === 'administration')) {
+        throw new AppError('VALIDATION_FAILED', 'this registration is decided per role', {
+          reason: 'DECIDE_PER_ROLE',
+        });
+      }
       const nextStatus = decision.approve ? 'active' : 'rejected';
       let activated = 1;
       const rejectedUserIds = new Set<string>(decision.approve ? [] : [applicant.id]);
@@ -785,6 +851,15 @@ export async function decide(
       await tx.user.update({
         where: { id: applicant.id },
         data: { accountStatus: nextStatus, accountStatusDecidedAt: new Date() },
+      });
+      await tx.roleRequest.updateMany({
+        where: { userId: applicant.id, status: 'pending' },
+        data: {
+          status: decision.approve ? 'approved' : 'declined',
+          decidedAt: new Date(),
+          decidedById: actor.userId,
+          ...(decision.approve ? {} : { declineReason: decision.reason!.trim().slice(0, 500) }),
+        },
       });
 
       for (const link of applicant.parentLinks) {

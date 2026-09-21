@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { AppError } from '../lib/errors.js';
+import { offeredCircleSlots } from '../services/registration-circle-slots.service.js';
 import { register } from '../services/registration.service.js';
 import { registrationSchema } from '../validators/registration.validators.js';
 
@@ -36,6 +38,27 @@ export function createRegistration(prisma: PrismaClient, config: AppConfig) {
       // approver will decide, one at a time.
       child_application_ids: result.childApplicationIds,
       account_status: result.accountStatus,
+    });
+  };
+}
+
+/**
+ * `GET /registration/circle-slots?category_id=&branch_id=` — **the memorisation
+ * circles a first-time مستفيدة may order** (SRS Revision 168 §1). Anonymous,
+ * like the consent text beside it: the applicant has no account yet. It
+ * publishes the least that lets her choose — see `offeredCircleSlots`.
+ */
+const circleSlotsQuery = z.object({ category_id: z.uuid(), branch_id: z.uuid() }).strict();
+
+export function circleSlots(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = circleSlotsQuery.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError('VALIDATION_FAILED', 'category_id and branch_id are required uuids');
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      data: await offeredCircleSlots(prisma, parsed.data.category_id, parsed.data.branch_id),
     });
   };
 }

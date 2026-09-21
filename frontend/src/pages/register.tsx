@@ -7,10 +7,13 @@ import {
   LIMITS,
   PHONE_PATTERN,
   fetchActiveConsentText,
+  fetchCircleSlots,
   submitRegistration,
   type ActiveConsentText,
+  type CircleSlots,
   type PersonInput,
   type RegistrationInput,
+  type RoleChoice,
 } from '../adapters/registrations.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
@@ -28,6 +31,7 @@ import {
   validateChildren,
   type ChildForm,
 } from '../components/registration/children.js';
+import { CircleRanking } from '../components/registration/circle-ranking.js';
 import { PersonFields } from '../components/registration/person-fields.js';
 import { requestSelfManagedClaim } from '../adapters/self-managed-claims.js';
 import { t } from '../i18n/index.js';
@@ -62,6 +66,9 @@ import { ApiError } from '../lib/api.js';
  * error state to style around — it means the OAuth sequence was not completed,
  * so the page says so and offers the way back in.
  */
+/** The four things the form offers, in the order it offers them (R168 §1). */
+export const ROLE_CHOICES: readonly RoleChoice[] = ['student', 'guardian', 'teaching', 'administration'];
+
 export function Register(): ReactNode {
   const [token, setToken] = useState<string | null>(null);
   const [tokenChecked, setTokenChecked] = useState(false);
@@ -88,11 +95,35 @@ export function Register(): ReactNode {
    * holds — the same OAuth callback and the same onboarding token — so the only
    * new thing she supplies is her reference code.
    */
-  const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher' | 'self_managed'>(
-    'adult',
+  /**
+   * **SRS Revision 168 §1 — what she is here to ask for: ANY COMBINATION of
+   * four.** It was one choice among three. A mother who memorises, teaches and
+   * registers her daughters submitted three forms, typed her own name three
+   * times, and was approved or refused three times over; now she ticks three
+   * boxes, is asked who she is ONCE, and each request is decided on its own.
+   *
+   * `self_managed` (R132) is still not a registration at all — it claims a
+   * record that exists — so it stays a MODE beside the roles, reached as before.
+   */
+  // Nothing is preselected: the Owner lists four choices as equals, and a box
+  // ticked for her is a request she did not make (the same reason «أول مرة» is
+  // never defaulted). An untouched form says «اختاري طلبًا واحدًا على الأقل».
+  const [roles, setRoles] = useState<RoleChoice[]>([]);
+  // **No entry on the form, by the Owner's decision** (R160 §8, 2026-09-16: the
+  // option is withdrawn for this release, the flow kept). It is reached by
+  // `/register?mode=self-managed` — the link the administration gives her — and
+  // left by «العودة إلى التسجيل», a STATE change, because her single-use
+  // onboarding token lives in this page's memory and a navigation would lose it.
+  const [selfManaged, setSelfManaged] = useState(
+    () => new URLSearchParams(window.location.search).get('mode') === 'self-managed',
   );
   const [selfManagedCode, setSelfManagedCode] = useState('');
-  const kind: 'adult' | 'parent_child' = intent === 'parent_child' ? 'parent_child' : 'adult';
+  const asks = (role: RoleChoice): boolean => roles.includes(role);
+  /** «هل هذه أول مرة تلتحقين فيها؟» — asked of a مستفيدة, never defaulted. */
+  const [firstTime, setFirstTime] = useState<'' | 'yes' | 'no'>('');
+  const [circleSlots, setCircleSlots] = useState<CircleSlots | null>(null);
+  const [circlePreferences, setCirclePreferences] = useState<string[]>([]);
+  const [administrationBranchId, setAdministrationBranchId] = useState<string | null>(null);
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
   /**
    * R62.1 — one request carries **one or more** children. The array starts with
@@ -179,8 +210,38 @@ export function Register(): ReactNode {
     void loadBranches();
   }, [loadBranches]);
 
+  /**
+   * **What she may choose between is asked of the server, for HER Category and
+   * branch** (R168 §1) — the scheduled memorisation classes of that Category's
+   * first Level there. A failed read offers nothing rather than blocking the
+   * form: the order is a wish, and the administration places her either way.
+   */
+  const wantsSlots = roles.includes('student') && firstTime === 'yes' && branchId && categoryId;
+  useEffect(() => {
+    setCircleSlots(null);
+    setCirclePreferences([]);
+    if (!wantsSlots) return;
+    let cancelled = false;
+    void fetchCircleSlots(categoryId, branchId)
+      .then((slots) => {
+        if (!cancelled) setCircleSlots(slots);
+      })
+      .catch(() => {
+        if (!cancelled) setCircleSlots({ level: null, circles: [], fixed: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsSlots, branchId, categoryId]);
+
   const localErrors = validate({
-    intent,
+    selfManaged,
+    roles,
+    firstTime,
+    circlePreferences,
+    // What is on offer decides whether an order is owed: fewer than two
+    // circles is not a choice, and nothing is asked.
+    circlesOffered: circleSlots?.circles.length ?? 0,
     applicant,
     children,
     branchId,
@@ -211,7 +272,7 @@ export function Register(): ReactNode {
        * already exists, which a Super Admin then decides. Folding it into
        * `POST /registrations` would have made one endpoint mean two things.
        */
-      if (intent === 'self_managed') {
+      if (selfManaged) {
         await requestSelfManagedClaim(selfManagedCode.trim().toUpperCase(), token);
         setDone(true);
         return;
@@ -219,7 +280,10 @@ export function Register(): ReactNode {
 
       await submitRegistration(
         buildPayload({
-          intent,
+          roles,
+          firstTime,
+          circlePreferences,
+          administrationBranchId,
           applicant,
           children,
           branchId,
@@ -268,16 +332,12 @@ export function Register(): ReactNode {
             * exists, and what she needs to read is that nothing has changed yet.
             */}
           <h1>
-            {intent === 'self_managed'
-              ? t('register.selfManagedLegend')
-              : t('register.submittedTitle')}
+            {selfManaged ? t('register.selfManagedLegend') : t('register.submittedTitle')}
           </h1>
           <p>
-            {intent === 'self_managed'
-              ? t('register.selfManagedSent')
-              : t('register.submittedBody')}
+            {selfManaged ? t('register.selfManagedSent') : t('register.submittedBody')}
           </p>
-          {intent === 'self_managed' ? null : (
+          {selfManaged ? null : (
             <p className="muted">{t('register.submittedNext')}</p>
           )}
           <div className="auth-page__links">
@@ -334,39 +394,57 @@ export function Register(): ReactNode {
               void submit();
             }}
           >
-            <SelectField
-              label={t('register.kindLabel')}
-              value={intent}
-              onChange={(next) => {
-                const chosen = next as typeof intent;
-                setIntent(chosen);
-                if (chosen === 'teacher') {
-                  // The teacher path has no single requested branch or stage.
-                  setBranchId(null);
-                  setCategoryId(null);
-                } else {
-                  // Hidden framing values are erased immediately, not trusted
-                  // to a later payload builder to remember to omit them.
-                  setFramingMode('');
-                  setAllFramingBranches(false);
-                  setFramingBranchIds([]);
-                }
-              }}
-              // `self_managed` (R132) is hidden from the dropdown for this
-              // release (Owner request, 2026-09-16) — not removed. The
-              // option's whole flow (state, validation, submission,
-              // `/register/self-managed-claims` review queue) stays intact;
-              // a direct link or an already-in-progress session can still
-              // reach it, only the entry point is withdrawn.
-              options={[
-                { value: 'adult', label: t('register.kindAdult') },
-                { value: 'parent_child', label: t('register.kindParentChild') },
-                { value: 'teacher', label: t('register.kindTeacher') },
-              ]}
-              hint={t('register.kindHint')}
-            />
+            {selfManaged ? null : (
+              /**
+               * **Four things, any combination** (SRS Revision 168 §1). Checkboxes
+               * and not a select: the question has several answers, and a control
+               * that can hold only one is what made a mother who memorises,
+               * teaches and registers her daughters fill this form three times.
+               * Unticking a role ERASES what its section held at once — hidden
+               * values are never trusted to a later payload builder to omit.
+               */
+              <fieldset className="register-form__group" data-role-choices>
+                <legend>{t('register.rolesLegend')}</legend>
+                <p className="field__hint">{t('register.rolesHint')}</p>
+                {ROLE_CHOICES.map((role) => (
+                  // `data-role-choice` — a control is addressed by what it IS:
+                  // the wording of a choice is the association's to change.
+                  <div key={role} data-role-choice={role}>
+                    <CheckboxField
+                      label={t(`register.role.${role}`)}
+                      checked={asks(role)}
+                      onChange={(checked) => {
+                        setRoles((current) =>
+                          ROLE_CHOICES.filter((r) => (r === role ? checked : current.includes(r))),
+                        );
+                        if (checked) return;
+                        if (role === 'student') {
+                          setBranchId(null);
+                          setCategoryId(null);
+                          setFirstTime('');
+                          setCirclePreferences([]);
+                          setApplicant((a) => ({ ...a, birthDate: '' }));
+                        }
+                        if (role === 'guardian') setChildren([EMPTY_CHILD]);
+                        if (role === 'teaching') {
+                          setFramingMode('');
+                          setAllFramingBranches(false);
+                          setFramingBranchIds([]);
+                        }
+                        if (role === 'administration') setAdministrationBranchId(null);
+                      }}
+                    />
+                  </div>
+                ))}
+                {touched && errors['roles'] ? (
+                  <p className="field__error" role="alert">
+                    {errors['roles']}
+                  </p>
+                ) : null}
+              </fieldset>
+            )}
 
-            {intent === 'self_managed' ? (
+            {selfManaged ? (
               /**
                * **R132 — said plainly, because the honest sentence is the whole
                * point.** Verifying a Google account does NOT move her record;
@@ -387,17 +465,12 @@ export function Register(): ReactNode {
                   required
                   error={touched ? (errors['selfManagedCode'] ?? null) : null}
                 />
+                <div className="form__actions">
+                  <Button variant="ghost" onClick={() => setSelfManaged(false)}>
+                    {t('register.selfManagedBack')}
+                  </Button>
+                </div>
               </fieldset>
-            ) : null}
-
-            {intent === 'teacher' ? (
-              // Said plainly rather than implied: submitting this asks for
-              // something a person has to grant. An applicant who expects to be
-              // teaching tomorrow has misunderstood the form, and the form is
-              // where that is cheapest to correct.
-              <p className="state" role="status">
-                {t('register.teacherNotice')}
-              </p>
             ) : null}
 
             {/**
@@ -408,10 +481,16 @@ export function Register(): ReactNode {
               * would ask her to restate what the platform already knows and
               * would imply the answers matter to a decision that ignores them.
               */}
-            {intent === 'self_managed' ? null : (
+            {selfManaged ? null : (
               <>
             <fieldset className="register-form__group">
-              <legend>{kind === 'adult' ? t('register.you') : t('register.parent')}</legend>
+              {/* R168 §1 — her identity is asked ONCE whatever is ticked. It is
+                  «بيانات وليّ الأمر» only when registering children is ALL she
+                  asked for; any other role's section is the same person's data,
+                  so that heading replaces it (the Owner's rule). */}
+              <legend>
+                {roles.length === 1 && asks('guardian') ? t('register.parent') : t('register.you')}
+              </legend>
               <PersonFields
                 value={applicant}
                 onChange={setApplicant}
@@ -422,12 +501,12 @@ export function Register(): ReactNode {
                    staff request is not a beneficiary admission and the server
                    refuses the field; a guardian registering children is
                    admitted to nothing (R129) and each child is asked instead. */
-                collectBirthDate={intent === 'adult'}
-                birthDateRequired={intent === 'adult'}
+                collectBirthDate={asks('student')}
+                birthDateRequired={asks('student')}
               />
             </fieldset>
 
-            {kind === 'parent_child' ? (
+            {asks('guardian') ? (
               /* R65 — the SHARED section. `/profile/register-child` renders the
                  same one, so the two flows cannot drift again: they lost the
                  repeatable behaviour once already, and a parent of three was
@@ -448,9 +527,14 @@ export function Register(): ReactNode {
                 derived from the first child's server-side: a parent enrols in
                 nothing, and asking twice would produce two answers that must
                 agree. */}
-            {intent === 'teacher' ? (
-              <fieldset className="register-form__group">
+            {asks('teaching') ? (
+              <fieldset className="register-form__group" data-role-section="teaching">
                 <legend>{t('register.framingLegend')}</legend>
+                {/* Said plainly rather than implied: submitting this asks for
+                    something a person has to grant. */}
+                <p className="state" role="status">
+                  {t('register.teacherNotice')}
+                </p>
                 <SelectField
                   label={t('register.framingModeLabel')}
                   value={framingMode}
@@ -502,8 +586,34 @@ export function Register(): ReactNode {
                   </>
                 ) : null}
               </fieldset>
-            ) : kind === 'parent_child' ? null : (
-              <fieldset className="register-form__group">
+            ) : null}
+
+            {asks('administration') ? (
+              /**
+               * **She asks; she does not choose** (R168 §1). Which administrative
+               * role — مديرة or مديرة النظام — and over which branches is the
+               * approving Super Admin's decision alone, so the form offers no
+               * such control: only where she would prefer to serve, if anywhere.
+               */
+              <fieldset className="register-form__group" data-role-section="administration">
+                <legend>{t('register.administrationLegend')}</legend>
+                <p className="state" role="status">
+                  {t('register.administrationNotice')}
+                </p>
+                <BranchSelector
+                  branches={branches}
+                  value={administrationBranchId}
+                  onChange={setAdministrationBranchId}
+                  label={t('register.administrationBranchLabel')}
+                  allowAll={false}
+                  emptyLabel={t('register.administrationBranchEmpty')}
+                  hint={t('register.administrationBranchHint')}
+                />
+              </fieldset>
+            ) : null}
+
+            {asks('student') ? (
+              <fieldset className="register-form__group" data-role-section="student">
                 <legend>{t('register.branchLegend')}</legend>
                 <BranchSelector
                   branches={branches}
@@ -529,8 +639,36 @@ export function Register(): ReactNode {
                   hint={t('register.categoryHint')}
                   error={touched ? (errors['category'] ?? null) : null}
                 />
+
+                {/* «هل هذه أول مرة؟» — a choice, never a default: a returning
+                    مستفيدة is placed by the administration, who know her. */}
+                <SelectField
+                  label={t('register.firstTimeLabel')}
+                  value={firstTime}
+                  onChange={(next) => {
+                    setFirstTime(next as typeof firstTime);
+                    if (next !== 'yes') setCirclePreferences([]);
+                  }}
+                  required
+                  options={[
+                    { value: '', label: t('common.choose') },
+                    { value: 'yes', label: t('register.firstTimeYes') },
+                    { value: 'no', label: t('register.firstTimeNo') },
+                  ]}
+                  hint={t('register.firstTimeHint')}
+                  error={touched ? (errors['firstTime'] ?? null) : null}
+                />
+
+                {firstTime === 'yes' && circleSlots ? (
+                  <CircleRanking
+                    slots={circleSlots}
+                    value={circlePreferences}
+                    onChange={setCirclePreferences}
+                    error={touched ? (errors['circles'] ?? null) : null}
+                  />
+                ) : null}
               </fieldset>
-            )}
+            ) : null}
 
             <fieldset className="register-form__group">
               <legend>{t('register.consentLegend')}</legend>
@@ -706,15 +844,35 @@ export function mapServerIssues(error: unknown): ServerErrors {
       fields[`${person}.${SERVER_FIELD_PATHS[tail]}`] = t('register.errServerField');
       continue;
     }
-    if (path === 'branch_id') {
+    // R168 §1 — the sections of the several-role request. A refusal of a whole
+    // section («required when … is asked for») lands on that section's first
+    // question, which is where she will look.
+    if (path === 'roles') {
+      fields['roles'] = t('register.errRoles');
+      continue;
+    }
+    if (path === 'branch_id' || path === 'student' || path === 'student.branch_id') {
       fields['branch'] = t('register.errBranch');
       continue;
     }
-    if (path === 'framing' || path === 'framing.mode') {
+    if (path === 'student.category_id') {
+      fields['category'] = t('register.errCategory');
+      continue;
+    }
+    if (path === 'student.first_time') {
+      fields['firstTime'] = t('register.errRequired');
+      continue;
+    }
+    if (path.startsWith('student.circle_preferences')) {
+      fields['circles'] = t('register.errCircles');
+      continue;
+    }
+    const framingPath = path.startsWith('teaching.') ? path.slice('teaching.'.length) : path;
+    if (path === 'teaching' || framingPath === 'framing' || framingPath === 'framing.mode') {
       fields['framingMode'] = t('register.errFramingMode');
       continue;
     }
-    if (path.startsWith('framing.willingness')) {
+    if (framingPath.startsWith('framing.willingness')) {
       fields['framingBranches'] = t('register.errFramingBranches');
       continue;
     }
@@ -759,6 +917,10 @@ export function explainFailure(error: unknown): string {
     case 'CONSENT_REQUIRED':
       return t('register.errConsent');
     case 'VALIDATION_FAILED':
+      // R168 §1 — a class was rescheduled while her form was open: the circle
+      // she ranked is no longer on offer. Said in those words; the list reloads
+      // when she changes her branch or stage, or simply re-answers «أول مرة».
+      if (error.details['reason'] === 'CIRCLE_NOT_OFFERED') return t('register.errCircleGone');
       return t('register.rejected');
     /**
      * **`DUPLICATE` is two different dead ends, and they had one message.**
@@ -796,10 +958,16 @@ export function explainFailure(error: unknown): string {
 /* ── Validation, mirroring TD-9 ───────────────────────────────────────────── */
 
 interface FormState {
-  /** The FORM's four options, not the wire's two `kind`s — a teacher applying
-   *  is an adult registering themselves (R49), and `self_managed` (R132) is not
-   *  a registration at all: it claims a record that already exists. */
-  intent: 'adult' | 'parent_child' | 'teacher' | 'self_managed';
+  /** R132 — not a registration at all: it claims a record that already exists. */
+  selfManaged: boolean;
+  /** R168 §1 — everything she asks for; any combination, at least one. */
+  roles: RoleChoice[];
+  /** «هل هذه أول مرة؟» — a مستفيدة only; never defaulted. */
+  firstTime: '' | 'yes' | 'no';
+  /** Her order, most convenient first. */
+  circlePreferences: string[];
+  /** How many circles the server offered her — fewer than two is no choice. */
+  circlesOffered: number;
   /** R132 — the reference code she already holds. Empty on every other arm. */
   selfManagedCode: string;
   applicant: PersonForm;
@@ -852,7 +1020,7 @@ export function validate(state: FormState): Record<string, string> {
    * against fields nobody could see, so the submit button did nothing at all —
    * a silent dead end the browser harness found and no source test would have.
    */
-  if (state.intent === 'self_managed') {
+  if (state.selfManaged) {
     const code = state.selfManagedCode.trim().toUpperCase();
     if (!/^BA-[0-9A-Z]{4,12}$/.test(code)) {
       errors['selfManagedCode'] = t('register.errSelfManagedCode');
@@ -860,22 +1028,33 @@ export function validate(state: FormState): Record<string, string> {
     return errors;
   }
 
+  const asks = (role: RoleChoice): boolean => state.roles.includes(role);
+  if (state.roles.length === 0) errors['roles'] = t('register.errRoles');
+
   person(state.applicant, 'applicant');
   // The children's rules live with the children's fields (R65), so the two
   // flows validate identically by construction rather than by review.
-  if (state.intent === 'parent_child') Object.assign(errors, validateChildren(state.children));
+  if (asks('guardian')) Object.assign(errors, validateChildren(state.children));
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place
   // someone at a branch nobody picked.
   // R67 — the applicant's own branch, on the adult path only. The parent+child
   // path asks it per child, and the server derives the applicant's from the
   // first.
-  if (state.intent === 'adult' && !state.branchId) errors['branch'] = t('register.errBranch');
+  if (asks('student') && !state.branchId) errors['branch'] = t('register.errBranch');
 
   // R49 — required for a student, and meaningless for a staff request: a
   // teacher is admitted to no Level, and the server refuses the pair together.
-  if (state.intent === 'adult' && !state.categoryId)
-    errors['category'] = t('register.errCategory');
+  if (asks('student') && !state.categoryId) errors['category'] = t('register.errCategory');
+
+  // R168 §1 — the first-time question is asked of a مستفيدة and never defaulted;
+  // a first-timer orders at least one circle WHERE there is a choice to make.
+  if (asks('student')) {
+    if (state.firstTime === '') errors['firstTime'] = t('register.errRequired');
+    if (state.firstTime === 'yes' && state.circlesOffered >= 2 && state.circlePreferences.length === 0) {
+      errors['circles'] = t('register.errCircles');
+    }
+  }
 
   /**
    * **R130 — required on the beneficiary arm and asked on no other.**
@@ -885,14 +1064,14 @@ export function validate(state: FormState): Record<string, string> {
    * and the server refuses the field there — and `'parent_child'` asks it of
    * each child instead, because the guardian is admitted to nothing (R129).
    */
-  if (state.intent === 'adult') {
+  if (asks('student')) {
     const dob = state.applicant.birthDate.trim();
     if (dob === '') errors['applicant.birthDate'] = t('register.errRequired');
     else if (!isRealPastDate(dob))
       errors['applicant.birthDate'] = t('register.errBirthDateInvalid');
   }
 
-  if (state.intent === 'teacher') {
+  if (asks('teaching')) {
     if (state.framingMode === '') errors['framingMode'] = t('register.errFramingMode');
     if (
       (state.framingMode === 'in_person' || state.framingMode === 'both') &&
@@ -911,7 +1090,10 @@ export function validate(state: FormState): Record<string, string> {
 }
 
 export function buildPayload(state: {
-  intent: 'adult' | 'parent_child' | 'teacher';
+  roles: RoleChoice[];
+  firstTime: '' | 'yes' | 'no';
+  circlePreferences: string[];
+  administrationBranchId: string | null;
   applicant: PersonForm;
   children: ChildForm[];
   branchId: string | null;
@@ -955,43 +1137,50 @@ export function buildPayload(state: {
     birth_date: p.birthDate,
   });
 
-  if (state.intent === 'teacher') {
-    const mode = state.framingMode as 'in_person' | 'online' | 'both';
-    return {
-      kind: 'adult',
-      applicant: person(state.applicant),
-      requested_role: 'teacher',
-      framing:
-        mode === 'online'
-          ? { mode }
-          : {
-              mode,
-              willingness: state.allFramingBranches
-                ? { all_branches: true }
-                : { all_branches: false, branch_ids: state.framingBranchIds },
-            },
-      consents: { data_processing: true, consent_text_id: state.consentTextId },
-    };
-  }
-
-  if (state.intent === 'adult') {
-    return {
-      kind: 'adult',
-      // R130 — on THIS arm the applicant is the beneficiary, so she carries a
-      // date of birth. The teacher arm above and the parent arm below use
-      // `person()` without one, deliberately.
-      applicant: beneficiary(state.applicant),
-      branch_id: state.branchId!,
-      category_id: state.categoryId!,
-      consents: { data_processing: true, consent_text_id: state.consentTextId },
-    };
-  }
+  /**
+   * **One arm, the sections of the ticked roles and no others** (R168 §1). The
+   * server REQUIRES a section for a ticked role and REFUSES one for an unticked
+   * role, so what is sent is decided here by `roles` alone — never by whether a
+   * hidden field happens to still hold a value.
+   */
+  const asks = (role: RoleChoice): boolean => state.roles.includes(role);
+  const mode = state.framingMode as 'in_person' | 'online' | 'both';
   return {
-    kind: 'parent_child',
-    parent: person(state.applicant),
-    // R67 — each child carries its own branch and stage; the request carries
-    // neither, and the server refuses one that does.
-    children: state.children.map(toChildInput),
+    kind: 'roles',
+    // A stable order, so the same ticks always make the same request.
+    roles: ROLE_CHOICES.filter(asks),
+    // R130 — a date of birth from a beneficiary, and from nobody else.
+    applicant: asks('student') ? beneficiary(state.applicant) : person(state.applicant),
+    ...(asks('student')
+      ? {
+          student: {
+            branch_id: state.branchId!,
+            category_id: state.categoryId!,
+            first_time: state.firstTime === 'yes',
+            ...(state.firstTime === 'yes' && state.circlePreferences.length > 0
+              ? { circle_preferences: state.circlePreferences }
+              : {}),
+          },
+        }
+      : {}),
+    // R67 — each child carries its own branch and stage.
+    ...(asks('guardian') ? { children: state.children.map(toChildInput) } : {}),
+    ...(asks('teaching')
+      ? {
+          teaching: {
+            framing:
+              mode === 'online'
+                ? { mode }
+                : {
+                    mode,
+                    willingness: state.allFramingBranches
+                      ? { all_branches: true as const }
+                      : { all_branches: false as const, branch_ids: state.framingBranchIds },
+                  },
+          },
+        }
+      : {}),
+    ...(asks('administration') ? { administration: { branch_id: state.administrationBranchId } } : {}),
     consents: { data_processing: true, consent_text_id: state.consentTextId },
   };
 }

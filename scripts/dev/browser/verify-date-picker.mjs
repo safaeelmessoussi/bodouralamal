@@ -64,6 +64,26 @@ async function assertNoEnglishPlaceholder(label) {
   );
 }
 
+/**
+ * R168 §1 — the form ticks no role for her, and a date of birth is asked only of
+ * a مستفيدة (R130). So the DOB control exists once «أسجّل نفسي كمستفيدة» is
+ * ticked — addressed by what the choice IS, never by its wording.
+ */
+async function openRegisterAsStudent() {
+  await open(null, `/register#onboarding_token=${S.onboardingToken}`);
+  for (let i = 0; i < 40; i += 1) {
+    const ticked = await evaluate(`(() => {
+      const box = document.querySelector('[data-role-choice="student"] input[type="checkbox"]');
+      if (!box) return false;
+      if (!box.checked) box.click();
+      return box.checked;
+    })()`).catch(() => false);
+    if (ticked && (await evaluate("!!document.querySelector('.date-picker__trigger')"))) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
 /** Clicks the Nth date-picker trigger found on the page (0-indexed) and
  *  returns whether the panel actually opened. */
 async function openNthPicker(index) {
@@ -82,7 +102,7 @@ async function panelOpen() {
 
 /* ── 1 · DOB on the public registration form, drilled year → month → day ──── */
 
-await open(null, `/register#onboarding_token=${S.onboardingToken}`);
+await openRegisterAsStudent();
 let body = await text();
 check('the registration page rendered, DOB field included', body.includes('تاريخ الميلاد'), body.slice(0, 300));
 check(
@@ -165,7 +185,7 @@ check('still no Arabic-Indic digits anywhere on the page', !/[٠-٩]/.test(body)
 
 /* ── 2 · Keyboard-only: tab to the trigger, open and pick with the keyboard ── */
 
-await open(null, `/register#onboarding_token=${S.onboardingToken}`);
+await openRegisterAsStudent();
 const keyboardResult = await evaluate(`(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const fire = (el, key, shiftKey = false) =>
@@ -202,7 +222,7 @@ check('Escape closes the panel and returns focus to the trigger', kb?.closedByEs
 /* ── 3 · Mobile: the picker fits a phone, and still shows the chosen date ──── */
 
 await viewport(390, 800);
-await open(null, `/register#onboarding_token=${S.onboardingToken}`);
+await openRegisterAsStudent();
 const overflow = await evaluate(
   'JSON.stringify({ doc: document.documentElement.scrollWidth, vw: window.innerWidth })',
 );
@@ -264,7 +284,7 @@ check(
 );
 await assertNoEnglishPlaceholder('academic-periods');
 
-/* ── 5 · The online-assessment builder (R124) — the exam date field ───────── */
+/* ── 5 · The online-assessment builder (R124) — no date of its own ────────── */
 
 await open(S.adminCookie2, '/admin/assessments');
 const openedAssessment = await evaluate(`(() => {
@@ -275,31 +295,18 @@ const openedAssessment = await evaluate(`(() => {
 })()`);
 check('the assessment builder’s create dialog opens', openedAssessment === true, String(openedAssessment));
 
-const assessmentDatePicked = await evaluate(`(async () => {
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const dialog = document.querySelector('dialog[open]');
-  if (!dialog) return 'no open dialog';
-  const trigger = dialog.querySelector('.date-picker__trigger');
-  if (!trigger) return 'no date trigger — target defaults to level, which needs one';
-  trigger.click();
-  await wait(300);
-  const grid = dialog.querySelector('.date-picker__grid');
-  if (!grid) return 'no day grid opened';
-  const today = grid.querySelector('button.is-today');
-  const cell = today ?? grid.querySelector('button:not(:disabled)');
-  if (!cell) return 'no pickable day';
-  cell.click();
-  await wait(300);
-  return JSON.stringify({ closed: !dialog.querySelector('.date-picker__panel') });
-})()`);
-const assessmentParsed =
-  typeof assessmentDatePicked === 'string' && assessmentDatePicked.startsWith('{')
-    ? JSON.parse(assessmentDatePicked)
-    : null;
+// **The builder no longer asks for a date at all.** An exam's date belongs to
+// the scheduled item (الجدولة — section 6 below drives that field); the paper is
+// attached to it. This section used to pick a day here and had been failing
+// since the field left, which read as a broken calendar. What it can still prove
+// is the negative: no second, competing date on the paper.
+const builderDates = await evaluate(
+  "document.querySelector('dialog[open]')?.querySelectorAll('.date-picker__trigger, input[type=date]').length ?? -1",
+);
 check(
-  'the exam date field opens and a real day can be picked',
-  assessmentParsed !== null,
-  String(assessmentDatePicked),
+  'the assessment builder carries no date of its own — the scheduled exam owns it',
+  builderDates === 0,
+  String(builderDates),
 );
 await assertNoEnglishPlaceholder('assessments');
 

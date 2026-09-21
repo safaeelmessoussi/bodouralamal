@@ -432,9 +432,126 @@ export const parentChildRegistrationSchema = z
   })
   .strict();
 
+/**
+ * **One form, several roles** (SRS Revision 168 §1 — the Owner's decision of
+ * 2026-09-21; `docs/SRS-PROPOSAL-R168.md` is the drafting record).
+ *
+ * A person may ask, in ONE request, for any combination of four things, and a
+ * Super Admin then decides each on its own:
+ *
+ * | `roles[]` | the form says | section it requires |
+ * |---|---|---|
+ * | `student` | «أسجّل نفسي كمستفيدة» | `student` |
+ * | `guardian` | «أسجّل أبنائي» | `children` (one or more) |
+ * | `teaching` | «هيئة التدريس والمساعدة في التدريس» | `teaching` |
+ * | `administration` | «هيئة الإدارة والمساعدة في الإدارة» | `administration` |
+ *
+ * **`applicant` is asked ONCE whatever is ticked** — the Owner's «full outer
+ * join»: every role's section is about the same person, so her identity is never
+ * repeated. **A section is REQUIRED for a ticked role and REFUSED for an unticked
+ * one** (`.strict()` and the refinement below), which is data minimisation
+ * stated as a contract: what no chosen role needs is not collected.
+ *
+ * **Every value here is a request and grants nothing.** The `administration`
+ * section deliberately cannot say *which* administrative role: `admin` or
+ * `super_admin`, and over which branches, is the approving Super Admin's
+ * decision alone (R49's principle, kept; only its «never through the public
+ * form» is superseded).
+ *
+ * The two older arms stay accepted — they are the same requests with one role
+ * each — so nothing that speaks them breaks; the form speaks only this one.
+ */
+export const ROLE_REQUEST_KINDS = ['student', 'guardian', 'teaching', 'administration'] as const;
+export type RoleRequestKindInput = (typeof ROLE_REQUEST_KINDS)[number];
+
+const studentSection = z
+  .object({
+    branch_id: branchId,
+    category_id: categoryId,
+    /** «هل هذه أول مرة تلتحقين فيها؟» */
+    first_time: z.boolean(),
+    /**
+     * The memorisation circles she can attend, MOST CONVENIENT FIRST — a
+     * first-time مستفيدة only, and only circles `GET /registration/circle-slots`
+     * offers for her Category and branch (the service refuses any other). A
+     * wish, never a seat.
+     */
+    circle_preferences: z
+      .array(z.uuid())
+      .max(20)
+      .refine((ids) => new Set(ids).size === ids.length, 'a circle may be ranked once')
+      .optional(),
+  })
+  .strict();
+
+export const rolesRegistrationSchema = z
+  .object({
+    kind: z.literal('roles'),
+    roles: z
+      .array(z.enum(ROLE_REQUEST_KINDS))
+      .min(1)
+      .max(ROLE_REQUEST_KINDS.length)
+      .refine((roles) => new Set(roles).size === roles.length, 'a role may be asked for once'),
+    applicant: personCore,
+    student: studentSection.optional(),
+    children: z.array(childCore).min(1).max(12).optional(),
+    teaching: z.object({ framing: framingPreference }).strict().optional(),
+    /** Where she would serve, if she has a preference. WHICH role is never hers
+     *  to say. */
+    administration: z.object({ branch_id: branchId.nullable() }).strict().optional(),
+    consents,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const asked = new Set<RoleRequestKindInput>(value.roles);
+    const sections: [RoleRequestKindInput, string, unknown][] = [
+      ['student', 'student', value.student],
+      ['guardian', 'children', value.children],
+      ['teaching', 'teaching', value.teaching],
+      ['administration', 'administration', value.administration],
+    ];
+    for (const [role, key, section] of sections) {
+      if (asked.has(role) && section === undefined) {
+        ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required when «${role}» is asked for` });
+      }
+      if (!asked.has(role) && section !== undefined) {
+        ctx.addIssue({ code: 'custom', path: [key], message: `${key} is only accepted when «${role}» is asked for` });
+      }
+    }
+
+    // R130 — a beneficiary carries a full date of birth; nobody else is asked
+    // for one (R49's minimisation for staff, kept).
+    if (asked.has('student') && value.applicant.birth_date === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['applicant', 'birth_date'],
+        message: 'birth_date is required for a beneficiary (R130)',
+      });
+    }
+    if (!asked.has('student') && value.applicant.birth_date !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['applicant', 'birth_date'],
+        message: 'birth_date is only collected from a beneficiary',
+      });
+    }
+    if (
+      value.student !== undefined &&
+      !value.student.first_time &&
+      (value.student.circle_preferences?.length ?? 0) > 0
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['student', 'circle_preferences'],
+        message: 'circle preferences are asked of a first-time beneficiary only',
+      });
+    }
+  });
+
 export const registrationSchema = z.discriminatedUnion('kind', [
   adultRegistrationSchema,
   parentChildRegistrationSchema,
+  rolesRegistrationSchema,
 ]);
 
 export type RegistrationInput = z.infer<typeof registrationSchema>;

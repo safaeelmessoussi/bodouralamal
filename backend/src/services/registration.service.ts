@@ -7,7 +7,11 @@ import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { submitChildApplications } from './child-application.service.js';
 import { resolvePresentedConsentText } from './legal-consent-text.service.js';
-import type { RegistrationInput } from '../validators/registration.validators.js';
+import type {
+  RegistrationInput,
+  RoleRequestKindInput,
+} from '../validators/registration.validators.js';
+import { offeredCircleSlots } from './registration-circle-slots.service.js';
 import {
   approvalReviewRecipients,
   notifySubjectUserChange,
@@ -62,6 +66,80 @@ import {
  * version, registration answers `503` / `CONSENT_TEXT_VERSION_NOT_CONFIGURED`
  * exactly as before. See `activeConsentText`.
  */
+
+/**
+ * **Three request shapes, one meaning** (SRS Revision 168 §1).
+ *
+ * `adult` is a مستفيدة registering herself, or a teaching request (R49);
+ * `parent_child` is a guardian with children (R62); `roles` is any combination
+ * of the four. Everything downstream — the role requests written, the branch
+ * and Category recorded, the children, the framing — reads this one shape, so
+ * the three cannot be treated differently by accident.
+ */
+type ChildInput = Extract<RegistrationInput, { kind: 'parent_child' }>['children'][number];
+type FramingInput = NonNullable<Extract<RegistrationInput, { kind: 'adult' }>['framing']>;
+
+interface NormalisedRegistration {
+  roles: RoleRequestKindInput[];
+  applicant: Extract<RegistrationInput, { kind: 'adult' }>['applicant'];
+  student: {
+    branchId: string;
+    categoryId: string;
+    /** `null` on the older arms: nobody was asked. */
+    firstTime: boolean | null;
+    circlePreferences: string[];
+  } | null;
+  children: ChildInput[];
+  framing: FramingInput | null;
+  administrationBranchId: string | null;
+}
+
+export function normaliseRegistration(input: RegistrationInput): NormalisedRegistration {
+  if (input.kind === 'parent_child') {
+    return {
+      roles: ['guardian'],
+      applicant: input.parent,
+      student: null,
+      children: input.children,
+      framing: null,
+      administrationBranchId: null,
+    };
+  }
+  if (input.kind === 'adult') {
+    const teaching = input.requested_role === 'teacher';
+    return {
+      roles: [teaching ? 'teaching' : 'student'],
+      applicant: input.applicant,
+      student:
+        teaching || input.branch_id === undefined || input.category_id === undefined
+          ? null
+          : {
+              branchId: input.branch_id,
+              categoryId: input.category_id,
+              firstTime: null,
+              circlePreferences: [],
+            },
+      children: [],
+      framing: teaching ? (input.framing ?? null) : null,
+      administrationBranchId: null,
+    };
+  }
+  return {
+    roles: input.roles,
+    applicant: input.applicant,
+    student: input.student
+      ? {
+          branchId: input.student.branch_id,
+          categoryId: input.student.category_id,
+          firstTime: input.student.first_time,
+          circlePreferences: input.student.first_time ? (input.student.circle_preferences ?? []) : [],
+        }
+      : null,
+    children: input.children ?? [],
+    framing: input.teaching?.framing ?? null,
+    administrationBranchId: input.administration?.branch_id ?? null,
+  };
+}
 
 export interface RegistrationResult {
   applicantId: string;
@@ -141,8 +219,11 @@ export async function register(
         });
       }
 
-      const applicantData = input.kind === 'adult' ? input.applicant : input.parent;
-      const staffRequest = input.kind === 'adult' && input.requested_role === 'teacher';
+      // R168 §1 — three request shapes, ONE meaning: a person, and the set of
+      // roles she asks for. Everything below reads this, never `input.kind`.
+      const request = normaliseRegistration(input);
+      const applicantData = request.applicant;
+      const staffRequest = request.roles.includes('teaching');
 
       // §4.1 / Revision 39: the chosen branch must be REAL and not closed.
       //
@@ -166,7 +247,11 @@ export async function register(
        * the form this revision removes it from.
        */
       const applicantBranchId =
-        input.kind === 'adult' ? input.branch_id : input.children[0]!.requested_branch_id;
+        request.student?.branchId ??
+        request.children[0]?.requested_branch_id ??
+        // R168 §1 — where an administrative applicant would serve, if she said.
+        request.administrationBranchId ??
+        undefined;
       /**
        * **The same derivation, for the same reason (R67.3).**
        *
@@ -179,7 +264,7 @@ export async function register(
        * is what a decision is made from.
        */
       const applicantCategoryId =
-        input.kind === 'adult' ? input.category_id : input.children[0]!.requested_category_id;
+        request.student?.categoryId ?? request.children[0]?.requested_category_id ?? undefined;
 
       if (applicantBranchId !== undefined) {
         const branch = await tx.branch.findFirst({
@@ -194,11 +279,12 @@ export async function register(
       // A physical/both staff preference may name several live branches. The
       // future-inclusive all-branches case deliberately names none, and online
       // is rejected by the schema if it carries any hidden branch data.
+      const framing = request.framing;
       const framingBranchIds =
-        staffRequest && input.framing && input.framing.mode !== 'online'
-          ? input.framing.willingness.all_branches
+        staffRequest && framing && framing.mode !== 'online'
+          ? framing.willingness.all_branches
             ? []
-            : input.framing.willingness.branch_ids
+            : framing.willingness.branch_ids
           : [];
       if (framingBranchIds.length > 0) {
         const liveBranches = await tx.branch.count({
@@ -273,7 +359,9 @@ export async function register(
           // nothing; `user_branch_role` is written at approval by a Super Admin.
           // Absent on the parent+child path, which is a family rather than a
           // staff request.
-          requestedRole: input.kind === 'adult' ? (input.requested_role ?? null) : null,
+          // R168 §1 — kept as the teaching hint older readers expect; what she
+          // asked for, in full, is `role_request` below.
+          requestedRole: staffRequest ? 'teacher' : null,
           accountStatus: 'pending',
         },
       });
@@ -284,12 +372,12 @@ export async function register(
         data: { userId: applicant.id, provider: 'google', providerSubjectId, email },
       });
 
-      if (staffRequest && input.framing) {
-        const physical = input.framing.mode !== 'online' ? input.framing.willingness : null;
+      if (staffRequest && framing) {
+        const physical = framing.mode !== 'online' ? framing.willingness : null;
         await tx.framingPreference.create({
           data: {
             userId: applicant.id,
-            mode: input.framing.mode,
+            mode: framing.mode,
             allBranches: physical?.all_branches ?? false,
             ...(framingBranchIds.length > 0
               ? {
@@ -329,15 +417,55 @@ export async function register(
       //
       // The applicant's OWN consent records are written above, unchanged: they
       // belong to a person who exists.
+      /**
+       * **R168 §1 — what she asked for, one row per role, each decided on its
+       * own.** Written for every request shape, so the approvals screen reads
+       * one model. A row is a request and never an authority.
+       */
+      await tx.roleRequest.createMany({
+        data: request.roles.map((kind) => ({
+          userId: applicant.id,
+          kind,
+          ...(kind === 'student' && request.student ? { firstTime: request.student.firstTime } : {}),
+        })),
+      });
+
+      // The circles a first-time مستفيدة can attend, most convenient first —
+      // and only circles that are really on offer for her Category and branch.
+      const ranked = request.student?.circlePreferences ?? [];
+      if (ranked.length > 0 && request.student) {
+        const offered = await offeredCircleSlots(
+          tx,
+          request.student.categoryId,
+          request.student.branchId,
+          now,
+        );
+        const onOffer = new Set(offered.circles.map((circle) => circle.teaching_group_id));
+        const stranger = ranked.find((id) => !onOffer.has(id));
+        if (stranger !== undefined) {
+          throw new AppError('VALIDATION_FAILED', 'a ranked circle is not on offer', {
+            reason: 'CIRCLE_NOT_OFFERED',
+            teaching_group_id: stranger,
+          });
+        }
+        await tx.circlePreference.createMany({
+          data: ranked.map((teachingGroupId, index) => ({
+            userId: applicant.id,
+            teachingGroupId,
+            rank: index + 1,
+          })),
+        });
+      }
+
       let childApplications: { requestId: string; applicationIds: string[] } | null = null;
-      if (input.kind === 'parent_child') {
+      if (request.children.length > 0) {
         childApplications = await submitChildApplications(tx, applicant.id, {
           consentDataProcessing: true,
           // R62.3b — the version in force NOW. Approval must never substitute
           // the current value for the one this parent actually saw.
           consentTextVersion: textVersion,
           consentTextId: consentText.id,
-          children: input.children.map((c) => ({
+          children: request.children.map((c) => ({
             firstNameArabic: c.first_name_arabic,
             lastNameArabic: c.last_name_arabic,
             ...(c.first_name_french ? { firstNameFrench: c.first_name_french } : {}),
@@ -377,6 +505,9 @@ export async function register(
           provider: 'google',
           account_status: 'pending',
           registration_kind: input.kind,
+          // R168 §1 — WHAT was asked for. Role names only: no PII (TD-14).
+          roles_requested: request.roles,
+          ...(request.student ? { first_time: request.student.firstTime, circles_ranked: ranked.length } : {}),
           // R62 — how many children were APPLIED for; none exists yet.
           ...(childApplications
             ? { child_applications: childApplications.applicationIds.length }

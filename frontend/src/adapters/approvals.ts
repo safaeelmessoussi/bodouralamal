@@ -74,6 +74,22 @@ export interface ApprovalApplicant {
   role: 'applicant' | 'child' | 'parent';
 }
 
+/**
+ * **One role a registration asked for, and what became of it** (SRS Revision
+ * 168 §1). One form may ask for several; each is approved or declined on its
+ * own, so a row's state is a LIST of these and never one word.
+ */
+export type RoleRequestKind = 'student' | 'guardian' | 'teaching' | 'administration';
+export type RoleRequestStatus = 'pending' | 'approved' | 'declined';
+
+export interface ApprovalRoleRequest {
+  kind: RoleRequestKind;
+  status: RoleRequestStatus;
+  /** `student` only — «هل هذه أول مرة تسجّلين فيها؟». `null` elsewhere and on a
+   *  registration from before the question existed. */
+  first_time: boolean | null;
+}
+
 export interface Approval {
   id: string;
   type: ApprovalType;
@@ -98,6 +114,13 @@ export interface Approval {
    * assignment the approver states below.
    */
   requested_role: string | null;
+  /** R168 §1 — every role this registration asked for; `[]` on the other item
+   *  types. More than one, or an `administration` request, is decided per role
+   *  (`decideRoleRequest`) — the server refuses the whole-account act for it. */
+  role_requests: ApprovalRoleRequest[];
+  /** The memorisation circles a first-time مستفيدة ranked, most convenient
+   *  first. **A wish, never a seat** — shown beside the placement control. */
+  circle_preferences: { teaching_group_id: string; name: string; rank: number }[];
   framing: FramingPreferenceView | null;
   /**
    * The educational stage the applicant asked for (Revision 49) — what §4.1
@@ -214,6 +237,65 @@ export async function rejectApproval(
     token,
     body: { reason },
   });
+}
+
+/**
+ * **One requested role, decided on its own** (R168 §1) —
+ * `POST /admin/approvals/{id}/roles/{kind}/approve|decline`; `{id}` is the
+ * applicant.
+ *
+ * What each kind needs is the server's contract, mirrored here as a union so a
+ * caller cannot send a placement with a teaching request: `student` is approved
+ * by PLACING her; `teaching` and `administration` by the role and scope the
+ * APPROVER states (never the applicant); `guardian` by nothing at all. A decline
+ * is always a reason.
+ */
+export type RoleDecisionBody =
+  | { approve: true; kind: 'student'; enrollment: PlacementBody }
+  | { approve: true; kind: 'teaching' | 'administration'; grant: { role: string; branch_id: string | null } }
+  | { approve: true; kind: 'guardian' }
+  | { approve: false; kind: RoleRequestKind; reason: string };
+
+export interface RoleDecisionResult {
+  status: 'approved' | 'declined';
+  /** The ACCOUNT after this decision: `active` with the first approval,
+   *  `rejected` only when every role was declined, otherwise still `pending`. */
+  account_status: string;
+}
+
+export async function decideRoleRequest(
+  userId: string,
+  decision: RoleDecisionBody,
+  token: string | null,
+): Promise<RoleDecisionResult> {
+  const body = !decision.approve
+    ? { reason: decision.reason }
+    : decision.kind === 'student'
+      ? { enrollment: decision.enrollment }
+      : decision.kind === 'guardian'
+        ? {}
+        : { grant: decision.grant };
+  return api<RoleDecisionResult>(
+    `/admin/approvals/${userId}/roles/${decision.kind}/${decision.approve ? 'approve' : 'decline'}`,
+    { method: 'POST', token, body },
+  );
+}
+
+/**
+ * Whether this row is decided ONE ROLE AT A TIME.
+ *
+ * The server's rule, stated once for the screen: several requests have no single
+ * «approve», and a lone `administration` request is a Super Admin's decision
+ * that the whole-account act — open to every approver — may not take. A
+ * registration that asked for one ordinary thing keeps the one decision it has
+ * always been.
+ */
+export function decidedPerRole(row: Pick<Approval, 'type' | 'role_requests'>): boolean {
+  return (
+    row.type === 'registration' &&
+    (row.role_requests.length > 1 ||
+      row.role_requests.some((request) => request.kind === 'administration'))
+  );
 }
 
 /** TD-9's ceiling for a decision reason (§5.6). */

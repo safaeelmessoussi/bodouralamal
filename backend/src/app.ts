@@ -45,7 +45,7 @@ import * as quran from './controllers/quran.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
 import * as students from './controllers/student.controller.js';
 import * as profile from './controllers/profile.controller.js';
-import { createRegistration } from './controllers/registration.controller.js';
+import { circleSlots, createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import type { JobRunnerReadiness } from './jobs/readiness.js';
@@ -299,6 +299,9 @@ export function createApp(
    * only the id, the label and the text — never provenance or usage.
    */
   api.get('/registration/consent-text', consentTexts.readActive(prisma));
+  // R168 §1 — the memorisation circles a first-time مستفيدة may order. Anonymous
+  // for the same reason: she has no account yet.
+  api.get('/registration/circle-slots', circleSlots(prisma));
 
   /**
    * **R138 §12/§13 — the public Privacy Policy and Terms of Use.** Anonymous
@@ -470,6 +473,9 @@ export function createApp(
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
+  // R168 §1 — one registration, several roles: each decided on its own.
+  guarded.post('/admin/approvals/:id/roles/:kind/approve', approvals.approveRole(prisma));
+  guarded.post('/admin/approvals/:id/roles/:kind/decline', approvals.declineRole(prisma));
   // R56 — the stored event DEFINITIONS for the unified Scheduling list. `GET
   // /calendar` returns their expansion and remains the calendar's read.
   guarded.get('/events', events.list(prisma));

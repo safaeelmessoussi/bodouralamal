@@ -4568,7 +4568,7 @@ the Owner's own report named.
       migrate deploy` applied the new R161 migration cleanly,
       `/healthz` green on the first check, no leftover disposable
       containers. Full detail in CHANGES.log.
-- [ ] **§4 — multi-role registration, investigated.** The blocker is
+- [x] **§4 — multi-role registration, investigated.** **[Closed 2026-09-21 — built as R168 §1: the join table is `role_request`, and a PARTIAL approval leaves an ACTIVE account with its other requests still pending or declined]** The blocker is
       `User.requestedRole`, a single scalar column read/written
       everywhere a registration is created, listed or approved.
       Supporting several roles needs it widened to a set (most likely
@@ -5341,7 +5341,7 @@ column, one table, one sequence; nothing dropped or rewritten).
 - [x] **Declared residual risk (not built):** a recorder CRASH mid-class still **[Closed 2026-09-21 ledger review — closed by R168 §2 — safety segments, assembly, and re-recording after a crash]**
       loses that class's capture. Segmented output uploaded during the class
       would close it.
-- [ ] **§6 — one registration form for several roles: PROPOSAL ONLY**,
+- [x] **§6 — one registration form for several roles: PROPOSAL ONLY**, **[Closed 2026-09-21 — ratified and built as R168 §1]**
       [`SRS-PROPOSAL-R168.md`](SRS-PROPOSAL-R168.md). Six decisions are the
       Owner's — first, whether administrative staff may ask through the public
       form at all (R49 says no today).
@@ -5397,9 +5397,38 @@ The Owner's six replies to Revision 167's report. One migration so far
 - [x] **§5 — the certificate carries no seal.**
 - [x] Ledger review: 24 boxes closed with their evidence (20 found already done
       by later sections, 4 resolved by this revision).
-- [ ] **§1 — one registration form, four roles, each decided separately.**
+- [x] **§1 — one registration form, four roles, each decided separately.**
       RATIFIED by the Owner (administrative staff may ask through the public
-      form; asking grants nothing). Being built as this revision's second part.
+      form; asking grants nothing) and BUILT as this revision's second part:
+      four checkboxes, none preselected, her identity asked once; «بيانات ولي
+      الأمر» only when registering children is all she asked for.
+- [x] §1 — each role is approved or declined on its own
+      (`POST /admin/approvals/{id}/roles/{kind}/approve|decline`). مستفيدة =
+      a placement; هيئة التدريس = مؤطِّرة; هيئة الإدارة = مسؤولة or مشرفة عامة,
+      the APPROVER's choice and a Super Admin's decision only; وليّة أمر grants
+      nothing (her children stay one decision each). The account is activated
+      by the FIRST approval and rejected only when every role was declined.
+- [x] §1 — a first-time مستفيدة ranks the memorisation حلقات that suit her,
+      offered from SCHEDULED classes of her Category's first Level at her
+      branch (`GET /registration/circle-slots`); the approver sees her order
+      beside the placement control. A wish, never a seat.
+- [x] §1 — طلبات الانضمام names every requested role with its own state and
+      offers «البتّ في الصفات المطلوبة» where one «موافقة» has no meaning (the
+      server answers `DECIDE_PER_ROLE` there).
+- [x] Found while building: three browser harnesses had been red for months
+      unnoticed — a date «typed» into the calendar control, a branch list that
+      became a dropdown, a date field that left the assessment builder. All
+      repaired; `date-picker.mjs` DRIVES the calendar for every harness.
+- [x] R160 §8 kept: the self-managed claim has no entry on the form (reached by
+      `/register?mode=self-managed`); its harness now asserts exactly that.
+- [ ] **§1 — not built, and said:** an account that already EXISTS cannot yet
+      ask for a further role through a form («a declined role may be asked for
+      again» is, for now, the administration granting it from «المستخدمون»).
+      Wants the Owner's word on whether it is needed before go-live.
+- [ ] **§1 — the proposal's five other recommendations were taken as drafted**
+      (one notification per decision; a declined role may be asked again;
+      slots = scheduled classes; a returning مستفيدة is asked nothing more;
+      teaching = the one role مؤطِّرة). Each is the Owner's to change.
 - [ ] **For the Owner — data, not code:** the ordered circle choice is offered
       from SCHEDULED classes. Today there is no «حلقة» for حفظ القرآن at all and
       no weekly memorisation class. For المرأة · المستوى الأول · مقر تاركة:

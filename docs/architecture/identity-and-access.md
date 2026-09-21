@@ -75,6 +75,39 @@ re-runs the complete routing condition before creating `UserIdentity` or `auth.i
 Suspension first therefore leaves no new identity or binding audit; binding first commits both,
 after which suspension may proceed and final issuance still re-reads the deactivated state.
 
+### One registration, several roles (R168 §1)
+
+The form the onboarding token leads to asks **what she wants** as four checkboxes, any combination
+— مستفيدة · تسجيل الأبناء · هيئة التدريس · هيئة الإدارة — and who she is **once**. The contract is
+SRS Revision 168 §1; this is how it is held together.
+
+| Piece | Where | The rule it carries |
+|---|---|---|
+| The request | `validators/registration.validators.ts` (`kind: 'roles'`) | A section for every role asked for and for no other; a date of birth exactly when `student` is asked (R130). **No field names an administrative role** — `administration` carries only where she would prefer to serve |
+| The write | `services/registration.service.ts` | All three request shapes are normalised into one write: the `User`, one `RoleRequest` per role, her `CirclePreference` rows (each checked against what is on offer — `CIRCLE_NOT_OFFERED`), the framing preference, the child applications |
+| What she may rank | `services/registration-circle-slots.service.ts` | Read from the SCHEDULE every time: the live weekly memorisation classes addressed to a حلقة of her Category's FIRST Level at her branch. Anonymous, so it publishes a name, days and times and nothing else; never a «مخفي» class |
+| One role decided | `services/role-request.service.ts` | `student` = a placement (`enrolAtPlacement`); `teaching`/`administration` = a grant the APPROVER states; `guardian` = nothing granted. Roles are ADDED through `ensureRoleAssignment` — never `applyRoleAssignments`, which replaces the set and would revoke what an earlier approval gave |
+| The account | same | `pending → active` on the FIRST approval; `rejected` (sessions revoked in the same transaction, R102) only when EVERY request was declined |
+| The whole-account act | `services/approval.service.ts` | Kept for a registration that asked for one ordinary thing, mirroring its decision onto the request. Several requests, or a lone `administration` one, answer `DECIDE_PER_ROLE` |
+
+**Asking grants nothing.** A `RoleRequest` is never read to decide what anybody may do; authority is
+`UserBranchRole`, and the only writer reached from here is the audited approval, behind
+`assertFreshActive`, the User row lock (TD-15.3 first-wins) and the privilege guard of the one
+role-management implementation. **A place in the administration is a Super Admin's decision on
+both paths** — the per-role act refuses an Admin with `403`, and the whole-account act, which is
+open to every approver, refuses a lone `administration` request rather than let an Admin record it
+as accepted while granting nothing.
+
+**A guardian is accepted by accepting a child.** `parent` is still granted with her first approved
+child (R62). Approving a child application directly marks a pending `guardian` request approved —
+that has always been possible and is what an approver means by it — and is blocked only when the
+request was **declined** (`GUARDIAN_REQUEST_DECLINED`). Declining `guardian` rejects her pending
+child applications with it (`not_eligible`): a child is not admitted under a guardian the
+association did not accept.
+
+**The self-managed claim (R132) is not one of the roles** — it claims a record that exists. Its
+entry stays withdrawn from the form (R160 §8) and is reached by `/register?mode=self-managed`.
+
 ### The Google identity trust boundary
 
 The authorization-code exchange and ID-token validation are **two different security

@@ -944,6 +944,37 @@
         }
       }
     },
+    "/registration/circle-slots": {
+      "get": {
+        "summary": "The memorisation circles a first-time مستفيدة may order",
+        "description": "SRS Revision 168 §1. **Anonymous**, like the consent text beside it: the applicant has no account yet. `?category_id=&branch_id=` (both required uuids). Returns `{ level, circles[], fixed[] }`: `level` is the Category's FIRST Level (the one a first-time مستفيدة joins) or `null`; `circles[]` are the حلقات of the memorisation Subject (`tracks_quran_progress` — by its column, never its name) at that Level that HAVE a live weekly class at that branch, each `{ teaching_group_id, name, meetings[{ weekdays, start_time, end_time }] }`; `fixed[]` are that Level's classes that address everybody in it (تفسير «للجميع») — information, not a choice. **Nothing is typed into a form, a seed or a constant**: a slot is a class that exists, so a Level or branch with none offers nothing, and starts offering them the day they are scheduled. Fewer than two circles is not a choice and the form asks nothing. It publishes the least that lets her choose — no staff, no room, no member count — and a class whose visibility is «مخفي» is never offered. `Cache-Control: no-store`.",
+        "responses": {
+          "200": {
+            "description": "The Level, its circles on offer, and its fixed classes."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/registration/consent-text": {
       "get": {
         "summary": "The legal wording the registration form must display",
@@ -1727,6 +1758,148 @@
           },
           "409": {
             "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/approvals/{id}/roles/{kind}/approve": {
+      "post": {
+        "summary": "Approve ONE requested role",
+        "description": "SRS Revision 168 §1 — a registration may ask for several roles, and **each is decided on its own**. `{id}` is the applicant; `{kind}` ∈ `student | guardian | teaching | administration`. Nothing new is done, only one thing at a time: **`student`** needs `enrollment` (a group, or a level with its branch — R66.5) and places her through `enrolAtPlacement`, grants `student` for that branch and marks her a beneficiary; **`teaching`** needs `grant { role: 'teacher', branch_id | null }`; **`administration`** needs `grant { role: 'admin' | 'super_admin', branch_id | null }` — WHICH role is the approver's decision, never the applicant's, a Super Admin is never branch-scoped, and **only a Super Admin may decide this kind at all**; **`guardian`** needs nothing (each child stays its own decision, R62). Roles are ADDED through `ensureRoleAssignment`, so approving her teaching request cannot revoke the `student` role an earlier approval gave her. **The account becomes `active` with the FIRST approved role.** One audit row (`rolerequest.approve`) and one notification per decision. Returns `{ status, account_status }`.",
+        "responses": {
+          "200": {
+            "description": "Approved."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — ENROLLMENT_REQUIRED, ROLE_NOT_GRANTABLE_HERE, SUPER_ADMIN_IS_UNSCOPED, or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — not an approver, or an administration request decided by anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — no such applicant, or she did not ask for this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT / ALREADY_DECIDED — first-wins (TD-15.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/approvals/{id}/roles/{kind}/decline": {
+      "post": {
+        "summary": "Decline ONE requested role",
+        "description": "SRS Revision 168 §1. `reason` is mandatory (§5.6) and operator-facing. Declining takes nothing else away: a role already approved stays. **The account is `rejected` — sessions revoked in the same transaction (R102) — only when EVERY role she asked for has been declined**; while some are undecided and none approved it stays `pending`. Declining `guardian` rejects her pending child applications with it (`not_eligible`): a child is not admitted under a guardian the association declined. The whole-account `POST /admin/approvals/{id}/approve|reject` answers `400 DECIDE_PER_ROLE` for a registration that asked for more than one role. One audit row (`rolerequest.decline`) and one notification.",
+        "responses": {
+          "200": {
+            "description": "Declined."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — no reason given.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT / ALREADY_DECIDED.",
             "content": {
               "application/json": {
                 "schema": {

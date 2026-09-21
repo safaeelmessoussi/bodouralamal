@@ -167,12 +167,16 @@ const statuses = JSON.parse(burst);
 const devEdge = process.env.EDGE_RATE_LIMITS === 'dev';
 check(
   devEdge
-    ? 'the permissive dev rate zones are active, so 429 is not exercisable here (production zones: 10r/m)'
+    ? 'the permissive dev rate zones are active: most of a burst passes (production, at 10r/m, refuses nearly all of it)'
     : 'the edge really does rate-limit, so 429 is a class worth having',
+  // 6000r/m is 100 r/s with `burst=5`: twenty-five sequential fetches on a fast
+  // machine briefly exceed even that, so «never a 429» was a race this check
+  // lost on 2026-09-21. What is TRUE of the permissive edge is that it lets most
+  // of the burst through — production's 10r/m refuses at least nineteen of them.
   devEdge
-    ? statuses.length > 0 && statuses.every((s) => s !== 429)
+    ? statuses.length > 0 && statuses.filter((s) => s === 429).length <= 12
     : statuses.includes(429),
-  `edge=${process.env.EDGE_RATE_LIMITS ?? 'unknown'} statuses=${[...new Set(statuses)].join(',')}`,
+  `edge=${process.env.EDGE_RATE_LIMITS ?? 'unknown'} refused=${statuses.filter((s) => s === 429).length}/${statuses.length}`,
 );
 
 /* ── 5. A real unknown route still lands on the branded 404 ─────────────── */

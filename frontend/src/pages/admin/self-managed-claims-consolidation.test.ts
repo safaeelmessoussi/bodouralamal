@@ -49,6 +49,8 @@ describe('self-managed claims: one queue implementation, reached two ways (R137)
     const source = code(APPROVALS_SOURCE);
     expect(source).toContain('showingSelfManagedClaims ?');
     expect(source).toContain('<SelfManagedClaimsQueue />');
-    expect(source).toMatch(/if \(typeFilter === SELF_MANAGED_CLAIMS_FILTER\) return;/);
+    // `load` answers with the rows it fetched since R168 §1 (the per-role review
+    // reopens on the refreshed row), so skipping the fetch answers «nothing».
+    expect(source).toMatch(/if \(typeFilter === SELF_MANAGED_CLAIMS_FILTER\) return null;/);
   });
 });

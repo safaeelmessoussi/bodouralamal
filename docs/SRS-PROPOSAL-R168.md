@@ -12,7 +12,9 @@ at once, the Super Admin decides each role separately, and a first-time
 form's four choices (§1, as amended in R168 §1: the teaching choice covers main
 and assistant teachers, the administration choice covers Admin and Super Admin,
 and WHICH is the approving Super Admin's decision). The other recommendations in
-§5 stand as drafted until she says otherwise. Kept as the drafting record.
+§5 stand as drafted until she says otherwise. **Built 2026-09-21** (Revision 168's
+second part — what exists is described in `SRS.md` Revision 168 §1 «as built», not
+here). Kept as the drafting record.
 
 ---
 

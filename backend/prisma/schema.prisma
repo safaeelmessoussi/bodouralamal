@@ -379,6 +379,26 @@ enum DeliveryMode {
 /// of one weekly availability window. This is deliberately distinct from
 /// `DeliveryMode`: a person may support `both`, while one scheduled occurrence
 /// is always either in-person or online.
+/// SRS Revision 168 §1 — what a person may ask for on the one registration form.
+/// `teaching` becomes the role `teacher`; `administration` becomes `admin` or
+/// `super_admin`, WHICH being the approving Super Admin's decision.
+enum RoleRequestKind {
+  student
+  guardian
+  teaching
+  administration
+
+  @@map("role_request_kind")
+}
+
+enum RoleRequestStatus {
+  pending
+  approved
+  declined
+
+  @@map("role_request_status")
+}
+
 enum FramingMode {
   in_person
   online
@@ -825,6 +845,11 @@ model User {
   levelCompletionMarks         LevelCompletionMark[] @relation("LevelCompletionMarkStudent")
   levelCompletionMarksRecorded LevelCompletionMark[] @relation("LevelCompletionMarkBy")
   levelCertificatesIssued      LevelCompletionMark[] @relation("LevelCertificateIssuedBy")
+
+  /// SRS Revision 168 §1 — what she asked for at registration.
+  roleRequests        RoleRequest[]      @relation("RoleRequestUser")
+  roleRequestsDecided RoleRequest[]      @relation("RoleRequestDecidedBy")
+  circlePreferences   CirclePreference[] @relation("CirclePreferenceUser")
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -1400,6 +1425,9 @@ model TeachingGroup {
   // Same technique as `AdministrativeGroup(id, level_id)`: the referenced pair
   // a composite FK needs. `StudentTeachingGroup` carries subject+level and this
   // is what forces them to agree with the group's own.
+  /// SRS Revision 168 §1.
+  circlePreferences CirclePreference[]
+
   @@unique([id, subjectId, levelId], map: "teaching_group_id_subject_id_level_id_key")
   @@index([subjectId, levelId, deletedAt])
   @@map("teaching_group")
@@ -3964,6 +3992,50 @@ model PlatformOwner {
 /// either that flag or at least one `branches` row. Online-only preferences
 /// require neither. Deferred SQL constraint triggers enforce the cross-table
 /// rule without forcing clients to write rows in an unsafe order.
+/// **One thing a person asked for at registration, decided on its own** (SRS
+/// Revision 168 §1).
+///
+/// A row is a REQUEST and never an authority — authority is `UserBranchRole`,
+/// written only by an audited approval. The account becomes `active` with the
+/// first approved request and `rejected` only when every one has been declined.
+model RoleRequest {
+  id     String            @id @default(uuid()) @db.Uuid
+  userId String            @map("user_id") @db.Uuid
+  user   User              @relation("RoleRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  kind   RoleRequestKind
+  status RoleRequestStatus @default(pending)
+
+  /// «هل هذه أول مرة تلتحقين فيها؟» — a مستفيدة only (CHECK). NULL on rows
+  /// back-filled by the migration: nobody was asked, and no answer is invented.
+  firstTime Boolean? @map("first_time")
+
+  decidedById   String?   @map("decided_by") @db.Uuid
+  decidedBy     User?     @relation("RoleRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt     DateTime? @map("decided_at") @db.Timestamptz(6)
+  /// Operator-facing, never rendered raw to the applicant.
+  declineReason String?   @map("decline_reason") @db.VarChar(500)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, kind])
+  @@map("role_request")
+}
+
+/// **The memorisation circles a first-time مستفيدة can attend, most convenient
+/// first** (SRS Revision 168 §1). A wish, never a seat: the approver still
+/// places her. What is on offer is read from scheduled classes, never typed.
+model CirclePreference {
+  userId          String        @map("user_id") @db.Uuid
+  user            User          @relation("CirclePreferenceUser", fields: [userId], references: [id], onDelete: Cascade)
+  teachingGroupId String        @map("teaching_group_id") @db.Uuid
+  teachingGroup   TeachingGroup @relation(fields: [teachingGroupId], references: [id], onDelete: Cascade)
+  rank            Int           @db.SmallInt
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, teachingGroupId])
+  @@unique([userId, rank])
+  @@map("circle_preference")
+}
+
 model FramingPreference {
   userId      String                    @id @map("user_id") @db.Uuid
   user        User                      @relation(fields: [userId], references: [id], onDelete: Restrict)

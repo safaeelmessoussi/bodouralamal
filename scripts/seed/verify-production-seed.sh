@@ -205,7 +205,8 @@ fi
     scripts/seed-quran-scenario.ts \
     scripts/seed-r82-scenario.ts \
     scripts/seed-r91-scenario.ts \
-    scripts/seed-r92-scenario.ts
+    scripts/seed-r92-scenario.ts \
+    scripts/seed-role-requests-scenario.ts
   do
     npx tsx "$fixture" >/dev/null
     npx tsx "$fixture" --clean >/dev/null

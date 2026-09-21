@@ -68,16 +68,28 @@ const setInput = (label, value) => evaluate(`(() => {
   return input.value;
 })()`);
 
-const framingState = () => evaluate(`(() => {
+/**
+ * The physical-branch control is the platform's collapsed dropdown (R137): a
+ * trigger, and a panel of checkboxes that exists only while it is open. So both
+ * helpers OPEN it first and read what is ticked — they used to look for an
+ * always-rendered list of buttons that has not existed since, and «one branch
+ * can be selected» had been failing on a control that worked.
+ */
+const framingState = () => evaluate(`(async () => {
   const group = [...document.querySelectorAll('fieldset')].find((node) =>
     (node.querySelector('legend')?.textContent ?? '').includes('تفضيلات التأطير')
   );
   if (!group) return null;
   const multi = group.querySelector('.multi-select');
+  if (multi && !multi.querySelector('.dropdown-select__panel')) {
+    multi.querySelector('.dropdown-trigger')?.click();
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const boxes = multi ? [...multi.querySelectorAll('.multi-select__options input[type=checkbox]')] : [];
   return {
     text: group.textContent,
-    chosen: multi ? multi.querySelectorAll('.multi-select__chosen li').length : 0,
-    offers: multi ? [...multi.querySelectorAll('.multi-select__options button')].map((b) => b.textContent.trim()) : [],
+    chosen: boxes.filter((box) => box.checked).length,
+    offers: boxes.length,
     multiPresent: multi !== null,
     allPresent: [...group.querySelectorAll('label')].some((label) => label.textContent.includes('كل المقرات')),
     allChecked: [...group.querySelectorAll('label')].some((label) =>
@@ -86,13 +98,21 @@ const framingState = () => evaluate(`(() => {
   };
 })()`);
 
-const chooseFramingOffer = (index) => evaluate(`(() => {
+/** Ticks the Nth branch still UNTICKED, so two calls choose two branches. */
+const chooseFramingOffer = (index) => evaluate(`(async () => {
   const group = [...document.querySelectorAll('fieldset')].find((node) =>
     (node.querySelector('legend')?.textContent ?? '').includes('تفضيلات التأطير')
   );
-  const button = group?.querySelectorAll('.multi-select__options button')[${index}];
-  if (!button) return false;
-  button.click();
+  const multi = group?.querySelector('.multi-select');
+  if (!multi) return false;
+  if (!multi.querySelector('.dropdown-select__panel')) {
+    multi.querySelector('.dropdown-trigger')?.click();
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const box = [...multi.querySelectorAll('.multi-select__options input[type=checkbox]')].filter((b) => !b.checked)[${index}];
+  if (!box) return false;
+  box.click();
+  await new Promise((r) => setTimeout(r, 150));
   return true;
 })()`);
 
@@ -106,7 +126,15 @@ const setAllBranches = (checked) => evaluate(`(() => {
 
 /* Registration: every framing shape is operated, not inferred from source. */
 check('1 · the real registration form opens', await open(`/register#onboarding_token=${ONBOARDING_TOKEN}`, '.register-form'));
-check('2 · choosing هيئة التأطير reveals the planning-only framing section', (await setSelect('نوع التسجيل', 'teacher')) === 'teacher' && (await waitFor("document.body.innerText.includes('تفضيلات التأطير')")));
+// R168 §1 — «هيئة التدريس» is one of four role CHOICES now, addressed by what it
+// is (`data-role-choice`), never by its wording.
+const tickRole = (role) => evaluate(`(() => {
+  const box = document.querySelector('[data-role-choice="${role}"] input[type=checkbox]');
+  if (!box) return 'missing';
+  if (!box.checked) box.click();
+  return box.checked;
+})()`);
+check('2 · choosing هيئة التدريس reveals the planning-only framing section', (await tickRole('teaching')) === true && (await waitFor("document.body.innerText.includes('تفضيلات التأطير')")));
 check('3 · in-person framing requires an explicit physical scope', (await setSelect('طريقة التأطير', 'in_person')) === 'in_person' && (await framingState())?.multiPresent === true);
 check('4 · one physical branch can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 1);
 check('5 · several physical branches can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 2);
@@ -118,14 +146,17 @@ check('9 · both mode accepts the durable all-branches statement', (await setSel
 await setInput('الاسم الشخصي', '[r115-browser]');
 await setInput('الاسم العائلي', 'طالبة التأطير');
 await setSelect('الجنس', 'female');
+// Required of every new registration since R117 — the harness never supplied
+// one, and its failure said nothing about why.
+await setInput('رقم الهاتف', '+212600000115');
 await evaluate(`(() => {
-  const boxes = [...document.querySelectorAll('input[type=checkbox]')];
-  const consent = boxes.find((box) => !box.closest('fieldset')?.textContent.includes('تفضيلات التأطير'));
+  const consent = document.querySelector('.consent-notice input[type=checkbox]');
   if (consent && !consent.checked) consent.click();
   document.querySelector('form.register-form button[type=submit]')?.click();
 })()`);
 if (!(await waitFor("document.body.innerText.includes('تم استلام طلبك')"))) {
-  throw new Error('registration did not reach the pending confirmation');
+  const why = await evaluate("JSON.stringify([...document.querySelectorAll('.field__error, [role=alert]')].map((node) => node.textContent.trim()).filter(Boolean))");
+  throw new Error('registration did not reach the pending confirmation: ' + why);
 }
 
 /* Real sessions and real API authority, still against synthetic users only. */

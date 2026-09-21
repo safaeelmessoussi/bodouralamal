@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import type { PublicBranch } from '../adapters/branches.js';
+import type { RoleChoice } from '../adapters/registrations.js';
 import { buildPayload, explainFailure, validate } from './register.js';
 import { ApiError } from '../lib/api.js';
 import { ar } from '../i18n/ar.js';
@@ -45,8 +46,14 @@ const child = {
   categoryId: 'c1',
 };
 const base = {
-  // R49 — the FORM's three options, not the wire's two `kind`s.
-  intent: 'adult' as const,
+  // R168 §1 — everything she asks for, any combination. One role here, so the
+  // older single-purpose cases below read exactly as they did.
+  selfManaged: false,
+  roles: ['student'] as RoleChoice[],
+  firstTime: 'no' as '' | 'yes' | 'no',
+  circlePreferences: [] as string[],
+  circlesOffered: 0,
+  administrationBranchId: null as string | null,
   applicant: person,
   // R62.1 — an array, because one request may carry several children.
   children: [child],
@@ -76,7 +83,7 @@ describe('R132 — the self-managed claim validates its code and nothing else', 
    * button did nothing at all — no error, no request, no explanation. A browser
    * run found it; nothing in the source could.
    */
-  const claim = (code: string) => ({ ...base, intent: 'self_managed' as const, selfManagedCode: code });
+  const claim = (code: string) => ({ ...base, selfManaged: true, selfManagedCode: code });
 
   it('accepts a well-formed reference code with every other field empty', () => {
     // The applicant, children, branch, category and consent are all untouched
@@ -129,8 +136,9 @@ describe('§4.1 step 1 / Revision 49 — the educational stage', () => {
     expect(
       validate({
         ...base,
-        intent: 'teacher',
+        roles: ['teaching'],
         categoryId: null,
+        branchId: null,
         framingMode: 'online',
       }),
     ).toEqual({});
@@ -140,7 +148,7 @@ describe('§4.1 step 1 / Revision 49 — the educational stage', () => {
 describe('هيئة التأطير framing preference', () => {
   const teacher = {
     ...base,
-    intent: 'teacher' as const,
+    roles: ['teaching'] as RoleChoice[],
     branchId: null,
     categoryId: null,
   };
@@ -173,15 +181,15 @@ describe('هيئة التأطير framing preference', () => {
         framingBranchIds: ['b1'],
       }),
     ).toEqual({
-      kind: 'adult',
+      kind: 'roles',
+      roles: ['teaching'],
       applicant: {
         first_name_arabic: 'خديجة',
         last_name_arabic: 'بنعلي',
         phone: '+212 600000000',
         sex: 'female',
       },
-      requested_role: 'teacher',
-      framing: { mode: 'online' },
+      teaching: { framing: { mode: 'online' } },
       // R119 — the payload names the wording that was on screen, so the server
       // can refuse one that went out of force while the form was open.
       consents: { data_processing: true, consent_text_id: 'ct-1' },
@@ -192,23 +200,21 @@ describe('هيئة التأطير framing preference', () => {
     expect(
       buildPayload({ ...teacher, framingMode: 'in_person', framingBranchIds: ['b1'] }),
     ).toMatchObject({
-      framing: {
-        mode: 'in_person',
-        willingness: { all_branches: false, branch_ids: ['b1'] },
+      teaching: {
+        framing: { mode: 'in_person', willingness: { all_branches: false, branch_ids: ['b1'] } },
       },
     });
     expect(
       buildPayload({ ...teacher, framingMode: 'both', framingBranchIds: ['b1', 'b2'] }),
     ).toMatchObject({
-      framing: {
-        mode: 'both',
-        willingness: { all_branches: false, branch_ids: ['b1', 'b2'] },
+      teaching: {
+        framing: { mode: 'both', willingness: { all_branches: false, branch_ids: ['b1', 'b2'] } },
       },
     });
     expect(
       buildPayload({ ...teacher, framingMode: 'both', allFramingBranches: true }),
     ).toMatchObject({
-      framing: { mode: 'both', willingness: { all_branches: true } },
+      teaching: { framing: { mode: 'both', willingness: { all_branches: true } } },
     });
   });
 
@@ -220,7 +226,7 @@ describe('هيئة التأطير framing preference', () => {
         allFramingBranches: true,
         framingBranchIds: ['b1'],
       }),
-    ).not.toHaveProperty('framing');
+    ).not.toHaveProperty('teaching');
   });
 });
 
@@ -231,7 +237,7 @@ describe('consent rules (§4.1, BR-1)', () => {
   });
 
   it('requires a media-release DECISION for a minor, and accepts "no"', () => {
-    const parentChild = { ...base, intent: 'parent_child' as const };
+    const parentChild = { ...base, roles: ['guardian'] as RoleChoice[] };
     // Unanswered is refused…
     expect(validate(parentChild)).toHaveProperty('children.0.mediaRelease');
     // …but declining is a valid, recorded answer. BR-1 reads an absent record
@@ -247,7 +253,7 @@ describe('consent rules (§4.1, BR-1)', () => {
     // would send an unanswered release for the second.
     const errors = validate({
       ...base,
-      intent: 'parent_child',
+      roles: ['guardian'],
       children: [{ ...child, mediaRelease: 'yes' }, child],
     });
     expect(errors).not.toHaveProperty('children.0.mediaRelease');
@@ -266,13 +272,13 @@ describe('consent rules (§4.1, BR-1)', () => {
         firstNameArabic: `طفلة ${index + 1}`,
         mediaRelease: index % 2 === 0 ? ('yes' as const) : ('no' as const),
       }));
-      const payload = buildPayload({ ...base, intent: 'parent_child', children });
+      const payload = buildPayload({ ...base, roles: ['guardian'], children });
 
       expect(payload.consents).toEqual({ data_processing: true, consent_text_id: 'ct-1' });
       expect(payload).not.toHaveProperty('consents.media_release');
-      expect(payload.kind).toBe('parent_child');
-      if (payload.kind === 'parent_child') {
-        expect(payload.children.map((entry) => entry.consent_media_release)).toEqual(
+      expect(payload.kind).toBe('roles');
+      if (payload.kind === 'roles') {
+        expect(payload.children?.map((entry) => entry.consent_media_release)).toEqual(
           children.map((entry) => entry.mediaRelease === 'yes'),
         );
       }
@@ -302,7 +308,7 @@ describe('person rules mirror TD-9', () => {
     // with no indication of which one.
     const errors = validate({
       ...base,
-      intent: 'parent_child',
+      roles: ['guardian'],
       children: [
         { ...child, mediaRelease: 'no' as const },
         { ...child, mediaRelease: 'no' as const, firstNameArabic: '' },
@@ -439,7 +445,7 @@ describe('the self-managed claim option is HIDDEN from the dropdown, not removed
   // Source-pinned, like `dashboard/library.test.tsx`'s own deep-link guard:
   // `Register` needs router/session context this file does not set up, and
   // the underlying state machine is already covered directly above by
-  // `validate`/`buildPayload` against `intent: 'self_managed'`.
+  // `validate`/`buildPayload` against `selfManaged: true`.
   const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
   it('no longer offers it as a choice in the dropdown', () => {
@@ -447,7 +453,94 @@ describe('the self-managed claim option is HIDDEN from the dropdown, not removed
   });
 
   it('keeps the whole flow reachable by state — validation, submission and the review queue are untouched', () => {
-    expect(source).toContain("intent === 'self_managed'");
+    expect(source).toContain('if (selfManaged) {');
+    expect(source).toContain("get('mode') === 'self-managed'");
     expect(source).toContain('requestSelfManagedClaim');
+  });
+});
+
+describe('SRS Revision 168 §1 — one form, several roles', () => {
+  const everything = {
+    ...base,
+    roles: ['student', 'guardian', 'teaching', 'administration'] as RoleChoice[],
+    children: [{ ...child, mediaRelease: 'no' as const }],
+    framingMode: 'online' as const,
+    administrationBranchId: 'b2',
+  };
+
+  it('asks for at least one role — and says so on the choices, not on a field nobody ticked', () => {
+    expect(validate({ ...base, roles: [] })).toHaveProperty('roles');
+  });
+
+  it('validates the UNION of what the ticked roles need, and nothing of what they do not', () => {
+    expect(validate(everything)).toEqual({});
+    // Administration alone: no branch, no Category, no date of birth, no framing.
+    expect(
+      validate({
+        ...base,
+        roles: ['administration'],
+        branchId: null,
+        categoryId: null,
+        firstTime: '',
+        applicant: { ...person, birthDate: '' },
+      }),
+    ).toEqual({});
+    // The same blanks are refused the moment «مستفيدة» is ticked beside it.
+    const errors = validate({
+      ...base,
+      roles: ['administration', 'student'],
+      branchId: null,
+      categoryId: null,
+      firstTime: '',
+      applicant: { ...person, birthDate: '' },
+    });
+    expect(Object.keys(errors).sort()).toEqual(['applicant.birthDate', 'branch', 'category', 'firstTime']);
+  });
+
+  it('sends ONE applicant, the sections of the ticked roles and no others — in a stable order', () => {
+    const payload = buildPayload({ ...everything, roles: ['teaching', 'student', 'administration', 'guardian'] });
+    expect(payload).toMatchObject({
+      kind: 'roles',
+      roles: ['student', 'guardian', 'teaching', 'administration'],
+      student: { branch_id: 'b1', category_id: 'c1', first_time: false },
+      teaching: { framing: { mode: 'online' } },
+      administration: { branch_id: 'b2' },
+    });
+    expect(payload).not.toHaveProperty('parent');
+    if (payload.kind === 'roles') expect(payload.children).toHaveLength(1);
+
+    // Unticked means ABSENT, whatever a hidden field still holds.
+    const onlyAdmin = buildPayload({ ...everything, roles: ['administration'] });
+    expect(Object.keys(onlyAdmin).sort()).toEqual(['administration', 'applicant', 'consents', 'kind', 'roles']);
+    // …and a date of birth travels with a beneficiary only (R130).
+    expect(onlyAdmin).not.toHaveProperty('applicant.birth_date');
+    expect(payload).toHaveProperty('applicant.birth_date');
+  });
+
+  it('never lets her say WHICH administrative role — there is no such control, and no such key', () => {
+    const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    expect(JSON.stringify(buildPayload({ ...everything, roles: ['administration'] }))).not.toContain('super_admin');
+    expect(source).not.toContain("'super_admin'");
+  });
+
+  it('«بيانات وليّ الأمر» heads her data ONLY when registering children is all she asked for', () => {
+    expect(PAGE).toContain("{roles.length === 1 && asks('guardian') ? t('register.parent') : t('register.you')}");
+  });
+
+  it('a first-timer orders at least one circle WHERE there is a choice, in her own order — a returning one is asked nothing', () => {
+    const first = { ...base, firstTime: 'yes' as const, circlesOffered: 3 };
+    expect(validate(first)).toHaveProperty('circles');
+    expect(validate({ ...first, circlePreferences: ['g2'] })).toEqual({});
+    // Fewer than two circles is not a choice: nothing is owed.
+    expect(validate({ ...first, circlesOffered: 1 })).toEqual({});
+    expect(validate({ ...base, firstTime: 'no', circlesOffered: 3 })).toEqual({});
+
+    expect(buildPayload({ ...first, circlePreferences: ['g2', 'g1'] })).toMatchObject({
+      student: { first_time: true, circle_preferences: ['g2', 'g1'] },
+    });
+    // A returning مستفيدة sends none, even if the state still holds some.
+    expect(buildPayload({ ...base, firstTime: 'no', circlePreferences: ['g1'] })).not.toHaveProperty(
+      'student.circle_preferences',
+    );
   });
 });

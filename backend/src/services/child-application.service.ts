@@ -222,6 +222,37 @@ export async function decideChildApplication(
 
     const decidedAt = new Date();
 
+    /**
+     * **R168 §1 — a child is not admitted under a guardian the association
+     * DECLINED.** One form may now ask for several roles, each decided on its
+     * own, and declining «أسجّل أبنائي» rejects her pending applications with it;
+     * this closes the remaining door (an application added afterwards).
+     *
+     * A guardian request that is still PENDING blocks nothing — approving a
+     * child has always been possible on its own, and it IS the acceptance of
+     * her as a guardian: the request is marked approved below, in this
+     * transaction, so the queue never shows «waiting» beside an admitted child.
+     * A parent with no request row (every one before this revision, and every
+     * parent adding a child from «حسابي») is unaffected.
+     */
+    const guardianRequest = decision.approve
+      ? await tx.roleRequest.findUnique({
+          where: { userId_kind: { userId: application.parentId, kind: 'guardian' } },
+          select: { id: true, status: true },
+        })
+      : null;
+    if (guardianRequest?.status === 'declined') {
+      throw new AppError('STATE_CONFLICT', 'her request to register children was declined', {
+        reason: 'GUARDIAN_REQUEST_DECLINED',
+      });
+    }
+    if (guardianRequest?.status === 'pending') {
+      await tx.roleRequest.update({
+        where: { id: guardianRequest.id },
+        data: { status: 'approved', decidedAt, decidedById: actor.userId },
+      });
+    }
+
     // ── Rejection: nothing is created. ──────────────────────────────────────
     if (!decision.approve) {
       if (!decision.rejectionReason) {

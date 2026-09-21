@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   approveApproval,
   decideChildApplication,
+  decidedPerRole,
+  decideRoleRequest,
+  type RoleDecisionBody,
+  type RoleRequestKind,
   CHILD_REJECTION_REASONS,
   type ChildRejectionReason,
   type PlacementBody,
@@ -48,6 +52,12 @@ import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FramingPreferenceValue } from '../../components/teaching/framing-preference-summary.js';
+import {
+  CircleWishes,
+  RoleRequestList,
+  RoleReviewDialog,
+  roleKindLabel,
+} from '../../components/approvals/role-review.js';
 import { formatInstant } from '../../lib/morocco-time.js';
 
 /**
@@ -81,6 +91,39 @@ export function registrationNeedsApplicantPlacement(
  * workflow about a minor's family links, not a Google-account claim): two
  * options with the same label in one dropdown would be a real defect.
  */
+/**
+ * Why a decision was refused, as the ONE sentence that helps — shared by the
+ * whole-account act and the per-role one (R168 §1), which fail the same ways.
+ *
+ * **R122 — no academic period covers today** (Owner-reported, 2026-09-14). A 409
+ * `STATE_CONFLICT` there does not mean somebody else decided it first:
+ * `enrolAtPlacement` refused because approval enrols as of TODAY (§4.1) and no
+ * `AcademicPeriod` includes it. Falling through to «تم البتّ في هذا الطلب…» told
+ * the reader to refresh a page that would refuse identically forever. So it is
+ * checked before `gone`, which the same status would otherwise match.
+ */
+export function decisionFailure(error: unknown): { key: string; gone: boolean; noPeriod: boolean } {
+  const api = error instanceof ApiError ? error : null;
+  const noPeriod = api?.details['reason'] === 'NO_CURRENT_ACADEMIC_PERIOD';
+  // Someone else decided it first: the item is gone from the queue, so
+  // reloading is the honest response.
+  const gone = !noPeriod && api !== null && (api.status === 404 || api.status === 409);
+  // A refused privilege grant is its own message: an Admin cannot create an
+  // administrator through approval any more than through the Users screen.
+  const forbidden = api?.status === 403;
+  return {
+    noPeriod,
+    gone,
+    key: noPeriod
+      ? 'admin.approvals.noCurrentPeriod'
+      : forbidden
+        ? 'admin.approvals.roleForbidden'
+        : gone
+          ? 'admin.approvals.alreadyDecided'
+          : 'admin.approvals.decisionFailed',
+  };
+}
+
 const SELF_MANAGED_CLAIMS_FILTER = 'self-managed-claim' as const;
 type QueueFilter = '' | ApprovalType | typeof SELF_MANAGED_CLAIMS_FILTER;
 
@@ -151,15 +194,23 @@ export function ApprovalsPage(): ReactNode {
    * generic approve/reject path is never offered for it.
    */
   const [childDeciding, setChildDeciding] = useState<Approval | null>(null);
+  /**
+   * R168 §1 — a registration that asked for SEVERAL roles (or for a place in the
+   * administration) is decided one role at a time: `reviewing` is the list of
+   * her requests, `roleAct` the one being decided. One dialog at a time, like
+   * the child flow — the act REPLACES the list and cancelling returns to it.
+   */
+  const [reviewing, setReviewing] = useState<Approval | null>(null);
+  const [roleAct, setRoleAct] = useState<{ kind: RoleRequestKind; approve: boolean } | null>(null);
   const [details, setDetails] = useState<Approval | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<Approval[] | null> => {
     // R137 — the self-managed-claims filter renders a different queue
     // entirely (`SelfManagedClaimsQueue`, its own data source); this table
     // has nothing to fetch while it is selected.
-    if (typeFilter === SELF_MANAGED_CLAIMS_FILTER) return;
+    if (typeFilter === SELF_MANAGED_CLAIMS_FILTER) return null;
     setStatus('loading');
     try {
       // The filter goes to the SERVER, unlike the Branches search which narrows
@@ -184,8 +235,10 @@ export function ApprovalsPage(): ReactNode {
         if (!exact) setNotice(t('admin.approvals.reviewUnavailable'));
       }
       setStatus('ready');
+      return result.data;
     } catch {
       setStatus('error');
+      return null;
     }
   // **`sort` belongs here** (NEW C). Without it the header updated the state and
   // announced the direction while `load` was never recreated — so the request
@@ -245,8 +298,13 @@ export function ApprovalsPage(): ReactNode {
       // Revision 49 — what makes a staff request distinguishable at a glance.
       // A hint, never an authority: the role is granted by the assignment the
       // approver states, not by this cell.
+      //
+      // R168 §1 — a registration now says EVERYTHING it asked for, each with its
+      // own state, because «مقبول» for one role says nothing about the others.
       cell: (r) =>
-        r.requested_role ? (
+        r.role_requests.length > 0 ? (
+          <RoleRequestList requests={r.role_requests} />
+        ) : r.requested_role ? (
           t(`admin.users.role.${r.requested_role}`)
         ) : (
           <span className="muted">—</span>
@@ -278,7 +336,16 @@ export function ApprovalsPage(): ReactNode {
       available: (row) => row.registration_details !== null || row.children.length > 0,
     },
     {
+      // R168 §1 — no «موافقة»/«رفض» on a row that has no single decision: the
+      // server refuses both for it (`DECIDE_PER_ROLE`), so the affordance is the
+      // review, not a button that answers with a refusal.
+      label: t('admin.approvals.reviewRoles'),
+      onSelect: setReviewing,
+      available: decidedPerRole,
+    },
+    {
       label: t('admin.approvals.approve'),
+      available: (row) => !decidedPerRole(row),
       onSelect: (row) =>
         // A request for a role needs a decision about that role; a family
         // registration does not. Sending both through one dialog would either
@@ -308,6 +375,7 @@ export function ApprovalsPage(): ReactNode {
     {
       label: t('admin.approvals.reject'),
       danger: true,
+      available: (row) => !decidedPerRole(row),
       onSelect: (row) =>
         row.type === 'child-application'
           ? setChildDeciding(row)
@@ -348,46 +416,64 @@ export function ApprovalsPage(): ReactNode {
         ),
       );
     } catch (error) {
-      /**
-       * **R122 — no academic period covers today** (Owner-reported, 2026-09-14).
-       * A 409 `STATE_CONFLICT` here does not mean somebody else already decided
-       * it — `enrolAtPlacement` refused because approval enrols as of TODAY
-       * (§4.1) and no `AcademicPeriod` row's dates include it. Falling through
-       * to «تم تعديل هذا العنصر... يرجى تحديث الصفحة» told the reader to
-       * refresh a page that would show the exact same refusal forever, since
-       * nothing about the ITEM had changed. Checked before the generic `gone`
-       * branch, which the same 409 status would otherwise match.
-       */
-      const noPeriod =
-        error instanceof ApiError && error.details['reason'] === 'NO_CURRENT_ACADEMIC_PERIOD';
-      // Someone else decided it first: the item is gone from the queue, so
-      // reloading is the honest response — the administrator needs to see that
-      // it is no longer theirs to decide.
-      const gone =
-        !noPeriod && error instanceof ApiError && (error.status === 404 || error.status === 409);
-      // A refused privilege grant is its own message: an Admin cannot create an
-      // administrator through approval any more than through the Users screen.
-      const forbidden = error instanceof ApiError && error.status === 403;
-      setNotice(
-        t(
-          noPeriod
-            ? 'admin.approvals.noCurrentPeriod'
-            : forbidden
-              ? 'admin.approvals.roleForbidden'
-              : gone
-                ? 'admin.approvals.alreadyDecided'
-                : 'admin.approvals.decisionFailed',
-        ),
-      );
+      const failure = decisionFailure(error);
+      setNotice(t(failure.key));
       // A missing period is not "gone from the queue" — the item is still
       // exactly where it was and still needs deciding, so the dialog stays
       // open rather than closing onto a notice that explains nothing further.
-      if (!noPeriod) {
+      if (!failure.noPeriod) {
         setDeciding(null);
         setStaffApproval(null);
         setPlacing(null);
       }
-      if (gone) await load();
+      if (failure.gone) await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * **One requested role, decided** (R168 §1).
+   *
+   * Afterwards the review REOPENS on the refreshed row while she still has
+   * something pending — deciding three roles should not be three trips through
+   * the table — and closes when the item has left the queue. What is reported is
+   * what the server says happened to the ACCOUNT, because «قُبل دور» and «فُعِّل
+   * الحساب» are different facts and only the first approval is both.
+   */
+  async function decideRole(decision: RoleDecisionBody): Promise<void> {
+    const target = reviewing;
+    if (!target) return;
+    setBusy(true);
+    try {
+      const result = await decideRoleRequest(target.id, decision, accessToken);
+      setRoleAct(null);
+      const fresh = await load();
+      setReviewing(fresh?.find((row) => row.id === target.id && decidedPerRole(row)) ?? null);
+      const wasPending = target.role_requests.every((request) => request.status !== 'approved');
+      setNotice(
+        [
+          t(decision.approve ? 'admin.approvals.roleApproved' : 'admin.approvals.roleDeclined').replace(
+            '{role}',
+            roleKindLabel(decision.kind),
+          ),
+          result.account_status === 'rejected'
+            ? t('admin.approvals.accountNowRejected')
+            : result.account_status === 'active' && wasPending
+              ? t('admin.approvals.accountNowActive')
+              : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+    } catch (error) {
+      const failure = decisionFailure(error);
+      setNotice(t(failure.key));
+      if (!failure.noPeriod) setRoleAct(null);
+      if (failure.gone) {
+        const fresh = await load();
+        setReviewing(fresh?.find((row) => row.id === target.id && decidedPerRole(row)) ?? null);
+      }
     } finally {
       setBusy(false);
     }
@@ -482,6 +568,9 @@ export function ApprovalsPage(): ReactNode {
               }))
           }
           title={t('admin.approvals.placeTitle')}
+          // R168 §1 — a lone «مستفيدة» request keeps this one-step approval, and
+          // her ranked circles are read here exactly as in the per-role review.
+          note={<CircleWishes preferences={placing.circle_preferences} />}
           branches={branches}
           busy={busy}
           onCancel={() => setPlacing(null)}
@@ -498,6 +587,101 @@ export function ApprovalsPage(): ReactNode {
           }
         />
       ) : null}
+
+      {reviewing && !roleAct ? (
+        <RoleReviewDialog
+          row={reviewing}
+          canDecideAdministration={isSuperAdmin}
+          busy={busy}
+          onApprove={(kind) => setRoleAct({ kind, approve: true })}
+          onDecline={(kind) => setRoleAct({ kind, approve: false })}
+          onClose={() => setReviewing(null)}
+        />
+      ) : null}
+
+      {reviewing && roleAct?.approve && roleAct.kind === 'student' ? (
+        <PlacementDialog
+          students={reviewing.applicants
+            .filter((a) => a.role === 'applicant')
+            .map((applicant) => ({
+              id: applicant.id,
+              name: applicant.name,
+              requestedCategory: reviewing.category,
+              requestedBranch: reviewing.branch,
+            }))}
+          title={t('admin.approvals.placeTitle')}
+          // Her ranked circles sit beside the control that places her — a wish
+          // the approver reads while deciding, never a preselection.
+          note={<CircleWishes preferences={reviewing.circle_preferences} />}
+          branches={branches}
+          busy={busy}
+          onCancel={() => setRoleAct(null)}
+          onConfirm={(placements) => {
+            const placed = placements[0]!;
+            // The route already names WHO; the body is only WHERE (R66.5's two
+            // shapes, whichever the dialog produced).
+            void decideRole({
+              approve: true,
+              kind: 'student',
+              enrollment:
+                'administrative_group_id' in placed
+                  ? { administrative_group_id: placed.administrative_group_id }
+                  : { level_id: placed.level_id, branch_id: placed.branch_id },
+            });
+          }}
+        />
+      ) : null}
+
+      {reviewing &&
+      roleAct?.approve &&
+      (roleAct.kind === 'teaching' || roleAct.kind === 'administration') ? (
+        <StaffApprovalDialog
+          row={reviewing}
+          branches={branches}
+          canGrantAdmin={isSuperAdmin}
+          busy={busy}
+          // WHICH role is the approver's to say and only within the request's
+          // own family: a teaching request is never turned into an
+          // administrative grant (the server refuses it by name).
+          grantable={roleAct.kind === 'teaching' ? ['teacher'] : ['admin', 'super_admin']}
+          requestLabel={roleKindLabel(roleAct.kind)}
+          onCancel={() => setRoleAct(null)}
+          onConfirm={(assignments) => {
+            const grant = assignments[0];
+            if (grant) void decideRole({ approve: true, kind: roleAct.kind as 'teaching' | 'administration', grant });
+          }}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={reviewing !== null && roleAct !== null && (!roleAct.approve || roleAct.kind === 'guardian')}
+        title={t(
+          roleAct?.approve ? 'admin.approvals.roleApproveTitle' : 'admin.approvals.roleDeclineTitle',
+        ).replace('{role}', roleAct ? roleKindLabel(roleAct.kind) : '')}
+        body={t(roleAct?.approve ? 'admin.approvals.roleApproveBody' : 'admin.approvals.roleDeclineBody')
+          .replace('{role}', roleAct ? roleKindLabel(roleAct.kind) : '')
+          .replace('{names}', reviewing?.applicants.map((a) => a.name).join('، ') ?? '')}
+        confirmLabel={t(roleAct?.approve ? 'admin.approvals.approve' : 'admin.approvals.reject')}
+        danger={roleAct?.approve === false}
+        {...(roleAct?.approve === false
+          ? {
+              reasonLabel: t('admin.approvals.reasonLabel'),
+              reasonHint: t('admin.approvals.reasonHint'),
+              reasonMin: 1,
+              reasonMax: DECISION_REASON_MAX,
+            }
+          : {})}
+        busy={busy}
+        onConfirm={(reason) => {
+          if (!roleAct) return;
+          void decideRole(
+            roleAct.approve
+              ? { approve: true, kind: 'guardian' }
+              : { approve: false, kind: roleAct.kind, reason: reason ?? '' },
+          );
+        }}
+        onCancel={() => setRoleAct(null)}
+      />
 
       {details ? <ApprovalDetailsDialog row={details} onClose={() => setDetails(null)} /> : null}
 
@@ -648,6 +832,8 @@ function StaffApprovalDialog({
   branches,
   canGrantAdmin,
   busy,
+  grantable,
+  requestLabel,
   onConfirm,
   onCancel,
 }: {
@@ -655,10 +841,21 @@ function StaffApprovalDialog({
   branches: PublicBranch[];
   canGrantAdmin: boolean;
   busy: boolean;
+  /**
+   * R168 §1 — deciding ONE requested role: the roles that request may grant
+   * (`teaching` → مؤطِّرة; `administration` → مسؤولة or مشرفة عامة, the
+   * approver's choice). Given, the dialog IS that decision, so «الموافقة دون
+   * دور» is not offered — approving a request for a role while granting none is
+   * declining it, and that has its own button and its own reason.
+   */
+  grantable?: readonly string[];
+  /** What she asked for, in the administration's words. */
+  requestLabel?: string;
   onConfirm: (assignments: { role: string; branch_id: string | null }[]) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [role, setRole] = useState(row.requested_role ?? 'teacher');
+  const initialRole = grantable ? grantable[0]! : (row.requested_role ?? 'teacher');
+  const [role, setRole] = useState(initialRole);
   const onlyWillingBranch =
     row.framing && !row.framing.all_branches && row.framing.branches.length === 1
       ? row.framing.branches[0]!.id
@@ -669,14 +866,16 @@ function StaffApprovalDialog({
    *  hydration, not a change, so it is the baseline. */
   const staffGuard = useUnsavedGuard({
     open: true,
-    dirty: isDirty(
-      { role, branchId },
-      { role: row.requested_role ?? 'teacher', branchId: initialScope },
-    ),
+    dirty: isDirty({ role, branchId }, { role: initialRole, branchId: initialScope }),
     onCancel,
   });
 
-  const offered = ROLES.filter((r) => canGrantAdmin || (r !== 'admin' && r !== 'super_admin'));
+  const offered = (grantable ?? ROLES).filter(
+    (r) => canGrantAdmin || (r !== 'admin' && r !== 'super_admin'),
+  );
+  /** A مشرفة عامة is never branch-scoped (the server refuses one that is), so
+   *  the scope is not a question for that role — it is stated. */
+  const unscoped = role === 'super_admin';
 
   return (
     <Dialog
@@ -693,7 +892,7 @@ function StaffApprovalDialog({
         <p>
           {t('admin.approvals.staffBody').replace(
             '{role}',
-            t(`admin.users.role.${row.requested_role ?? 'teacher'}`),
+            requestLabel ?? t(`admin.users.role.${row.requested_role ?? 'teacher'}`),
           )}
         </p>
         <div className="state" role="status">
@@ -705,18 +904,19 @@ function StaffApprovalDialog({
           value={role}
           onChange={setRole}
           options={offered.map((r) => ({ value: r, label: t(`admin.users.role.${r}`) }))}
-          hint={t('admin.approvals.grantRoleHint')}
+          hint={t(grantable ? 'admin.approvals.grantRoleYours' : 'admin.approvals.grantRoleHint')}
         />
         <SelectField
           label={t('admin.users.branchScope')}
-          value={branchId}
+          value={unscoped ? '' : branchId}
           onChange={setBranchId}
+          disabled={unscoped}
           options={[
             { value: '__choose__', label: t('admin.approvals.chooseGrantScope') },
             { value: '', label: t('admin.users.allBranches') },
             ...branches.map((b) => ({ value: b.id, label: b.name })),
           ]}
-          hint={t('admin.approvals.grantScopeHint')}
+          hint={t(unscoped ? 'admin.approvals.superAdminUnscoped' : 'admin.approvals.grantScopeHint')}
         />
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
@@ -725,13 +925,15 @@ function StaffApprovalDialog({
           {/* Approving WITHOUT a role stays reachable: an applicant may have
               asked for something the approver does not agree to, and refusing
               the role is not the same decision as refusing the person. */}
-          <Button variant="secondary" disabled={busy} onClick={() => onConfirm([])}>
-            {t('admin.approvals.approveWithoutRole')}
-          </Button>
+          {grantable ? null : (
+            <Button variant="secondary" disabled={busy} onClick={() => onConfirm([])}>
+              {t('admin.approvals.approveWithoutRole')}
+            </Button>
+          )}
           <Button
             variant="primary"
-            disabled={busy || branchId === '__choose__'}
-            onClick={() => onConfirm([{ role, branch_id: branchId || null }])}
+            disabled={busy || (!unscoped && branchId === '__choose__')}
+            onClick={() => onConfirm([{ role, branch_id: unscoped ? null : branchId || null }])}
           >
             {t('admin.approvals.approveWithRole')}
           </Button>
@@ -821,11 +1023,15 @@ export function initialPlacementChoices(
 function PlacementDialog({
   students,
   title,
+  note,
   branches,
   busy,
   onConfirm,
   onCancel,
 }: {
+  /** R168 §1 — what the applicant wished for (her ranked circles), read while
+   *  placing her. Information only: it preselects nothing. */
+  note?: ReactNode;
   /**
    * Who is being placed, as `{ id, name }`.
    *
@@ -931,6 +1137,7 @@ function PlacementDialog({
       {placementGuard.confirmation}
       <div className="form">
         <p>{t('admin.approvals.placeBody')}</p>
+        {note}
 
         {loadFailed ? (
           <p className="state" role="alert">

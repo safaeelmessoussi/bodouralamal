@@ -21,6 +21,7 @@
  * the same guards.
  */
 import { connect, results } from './cdp.mjs';
+import { pickDate } from './date-picker.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const TOKEN = process.env.ONBOARDING_TOKEN;
@@ -120,14 +121,36 @@ check(
 );
 
 /* ── 3. Fill the exact multi-child shape that failed in controlled UAT ──── */
+/**
+ * R168 §1 — the form asks WHAT she wants as four checkboxes (any combination),
+ * no longer one «نوع التسجيل» select. A choice is addressed by what it IS
+ * (`data-role-choice`), never by its wording, which is the association's to
+ * change. The several-role journey and its per-role approval have their own
+ * harness (`verify-role-requests`); this one stays the family registration.
+ */
+const tickRole = (role) => evaluate(`(() => {
+  const box = document.querySelector('[data-role-choice="${role}"] input[type="checkbox"]');
+  if (!box) return 'missing';
+  if (!box.checked) box.click();
+  return box.checked;
+})()`);
+const tickConsent = (wanted) => evaluate(`(() => {
+  const box = document.querySelector('.consent-notice input[type="checkbox"]');
+  if (!box) return 'none';
+  if (box.checked !== ${wanted}) box.click();
+  return box.checked;
+})()`);
+
 check(
-  'the parent + children registration path is selectable',
-  (await setSelectValue('نوع التسجيل', 'parent_child')) === 'parent_child',
+  'the four role choices are offered, and none is preselected',
+  (await evaluate(`JSON.stringify([...document.querySelectorAll('[data-role-choice] input[type="checkbox"]')].map((box) => box.checked))`)) ===
+    JSON.stringify([false, false, false, false]),
 );
+check('«أسجّل أبنائي» is selectable', (await tickRole('guardian')) === true);
 await new Promise((r) => setTimeout(r, 200));
 check(
-  'the guardian option explains that the applicant is registering children as وليّة أمر',
-  (await bodyText()).includes('أُسجّل أبناءً أو بنات بصفتي وليّة أمر'),
+  'with no other adult role ticked, the guardian is asked for her own data',
+  (await bodyText()).includes('بيانات ولي الأمر'),
 );
 
 check('ولي الأمر: الاسم الشخصي accepted', (await setInput('الاسم الشخصي*', 'ولية', 0)) === 'ok');
@@ -142,7 +165,10 @@ check('الطفلة 1: الاسم الشخصي accepted', (await setInput('ال�
 check('الطفلة 1: الاسم العائلي accepted', (await setInput('الاسم العائلي*', 'تحقق', 1)) === 'ok');
 check('الطفلة 1: الجنس accepted', (await setSelect('الجنس*', 0, 1)) !== 'missing');
 
-check('الطفلة 1: تاريخ الميلاد accepted', (await setInput('تاريخ الميلاد*', '2015-06-02', 0)) === 'ok');
+// The platform's own calendar, DRIVEN (`date-picker.mjs`): there has been no
+// input to type a date into since the native control was replaced.
+const birth1 = await pickDate(evaluate, 0, { year: 2015, month: 6, day: 2 });
+check('الطفلة 1: تاريخ الميلاد accepted', birth1 === 'ok', birth1);
 check('الطفلة 1: المقر accepted', (await setSelect('المقر المطلوب', 0, 0)) !== 'missing');
 check('الطفلة 1: الفئة accepted', (await setSelect('الفئة*', 0, 0)) !== 'missing');
 const child1Branch = await selectedText('المقر المطلوب', 0);
@@ -164,7 +190,8 @@ check('الطفلة 2: الاسم العائلي accepted', (await setInput('ا�
 check('الطفلة 2: الجنس accepted', (await setSelect('الجنس*', 0, 2)) !== 'missing');
 // A DIFFERENT date from her sister's: two children on one request are two
 // people, and a payload that collapsed them onto one would pass with equal ones.
-check('الطفلة 2: تاريخ الميلاد accepted', (await setInput('تاريخ الميلاد*', '2012-11-30', 1)) === 'ok');
+const birth2 = await pickDate(evaluate, 1, { year: 2012, month: 11, day: 30 });
+check('الطفلة 2: تاريخ الميلاد accepted', birth2 === 'ok', birth2);
 
 /**
  * **R130 in a browser — the asymmetry IS the assertion.**
@@ -206,11 +233,7 @@ check(
 );
 
 /* Prove the prospective phone rule independently of the consent rule below. */
-await evaluate(`(() => {
-  const c = document.querySelector('input[type="checkbox"]');
-  if (c && !c.checked) c.click();
-  return c ? c.checked : 'none';
-})()`);
+await tickConsent(true);
 await new Promise((r) => setTimeout(r, 200));
 await clickButton('إرسال الطلب');
 await new Promise((r) => setTimeout(r, 250));
@@ -224,11 +247,7 @@ check(
 );
 check('ولي الأمر: رقم الهاتف accepted', (await setInput('رقم الهاتف*', '+212600000099')) === 'ok');
 
-await evaluate(`(() => {
-  const c = document.querySelector('input[type="checkbox"]');
-  if (c?.checked) c.click();
-  return c ? c.checked : 'none';
-})()`);
+await tickConsent(false);
 await new Promise((r) => setTimeout(r, 200));
 
 /* The required request-level processing consent must fail before the wire. */
@@ -244,11 +263,7 @@ check(
 );
 
 /* ── 4. Consent and submit the real form ────────────────────────────────── */
-await evaluate(`(() => {
-  const c = document.querySelector('input[type="checkbox"]');
-  if (c && !c.checked) c.click();
-  return c ? c.checked : 'none';
-})()`);
+await tickConsent(true);
 await new Promise((r) => setTimeout(r, 300));
 
 await evaluate(`(() => {

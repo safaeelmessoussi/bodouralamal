@@ -170,6 +170,12 @@ const EXEMPT = new Set([
   // session. It publishes the id, the label and the text; never provenance,
   // status or usage. **The guard caught this one**, which is what it is for.
   "/registration/consent-text",
+  // R168 §1: the memorisation circles a first-time مستفيدة may rank. **Anonymous
+  // for the reason the consent wording above is** — it is part of the
+  // registration form, which is filled before any account exists. It publishes
+  // a حلقة's name, days and times from the SCHEDULE; never staff, a room, a
+  // member count or a «مخفي» class. **The guard caught this one too.**
+  "/registration/circle-slots",
   // R138 §12/§13: the public Privacy Policy / Terms of Use. **Anonymous for
   // the identical reason the consent wording above is** — a notice the
   // association is legally obliged to show cannot sit behind a session, and

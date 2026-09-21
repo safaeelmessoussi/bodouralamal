@@ -72,20 +72,24 @@ async function navigate(url, selector) {
   return false;
 }
 
-/* ── 1 · Her entry point exists and is reachable from the onboarding state ─ */
+/* ── 1 · Her entry point: the LINK, and only the link ───────────────────── */
+// R160 §8 (Owner, 2026-09-16) — the option is withdrawn from the form for this
+// release and the flow kept: «a direct link can still reach it». R168 §1 then
+// replaced the «نوع التسجيل» select with four role choices, of which a claim is
+// not one. So the ordinary form must NOT offer it, and the link must reach it.
 check(
-  'the register form renders from an onboarding token',
+  'the ordinary register form renders from an onboarding token',
   await navigate(`${BASE}/register#onboarding_token=${TOKEN}`, 'form.register-form'),
 );
-
 check(
-  'R132: the self-managed option is offered',
-  (await bodyText()).includes('لديّ سجل سابق في الجمعية وأريد حساباً خاصاً بي'),
+  'R160 §8: the ordinary form offers no self-managed entry',
+  !(await bodyText()).includes('لديّ سجل سابق في الجمعية وأريد حساباً خاصاً بي') &&
+    (await evaluate(`document.querySelectorAll('[data-role-choice]').length`)) === 4,
 );
-
 check(
-  'the self-managed mode is selectable',
-  (await setSelectValue('نوع التسجيل', 'self_managed')) === 'self_managed',
+  'the link «/register?mode=self-managed» reaches the claim, token intact',
+  await navigate(`${BASE}/register?mode=self-managed#onboarding_token=${TOKEN}`, 'form.register-form') &&
+    (await evaluate(`document.querySelectorAll('[data-role-choice]').length`)) === 0,
 );
 await wait(250);
 

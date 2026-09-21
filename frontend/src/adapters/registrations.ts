@@ -189,7 +189,62 @@ export interface ParentChildRegistration {
   consents: { data_processing: boolean; consent_text_id: string };
 }
 
-export type RegistrationInput = AdultRegistration | ParentChildRegistration;
+/**
+ * **One form, several roles** (SRS Revision 168 §1) — the arm this form speaks.
+ *
+ * `roles` is any combination of the four, and a section is REQUIRED for a
+ * ticked role and REFUSED for an unticked one (the server is `.strict()`), so
+ * the payload builder sends exactly the sections of the ticked roles and no
+ * others. `applicant` is sent once whatever is ticked. **The `administration`
+ * section cannot say which administrative role** — that is the approving Super
+ * Admin's decision — and nothing here grants anything.
+ */
+export type RoleChoice = 'student' | 'guardian' | 'teaching' | 'administration';
+
+export interface RolesRegistration {
+  kind: 'roles';
+  roles: RoleChoice[];
+  applicant: PersonInput;
+  student?: {
+    branch_id: string;
+    category_id: string;
+    /** «هل هذه أول مرة تلتحقين فيها؟» */
+    first_time: boolean;
+    /** The circles she can attend, MOST CONVENIENT FIRST — first-time only. */
+    circle_preferences?: string[];
+  };
+  children?: ChildInput[];
+  teaching?: { framing: FramingPreferenceInput };
+  administration?: { branch_id: string | null };
+  consents: { data_processing: boolean; consent_text_id: string };
+}
+
+export type RegistrationInput = AdultRegistration | ParentChildRegistration | RolesRegistration;
+
+/** The memorisation circles a first-time مستفيدة may order (R168 §1). */
+export interface CircleSlot {
+  teaching_group_id: string;
+  name: string;
+  meetings: { weekdays: string[]; start_time: string; end_time: string }[];
+}
+
+export interface CircleSlots {
+  level: { id: string; name: string } | null;
+  circles: CircleSlot[];
+  /** The Level's classes that are NOT a choice («تفسير للجميع»). */
+  fixed: { subject_name: string; weekdays: string[]; start_time: string; end_time: string }[];
+}
+
+/**
+ * What is on offer for her Category and branch — read from SCHEDULED classes on
+ * the server, never a list this form knows. Anonymous: she has no account yet.
+ */
+export async function fetchCircleSlots(categoryId: string, branchId: string): Promise<CircleSlots> {
+  const body = await api<{ data: CircleSlots }>(
+    `/registration/circle-slots?category_id=${encodeURIComponent(categoryId)}&branch_id=${encodeURIComponent(branchId)}`,
+  );
+  return body.data;
+}
 
 export interface RegistrationResult {
   applicant_id: string;

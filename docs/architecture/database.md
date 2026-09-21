@@ -143,6 +143,39 @@ and target Users in id order, so two concurrent attempts cannot create two succe
 zero-owner interval. The relationship is what the Users screen labels; it is not represented
 by another Role row.
 
+### `RoleRequest` and `CirclePreference` — what was asked, never what was granted (R168 §1)
+
+One registration may ask for several roles, and each is approved or declined on its own
+([identity and access](identity-and-access.md#one-registration-several-roles-r168-1)). `role_request`
+is one row per person and role — `student · guardian · teaching · administration` — walking
+`pending → approved | declined`. **It is a request and never an authority**: authority is
+`UserBranchRole`, written only by the audited approval, and no read of `role_request` decides what
+anybody may do.
+
+* **UNIQUE `(user_id, kind)`** — one line of history per person and role. Asking again for a declined
+  role, when that is built, re-opens the row rather than adding a second.
+* **Three CHECKs carry the state machine**, so no code path can write a half-decision: pending means
+  no `decided_at` and no `decided_by`; decided means a `decided_at`; a `decline_reason` exists only
+  on a decline; `first_time` exists only on `student`.
+* **`first_time` is nullable on purpose.** NULL is «nobody was asked» — every row the migration
+  back-filled for a registration still pending — and no answer is invented.
+* **`decided_by` is `SET NULL`, the person is `CASCADE`.** WHO decided is always written by the
+  service and is in the audit log; the column may only empty if that row ever ceases to exist.
+  The rows themselves go with the person, so account deletion and rejection retention needed no
+  new rule (`account-deletion.service.ts` still clears them explicitly — it de-identifies, it does
+  not delete the `User`).
+* **A partial index on `status = 'pending'`** serves the approval queue, which now also lists an
+  ACTIVE account that still has a request waiting.
+
+`circle_preference` is her ranked memorisation حلقات — PK `(user_id, teaching_group_id)`, UNIQUE
+`(user_id, rank)`, `rank` 1–20. **A wish, never a seat**: nothing reads it to place anybody; the
+approver sees it beside the placement control. What she may rank is not stored anywhere — it is
+read from the schedule each time (`registration-circle-slots.service.ts`).
+
+The migration **back-fills** one request for every registration still `pending` (teaching where
+`requested_role = 'teacher'`, guardian where child applications wait, student otherwise), so the
+queue never shows an old registration as having asked for nothing.
+
 ### Framing preference and availability mode — planning only
 
 `FramingPreference` records `in_person | online | both`. Physical modes require either
@@ -755,6 +788,17 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260909132600_r138_legal_documents
 20260911100000_deletion_generation_identity_minimization
 20260911110000_selfmanaged_rejection_audit_minimization
+20260911130000_durable_storage_retirement
+20260915180000_r151_grade_question_score
+20260916100000_r155_multi_dimension_schedule_expand
+20260916110000_r155_multi_dimension_schedule_constraints
+20260916120000_r156_created_by_audit_trail
+20260917090000_r161_session_audience_dimensions_and_subject
+20260920100000_r165_surahs_in_scheduling
+20260921090000_r166_class_title_is_composed
+20260922090000_r167_whole_category_content_and_level_completion_mark
+20260923090000_r168_recording_recovered_from_segments
+20260923100000_r168_role_requests
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

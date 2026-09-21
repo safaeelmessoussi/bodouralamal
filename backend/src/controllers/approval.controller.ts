@@ -7,6 +7,9 @@ import { requireActor } from '../middleware/authenticate.js';
 import { approvalDto, pageOf } from './dto.js';
 import { sortParamsFrom } from '../lib/sorting.js';
 import { decide, listApprovals, type ApprovalType } from '../services/approval.service.js';
+import { decideRoleRequest } from '../services/role-request.service.js';
+import { ROLE_REQUEST_KINDS } from '../validators/registration.validators.js';
+import { idParam, parse } from './parse.js';
 
 /**
  * TD-9: reasons max 500 chars.
@@ -144,3 +147,62 @@ function decision(prisma: PrismaClient, approve: boolean) {
 export const approve = (prisma: PrismaClient) => decision(prisma, true);
 /** `POST /admin/approvals/{id}/reject` — body `{ reason }` (§5.6). */
 export const reject = (prisma: PrismaClient) => decision(prisma, false);
+
+/**
+ * `POST /admin/approvals/{id}/roles/{kind}/approve|decline` — **one requested
+ * role, decided on its own** (SRS Revision 168 §1). `{id}` is the applicant.
+ *
+ * `.strict()`: what each kind needs is stated, and anything else is refused
+ * rather than ignored — `grant` for `teaching`/`administration` (WHICH
+ * administrative role is the approver's to say, never the applicant's),
+ * `enrollment` for `student`, nothing for `guardian`.
+ */
+const roleKindSchema = z.enum(ROLE_REQUEST_KINDS);
+const roleDecisionSchema = z
+  .object({
+    reason: z.string().trim().max(500).optional(),
+    grant: z
+      .object({ role: z.string().min(1).max(40), branch_id: z.uuid().nullable() })
+      .strict()
+      .optional(),
+    enrollment: z
+      .object({
+        administrative_group_id: z.uuid().optional(),
+        level_id: z.uuid().optional(),
+        branch_id: z.uuid().optional(),
+      })
+      .strict()
+      .refine(
+        (e) =>
+          (e.administrative_group_id !== undefined) !==
+          (e.level_id !== undefined && e.branch_id !== undefined),
+        'a placement is a group, or a level with its branch (R66.5)',
+      )
+      .optional(),
+  })
+  .strict();
+
+function roleDecision(prisma: PrismaClient, approve: boolean) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(roleDecisionSchema, req.body ?? {});
+    const kind = parse(roleKindSchema, req.params['kind']);
+    const e = body.enrollment;
+    const result = await decideRoleRequest(prisma, requireActor(req), idParam(req, 'id'), kind, {
+      approve,
+      ...(body.reason !== undefined ? { reason: body.reason } : {}),
+      ...(body.grant ? { grant: { role: body.grant.role, branchId: body.grant.branch_id } } : {}),
+      ...(e
+        ? {
+            placement:
+              e.administrative_group_id !== undefined
+                ? { administrativeGroupId: e.administrative_group_id }
+                : { levelId: e.level_id!, branchId: e.branch_id! },
+          }
+        : {}),
+    });
+    res.json({ status: result.status, account_status: result.accountStatus });
+  };
+}
+
+export const approveRole = (prisma: PrismaClient) => roleDecision(prisma, true);
+export const declineRole = (prisma: PrismaClient) => roleDecision(prisma, false);

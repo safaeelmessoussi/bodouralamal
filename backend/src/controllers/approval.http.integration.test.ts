@@ -303,12 +303,19 @@ describe("GET /api/v1/admin/approvals", () => {
       // request but give the approver nothing to act on, since R62.2 decides
       // a child alone and the ids live in these blocks.
       "children",
+      // R168 §1 — the memorisation circles a first-time مستفيدة ranked: a wish
+      // the approver reads beside the placement control. `[]` on this family.
+      "circle_preferences",
       // General framing preference is visible before approval; null on this
       // ordinary family registration and on honest legacy rows.
       "framing",
       "id",
       "registration_details",
       "requested_role",
+      // R168 §1 — every role the registration asked for, each with its own
+      // state. Argued onto this list: without it a several-role registration
+      // is a row whose only decision the server refuses (`DECIDE_PER_ROLE`).
+      "role_requests",
       "submitted_at",
       "type",
     ]);

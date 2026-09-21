@@ -10922,3 +10922,80 @@ type there is «حصة» — the Owner's own rename, untouched by the deployment
 wild; TLS active; `/healthz` 200, `/rtc/validate` 401, every service healthy, zero error-level API
 lines. Inside the shipped image: `ffmpeg version 7.1` runs, and one `ops:reconcile-recordings` pass
 reported nothing open, nothing to retire, nothing to assemble.
+
+## 2026-09-21 — SRS Revision 168 (part two): one registration form, four roles, each decided on its own
+
+**What the Owner asked.** Her answer to the proposal's gating question — *yes, administrative staff may
+ask through the public form* — and the form's four choices in her words: «أسجّل نفسي كمستفيدة» ·
+«أسجّل أبنائي» (the guardian's own data only when no other adult role is ticked) · «أسجّل نفسي مع هيئة
+التدريس والمساعدة في التدريس» · «أسجّل نفسي مع هيئة الإدارة والمساعدة في الإدارة».
+
+**The form.** Four checkboxes, any combination, NONE preselected; her identity asked once. A section
+appears for every role ticked and for no other, and unticking a role erases what its section held. A
+مستفيدة is asked «هل هذه أول مرة؟»; a first-time one ranks the memorisation حلقات that suit her. Those
+are read from the SCHEDULE — the live weekly classes of the memorisation Subject addressed to a حلقة of
+her Category's first Level at her branch (`GET /registration/circle-slots`, anonymous: a name, days and
+times, never staff, a room, a count or a «مخفي» class) — so the Owner's Targa example is entered once,
+as three scheduled classes, and «other Levels have no choice» and «أمرشيش later» need no list of
+exceptions. The administration section offers no role to choose: only where she would prefer to serve.
+
+**The decision.** `role_request` (one row per person and role, `pending → approved | declined`) and
+`circle_preference` (her ranked wish — never a seat); the migration back-fills every registration still
+pending. `POST /admin/approvals/{id}/roles/{kind}/approve|decline` decides ONE role: مستفيدة by placing
+her, هيئة التدريس by granting مؤطِّرة, هيئة الإدارة by granting مسؤولة or مشرفة عامة — the APPROVER's
+choice, and a Super Admin's decision only — وليّة أمر by granting nothing (each child stays its own
+decision, and approving a child directly IS accepting her). Roles are added through
+`ensureRoleAssignment`, never `applyRoleAssignments`, which replaces the set and would have revoked
+what an earlier approval gave. The account turns `active` on the FIRST approval and `rejected` —
+sessions revoked in the same transaction — only when every role was declined. The old whole-account
+«موافقة»/«رفض» stays for a registration that asked for one ordinary thing and keeps its request row in
+step; for several requests, or a lone administration request, it answers `DECIDE_PER_ROLE`. That last
+half was found while wiring the screen: the whole-account act is open to every approver, and an Admin
+could otherwise have recorded an administration request as «accepted» while granting nothing.
+
+**The queue.** «الصفة المطلوبة» names every role with its own state in words. A row with no single
+decision offers «البتّ في الصفات المطلوبة» instead of two buttons the server would refuse; the review
+shows an Admin the administration request, says whose it is, and offers her no decision on it. One
+dialog at a time: the act replaces the review and cancelling returns to it; after a decision it reopens
+on the refreshed row while something is still pending. Her ranked circles sit beside the placement
+control, called what they are.
+
+**Corrected before it shipped.** Removing the «نوع التسجيل» select had also removed the only visible way
+to a self-managed claim, and I first put an entry under the four choices — then found R160 §8, where the
+Owner had asked for exactly that entry to be withdrawn for this release. It is withdrawn again; the
+claim is reached by `/register?mode=self-managed`, and its harness now asserts BOTH halves (it had been
+asserting the opposite, and failing, since R160). An inaccurate comment in the new migration («the
+service re-opens a declined row») was corrected before the file was ever committed.
+
+**Three browser harnesses had been red for months, unnoticed.** `verify-registration` was still
+«typing» a date into an input the calendar control replaced in `35f27dc`; `verify-platform-owner-framing`
+looked for a branch list that became a collapsed dropdown in R137 (and never supplied the phone R117
+made mandatory); `verify-date-picker` picked a day in an assessment builder that no longer has a date.
+None of them runs in CI, which is how. All three are repaired; `date-picker.mjs` now DRIVES the one
+calendar for every harness (month by position, never by its Arabic name), and the registration form
+publishes `data-role-choice` / `data-role-section` / `data-circle-ranking` so a control is addressed by
+what it is.
+
+**Not built, and said.** An account that already exists cannot yet ask for a further role through a
+form. The proposal's other recommendations were taken as drafted and are the Owner's to change.
+
+**Verification (part two).** Backend typecheck, lint, unit **360/360**; frontend typecheck, lint,
+**1,449/1,449**; 32 guards + doc links; OpenAPI regenerated and reconciled against the live router (187
+paths, 240 operations). The full disposable integration run FAILED first — three of 2,776, all mine and
+all caught by the project's own guards: the approval item's pinned key-set (two new keys), the «a new
+route is guarded until it is declared public» list (`/registration/circle-slots` is part of a form
+filled before any account exists — now declared, with its reason), and the soft-delete read guard (the
+filter was there through a spread, forty lines from the read; it is restated at the read). Fixed, the
+four affected files re-run (**265/265**), then the WHOLE suite again: **2,756 passed, exit 0**, all-table
+isolation passed (read from the log's own line). Seed drill **exit 0**, now also running
+`seed-role-requests-scenario.ts` and its `--clean` on a freshly seeded database. On the rebuilt Localhost
+(migration applied; nothing recording when the API was restarted — asked first): the new
+`verify-role-requests` **70/70**, `verify-registration` **45/45 + 12/12** database assertions,
+`verify-self-managed-claim` **20/20**, `verify-platform-owner-framing` **23/23 + 8/8**,
+`verify-date-picker` **24/24**, `verify-consent-disclosure` **19/19**, `verify-approvals-sorting` **7/7**,
+`verify-error-experience` **7/7** (its dev-edge check had been a race: twenty-five sequential requests
+can briefly exceed even 6000 r/m with `burst=5`; it now asserts what is true there — most of the burst
+passes). The scenario left nothing behind (checked: no tagged user, Level, fixture year, request,
+preference or e-mail lock). **Found on Localhost, for the Owner:** no academic period covers today, so
+approving a مستفيدة there is refused with «لا يوجد فصل دراسي…» until الفصول الدراسية is filled — the
+harness brings, and removes, its own fixture period.

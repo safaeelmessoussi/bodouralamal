@@ -2026,6 +2026,7 @@ Only user-modified data is.
 | `levels.tsx` | bare `Dialog` | `FormDialog` + `isDirty` |
 | `users.tsx` — profile, roles | bare `Dialog` ×2 | `useUnsavedGuard` ×2 (a staged role list plus a half-filled add row both count) |
 | `approvals.tsx` — staff, placement, child | bare `Dialog` ×3 | `useUnsavedGuard` ×3 — decision dialogs with several actions, so not `FormDialog` |
+| `approvals/role-review.tsx` — the per-role review (R168 §1) | bare `Dialog` | No guard: it holds no input, only a list of requests and their actions. **One dialog at a time** — the act it starts (placement, grant, or a `ConfirmDialog`) REPLACES it and cancelling returns to it, the same shape as the child flow; after a decision it reopens on the refreshed row while something is still pending |
 | `session-materials-dialog.tsx` | bare `Dialog` | `useUnsavedGuard` — a picked-but-unlinked material is unsaved work |
 | `enrollments` · `groups` · `scheduling` · `level-subjects` · `level-surahs` · `teaching-structure` · `schedule-sessions` · `session-audience` · `teaching-profile` | already `FormDialog` + `dirty` | unchanged |
 

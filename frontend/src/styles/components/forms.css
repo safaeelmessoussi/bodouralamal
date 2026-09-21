@@ -484,3 +484,44 @@
   line-height: 1.8;
   font-size: var(--font-size-sm);
 }
+
+/* ── «رتّبي الحلقات التي تناسبك» (R168 §1) ─────────────────────────────── */
+.circle-ranking {
+  display: grid;
+  gap: var(--space-2);
+}
+.circle-ranking__order {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.circle-ranking__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.circle-ranking__rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.circle-ranking__name {
+  flex: 1 1 12rem;
+}
+.circle-ranking__moves {
+  display: inline-flex;
+  gap: var(--space-1);
+}

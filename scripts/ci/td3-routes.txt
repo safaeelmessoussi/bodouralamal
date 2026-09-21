@@ -52,6 +52,7 @@ POST /admin/legal-consent-texts               # TD-3.11, §2.3, §4.1a (R119) �
 PATCH /admin/legal-consent-texts/{id}         # TD-3.11, §2.3, §4.1a (R119) — a never-activated draft only; used wording is immutable
 POST /admin/legal-consent-texts/{id}/activate # TD-3.11, §2.3, §4.1a (R119) — puts one version into force; exactly one active
 GET /registration/consent-text                # TD-3.2, §2.3, §4.1a (R119) — anonymous; the exact wording the form displays and submits the id of
+GET /registration/circle-slots                # R168 §1; anonymous; the memorisation circles a first-time مستفيدة may order — from SCHEDULED classes, never a typed list
 GET /admin/legal-documents/{kind}             # TD-3.11, §5.6 (R138 §13) — Super Admin only; every version of one kind (privacy_policy|terms_of_use)
 POST /admin/legal-documents                   # TD-3.11, §5.6 (R138 §13) — creates a DRAFT of one kind; activating is a separate decision
 PATCH /admin/legal-documents/{id}             # TD-3.11, §5.6 (R138 §13) — a never-activated draft only; used wording is immutable
@@ -64,6 +65,8 @@ GET /child-applications/mine                  # §4.3 (R62) — a parent's own a
 GET /admin/child-applications/{id}/matches    # §4.3 (R62) — duplicate PROPOSALS; the platform never merges
 POST /admin/child-applications/{id}/decide    # §4.3 (R62) — one child decided alone; TD-4.2 narrowed
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
+POST /admin/approvals/{id}/roles/{kind}/approve  # R168 §1; ONE requested role decided on its own; administration is Super Admin only
+POST /admin/approvals/{id}/roles/{kind}/decline  # R168 §1; a reason is mandatory; the account is rejected only when every role was declined
 POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff-mediated, existing child)
 GET /students/me                              # TD-3.3, §5.3 (R62.10, Revision 63) — the ACTING student's identity block
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"
