@@ -412,8 +412,8 @@ const document = {
     '/profile/role-requests': {
       get: op(
         'My role requests, and what I may still ask for',
-        '**SRS Revision 169 §1.** The caller\'s own `RoleRequest` rows — `kind`, `status`, `decided_at` — and `askable`: the kinds she may ask for NOW (not held, not already waiting). **The decline reason is never returned**: it is operator-facing (§5.6); she is told THAT a request was declined, never why in an operator\'s words. `guardian` is never «askable» here — registering a child (`POST /child-applications`) IS that request.',
-        { '200': '`{ requests[], askable[] }`.', '401': ENVELOPE },
+        '**SRS Revision 169 §1.** The caller\'s own `RoleRequest` rows — `kind`, `status`, `decided_at` — and `askable`: the kinds she may ask for NOW (not held, not already waiting). **The decline reason is never returned**: it is operator-facing (§5.6); she is told THAT a request was declined, never why in an operator\'s words. `guardian` is never «askable» here — registering a child (`POST /child-applications`) IS that request. `held` names the kinds she HOLDS, from live role rows (R170 §1): a person holding every role has nothing to ask for and no request to show, and a screen that then showed nothing left her unable to find it.',
+        { '200': '`{ requests[], askable[], held[] }`.', '401': ENVELOPE },
       ),
       post: op(
         'Ask for a further role',

@@ -153,7 +153,9 @@ export function MultiSelectField({
                       <li className="field__hint">{t('common.noMatches')}</li>
                     ) : (
                       visible.map((o) => (
-                        <li key={o.value}>
+                        // `data-option-value` — a choice is addressed by what it
+                        // IS; its wording is the association's to change.
+                        <li key={o.value} data-option-value={o.value}>
                           <ChoiceField
                             label={o.label}
                             checked={selected.includes(o.value)}

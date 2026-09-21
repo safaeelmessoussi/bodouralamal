@@ -11329,3 +11329,36 @@ upgrading from `439f1ba`. No Production action.** Recordings asked first (`{"act
 taken; one older release image removed (22 GiB free); preflight PASS; both labels exact; no pending
 migration; TLS active; `/healthz` 200, `/rtc/validate` 401, `GET /admin/operations/status` 401 without a
 session; zero error-level lines. What «حالة النظام» will show there: 3 failed jobs (history), 0 late.
+
+## 2026-09-21 — SRS Revision 170, part one: «صفاتي وطلباتي» never disappears, and the registration form redesigned
+
+**Why the Owner could not find it.** She was told to look for «حسابي» → «صفاتي وطلباتي» → «طلب صفة
+إضافية». Her own account holds every role and was never registered through the form: nothing is
+askable, no request exists — and the section rendered NOTHING in exactly that case (and for anyone
+whose read failed). The instruction was true for every account but hers. The section is now always
+there: the roles she holds (`held[]`, the one addition to `GET /profile/role-requests`, read from live
+role rows), her requests under their own heading, the button whenever something is askable, and
+otherwise the sentence that says so and when the button appears. A failed read is an `ErrorState`.
+
+**The registration form** (her words: «more user friendly, easy to use, beautiful and elegant»; and
+«a closed drop down, by default selecting أسجّل نفسي كمستفيدة»). «ماذا تريدين؟» is the platform's own
+`MultiSelectField` — closed until opened, real checkboxes, several answers, its closed face naming and
+WRAPPING what is chosen — and starts with the مستفيدة role chosen. That reverses one sentence of R168
+§1 by her decision; the default is never a lock (unticking erases its section; nothing chosen is still
+refused). Around it: three steps said before she starts; each section a card with a numbered heading
+(a CSS counter over the sections actually shown, the real `<legend>` floated INSIDE the card); two
+columns where there is room, only fields pairing up, items start-aligned (a stretched field doubled a
+select's height — seen in the browser, fixed); and required before optional — `NameFields` takes each
+caller's required questions in `afterRequired` and closes every person's section with ONE optional
+block, the French pair's rule said once instead of under both boxes. `MultiSelectField` options carry
+`data-option-value`. No field, key or request changed.
+
+**Verification.** Frontend 1,478/1,478 (the pinned «hint under both French fields» test restated; four
+section tests and four chooser tests added); backend typecheck + lint; `role-request.integration`
+gains the holds-everything case. In a real browser on Localhost, after rebuilding the API (recordings
+asked first: none): `verify-role-requests` **85/85** (journey E: an account holding every askable role
+finds the section, its roles named, the missing button explained), `verify-registration` **45/45 +
+12/12 DB** (one stale check restated: each of three people has one optional block, nothing required
+inside or below it), `verify-platform-owner-framing` 23/23 + 8/8, `verify-date-picker` 24/24,
+`verify-self-managed-claim` 20/20, `verify-error-experience` 7/7, `verify-consent-disclosure` 19/19.
+Looked at, not only asserted: desktop and 400 px screenshots, closed and open.

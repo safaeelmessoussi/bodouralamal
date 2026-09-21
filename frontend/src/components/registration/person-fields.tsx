@@ -79,26 +79,35 @@ export function PersonFields({
 
   return (
     <>
-      <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
-      <TextField
-        label={t(phoneRequired ? 'register.phone' : 'register.phoneOptional')}
-        type="tel"
-        value={value.phone}
-        onChange={(next) => set({ phone: next })}
-        hint={t('register.phoneHint')}
-        error={errors[`${prefix}.phone`] ?? null}
-        required={phoneRequired}
+      <NameFields
+        value={value}
+        onChange={set}
+        errors={errors}
+        prefix={prefix}
+        afterRequired={
+          <>
+            {collectBirthDate ? (
+              <DateField
+                label={t('register.birthDate')}
+                value={value.birthDate}
+                onChange={(next) => set({ birthDate: next })}
+                hint={t('register.birthDateHint')}
+                required={birthDateRequired ?? false}
+                error={errors[`${prefix}.birthDate`] ?? null}
+              />
+            ) : null}
+            <TextField
+              label={t(phoneRequired ? 'register.phone' : 'register.phoneOptional')}
+              type="tel"
+              value={value.phone}
+              onChange={(next) => set({ phone: next })}
+              hint={t('register.phoneHint')}
+              error={errors[`${prefix}.phone`] ?? null}
+              required={phoneRequired}
+            />
+          </>
+        }
       />
-      {collectBirthDate ? (
-        <DateField
-          label={t('register.birthDate')}
-          value={value.birthDate}
-          onChange={(next) => set({ birthDate: next })}
-          hint={t('register.birthDateHint')}
-          required={birthDateRequired ?? false}
-          error={errors[`${prefix}.birthDate`] ?? null}
-        />
-      ) : null}
     </>
   );
 }

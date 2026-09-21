@@ -17,6 +17,7 @@
  * handing an administrator something no decision needs.
  */
 import { connect, results } from './cdp.mjs';
+import { roleStates } from './role-chooser.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const TOKEN = process.env.ONBOARDING_TOKEN;
@@ -84,12 +85,12 @@ check(
 check(
   'R160 §8: the ordinary form offers no self-managed entry',
   !(await bodyText()).includes('لديّ سجل سابق في الجمعية وأريد حساباً خاصاً بي') &&
-    (await evaluate(`document.querySelectorAll('[data-role-choice]').length`)) === 4,
+    JSON.parse(await roleStates(evaluate)).length === 4,
 );
 check(
   'the link «/register?mode=self-managed» reaches the claim, token intact',
   await navigate(`${BASE}/register?mode=self-managed#onboarding_token=${TOKEN}`, 'form.register-form') &&
-    (await evaluate(`document.querySelectorAll('[data-role-choice]').length`)) === 0,
+    (await evaluate(`document.querySelector('[data-role-choices]') === null`)) === true,
 );
 await wait(250);
 

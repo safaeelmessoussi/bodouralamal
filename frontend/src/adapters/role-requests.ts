@@ -16,6 +16,9 @@ export interface MyRoleRequests {
   /** What she may ask for NOW — not held, and not already waiting. `guardian`
    *  is never here: registering a child IS that request. */
   askable: AskableRole[];
+  /** What she HOLDS, from live role rows (R170 §1) — so the screen can say why
+   *  nothing is askable instead of showing nothing. */
+  held: RoleRequestKind[];
 }
 
 export async function fetchMyRoleRequests(token: string | null): Promise<MyRoleRequests> {

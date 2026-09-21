@@ -57,7 +57,12 @@ describe('validateChildren — one rule set, keyed per sibling', () => {
     );
   });
 
-  it('states the optional-pair rule beside both French fields', () => {
+  /**
+   * R170 §2 — the rule is said ONCE, above the pair it governs, inside the one
+   * optional block that closes a person's section. It used to be printed under
+   * BOTH boxes, so the same sentence appeared twice within a hand's width.
+   */
+  it('states the optional-pair rule once, above the French pair, inside the optional block', () => {
     const markup = renderToStaticMarkup(
       createElement(NameFields, {
         value: child(),
@@ -68,7 +73,26 @@ describe('validateChildren — one rule set, keyed per sibling', () => {
     );
     expect(
       markup.match(/اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين\./g),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
+    const optional = markup.slice(markup.indexOf('data-optional-fields'));
+    expect(optional).toContain('بيانات اختيارية');
+    expect(optional).toContain('الاسم الشخصي بالفرنسية');
+    // What she MUST give is never below what she may skip.
+    expect(markup.indexOf('الاسم العائلي')).toBeLessThan(markup.indexOf('data-optional-fields'));
+  });
+
+  it('puts a caller’s required questions BEFORE the optional block (R170 §2)', () => {
+    const markup = renderToStaticMarkup(
+      createElement(NameFields, {
+        value: child(),
+        onChange: () => undefined,
+        errors: {},
+        prefix: 'applicant',
+        afterRequired: createElement('p', { 'data-probe': 'required' }, 'رقم الهاتف'),
+      }),
+    );
+    expect(markup.indexOf('data-probe')).toBeGreaterThan(-1);
+    expect(markup.indexOf('data-probe')).toBeLessThan(markup.indexOf('data-optional-fields'));
   });
 });
 

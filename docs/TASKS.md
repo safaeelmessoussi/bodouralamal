@@ -5499,10 +5499,12 @@ The Owner's six replies to Revision 167's report. One migration so far
       why: the SRS lists the grading-template engine as «not present by design»
       (§10.1, §20 rule 16 — «do not pre-create»), and it has no tables, weights
       or screens specified to the point of building. Needs a proposal first.
-- [ ] **For the Owner — her questions back to me, answered in the report:**
+- [x] **For the Owner — her questions back to me, answered in the report:**
       slots from scheduled classes (keep); a returning مستفيدة asked nothing
       more (keep, with one optional line for «مستواي السابق»).
-- [ ] **Owner questions still open** (each one sentence, in the report): the
+      **[Closed 2026-09-21 — the Owner: keep both as they are (R170 §14).]**
+- [x] **[Answered by the Owner, 2026-09-21 — every item is now a box of its own
+      under Revision 170 below; three stay open there.]** **Owner questions still open** (each one sentence, in the report): the
       adult-Category marker; a spoken reference code for every beneficiary;
       schedule history in the Trash; retention of old reference rows; automatic
       destruction of quarantined files after 90 days; the login audit's e-mail;
@@ -5582,3 +5584,44 @@ The Owner's six replies to Revision 167's report. One migration so far
       averages, and averages shown to students. Today every grade is a
       per-exam mark and no average is shown anywhere. The largest feature left.
       ONE question: is it wanted BEFORE launch?
+
+## SRS Revision 170 — the Owner's third batch of answers — 2026-09-21
+
+- [x] **§1 — «صفاتي وطلباتي» is ALWAYS on «حسابي».** The Owner could not find
+      it: her account holds every role and never registered, so nothing was
+      askable, nothing was listed, and the section rendered nothing. It now
+      names the roles held (`held[]` on `GET /profile/role-requests`), says why
+      there is no button when nothing is askable, and shows a failed read as a
+      failure. Rule BG.
+- [x] **§2 — the registration form redesigned.** «ماذا تريدين؟» is one closed
+      multi-select with «أسجّل نفسي كمستفيدة» chosen (reverses R168 §1's
+      «nothing preselected», at her word); three steps said first; numbered
+      section cards; two columns on a wide screen, one on a phone; required
+      before optional, the optional block said once per person. No field or
+      request key changed. Five harnesses moved onto `role-chooser.mjs`.
+- [ ] **§3 — the consent gate becomes a WARNING** (nothing forced, default
+      public, staff switch to private themselves). Reverses BR-2/BR-3.
+- [ ] §4 — editing an already-scheduled remote session's arrangements.
+- [ ] §5 — a مؤطِّرة's list shows her activities with her classes.
+- [ ] §6 — Category tick-box «its beneficiaries hold their own login» + an age
+      range, on «الفئات»; the enrolment picker then stops offering everybody.
+- [ ] §7 — a spoken reference code for EVERY beneficiary, adults included.
+- [ ] §8 — a deleted class keeps its past sessions visible in the Trash for the
+      same window as everything else.
+- [ ] §9 — a closed branch, room or subject still pointed to by old records is
+      kept for ever; deletable only once nothing points to it.
+- [ ] §10 — quarantined files destroyed automatically after 90 days.
+- [ ] §11 — a refused applicant MAY be told the real reason (optional, the
+      approver's choice each time).
+- [ ] §12 — recorded, nothing to build: no guardianship-document check; health,
+      family situation and home address are NOT collected for minors.
+- [ ] §13 — CNDP filing material and the Arabic privacy-notice TEXT, drafted for
+      the Owner's review.
+- [ ] §15 — run the performance measurement (TD-11a).
+- [ ] §16 — start the §18 acceptance checklists and journeys J1–J8 on Staging;
+      prepare for Production whatever needs neither its server nor a payment.
+- [ ] **Still the Owner's, one sentence each:** the login audit — keep the
+      e-mail, or the user id only? (her answer named both); exact storage keys
+      vs a non-reversible id in the audit; free text vs fixed codes in the
+      audit; and whether the automatic grading components are wanted BEFORE
+      launch.

@@ -255,6 +255,9 @@ export interface MyRoleRequests {
   requests: { kind: RoleRequestKindInput; status: string; decided_at: Date | null }[];
   /** The kinds she may ask for NOW: not held, and not already waiting. */
   askable: RoleRequestKindInput[];
+  /** The kinds she HOLDS, from her live role rows — so the screen can say why
+   *  nothing is askable instead of showing nothing at all (R170 §1). */
+  held: RoleRequestKindInput[];
 }
 
 /**
@@ -281,6 +284,9 @@ export async function myRoleRequests(prisma: PrismaClient, caller: Actor): Promi
   return {
     requests: rows.map((row) => ({ kind: row.kind, status: row.status, decided_at: row.decidedAt })),
     askable: [...askable],
+    held: (['student', 'guardian', 'teaching', 'administration'] as const).filter((kind) =>
+      HELD_BY[kind].some((role) => held.has(role)),
+    ),
   };
 }
 

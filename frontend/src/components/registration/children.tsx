@@ -77,13 +77,27 @@ export const SCHOOLING_STAGES: NonNullable<ChildInput['schooling_stage']>[] = [
  * different — a child has no phone and no notes, and has a schooling stage and
  * a media release that an adult does not — so the split is along that seam and
  * **only** along it. The six name inputs still exist once.
+ *
+ * ## What is REQUIRED comes first, what is optional comes last (R170 §2)
+ *
+ * The order used to follow the record: Arabic names, sex, then three optional
+ * inputs — and only then the phone and the date of birth she MUST give. A reader
+ * met three boxes she could skip before the two she could not, and the French
+ * pair's one hint was printed under both of its boxes. `afterRequired` is the
+ * slot where each caller puts ITS required questions (an adult's phone, a
+ * child's date of birth and placement), so the optional block closes every
+ * person's section, said once: «بيانات اختيارية».
  */
 export function NameFields({
   value,
   onChange,
   errors,
   prefix,
+  afterRequired = null,
 }: {
+  /** The caller's own required questions — rendered after the sex, before the
+   *  optional block. */
+  afterRequired?: ReactNode;
   value: {
     firstNameArabic: string;
     lastNameArabic: string;
@@ -128,27 +142,32 @@ export function NameFields({
         required
         error={errors[`${prefix}.sex`] ?? null}
       />
-      {/* Revision 41 — split like the Arabic pair. Optional as a PAIR. */}
-      <TextField
-        label={t('register.firstNameFrench')}
-        value={value.firstNameFrench}
-        onChange={(next) => set({ firstNameFrench: next })}
-        hint={t('register.frenchPairHint')}
-        error={errors[`${prefix}.firstNameFrench`] ?? null}
-      />
-      <TextField
-        label={t('register.lastNameFrench')}
-        value={value.lastNameFrench}
-        onChange={(next) => set({ lastNameFrench: next })}
-        hint={t('register.frenchPairHint')}
-        error={errors[`${prefix}.lastNameFrench`] ?? null}
-      />
-      <TextField
-        label={t('register.nickname')}
-        value={value.nickname}
-        onChange={(next) => set({ nickname: next })}
-        hint={t('register.nicknameHint')}
-      />
+      {afterRequired}
+
+      {/* Revision 41 — split like the Arabic pair. Optional as a PAIR, and the
+          pair's one rule is said ONCE, above it (R170 §2). */}
+      <div className="form-optional" data-optional-fields>
+        <p className="form-optional__title">{t('register.optionalTitle')}</p>
+        <p className="field__hint form-optional__hint">{t('register.frenchPairHint')}</p>
+        <TextField
+          label={t('register.firstNameFrench')}
+          value={value.firstNameFrench}
+          onChange={(next) => set({ firstNameFrench: next })}
+          error={errors[`${prefix}.firstNameFrench`] ?? null}
+        />
+        <TextField
+          label={t('register.lastNameFrench')}
+          value={value.lastNameFrench}
+          onChange={(next) => set({ lastNameFrench: next })}
+          error={errors[`${prefix}.lastNameFrench`] ?? null}
+        />
+        <TextField
+          label={t('register.nickname')}
+          value={value.nickname}
+          onChange={(next) => set({ nickname: next })}
+          hint={t('register.nicknameHint')}
+        />
+      </div>
     </>
   );
 }
@@ -180,7 +199,13 @@ export function ChildFields({
 
   return (
     <>
-      <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
+      <NameFields
+        value={value}
+        onChange={set}
+        errors={errors}
+        prefix={prefix}
+        afterRequired={
+          <>
 
       {/**
         * **R130 — here, and NOT in `NameFields`** (browser-verified, 2026-09-03).
@@ -262,6 +287,9 @@ export function ChildFields({
         // different answers here.
         hint={t('register.consentMediaHint')}
         error={errors[`${prefix}.mediaRelease`] ?? null}
+      />
+          </>
+        }
       />
     </>
   );

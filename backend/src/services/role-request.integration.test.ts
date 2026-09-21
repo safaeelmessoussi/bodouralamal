@@ -579,7 +579,12 @@ describe('an existing account asks for a further role — and again after a decl
   it('opens ONE pending request, tells the approvers, grants nothing — and the queue lists the ACTIVE account', async () => {
     const id = await teacher();
     const me = await actorFor(prisma, id);
-    expect((await myRoleRequests(prisma, me)).askable).toEqual(['student', 'administration']);
+    const before = await myRoleRequests(prisma, me);
+    expect(before.askable).toEqual(['student', 'administration']);
+    // R170 §1 — what she HOLDS is said too, from live role rows: a person who
+    // holds everything has nothing askable and no request, and the screen must
+    // still be able to say why.
+    expect(before.held).toEqual(['teaching']);
 
     const asked = await requestFurtherRole(prisma, me, studentAsk());
     expect(asked).toEqual({ kind: 'student', status: 'pending', reopened: false });
@@ -603,6 +608,15 @@ describe('an existing account asks for a further role — and again after a decl
     });
     expect(await rolesOf(id)).toEqual(['student', 'teacher']);
     expect((await prisma.user.findUniqueOrThrow({ where: { id } })).birthDate).not.toBeNull();
+  });
+
+  it('an account that was never registered through the form and holds every role: nothing askable, no request — and `held` says why (R170 §1)', async () => {
+    // The Owner's own case: provisioned, never «registered», holding them all.
+    // The screen showed NOTHING, and she could not find the section.
+    const mine = await myRoleRequests(prisma, await actorFor(prisma, superAdminId));
+    expect(mine.requests).toEqual([]);
+    expect(mine.held).toContain('administration');
+    expect(mine.askable).not.toContain('administration');
   });
 
   it('refuses a role she holds, a request already waiting, and an account that is not active', async () => {

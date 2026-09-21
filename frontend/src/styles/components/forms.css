@@ -249,42 +249,203 @@
   }
 }
 
-/* ── The registration form (§5.5) ─────────────────────────────────────────── */
+/* ── The registration form (§5.5; redesigned by SRS Revision 170 §2) ─────────
+ *
+ * The Owner, 2026-09-21: «more user friendly, easy to use, beautiful and
+ * elegant». What that means HERE, in order of how much it helps:
+ *
+ * 1. **Each section is a card with a numbered heading**, not a hairline box with
+ *    a grey caption. The numbers come from a CSS counter, so they follow the
+ *    sections that are actually on the page — a مؤطِّرة's form has other steps
+ *    than a mother's, and neither is ever numbered 1, 2, 5.
+ * 2. **Two columns where there is room** (الاسم الشخصي | الاسم العائلي), one on
+ *    a phone. Only fields pair up; a sentence, a notice or a ranking keeps the
+ *    full width it was written for.
+ * 3. **Required before optional** — the markup's job (`NameFields`), styled here
+ *    as one quiet block that closes a person's section.
+ * 4. **Said before she starts**: three steps, the last of which is not hers.
+ */
+
+.register-intro {
+  display: grid;
+  gap: var(--space-3);
+}
+.register-intro > h1,
+.register-intro > .lede {
+  margin: 0;
+}
+.register-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: register-step;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+.register-steps > li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  counter-increment: register-step;
+}
+.register-steps > li::before {
+  content: counter(register-step);
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+}
 
 .register-form {
   display: grid;
   gap: var(--space-6);
-  max-width: 44rem;
-  margin-block-start: var(--space-6);
+  max-width: 48rem;
+  margin-block-start: var(--space-8);
+  counter-reset: register-section;
 }
 /* A real <fieldset>/<legend>: the groups are semantic, so a screen reader
    announces "child" before the child's fields rather than leaving the second
    "full name" ambiguous. */
 .register-form__group {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-4) var(--space-5);
+  /* `start`, not the default `stretch`: two fields share a row now, and a
+     stretched field grows its CONTROL to the height of a neighbour that has a
+     hint — a select twice as tall as the input beside it (seen in a browser). */
+  align-items: start;
+  /* `min-width: 0` — a fieldset's default `min-inline-size: min-content` is
+     what lets one long option push a card wider than a phone. */
+  min-width: 0;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+  padding: clamp(1.25rem, 3vw, 2rem);
   margin: 0;
+  counter-increment: register-section;
 }
-/* **A `<legend>` is not a grid item**, and that is why this needs a margin.
-   The fieldset is `display: grid`, so `gap` spaces the fields from each other
-   and does nothing between the legend and the first of them — the legend is
-   laid out by the fieldset's own special algorithm, outside the grid. It read
-   as «الموافقاتالموافقة على…» once the consent group's first child became a
-   line of text rather than a labelled field with its own leading. Measured in
-   a browser, not asserted from this file. */
+/* **The legend is the card's heading, INSIDE the card.** A rendered legend sits
+   astride the fieldset's border, which is what made every section read as a
+   captioned hairline box. Floating it takes it out of that special layout (it
+   is the documented way to do so) and, in a grid container, it then lays out
+   as the first grid item; `width: 100%` and the full-width span keep it on its
+   own row. Measured in a browser, not asserted from this file. */
 .register-form__group > legend {
-  padding-inline: var(--space-2);
-  margin-block-end: var(--space-3);
+  float: inline-start;
+  inline-size: 100%;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0 0 var(--space-2);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+  font-weight: 700;
+  font-size: var(--font-size-md);
+  color: var(--color-primary-strong);
+}
+.register-form__group > legend::before {
+  content: counter(register-section);
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+}
+/* A child's card sits INSIDE the children section: it is a part of step N, not
+   a step of its own, so it neither counts nor wears a number. */
+.register-form__group .register-form__group {
+  counter-increment: none;
+  box-shadow: none;
+  background: var(--color-background);
+}
+.register-form__group .register-form__group > legend {
+  font-size: var(--font-size-sm);
+}
+.register-form__group .register-form__group > legend::before {
+  content: none;
+}
+
+@media (min-width: 44rem) {
+  .register-form__group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Only FIELDS pair up. Everything else — a notice, a ranking, a nested card,
+     the optional block — keeps the whole row. */
+  .register-form__group > :not(.field),
+  .register-form__group > .field--choice,
+  .register-form__group[data-role-choices] > .field {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The optional block that closes a person's section (`NameFields`). */
+.form-optional {
+  display: grid;
+  gap: var(--space-4) var(--space-5);
+  align-items: start;
+  grid-column: 1 / -1;
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px dashed var(--color-border);
+}
+.form-optional__title {
+  margin: 0;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
 }
+.form-optional__hint {
+  margin: calc(-1 * var(--space-3)) 0 0;
+}
+@media (min-width: 44rem) {
+  .register-form__group .form-optional {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .register-form__group .form-optional > :not(.field) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The role chooser names what was chosen, and four such names are long: here
+   the closed control WRAPS rather than cutting her own choice off with «…». */
+.register-form__group[data-role-choices] .dropdown-trigger__label {
+  white-space: normal;
+  text-align: start;
+}
+/* Four choices, all of them the point of the control: never a scrolling list. */
+.register-form__group[data-role-choices] .multi-select__options {
+  max-block-size: none;
+}
+
 .register-form__actions {
   display: flex;
   justify-content: start;
+}
+.register-form > .register-form__actions .btn {
+  min-inline-size: 14rem;
+  justify-content: center;
+  padding-block: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+@media (max-width: 43.99rem) {
+  .register-form > .register-form__actions .btn {
+    inline-size: 100%;
+  }
 }
 /* The checkbox keeps its label on one line with the box, unlike the stacked
    field primitives — an agreement reads as a sentence, not as a form field. */

@@ -544,3 +544,39 @@ describe('SRS Revision 168 §1 — one form, several roles', () => {
     );
   });
 });
+
+/**
+ * **SRS Revision 170 §2 — «ماذا تريدين؟» is one CLOSED control, and «أسجّل نفسي
+ * كمستفيدة» is chosen for her** (the Owner, 2026-09-21 — reversing R168's
+ * «nothing preselected»). Source-pinned for the same reason as the block above:
+ * `Register` needs an onboarding token and a session this file does not set up,
+ * and the behaviour — open, tick several, the sections follow — is watched in a
+ * real browser by `verify-role-requests` and `verify-registration`.
+ */
+describe('SRS Revision 170 §2 — the role chooser is a closed dropdown with a default', () => {
+  const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+  it('starts with «أسجّل نفسي كمستفيدة» chosen — a default, never a lock', () => {
+    expect(source).toContain("useState<RoleChoice[]>(['student'])");
+    // Unticking it is still allowed, and still refused only when NOTHING is left.
+    expect(validate({ ...base, roles: [] })).toHaveProperty('roles');
+  });
+
+  it('is the platform’s own multi-select — closed until opened, several answers — not a checkbox list', () => {
+    expect(source).toContain('<MultiSelectField');
+    expect(source).toContain("options={ROLE_CHOICES.map((role) => ({ value: role, label: t(`register.role.${role}`) }))}");
+    expect(source).not.toContain('<CheckboxField');
+  });
+
+  it('unticking a role still ERASES what its section held, whichever roles were dropped together', () => {
+    expect(source).toContain("const dropped = roles.filter((role) => !next.includes(role));");
+    for (const role of ['student', 'guardian', 'teaching', 'administration']) {
+      expect(source).toContain(`dropped.includes('${role}')`);
+    }
+  });
+
+  it('says what will happen before she starts — three steps, the last of which is not hers', () => {
+    expect(source).toContain('data-register-steps');
+    expect(ar.register.stepReview).toBe('تراجع الإدارة طلبك');
+  });
+});

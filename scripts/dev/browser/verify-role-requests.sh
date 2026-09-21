@@ -37,6 +37,9 @@ EXISTING_ID="$(node -e 'process.stdout.write(JSON.parse(process.env.SCENARIO).ex
 export EXISTING_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$EXISTING_ID")"
 export EXISTING_REFRESH_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh "$EXISTING_ID")"
 export SUPER_REFRESH_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh)"
+# R170 §1 — an account that holds every askable role and never registered.
+HOLDS_ALL_ID="$(node -e 'process.stdout.write(JSON.parse(process.env.SCENARIO).holdsAll)')"
+export HOLDS_ALL_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$HOLDS_ALL_ID")"
 
 WORK="$(mktemp -d)"
 cleanup() {

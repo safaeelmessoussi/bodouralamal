@@ -21,6 +21,7 @@
  */
 import { connect, results } from './cdp.mjs';
 import { pickDate } from './date-picker.mjs';
+import { roleStates, roleSummary, setRoles } from './role-chooser.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const S = JSON.parse(process.env.SCENARIO ?? '{}');
@@ -110,13 +111,6 @@ const selectOptions = (root, label) => evaluate(`(() => {
   return el ? { disabled: el.disabled, options: [...el.options].map((o) => (o.textContent ?? '').trim()) } : null;
 })()`);
 
-const tickRole = (role) => evaluate(`(() => {
-  const box = document.querySelector('[data-role-choice="${role}"] input[type="checkbox"]');
-  if (!box) return 'missing';
-  if (!box.checked) box.click();
-  return box.checked;
-})()`);
-
 const clickIn = (root, text) => evaluate(`(() => {
   const scope = document.querySelector(${q(root)});
   const button = [...(scope?.querySelectorAll('button') ?? [])].find((b) => (b.textContent ?? '').trim() === ${q(text)});
@@ -134,16 +128,23 @@ await send('Page.navigate', { url: `${BASE}/register#onboarding_token=${TOKEN}` 
 check('the registration form renders from an onboarding token', await waitFor(`document.querySelector('form.register-form')`));
 await installProbe();
 
+// R170 §2 — one CLOSED control, «أسجّل نفسي كمستفيدة» chosen for her (the
+// Owner, 2026-09-21, reversing R168's «nothing preselected»).
+const closedAtFirst = await roleSummary(evaluate);
 check(
-  'four choices are offered and NONE is ticked for her',
-  (await evaluate(`JSON.stringify([...document.querySelectorAll('[data-role-choice]')].map((el) => [el.getAttribute('data-role-choice'), el.querySelector('input').checked]))`)) ===
-    JSON.stringify([['student', false], ['guardian', false], ['teaching', false], ['administration', false]]),
+  '«ماذا تريدين؟» is a CLOSED control that names her default: «أسجّل نفسي كمستفيدة»',
+  closedAtFirst?.expanded === 'false' && closedAtFirst.text.includes('أسجّل نفسي كمستفيدة') && !closedAtFirst.text.includes('أسجّل أبنائي'),
+  JSON.stringify(closedAtFirst),
 );
-
-check('«أسجّل أبنائي» alone asks for the guardian’s own data', (await tickRole('guardian')) === true && (await waitFor(`document.body.innerText.includes('بيانات ولي الأمر')`)));
-check('ticking an adult role REPLACES «بيانات ولي الأمر» — she is asked who she is once', (await tickRole('teaching')) === true && (await waitFor(`!document.body.innerText.includes('بيانات ولي الأمر')`)));
-await tickRole('student');
-await tickRole('administration');
+check(
+  'opening it offers all four, and only the default is ticked',
+  (await roleStates(evaluate)) ===
+    JSON.stringify([['student', true], ['guardian', false], ['teaching', false], ['administration', false]]),
+);
+check('the default can be unticked: «أسجّل أبنائي» alone asks for the guardian’s own data', (await setRoles(evaluate, ['guardian'])) === 'ok' && (await waitFor(`document.body.innerText.includes('بيانات ولي الأمر')`)));
+check('ticking an adult role REPLACES «بيانات ولي الأمر» — she is asked who she is once', (await setRoles(evaluate, ['guardian', 'teaching'])) === 'ok' && (await waitFor(`!document.body.innerText.includes('بيانات ولي الأمر')`)));
+const allFour = await setRoles(evaluate, ['student', 'guardian', 'teaching', 'administration']);
+check('several choices are ticked at once, and the closed control names them all', allFour === 'ok' && ((await roleSummary(evaluate))?.text ?? '').includes('أسجّل أبنائي'), allFour);
 await sleep(300);
 
 const sections = await legends();
@@ -470,6 +471,29 @@ if (EXISTING) {
   await waitFor(`document.querySelector('[data-role-requests] [data-role-request="administration"]')`);
   const reopened = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-role-requests] [data-role-request="administration"]')].map((li) => li.getAttribute('data-role-status')))`);
   check('…and it is ONE line of history, pending again', reopened === JSON.stringify(['pending']), reopened);
+}
+
+/* ══ Journey E — «صفاتي وطلباتي» never disappears (R170 §1) ═══════════════ */
+/* The Owner, 2026-09-21: «I don't find this». Her account holds every role and
+   never registered through the form — nothing askable, no request — and the
+   section rendered NOTHING for exactly that person. */
+if (process.env.HOLDS_ALL_REFRESH_COOKIE) {
+  await actAs(process.env.HOLDS_ALL_REFRESH_COOKIE);
+  await send('Page.navigate', { url: `${BASE}/profile` });
+  const shown = await waitFor(`document.querySelector('[data-role-requests] [data-roles-held]')`);
+  const section = await evaluate(`(() => {
+    const root = document.querySelector('[data-role-requests]');
+    return {
+      heading: root?.querySelector('h2')?.textContent ?? null,
+      held: [...(root?.querySelectorAll('[data-role-held]') ?? [])].map((li) => li.getAttribute('data-role-held')),
+      why: root?.querySelector('[data-nothing-to-ask]')?.textContent ?? null,
+      button: !!root?.querySelector('a[href="/profile/request-role"]'),
+      requests: root?.querySelectorAll('[data-role-request]').length ?? -1,
+    };
+  })()`);
+  check('an account holding EVERY askable role still finds «صفاتي وطلباتي» on «حسابي»', shown === true && section.heading === 'صفاتي وطلباتي', JSON.stringify(section));
+  check('…it names the roles she holds', JSON.stringify(section.held) === JSON.stringify(['student', 'teaching', 'administration']), JSON.stringify(section.held));
+  check('…and SAYS why there is no «طلب صفة إضافية» button, instead of showing nothing', section.button === false && section.requests === 0 && (section.why ?? '').includes('لا يوجد ما يُطلب الآن'), JSON.stringify(section));
 }
 
 close();

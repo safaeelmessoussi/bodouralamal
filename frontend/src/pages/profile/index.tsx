@@ -133,7 +133,7 @@ export function ProfilePage(): ReactNode {
                 <ChildIdentitySection name={activeChild.label} identity={childIdentity} />
               ) : null}
               <ChildSection applications={applications} />
-              {roleRequests ? <RoleRequestsSection mine={roleRequests} /> : null}
+              <RoleRequestsSection mine={roleRequests} onRetry={() => void load()} />
               <DeleteAccountSection />
             </>
           )}
@@ -552,32 +552,78 @@ function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
  * (§5.6). «طلب صفة إضافية» is offered exactly when the server says there is
  * something left to ask for — never as a button that leads to a refusal.
  */
-function RoleRequestsSection({ mine }: { mine: MyRoleRequests }): ReactNode {
-  if (mine.requests.length === 0 && mine.askable.length === 0) return null;
+/**
+ * **«صفاتي وطلباتي» is ALWAYS here** (SRS Revision 170 §1).
+ *
+ * It used to render only when there was a request to list or a role to ask for
+ * — so the one person who holds every role, the Owner, was told to look for a
+ * section that did not exist for her, and a failed read removed it for anyone.
+ * It now names the roles she holds, says plainly when nothing can be asked for
+ * and why, and shows a failed read as a failure.
+ */
+export function RoleRequestsSection({
+  mine,
+  onRetry,
+}: {
+  mine: MyRoleRequests | null;
+  onRetry: () => void;
+}): ReactNode {
   return (
     <section className="card" aria-labelledby="role-requests-heading" data-role-requests>
       <h2 id="role-requests-heading">{t('profile.requestRole.sectionTitle')}</h2>
       <p className="muted">{t('profile.requestRole.sectionLede')}</p>
 
-      {mine.askable.length > 0 ? (
-        <div className="register-form__actions">
-          <ButtonLink variant="add" href="/profile/request-role">
-            {t('profile.requestRole.title')}
-          </ButtonLink>
-        </div>
-      ) : null}
+      {mine === null ? (
+        // A failed read used to make the whole section vanish. It says so now,
+        // in the one appearance every failure has.
+        <ErrorState onRetry={onRetry} />
+      ) : (
+        <>
+          <h3>{t('profile.requestRole.heldTitle')}</h3>
+          {mine.held.length === 0 ? (
+            <p className="muted">{t('profile.requestRole.heldNone')}</p>
+          ) : (
+            <ul className="role-badges" data-roles-held>
+              {mine.held.map((kind) => (
+                <li key={kind} data-role-held={kind}>
+                  <Badge tone="ok">{t(`admin.approvals.roleKind.${kind}`)}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {mine.requests.length === 0 ? null : (
-        <ul className="detail-list">
-          {mine.requests.map((request) => (
-            <li key={request.kind} data-role-request={request.kind} data-role-status={request.status}>
-              {t(`admin.approvals.roleKind.${request.kind}`)}{' '}
-              <Badge tone={request.status === 'approved' ? 'ok' : request.status === 'pending' ? 'warn' : 'neutral'}>
-                {t(`admin.approvals.roleStatus.${request.status}`)}
-              </Badge>
-            </li>
-          ))}
-        </ul>
+          {mine.askable.length > 0 ? (
+            <div className="register-form__actions">
+              <ButtonLink variant="add" href="/profile/request-role">
+                {t('profile.requestRole.title')}
+              </ButtonLink>
+            </div>
+          ) : (
+            // Said, never left blank: a person who holds every role could not
+            // find this section at all (the Owner, 2026-09-21).
+            <p className="muted" data-nothing-to-ask>
+              {t('profile.requestRole.nothingToAsk')}
+            </p>
+          )}
+
+          {mine.requests.length === 0 ? null : (
+            <>
+              <h3>{t('profile.requestRole.requestsTitle')}</h3>
+              <ul className="detail-list">
+                {mine.requests.map((request) => (
+                  <li key={request.kind} data-role-request={request.kind} data-role-status={request.status}>
+                    {t(`admin.approvals.roleKind.${request.kind}`)}{' '}
+                    <Badge
+                      tone={request.status === 'approved' ? 'ok' : request.status === 'pending' ? 'warn' : 'neutral'}
+                    >
+                      {t(`admin.approvals.roleStatus.${request.status}`)}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
       )}
     </section>
   );

@@ -115,7 +115,10 @@ missing date of birth (never corrects one), and raises the approvers' ordinary
 with a pending request, and marks the item `account_active` — there is no pending ACCOUNT to approve
 or reject, so the whole-account act does not apply and the screen offers the per-role review only.
 Registering a child re-opens a declined `guardian` request for the same reason. **The decline
-reason is never returned to her** (`GET /profile/role-requests` omits it by projection).
+reason is never returned to her** (`GET /profile/role-requests` omits it by projection). The same
+read answers `held[]` — the kinds she HOLDS, from live role rows — because «صفاتي وطلباتي» is
+always on «حسابي» (R170 §1): a person holding every role has nothing askable and no request, and a
+section that then rendered nothing is how the Owner could not find it.
 
 **A granted role is hers at her next page, not at her next sign-in (R169 §2).** The access token
 lives in memory only; every page load calls `POST /auth/refresh`, which reads the live

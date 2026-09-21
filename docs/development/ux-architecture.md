@@ -2447,6 +2447,38 @@ columns (R76.1); offering a sort on a value computed per page would order the 25
 rows on screen and present that as the collection's order. `sortable-columns.test.ts`
 pins each such column in its `never` list.
 
+## BG · A section that has nothing to offer says so — it never vanishes; and a long form asks what it must before what it may
+
+*(SRS Revision 170 §1–§2; the Owner, 2026-09-21: «I don't find this», and «more user friendly, easy
+to use, beautiful and elegant».)*
+
+**A named place is always there.** «صفاتي وطلباتي» rendered only when it had a request to list or a
+role to offer — so the person told to look for it, whose account holds every role, found nothing,
+and a failed read removed it for anyone. A section the platform has NAMED to a person (in a report,
+a notification, a colleague's instruction) renders for everyone who may have it: what it holds, or
+the sentence saying why it holds nothing and when it will (rule I's empty state, applied to a
+section), or the failure (`ErrorState`) if its read failed. Conditional rendering is for what a
+person may not HAVE, never for what happens to be empty.
+
+**The public registration form, as the pattern for any long form a newcomer fills:**
+
+* **Say what will happen before it starts** — three steps, the last of which («تراجع الإدارة
+  طلبك») is not hers, so nobody expects an account at once.
+* **Each section is a card with a numbered heading.** The numbers come from a CSS counter on the
+  sections actually rendered: a مؤطِّرة's form has other steps than a mother's, and neither is
+  numbered 1, 2, 5. The `<fieldset>`/`<legend>` semantics stay; the legend is floated so it lays
+  out INSIDE the card as its heading.
+* **Two columns where there is room, one on a phone — and only FIELDS pair up.** A notice, a
+  ranking or a nested card keeps the full row; items align to the start, because a stretched field
+  grows its control to the height of a neighbour that has a hint.
+* **Required before optional.** `NameFields` takes each caller's required questions in
+  `afterRequired` and closes every person's section with ONE optional block («بيانات اختيارية»),
+  the French pair's rule said once above the pair.
+* **A several-answer question with a usual answer is a closed multi-select with that answer
+  chosen** (`MultiSelectField`): closed until opened, real checkboxes, the closed face naming what
+  is chosen and WRAPPING rather than truncating when the names are the point. The default is never
+  a lock — unticking it erases what its section held.
+
 ## The guards
 
 Rules that are not checked drift back. These are behavioural or registry-level,
@@ -2550,7 +2582,8 @@ and says nothing false about place.
   `intended_category_id` is unset on every live row, and one live account holds
   both `teacher` and `student`. So every student picker offers **every active
   account**, and filtering by role would hide exactly the students who most need
-  enrolling. Related: R64.7's recommended `Category.holds_own_login`.
+  enrolling. Related: R64.7's recommended `Category.holds_own_login` — **decided by the Owner,
+  2026-09-21 (SRS Revision 170 §6): each Category carries the tick-box; built in its own part.**
 * **`/admin/level-surahs` is not in §14.1.** M4c shipped it with *"no SRS
   change"*. Its menu position follows the dependency order §14.1 states for its
   neighbours.

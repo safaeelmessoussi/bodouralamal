@@ -22,6 +22,7 @@
  */
 import { connect, results } from './cdp.mjs';
 import { pickDate } from './date-picker.mjs';
+import { roleStates, setRoles } from './role-chooser.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const TOKEN = process.env.ONBOARDING_TOKEN;
@@ -122,18 +123,12 @@ check(
 
 /* ── 3. Fill the exact multi-child shape that failed in controlled UAT ──── */
 /**
- * R168 §1 — the form asks WHAT she wants as four checkboxes (any combination),
- * no longer one «نوع التسجيل» select. A choice is addressed by what it IS
- * (`data-role-choice`), never by its wording, which is the association's to
- * change. The several-role journey and its per-role approval have their own
- * harness (`verify-role-requests`); this one stays the family registration.
+ * R168 §1 — the form asks WHAT she wants: four roles, any combination. R170 §2
+ * put them in ONE closed control with «أسجّل نفسي كمستفيدة» chosen for her, so a
+ * family registration UNTICKS that default (`role-chooser.mjs`). The several-role
+ * journey and its per-role approval have their own harness
+ * (`verify-role-requests`); this one stays the family registration.
  */
-const tickRole = (role) => evaluate(`(() => {
-  const box = document.querySelector('[data-role-choice="${role}"] input[type="checkbox"]');
-  if (!box) return 'missing';
-  if (!box.checked) box.click();
-  return box.checked;
-})()`);
 const tickConsent = (wanted) => evaluate(`(() => {
   const box = document.querySelector('.consent-notice input[type="checkbox"]');
   if (!box) return 'none';
@@ -142,11 +137,12 @@ const tickConsent = (wanted) => evaluate(`(() => {
 })()`);
 
 check(
-  'the four role choices are offered, and none is preselected',
-  (await evaluate(`JSON.stringify([...document.querySelectorAll('[data-role-choice] input[type="checkbox"]')].map((box) => box.checked))`)) ===
-    JSON.stringify([false, false, false, false]),
+  'the four role choices are offered, «أسجّل نفسي كمستفيدة» chosen by default (R170 §2)',
+  (await roleStates(evaluate)) ===
+    JSON.stringify([['student', true], ['guardian', false], ['teaching', false], ['administration', false]]),
 );
-check('«أسجّل أبنائي» is selectable', (await tickRole('guardian')) === true);
+const guardianOnly = await setRoles(evaluate, ['guardian']);
+check('«أسجّل أبنائي» alone is selectable — the default unticks', guardianOnly === 'ok', guardianOnly);
 await new Promise((r) => setTimeout(r, 200));
 check(
   'with no other adult role ticked, the guardian is asked for her own data',
@@ -227,9 +223,21 @@ check(
   'الطفلة 2: media release NO accepted',
   (await setSelectValue('الموافقة على نشر الصوت/التسجيلات', 'no', 1)) === 'no',
 );
+// R170 §2 — the pair's rule is said ONCE per person, above the pair, inside the
+// one optional block that closes her section (it was printed under BOTH boxes:
+// six times for a guardian and two children). And what she MUST give is never
+// below what she may skip.
+const optionalBlocks = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-optional-fields]')].map((block) => ({
+  rule: (block.textContent ?? '').split('اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين.').length - 1,
+  inputs: block.querySelectorAll('input').length,
+  requiredInside: block.querySelectorAll('[aria-required="true"], input[required], select[required]').length,
+  requiredAfter: [...(block.parentElement?.querySelectorAll('.field__required') ?? [])].filter((mark) => block.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING && !block.contains(mark)).length,
+})))`);
 check(
-  'all six optional French-name controls explain the pair rule',
-  (await bodyText()).split('اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين.').length - 1 === 6,
+  'each of the three people has ONE optional block — the pair rule said once, three optional inputs, nothing required inside or below it',
+  JSON.stringify(JSON.parse(optionalBlocks)) ===
+    JSON.stringify(Array.from({ length: 3 }, () => ({ rule: 1, inputs: 3, requiredInside: 0, requiredAfter: 0 }))),
+  optionalBlocks,
 );
 
 /* Prove the prospective phone rule independently of the consent rule below. */

@@ -194,6 +194,19 @@ const existing = await prisma.user.create({
 });
 await prisma.userBranchRole.create({ data: { userId: existing.id, roleId: teacherRole.id, branchId: null } });
 
+// R170 §1 — the Owner's own case: an account that was never «registered»
+// through the form and HOLDS every role that can be asked for. Nothing is
+// askable and there is no request to list — and «صفاتي وطلباتي» used to render
+// nothing at all for exactly her. (`admin`, not `super_admin`: the fixture needs
+// the role HELD, never the widest authority on a populated Localhost.)
+const studentRole = await prisma.role.findUniqueOrThrow({ where: { name: 'student' } });
+const holdsAll = await prisma.user.create({
+  data: { nameArabic: `${TAG} تحمل كل الصفات`, sex: 'female', accountStatus: 'active' },
+});
+for (const role of [studentRole, teacherRole, adminRole]) {
+  await prisma.userBranchRole.create({ data: { userId: holdsAll.id, roleId: role.id, branchId: null } });
+}
+
 // R122 — approval enrols as of TODAY and fails closed with no period covering it.
 const today = new Date();
 const covering = await prisma.academicPeriod.findFirst({
@@ -217,6 +230,7 @@ console.log(
     tag: TAG,
     admin: admin.id,
     existing: existing.id,
+    holdsAll: holdsAll.id,
     branch: { id: branch.id, name: branch.name },
     category: { id: category.id, name: category.name },
     firstLevel: { id: first.id, name: first.name },

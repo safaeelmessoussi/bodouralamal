@@ -14,6 +14,7 @@
  * loaded, twice, and the lesson stuck.
  */
 import { connect, results } from './cdp.mjs';
+import { setRoles } from './role-chooser.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const S = JSON.parse(process.env.DATE_PICKER_SCENARIO ?? '{}');
@@ -65,20 +66,16 @@ async function assertNoEnglishPlaceholder(label) {
 }
 
 /**
- * R168 §1 — the form ticks no role for her, and a date of birth is asked only of
- * a مستفيدة (R130). So the DOB control exists once «أسجّل نفسي كمستفيدة» is
- * ticked — addressed by what the choice IS, never by its wording.
+ * A date of birth is asked only of a مستفيدة (R130), and «أسجّل نفسي كمستفيدة» is
+ * the form's DEFAULT (R170 §2) — so the DOB control is there as soon as the form
+ * is. `setRoles` still says so explicitly: the journey must not depend on a
+ * default the association may change again.
  */
 async function openRegisterAsStudent() {
   await open(null, `/register#onboarding_token=${S.onboardingToken}`);
   for (let i = 0; i < 40; i += 1) {
-    const ticked = await evaluate(`(() => {
-      const box = document.querySelector('[data-role-choice="student"] input[type="checkbox"]');
-      if (!box) return false;
-      if (!box.checked) box.click();
-      return box.checked;
-    })()`).catch(() => false);
-    if (ticked && (await evaluate("!!document.querySelector('.date-picker__trigger')"))) return true;
+    const ready = await evaluate("!!document.querySelector('[data-role-choices] button.dropdown-trigger')").catch(() => false);
+    if (ready && (await setRoles(evaluate, ['student'])) === 'ok' && (await evaluate("!!document.querySelector('.date-picker__trigger')"))) return true;
     await new Promise((r) => setTimeout(r, 250));
   }
   return false;

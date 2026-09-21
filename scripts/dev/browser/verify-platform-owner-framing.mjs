@@ -3,6 +3,7 @@
  * stack. The shell wrapper supplies only tagged synthetic identities.
  */
 import { connect, results } from './cdp.mjs';
+import { setRoles } from './role-chooser.mjs';
 
 const BASE = process.env.APP_BASE;
 const FIXTURE = JSON.parse(process.env.R115_BROWSER_FIXTURE ?? '{}');
@@ -126,15 +127,9 @@ const setAllBranches = (checked) => evaluate(`(() => {
 
 /* Registration: every framing shape is operated, not inferred from source. */
 check('1 · the real registration form opens', await open(`/register#onboarding_token=${ONBOARDING_TOKEN}`, '.register-form'));
-// R168 §1 — «هيئة التدريس» is one of four role CHOICES now, addressed by what it
-// is (`data-role-choice`), never by its wording.
-const tickRole = (role) => evaluate(`(() => {
-  const box = document.querySelector('[data-role-choice="${role}"] input[type=checkbox]');
-  if (!box) return 'missing';
-  if (!box.checked) box.click();
-  return box.checked;
-})()`);
-check('2 · choosing هيئة التدريس reveals the planning-only framing section', (await tickRole('teaching')) === true && (await waitFor("document.body.innerText.includes('تفضيلات التأطير')")));
+// R168 §1 — «هيئة التدريس» is one of four role CHOICES; R170 §2 put them in one
+// closed control whose default («مستفيدة») this journey unticks.
+check('2 · choosing هيئة التدريس reveals the planning-only framing section', (await setRoles(evaluate, ['teaching'])) === 'ok' && (await waitFor("document.body.innerText.includes('تفضيلات التأطير')")));
 check('3 · in-person framing requires an explicit physical scope', (await setSelect('طريقة التأطير', 'in_person')) === 'in_person' && (await framingState())?.multiPresent === true);
 check('4 · one physical branch can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 1);
 check('5 · several physical branches can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 2);

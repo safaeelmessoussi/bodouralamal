@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { CheckboxField, TextField } from '../components/ui/field.js';
+import { TextField } from '../components/ui/field.js';
+import { MultiSelectField } from '../components/ui/multi-select.js';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
@@ -110,10 +111,12 @@ export function Register(): ReactNode {
    * `self_managed` (R132) is still not a registration at all — it claims a
    * record that exists — so it stays a MODE beside the roles, reached as before.
    */
-  // Nothing is preselected: the Owner lists four choices as equals, and a box
-  // ticked for her is a request she did not make (the same reason «أول مرة» is
-  // never defaulted). An untouched form says «اختاري طلبًا واحدًا على الأقل».
-  const [roles, setRoles] = useState<RoleChoice[]>([]);
+  // **«أسجّل نفسي كمستفيدة» is chosen for her** (SRS Revision 170 §2 — the
+  // Owner, 2026-09-21, reversing R168's «nothing preselected»): it is what
+  // nearly every visitor came for, and a closed control that reads «لم يُختر
+  // شيء» made the form look empty. It is a DEFAULT, never a lock — she unticks
+  // it like any other, and what its section held is erased at once.
+  const [roles, setRoles] = useState<RoleChoice[]>(['student']);
   // **No entry on the form, by the Owner's decision** (R160 §8, 2026-09-16: the
   // option is withdrawn for this release, the flow kept). It is reached by
   // `/register?mode=self-managed` — the link the administration gives her — and
@@ -372,8 +375,19 @@ export function Register(): ReactNode {
       <ApplicationHeader />
       <main id="main" className="section">
         <Container narrow>
-          <h1>{t('register.title')}</h1>
-        <p className="lede">{t('register.lede')}</p>
+          <header className="register-intro">
+            <h1>{t('register.title')}</h1>
+            <p className="lede">{t('register.lede')}</p>
+            {selfManaged ? null : (
+              /* What will happen, before she starts: three short steps, the last
+                 of which is NOT hers — so nobody expects an account at once. */
+              <ol className="register-steps" data-register-steps>
+                <li>{t('register.stepChoose')}</li>
+                <li>{t('register.stepFill')}</li>
+                <li>{t('register.stepReview')}</li>
+              </ol>
+            )}
+          </header>
 
         {branchesFailed ? (
           <ErrorState onRetry={() => void loadBranches()} />
@@ -388,51 +402,43 @@ export function Register(): ReactNode {
           >
             {selfManaged ? null : (
               /**
-               * **Four things, any combination** (SRS Revision 168 §1). Checkboxes
-               * and not a select: the question has several answers, and a control
-               * that can hold only one is what made a mother who memorises,
-               * teaches and registers her daughters fill this form three times.
-               * Unticking a role ERASES what its section held at once — hidden
-               * values are never trusted to a later payload builder to omit.
+               * **Four things, any combination — in ONE closed control** (R168 §1,
+               * redesigned by R170 §2 at the Owner's word). Still real
+               * checkboxes, because the question has several answers; they now
+               * live inside the platform's own `MultiSelectField`, closed until
+               * opened, its trigger NAMING what is chosen. Unticking a role
+               * ERASES what its section held at once — hidden values are never
+               * trusted to a later payload builder to omit.
                */
               <fieldset className="register-form__group" data-role-choices>
                 <legend>{t('register.rolesLegend')}</legend>
-                <p className="field__hint">{t('register.rolesHint')}</p>
-                {ROLE_CHOICES.map((role) => (
-                  // `data-role-choice` — a control is addressed by what it IS:
-                  // the wording of a choice is the association's to change.
-                  <div key={role} data-role-choice={role}>
-                    <CheckboxField
-                      label={t(`register.role.${role}`)}
-                      checked={asks(role)}
-                      onChange={(checked) => {
-                        setRoles((current) =>
-                          ROLE_CHOICES.filter((r) => (r === role ? checked : current.includes(r))),
-                        );
-                        if (checked) return;
-                        if (role === 'student') {
-                          setBranchId(null);
-                          setCategoryId(null);
-                          setFirstTime('');
-                          setCirclePreferences([]);
-                          setApplicant((a) => ({ ...a, birthDate: '' }));
-                        }
-                        if (role === 'guardian') setChildren([EMPTY_CHILD]);
-                        if (role === 'teaching') {
-                          setFramingMode('');
-                          setAllFramingBranches(false);
-                          setFramingBranchIds([]);
-                        }
-                        if (role === 'administration') setAdministrationBranchId(null);
-                      }}
-                    />
-                  </div>
-                ))}
-                {touched && errors['roles'] ? (
-                  <p className="field__error" role="alert">
-                    {errors['roles']}
-                  </p>
-                ) : null}
+                <MultiSelectField
+                  label={t('register.rolesLabel')}
+                  hint={t('register.rolesHint')}
+                  options={ROLE_CHOICES.map((role) => ({ value: role, label: t(`register.role.${role}`) }))}
+                  selected={roles}
+                  required
+                  error={touched ? (errors['roles'] ?? null) : null}
+                  onChange={(next) => {
+                    const dropped = roles.filter((role) => !next.includes(role));
+                    // The options' own order, whatever order she ticked them in.
+                    setRoles(ROLE_CHOICES.filter((role) => next.includes(role)));
+                    if (dropped.includes('student')) {
+                      setBranchId(null);
+                      setCategoryId(null);
+                      setFirstTime('');
+                      setCirclePreferences([]);
+                      setApplicant((a) => ({ ...a, birthDate: '' }));
+                    }
+                    if (dropped.includes('guardian')) setChildren([EMPTY_CHILD]);
+                    if (dropped.includes('teaching')) {
+                      setFramingMode('');
+                      setAllFramingBranches(false);
+                      setFramingBranchIds([]);
+                    }
+                    if (dropped.includes('administration')) setAdministrationBranchId(null);
+                  }}
+                />
               </fieldset>
             )}
 
