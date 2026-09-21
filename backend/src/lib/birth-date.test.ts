@@ -88,3 +88,16 @@ describe('isSelfManagementEligible', () => {
     expect(typeof isSelfManagementEligible(day('2000-01-01'), TODAY)).toBe('boolean');
   });
 });
+
+describe('R169 §9 — a filled-in date is a MARK, never an age', () => {
+  it('answers «not recorded» for the placeholder, and the date itself for a real one', async () => {
+    const { PLACEHOLDER_BIRTH_DATE, knownBirthDate, isSelfManagementEligible } = await import('./birth-date.js');
+    expect(knownBirthDate({ birthDate: PLACEHOLDER_BIRTH_DATE, birthDateIsPlaceholder: true })).toBeNull();
+    expect(knownBirthDate({ birthDate: null, birthDateIsPlaceholder: false })).toBeNull();
+    const real = new Date('2005-01-02T00:00:00.000Z');
+    expect(knownBirthDate({ birthDate: real, birthDateIsPlaceholder: false })).toBe(real);
+    // Read naively, the placeholder would make a child «eligible at eighteen».
+    // That is the whole reason no rule reads `birthDate` directly any more.
+    expect(isSelfManagementEligible(PLACEHOLDER_BIRTH_DATE)).toBe(true);
+  });
+});

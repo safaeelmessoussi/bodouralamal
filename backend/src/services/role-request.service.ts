@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { ConsentMethod, ConsentType, RefreshRevokedReason } from '../generated/prisma/enums.js';
+import { knownBirthDate } from '../lib/birth-date.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
@@ -334,9 +335,12 @@ export async function requestFurtherRole(
     if (!(await users.lockUser(tx, caller.userId))) throw new AppError('NOT_FOUND', 'no such account');
     const me = await tx.user.findFirst({
       where: { id: caller.userId, deletedAt: null, accountStatus: 'active' },
-      select: { id: true, birthDate: true },
+      select: { id: true, birthDate: true, birthDateIsPlaceholder: true },
     });
     if (!me) throw new AppError('FORBIDDEN', 'only an active account may ask for a further role');
+    // A placeholder is «not recorded»: she is asked for the real date, and
+    // giving it is completion, not correction (R169 §9).
+    const recorded = knownBirthDate(me);
 
     const held = await heldRoles(tx, me.id);
     if (HELD_BY[input.kind].some((role) => held.has(role))) {
@@ -361,12 +365,12 @@ export async function requestFurtherRole(
 
       // R130 — a beneficiary carries a date of birth. COMPLETION, never
       // correction: a recorded date is not hers to replace from a form.
-      if (me.birthDate === null && input.birth_date === undefined) {
+      if (recorded === null && input.birth_date === undefined) {
         throw new AppError('VALIDATION_FAILED', 'birth_date is required for a beneficiary (R130)', {
           reason: 'BIRTH_DATE_REQUIRED',
         });
       }
-      if (me.birthDate !== null && input.birth_date !== undefined) {
+      if (recorded !== null && input.birth_date !== undefined) {
         throw new AppError('STATE_CONFLICT', 'her date of birth is already recorded', {
           reason: 'BIRTH_DATE_ALREADY_RECORDED',
         });
@@ -376,7 +380,9 @@ export async function requestFurtherRole(
         data: {
           intendedBranchId: branch.id,
           intendedCategoryId: category.id,
-          ...(input.birth_date !== undefined ? { birthDate: input.birth_date } : {}),
+          ...(input.birth_date !== undefined
+            ? { birthDate: input.birth_date, birthDateIsPlaceholder: false }
+            : {}),
         },
       });
       ranked = await replaceCirclePreferences(

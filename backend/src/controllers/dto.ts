@@ -1818,6 +1818,7 @@ export function userDto(row: {
   lastNameFrench: string | null;
   sex: string | null;
   birthDate?: Date | null;
+  birthDateIsPlaceholder?: boolean;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -1852,7 +1853,12 @@ export function userDto(row: {
      * would need this — and not to any beneficiary-facing list. An age is never
      * sent: it is derived where it is needed, from `lib/birth-date.ts`.
      */
-    birth_date: row.birthDate ? row.birthDate.toISOString().slice(0, 10) : null,
+    // R169 §9 — a PLACEHOLDER never leaves the server as a date: the form
+    // reads «not recorded» and offers to complete it, which is exactly right.
+    birth_date:
+      row.birthDate && row.birthDateIsPlaceholder !== true
+        ? row.birthDate.toISOString().slice(0, 10)
+        : null,
     nickname: row.nickname,
     public_display_name: row.publicDisplayName,
     phone: row.phone,

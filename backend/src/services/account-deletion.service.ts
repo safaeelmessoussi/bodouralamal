@@ -577,6 +577,8 @@ export async function deIdentifyAccount(
          * date is recorded or absent, never approximated.
          */
         birthDate: null,
+        // R169 §9 — the mark goes with the date it marked.
+        birthDateIsPlaceholder: false,
         /**
          * **`reference_code` IS cleared** (Revision 133).
          *

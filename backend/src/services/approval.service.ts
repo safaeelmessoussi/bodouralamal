@@ -1060,6 +1060,10 @@ export async function decide(
       }
 
       if (decision.approve && admitted.length > 0) {
+        // R169 §9 — becoming a beneficiary means carrying a date of birth. A
+        // registration from before R130 has none; the DATABASE gives her the
+        // MARKED placeholder (`user_beneficiary_birth_date_fill`), which
+        // «المستخدمون» asks staff to replace.
         await tx.user.updateMany({
           where: { id: { in: admitted } },
           data: { isBeneficiary: true },

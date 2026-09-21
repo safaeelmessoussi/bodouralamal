@@ -1,3 +1,4 @@
+import { knownBirthDate } from "../lib/birth-date.js";
 import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -443,7 +444,7 @@ describe("R130 — every beneficiary carries a full date of birth (Owner, 2026-0
     expect(names.filter((n) => /(^|_)age($|_)/.test(n))).toEqual([]);
   });
 
-  it("12 · a legacy beneficiary with no date is left alone, never given one", async () => {
+  it("12 · a legacy beneficiary with no date is given the MARKED placeholder — never an estimate, never read as her date (R169 §9)", async () => {
     const legacy = await prisma.user.create({
       data: {
         sex: "female",
@@ -452,10 +453,16 @@ describe("R130 — every beneficiary carries a full date of birth (Owner, 2026-0
         isBeneficiary: true,
       },
     });
-    // Nothing in the read path fabricates, defaults or infers a value — not from
-    // the Category, the schooling stage, an enrolment or the row's own age.
+    // R130 left her with none, «never given one». The Owner reversed that on
+    // 2026-09-21 — every beneficiary carries a date — so the database fills ONE
+    // fixed day and MARKS it. What still holds is the half that mattered: nothing
+    // fabricates, defaults or infers a value from the Category, the schooling
+    // stage, an enrolment or the row's own age, and no rule reads the mark as a
+    // date of birth.
     const read = await prisma.user.findUniqueOrThrow({ where: { id: legacy.id } });
-    expect(read.birthDate).toBeNull();
+    expect(read.birthDate?.toISOString().slice(0, 10)).toBe("1900-01-01");
+    expect(read.birthDateIsPlaceholder).toBe(true);
+    expect(knownBirthDate(read)).toBeNull();
   });
 });
 

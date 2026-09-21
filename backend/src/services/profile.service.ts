@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { knownBirthDate } from '../lib/birth-date.js';
 import { qrMatrixFor, type QrMatrix } from '../lib/qr-identity.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -113,6 +114,7 @@ export async function getOwnProfile(
       accountStatus: true,
       referenceCode: true,
       birthDate: true,
+      birthDateIsPlaceholder: true,
       isBeneficiary: true,
       qrRef: true,
       version: true,
@@ -174,7 +176,9 @@ export async function getOwnProfile(
     sex: user.sex,
     accountStatus: user.accountStatus,
     referenceCode: user.referenceCode,
-    birthDate: user.birthDate ? user.birthDate.toISOString().slice(0, 10) : null,
+    // R169 §9 — a placeholder never leaves the server as a date: to her it is
+    // what it is, «not recorded», and the form asks her to complete it.
+    birthDate: knownBirthDate(user)?.toISOString().slice(0, 10) ?? null,
     isBeneficiary: user.isBeneficiary,
     qr: await qrMatrixFor(user.qrRef),
     enrolments: user.levelEnrollments.map((e) => ({
@@ -240,11 +244,11 @@ export interface OwnProfileInput {
  * already has both may not explicitly clear either back to empty.
  */
 function assertBeneficiaryComplete(
-  current: { phone: string | null; birthDate: Date | null },
+  current: { phone: string | null; birthDate: Date | null; birthDateIsPlaceholder: boolean },
   input: OwnProfileInput,
 ): void {
   const resultingPhone = input.phone !== undefined ? input.phone : current.phone;
-  const resultingBirthDate = input.birthDate !== undefined ? input.birthDate : current.birthDate;
+  const resultingBirthDate = input.birthDate !== undefined ? input.birthDate : knownBirthDate(current);
   const issues: { path: string; message: string }[] = [];
   if (resultingPhone === null || resultingPhone.trim() === '') {
     issues.push({ path: 'phone', message: 'required for a beneficiary profile' });
@@ -267,7 +271,7 @@ export async function updateOwnProfile(
 ): Promise<OwnProfile> {
   const existing = await prisma.user.findFirst({
     where: { id: caller.userId, deletedAt: null },
-    select: { phone: true, birthDate: true, isBeneficiary: true },
+    select: { phone: true, birthDate: true, birthDateIsPlaceholder: true, isBeneficiary: true },
   });
   if (!existing) throw new AppError('AUTH_REQUIRED', 'account unavailable');
   if (existing.isBeneficiary) assertBeneficiaryComplete(existing, input);
@@ -279,7 +283,10 @@ export async function updateOwnProfile(
     data: {
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
-      ...(input.birthDate !== undefined ? { birthDate: input.birthDate } : {}),
+      // Recording a date — or clearing one — always clears the placeholder mark.
+      ...(input.birthDate !== undefined
+        ? { birthDate: input.birthDate, birthDateIsPlaceholder: false }
+        : {}),
       version: { increment: 1 },
     },
   });

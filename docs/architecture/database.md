@@ -508,6 +508,19 @@ into exactly the kind of copy that the platform has been burned by before.
 
 ### Checks
 
+- **A live beneficiary carries a date of birth (R169 §9)** —
+  `user_beneficiary_birth_date_check`: `NOT is_beneficiary OR deleted_at IS NOT NULL OR birth_date
+  IS NOT NULL`. The COLUMN stays nullable (a guardian-only adult and a staff request are never
+  asked, R49/R130), and a deleted row is exempt because de-identification erases the date. The rule
+  is APPLIED by a trigger rather than by each service: `user_beneficiary_birth_date_fill` gives a
+  live beneficiary row that would carry no date the fixed **1900-01-01** with
+  `birth_date_is_placeholder = true` — whatever path made her a beneficiary, including a restore from
+  the Trash or a script — and clears the mark when any other date is written.
+  `user_birth_date_placeholder_check` ties the mark to that one date. **The placeholder is a mark,
+  never an age**: every rule reads `knownBirthDate()` (`lib/birth-date.ts`), which answers `null` for
+  it — read naively it would make a child «eligible at eighteen» (R132) — and no DTO sends it as a
+  date: the API says `birth_date: null`, so the forms ask for the real one. Recording it is
+  COMPLETION (R130): it replaces the placeholder once, and correcting a recorded date stays refused.
 - `QuranProgressLog`: `start_ayah >= 1 AND start_ayah <= end_ayah`. The upper bound against
   the Surah's total crosses tables, so it is a **trigger** plus a service check.
 - All stored scores: `>= 0 AND <= 10000`. **No float score column exists anywhere.**
@@ -799,6 +812,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260922090000_r167_whole_category_content_and_level_completion_mark
 20260923090000_r168_recording_recovered_from_segments
 20260923100000_r168_role_requests
+20260924090000_r169_beneficiary_birth_date_required
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

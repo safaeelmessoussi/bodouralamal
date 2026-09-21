@@ -673,11 +673,18 @@ model User {
   sex               Sex       @map("sex")
   /// R130 — **the beneficiary's full date of birth**, a TD-11 calendar date and
   /// never an instant. Required at the write boundary for every beneficiary and
-  /// NOT collected from a guardian-only adult or a staff request; nullable here
-  /// because 25 existing beneficiaries have none and inventing one would be
-  /// indistinguishable from a recorded fact. **No age column exists** — an age
+  /// NOT collected from a guardian-only adult or a staff request — which is why
+  /// the COLUMN stays nullable. For a beneficiary it is mandatory since R169 §9
+  /// (`user_beneficiary_birth_date_check`), with a MARKED placeholder where none
+  /// was ever recorded (`birthDateIsPlaceholder`). **No age column exists** — an age
   /// is wrong the day after it is written, so `lib/birth-date.ts` derives it.
   birthDate         DateTime? @map("birth_date") @db.Date
+  /// R169 §9 — **`birth_date` above is NOT her date of birth**: it is the fixed
+  /// 1900-01-01 the platform filled in so that every beneficiary carries a date
+  /// (a CHECK in hand-written SQL: a live beneficiary has one). Every rule that
+  /// reads an age treats a placeholder as UNKNOWN; recording the real date
+  /// replaces it once and clears this. See `lib/birth-date.ts`.
+  birthDateIsPlaceholder Boolean @default(false) @map("birth_date_is_placeholder")
 
   /// **Is this person one of the institute's مستفيدات?** (Revision 79)
   ///

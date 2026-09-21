@@ -1,5 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { isSelfManagementEligible } from '../lib/birth-date.js';
+import { isSelfManagementEligible, knownBirthDate } from '../lib/birth-date.js';
 import { AppError } from '../lib/errors.js';
 import type { VerifiedIdentity } from '../lib/oauth.js';
 import type { Actor } from '../policies/actor.js';
@@ -136,6 +136,7 @@ export async function requestSelfManagedClaim(
         accountStatus: true,
         isBeneficiary: true,
         birthDate: true,
+        birthDateIsPlaceholder: true,
         identities: { where: { isActive: true }, select: { id: true } },
       },
     });
@@ -146,8 +147,10 @@ export async function requestSelfManagedClaim(
       beneficiary.accountStatus !== 'active' ||
       !beneficiary.isBeneficiary ||
       beneficiary.identities.length > 0 ||
-      beneficiary.birthDate === null ||
-      !isSelfManagementEligible(beneficiary.birthDate)
+      // R169 §9 — a PLACEHOLDER is «not recorded»: nobody turns eighteen by way
+      // of a date the platform filled in.
+      knownBirthDate(beneficiary) === null ||
+      !isSelfManagementEligible(knownBirthDate(beneficiary)!)
     ) {
       throw claimUnavailable();
     }
@@ -257,6 +260,7 @@ export async function approveSelfManagedClaim(
         accountStatus: true,
         isBeneficiary: true,
         birthDate: true,
+        birthDateIsPlaceholder: true,
         identities: { where: { isActive: true }, select: { id: true } },
       },
     });
@@ -264,8 +268,10 @@ export async function approveSelfManagedClaim(
       !beneficiary ||
       beneficiary.accountStatus !== 'active' ||
       !beneficiary.isBeneficiary ||
-      beneficiary.birthDate === null ||
-      !isSelfManagementEligible(beneficiary.birthDate)
+      // R169 §9 — a PLACEHOLDER is «not recorded»: nobody turns eighteen by way
+      // of a date the platform filled in.
+      knownBirthDate(beneficiary) === null ||
+      !isSelfManagementEligible(knownBirthDate(beneficiary)!)
     ) {
       // Fail CLOSED and say which side moved: an administrator seeing this needs
       // to know the claim is stale rather than that the button is broken.

@@ -11157,3 +11157,50 @@ project has had — `verify-trash-restore` **6/6**: a deleted circle is offered 
 **Full gates, once, at the boundary (part three).** Backend unit **360/360**; frontend **1,461/1,461**; 32
 guards + doc links; OpenAPI regenerated, no drift; full disposable integration **2,772 passed, exit 0**,
 isolation passed; seed drill **exit 0** (the scenario seed now also makes and cleans a deletable circle).
+
+**Hosted CI green on the first push — `aa9e879` 8/8. Deployed to `staging.bodouralamal.com` at
+`aa9e879c8f9083cb42a1b34aa3ec0fbb23edf040` (SRS Revision 169, part three), upgrading from `8d87feb`. No
+Production action.** Recordings asked first (`{"active":0}`, exit 0); dump taken; one older release
+image removed before the preflight (running release and predecessor kept; 22 GiB free); preflight
+PASS; both labels exact; no pending migration; `/healthz` 200, `/rtc/validate` 401; zero error lines.
+
+## 2026-09-21 — SRS Revision 169 (part four): every beneficiary carries a date of birth
+
+**What the Owner asked, verbatim.** «fill records without birth dates with any dates, just to be able to
+make Birth date mandatory.» R130 had left the rule's contract phase waiting for every legacy record to
+be completed by hand, because «inventing one would be indistinguishable from a recorded fact».
+
+**What was built is her decision with one safeguard: the filled date is MARKED.** A date of birth decides
+who may claim a self-managed account at eighteen (R132), and «completion, never correction» (R130) would
+have stopped anybody fixing an invented one. So `birth_date_is_placeholder` says «this is not her date
+of birth»; the value is one fixed, unmistakable day (1900-01-01); `knownBirthDate()` answers `null` for
+it and is what every rule reads; no DTO sends it as a date, so «المستخدمون» and «حسابي» simply read
+«not recorded» and ask for the real one; and recording it replaces the placeholder ONCE.
+
+**A design I changed mid-way, and why.** I first patched each path that makes somebody a beneficiary
+(the whole-account approval, the per-role decision, a legacy child application) and was about to edit
+thirty fixtures that create beneficiaries directly. That is one rule in five places, waiting for a sixth
+to forget it. The rule now lives in ONE place — a trigger, `user_beneficiary_birth_date_fill`: a live
+beneficiary row that would carry no date gets the marked placeholder, whatever wrote it, including a
+restore from the Trash; writing any other date clears the mark. Two CHECKs are the backstop. The service
+copies were removed; no fixture needed touching.
+
+**Verification (part four).** `birth-date` unit tests **11/11** (one pins the reason the mark exists: read
+naively, the placeholder IS «eligible at eighteen»). `user.integration` **46/46** on the disposable stack:
+test 13 restated (a legacy beneficiary now carries the marked placeholder, `knownBirthDate` says null,
+completion clears the mark), a new 13a for the database rule (becoming a beneficiary later fills it; a
+real date can never carry the mark; a non-beneficiary is given none; an erased row keeps its NULL), and 14
+restated. On Localhost the migration filled **3** live records (Staging has 9); through the real API a
+placeholder account's `GET /profile` answers `birth_date: null` with no placeholder key at all — checked
+with a session I minted for one real account and then removed (2 tokens, 1 session; none left).
+`verify-enrolments-dialog` **24/24**, `verify-registration` **45/45**.
+
+**Full gates, once, at the boundary (part four).** Backend unit **361/361**; frontend **1,461/1,461** (one
+pinned source test restated: the profile's «resulting value» is her KNOWN date); 32 guards + doc links;
+OpenAPI regenerated, no drift. The full disposable integration run FAILED first — one of 2,792:
+`registration.integration` test 12 pinned R130's old policy word for word («a legacy beneficiary with no
+date is left alone, never given one»), which this revision reverses by the Owner's decision. Restated to
+the new rule — she is given the MARKED placeholder, and nothing reads it as a date — then the WHOLE suite
+again: **2,773 passed, exit 0**, isolation passed. Seed drill **exit 0**. Disclosed: my API check on
+Localhost left one truthful `auth.refresh` audit line on a real account (the audit log is append-only
+and was not edited); the session itself was removed.

@@ -1,3 +1,4 @@
+import { knownBirthDate } from "../lib/birth-date.js";
 import { emailLockDigest } from '../lib/email-lock.js';
 import { randomUUID } from "node:crypto";
 
@@ -193,7 +194,12 @@ describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () =>
     const admin = await makeStaff("super_admin");
     const legacy = await beneficiaryWithNoBirthDate();
     const before = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
-    expect(before.birthDate).toBeNull();
+    // R169 §9 — she HAS a date now, because every beneficiary does: the database
+    // filled the MARKED placeholder the moment the row said `is_beneficiary`.
+    // It is a mark, not a date — nothing reads it as her age (`knownBirthDate`).
+    expect(before.birthDate?.toISOString().slice(0, 10)).toBe("1900-01-01");
+    expect(before.birthDateIsPlaceholder).toBe(true);
+    expect(knownBirthDate(before)).toBeNull();
 
     await updateUser(prisma, await actorFor(prisma, admin), legacy, before.version, {
       birthDate: new Date("2009-05-20T00:00:00Z"),
@@ -201,6 +207,9 @@ describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () =>
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: legacy } });
     expect(after.birthDate?.toISOString().slice(0, 10)).toBe("2009-05-20");
+    // Recording the real date is COMPLETION — it replaces the placeholder once,
+    // and the mark goes with it (13b: a second rewrite is still refused).
+    expect(after.birthDateIsPlaceholder).toBe(false);
 
     const entry = await prisma.auditLog.findFirstOrThrow({
       where: { targetEntity: "User", targetId: legacy, actionType: "user.update" },
@@ -211,6 +220,43 @@ describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () =>
     // that. The audit says a birth date was recorded; it does not say which.
     expect(entry.detail).toMatchObject({ fields: ["birthDate"] });
     expect(JSON.stringify(entry.detail)).not.toContain("2009");
+  });
+
+  it("13a · R169 §9 — the DATABASE keeps the rule: no live beneficiary without a date, and no mark on a real one", async () => {
+    // Becoming a beneficiary LATER fills it too — whichever path set the flag.
+    const adult = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} مؤطرة تصير مستفيدة`, accountStatus: "active" },
+    });
+    expect(adult.birthDate).toBeNull();
+    const admitted = await prisma.user.update({ where: { id: adult.id }, data: { isBeneficiary: true } });
+    expect(admitted).toMatchObject({ birthDateIsPlaceholder: true });
+    expect(admitted.birthDate?.toISOString().slice(0, 10)).toBe("1900-01-01");
+
+    // A real date can never carry the mark, even if something asks for it.
+    const real = await prisma.user.create({
+      data: {
+        sex: "female",
+        nameArabic: `${TAG} مستفيدة بتاريخ`,
+        accountStatus: "active",
+        isBeneficiary: true,
+        birthDate: new Date("2010-03-04T00:00:00Z"),
+        birthDateIsPlaceholder: true,
+      },
+    });
+    expect(real.birthDateIsPlaceholder).toBe(false);
+
+    // A non-beneficiary is never given one (R49's minimisation stands)…
+    const staff = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} موظفة`, accountStatus: "active" },
+    });
+    expect(staff).toMatchObject({ birthDate: null, birthDateIsPlaceholder: false });
+    // …and an ERASED beneficiary keeps her NULL: nothing is invented about a
+    // person the platform de-identified.
+    const erased = await prisma.user.update({
+      where: { id: real.id },
+      data: { deletedAt: new Date(), birthDate: null },
+    });
+    expect(erased.birthDate).toBeNull();
   });
 
   it("13b · REFUSES to rewrite a date that is already recorded", async () => {
@@ -266,8 +312,10 @@ describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () =>
       ).rejects.toBeTruthy();
     }
     // And nothing moved.
+    // Nobody wrote one: what she carries is still ONLY the placeholder (R169 §9)
+    // — «not recorded» to every rule that reads a date of birth.
     expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id: legacy } })).birthDate,
+      knownBirthDate(await prisma.user.findUniqueOrThrow({ where: { id: legacy } })),
     ).toBeNull();
   });
 

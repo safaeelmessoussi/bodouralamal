@@ -393,9 +393,10 @@ export async function decideChildApplication(
           // R130 — the SUBMITTED calendar date, materialised unchanged. The
           // application is the evidence and the `User` becomes the authority;
           // copying rather than recomputing is what keeps the two from
-          // disagreeing. Legacy applications carry none and are approved without
-          // one rather than being given an invented date — the administrator
-          // records the real one afterwards.
+          // disagreeing. A LEGACY application carries none. R169 §9: every
+          // beneficiary carries a date, so when this child becomes one below the
+          // DATABASE gives her the MARKED placeholder — never an estimate, shown
+          // nowhere as a date, and replaced once by whoever records the real one.
           ...(application.birthDate ? { birthDate: application.birthDate } : {}),
           ...(application.schoolingStage ? { schoolingStage: application.schoolingStage } : {}),
           // Approved here, so the child is usable immediately (TD-4.2).

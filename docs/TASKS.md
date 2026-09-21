@@ -1502,7 +1502,7 @@ was hiding behind it: the run went green on the first attempt.
       anywhere, asserted against `information_schema`. **18 establishes
       eligibility and triggers nothing**: no birthday job, guarded by asserting
       no job source names the column.
-      - [ ] **CONTRACT PHASE PENDING, and honestly so — `birth_date` cannot
+      - [x] **[Closed 2026-09-21 — the Owner decided: fill the gaps so it can be mandatory. Built as R169 §9 with a MARKED placeholder applied by the database; the real date replaces it once]** **CONTRACT PHASE PENDING, and honestly so — `birth_date` cannot
             become `NOT NULL` until every live beneficiary has a real recorded
             date.** 25 have none (Localhost, 2026-09-03) and none was
             fabricated. Completion is a Super Admin recording the real date on
@@ -5483,7 +5483,7 @@ The Owner's six replies to Revision 167's report. One migration so far
 - [x] **Part three — BUILT, R169 §8: the Trash restores a Subject circle, a class schedule and
       a Level** (the Owner: build). A Level's event-audience joins are hard-
       deleted today; they must be snapshotted from now on.
-- [ ] **Part four — a date of birth for every beneficiary** (the Owner: fill the
+- [x] **Part four — BUILT, R169 §9: a date of birth for every beneficiary** (the Owner: fill the
       gaps so it can be mandatory). To be built with a MARKER on a filled date:
       a placeholder that looks real would drive the 18-year rule (R132) for a
       child, and «completion, never correction» would stop anyone fixing it.
@@ -5527,3 +5527,12 @@ The Owner's six replies to Revision 167's report. One migration so far
       images had piled up. The five oldest UNUSED release images were removed
       (re-pullable from the registry; the running release and its predecessor
       kept) → 23 GiB free, preflight PASS. `/healthz` 200; zero error lines.
+- [x] **Hosted CI 8/8 on `aa9e879` (part three); deployed to Staging at
+      `aa9e879`** from `8d87feb` — recordings asked first; one older release
+      image removed (running release and predecessor kept), 22 GiB free;
+      no pending migration; `/healthz` 200; zero error lines.
+- [ ] **For the Owner — data, not code (R169 §9):** the beneficiaries whose date
+      of birth was never recorded now read «غير مسجَّل» and carry the marked
+      placeholder: 3 on Localhost, 9 on Staging. Recording the real date from
+      «المستخدمون» (or each from her own «حسابي») replaces it once. A filter
+      «بلا تاريخ ميلاد» on «المستخدمون» is NOT built — say if it is wanted.

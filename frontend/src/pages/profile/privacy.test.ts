@@ -134,7 +134,9 @@ describe('phone and birth_date are required for a beneficiary profile, and for n
     // Resulting, not merely-what-was-sent: an edit touching only nickname
     // must not be blocked by a legacy gap it did not create.
     expect(svc).toContain('input.phone !== undefined ? input.phone : current.phone');
-    expect(svc).toContain('input.birthDate !== undefined ? input.birthDate : current.birthDate');
+    // R169 §9 — what she HAS is her KNOWN date: a placeholder is «not recorded»,
+    // so it is still the gap she is asked to complete, never a date she «has».
+    expect(svc).toContain('input.birthDate !== undefined ? input.birthDate : knownBirthDate(current)');
   });
 
   it('a non-beneficiary (guardian-only or staff) is never forced into either requirement', () => {

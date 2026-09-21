@@ -124,3 +124,26 @@ export function ageOn(birthDate: Date, on: Date): number {
 export function isSelfManagementEligible(birthDate: Date, on: Date = new Date()): boolean {
   return ageOn(birthDate, on) >= SELF_MANAGED_AGE_YEARS;
 }
+
+/**
+ * **The date the platform fills in where a beneficiary has none** (SRS Revision
+ * 169 §9 — the Owner, 2026-09-21: every beneficiary carries a date of birth,
+ * and a filled-in one is acceptable to get there).
+ *
+ * **The DATABASE fills it** — trigger `user_beneficiary_birth_date_fill`: a live
+ * beneficiary row that would carry no date gets this one, marked — so no
+ * service has to remember and none can forget. One fixed, unmistakable day,
+ * ALWAYS stored with `birthDateIsPlaceholder = true` (a CHECK ties the two). It is never an estimate and never shown as a
+ * date: screens say «غير مسجَّل», and every rule that reads an age goes through
+ * `knownBirthDate`, which answers `null` for it — so a child can never become
+ * «eighteen» by way of a date nobody recorded.
+ */
+export const PLACEHOLDER_BIRTH_DATE = new Date('1900-01-01T00:00:00.000Z');
+
+/** Her REAL date of birth, or `null` — absent, or only the placeholder. */
+export function knownBirthDate(person: {
+  birthDate: Date | null;
+  birthDateIsPlaceholder: boolean;
+}): Date | null {
+  return person.birthDateIsPlaceholder ? null : person.birthDate;
+}

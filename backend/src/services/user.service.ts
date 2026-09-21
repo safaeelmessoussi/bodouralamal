@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
+import { knownBirthDate } from '../lib/birth-date.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
@@ -447,6 +448,8 @@ async function listUsersUnchecked(
         sex: true,
         // R130 — the §5.6 edit form completes a missing one, so it must know.
         birthDate: true,
+        // R169 §9 — …and a PLACEHOLDER is a missing one.
+        birthDateIsPlaceholder: true,
         nickname: true,
         publicDisplayName: true,
         phone: true,
@@ -663,6 +666,7 @@ async function loadManageable(
   firstNameFrench: string | null;
   lastNameFrench: string | null;
   birthDate: Date | null;
+  birthDateIsPlaceholder: boolean;
 }> {
   const managed = branchesForRole(actor.roleScopes, 'admin');
   const user = await db.user.findFirst({
@@ -690,6 +694,7 @@ async function loadManageable(
       // R130 — like `sex`, the stored value travels so the completion guard can
       // see whether one is already recorded. Read here and nowhere else.
       birthDate: true,
+      birthDateIsPlaceholder: true,
     },
   });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
@@ -723,10 +728,14 @@ export async function updateUser(
      * eligibility for a self-managed account, so changing one is its own
      * decision rather than a side effect of an edit form.
      */
+    // R169 §9 — a PLACEHOLDER is not a recorded date: replacing it IS the
+    // completion this path exists for, and it happens once — the real date then
+    // stands, and correcting that remains its own decision.
+    const recordedBirthDate = knownBirthDate(target);
     if (
       input.birthDate !== undefined &&
-      target.birthDate !== null &&
-      target.birthDate.getTime() !== input.birthDate.getTime()
+      recordedBirthDate !== null &&
+      recordedBirthDate.getTime() !== input.birthDate.getTime()
     ) {
       throw new AppError('VALIDATION_FAILED', 'a date of birth is already recorded for this person', {
         reason: 'BIRTH_DATE_ALREADY_RECORDED',
@@ -775,7 +784,9 @@ export async function updateUser(
         ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.sex !== undefined ? { sex: input.sex } : {}),
-        ...(input.birthDate !== undefined ? { birthDate: input.birthDate } : {}),
+        ...(input.birthDate !== undefined
+          ? { birthDate: input.birthDate, birthDateIsPlaceholder: false }
+          : {}),
         version: { increment: 1 },
       },
     });
