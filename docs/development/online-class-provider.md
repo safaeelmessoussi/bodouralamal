@@ -124,10 +124,14 @@ class is listed for the first Level's beneficiaries only.
 
 The job retries under TD-7's backoff and then stops, which is right for a transient failure
 and useless once a DEFECT is fixed: the staging object is still there and nothing is left to
-try it. `backend/scripts/requeue-recording-ingest.ts` puts the ordinary import job back for
+try it. `npm run ops:requeue-recordings` — `src/ops/requeue-recording-ingest.ts`, under `src/` on
+purpose: the release image ships compiled `src` and `prisma` only, and a recovery tool that
+cannot run on the tier where recordings were stranded is a note, not a tool — puts the ordinary
+import job back for
 every recording that is `completed`, has an output object and no content — idempotently (the
 job's first step is its own idempotency anchor), printing counts and recording ids only.
-`--dry-run` lists without writing. On Staging and Production it is a queue mutation and needs
+`-- --dry-run` lists without writing. On a release tier:
+`docker compose … run --rm --no-deps api npm run -s ops:requeue-recordings -- --dry-run`. On Staging and Production it is a queue mutation and needs
 the Owner's authorization like any other.
 
 ## What it actually costs (MEASURED)

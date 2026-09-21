@@ -18,6 +18,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "seed:production": "node dist/prisma/seed/production.js",
     "seed:fixtures": "node dist/prisma/seed/fixtures.js",
+    "ops:requeue-recordings": "node dist/src/ops/requeue-recording-ingest.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

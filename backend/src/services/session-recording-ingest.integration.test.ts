@@ -19,6 +19,7 @@ import { createLevel } from "./level.service.js";
 import {
   ingestRecording,
   RecordingStagingCleanupFailure,
+  requeueStrandedRecordings,
 } from "./session-recording-ingest.service.js";
 import { applyProviderReport } from "./session-recording.service.js";
 
@@ -922,6 +923,50 @@ describe("SRS Revision 166 §4 — a filter-built class's recording is imported 
       select: { ingestionFailureReason: true },
     });
     expect(row.ingestionFailureReason).toBeNull();
+  });
+});
+
+/* ── A stranded import is put back ───────────────────────────────────────── */
+
+describe("SRS Revision 166 §4 — `ops:requeue-recordings` puts a stranded import back", () => {
+  it("lists without writing on a dry run, queues exactly the stranded ones, and is harmless to run twice", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    // Stranded: made, never imported, refused for a reason since fixed.
+    const stranded = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    await prisma.sessionRecording.update({
+      where: { id: stranded.id },
+      data: { ingestionFailureReason: "the occurrence resolves to no Level" },
+    });
+    const pending = async (): Promise<number> =>
+      Number(
+        (
+          await prisma.$queryRaw<{ n: bigint }[]>`
+            select count(*) as n from pgboss.job
+             where name = 'session-recording-ingest'
+               and data->>'recording_id' = ${stranded.id}
+               and state in ('created', 'retry')`
+        )[0]!.n,
+      );
+    const before = await pending();
+
+    const dry = await requeueStrandedRecordings(prisma, { dryRun: true });
+    expect(dry.recording_ids).toContain(stranded.id);
+    expect(dry.queued).toBe(0);
+    expect(dry.reasons).toContain("the occurrence resolves to no Level");
+    expect(await pending()).toBe(before);
+
+    const first = await requeueStrandedRecordings(prisma, { dryRun: false });
+    expect(first.recording_ids).toContain(stranded.id);
+    expect(await pending()).toBe(before + 1);
+
+    // Twice is once: the singleton key is the recording's own id.
+    await requeueStrandedRecordings(prisma, { dryRun: false });
+    expect(await pending()).toBe(before + 1);
+
+    // …and once it HAS content it is no longer stranded, so it is left alone.
+    await ingestRecording(prisma, clients, stranded.id);
+    const after = await requeueStrandedRecordings(prisma, { dryRun: true });
+    expect(after.recording_ids).not.toContain(stranded.id);
   });
 });
 

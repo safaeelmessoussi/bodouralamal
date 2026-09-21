@@ -5255,7 +5255,7 @@ required; nothing dropped or rewritten).
 - [x] **§4 — recordings of filter-built classes import.** The job resolved a
       Level from the single-target columns only; every class since R163 §5 has
       none, so each recording was refused four times and stranded.
-      `scripts/requeue-recording-ingest.ts` re-queues stranded imports; the
+      `npm run ops:requeue-recordings` (shipped in the image) re-queues stranded imports; the
       Owner's seven on Localhost imported.
 - [x] **A composed title can no longer overflow `VARCHAR(120)`** — it would
       have REFUSED a recording's or a bare exam's row. Surahs give way first,

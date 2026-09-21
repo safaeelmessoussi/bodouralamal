@@ -12,6 +12,7 @@ import {
 } from "../lib/file-types.js";
 import { verifyStoredObject } from "../lib/object-verification.js";
 import { scheduleLevelIds } from "../policies/roster-resolution.js";
+import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 import { publicDisplayName } from "../lib/display-name.js";
 import {
   nextRecordingName,
@@ -535,3 +536,59 @@ async function linkedTitles(
 
 /** TD-11: a Session carries a calendar date, never an instant. */
 const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * **Re-queues the import of recordings that were made but never reached the
+ * library** (SRS Revision 166 §4) — the operator tool behind
+ * `npm run ops:requeue-recordings`.
+ *
+ * `session-recording-ingest` retries under TD-7's backoff and then stops. That
+ * is right for a transient failure and useless once a DEFECT is fixed: the
+ * staging object is still there and nothing is left to try it. For every
+ * recording that is `completed`, not deleted, has an output object and has NO
+ * content, this enqueues the ordinary import job — the same queue, payload and
+ * singleton key the provider callback uses. It clears nothing: the job's own
+ * first step is its idempotency anchor, so running this twice, or beside a job
+ * already pending, is harmless. Returns counts, the platform's own refusal text
+ * and recording ids — never a title, a name or a key.
+ */
+export async function requeueStrandedRecordings(
+  prisma: PrismaClient,
+  options: { dryRun: boolean },
+): Promise<{
+  stranded: number;
+  queued: number;
+  already_pending: number;
+  dry_run: boolean;
+  reasons: string[];
+  recording_ids: string[];
+}> {
+  const stranded = await prisma.sessionRecording.findMany({
+    where: {
+      status: "completed",
+      deletedAt: null,
+      educationalContentId: null,
+      outputKey: { not: null },
+    },
+    select: { id: true, ingestionFailureReason: true },
+    orderBy: { startedAt: "asc" },
+  });
+
+  let queued = 0;
+  if (!options.dryRun) {
+    for (const recording of stranded) {
+      const inserted = await prisma.$transaction((tx) =>
+        enqueue(tx, JOB_QUEUES.sessionRecordingIngest, { recording_id: recording.id }, recording.id),
+      );
+      if (inserted) queued += 1;
+    }
+  }
+  return {
+    stranded: stranded.length,
+    queued,
+    already_pending: options.dryRun ? 0 : stranded.length - queued,
+    dry_run: options.dryRun,
+    reasons: [...new Set(stranded.map((r) => r.ingestionFailureReason ?? "(none recorded)"))],
+    recording_ids: stranded.map((r) => r.id),
+  };
+}

@@ -10722,7 +10722,10 @@ and recomposed on `PATCH /exams/{id}` only while it still equals what composing 
 would give — no marker column; the text is the evidence.
 
 **Recordings (§4).** `recordingLevelId` → `scheduleLevelIds`. The seven jobs on Localhost had used 4/4
-retries; `requeue-recording-ingest.ts` re-queued them and all seven imported.
+retries; the re-queue tool put them back and all seven imported. It first lived in `backend/scripts/`,
+which the release image does not contain — a recovery tool that cannot run where the recordings were
+stranded — so the logic is `requeueStrandedRecordings` in the ingest service and the entry point is
+`src/ops/requeue-recording-ingest.ts`, run as `npm run ops:requeue-recordings [-- --dry-run]`.
 
 **Every instant, an hour off.** Found checking a recording title against `psql`: the database said
 17:28 UTC, the app read 18:28 UTC. A probe then showed the write direction too (sent 12:00 UTC,
