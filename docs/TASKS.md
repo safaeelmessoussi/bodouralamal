@@ -1999,7 +1999,7 @@ was hiding behind it: the run went green on the first attempt.
   PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
   DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
   `purge_after` scan
-- [ ] **DOCUMENT OWNER ACTION REQUIRED — R111 account-purge reconciliation.** The ratified
+- [x] **DOCUMENT OWNER ACTION REQUIRED — R111 account-purge reconciliation.** **[Closed 2026-09-21 — STALE in substance: the purge job exists (`trash.retention-purge` → `deIdentifyAccountSystem`, daily), and the window is SEVEN days (R133), not three. What remained was the SRS's own body text, reconciled under R169: §5.2 and TD-7]** The ratified
   R111 design and shipped UI promise automatic de-identification after the account's three-day
   restoration window, but the authoritative SRS still says account deletion is unapproved in
   §5.2/§14.1, excludes User from the complete restorable set in §0/§4.10, lists neither
@@ -5510,7 +5510,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       guardianship document is checked and recorded; a refused applicant's
       right to the real reason; the three sensitive fields for minors; the
       CNDP filing and the Arabic privacy notice's TEXT (hers to supply).
-- [ ] **R111 SRS reconciliation — document work, not code:** the account purge
+- [x] **R111 SRS reconciliation — document work, not code:** **[Closed 2026-09-21 — §5.2's Profile bullet no longer says «no deletion control ships» (it names R111's control, R133's seven days and the purge job), and TD-7 lists `trash.retention-purge`, `application.retention-purge` and `registration.rejected-purge`, all built long ago and absent from the table]** the account purge
       job EXISTS (`trash.retention-purge` → `deIdentifyAccountSystem`) and the
       window is SEVEN days, but §5.2/§14.1 still call account deletion
       unapproved and TD-7 lists no such job. To be reconciled in the SRS.
@@ -5565,3 +5565,20 @@ The Owner's six replies to Revision 167's report. One migration so far
       «Production smoke» job had failed on a Docker Hub registry timeout (exit
       125), not on code. **Deployed to Staging at `439f1ba`** from `ede0770`;
       migration `20260924100000` applied; `/healthz` 200; zero error lines.
+- [x] **Hosted CI 8/8 on `028d597` (part six); deployed to Staging at
+      `028d597`** from `439f1ba` — recordings asked first; no pending
+      migration; `/healthz` 200; zero error lines. «حالة النظام» there shows 3
+      failed jobs (history) and 0 late.
+- [ ] **For the Owner to try on Staging (R169):** «حسابي» → «طلب صفة إضافية»;
+      «الفروع» → «القاعات» → سعة القاعة, then schedule a class in that room;
+      a class with Level, group and circle all left at «الكل»; delete a حلقة
+      with no class and restore it from «سلة المحذوفات»; «مكتبة المحتوى» →
+      تعديل → «مستويات أخرى ينتمي إليها»; and «حالة النظام».
+- [ ] **AUTOMATIC GRADING COMPONENTS — the Owner said «build this»; NOT started,
+      and the reason is hers to weigh.** It is the weight-template engine she
+      herself postponed to after launch (R12/R13, «deadline protection»; §10.1
+      «do not pre-create»): weighted averages, a Draft↔Active template per
+      Level with a 10,000-point gate, a recalculation job, frozen «stale»
+      averages, and averages shown to students. Today every grade is a
+      per-exam mark and no average is shown anywhere. The largest feature left.
+      ONE question: is it wanted BEFORE launch?

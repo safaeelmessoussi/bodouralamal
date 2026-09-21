@@ -11313,3 +11313,19 @@ needed its fake queue taught the three calls start-up now makes); frontend **1,4
 doc links (one link repointed: I had renamed the observability heading another page links to); OpenAPI
 regenerated (189 paths, 243 operations); full disposable integration **2,778 passed, exit 0**, isolation
 passed; seed drill **exit 0**.
+
+## 2026-09-21 — SRS reconciliation: account deletion (R111/R133) said in the SRS's own body
+
+Document work only, and the Owner's «yes» to it. R111 ratified and built «حذف حسابي» in August, R133
+set one seven-day window, and the daily purge shipped on 2026-09-04 — yet §5.2's Profile bullet still
+read «no account-deletion control ships» and cited the never-approved R54 draft, and TD-7 listed none of
+`trash.retention-purge`, `application.retention-purge`, `registration.rejected-purge`. Both now say what
+is true. The TASKS box that asked for this also claimed «no purge job» and «three days»; it was stale
+in substance and is closed with that said. No behaviour changed.
+
+**Hosted CI green on the first push — `028d597` 8/8 (run `35651288410`, no job re-run). Deployed to
+`staging.bodouralamal.com` at `028d597233333d019e21a65a6ec1fa90c7d9f486` (SRS Revision 169, part six),
+upgrading from `439f1ba`. No Production action.** Recordings asked first (`{"active":0}`, exit 0); dump
+taken; one older release image removed (22 GiB free); preflight PASS; both labels exact; no pending
+migration; TLS active; `/healthz` 200, `/rtc/validate` 401, `GET /admin/operations/status` 401 without a
+session; zero error-level lines. What «حالة النظام» will show there: 3 failed jobs (history), 0 late.
