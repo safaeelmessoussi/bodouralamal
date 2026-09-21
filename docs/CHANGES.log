@@ -10740,3 +10740,20 @@ the one PATCH it sends), `verify-schedule-edit` 13/13, `verify-teacher-schedulin
 «اختبار»). Journey D writes a per-session audience, which `seed-dev-scenario --clean` did not unwind —
 and the wrapper's `|| true` hid that failure until the NEXT harness died parsing an empty scenario. The
 cleanup unwinds all five audience tables; the two wrappers now say when it fails.
+
+**Hosted CI green on the FIRST push this time — `d608fc7` 8/8 and `c8d86c9` 8/8 (run `35577771451`),
+seed drill included; I ran the drill locally to exit 0 before pushing, which is what the previous
+revision's refusal was for. Deployed to `staging.bodouralamal.com` at
+`c8d86c9aef76294afee204a3920da34d85118818` (SRS Revision 166), upgrading from `886aac6`, by the
+documented Staging pipeline. No Production action.** Dump taken first
+(`~/bodour-predeploy/pre-c8d86c9-…dump`); preflight PASS (23 GiB free after); both revision labels exact
+before and after start; migration `20260921090000_r166_class_title_is_composed` applied; Subjects
+«already initialized»; fixtures complete; TLS active; `/healthz` 200, `/rtc/validate` 401, zero
+error-level API lines. **The three recordings the Owner had stranded on Staging were re-queued with the
+shipped tool** (`npm run ops:requeue-recordings`, dry run first: 3 stranded, all *"the occurrence
+resolves to no Level"*) **and all three imported, titled and linked to their session.** The
+application's session there reads `TimeZone = UTC` and `now()` within milliseconds of the real clock.
+From outside: all 19 class occurrences of the month carry a composed `item_title` with their own date,
+and the served bundle contains the completion and single-session strings. Those three recordings'
+titles read one hour EARLIER than the moment they were really stopped — they were written before the
+UTC fix, the consequence this revision accepted; every recording from now on is right.

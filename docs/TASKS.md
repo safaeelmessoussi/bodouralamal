@@ -5279,3 +5279,16 @@ required; nothing dropped or rewritten).
       been `|| true`, and hid a failed cleanup three times in two days).
       Fixtures and scenario seeds find the classes they own by what they are
       attached to (`test-support/owned-schedules.ts`), not by a title.
+- [x] **Hosted CI green on the first push** (`d608fc7` and `c8d86c9`, 8/8 each;
+      the seed drill was run locally to exit 0 beforehand). **Deployed to
+      Staging at `c8d86c9`** from `886aac6` by the documented pipeline: dump,
+      preflight PASS, exact labels, migration applied, `/healthz` 200,
+      `/rtc/validate` 401, zero error-level lines, the app's session `UTC`.
+      **The Owner's three stranded Staging recordings re-queued with the shipped
+      tool and imported**, titled and linked to their session. Their titles read
+      one hour early — written before the UTC fix; new ones are right.
+- [ ] **For the Owner to try on Staging:** «تعديل الحصة» on one session (its
+      audience, Subject, Surah and staff in one save); schedule a class and an
+      exam with no «العنوان» and read what they are called; record an online
+      class and find it under «التسجيلات»; and open «حفظي» for a مستفيدة whose
+      Level teaches تفسير to read her completion.
