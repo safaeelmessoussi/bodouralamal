@@ -12,9 +12,14 @@ import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const S = JSON.parse(process.env.NOTIFY_SCENARIO ?? '{}');
-// The class type is called whatever the catalogue calls it today (R110).
+// Every type is called whatever the catalogue calls it today (R110, R168 §4);
+// the scenario reads the names from the database it seeds into.
 const CLASS_TYPE = S.classTypeName;
-if (!CLASS_TYPE) throw new Error('the scenario names no class scheduling type');
+const EXAM_TYPE = S.examTypeName;
+const ACTIVITY_TYPE = S.activityTypeName;
+if (!CLASS_TYPE || !EXAM_TYPE || !ACTIVITY_TYPE) {
+  throw new Error('the scenario must name a class, an exam and an activity scheduling type');
+}
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9253');
 const { check, finish } = results();
 
@@ -220,7 +225,7 @@ const created = await evaluate(`(async () => {
   if (!dialog) return { noDialog: true };
   ${FORM_HELPERS}
   // The form opens on NO type (R110); an activity is what this journey creates.
-  if (!(await chooseType('نشاط'))) return { noActivityType: true };
+  if (!(await chooseType(${JSON.stringify(ACTIVITY_TYPE)}))) return { noActivityType: true };
   dialog = dlg();
 
   // The responsible selector, and what it is willing to offer.
@@ -432,7 +437,7 @@ const types = await evaluate(`(async () => {
 check(
   '10 · her type selector offers نشاط, امتحان AND حصة',
   // By what she READS: the values are catalogue ids (R110), not kind names.
-  (types.options ?? []).includes('نشاط') && (types.options ?? []).includes('اختبار') &&
+  (types.options ?? []).includes(ACTIVITY_TYPE) && (types.options ?? []).includes(EXAM_TYPE) &&
     (types.options ?? []).includes(CLASS_TYPE),
   JSON.stringify(types),
 );
@@ -452,7 +457,7 @@ check(
 
 const examSaved = await evaluate(`(async () => {
   ${FORM_HELPERS}
-  if (!(await chooseType('اختبار'))) return { noExamType: true };
+  if (!(await chooseType(${JSON.stringify(EXAM_TYPE)}))) return { noExamType: true };
 
   // She names one of her OWN classes; its Level, Subject, Branch and Year come
   // with it, because the chain that would offer them answers 403 for her.

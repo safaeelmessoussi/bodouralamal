@@ -39,7 +39,41 @@ const level = (over: Partial<LevelCoverage>): LevelCoverage => ({
 const html = (l: LevelCoverage): string => renderToStaticMarkup(<LevelCompletionSummary level={l} />);
 
 describe('what she is told about her Level', () => {
-  it('«أتمّت المستوى» when every Surah is memorised AND examined', () => {
+  it('R168 §3 — «أتمّت المستوى» is said ONLY when the administration recorded it, whatever the conditions read', () => {
+    const unmetButMarked = html(
+      level({
+        surahs: [surah(1, 'الفاتحة', 40, false)],
+        completion: {
+          complete: false,
+          configured_surahs: 1,
+          memorised_surahs: 0,
+          examined_surahs: 0,
+          exams_required: true,
+          marked_on: '2026-09-21',
+        },
+      }),
+    );
+    expect(unmetButMarked).toContain('أتمّت المستوى');
+    // …and the conditions stay on screen as progress: they are not the verdict.
+    expect(unmetButMarked).toContain('بقي للحفظ: الفاتحة');
+    expect(unmetButMarked).not.toContain('لم تُستوفَ شروط الإتمام بعد');
+
+    const markedWithNoSyllabus = html(
+      level({
+        completion: {
+          complete: null,
+          configured_surahs: 0,
+          memorised_surahs: 0,
+          examined_surahs: 0,
+          exams_required: false,
+          marked_on: '2026-09-21',
+        },
+      }),
+    );
+    expect(markedWithNoSyllabus).toContain('أتمّت المستوى');
+  });
+
+  it('every condition met but NOT yet recorded says exactly that — never «أتمّت»', () => {
     const out = html(
       level({
         surahs: [surah(1, 'الفاتحة', 100, true)],
@@ -52,7 +86,8 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(out).toContain('أتمّت المستوى');
+    expect(out).toContain('استوفت شروط الإتمام — بانتظار تسجيل الإدارة');
+    expect(out).not.toContain('أتمّت المستوى');
     expect(out).toContain('الحفظ: 1 من 1 سورة');
     expect(out).toContain('اختبارات التفسير: 1 من 1 سورة');
     expect(out).not.toContain('بقي');
@@ -71,7 +106,7 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(out).toContain('لم يكتمل المستوى بعد');
+    expect(out).toContain('لم تُستوفَ شروط الإتمام بعد');
     expect(out).toContain('بقي للحفظ: البقرة');
     expect(out).toContain('بقي اختبار التفسير في: الفاتحة');
   });
@@ -89,7 +124,7 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(out).toContain('أتمّت المستوى');
+    expect(out).toContain('استوفت شروط الإتمام');
     expect(out).not.toContain('اختبارات التفسير');
     expect(out).not.toContain('بقي اختبار');
   });

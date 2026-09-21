@@ -98,7 +98,7 @@ psql_seed() {
 }
 missing="$(psql_seed "
   SELECT string_agg(t.name, ', ')
-    FROM (VALUES ('حصة دراسية'),('اختبار'),('محاضرة'),('حفل'),('عطلة'),('نشاط')) AS t(name)
+    FROM (VALUES ('حصة'),('اختبار'),('محاضرة'),('حفل'),('عطلة'),('نشاط')) AS t(name)
    WHERE NOT EXISTS (SELECT 1 FROM scheduling_type s WHERE s.name = t.name);" | tr -d '[:space:]')"
 if [[ -n "$missing" ]]; then
   echo "FAIL: the seeded scheduling-type catalogue is incomplete (SRS R110.2/110.9)." >&2

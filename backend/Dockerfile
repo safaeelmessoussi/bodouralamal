@@ -28,10 +28,20 @@ COPY prisma ./prisma
 COPY src ./src
 RUN npx prisma generate && npm run build && npm prune --omit=dev
 
+# **One static `ffmpeg` binary, pinned by digest** (SRS Revision 168 §2). It
+# exists for exactly one job: REMUXING (`-c copy`, nothing is re-encoded) the
+# ten-second safety segments of a recording whose recorder died mid-class into
+# the MP4 the library keeps. Debian's own package would add 481 MB and two
+# hundred packages to this image; this is one 135 MB file in a layer every
+# release shares, so it is stored and pulled once, not per deployment.
+FROM mwader/static-ffmpeg:7.1@sha256:a8090df5f5608daef387e1b2e93b98aaacb4d92153ad904e7d715c725724fca4 AS ffmpeg
+
 FROM node:24.11.0-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       tzdata ca-certificates openssl curl \
   && rm -rf /var/lib/apt/lists/*
+# Before anything that changes per release, so the layer is shared.
+COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 ENV NODE_ENV=production TZ=Africa/Casablanca
 WORKDIR /app
 

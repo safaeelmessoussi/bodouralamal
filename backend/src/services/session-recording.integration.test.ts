@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { createStorageClients } from "../lib/storage.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import type { Actor } from "../policies/actor.js";
 import type {
@@ -100,7 +101,9 @@ class FakeProvider implements OnlineClassProvider {
     this.started.push(request);
     return Promise.resolve({
       providerEgressId: this.nextId,
-      mimeType: request.media === "audio_only" ? "audio/ogg" : "video/mp4",
+      // R168 §2 — AAC in MP4 for a صوت فقط class: one recording has one audio
+      // codec, and its safety segments (HLS) are AAC.
+      mimeType: request.media === "audio_only" ? "audio/mp4" : "video/mp4",
       outputBucket: "recordings-staging",
       outputKey: request.key,
     });
@@ -446,8 +449,15 @@ describe("the artefact follows the class, never a provider default (R99.7)", () 
     );
 
     expect(provider.started[0]?.media).toBe("audio_only");
-    expect(provider.started[0]?.key.endsWith(".ogg")).toBe(true);
-    expect((await liveRow(sessionId)).mimeType).toBe("audio/ogg");
+    // `.mp4` is the CONTAINER; what the recording is stays on the row.
+    expect(provider.started[0]?.key.endsWith(".mp4")).toBe(true);
+    expect((await liveRow(sessionId)).mimeType).toBe("audio/mp4");
+    // R168 §2 — and it is told where to leave its safety segments while the
+    // class runs: beside the file, under the recording's own id, ten seconds each.
+    expect(provider.started[0]?.segmentsPrefix).toBe(
+      provider.started[0]!.key.replace(/\.mp4$/, ".segments/"),
+    );
+    expect(provider.started[0]?.segmentSeconds).toBe(10);
   });
 
   it("tells the provider the DERIVED room, never a stored one (R97.9)", async () => {
@@ -501,6 +511,51 @@ describe("the lifecycle is idempotent in both directions (R99.15)", () => {
     expect(await prisma.sessionRecording.count({ where: { sessionId } })).toBe(1);
     // And the provider was asked exactly once.
     expect(provider.started).toHaveLength(1);
+  });
+
+  it("R168 §2 — …unless the recorder behind it has DIED: ninety silent seconds, and «بدء التسجيل» retires it and records again", async () => {
+    const { sessionId, teacher, provider } = await recordingClass();
+    const clients = createStorageClients(config);
+    const her = actorOf(teacher, [{ role: "teacher", branches: [branchA] }]);
+    const first = await liveRow(sessionId);
+
+    // Thirty seconds in, with nothing delivered yet: far too young to doubt.
+    await prisma.sessionRecording.update({
+      where: { id: first.id },
+      data: { startedAt: new Date(DURING.getTime() - 30_000) },
+    });
+    await startRecording(prisma, provider, her, sessionId, DURING, clients);
+    expect(provider.started).toHaveLength(1);
+
+    // Five minutes in, and storage holds no sign of life from it at all.
+    await prisma.sessionRecording.update({
+      where: { id: first.id },
+      data: { startedAt: new Date(DURING.getTime() - 5 * 60_000) },
+    });
+    provider.nextId = "EG_fake_2";
+    const again = await startRecording(prisma, provider, her, sessionId, DURING, clients);
+
+    expect(again.live).toBe(true);
+    expect(again.id).not.toBe(first.id);
+    expect(provider.started).toHaveLength(2);
+    // The dead one was asked to stop — a recorder alive after all then delivers
+    // its own file — and left the live states with everything it had delivered
+    // still in storage, for the reconciler to assemble.
+    expect(provider.stopped).toEqual([first.providerEgressId]);
+    const retired = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: first.id },
+      select: { status: true, stoppedAt: true },
+    });
+    expect(retired.status).toBe("processing");
+    expect(retired.stoppedAt).not.toBeNull();
+
+    // Without storage to ask, a live row is simply believed — as before.
+    await prisma.sessionRecording.update({
+      where: { id: again.id },
+      data: { startedAt: new Date(DURING.getTime() - 5 * 60_000) },
+    });
+    await startRecording(prisma, provider, her, sessionId, DURING);
+    expect(provider.started).toHaveLength(2);
   });
 
   it("a duplicate completion callback creates nothing and changes nothing", async () => {

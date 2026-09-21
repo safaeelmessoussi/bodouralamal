@@ -275,11 +275,25 @@ It deletes nothing, and nothing else deletes a recording's staged file either: `
 catalogue is fixed and does not name the recording staging bucket, and the import sweeps staging
 only after the library row and its relation are committed.
 
-**What it cannot repair is prevented.** The recorder holds a class's file locally until the class
-ends; restarting it mid-class loses the capture. A deployment therefore asks first:
-`npm run ops:active-recordings` prints the open recordings and exits `3` while there are any
-([deployment](../operations/deployment.md#the-pipeline)). A recorder *crash* mid-class is the
-declared residual risk; segmented output uploaded during the class would close it and is not built.
+**A recorder that dies mid-class (R168 §2).** The recorder now uploads ten-second safety segments
+while the class runs, and this job is what turns them back into a recording
+([how and why](../development/online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2)):
+
+1. A recording still marked live whose segments have been silent for ten minutes is **retired** —
+   the provider is asked to stop the job, the row moves to `processing`, its segments stay. The
+   provider's own answer is not used for this: measured, it calls a killed recorder «active» for
+   ever. Only a recording that has delivered at least one segment is judged by silence — one
+   started before R168 writes none.
+2. On a **later** pass — never in the same breath as the doubt — a retired or provider-failed
+   recording with no final file is assembled by `ffmpeg` into its own `output_key`, marked
+   `completed` + `recovered_from_segments`, and its import enqueued in the same transaction. That
+   is the one sanctioned exit from `failed`/`aborted`: the reason for the failure, *no file*, is no
+   longer a fact. A failed assembly is written to `ingestion_failure_reason`, keeps every segment,
+   and is retried.
+
+A deployment still asks `npm run ops:active-recordings` first
+([deployment](../operations/deployment.md#the-pipeline)): a recovered recording is whole but for
+its last ten seconds, and an uninterrupted one is simply whole.
 
 ### `session.materialize` — eager, and the reason is correctness
 

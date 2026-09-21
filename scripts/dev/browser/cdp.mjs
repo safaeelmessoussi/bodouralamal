@@ -96,7 +96,13 @@ export function results() {
     finish() {
       const failed = all.filter((r) => !r.ok);
       process.stdout.write(`\n${all.length - failed.length}/${all.length} checks passed\n`);
-      return failed.length === 0 ? 0 : 1;
+      const code = failed.length === 0 ? 0 : 1;
+      // **A failed check is a failed run, whoever forgets to pass this on**
+      // (2026-09-21). Thirteen harnesses called a bare finish(), so their
+      // wrappers exited 0 over FAIL lines — which is how two of them stayed
+      // stale for a month behind a green exit status.
+      if (code !== 0) process.exitCode = code;
+      return code;
     },
   };
 }

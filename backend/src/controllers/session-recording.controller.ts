@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { OnlineClassProvider } from "../lib/online-class-provider.js";
+import type { StorageClients } from "../lib/storage.js";
 import { requireActor } from "../middleware/authenticate.js";
 import { ACTIVE_CHILD_HEADER } from "../middleware/child-context.js";
 import * as recordings from "../services/session-recording.service.js";
@@ -22,7 +23,12 @@ import { recordingCommandSchema } from "../validators/session.validators.js";
  * **Nothing here decides either one.** The service authorizes; this file maps.
  */
 
-export function start(prisma: PrismaClient, provider: OnlineClassProvider | null) {
+export function start(
+  prisma: PrismaClient,
+  provider: OnlineClassProvider | null,
+  /** So «already recording» is checked against what storage holds (R168 §2). */
+  clients: StorageClients | null = null,
+) {
   return async (req: Request, res: Response): Promise<void> => {
     parse(recordingCommandSchema, req.body ?? {});
     const state = await recordings.startRecording(
@@ -30,6 +36,8 @@ export function start(prisma: PrismaClient, provider: OnlineClassProvider | null
       provider,
       requireActor(req),
       idParam(req, "id"),
+      new Date(),
+      clients,
     );
     res.status(202).json({ data: recordingStateDto(state) });
   };

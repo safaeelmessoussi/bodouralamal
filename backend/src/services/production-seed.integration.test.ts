@@ -469,7 +469,7 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
 // excluded, عطلة and حفل, are pinned as `disabled` because that exclusion is
 // the requirement, not an incidental default.
 const CANONICAL_TYPES = [
-  { name: 'حصة دراسية', structuralKind: 'class', attendanceMode: 'required' },
+  { name: 'حصة', structuralKind: 'class', attendanceMode: 'required' },
   { name: 'اختبار', structuralKind: 'exam', attendanceMode: 'required' },
   { name: 'محاضرة', structuralKind: 'class', attendanceMode: 'optional' },
   { name: 'حفل', structuralKind: 'activity', attendanceMode: 'disabled' },
@@ -577,6 +577,36 @@ describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install
     expect(after.displayOrder).toBe(99);
     // And no second حفل was created beside it.
     expect(await prisma.schedulingType.count({ where: { name: 'حفل' } })).toBe(1);
+  });
+
+  it('SRS Revision 168 §4 — a RENAMED canonical type stays renamed: no deployment brings the old name back', async () => {
+    await resetCatalogue();
+    await runProductionSeed();
+
+    // The catalogue is hers: she calls the first class type something else.
+    const before = await prisma.schedulingType.findFirstOrThrow({
+      where: { structuralKind: 'class', deletedAt: null },
+      orderBy: { displayOrder: 'asc' },
+    });
+    const canonical = before.name;
+    await prisma.schedulingType.update({
+      where: { id: before.id },
+      data: { name: 'درس الأسبوع' },
+    });
+    const count = await prisma.schedulingType.count();
+
+    // Every deployment runs the seed again. Twice, to be plain about it.
+    await runProductionSeed();
+    await runProductionSeed();
+
+    expect(await prisma.schedulingType.count()).toBe(count);
+    expect(await prisma.schedulingType.count({ where: { name: canonical } })).toBe(0);
+    const after = await prisma.schedulingType.findUniqueOrThrow({ where: { id: before.id } });
+    expect(after.name).toBe('درس الأسبوع');
+
+    // `resetCatalogue` finds rows by their CANONICAL names, so a renamed one
+    // would outlive it and make every later install shape one row too many.
+    await prisma.schedulingType.delete({ where: { id: before.id } });
   });
 
   it('a SOFT-DELETED canonical type is NOT resurrected', async () => {

@@ -690,7 +690,9 @@ describe("عطلة carries branches and categories only", () => {
       select: { name: true, structuralKind: true },
     });
     const byName = new Map(rows.map((r) => [r.name, r.structuralKind]));
-    expect(byName.get("حصة دراسية")).toBe("class");
+    // The first class type is called whatever the catalogue calls it (R168 §4);
+    // what is pinned is that TWO class types exist, and the named moves below.
+    expect(rows.filter((r) => r.structuralKind === "class").length).toBeGreaterThanOrEqual(2);
     expect(byName.get("محاضرة")).toBe("class");
     expect(byName.get("حفل")).toBe("activity");
     expect(byName.get("نشاط")).toBe("activity");

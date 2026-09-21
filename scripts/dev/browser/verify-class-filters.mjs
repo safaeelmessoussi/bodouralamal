@@ -4,7 +4,7 @@
  *
  * The properties, each one something only a browser can show:
  *
- * 1. choosing «حصة دراسية» renders NO teaching-mode picker, five audience
+ * 1. choosing the class type renders NO teaching-mode picker, five audience
  *    filters each reading «الكل», and NO second branch question — the class's
  *    own branch is derived from «فروع» (SRS Revision 165 §6);
  * 2. a Category narrows the Levels on offer to its own;

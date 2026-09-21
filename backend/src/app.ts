@@ -830,7 +830,7 @@ export function createApp(
    * state does not**, because every participant must see «جاري التسجيل»
    * including a beneficiary who arrived after it began (R99.5).
    */
-  guarded.post('/sessions/:id/recording', recordingCtl.start(prisma, onlineClass));
+  guarded.post('/sessions/:id/recording', recordingCtl.start(prisma, onlineClass, storage));
   guarded.post('/sessions/:id/recording/stop', recordingCtl.stop(prisma, onlineClass));
   guarded.get('/sessions/:id/recording', recordingCtl.state(prisma));
   guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));

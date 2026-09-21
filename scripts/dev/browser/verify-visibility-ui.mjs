@@ -13,6 +13,7 @@
  * screen: what changed is a set of rows, and a table can only show what it
  * happened to fetch.
  */
+import { readCatalogue } from './catalogue.mjs';
 import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
@@ -130,10 +131,18 @@ check('الجدولة opens', true, {});
 await openAddDialog();
 await new Promise((r) => setTimeout(r, 1200));
 
+// By what each type IS, never by what it is called (SRS Revision 168 §4): the
+// catalogue is the Super Admin's to rename.
+const catalogue = await readCatalogue(evaluate);
+const typeOf = (kind, attendanceMode) => {
+  const row = catalogue.first(kind, attendanceMode);
+  if (!row) throw new Error('the catalogue has no ' + kind + ' type' + (attendanceMode ? ' with attendance ' + attendanceMode : ''));
+  return row.name;
+};
 for (const [kind, label] of [
-  ['نشاط', 'محاضرة'],
-  ['حصة', 'حصة دراسية'],
-  ['امتحان', 'اختبار'],
+  ['نشاط', typeOf('activity')],
+  ['حصة', typeOf('class')],
+  ['امتحان', typeOf('exam')],
 ]) {
   const picked = await pickType(label);
   await new Promise((r) => setTimeout(r, 350));
@@ -152,16 +161,23 @@ const noticeAfter = async (label) => {
   await new Promise((r) => setTimeout(r, 350));
   return evaluate(`(() => {
     const dialog = document.querySelector('dialog[open]');
-    return dialog ? dialog.textContent.includes('يُسجَّل الحضور') : false;
+    // «لا يُسجَّل الحضور…» CONTAINS «يُسجَّل الحضور», so a bare substring said yes
+    // to the one notice that says no. The negation is excluded explicitly.
+    const text = dialog ? dialog.textContent : '';
+    return text.includes('يُسجَّل الحضور') && !text.includes('لا يُسجَّل الحضور');
   })()`);
 };
-check('حصة دراسية states that attendance is taken', (await noticeAfter('حصة دراسية')) === true, {});
-check('اختبار states that attendance is taken', (await noticeAfter('اختبار')) === true, {});
+check('a class type with REQUIRED attendance states that attendance is taken', (await noticeAfter(typeOf('class', 'required'))) === true, {});
+check('an exam type with REQUIRED attendance states that attendance is taken', (await noticeAfter(typeOf('exam', 'required'))) === true, {});
 // The negative half: a notice that always rendered would pass the two above and
-// prove nothing about the flag.
-check('محاضرة does NOT', (await noticeAfter('محاضرة')) === false, {});
-check('حفل does NOT', (await noticeAfter('حفل')) === false, {});
-check('عطلة does NOT', (await noticeAfter('عطلة')) === false, {});
+// prove nothing about the flag. Every live type that does NOT require it.
+for (const row of catalogue.rows.filter((r) => r.attendance_mode !== 'required')) {
+  check(
+    'a type whose attendance is ' + row.attendance_mode + ' (position ' + row.display_order + ') does NOT',
+    (await noticeAfter(row.name)) === false,
+    {},
+  );
+}
 
 /* ── 3. Edit hydrates the STORED tier, for a class ──────────────────────── */
 
@@ -333,4 +349,5 @@ if (successorId && successorId !== target.id) {
 }
 
 await close();
-finish();
+// A failed check is a failed run — see verify-scheduling-types.mjs.
+process.exit(finish());

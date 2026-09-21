@@ -5,6 +5,7 @@ import {
 } from '../policies/level-completion.js';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { moroccoDateIso } from '../lib/morocco-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { computeCoverage, type AyahInterval } from '../policies/quran-coverage.js';
@@ -194,6 +195,14 @@ export interface LevelCoverage {
     memorised_surahs: number;
     examined_surahs: number;
     exams_required: boolean;
+    /**
+     * **SRS Revision 168 §3 — what says she COMPLETED the Level.** The
+     * administration's mark (`LevelCompletionMark`), as a Morocco calendar
+     * date, or `null`. The fields above are the CONDITIONS BR-11 reads — shown
+     * as progress, never as the verdict: a Level is completed when the
+     * administration records it, whatever they read (Owner, 2026-09-21).
+     */
+    marked_on: string | null;
   };
 }
 
@@ -502,6 +511,13 @@ async function coverageFor(
   ]);
   const examined = examinedByStudent.get(studentId) ?? new Set<number>();
 
+  // R168 §3 — the administration's marks, read once for all her Levels.
+  const marks = await prisma.levelCompletionMark.findMany({
+    where: { studentId, levelId: { in: ownLevels.map((l) => l.id) } },
+    select: { levelId: true, completedAt: true },
+  });
+  const markedOn = new Map(marks.map((mark) => [mark.levelId, moroccoDateIso(mark.completedAt)]));
+
   const levels: LevelCoverage[] = [];
   for (const level of ownLevels.sort((a, b) => a.name.localeCompare(b.name, 'ar'))) {
     const rows: LevelCoverage['surahs'] = [];
@@ -528,6 +544,7 @@ async function coverageFor(
         memorised_surahs: verdict.memorisedSurahs,
         examined_surahs: verdict.examinedSurahs,
         exams_required: verdict.examsRequired,
+        marked_on: markedOn.get(level.id) ?? null,
       },
     });
   }

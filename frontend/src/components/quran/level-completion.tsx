@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { LevelCoverage } from '../../adapters/quran.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { Badge } from '../ui/badge.js';
 
 /**
@@ -24,11 +25,17 @@ export function LevelCompletionSummary({ level }: { level: LevelCoverage }): Rea
   if (c.complete === null) {
     return (
       <p className="field__hint" role="status">
+        {c.marked_on ? (
+          <Badge tone="ok">
+            {t('quran.completion.complete')} — {formatDate(c.marked_on)}
+          </Badge>
+        ) : null}{' '}
         <Badge>{t('quran.completion.notConfigured')}</Badge>
       </p>
     );
   }
 
+  const marked = c.marked_on ?? null;
   const count = (n: number): string =>
     t('quran.completion.outOf').replace('{n}', String(n)).replace('{total}', String(c.configured_surahs));
   const toMemorise = level.surahs.filter((s) => s.coverage_percent < 100).map((s) => s.name_arabic);
@@ -39,9 +46,17 @@ export function LevelCompletionSummary({ level }: { level: LevelCoverage }): Rea
   return (
     <div className="level-completion" role="status">
       <p className="staff-picker__warnings">
-        <Badge tone={c.complete ? 'ok' : 'warn'}>
-          {t(c.complete ? 'quran.completion.complete' : 'quran.completion.incomplete')}
-        </Badge>
+        {/* R168 §3 — a Level is COMPLETED when the administration records it.
+            What BR-11 reads is its conditions: progress, never the verdict. */}
+        {marked ? (
+          <Badge tone="ok">
+            {t('quran.completion.complete')} — {formatDate(marked)}
+          </Badge>
+        ) : (
+          <Badge tone={c.complete ? 'ok' : 'warn'}>
+            {t(c.complete ? 'quran.completion.conditionsMet' : 'quran.completion.incomplete')}
+          </Badge>
+        )}
         <Badge>{`${t('quran.completion.memorised')} ${count(c.memorised_surahs)}`}</Badge>
         {c.exams_required ? (
           <Badge>{`${t('quran.completion.examined')} ${count(c.examined_surahs)}`}</Badge>

@@ -459,6 +459,20 @@ describe('recording is optional, explicit, and visible to everyone (R99)', () =>
  * server.** Found on Staging, in a real browser's own `RTCPeerConnection`: the
  * media server's default ICE list is Twilio's and Google's public STUN servers.
  */
+describe('SRS Revision 168 §2 — a recorder that died mid-class is SAID, and she can record again', () => {
+  it('the room saying «not recording» while the platform says «recording» becomes a stalled notice, never an endless «إيقاف التسجيل»', () => {
+    const source = code(recordingSource);
+    // The disagreement itself, from the two facts that exist.
+    expect(source).toContain("const disagreeing = !live && state?.status === 'recording';");
+    // Not at once: two messages crossing is ordinary.
+    expect(source).toContain('setTimeout(() => setStalled(true), STALLED_AFTER_MS)');
+    // Stalled, the control is «بدء التسجيل» again — the server checks the
+    // recorder's silence against storage before it believes her.
+    expect(source).toContain('{live || (state?.live && !stalled) ? (');
+    expect(source).toContain("t('classroom.recorderStalled')");
+  });
+});
+
 describe('SRS Revision 164 — the classroom contacts no third-party ICE server', () => {
   const code = CLASSROOM.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 

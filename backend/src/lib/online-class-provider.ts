@@ -2,6 +2,8 @@ import {
   EncodedFileOutput,
   EncodedFileType,
   EgressStatus,
+  SegmentedFileOutput,
+  SegmentedFileProtocol,
   type EgressInfo,
   S3Upload,
   TrackSource,
@@ -88,6 +90,10 @@ export interface RecordingRequest {
    * object landed (R99.13).
    */
   key: string;
+  /** Where the safety segments go while the class runs, and how long each is
+   *  (SRS Revision 168 §2). The platform's choice, like `key`. */
+  segmentsPrefix: string;
+  segmentSeconds: number;
 }
 
 export interface RecordingHandle {
@@ -231,10 +237,41 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
    */
   async startRecording(request: RecordingRequest): Promise<RecordingHandle> {
     const audioOnly = request.media === "audio_only";
-    const fileType = audioOnly ? EncodedFileType.OGG : EncodedFileType.MP4;
+    const upload = {
+      case: "s3" as const,
+      value: new S3Upload({
+        accessKey: this.staging.accessKey,
+        secret: this.staging.secretKey,
+        bucket: this.staging.bucket,
+        region: this.staging.region,
+        endpoint: this.staging.endpoint,
+        // MinIO addresses buckets by path, not by DNS subdomain.
+        forcePathStyle: true,
+      }),
+    };
 
-    const output = new EncodedFileOutput({
-      fileType,
+    /**
+     * **Two outputs of ONE recording** (SRS Revision 168 §2).
+     *
+     * `file` is the recording the library keeps: finalised and uploaded once,
+     * when the class ends. `segments` is the same recording in ten-second
+     * pieces, each uploaded as it completes — so a recorder killed mid-class has
+     * already delivered everything but its last few seconds, and the reconciler
+     * assembles them (`session-recording-recover`). One encode feeds both, which
+     * is why the file is MP4/AAC for a صوت فقط class too: HLS segments are AAC,
+     * and the recorder refuses two outputs that need different codecs.
+     */
+    const segments = new SegmentedFileOutput({
+      protocol: SegmentedFileProtocol.HLS_PROTOCOL,
+      filenamePrefix: `${request.segmentsPrefix}seg`,
+      playlistName: `${request.segmentsPrefix}playlist.m3u8`,
+      segmentDuration: request.segmentSeconds,
+      disableManifest: true,
+      output: upload,
+    });
+
+    const file = new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
       filepath: request.key,
       // **No `EG_*.json` manifest beside the recording** (SRS Revision 164).
       // The platform never read it, and ingestion deliberately sweeps only the
@@ -242,28 +279,21 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
       // bucket nothing lists. On a test tier that is litter; in Production,
       // where recordings accumulate for years, it is unbounded residue.
       disableManifest: true,
-      output: {
-        case: "s3",
-        value: new S3Upload({
-          accessKey: this.staging.accessKey,
-          secret: this.staging.secretKey,
-          bucket: this.staging.bucket,
-          region: this.staging.region,
-          endpoint: this.staging.endpoint,
-          // MinIO addresses buckets by path, not by DNS subdomain.
-          forcePathStyle: true,
-        }),
-      },
+      output: upload,
     });
 
-    const info = await this.egress.startRoomCompositeEgress(request.room, output, {
-      audioOnly,
-      ...(audioOnly ? {} : { layout: "grid" }),
-    });
+    const info = await this.egress.startRoomCompositeEgress(
+      request.room,
+      { file, segments },
+      {
+        audioOnly,
+        ...(audioOnly ? {} : { layout: "grid" }),
+      },
+    );
 
     return {
       providerEgressId: info.egressId,
-      mimeType: audioOnly ? "audio/ogg" : "video/mp4",
+      mimeType: audioOnly ? "audio/mp4" : "video/mp4",
       outputBucket: this.staging.bucket,
       outputKey: request.key,
     };

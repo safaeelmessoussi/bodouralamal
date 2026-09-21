@@ -10845,3 +10845,67 @@ registered `*/15 * * * *` and completed its first run at 11:31 UTC (nothing open
 `/manifest.json`, `/sw.js` and the icons are served with the right types, the shell links the
 manifest, `GET /library?whole_category=true` answers 200, `GET /students/me/certificates` answers 401
 to an anonymous caller, and the served bundle carries «إدارة التسجيلات».
+
+## 2026-09-21 — SRS Revision 168 (part one): a recorder crash loses nothing, completion is the administration's act, scheduling-type names are hers to change, the certificate's seal
+
+The Owner's replies to Revision 167's report. Migration
+`20260923090000_r168_recording_recovered_from_segments` (one column). Her answer on registration — yes,
+administrative staff may ask through the public form — is ratified in the SRS (§1) and built as part two.
+
+**The recorder (§2) — three things only the real stack could show.** Every recording is now requested
+as a final file PLUS ten-second HLS safety segments uploaded while the class runs. The first drill run
+said no segment ever reached storage; the second showed why: asked for `<id>.m4a`, the recorder writes
+`<id>.m4a.mp4` and REPORTS THAT NAME BACK, so the row's key changed mid-recording and «the key minus one
+extension» pointed at a folder nothing had written to. Keys are `.mp4` for both kinds of class now, and
+the segments folder is derived from the recording's ID. The third: a recorder whose container is
+SIGKILLed is still «active» to LiveKit minutes later, indefinitely — so under my first rule (believe the
+provider, wait thirty minutes) the مؤطِّرة would have seen «جاري التسجيل» and been unable to record again
+for half an hour, losing the REST of the class. Silence of the segments decides instead: the classroom
+says the recorder stopped after twenty seconds of the room and the row disagreeing; «بدء التسجيل» again,
+believed once storage agrees (ninety silent seconds), retires the dead recording and starts a new one;
+the reconciler retires after ten silent minutes and assembles on a LATER pass, asking the provider to
+stop the job first so a recorder that was alive after all delivers its own file. Only a recording that
+has delivered a segment is judged by silence — one started before this release writes none.
+
+Assembly is `ffmpeg -c copy` from stdin (no input on disk), one static binary pinned by digest
+(135 MB in a shared layer; Debian's package would have added 481 MB and 200 packages). It is the one
+sanctioned exit from `failed`/`aborted`: the reason for the failure, *no file*, is no longer a fact.
+
+**Found while reading the import, and worse than a crash:** the platform's own recordings were
+verified against the UPLOAD caps — 100 MB audio, 500 MB video. At the measured ≈59 MB and ≈0.63 GB per
+hour, every audio class over ≈1 h 40 and every video class over ≈47 minutes would have been refused on
+import, for ever (and, since R167, re-queued every fifteen minutes into the same refusal). The
+association's classes run three to five hours. Bounded at 5 GiB now; TD-9 says so.
+
+**`verify-recorder-crash` — 14/14 on the real stack:** segments 1→4 in forty seconds with no final file;
+SIGKILL; no final file; provider still «recording»; the classroom notice; «بدء التسجيل» again → a new
+recording, the dead one `processing`; the second part imported the ordinary way; ten silent minutes
+later the reconciler assembled the first part with the image's own ffmpeg — `completed`,
+`recovered_from_segments`, 682 KB of real `audio/mp4`, «الوصف» saying so — and staging swept of file,
+segments and playlist. It waits the real rules (about a quarter of an hour): a switch that moved the
+reconciler's clock would ship to Production.
+
+**Completion (§3).** «حفظي» and the مؤطِّرة's Quran screen said «أتمّت المستوى» from the derived rule. They
+now say it only where the administration has recorded it (`completion.marked_on`); BR-11's reading is
+shown as the conditions. Closes R166's open *taken or passed?* — neither.
+
+**Type names (§4).** Audited: every occurrence of a type's name in `src/` is a comment; the seed
+initialises once and never restores a name (now pinned by a rename test). Five harnesses typed names;
+they ask the platform for the live catalogue now (`catalogue.mjs`) or read it from their scenario. Doing
+that exposed two harnesses that had been green over FAILED checks for a month — a bare `finish()` exits
+0 whatever it printed (fixed once, in `cdp.mjs`, for all thirteen that call it bare), and «لا يُسجَّل
+الحضور» contains «يُسجَّل الحضور». Fresh installs are seeded «حصة».
+
+**Ledger.** 24 TASKS boxes closed with their evidence — 20 that later sections had already done, 4
+resolved here. 71 remain open, most of them Owner decisions, Owner tests and the launch runway.
+
+**Verification (part one).** Backend typecheck, lint, unit **360/360**; frontend typecheck, lint,
+**1,429/1,429**; 31 guards + doc links; full disposable integration **2,738 passed, exit 0** (run with
+the real ffmpeg, so the remux test executed rather than skipped); the seed drill FAILED once — my new
+rename test left its renamed row behind, and `resetCatalogue` finds rows by their canonical names, so
+every later install shape was one row too many — fixed, re-run, **exit 0** (read from the log). On the
+rebuilt Localhost: `verify-recorder-crash` **14/14**, `verify-livekit-ingest` **28/28** (a صوت فقط class
+now records and plays as `audio/mp4`), `verify-enrolments-dialog` **24/24**, `verify-class-filters`
+**21/21**, `verify-scheduling-types` **11/11**, `verify-visibility-ui` **20/20**,
+`verify-teacher-scheduling` **14/14**, `verify-exam-scheduling` **93/93**. The API image is 730 MB with
+ffmpeg in it.

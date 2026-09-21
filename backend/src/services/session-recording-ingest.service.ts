@@ -6,11 +6,11 @@ import {
   extensionOf,
   isIngestibleMime,
   mimeEssence,
+  platformRecordingCap,
   recordingFamilyMatches,
-  sizeCapFor,
-  type AcceptedMime,
 } from "../lib/file-types.js";
 import { verifyStoredObject } from "../lib/object-verification.js";
+import { segmentsPrefixFor } from "../policies/online-class.js";
 import { scheduleLevelIds } from "../policies/roster-resolution.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 import { publicDisplayName } from "../lib/display-name.js";
@@ -22,6 +22,7 @@ import {
 import {
   copyObject,
   deleteObject,
+  listObjectsPage,
   statObject,
   type StorageClients,
 } from "../lib/storage.js";
@@ -98,6 +99,10 @@ export interface IngestOutcome {
  * Raised when the attempt should be retried by pg-boss. Carries the reason that
  * was persisted, so the job log and the row agree.
  */
+/** What a recovered recording says about itself in the library (R168 §2). */
+export const RECOVERED_NOTE =
+  "استُعيد هذا التسجيل من أجزائه المحفوظة بعد توقّف المسجِّل قبل نهاية الحصة؛ قد تنقصه الثواني الأخيرة.";
+
 export class IngestionFailure extends Error {
   constructor(readonly reason: string) {
     super(reason);
@@ -244,7 +249,10 @@ export async function ingestRecording(
     // a strictness that protects nothing. The cap and the emptiness check are
     // what actually matter here.
     declaredSize: null,
-    cap: sizeCapFor(stagingMime as AcceptedMime),
+    // **Not the upload caps** (SRS Revision 168 §2): a recording is as long as
+    // the class was, and TD-9's 100 MB / 500 MB refused every class over about
+    // 1 h 40 of audio or 47 minutes of video — after it had been given.
+    cap: platformRecordingCap(),
   });
   if (!verified.ok) {
     return fail(
@@ -366,7 +374,9 @@ export async function ingestRecording(
       data: {
         id: contentId,
         title,
-        description: null,
+        // R168 §2 — said where she will read it: a recording assembled from the
+        // recorder's safety segments may be missing its last few seconds.
+        description: recording.recoveredFromSegments ? RECOVERED_NOTE : null,
         visibility: visibility as "public" | "private" | "hidden",
         levelId,
         wholeCategory,
@@ -530,6 +540,17 @@ async function sweepStaging(
   if (!bucket || !key) return;
   try {
     await deleteObject(clients, bucket, key);
+    // R168 §2 — and the safety segments the recorder uploaded while the class
+    // ran. They exist so that a recording can be rebuilt; once the library
+    // holds it they are residue, and a five-hour class leaves 1,800 of them.
+    // Exactly this recording's prefix, a page at a time; the playlist too.
+    const prefix = segmentsPrefixFor(key);
+    for (;;) {
+      const page = await listObjectsPage(clients, bucket, prefix, { maxKeys: 1_000 });
+      if (page.objects.length === 0) break;
+      for (const object of page.objects) await deleteObject(clients, bucket, object.key);
+      if (page.nextContinuationToken === null) break;
+    }
   } catch (error) {
     throw new RecordingStagingCleanupFailure(bucket, key, error);
   }

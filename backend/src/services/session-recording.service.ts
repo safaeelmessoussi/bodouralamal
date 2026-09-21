@@ -10,7 +10,14 @@ import type {
 } from "../lib/online-class-provider.js";
 import type { Actor } from "../policies/actor.js";
 import { authorizeJoin } from "./online-class.service.js";
-import { roomNameForSession, stagingKeyFor } from "../policies/online-class.js";
+import type { StorageClients } from "../lib/storage.js";
+import {
+  RECORDING_SEGMENT_SECONDS,
+  roomNameForSession,
+  segmentsPrefixFor,
+  stagingKeyFor,
+} from "../policies/online-class.js";
+import { recorderHasGoneSilent } from "./session-recording-segments.js";
 import * as audit from "../repositories/audit.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 
@@ -175,6 +182,9 @@ export async function startRecording(
   actor: Actor,
   sessionId: string,
   now: Date = new Date(),
+  /** Storage, so that «already recording» can be checked against the evidence
+   *  (R168 §2). Absent, a live row is simply believed, as before. */
+  clients: StorageClients | null = null,
 ): Promise<RecordingState> {
   // The whole of R98's authorization, unchanged and unrepeated. It also
   // enforces that the occurrence is online, not cancelled, and inside its
@@ -214,9 +224,25 @@ export async function startRecording(
    */
   const live = await prisma.sessionRecording.findFirst({
     where: { sessionId, deletedAt: null, status: { in: LIVE } },
-    select: SELECT_STATE,
+    select: { ...SELECT_STATE, outputBucket: true, outputKey: true },
   });
-  if (live) return toState(live);
+  if (live) {
+    /**
+     * **…unless the recorder behind it has died** (SRS Revision 168 §2).
+     *
+     * A recorder killed mid-class says nothing, and the provider goes on
+     * calling its job «active». The row would then answer «already recording»
+     * for the rest of the class while nothing is recorded. A live recorder
+     * uploads a safety segment every ten seconds; ninety seconds without one is
+     * a recorder that is gone. Its recording is RETIRED — out of the live
+     * states, its segments kept for the reconciler to assemble — and she gets
+     * the new recording she asked for. Nothing she had recorded is lost, and
+     * nothing more is lost either.
+     */
+    const silent = clients !== null && (await recorderHasGoneSilent(clients, live, now));
+    if (!silent) return toState(live);
+    await retireSilentRecording(prisma, provider, live.id, now);
+  }
 
   /**
    * **Two مؤطِّرات pressing the button at the same instant.**
@@ -246,6 +272,7 @@ export async function startRecording(
   // from "the provider accepted and we then failed" — two very different
   // situations with two very different clean-ups.
   let handle: Awaited<ReturnType<OnlineClassProvider["startRecording"]>> | null = null;
+  const stagingKey = stagingKeyFor(sessionId, created.id, authorization.mediaMode);
   try {
     handle = await provider.startRecording({
       room: roomNameForSession(sessionId),
@@ -253,7 +280,9 @@ export async function startRecording(
       // The key is the platform's, so an object can always be traced back to
       // the recording that produced it without asking the provider anything.
       // The bucket is the deployment's and comes back on the handle.
-      key: stagingKeyFor(sessionId, created.id, authorization.mediaMode),
+      key: stagingKey,
+      segmentsPrefix: segmentsPrefixFor(stagingKey),
+      segmentSeconds: RECORDING_SEGMENT_SECONDS,
     });
 
     const updated = await prisma.sessionRecording.update({
@@ -525,6 +554,86 @@ export async function applyProviderReport(
   });
 
   return { ...outcome, recordingId: existing.id };
+}
+
+/**
+ * **A recording whose recorder has gone silent is taken out of the live states**
+ * (SRS Revision 168 §2) — by «بدء التسجيل» pressed again, or by the reconciler.
+ *
+ * `processing`: the recording is over and its file is being produced — here by
+ * the platform, from the segments, rather than by the provider. That frees the
+ * occurrence to be recorded again (one LIVE recording per occurrence) and hands
+ * the row to the reconciler, which assembles it once the silence has lasted.
+ *
+ * **The provider is asked to stop the job first, on purpose.** If the recorder
+ * was alive after all — storage had merely been unreachable — stopping makes it
+ * finalise and upload its OWN complete file, which always wins over an assembled
+ * one. If it is dead, the request fails and nothing is lost by asking.
+ */
+export async function retireSilentRecording(
+  prisma: PrismaClient,
+  provider: OnlineClassProvider | null,
+  recordingId: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const row = await prisma.sessionRecording.findFirst({
+    where: { id: recordingId, deletedAt: null, status: { in: LIVE } },
+    select: { status: true, providerEgressId: true, stoppedAt: true },
+  });
+  if (!row) return false;
+  if (provider !== null && row.providerEgressId) {
+    await provider.stopRecording(row.providerEgressId).catch(() => undefined);
+  }
+  const moved = await prisma.sessionRecording.updateMany({
+    where: { id: recordingId, status: row.status },
+    data: { status: "processing", ...(row.stoppedAt === null ? { stoppedAt: now } : {}) },
+  });
+  return moved.count === 1;
+}
+
+/**
+ * **The one sanctioned way OUT of a terminal failure: the file now exists**
+ * (SRS Revision 168 §2).
+ *
+ * `TRANSITIONS` makes `failed` and `aborted` final, and that stays true for
+ * every REPORT: nothing a provider says can re-open a recording. This is not a
+ * report. It is called by `recoverFromSegments` only after it has put the
+ * assembled file at the recording's own `output_key` — so the reason the
+ * recording had failed (no file) is no longer a fact. From here it is an
+ * ordinary `completed` recording: the import is enqueued IN THE SAME
+ * TRANSACTION, exactly as a verified completion does (§16.2, TD-4), and the
+ * import verifies the bytes like any other.
+ *
+ * Guarded in the `where`, like every status write here: a recording that is
+ * already `completed`, already imported, or deleted matches nothing.
+ */
+export async function markRecoveredFromSegments(
+  prisma: PrismaClient,
+  recordingId: string,
+  facts: { sizeBytes: number; segments: number; stoppedAt?: Date | null },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.sessionRecording.findFirst({
+      where: { id: recordingId, deletedAt: null, educationalContentId: null },
+      select: { status: true, stoppedAt: true },
+    });
+    if (!current || current.status === "completed") return false;
+
+    const moved = await tx.sessionRecording.updateMany({
+      where: { id: recordingId, status: current.status, educationalContentId: null },
+      data: {
+        status: "completed",
+        recoveredFromSegments: true,
+        sizeBytes: BigInt(facts.sizeBytes),
+        // When it really stopped: the recorder's last sign of life.
+        ...(current.stoppedAt === null && facts.stoppedAt ? { stoppedAt: facts.stoppedAt } : {}),
+      },
+    });
+    if (moved.count === 0) return false;
+
+    await enqueue(tx, JOB_QUEUES.sessionRecordingIngest, { recording_id: recordingId }, recordingId);
+    return true;
+  });
 }
 
 /* ───────────────────────────────── internals ───────────────────────────── */

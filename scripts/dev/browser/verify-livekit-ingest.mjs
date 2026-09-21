@@ -196,7 +196,7 @@ async function settle(sessionId, token, tries = 60) {
   );
 }
 
-/* ── 2. صوت فقط: the real UI, a real OGG, and a beneficiary who plays it ── */
+/* ── 2. صوت فقط: the real UI, a real audio file, and a beneficiary who plays it ── */
 
 let audioContentId = null;
 {

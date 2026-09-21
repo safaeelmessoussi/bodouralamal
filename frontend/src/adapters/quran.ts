@@ -46,6 +46,9 @@ export interface LevelCoverage {
     memorised_surahs: number;
     examined_surahs: number;
     exams_required: boolean;
+    /** R168 §3 — the administration's mark (a Morocco calendar date), or `null`.
+     *  THIS is what says she completed the Level; the rest are its conditions. */
+    marked_on?: string | null;
   };
 }
 

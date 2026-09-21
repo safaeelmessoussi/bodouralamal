@@ -312,15 +312,24 @@ const exam = await prisma.exam.create({
 
 // What the catalogue CALLS its first class type today — editable reference data
 // (R110), renamed by the Owner on 2026-09-21; a harness must not type a name.
-const classType = await prisma.schedulingType.findFirst({
-  where: { structuralKind: 'class', deletedAt: null },
-  orderBy: { displayOrder: 'asc' },
-  select: { name: true },
-});
+const typeNamed = async (
+  structuralKind: 'class' | 'exam' | 'activity',
+  attendanceMode?: 'required' | 'optional' | 'disabled',
+): Promise<string | null> =>
+  (
+    await prisma.schedulingType.findFirst({
+      where: { structuralKind, deletedAt: null, ...(attendanceMode ? { attendanceMode } : {}) },
+      orderBy: { displayOrder: 'asc' },
+      select: { name: true },
+    })
+  )?.name ?? null;
 
 console.log(
   JSON.stringify({
-    classTypeName: classType?.name ?? null,
+    classTypeName: await typeNamed('class'),
+    examTypeName: await typeNamed('exam'),
+    // The general-purpose activity (attendance optional) where there is one.
+    activityTypeName: (await typeNamed('activity', 'optional')) ?? (await typeNamed('activity')),
     targaSchedule: targaClass.id,
     secondSchedule: secondClass.id,
     level: level.id,

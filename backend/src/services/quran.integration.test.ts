@@ -582,6 +582,11 @@ describe("SRS Revision 167 §3 — «إتمام المستوى»: the administra
 
     // Told, and marking anyway: allowed — and the record says so for ever.
     await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true });
+    // R168 §3 — THIS is what «حفظي» reads as «أتمّت المستوى»: the mark, while
+    // the conditions beside it still read unmet.
+    const hers = (await readOwnCoverage(prisma, student)).levels.find((l) => l.level_id === levelId)!;
+    expect(hers.completion.marked_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(hers.completion.complete).toBe(false);
     const marked = await row();
     expect(marked.mark).toMatchObject({ requirements_met: false, certificate_number: null });
     expect(marked.mark!.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -857,6 +862,8 @@ describe("M4c — BR-11 level completion", () => {
         memorised_surahs: 1,
         examined_surahs: 0,
         exams_required: true,
+        // R168 §3 — nobody has RECORDED her completion; the rest are conditions.
+        marked_on: null,
       });
       expect(before.surahs[0]?.exam_taken).toBe(false);
 

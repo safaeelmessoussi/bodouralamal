@@ -44,6 +44,10 @@ import { Feedback } from '../ui/feedback.js';
  *  the authority (the server is). A beneficiary and a guardian see none. */
 const MAY_RECORD: JoinCredentials['role'][] = ['teacher', 'assistant', 'admin'];
 
+/** How long the room and the platform may disagree about «is it recording»
+ *  before it is called a stalled recorder rather than two messages crossing. */
+const STALLED_AFTER_MS = 20_000;
+
 export function RecordingPanel({
   sessionId,
   role,
@@ -120,6 +124,27 @@ export function RecordingPanel({
     };
   }, [sessionId, accessToken, mayRecord, live, settled]);
 
+  /**
+   * **The recorder died and nobody said so** (SRS Revision 168 §2).
+   *
+   * A recorder killed mid-class leaves the ROOM saying nothing is being recorded
+   * (it left) while the platform's row still says «recording» — the provider
+   * goes on calling a dead job active. Twenty seconds of that disagreement is
+   * not a race between two messages any more. She is told, in words, that what
+   * was recorded is safe, and offered «بدء التسجيل» again; the server then
+   * checks the recorder's silence against storage before it believes her.
+   */
+  const disagreeing = !live && state?.status === 'recording';
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (!disagreeing) {
+      setStalled(false);
+      return;
+    }
+    const timer = setTimeout(() => setStalled(true), STALLED_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [disagreeing]);
+
   const act = useCallback(
     async (run: () => Promise<RecordingState>) => {
       setBusy(true);
@@ -152,13 +177,18 @@ export function RecordingPanel({
       {mayRecord ? (
         <div className="classroom__recording-controls">
           {problem ? <Feedback tone="warn">{problem}</Feedback> : null}
+          {stalled ? (
+            <Feedback tone="warn">
+              <span data-recorder-stalled>{t('classroom.recorderStalled')}</span>
+            </Feedback>
+          ) : null}
 
           {/**
            * **One control, and which one depends on what is actually
            * happening** — never both, and never a «بدء» button while a
            * recording runs.
            */}
-          {live || state?.live ? (
+          {live || (state?.live && !stalled) ? (
             <Button
               variant="danger"
               disabled={busy}

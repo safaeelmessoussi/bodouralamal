@@ -931,7 +931,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ **Proven, not assumed** — `prisma/verification/r43-constraints-proof.sql` applies the full current migration history to a scratch database from empty and attempts every live constraint boundary: **12 rejections fired on the named constraint, 6 legitimate rows accepted**, including R83's reasonless cancellation
   - ✓ **Independence between Subjects proven directly**: a ترتيل وتجويد seat for a student already holding a حفظ seat in the same Level is accepted; a second حفظ seat is refused
   - ⚠ **Historical:** the original proof caught a defect in the then-required cancellation-reason CHECK: `btrim(NULL) <> ''` evaluated to `NULL`, which a CHECK treats as satisfied. It was rewritten with an explicit `IS NOT NULL`; R83.2 later dropped that constraint when the Owner made the reason optional
-- [ ] *Migrate:* backfill each existing `Group` into an `AdministrativeGroup` + one `RecurringCourseSchedule` carrying its slot; `StudentGroup` → `Enrollment`; `GroupTeacher` → `CourseScheduleStaff`; `EventGroup` → `EventAdministrativeGroup`; `Grade.group_id` → `administrative_group_id`
+- [x] *Migrate:* backfill each existing `Group` into an `AdministrativeGroup` + one `RecurringCourseSchedule` carrying its slot; `StudentGroup` → `Enrollment`; `GroupTeacher` → `CourseScheduleStaff`; `EventGroup` → `EventAdministrativeGroup`; `Grade.group_id` → `administrative_group_id` **[Closed 2026-09-21 ledger review — superseded: see the «Migrate: superseded» line five below; no data was migrated, by Owner decision]**
 - [x] *Contract (separate, later migration):* the retired tables and columns dropped, tagged with the contract-phase justification
   - ✓ **No data migrated, by Document Owner decision** — no production deployment exists, and a backfill would have had to invent the Subject the old model never recorded
   - ✓ Verified on a **fresh database**: all 19 migrations apply from empty, and the four retired tables are absent
@@ -986,7 +986,7 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
 - [ ] حفظ القرآن and تفسير القرآن as schedulable atomic Subjects **with the BR-9 carve-out** — their `LevelSubject` rows generate no generic grading components because both follow the LevelSurah selection; only حفظ is progress-tracked (§4.4b, R107); the postponed grading-template engine remains unbuilt
 - [x] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
-- [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
+- [x] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2) **[Closed 2026-09-21 ledger review — done: `errors.test.ts` pins `CAPACITY_FULL` as retired by name (M8, 2026-08-28 batch) and no capacity check remains]**
 
 **API & screens**
 
@@ -1062,7 +1062,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ `timeLabel` exported and tested: TD-11 wall-clock rendered verbatim, never parsed through `Date`
   - ✓ Client-side contract guard mirroring the server's key set, so an adapter rename is a typecheck failure rather than a blank page
   - ✓ Write form deliberately deferred to its own slice — half a form would claim a capability the module lacks
-- [ ] `/admin/schedules` **write form** (subject · mode + single target · room · staff · times · recurrence, with conflict reporting on save)
+- [x] `/admin/schedules` **write form** (subject · mode + single target · room · staff · times · recurrence, with conflict reporting on save) **[Closed 2026-09-21 ledger review — built: see «`/admin/schedules` write form — create and edit» below]**
 - [x] **Portal separation** — `TEACHER_MODULES` beside `ADMIN_MODULES`, shared mechanics extracted
   - ✓ `lib/portal-modules.ts` owns the *behaviour* (status vocabulary, role gating, longest-match path resolution); each portal owns its *list*
   - ✓ `components/portal/` owns the shared shell and nav rendering; `AdminLayout` and `TeacherLayout` differ only in their sidebar, which is the part that genuinely differs
@@ -1287,14 +1287,14 @@ was hiding behind it: the run went green on the first attempt.
 - [x] 7 unit · 15 integration · `verify-user-qr` **11/11** · 19 CI guards
 - [ ] **Owner decision**: should every beneficiary carry a spoken `referenceCode`? (R62 gap)
 - [x] **Fixed (R96.1)** — a `parent`-only account acting for a linked child now reaches every beneficiary screen through the shared gate; no role widened, new rule **AW**, `verify-guardian-child` **12/12**
-- [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
+- [x] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25) **[Closed 2026-09-21 ledger review — all three shipped: shared occurrence dialog (`verify-occurrence-details` 13/13), Session recordings/materials, R96 QR]**
 
 ### Notification root causes + landing pages (2026-08-20)
 - [x] **Level cancellation root cause**: the resolver was right. The only beneficiary in that Level+Branch was the Owner's own account, excluded as the actor (R78.3) — so the send reached nobody and said «أُرسل الإشعار إلى 0» which reads as success. **Zero now answers explicitly.**
 - [x] **Grade republish root cause**: two blockers — only newly-drafted rows were offered to the notifier, and `skipDuplicates` absorbed the rest. New semantics: one row per (student, exam), **unread again when the score changed**, silent when it did not
 - [x] Student landing = title + lede only; مؤطرة landing loses «ستُضاف لوحة مختصرة هنا لاحقاً», from the page and the catalogue
 - [x] `verify-notify-ui` **32/32**; 643 frontend · 222 backend unit · 1399 integration; all 23 browser scripts green (508 checks)
-- [ ] **NOT STARTED — the rest of this brief**: merged Teacher calendar/scheduling (§8), Teacher event creation with responsible=self (§9, §21), assistant assignment notification (§10, §11), one shared occurrence-details dialog across all four calendars (§12, §22), direct Session content in that dialog (§13, §14), beneficiary QR identity (§15–§19). Each is its own slice with its own migration/UI/tests
+- [x] **NOT STARTED — the rest of this brief**: merged Teacher calendar/scheduling (§8), Teacher event creation with responsible=self (§9, §21), assistant assignment notification (§10, §11), one shared occurrence-details dialog across all four calendars (§12, §22), direct Session content in that dialog (§13, §14), beneficiary QR identity (§15–§19). Each is its own slice with its own migration/UI/tests **[Closed 2026-09-21 ledger review — each item was later built and ticked in this section and R93/R96]**
 
 ### Notifications — verified through the UI (2026-08-20)
 - [x] **`verify-notify-ui` — 27/27.** Real dialog, real button, recipient's own bell. Cancel (with and without reason) · decline · reschedule · Event · grade draft/publish · R91 replacement recipients · R92 cross-branch · mark-read · reload
@@ -1341,7 +1341,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Admin UI «الحضور من الفروع» on the occurrence, seeded with the inherited branch; roster shown, not inferred
 - [x] 20 API tests · 10 frontend guards · **16/16** `verify-cross-branch` across six identities · concurrency on the Session's own version
 - [x] 1395 integration · 222 backend unit · 623 frontend · 18 CI guards · OpenAPI current, TD-3 +2 routes
-- [ ] ~~NEXT — cross-branch occurrence audience (§D)~~ **DONE.** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs
+- [x] ~~NEXT — cross-branch occurrence audience (§D)~~ **DONE.** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs **[Closed 2026-09-21 ledger review — the line itself says DONE; R92's section above is fully ticked]**
 
 ### R90 — staff-picker planning warnings (2026-08-19)
 - [x] **SRS Revision 89** closes the §14.1 gap: `/admin/teachers` is in the sitemap, with the three ownerships stated
@@ -1352,7 +1352,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **Defect fixed:** class staffing was refused on UPDATE while the form offered the controls — now replaced whole, future occurrences resynced, past ones untouched
 - [x] **Defect fixed:** `ClassSection` hand-wrote the picker (rule C) — the extraction had been written down and only two thirds applied
 - [x] QA inventory reconciled: **447 checks across 19 harnesses**, every count measured. Three harnesses were repaired first — see CHANGES.log
-- [ ] **NEXT SLICE — effective-dated staffing.** `CourseScheduleStaff` is time-blind: conflicts are bounded only by the schedule's `deleted_at` and R50's `effective_until`, and *A until 15 November, B from 16 November* cannot be expressed. R90 takes the proposed class as input and reads staffing through **one** query, so bounding that query by a date range is the whole of the change
+- [x] **NEXT SLICE — effective-dated staffing.** `CourseScheduleStaff` is time-blind: conflicts are bounded only by the schedule's `deleted_at` and R50's `effective_until`, and *A until 15 November, B from 16 November* cannot be expressed. R90 takes the proposed class as input and reads staffing through **one** query, so bounding that query by a date range is the whole of the change **[Closed 2026-09-21 ledger review — built as R91 — `effective_from`/`effective_until`, migration `20260819230000_r91_effective_staffing`]**
 
 ### R88 correction — إدارة المؤطِّرات gets its own screen (2026-08-19)
 - [x] **The row action left `المستخدمون`.** A teaching profile was offered on a screen whose population is every account — guardians, minors, administrators. The backend is untouched; only ownership moved. New rule **AQ** in [ux-architecture](development/ux-architecture.md)
@@ -1411,13 +1411,13 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`
 
 ## M4 — Quran Progress
-- [ ] QuranProgressLog CRUD (teacher-scoped) with soft delete (TD-5)
-- [ ] Interval-merge union engine + percentage vs total_ayahs (BR-13)
-- [ ] StudentSurahProgress cache: post-commit upsert + read-side stamp guard with self-heal (§4.5, §7)
-- [ ] Synchronous per-surah recalc on create/update/soft-delete — derive-on-read immediately after commit, returned in response (§4.5, TD-4.11)
+- [x] QuranProgressLog CRUD (teacher-scoped) with soft delete (TD-5) **[Closed 2026-09-21 ledger review — built as M4a, below]**
+- [x] Interval-merge union engine + percentage vs total_ayahs (BR-13) **[Closed 2026-09-21 ledger review — built as M4a, below]**
+- [x] StudentSurahProgress cache: post-commit upsert + read-side stamp guard with self-heal (§4.5, §7) **[Closed 2026-09-21 ledger review — built as M4a, below]**
+- [x] Synchronous per-surah recalc on create/update/soft-delete — derive-on-read immediately after commit, returned in response (§4.5, TD-4.11) **[Closed 2026-09-21 ledger review — built as M4a, below]**
 - [ ] Ayah bounds: CHECK + cross-table trigger + service validation (TD-6)
 - [ ] Audit rows quranlog.update / quranlog.delete (TD-8)
-- [ ] Student read-only per-surah expandable progress view (§5.3)
+- [x] Student read-only per-surah expandable progress view (§5.3) **[Closed 2026-09-21 ledger review — built as M4b — `/dashboard/student/quran`]**
 - [ ] p95 < 100 ms incl. recalc verified (TD-11a)
 - [ ] §18 Quran Progress checklist green (incl. deletion-un-completes-level test)
 
@@ -1590,7 +1590,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **M4c — `LevelSurah` + BR-11.** Syllabus management (Super Admin writes, Admin reads) and completion read from the existing engine
 - [x] Three states: no syllabus -> `complete: null`, deliberately not `false`
 - [x] **BR-11's final-exam clause is unreachable and reported as such** — nothing marks an exam as final (`round` is explicitly non-semantic, §4.6). No marker invented
-- [ ] **Owner decision, reported not invented:** a *final exam* marker on `Exam`, if BR-11's second clause is ever to fire. Same shape as R64.7, R73.4 and the beneficiary gap
+- [x] **Owner decision, reported not invented:** a *final exam* marker on `Exam`, if BR-11's second clause is ever to fire. Same shape as R64.7, R73.4 and the beneficiary gap **[Closed 2026-09-21 ledger review — answered differently: R166 §1 defined the second clause without a marker, and R168 §3 made completion the administration's recorded act]**
 
 ### R72 — the Teacher's الجدولة write access (2026-08-12)
 - [x] **R72 applied:** §14.1's `/teacher/schedules` clause said *"do not create or edit schedules"* and gave TD-2's event grant no node. Clarified to mean Course Schedules; Activities are authored here
@@ -1641,7 +1641,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **Found live, not by tests:** pre-R58 exams (null branch/subject) answered 500; now `EXAM_INCOMPLETE`, with the type narrowed so it cannot recur
 - [x] One shared `GradeSheetView` rendered by both entry points, with a source guard asserting neither page reimplements it
 - [x] Empty ≠ absent ≠ zero, structurally; /20 ↔ bp converted once on the server; BR-7 · BR-8 · BR-12 · TD-15 all covered
-- [ ] **Not implemented, and stated:** no UI for a Teacher to CREATE an Event — the server has supported it since R43 (`teacherEventScope`), and `/teacher/schedules` is read-only by design. الجدولة write access for Teachers needs its own slice
+- [x] **Not implemented, and stated:** no UI for a Teacher to CREATE an Event — the server has supported it since R43 (`teacherEventScope`), and `/teacher/schedules` is read-only by design. الجدولة write access for Teachers needs its own slice **[Closed 2026-09-21 ledger review — built: R72/R140 gave the مؤطِّرة الجدولة write access; `verify-teacher-scheduling` 14/14]**
 
 ### Post-R69 UI fixes (2026-08-12)
 - [x] **`SUBJECT_NOT_IN_LEVEL` root-caused to the CLIENT.** The Subject selector listed every Subject on the platform instead of the Level's own; validation untouched
@@ -1695,7 +1695,7 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] **OWNER DECISION — الفئة offers الكبار in child registration, and the model cannot honour it.** Traced end to end: approval creates a login-less account (no `UserIdentity`, no email), linked to the requester, with consent recorded as given by the requester — contradicting §2.1 (adults hold their own accounts), §4.3/R62.9 (an adult consents for themselves) and §4.1a. The Owner's future cases are already served by adult self-registration (§4.1b). **Removing the option requires R64.7's `Category.holds_own_login` marker** — R27 made the Categories renameable, so filtering by name would hardcode reference data
 
 ### R62 — deferred by scope, not forgotten
-- [ ] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them
+- [x] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them **[Closed 2026-09-21 ledger review — all built since: تقويمي, حفظي, اختباراتي (grades merged in R153), and شهاداتي (R167)]**
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice
 
 ### R61 — الإدارة is Super Admin only (2026-08-11)
@@ -1783,7 +1783,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `--color-exam` violet on all four surfaces (chip, badge, details, indicator), with weight and words as well as hue
 - [x] `SchedulingItem.ids` — the edit form seeds itself from the row it already has, so a re-title cannot silently clear the audience
 - [x] 16 HTTP integration tests + the client contract guard; full flow exercised against the real API and database
-- [ ] Exams are **not restorable from Trash** (`NOT_YET_SUPPORTED`) — part of the standing restorable-set gap, not specific to R58
+- [x] Exams are **not restorable from Trash** (`NOT_YET_SUPPORTED`) — part of the standing restorable-set gap, not specific to R58 **[Closed 2026-09-21 ledger review — done: «`Exam` and `HijriMonthStart` join the restorable set»]**
 
 ### R56 — unified scheduling (2026-08-07)
 - [x] One `/admin/schedules` screen replacing `/admin/calendar` and the old schedules page; type is a field, not a destination
@@ -2588,7 +2588,7 @@ actual values, which are Production reference data the Owner holds.
   **CLOSED by §D (2026-08-26):** both mappers hydrate, one shared `VisibilityField` renders for
   every kind and in the occurrence editor, and the three R50 scopes carry the tier to the
   endpoints they already owned. 19/19 in the browser.
-- [ ] ~~**NEW B §C — scheduling visibility (schema + migration + recurrence integration).**~~ Design
+- [x] ~~**NEW B §C — scheduling visibility (schema + migration + recurrence integration).**~~ Design **[Closed 2026-09-21 ledger review — done 2026-08-26 as R109 — the ticked copy is above]**
   ratified in §B; **not started** — the capacity checkpoint refused it at 19% session remaining.
   **Precondition audit COMPLETE (Owner question 3b), and it changes the design:**
   `@@unique([scheduleId, userId])` was withdrawn by R91, so a schedule may hold **several**
@@ -3946,7 +3946,7 @@ the Owner's own report named.
       (run `34825423221`); deployed to Staging (`staging.bodouralamal.com`),
       no new migrations, `/healthz` green within seconds of recreation, no
       new host-state issues. Full detail in CHANGES.log.
-- [ ] **Owner action still needed**: record an `AcademicPeriod` covering
+- [x] **Owner action still needed**: record an `AcademicPeriod` covering **[Closed 2026-09-21 ledger review — done — see «Owner action done» below]**
       the current date on Staging — the semester-select fix makes the empty
       state honest, it cannot supply real academic-calendar dates.
 
@@ -4436,7 +4436,7 @@ the Owner's own report named.
       green on the first check, TLS/security headers intact, no
       leftover disposable containers. Full detail in CHANGES.log.
 
-- [ ] The روster-viewing gap decision (`عرض المستفيدات`) is now resolved
+- [x] The روster-viewing gap decision (`عرض المستفيدات`) is now resolved **[Closed 2026-09-21 ledger review — the line itself records it resolved]**
       — see the confirmation above; nothing further outstanding here.
 
 ## A3 end-to-end + platform-wide audit trail — 2026-09-16
@@ -5021,7 +5021,7 @@ changed destructively; Production go-live remains on hold.
       activities means changing who existing multi-dimension activities reach.
       Labels deliberately left alone: «الكل» over a union would be false. A
       circle dimension for activities would also be a new table.
-- [ ] **§5 (ii) — OWNER DECISION: exams and «سورة».** An exam is single-Level
+- [x] **§5 (ii) — OWNER DECISION: exams and «سورة».** An exam is single-Level **[Closed 2026-09-21 ledger review — decided and built in R165 §2: a class names one or more Surahs, an exam exactly one]**
       by schema, and grading, the grade sheet's audience and a مؤطِّرة's exam
       scope all read that one Level. `exam.surah_id` exists but no route has
       ever accepted it — new API surface whose placement (exam only, or a حفظ
@@ -5161,7 +5161,7 @@ editor, المواد and the browser harnesses. One migration
 - [x] **§2 — the title is SUGGESTED** for a class and an exam and follows the
       form until she types. A repeating class carries its time and NO date (its
       title is copied onto every occurrence); a one-off carries both.
-- [ ] **Recorded, not built:** completing a Level = memorising its Surahs AND
+- [x] **Recorded, not built:** completing a Level = memorising its Surahs AND **[Closed 2026-09-21 ledger review — built the next day as R166 §1; R168 §3 then made completion the administration's act]**
       passing the تفسير exams of the same Surahs. The data now exists to
       compute it; nothing computes it yet.
 - [x] **§3 — `verify-schedule-edit` 13/13 and `verify-teacher-scheduling`
@@ -5235,7 +5235,7 @@ required; nothing dropped or rewritten).
       paper). One pure rule (`policies/level-completion.ts`) behind both reads;
       shown on «حفظي» and the مؤطِّرة's Quran screen, naming which Surahs are
       still to memorise and which still need their exam. Derived, never stored.
-- [ ] **For the Owner to confirm:** *taken*, not *passed* — the platform has no
+- [x] **For the Owner to confirm:** *taken*, not *passed* — the platform has no **[Closed 2026-09-21 ledger review — answered 2026-09-21 (R168 §3): neither — a Level is completed when the administration records it]**
       pass mark (§4.6), and her word was «taking». A pass mark would be a new
       rule; this clause is where it would go.
 - [x] **§2 — «تعديل الحصة» changes everything about ONE session in one save**:
@@ -5338,7 +5338,7 @@ column, one table, one sequence; nothing dropped or rewritten).
       closes a recording the provider positively no longer knows after a day.
       `npm run ops:active-recordings` is asked before a deployment restarts
       the recorder.
-- [ ] **Declared residual risk (not built):** a recorder CRASH mid-class still
+- [x] **Declared residual risk (not built):** a recorder CRASH mid-class still **[Closed 2026-09-21 ledger review — closed by R168 §2 — safety segments, assembly, and re-recording after a crash]**
       loses that class's capture. Segmented output uploaded during the class
       would close it.
 - [ ] **§6 — one registration form for several roles: PROPOSAL ONLY**,
@@ -5347,7 +5347,7 @@ column, one table, one sequence; nothing dropped or rewritten).
       form at all (R49 says no today).
 - [x] Harnesses read the class type's NAME from their scenario: the Owner
       renamed «حصة دراسية» to «حصة» on Localhost and two harnesses went blind.
-- [ ] **Not repaired:** `verify-scheduling-types`, `verify-visibility-ui` and
+- [x] **Not repaired:** `verify-scheduling-types`, `verify-visibility-ui` and **[Closed 2026-09-21 ledger review — repaired in R168 §4 — harnesses read the live catalogue; none types a name]**
       `verify-exam-scheduling` still type «حصة دراسية» in assertions about the
       SEEDED catalogue; on the Owner's renamed Localhost they will report it.
 - [x] **Hosted CI 8/8 on `7655a6b` (first push); deployed to Staging at
@@ -5360,3 +5360,51 @@ column, one table, one sequence; nothing dropped or rewritten).
       مستفيدة → «شهاداتي» → «تحميل PDF»; «تثبيت التطبيق» from a phone; schedule a
       class and watch «العنوان» compose; and read any time on screen against a
       clock on the wall.
+
+## SRS Revision 168 — a recorder crash loses nothing, completion is the administration's act, type names are hers to change, the registration form's four roles — 2026-09-21
+
+The Owner's six replies to Revision 167's report. One migration so far
+(`20260923090000_r168_recording_recovered_from_segments` — one column).
+
+- [x] **§2 — a recorder that dies mid-class loses nothing recorded.** Every
+      recording is requested as a final file PLUS ten-second safety segments
+      uploaded while the class runs. Where the final file never arrives the
+      reconciler assembles the segments with `ffmpeg` (remux only) into the
+      recording's own key, and the ordinary import publishes it, marked as
+      recovered. Cost of a crash: at most the last ten seconds.
+- [x] **§2 — and nothing AFTER it.** The provider calls a killed recorder
+      «active» for ever (measured), so silence of the segments decides. The
+      classroom says the recorder stopped; «بدء التسجيل» again — believed once
+      storage agrees, ninety silent seconds — retires the dead recording and
+      starts a new one.
+- [x] **§2 — a recording is as long as the class was.** The UPLOAD caps (100 MB
+      audio, 500 MB video) were being applied to the platform's own capture and
+      would have refused every audio class over ≈1 h 40 and every video class
+      over ≈47 min, permanently. The platform's recording is bounded at 5 GiB.
+- [x] A صوت فقط recording is now `audio/mp4` (AAC), not OGG — the segments are
+      AAC and one recording has one codec. It also plays on every iPhone.
+- [x] Operator commands: `ops:reconcile-recordings`, `ops:recording-segments`.
+- [x] **§3 — a Level is completed when the administration records it.** Not an
+      exam taken, not an exam passed. «حفظي» and the مؤطِّرة's Quran screen say
+      «أتمّت المستوى» only where a mark exists; BR-11's reading is shown as the
+      conditions, with what is still missing named.
+- [x] **§4 — a scheduling type's name is hers to change.** No application code
+      reads a name (audited); the seed never brings an old name back (now
+      tested); harnesses ask the platform for the live catalogue. Fresh installs
+      are seeded «حصة».
+- [x] A failed browser check now fails its run: `finish()` sets the exit code.
+      Thirteen harnesses had been exiting 0 over FAIL lines.
+- [x] **§5 — the certificate carries no seal.**
+- [x] Ledger review: 24 boxes closed with their evidence (20 found already done
+      by later sections, 4 resolved by this revision).
+- [ ] **§1 — one registration form, four roles, each decided separately.**
+      RATIFIED by the Owner (administrative staff may ask through the public
+      form; asking grants nothing). Being built as this revision's second part.
+- [ ] **For the Owner — data, not code:** the ordered circle choice is offered
+      from SCHEDULED classes. Today there is no «حلقة» for حفظ القرآن at all and
+      no weekly memorisation class. For المرأة · المستوى الأول · مقر تاركة:
+      create three حلقات (حلقات المواد → حفظ القرآن), then one weekly class per
+      حلقة in الجدولة — الثلاثاء 15:00–20:00, الخميس 09:00–12:00, السبت
+      15:00–20:00 — and تفسير on الأربعاء 09:00–12:00 for the whole Level.
+- [ ] Staging's first class type is still called «حصة دراسية»; renaming it is
+      one edit in أنواع الجدولة (the seed will never undo it).

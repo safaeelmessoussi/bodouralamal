@@ -2213,6 +2213,12 @@ model SessionRecording {
   /// told the recording failed and what to do, not what the provider said.
   failureReason String? @map("failure_reason") @db.VarChar(500)
 
+  /// **The final file never arrived, and this recording was ASSEMBLED from the
+  /// safety segments the recorder uploaded while the class ran** (SRS Revision
+  /// 168 §2). A fact about how the file was obtained, not a status — the library
+  /// item says so, because its last few seconds may be missing.
+  recoveredFromSegments Boolean @default(false) @map("recovered_from_segments")
+
   /// **The library item this recording BECAME — and the durable idempotency
   /// anchor for the whole ingestion pipeline (R99.13, R99.15).**
   ///

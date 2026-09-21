@@ -83,9 +83,44 @@ export function stagingKeyFor(
   recordingId: string,
   media: OnlineMediaMode,
 ): string {
-  const extension = media === "audio_only" ? "ogg" : "mp4";
-  return `session-recordings/${sessionId}/${recordingId}.${extension}`;
+  // **`.mp4` for both kinds of class since SRS Revision 168 §2.** The recorder
+  // writes its safety segments as HLS, which is AAC — and one recording has one
+  // audio codec, so a صوت فقط class is AAC in an MP4 container too (`audio/mp4`,
+  // a TD-9 type; it also plays on every iPhone, which OGG did not). The
+  // extension is the CONTAINER's, not the media's: asked for `.m4a`, the
+  // recorder writes `.m4a.mp4` and reports that name back, which moved the
+  // recording's key under the platform's feet (found by the recorder-kill
+  // drill). What the recording IS stays on the row, as `mime_type`.
+  void media;
+  return `session-recordings/${sessionId}/${recordingId}.mp4`;
 }
+
+/**
+ * **Where the recorder leaves its SAFETY SEGMENTS while the class is still
+ * running** (SRS Revision 168 §2).
+ *
+ * The final file exists only once the class ends: the recorder holds it locally
+ * and uploads it in one PUT. A recorder that dies mid-class — a host reboot, an
+ * out-of-memory kill — takes that file with it. The segments are the same
+ * recording cut into ten-second pieces, each uploaded the moment it is complete,
+ * so what was recorded is already in Bodour storage when the recorder dies.
+ *
+ * Derived from the staging key, never stored: a recording's segments are found
+ * from the row that already names its output, and cannot point anywhere else.
+ */
+export function segmentsPrefixFor(stagingKey: string): string {
+  // From the recording's ID — the file name up to its FIRST dot — never from
+  // «the key minus one extension»: a provider may append an extension of its
+  // own (`<id>.m4a` came back as `<id>.m4a.mp4`), and the segments must be
+  // found where they were put whatever the final file ended up being called.
+  const slash = stagingKey.lastIndexOf("/") + 1;
+  const name = stagingKey.slice(slash);
+  const dot = name.indexOf(".");
+  return `${stagingKey.slice(0, slash)}${dot === -1 ? name : name.slice(0, dot)}.segments/`;
+}
+
+/** Seconds per safety segment — also the most a crash can cost. */
+export const RECORDING_SEGMENT_SECONDS = 10;
 
 /* ─────────────────────────────── join window ─────────────────────────────── */
 

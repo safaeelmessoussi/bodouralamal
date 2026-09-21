@@ -264,7 +264,7 @@ exists to prevent.
 | class | output | why |
 |---|---|---|
 | `audio_video` | **MP4 with audio** | it is a صوت وصورة lesson; an audio stub would be the platform deciding it was worth less than it was |
-| `audio_only` | **OGG audio** | no video is captured for a class that has none |
+| `audio_only` | **AAC audio in MP4** (`audio/mp4`) | no video is captured for a class that has none. It was OGG until R168 §2: the recorder's safety segments are HLS, which is AAC, and one recording has one audio codec — see [the provider page](online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2). Unlike OGG it plays on every iPhone |
 
 The client cannot name the format — `recordingCommandSchema` is empty and
 `.strict()`, so a body carrying `media_mode` is a `400`. A client that could

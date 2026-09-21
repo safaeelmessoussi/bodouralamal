@@ -314,6 +314,15 @@ to the Category later is included and the two can never disagree. `branch_id` ke
 `NULL` is every branch. A partial index (`WHERE whole_category AND deleted_at IS NULL`) serves the
 «كل مستويات الفئة» shelf.
 
+### `SessionRecording.recovered_from_segments` — how the file was obtained, not a status (R168 §2)
+
+`true` where the recorder's final file never arrived and the recording was assembled from the
+safety segments it had uploaded while the class ran. The status is the ordinary `completed` and
+availability is still derived from `educational_content_id`; this column exists so the library item
+can say, honestly, that its last seconds may be missing, and so an operator can count how often a
+recorder dies. It is written by exactly one function (`markRecoveredFromSegments`), which is also
+the only path out of `failed`/`aborted`.
+
 ### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
 
 One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —

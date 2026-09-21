@@ -74,9 +74,6 @@ export function LevelCertificate({
             <span>{t('student.certificates.number')}</span>
             <strong dir="ltr">BA-{number}</strong>
           </div>
-          <div className="certificate__seal" aria-hidden="true">
-            <Seal />
-          </div>
           <div className="certificate__meta certificate__meta--end">
             <span>{t('student.certificates.issuedOn')}</span>
             <strong>{formatDate(certificate.issued_on)}</strong>
@@ -114,25 +111,6 @@ function Divider(): ReactNode {
       </g>
       <circle cx="102" cy="8" r="1.6" />
       <circle cx="138" cy="8" r="1.6" />
-    </svg>
-  );
-}
-
-function Seal(): ReactNode {
-  const points = Array.from({ length: 24 }, (_, i) => {
-    const angle = (i * Math.PI) / 12;
-    const radius = i % 2 === 0 ? 46 : 40;
-    return `${(50 + radius * Math.cos(angle)).toFixed(2)},${(50 + radius * Math.sin(angle)).toFixed(2)}`;
-  }).join(' ');
-  return (
-    <svg viewBox="0 0 100 100" focusable="false">
-      <polygon className="certificate__seal-burst" points={points} />
-      <circle className="certificate__seal-ring" cx="50" cy="50" r="33" />
-      <circle className="certificate__seal-ring" cx="50" cy="50" r="28" />
-      <g className="certificate__seal-star" transform="translate(50 50)">
-        <rect x="-12" y="-12" width="24" height="24" />
-        <rect x="-12" y="-12" width="24" height="24" transform="rotate(45)" />
-      </g>
     </svg>
   );
 }

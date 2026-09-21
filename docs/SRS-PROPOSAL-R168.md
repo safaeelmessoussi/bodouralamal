@@ -6,10 +6,13 @@
 at once, the Super Admin decides each role separately, and a first-time
 مستفيدة orders the memorisation circles that suit her.**
 
-**Status: PROPOSED — awaiting the Document Owner (2026-09-21). Nothing here is
-implemented, and `SRS.md` is unchanged by it.** Requested by the Owner as item 6
-of the Revision 167 batch. It is a proposal rather than code because it reverses
-four rules the SRS states today (§2), and those are the Owner's to reverse.
+**Status: RATIFIED by the Document Owner, 2026-09-21, and recorded as SRS Revision
+168 §1 — `SRS.md` is now authoritative.** Her answer to the gating question (§5.1):
+*yes, administrative staff may ask through the public form.* She also fixed the
+form's four choices (§1, as amended in R168 §1: the teaching choice covers main
+and assistant teachers, the administration choice covers Admin and Super Admin,
+and WHICH is the approving Super Admin's decision). The other recommendations in
+§5 stand as drafted until she says otherwise. Kept as the drafting record.
 
 ---
 

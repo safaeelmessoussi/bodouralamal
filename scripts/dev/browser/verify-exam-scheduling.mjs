@@ -25,6 +25,7 @@
  * drafts and scheduled occurrences alike, with no second tag and no second
  * cleanup mechanism to keep in sync.
  */
+import { readCatalogue } from './catalogue.mjs';
 import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
@@ -312,6 +313,13 @@ let onlineOccurrenceId = null;
 let superToken = null;
 
 await goto('/admin/assessments', '.admin-nav');
+
+// What the types are CALLED today (SRS Revision 168 §4) — the catalogue is the
+// Super Admin's to rename, so nothing below types a name.
+const catalogue = await readCatalogue(evaluate);
+const EXAM_TYPE = catalogue.first('exam')?.name;
+const FIRST_TYPE = catalogue.rows[0]?.name;
+if (!EXAM_TYPE || !FIRST_TYPE) throw new Error('the catalogue has no exam type');
 superToken = await browserToken();
 check('A-1 · a browser-mediated API token was obtained', typeof superToken === 'string' && superToken.length > 0);
 {
@@ -399,8 +407,8 @@ if (onlineDraftId) {
 
   const itemType = await fieldSnapshot('نوع العنصر');
   check(
-    'A11 · «نوع العنصر» actually SHOWS اختبار (not the catalogue’s first row, حصة دراسية)',
-    itemType.present === true && itemType.selectedText === 'اختبار',
+    'A11 · «نوع العنصر» actually SHOWS the exam type (not merely the catalogue’s first row)',
+    itemType.present === true && itemType.selectedText === EXAM_TYPE,
     JSON.stringify(itemType),
   );
 
@@ -472,7 +480,7 @@ if (onlineDraftId) {
 /* ════════════════════════════════════════════════════════════════════════
    Journey B — نقاط الامتحانات's ＋ جدولة امتحان → /admin/schedules?kind=
    exam&new=1 (no source/mode) → the dialog opens on اختبار, not the
-   catalogue's first row (حصة دراسية) — the ORIGINAL defect symptom.
+   catalogue's first row — the ORIGINAL defect symptom.
    ════════════════════════════════════════════════════════════════════════ */
 
 await goto('/admin/exam-grades', '.admin-nav');
@@ -502,10 +510,10 @@ await goto('/admin/exam-grades', '.admin-nav');
 
   const itemType = await fieldSnapshot('نوع العنصر');
   check(
-    'B3 · «نوع العنصر» shows اختبار — never «حصة دراسية», the catalogue’s first row',
+    'B3 · «نوع العنصر» shows the exam type — never the catalogue’s first row by default',
     itemType.present === true &&
-      itemType.selectedText === 'اختبار' &&
-      itemType.selectedText !== 'حصة دراسية',
+      itemType.selectedText === EXAM_TYPE &&
+      (FIRST_TYPE === EXAM_TYPE || itemType.selectedText !== FIRST_TYPE),
     JSON.stringify(itemType),
   );
 }
@@ -669,7 +677,7 @@ if (physicalDraftId) {
   const isOpen = await dialogOpen();
   check('D1 · the dialog is open', isOpen === true);
 
-  const typeSet = await setSelectContainingOption('نوع العنصر', 'اختبار');
+  const typeSet = await setSelectContainingOption('نوع العنصر', EXAM_TYPE);
   check('D2 · «نوع العنصر» can be set to اختبار', typeSet.ok === true, JSON.stringify(typeSet));
   await new Promise((r) => setTimeout(r, 400));
 
@@ -730,7 +738,7 @@ if (physicalDraftId) {
   check(
     'D7b · and it is CALLED what it is — its type, its date and its time — not something typed',
     typeof occurrence?.title === 'string' &&
-      occurrence.title.includes('اختبار') &&
+      occurrence.title.includes(EXAM_TYPE) &&
       /\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(occurrence.title),
     JSON.stringify({ title: occurrence?.title }),
   );

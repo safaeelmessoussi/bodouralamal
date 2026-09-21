@@ -1,3 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { PgBoss } from "pg-boss";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -9,16 +15,20 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
   createStorageClients,
   deleteObject,
+  listObjectsPage,
   statObject,
   type StorageClients,
 } from "../lib/storage.js";
 import type { OnlineClassProvider, RecordingReport } from "../lib/online-class-provider.js";
+import { platformRecordingCap, SIZE_CAPS } from "../lib/file-types.js";
 import type { Actor } from "../policies/actor.js";
+import { segmentsPrefixFor } from "../policies/online-class.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import { createCourseSchedule } from "./course-schedule.service.js";
 import { createLevel } from "./level.service.js";
 import {
   ingestRecording,
+  RECOVERED_NOTE,
   RecordingStagingCleanupFailure,
   requeueStrandedRecordings,
 } from "./session-recording-ingest.service.js";
@@ -27,6 +37,8 @@ import {
   RECONCILE_DEAD_AFTER_MS,
   reconcileRecordings,
 } from "./session-recording-reconcile.service.js";
+import { FFMPEG_PATH, type Assembler } from "./session-recording-recover.service.js";
+import { listSegments } from "./session-recording-segments.js";
 import { applyProviderReport } from "./session-recording.service.js";
 
 /**
@@ -299,6 +311,12 @@ async function cleanup(): Promise<void> {
       } catch {
         /* already swept by a successful ingestion */
       }
+      // R168 §2 — and the safety segments a recording that was never imported
+      // still has, deliberately.
+      const left = await listObjectsPage(s3, row.outputBucket, segmentsPrefixFor(row.outputKey), {
+        maxKeys: 1_000,
+      });
+      for (const object of left.objects) await deleteObject(s3, row.outputBucket, object.key);
     }
   }
 
@@ -931,6 +949,234 @@ describe("SRS Revision 166 §4 — a filter-built class's recording is imported 
       select: { ingestionFailureReason: true },
     });
     expect(row.ingestionFailureReason).toBeNull();
+  });
+});
+
+/* ── A recorder that dies mid-class ──────────────────────────────────────── */
+
+describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing recorded", () => {
+  /** A recording that has NO final file — only what the recorder had already
+   *  delivered: `n` ten-second safety segments under its own prefix. */
+  async function diedMidClass(
+    sessionId: string,
+    status: "recording" | "failed",
+    segments: number,
+  ): Promise<{ id: string; egressId: string; key: string }> {
+    const egressId = `EG_${Math.random().toString(36).slice(2)}`;
+    const created = await prisma.sessionRecording.create({
+      data: {
+        sessionId,
+        startedById: adminId,
+        status,
+        providerEgressId: egressId,
+        outputBucket: STAGING,
+        outputKey: "placeholder",
+        mimeType: "audio/mp4",
+        startedAt: new Date(Date.now() - 2 * 60 * 60_000),
+      },
+      select: { id: true },
+    });
+    const key = `session-recordings/${sessionId}/${created.id}.m4a`;
+    await prisma.sessionRecording.update({ where: { id: created.id }, data: { outputKey: key } });
+    for (let i = 0; i < segments; i += 1) {
+      await putStaging(
+        `${segmentsPrefixFor(key)}seg_${String(i).padStart(5, "0")}.ts`,
+        Buffer.alloc(1024, 0x47 + i),
+      );
+    }
+    await putStaging(`${segmentsPrefixFor(key)}playlist.m3u8`, Buffer.from("#EXTM3U\n"));
+    return { id: created.id, egressId, key };
+  }
+
+  /**
+   * Stands in for `ffmpeg` where there is none (a CI runner): it CONSUMES every
+   * segment in the order given — which is what is under test here — and writes
+   * a file the importer's own byte check accepts. The real remux is proven by
+   * the `ffmpeg` test below and by the recorder-kill drill on a real stack.
+   */
+  const order: number[] = [];
+  const fakeAssemble: Assembler = async (parts, outputPath) => {
+    let total = 0;
+    for await (const part of parts) {
+      for await (const chunk of part) {
+        order.push((chunk as Buffer)[0]!);
+        total += (chunk as Buffer).length;
+      }
+    }
+    await writeFile(outputPath, mp4Bytes(Math.max(total, 64)));
+  };
+
+  const provider = (answers: Record<string, RecordingReport | null>, throws = false): OnlineClassProvider => ({
+    issueJoinCredentials: () => Promise.reject(new Error("not used")),
+    startRecording: () => Promise.reject(new Error("not used")),
+    stopRecording: () => Promise.resolve(),
+    verifyCallback: () => Promise.resolve(null),
+    reportRecording: (egressId: string) =>
+      throws ? Promise.reject(new Error("provider down")) : Promise.resolve(answers[egressId] ?? null),
+  });
+  const row = (id: string) =>
+    prisma.sessionRecording.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, recoveredFromSegments: true, educationalContentId: true, stoppedAt: true },
+    });
+  /** Far enough on that freshly written segments count as quiet. */
+  const LATER = (): Date => new Date(Date.now() + 40 * 60_000);
+
+  it("the provider says the recorder gave up: what it had delivered is assembled IN ORDER, imported, and says so — and the segments are swept", async () => {
+    order.length = 0;
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const dead = await diedMidClass(sessionId, "recording", 3);
+
+    const outcome = await reconcileRecordings(
+      prisma,
+      clients,
+      provider({ [dead.egressId]: { providerEgressId: dead.egressId, state: "failed", failureReason: "egress crashed" } }),
+      LATER(),
+      fakeAssemble,
+    );
+    expect(outcome.recovered_from_segments).toBe(1);
+    expect(order).toEqual([0x47, 0x48, 0x49]);
+    const recovered = await row(dead.id);
+    expect(recovered.status).toBe("completed");
+    expect(recovered.recoveredFromSegments).toBe(true);
+    expect(recovered.stoppedAt).not.toBeNull();
+    // The file the recording always named now exists — and nothing else moved it.
+    expect(await statObject(clients, STAGING, dead.key)).not.toBeNull();
+
+    const imported = await ingestRecording(prisma, clients, dead.id);
+    const content = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: imported.contentId! },
+      select: { description: true, origin: true, mimeType: true },
+    });
+    expect(content).toEqual({ description: RECOVERED_NOTE, origin: "session_recording", mimeType: "audio/mp4" });
+    // Swept: the file, every segment and the playlist.
+    expect(await statObject(clients, STAGING, dead.key)).toBeNull();
+    expect((await listSegments(clients, STAGING, dead.key)).keys).toEqual([]);
+    expect(await statObject(clients, STAGING, `${segmentsPrefixFor(dead.key)}playlist.m3u8`)).toBeNull();
+  });
+
+  it("a recording a CALLBACK already declared failed is recovered too — the one way out of a terminal failure is that the file now exists", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const failed = await diedMidClass(sessionId, "failed", 2);
+    const outcome = await reconcileRecordings(prisma, clients, provider({}), LATER(), fakeAssemble);
+    expect(outcome.recovered_from_segments).toBeGreaterThanOrEqual(1);
+    expect((await row(failed.id)).status).toBe("completed");
+
+    // …and ONLY that way: a failed recording with nothing delivered stays failed.
+    const [, next] = await prisma.session.findMany({
+      where: { schedule: { sessions: { some: { id: sessionId } } }, date: { gte: day(CLASS_DATE) } },
+      orderBy: { date: "asc" },
+      take: 2,
+      select: { id: true },
+    });
+    const nothing = await diedMidClass(next!.id, "failed", 0);
+    await reconcileRecordings(prisma, clients, provider({}), LATER(), fakeAssemble);
+    expect((await row(nothing.id)).status).toBe("failed");
+  });
+
+  it("a recorder the provider still calls «active» is judged by its SILENCE: untouched while it may be writing, retired after ten silent minutes, assembled only on a LATER pass", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const live = await diedMidClass(sessionId, "recording", 2);
+    const stopped: string[] = [];
+    const saysRecording: OnlineClassProvider = {
+      ...provider({ [live.egressId]: { providerEgressId: live.egressId, state: "recording" } }),
+      stopRecording: (egressId: string) => {
+        stopped.push(egressId);
+        return Promise.resolve();
+      },
+    };
+    const after = (minutes: number): Date => new Date(Date.now() + minutes * 60_000);
+
+    // Five quiet minutes: a class in progress is left alone, whoever is asked.
+    await reconcileRecordings(prisma, clients, saysRecording, after(5), fakeAssemble);
+    await reconcileRecordings(prisma, clients, provider({}, true), after(5), fakeAssemble);
+    expect((await row(live.id)).status).toBe("recording");
+    expect(stopped).toEqual([]);
+
+    // Twelve: measured on the real stack, a KILLED recorder is still «active» to
+    // the provider. It is retired — asked to stop, so a recorder that was alive
+    // after all delivers its own complete file — and NOT assembled yet.
+    const retiring = await reconcileRecordings(prisma, clients, saysRecording, after(12), fakeAssemble);
+    expect(retiring.retired).toBe(1);
+    expect(retiring.recovered_from_segments).toBe(0);
+    expect(stopped).toEqual([live.egressId]);
+    expect((await row(live.id)).status).toBe("processing");
+    expect(await statObject(clients, STAGING, live.key)).toBeNull();
+
+    // The next pass: still no file, still silent — what it delivered is assembled.
+    const assembling = await reconcileRecordings(prisma, clients, saysRecording, after(30), fakeAssemble);
+    expect(assembling.recovered_from_segments).toBe(1);
+    expect((await row(live.id)).status).toBe("completed");
+  });
+
+  it("a recording that has delivered NO segment is never judged by silence — it may predate them, and be recording perfectly well", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const old = await diedMidClass(sessionId, "recording", 0);
+    const outcome = await reconcileRecordings(
+      prisma,
+      clients,
+      provider({ [old.egressId]: { providerEgressId: old.egressId, state: "recording" } }),
+      LATER(),
+      fakeAssemble,
+    );
+    expect(outcome.retired).toBe(0);
+    expect((await row(old.id)).status).toBe("recording");
+  });
+
+  it("an assembly that fails is said, keeps every segment, and is tried again", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const dead = await diedMidClass(sessionId, "failed", 2);
+    const broken: Assembler = () => Promise.reject(new Error("ffmpeg exited 1"));
+    const outcome = await reconcileRecordings(prisma, clients, provider({}), LATER(), broken);
+    expect(outcome.recovery_failed).toBeGreaterThanOrEqual(1);
+    const after = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: dead.id },
+      select: { status: true, ingestionFailureReason: true },
+    });
+    expect(after.status).toBe("failed");
+    expect(after.ingestionFailureReason).toContain("recovery from segments failed");
+    expect((await listSegments(clients, STAGING, dead.key)).keys).toHaveLength(2);
+
+    await reconcileRecordings(prisma, clients, provider({}), LATER(), fakeAssemble);
+    expect((await row(dead.id)).status).toBe("completed");
+  });
+
+  it.skipIf(!existsSync(FFMPEG_PATH))(
+    "the real `ffmpeg` remuxes real MPEG-TS segments into an MP4 the importer accepts",
+    async () => {
+      // Segments made by ffmpeg itself, exactly as HLS cuts them.
+      const dir = await mkdtemp(join(tmpdir(), "bodour-seg-test-"));
+      try {
+        execFileSync(FFMPEG_PATH, [
+          "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
+          "-c:a", "aac", "-f", "hls", "-hls_time", "2", "-hls_segment_filename", join(dir, "seg_%05d.ts"),
+          join(dir, "playlist.m3u8"),
+        ]);
+        const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+        const dead = await diedMidClass(sessionId, "failed", 0);
+        const made = readdirSync(dir).filter((name) => name.endsWith(".ts")).sort();
+        expect(made.length).toBeGreaterThanOrEqual(2);
+        for (const name of made) {
+          await putStaging(`${segmentsPrefixFor(dead.key)}${name}`, readFileSync(join(dir, name)));
+        }
+
+        const outcome = await reconcileRecordings(prisma, clients, provider({}), LATER());
+        expect(outcome.recovered_from_segments).toBeGreaterThanOrEqual(1);
+        const imported = await ingestRecording(prisma, clients, dead.id);
+        expect(imported.contentId).not.toBeNull();
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe("SRS Revision 168 §2 — a recording is as long as the class was", () => {
+  it("the UPLOAD caps do not govern the platform's own capture: a two-hour audio class is over TD-9's 100 MB and must import", () => {
+    // At the measured ≈59 MB per audio hour and ≈0.63 GB per video hour.
+    expect(platformRecordingCap()).toBeGreaterThan(2 * 59 * 1024 * 1024);
+    expect(platformRecordingCap()).toBeGreaterThan(5 * 0.63 * 1024 * 1024 * 1024);
+    expect(SIZE_CAPS.audio).toBeLessThan(2 * 59 * 1024 * 1024);
   });
 });
 

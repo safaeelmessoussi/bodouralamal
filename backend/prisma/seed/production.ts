@@ -162,7 +162,7 @@ const MEMORISATION_SUBJECT = SUBJECTS[1];
  * label could never be renamed.
  *
  * **`attendanceMode` is the Owner's column, widened by R123** from a boolean to
- * the three states the association actually has: `required` for حصة دراسية and
+ * the three states the association actually has: `required` for حصة and
  * اختبار (the register), `optional` for محاضرة and نشاط (the blank list), and
  * `disabled` for عطلة and حفل — the two the Owner excluded from attendance
  * entirely. It is not derivable: اختبار takes attendance and محاضرة may, and
@@ -191,7 +191,10 @@ const MEMORISATION_SUBJECT = SUBJECTS[1];
  * Nothing here is inferred: every value is either R110(2)'s or the amendment's.
  */
 const SCHEDULING_TYPES = [
-  { name: 'حصة دراسية', structuralKind: 'class', attendanceMode: 'required', displayOrder: 1 },
+  // «حصة» — the Owner's name for it since 2026-09-21 (SRS Revision 168 §4); it
+  // was «حصة دراسية». A baseline for a FRESH installation only: an installation
+  // that already has a catalogue keeps whatever its Super Admin calls each row.
+  { name: 'حصة', structuralKind: 'class', attendanceMode: 'required', displayOrder: 1 },
   { name: 'اختبار', structuralKind: 'exam', attendanceMode: 'required', displayOrder: 2 },
   { name: 'محاضرة', structuralKind: 'class', attendanceMode: 'optional', displayOrder: 3 },
   { name: 'حفل', structuralKind: 'activity', attendanceMode: 'disabled', displayOrder: 4 },

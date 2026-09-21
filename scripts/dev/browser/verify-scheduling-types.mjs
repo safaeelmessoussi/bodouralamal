@@ -15,6 +15,7 @@
  *    that matters: a notice that always rendered would pass a check for its
  *    presence and prove nothing.
  */
+import { readCatalogue } from './catalogue.mjs';
 import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
@@ -78,33 +79,35 @@ const rows = await evaluate(`(() => {
 })()`);
 const table = JSON.parse(rows ?? '[]');
 
-// The Owner's table, verbatim — order included, because she calls it canonical.
-const EXPECTED = [
-  { name: 'حصة دراسية', attendance: 'نعم' },
-  { name: 'اختبار', attendance: 'نعم' },
-  { name: 'محاضرة', attendance: 'لا' },
-  { name: 'حفل', attendance: 'لا' },
-  { name: 'عطلة', attendance: 'لا' },
-];
-const seeded = table.filter((r) => EXPECTED.some((e) => e.name === r.name));
+// **The catalogue as it IS, never as it was seeded** (SRS Revision 168 §4). The
+// names are hers to change; what this holds the screen to is that it renders
+// the live rows, in her order, with each row's own stored facts.
+const catalogue = await readCatalogue(evaluate);
+// R123 widened attendance from yes/no to three states; the column says which.
+const ATTENDANCE_LABEL = { required: 'حضور مطلوب', optional: 'حضور اختياري', disabled: 'لا حضور' };
+const EXPECTED = catalogue.rows.map((row) => ({
+  name: row.name,
+  attendance: ATTENDANCE_LABEL[row.attendance_mode],
+}));
+check('the catalogue holds rows to render', EXPECTED.length > 0, EXPECTED.length);
 check(
-  "the five seeded types render in the Owner's order",
-  seeded.length === 5 && seeded.every((r, i) => r.name === EXPECTED[i].name),
+  'every live type renders, in the stored display order',
+  table.length === EXPECTED.length && table.every((r, i) => r.name === EXPECTED[i].name),
   // Reported as POSITIONS, not as the Arabic names: a terminal applies bidi to a
   // comma-separated Arabic list and prints it mirrored, which made a correct
   // order look reversed while this harness was being written.
-  seeded.map((r) => EXPECTED.findIndex((e) => e.name === r.name) + 1).join(' → '),
+  table.map((r) => EXPECTED.findIndex((e) => e.name === r.name) + 1).join(' → '),
 );
 check(
-  'حضور إجباري is read from the COLUMN — نعم for حصة دراسية and اختبار, لا for the rest',
-  seeded.every((r, i) => r.attendance === EXPECTED[i].attendance),
-  seeded.map((r) => `${r.name}:${r.attendance}`),
+  'the attendance column renders each row’s own stored mode — required, optional or none',
+  table.every((r, i) => r.attendance === EXPECTED[i]?.attendance),
+  table.map((r) => `${r.name}:${r.attendance}`),
 );
-// The routing R56 settled, rendered: five rows, three entities.
+// The routing R56 settled, rendered: several rows share an entity.
 check(
-  'three of the five are delivered as the same entity',
-  new Set(seeded.map((r) => r.kind)).size === 3,
-  [...new Set(seeded.map((r) => r.kind))],
+  'the rendered kinds are exactly the structural kinds the catalogue stores',
+  new Set(table.map((r) => r.kind)).size === new Set(catalogue.rows.map((r) => r.structural_kind)).size,
+  [...new Set(table.map((r) => r.kind))],
 );
 
 /* ── 2. The الجدولة picker offers the catalogue, not the entities ───────── */
@@ -133,20 +136,21 @@ for (let i = 0; i < 40; i += 1) {
     return JSON.stringify([...select.options].map((o) => o.textContent.trim()));
   })()`);
   options = JSON.parse(raw ?? '[]');
-  if (options.includes('حفل')) break;
+  if (catalogue.names.every((n) => options.includes(n))) break;
   await new Promise((r) => setTimeout(r, 250));
 }
 
 check(
   'the picker offers the CATALOGUE rows, not the three entities',
-  ['حصة دراسية', 'اختبار', 'محاضرة', 'حفل', 'عطلة'].every((n) => options.includes(n)),
+  catalogue.names.every((n) => options.includes(n)),
   options,
 );
-// The negative half: `نشاط` was the old entity-level label. Its absence is what
-// says the registry stopped being the source.
+// The negative half: the picker offers NOTHING that is not a catalogue row. (It
+// used to assert the absence of «نشاط», the old entity-level label — which
+// R110.9 then made a catalogue row of its own, so the name proves nothing.)
 check(
-  'and no longer offers the bare entity label «نشاط»',
-  !options.includes('نشاط'),
+  'and offers nothing that is not a catalogue row',
+  options.filter((o) => o !== '' && !o.startsWith('اختاري')).every((o) => catalogue.names.includes(o)),
   options,
 );
 
@@ -167,18 +171,28 @@ const noticeFor = async (typeName) => {
   await new Promise((r) => setTimeout(r, 400));
   return evaluate(`(() => {
     const dialog = document.querySelector('dialog[open]');
-    return dialog ? dialog.textContent.includes('يُسجَّل الحضور') : false;
+    // «لا يُسجَّل الحضور…» CONTAINS «يُسجَّل الحضور», so a bare substring said yes
+    // to the one notice that says no. The negation is excluded explicitly.
+    const text = dialog ? dialog.textContent : '';
+    return text.includes('يُسجَّل الحضور') && !text.includes('لا يُسجَّل الحضور');
   })()`);
 };
 
-const withAttendance = await noticeFor('اختبار');
-const withoutAttendance = await noticeFor('عطلة');
-check('اختبار (حضور إجباري = نعم) states that attendance is taken', withAttendance === true, {
+// By the FLAG, whatever the rows are called: one type that takes attendance and
+// one for which it is disabled.
+const taking = catalogue.rows.find((r) => r.attendance_mode === 'required');
+const notTaking = catalogue.rows.find((r) => r.attendance_mode === 'disabled');
+if (!taking || !notTaking) throw new Error('the catalogue needs a required and a disabled type for this check');
+const withAttendance = await noticeFor(taking.name);
+const withoutAttendance = await noticeFor(notTaking.name);
+check('a type whose attendance is REQUIRED states that attendance is taken', withAttendance === true, {
   withAttendance,
 });
-check('عطلة (حضور إجباري = لا) states nothing about attendance', withoutAttendance === false, {
+check('a type whose attendance is DISABLED states nothing about attendance', withoutAttendance === false, {
   withoutAttendance,
 });
 
 await close();
-finish();
+// A failed check is a failed run: `finish()` only REPORTS, and a wrapper that
+// exits 0 over a FAIL line is how a stale harness stays stale.
+process.exit(finish());

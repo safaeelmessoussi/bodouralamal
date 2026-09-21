@@ -81,7 +81,24 @@ export const SIZE_CAPS = {
   audio: 100 * MB,
   document: 50 * MB,
   recording: 500 * MB,
+  /**
+   * **The platform's OWN capture of a class** (SRS Revision 168 §2).
+   *
+   * The three caps above bound what a PERSON may upload. A recording's size is
+   * not chosen by anybody: it is the length of the class. At the measured
+   * bitrates (≈59 MB per audio hour, ≈0.63 GB per video hour) the upload caps
+   * refused every audio class over about 1 h 40 and every video class over
+   * about 47 minutes — on import, after the class had been given, for ever.
+   * Five gibibytes is a five-hour class in video with room to spare, and the
+   * largest object one server-side copy moves.
+   */
+  platformRecording: 5 * 1024 * MB,
 } as const;
+
+/** The cap that governs the platform's own recording, whatever its container. */
+export function platformRecordingCap(): number {
+  return SIZE_CAPS.platformRecording;
+}
 
 /**
  * **The media type without its parameters** — `audio/webm;codecs=opus` is

@@ -87,6 +87,26 @@ Revision is not discarded. `revision_log_count` and `last_revised_at` come back
 with every coverage row, and the log itself is preserved and displayed — *has
 this been revised, and when last* is the question revision actually answers.
 
+## What says a Level is COMPLETED — the administration, and nothing else (R168 §3)
+
+BR-11's reading — every Surah of the «مقرر الحفظ» memorised, and an exam of each taken where the
+Level teaches تفسير — is computed exactly as before (`policies/level-completion.ts`), and it is
+**the conditions of completion, never the verdict**. A Level is completed when an Admin or Super
+Admin records it («تسجيل إتمام المستوى», `LevelCompletionMark`, R167 §3); neither an exam *taken*
+nor an exam *passed* marks it, which closes the question Revision 166 left open.
+
+So the per-student read carries both, and the screens say which is which:
+
+| `completion.marked_on` | `completion.complete` | «حفظي» and the مؤطِّرة's Quran screen say |
+|---|---|---|
+| a date | anything | «أتمّت المستوى — *date*» |
+| `null` | `true` | «استوفت شروط الإتمام — بانتظار تسجيل الإدارة» |
+| `null` | `false` | «لم تُستوفَ شروط الإتمام بعد», naming the Surahs still to memorise and to be examined on |
+| `null` | `null` | «لم يُضبط «مقرر الحفظ» لهذا المستوى بعد» |
+
+The conditions stay on screen beside a recorded completion: they are progress, and the
+administration may knowingly record a Level whose conditions the platform cannot see met (R167 §3).
+
 ## `LevelSurah` is the حفظ القرآن syllabus and is normative for ENTRY
 
 A Surah may be logged against a Level only when both hold:

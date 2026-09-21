@@ -145,6 +145,56 @@ job's first step is its own idempotency anchor), printing counts and recording i
 `docker compose … run --rm --no-deps api npm run -s ops:requeue-recordings -- --dry-run`. On Staging and Production it is a queue mutation and needs
 the Owner's authorization like any other.
 
+## A recorder that dies mid-class loses nothing recorded (R168 §2)
+
+The recorder holds a class's final file locally and uploads it once, at the end. A host reboot or
+an out-of-memory kill used to take the whole class with it. Since Revision 168 every recording is
+requested with **two outputs of one encode**:
+
+| Output | Where | When it reaches Bodour storage |
+|---|---|---|
+| The final file | `session-recordings/<session>/<recording>.mp4` | Once, when the class ends |
+| Ten-second HLS safety segments + playlist | `session-recordings/<session>/<recording>.segments/` | **Each segment the moment it is complete** |
+
+Three things the recorder-kill drill (`scripts/dev/browser/verify-recorder-crash.sh`) established
+on the real stack, none of which a fake could have shown:
+
+* **HLS is AAC, so everything is.** The recorder refuses two outputs that need different codecs, so
+  a صوت فقط class is AAC in MP4 (`audio/mp4`) — no longer Opus in OGG. It is a TD-9 type and,
+  unlike OGG, plays on every iPhone.
+* **The key is `.mp4` for both kinds of class.** Asked for `<id>.m4a`, the recorder writes
+  `<id>.m4a.mp4` and reports THAT name back, which moved the row's key mid-recording. The
+  extension is the container's; what the recording is stays in `mime_type`. And the segments folder
+  is derived from the recording's ID (the file name up to its first dot), never from «the key minus
+  one extension» — the first version looked in a folder nothing had written to.
+* **The provider's word is not evidence of life.** A recorder whose container was SIGKILLed was
+  still reported «active» minutes later, indefinitely. A live recorder uploads a segment every ten
+  seconds; **silence is the fact** (`services/session-recording-segments.ts`).
+
+What follows from the silence:
+
+| Who notices | After | What happens |
+|---|---|---|
+| The classroom | 20 s of the ROOM saying nothing is recorded while the row says `recording` | «توقّف المسجِّل… ما سُجِّل محفوظ» and «بدء التسجيل» is offered again |
+| `POST /sessions/{id}/recording` | 90 s without a segment (checked against storage — her click alone is not believed) | The dead recording is **retired** (`processing`; the provider is asked to stop the job, so a recorder that was alive after all delivers its own complete file, which always wins) and a new recording starts — the rest of the class is recorded |
+| `session-recording-reconcile` | 10 min without a segment, for a recording that has delivered at least one | Retires it likewise |
+| …on a later pass | retired or provider-failed, no final file, segments quiet | `ffmpeg` REMUXES the segments (`-c copy`; streamed from storage on stdin, no input on disk) into the recording's own `output_key`; the row becomes `completed` with `recovered_from_segments`, and the ordinary import verifies, publishes and sweeps it — file, segments and playlist |
+
+The library item of a recovered recording says so in «الوصف» — its last seconds (at most one
+segment) may be missing. `ffmpeg` is one static binary, pinned by digest, in a layer every release
+shares (Debian's package would add 481 MB and two hundred packages to the API image).
+
+`npm run ops:recording-segments -- <recording-id>` (read-only) prints what storage holds, the
+newest segment's time, and what the PROVIDER says — side by side, because they can disagree.
+`npm run ops:reconcile-recordings` runs one reconciler pass now.
+
+**A recording is as long as the class was.** TD-9's 100 MB and 500 MB caps bound what a person
+uploads. Applied to the platform's own capture they refused, on import and permanently, every
+audio class over ≈1 h 40 and every video class over ≈47 min at the measured bitrates below — the
+likeliest way a two-hour class would have been «lost». The platform's own recording is bounded at
+5 GiB (`platformRecordingCap`). While a class runs, staging holds its segments as well as, at the
+end, its file — roughly twice the recording's size, until the import sweeps both.
+
 ## What it actually costs (MEASURED)
 
 Measured on 2026-09-20 with real rooms and real recordings (three participants,
