@@ -115,6 +115,11 @@ GET /admin/enrollments                        # §7 R66, §14.1 R74; Admin in br
 POST /admin/enrollments                       # §7 R66; administrative_group_id optional, null = the Level itself
 PATCH /admin/enrollments/{id}                 # §7 R66; placement within the Level; level_id refused (BR-21)
 DELETE /admin/enrollments/{id}                # §7 R66; TD-5 soft-delete of the enrolment row only
+GET /admin/students/{id}/level-completions    # R167 §3; BR-11 read now + the recorded mark, per Level in the caller's reach
+PUT /admin/students/{id}/level-completions/{levelId}                 # R167 §3; record «إتمام المستوى»; 409 REQUIREMENTS_NOT_MET until acknowledged
+DELETE /admin/students/{id}/level-completions/{levelId}              # R167 §3; a mark made in error; 409 CERTIFICATE_ISSUED while one is showing
+PUT /admin/students/{id}/level-completions/{levelId}/certificate     # R167 §3; confirm the certificate — it appears in her dashboard
+DELETE /admin/students/{id}/level-completions/{levelId}/certificate  # R167 §3; withdraw it; the number is kept
 
 # ── Teaching-group reads (TD-3.12, §4.4c) ───────────────────────────────────
 # Shipping under TD-3.12's existing clause, by the precedent GET /students/me/quran
@@ -144,6 +149,7 @@ POST /exams/{id}/grades/publish               # §4.6, TD-3.6, TD-4.5 R70; publi
 # because this registry is the projection of what the SRS DOCUMENTS, and the SRS
 # documents it no longer — that is following the source, not fitting the code.
 GET /students/me/grades                       # TD-3.3 clause, §5.3 R63.3; PUBLISHED only; the ACTING student
+GET /students/me/certificates                 # R167 §3; the ACTING student's confirmed Level certificates (§4.3)
 
 # ── Reads added with their screens ──────────────────────────────────────────
 GET /library/{id}/sessions                    # §4.9 R43; SessionContent read backwards; public at the caller's tier
@@ -227,6 +233,7 @@ POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
 # ── Calendar bootstrap (TD-3.10, Revision 36)
 GET /calendar/bootstrap                       # TD-3.10; anonymous; calendar chrome in one read
+GET /clock                                    # R167 §2; anonymous; Morocco's current UTC offset, from the host's zone database
 
 # ── Public branch directory (TD-3.9, Revision 35)
 GET /branches                                 # TD-3.9; anonymous; §5.1 landing-page branch list

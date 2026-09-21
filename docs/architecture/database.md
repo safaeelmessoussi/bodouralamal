@@ -283,6 +283,37 @@ Tafsir still carries no `tracks_quran_progress` and does not participate in the 
 `LevelSubject` curriculum. The eight-row Production seed is an additive baseline and does
 not constrain or rewrite later Super-Admin additions.
 
+### `LevelCompletionMark` — an attestation beside a derived rule, never instead of it (R167 §3)
+
+BR-11 — *has she completed this Level* — is **derived on read and never stored** (Revision 166 §1;
+`policies/level-completion.ts`). `level_completion_mark` is a different fact: that an Admin or
+Super Admin **recorded** she completed it, which the Owner allows while BR-11 is unmet provided
+the caller was told (`409 REQUIREMENTS_NOT_MET` until `acknowledge_unmet`). `requirements_met`
+keeps what BR-11 read at that moment, so the record says for ever whether the attestation agreed
+with the engine. Nothing reads the mark back into BR-11.
+
+* **One row per `(student_id, level_id)`** — a UNIQUE index, not per enrolment: completion is about
+  her and the Level, and R122 lets her hold several enrolments at one Level.
+* **`branch_id`** is her enrolment's branch when it was recorded — what an Admin's scope is checked
+  against, and what the certificate names.
+* **The certificate is three columns and one CHECK**: `certificate_number` (UNIQUE, drawn from
+  `level_certificate_number_seq` at FIRST issue and never reused), `certificate_issued_at`,
+  `certificate_issued_by`; `level_completion_mark_certificate_check` makes *issued* mean *by
+  somebody, with a number*. Withdrawing clears the two `issued` columns and keeps the number, so a
+  copy printed earlier stays traceable.
+* **No soft delete and no Trash entry.** Removing a mark made in error is a correction — nothing of
+  hers is lost, the audit row records who — and it is refused while a certificate is showing.
+
+### `EducationalContent.whole_category` — a scope read through the Level, never copied (R167 §5)
+
+`level_id` stays `NOT NULL`: §4.9 groups the library by Level and every reader keeps a Level to
+join through. `whole_category = true` says the item is **addressed to every Level of that Level's
+Category**. There is deliberately no `category_id` column beside it: the Category is read through
+`level_id` at the moment of the read (`tierPredicate`, the `?level_id=` filter), so a Level added
+to the Category later is included and the two can never disagree. `branch_id` keeps its meaning —
+`NULL` is every branch. A partial index (`WHERE whole_category AND deleted_at IS NULL`) serves the
+«كل مستويات الفئة» shelf.
+
 ### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
 
 One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —

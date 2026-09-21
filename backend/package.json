@@ -19,6 +19,7 @@
     "seed:production": "node dist/prisma/seed/production.js",
     "seed:fixtures": "node dist/prisma/seed/fixtures.js",
     "ops:requeue-recordings": "node dist/src/ops/requeue-recording-ingest.js",
+    "ops:active-recordings": "node dist/src/ops/active-recordings.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

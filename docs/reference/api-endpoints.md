@@ -111,6 +111,7 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 | `GET` | `/calendar` | Occurrences at the caller's visibility tier. Public and optionally authenticated: the calendar client sends its access token when present; invalid/Pending/role-less callers receive public only. **Self-sufficient** — opening an event costs no further request. **Uncached** |
 | `GET` | `/calendar/sessions/{id}` | Focused data for the canonical calendar dialog: `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`. Public at the caller's tier — a public session's details, never its private recordings. This is not a frontend page route |
 | `GET` | `/calendar/bootstrap` | The calendar screen's reference data in one read. **Cached 5 min + strong ETag.** Reference data only — never operational data. `?category_id=` narrows **only** the Level list, server-side (§4.4); an unknown id yields an empty list rather than falling back to all |
+| `GET` | `/clock` | 🌐 **Which offset Morocco observes right now** (SRS Revision 167 §2): `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }`, cacheable five minutes. Read from the HOST's zone file, so a decree reaches a running platform without a release; `source` is `host-zoneinfo`, or `icu-fallback` when the file could not be read (and then SAYS so). The browser formats instants with this offset rather than its own possibly outdated zone data. `next_change_at` names only a real change of offset — a zone file also lists transitions that change nothing |
 | `GET` | `/branches` | The landing-page branch directory: id, name, address, phone, email, opening hours, map link, display order. **Never** version, operational start date, or timestamps |
 
 `GET /branches` is deliberately **not** the admin route with permissions relaxed — an
@@ -442,6 +443,17 @@ authenticates; it does not authorise.
 |---|---|---|
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
 
+**«إتمام المستوى» and its certificate (SRS Revision 167 §3)** — Admin or Super Admin, within the
+branch of her enrolment at that Level; out of reach is `404`. BR-11 stays derived; these record and
+publish a separate fact.
+
+| | Path | Notes |
+|---|---|---|
+| `GET` | `/admin/students/{id}/level-completions` | One row per Level she is enrolled at within the caller's reach: `requirements` (BR-11 read NOW — `complete` is `null` with no «مقرر الحفظ») beside `mark` (the stored attestation and its certificate) or `null` |
+| `PUT` `DELETE` | `/admin/students/{id}/level-completions/{levelId}` | Record / remove. `PUT` on an unmet Level answers `409 REQUIREMENTS_NOT_MET` with the counts until the body carries `acknowledge_unmet: true`; the mark then keeps `requirements_met: false` for ever. `DELETE` is refused `409 CERTIFICATE_ISSUED` while a certificate is showing. Both idempotent, both audited |
+| `PUT` `DELETE` | `/admin/students/{id}/level-completions/{levelId}/certificate` | Confirm / withdraw — the SECOND confirmation. The number is drawn once and kept: re-issuing reuses it. `409 LEVEL_NOT_COMPLETED` with no mark |
+| `GET` | `/students/me/certificates` | The ACTING student's CONFIRMED certificates (§4.3 — no id in the route): number, her recorded name, Level, Category, branch, and the two dates as Morocco calendar dates. The page renders and prints it; no file exists |
+
 **Assessment builder (§4.6, R124)** — the ONLINE half of `Exam`, which R58 declared and refused. **No second entity**: `Grade` is keyed `(exam_id, student_id)` and already carries the 20-point scale, the draft/published split, the sheet and the student's results screen, so a parallel model would have forked all four.
 
 | | Path | Notes |
@@ -624,6 +636,14 @@ forbids inventing one.
 | | Path | Notes |
 |---|---|---|
 | `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10). Carries `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99) — `null` with no Subject in view |
+
+**`whole_category` (SRS Revision 167 §5) — «كل مستويات الفئة».** An item may be addressed to
+EVERY Level of its Level's Category; `level_id` is then only where it is filed. A private one is
+readable by a member of ANY Level of that Category — and by nobody else: the tier is unchanged in
+*who*, widened only in *which Levels*. `?level_id=` returns the items filed under that Level AND
+its Category's whole-category ones (filtering by her own Level must not hide exactly what was made
+for everybody); `?whole_category=true|false` isolates either set. The ingest sets it for a class
+addressing every live Level of exactly one Category; staff set it with `PATCH /content/{id}`.
 
 **Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`,
 `level_name`, `subject_name`, `academic_year_label`, `branch_name`. That view groups

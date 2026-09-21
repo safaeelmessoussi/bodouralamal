@@ -192,6 +192,10 @@ const EXEMPT = new Set([
   "/programs",
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   "/calendar/bootstrap",
+  // R167 §2: which offset Morocco observes. It is a fact about the country, it
+  // names nobody, and the sign-in and registration screens need it BEFORE there
+  // is an account at all — so it is public, stated here on purpose.
+  "/clock",
   // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
   // exactly like the calendar grid it is opened from. A Pending account sees a
   // public session's existence and details, and never its private recordings —

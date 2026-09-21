@@ -3,10 +3,12 @@ import { PgBoss, type WorkHandler } from 'pg-boss';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { purgeExpiredAuthRows } from '../repositories/audit.repository.js';
+import { createOnlineClassProvider, type OnlineClassProvider } from '../lib/online-class-provider.js';
 import { BUCKETS, createStorageClients } from '../lib/storage.js';
 import { purgeExpired as purgeExpiredRefreshTokens } from '../services/refresh-token.service.js';
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
+import { reconcileRecordings } from '../services/session-recording-reconcile.service.js';
 import {
   collectAbandonedUploadPage,
   uploadGcContinuationSingletonKey,
@@ -127,10 +129,22 @@ export const QUEUES = {
    * content → link → relation → **staging swept last**.
    */
   sessionRecordingIngest: 'session-recording-ingest',
+
+  /**
+   * **`session-recording-reconcile`** (SRS Revision 167 §5) — every fifteen
+   * minutes: asks the provider about recordings whose callback never arrived,
+   * and re-queues every import that has not succeeded, indefinitely. See
+   * `reconcileRecordings`. It never deletes, and it changes a recording only
+   * through the door a verified callback uses.
+   */
+  sessionRecordingReconcile: 'session-recording-reconcile',
 } as const;
 
 /** Daily, small hours local time. TZ is pinned to Africa/Casablanca (TD-11). */
 const DAILY_AT_0330 = '30 3 * * *';
+/** A recording stranded by a missed callback or a failed import waits at most
+ *  this long for the next attempt. No zone is involved in «every quarter hour». */
+const EVERY_15_MINUTES = '*/15 * * * *';
 
 /**
  * TD-13 pins the pg-boss pool at ≤ 5 — the real concurrency risk on the 4 GB
@@ -175,6 +189,9 @@ export function createWorkerCatalog(
   prisma: PrismaClient,
   storage: ReturnType<typeof createStorageClients>,
   log: (queue: string, detail: Record<string, unknown>) => void,
+  /** `null` where online classes are not configured (TD-13): the reconciler
+   *  then still re-queues imports and still trusts a staged file. */
+  provider: OnlineClassProvider | null = null,
 ): readonly WorkerDefinition[] {
   return [
     {
@@ -426,6 +443,13 @@ export function createWorkerCatalog(
         });
       },
     },
+    {
+      name: QUEUES.sessionRecordingReconcile,
+      handler: async () => {
+        const outcome = await reconcileRecordings(prisma, storage, provider);
+        log(QUEUES.sessionRecordingReconcile, { ...outcome });
+      },
+    },
   ];
 }
 
@@ -449,7 +473,7 @@ export async function startJobRunner(
         `${JSON.stringify({ time: new Date().toISOString(), level: 'info', job: queue, ...detail })}\n`,
       );
     };
-    const workers = createWorkerCatalog(prisma, storage, log);
+    const workers = createWorkerCatalog(prisma, storage, log, createOnlineClassProvider(config));
 
     readiness.starting(workers.map((worker) => worker.name));
     await boss.start();
@@ -493,6 +517,7 @@ export async function startJobRunner(
     // Reconcile already-authorized exact obligations, never select objects or
     // Trash by age. pg-boss retry exhaustion cannot erase the domain backlog.
     await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' }, dailyOptions);
+    await boss.schedule(QUEUES.sessionRecordingReconcile, EVERY_15_MINUTES, {}, dailyOptions);
     
     readiness.ready();
   } catch (error) {

@@ -81,6 +81,11 @@
   border-color: var(--color-primary-emphasis);
   background: color-mix(in srgb, var(--color-primary-soft) 35%, var(--color-surface-raised));
 }
+/* The shelf that belongs to the whole Category reads as one — not as a Level. */
+.level-card--whole-category {
+  border-style: dashed;
+  border-color: var(--color-primary-emphasis);
+}
 .level-card__icon {
   display: inline-grid;
   place-items: center;
@@ -243,6 +248,14 @@
   font-variant-numeric: tabular-nums;
 }
 .content-card__kind {
+  font-weight: 700;
+}
+/* R167 §5 — «لكل مستويات الفئة»: a scope, said on the item. */
+.content-card__scope {
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   font-weight: 700;
 }
 .content-card__teacher {

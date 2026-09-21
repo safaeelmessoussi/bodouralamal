@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Drives the installed Chrome over SRS Revision 167: «إدارة التسجيلات», «إتمام المستوى», «شهاداتي», «تثبيت التطبيق».
+# See verify-enrolments-dialog.mjs for what only a browser can show.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+[[ -n "$CHROME" ]] || { echo "SKIP: no Chrome on this machine; the edit flow was not verified"; exit 0; }
+
+export SCENARIO="$(bash scripts/dev/seed-dev-scenario.sh | tail -1)"
+export DEV_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
+# The scenario student HERSELF, minted as she is — never a widened admin token.
+STUDENT_ID="$(node -e 'process.stdout.write(JSON.parse(process.env.SCENARIO).student)')"
+export STUDENT_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$STUDENT_ID")"
+
+WORK="$(mktemp -d)"
+cleanup() {
+  [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true
+  rm -rf "$WORK" 2>/dev/null || true
+  # **A failed cleanup is SAID, never swallowed** (2026-09-21). This was
+  # `|| true`, and it hid a cleanup that could not finish three times in two
+  # days — each time leaving rows behind on a populated Localhost that then
+  # broke the NEXT harness, far from the cause. It cannot change this script's
+  # exit status from inside an EXIT trap, so it says so where it will be read.
+  if ! bash scripts/dev/seed-dev-scenario.sh --clean >/dev/null 2>&1; then
+    echo "WARNING: seed-dev-scenario --clean FAILED — [dev-scenario] rows were left behind." >&2
+    echo "         Run: bash scripts/dev/seed-dev-scenario.sh --clean   (and read its error)" >&2
+  fi
+}
+trap cleanup EXIT
+
+"$CHROME" --headless=new --disable-gpu --no-sandbox \
+  --remote-debugging-port=9236 --remote-allow-origins='*' \
+  --user-data-dir="$WORK/profile" about:blank >/dev/null 2>&1 &
+CHROME_PID=$!
+
+# Wait for Chrome, and fail loudly if it never opens the port.
+#
+# This was 30 x 0.3s = 9 seconds. The dev overlay now also runs an Egress
+# worker with its own headless Chrome, and under that contention a harness
+# could reach connect() before the port existed, throw an unhelpful JSON
+# error, and be recorded by a sweep as NO RESULT — indistinguishable from a
+# harness that genuinely proved nothing.
+CHROME_READY=0
+for _ in $(seq 1 60); do
+  curl -sf http://127.0.0.1:9236/json/list >/dev/null 2>&1 && { CHROME_READY=1; break; }
+  sleep 0.5
+done
+if [[ "$CHROME_READY" != "1" ]]; then
+  echo "FAIL: Chrome never opened its debug port on 9236"
+  exit 1
+fi
+
+PORT=9236 node scripts/dev/browser/verify-enrolments-dialog.mjs

@@ -1215,6 +1215,9 @@ export interface ContentMetadataPatch {
    * and can require an exact-key private migration.
    */
   origin?: 'uploaded' | 'session_recording';
+  /** R167 §5 — addressed to EVERY Level of its Level's Category. A scope
+   *  statement only: the file, its bucket and its tier are untouched. */
+  wholeCategory?: boolean;
 }
 
 /**
@@ -1331,6 +1334,7 @@ export async function updateContentMetadata(
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
           ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
+          ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
           version: { increment: 1 },
         },
       });
@@ -1388,6 +1392,7 @@ export async function updateContentMetadata(
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
           visibility: nextVisibility as never,
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
+          ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
           storageBucket: targetBucket, storageKey: destinationKey, version: { increment: 1 },
         } });
         if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);

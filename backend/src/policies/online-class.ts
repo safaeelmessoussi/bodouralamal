@@ -145,11 +145,17 @@ export function joinWindowFor(occurrence: {
   // The association has never scheduled one, and treating it as a zero-length
   // window would refuse a real class; rolling to the next day is the only
   // reading of the two times that is not nonsense.
-  if (end.getTime() < start.getTime()) end.setDate(end.getDate() + 1);
+  // (Re-derived for the NEXT calendar date rather than `setDate(+1)`, which is
+  // local-clock arithmetic through ICU — R167 §2 — and is also wrong by an hour
+  // on the two nights a year the offset changes.)
+  const closing =
+    end.getTime() < start.getTime()
+      ? wallClockInstant(new Date(occurrence.date.getTime() + 86_400_000), occurrence.endTime)
+      : end;
 
   return {
     opensAt: new Date(start.getTime() - JOIN_OPENS_MINUTES_BEFORE * 60_000),
-    closesAt: new Date(end.getTime() + JOIN_GRACE_MINUTES_AFTER * 60_000),
+    closesAt: new Date(closing.getTime() + JOIN_GRACE_MINUTES_AFTER * 60_000),
   };
 }
 

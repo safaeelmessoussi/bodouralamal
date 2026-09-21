@@ -48,6 +48,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-migration-drop-rename.sh` | A `DROP`/`RENAME` without a contract-phase justification, flagged for human review |
 | `check-prisma-mass-write.sh` | A mass-write Prisma call that skips soft-delete filtering |
 | `check-header-nav-exclusive.sh` | The burger and horizontal navigation both visible at one width |
+| `check-no-local-clock.sh` | Backend code reading the process's LOCAL clock (`getHours`, `new Date(y, m, d…)`, `toLocale…String`) — those convert through the zone data frozen in the image, which is how the platform ran an hour off Morocco's time after the 2026-09-20 change (SRS Revision 167 §2). Morocco's time comes from `lib/morocco-clock.ts` |
 | `check-design-tokens.sh` | A raw colour, a reach past the semantic token layer, or a stylesheet nobody imports |
 | `check-dialog-hidden-when-closed.sh` | A mounted native dialog whose author CSS defeats the browser rule hiding it while closed |
 | `check-progress-css.sh` | A progress fill using physical/direction-blind sizing, missing clipping or reduced-motion support, or an unloaded stylesheet |

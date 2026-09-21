@@ -71,6 +71,8 @@ const ITEM_KEYS = [
   "subject_name",
   "title",
   "visibility",
+  // R167 §5 — addressed to every Level of its Category.
+  "whole_category",
 ];
 
 interface Res {
@@ -144,6 +146,7 @@ async function content(
     branchId?: string | null;
     levelId?: string;
     forced?: boolean;
+    wholeCategory?: boolean;
   } = {},
 ): Promise<string> {
   const row = await prisma.educationalContent.create({
@@ -155,6 +158,7 @@ async function content(
       branchId: over.branchId === undefined ? branchA : over.branchId,
       visibility: (over.visibility ?? "public") as never,
       consentForcedPrivate: over.forced ?? false,
+      wholeCategory: over.wholeCategory ?? false,
       storageBucket: "content",
       storageKey: `${TAG}/${label}-${Date.now()}-${Math.random()}`,
       originalFilename: `${label}.pdf`,
@@ -381,6 +385,43 @@ describe("§4.9 tiers filter every result set", () => {
     expect(seen).not.toContain(ids.privateOther);
     // Hidden is excluded from Student directories (§4.9 tier 3).
     expect(seen).not.toContain(ids.hidden);
+  });
+
+  it("R167 §5 — «كل مستويات الفئة»: filed under ANOTHER Level of her Category, it is hers; of another Category, it is not", async () => {
+    // `privateOther` is the control: same Level, same tier, NOT whole-category.
+    const shared = await content("خاص-كل-المستويات", {
+      visibility: "private",
+      levelId: otherLevelId,
+      wholeCategory: true,
+    });
+    const foreignCategory = await prisma.category.create({ data: { name: `${TAG} فئة أخرى` } });
+    const foreignLevel = await prisma.level.create({
+      data: { name: `${TAG} مستوى فئة أخرى`, categoryId: foreignCategory.id, genderRestriction: "any" },
+    });
+    const foreign = await content("خاص-فئة-أخرى", {
+      visibility: "private",
+      levelId: foreignLevel.id,
+      wholeCategory: true,
+    });
+
+    const seen = await titlesFor(studentToken);
+    expect(seen).toContain(shared);
+    expect(seen).not.toContain(ids.privateOther);
+    expect(seen).not.toContain(foreign);
+    // The tier is unchanged for everybody else: it widens WHICH Levels, never who.
+    expect(await titlesFor()).not.toContain(shared);
+    expect(await titlesFor(strangerToken)).not.toContain(shared);
+    expect(await titlesFor(parentToken)).toContain(shared);
+
+    // Her own Level's shelf holds it — filtering by her Level must not hide
+    // exactly what was made for everybody — and the row says why it is there.
+    const shelf = await call(`/library?level_id=${levelId}&page_size=100`, studentToken);
+    const row = (shelf.body.data as { id: string; whole_category: boolean; level_id: string }[]).find(
+      (item) => item.id === shared,
+    );
+    expect(row).toMatchObject({ whole_category: true, level_id: otherLevelId });
+    const foreignShelf = await call(`/library?level_id=${levelId}&page_size=100`, teacherToken);
+    expect((foreignShelf.body.data as { id: string }[]).map((item) => item.id)).not.toContain(foreign);
   });
 
   it("a parent of that student sees it too, with no child context header", async () => {

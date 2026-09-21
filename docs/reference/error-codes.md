@@ -143,6 +143,9 @@ malformed request rather than a state that moved on:
 |---|---|---|
 | `ENROLLMENT_REQUIRED` | Approval | §4.1: every admitted student needs a Level and a group **in the approval itself**. `missing_user_ids` names who — on a family bundle that is the only way to know which of them |
 | `NOT_IN_BUNDLE` | Approval | A placement named somebody this approval does not admit. Without the check, approval would be an unscoped enrolment endpoint |
+| `REQUIREMENTS_NOT_MET` | `PUT /admin/students/{id}/level-completions/{levelId}` (SRS Revision 167 §3) — `409 STATE_CONFLICT` | BR-11 is not met for this Level and the caller has not said she has seen what is missing. The details carry `configured_surahs`, `memorised_surahs`, `examined_surahs` and `exams_required`; show them, ask, and resend with `acknowledge_unmet: true`. Marking anyway is allowed — never unknowingly |
+| `LEVEL_NOT_COMPLETED` | `PUT …/level-completions/{levelId}/certificate` — `409 STATE_CONFLICT` | A certificate is the second confirmation; record the completion first |
+| `CERTIFICATE_ISSUED` | `DELETE …/level-completions/{levelId}` — `409 STATE_CONFLICT` | What she can see and print is withdrawn first (`DELETE …/certificate`), deliberately |
 | `SURAHS_REQUIRED` | Scheduling or editing a class, one occurrence, or an exam (SRS Revision 165 §2) | The Subject works by Surah: name which. A class names one or more, an exam exactly one. If none is on offer, the Level's «مقرر الحفظ» is empty — the Super Admin sets it first |
 | `SURAH_NOT_IN_SYLLABUS` | The same writes | `details.surah_ids` names the Surahs outside the «مقرر الحفظ» of every Level the item addresses |
 | `SURAHS_NOT_APPLICABLE` | The same writes | A Surah was named for a Subject that is not taught by Surah — remove it; it is never stored as a harmless extra |

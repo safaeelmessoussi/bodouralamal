@@ -107,6 +107,19 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
     roles: STUDENT,
     status: 'ready',
   },
+  {
+    /**
+     * **R167 §3 — شهاداتي**: the Level certificates the administration has
+     * confirmed, printable and saved as PDF from the page itself.
+     */
+    path: '/dashboard/student/certificates',
+    // `/students/me/certificates` resolves the ACTING student (§4.3), so a
+    // guardian sees the certificates of the child she is acting for.
+    childContext: true,
+    labelKey: 'student.nav.certificates',
+    roles: STUDENT,
+    status: 'ready',
+  },
 ];
 
 /** The modules this session may see — the shared predicate, not a local copy. */

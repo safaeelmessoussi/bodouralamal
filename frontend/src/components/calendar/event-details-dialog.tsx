@@ -14,6 +14,7 @@ import { levelLabel } from '../scope/level-select.js';
 import { Dialog } from '../ui/dialog.js';
 import { AttendancePanel } from './attendance-panel.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
+import { formatInstant } from '../../lib/morocco-time.js';
 
 /** The roles that may reach الجدولة at all — the same set `AttendancePanel`
  *  already uses to decide who sees the staff sheet rather than one button. */
@@ -463,7 +464,7 @@ function ExamAccessAction({
       <p className="details__action muted">
         {t('calendar.examOpensAt')}{' '}
         <time dateTime={availableFrom} dir="ltr">
-          {opensAt.toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' })}
+          {formatInstant(opensAt, 'datetime', 'ar')}
         </time>
       </p>
     );

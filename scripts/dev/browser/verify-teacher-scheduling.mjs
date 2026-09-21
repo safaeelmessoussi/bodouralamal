@@ -12,6 +12,9 @@ import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const S = JSON.parse(process.env.NOTIFY_SCENARIO ?? '{}');
+// The class type is called whatever the catalogue calls it today (R110).
+const CLASS_TYPE = S.classTypeName;
+if (!CLASS_TYPE) throw new Error('the scenario names no class scheduling type');
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9253');
 const { check, finish } = results();
 
@@ -430,7 +433,7 @@ check(
   '10 · her type selector offers نشاط, امتحان AND حصة',
   // By what she READS: the values are catalogue ids (R110), not kind names.
   (types.options ?? []).includes('نشاط') && (types.options ?? []).includes('اختبار') &&
-    (types.options ?? []).includes('حصة دراسية'),
+    (types.options ?? []).includes(CLASS_TYPE),
   JSON.stringify(types),
 );
 check(
@@ -443,7 +446,7 @@ check(
    * proves the server still holds the line when she has declared nothing.
    */
   '11 · the option is offered because §2 grants it — not because §4.4c widened',
-  (types.options ?? []).includes('حصة دراسية'),
+  (types.options ?? []).includes(CLASS_TYPE),
   JSON.stringify(types.options),
 );
 
@@ -500,7 +503,7 @@ const classForm = await evaluate(`(async () => {
   let dialog = document.querySelector('dialog[open]');
   if (!dialog) return { noDialog: true };
   ${FORM_HELPERS}
-  if (!(await chooseType('حصة دراسية'))) return { noClassType: true };
+  if (!(await chooseType(${JSON.stringify(CLASS_TYPE)}))) return { noClassType: true };
   dialog = dlg();
 
   // SRS Revision 163 §5 — «نمط التدريس» is asked of nobody. Her class is one

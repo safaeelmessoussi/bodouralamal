@@ -22,11 +22,10 @@ import {
 } from '../../adapters/teaching-groups.js';
 import { searchDirectory, type DirectoryEntry, type RoleAssignment } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { StudentEnrolmentsDialog } from '../../components/enrollments/student-enrolments-dialog.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
-import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction } from '../../components/ui/data-table.js';
-import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import {
   listAcademicPeriods,
@@ -127,11 +126,15 @@ export function EnrollmentsPage(): ReactNode {
    * R79.7's durable beneficiary fact, so neither rule drops anybody.
    */
   const [students, setStudents] = useState<DirectoryEntry[]>([]);
-  /** Which مستفيدة's placements are open — she may hold several. */
-  const [placementsOf, setPlacementsOf] = useState<StudentRow | null>(null);
+  /** Which مستفيدة's placements are open — BY ID, so the dialog always shows
+   *  the rows as they are after the last save, never a snapshot of them. */
+  const [placementsOf, setPlacementsOf] = useState<string | null>(null);
   const [editing, setEditing] = useState<EnrollmentRowView | null>(null);
   const [ending, setEnding] = useState<EnrollmentRowView | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Bumped after any change made from «إدارة التسجيلات», so the completion
+   *  facts under each Level are read again. */
+  const [completionsKey, setCompletionsKey] = useState(0);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -233,6 +236,10 @@ export function EnrollmentsPage(): ReactNode {
    * a row cannot sort by one value and display another. `null` sorts last in
    * both directions, which is what «no family name recorded» should do.
    */
+  // The مستفيدة whose dialog is open, as she is NOW — re-derived on every
+  // render so a save made from the dialog shows up in it.
+  const managed = placementsOf === null ? null : (studentRows.find((r) => r.id === placementsOf) ?? null);
+
   const visibleStudents = sortRows(filteredStudents, sort, {
     first_name: (r) => r.firstName ?? r.name,
     last_name: (r) => r.lastName,
@@ -371,25 +378,16 @@ export function EnrollmentsPage(): ReactNode {
 
   const actions: RowAction<StudentRow>[] = [
     /**
-     * **تسجيل — place her in another Level** (Owner, 2026-08-28). A مستفيدة may
-     * hold several placements, so this is repeatable rather than a one-off: the
-     * dialog opens with her already chosen and asks only where she is going.
+     * **«إدارة التسجيلات» — ONE door** (Owner, 2026-09-21; SRS Revision 167
+     * §3). «تسجيل» and «تعديل» were two buttons answering one question — *what
+     * are this مستفيدة's placements, and what should change* — and the second
+     * was hidden for exactly the person with none. The dialog lists every
+     * placement she holds, edits or ends each, places her in another Level,
+     * and records a Level's completion and its certificate.
      */
     {
-      // «تسجيل» alone: the row already says who, so repeating «مستفيدة» in
-      // the action would restate the column beside it.
-      label: t('admin.enrollments.enrol'),
-      onSelect: (r) => setComposing(r),
-    },
-    /**
-     * **تعديل / إنهاء act on ONE placement.** A student row may hold several,
-     * and «edit» with no answer to *which one* would be a guess — so a row with
-     * exactly one placement acts on it, and a row with more opens the list.
-     */
-    {
-      label: t('common.edit'),
-      onSelect: (r) => setPlacementsOf(r),
-      available: (r) => r.enrolments.length > 0,
+      label: t('admin.enrollments.manage'),
+      onSelect: (r) => setPlacementsOf(r.id),
     },
   ];
 
@@ -512,49 +510,20 @@ export function EnrollmentsPage(): ReactNode {
         onCancel={() => setEnding(null)}
       />
 
-      {placementsOf ? (
-        <Dialog
-          open
+      {managed ? (
+        <StudentEnrolmentsDialog
+          student={managed}
+          token={accessToken}
+          refreshKey={completionsKey}
           onClose={() => setPlacementsOf(null)}
-          title={t('admin.enrollments.placementsTitle').replace('{name}', placementsOf.name)}
-        >
-          {/* Each placement is edited or ended on its own, because they are
-              separate facts: ending one Level does not touch another. */}
-          <ul className="admin-list">
-            {placementsOf.enrolments.map((e) => (
-              <li key={e.id}>
-                <span className="admin-list__label">
-                  {levelLabel({
-                    id: e.level_id,
-                    name: e.level_name,
-                    category_name: e.category_name,
-                  })}
-                </span>
-                <span className="muted">
-                  {e.administrative_group_name ?? t('admin.enrollments.noGroup')}
-                </span>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setPlacementsOf(null);
-                    setEditing(e);
-                  }}
-                >
-                  {t('common.edit')}
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    setPlacementsOf(null);
-                    setEnding(e);
-                  }}
-                >
-                  {t('admin.enrollments.end')}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </Dialog>
+          onEdit={setEditing}
+          onEnd={setEnding}
+          onAdd={() => setComposing(managed)}
+          onChanged={(message) => {
+            setNotice(message);
+            setCompletionsKey((key) => key + 1);
+          }}
+        />
       ) : null}
 
       {composing ? (

@@ -50,6 +50,13 @@ services:
       TZ: ${TZ:-Africa/Casablanca}
       # TD-13 container memory pin (4 GB VPS budget)
       NODE_OPTIONS: --max-old-space-size=768
+    volumes:
+      # **Morocco's official time comes from the HOST** (SRS Revision 167 §2).
+      # An image freezes its own zone data on the day it is built; Ubuntu keeps
+      # the host's current. On 2026-09-20 Morocco moved to UTC+0 and the
+      # platform stayed an hour ahead until this mount existed. Read-only, and
+      # read by `lib/morocco-clock.ts`, which re-reads it when it changes.
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
     depends_on:
       db:
         condition: service_healthy
@@ -80,6 +87,10 @@ services:
       POSTGRES_USER: app
       POSTGRES_DB: bodour
     volumes:
+      # The host's zone database (SRS Revision 167 §2), so an operator's `psql`
+      # and any `AT TIME ZONE` read Morocco's CURRENT rules. The application
+      # itself never depends on this: its own sessions are UTC (R166).
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
       # PG 18+ images require the mount at /var/lib/postgresql (NOT .../data):
       # data lands in a major-version subdirectory, which is what keeps
       # `pg_upgrade --link` possible without mount-boundary issues. Mounting

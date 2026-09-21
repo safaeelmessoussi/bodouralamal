@@ -290,6 +290,7 @@ displayed and nothing more. That is collection without purpose.
 | Data | Model | Purpose | Necessary? | Minor? | Action |
 |---|---|---|---|---|---|
 | Level / Category / Group membership | `Enrollment`, `StudentTeachingGroup` | Educational administration | Yes | Yes | **KEEP** |
+| Level completion attested by the administration, and its certificate number and dates (SRS Revision 167 §3) | `LevelCompletionMark` | Educational administration — the association's record that she completed a Level, and the certificate she may print. No free text; `requirements_met` is a boolean; the certificate page is rendered in her own browser and **no certificate file is generated, stored or sent** | Yes | Yes | **KEEP** |
 | Quran progress (surah, ayah range) | `QuranProgressLog` | Core educational purpose | Yes | Yes | **KEEP** |
 | Grades (integer basis points) | `Grade` | Assessment | Yes | Yes | **KEEP** |
 | `Grade.overrideReason` | free text | Accountability for an override | Yes | Yes | **KEEP** — bound the length |

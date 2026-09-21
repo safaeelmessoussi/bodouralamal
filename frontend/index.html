@@ -13,6 +13,13 @@
          large for a mobile-first client (§2.2). -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- R167 §4 — installable from the browser. `manifest.json`, so every
+         server gives it a JSON type without a MIME table entry. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="بذور الأمل" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <!-- One theme, so one colour: the browser chrome matches the header. The
          `color-scheme` declaration keeps native controls light on a dark OS. -->
     <meta name="theme-color" content="#073826" />

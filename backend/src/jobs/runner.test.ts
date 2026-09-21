@@ -96,6 +96,8 @@ describe('job runner startup readiness', () => {
       QUEUES.uploadGc,
       QUEUES.sessionMaterialize,
       QUEUES.sessionRecordingIngest,
+      // R167 §5 — a recording is never left to a delivery that may not happen.
+      QUEUES.sessionRecordingReconcile,
     ]);
     expect(readiness.snapshot()).toEqual({
       state: 'ok',
@@ -141,7 +143,13 @@ describe('job runner startup readiness', () => {
     const firstWorker = boss.work.mock.invocationCallOrder[0];
     expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
     expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
-    expect(boss.schedule).toHaveBeenCalledTimes(9);
+    expect(boss.schedule).toHaveBeenCalledTimes(10);
+    expect(boss.schedule).toHaveBeenCalledWith(
+      QUEUES.sessionRecordingReconcile,
+      '*/15 * * * *',
+      {},
+      { tz: 'Africa/Casablanca' },
+    );
     for (const call of boss.schedule.mock.calls as unknown[][]) {
       expect(call[3]).toEqual({ tz: 'Africa/Casablanca' });
     }
@@ -207,7 +215,7 @@ describe('job runner startup readiness', () => {
       // number is asserted rather than derived deliberately: readiness claiming
       // "all workers up" while counting a shorter catalogue is exactly the
       // failure this test exists for.
-      expected_workers: 12,
+      expected_workers: 13,
       registered_workers: 2,
       active_workers: 2,
     });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { composeItemTitle } from './item-title.js';
+import { moroccoWallClockToInstant } from './morocco-clock.js';
 import { RECORDING_TITLE_LIMIT, sessionRecordingBaseName } from './recording-name.js';
 
 /**
@@ -71,7 +72,8 @@ describe('where the text is stored in VARCHAR(120)', () => {
       subjectName: 'تفسير القرآن',
       surahNames: many,
       teacherName: 'الأستاذة صفاء المسوسي',
-      at: new Date(2026, 8, 21, 6, 10, 0),
+      // Morocco's wall clock, from the one authority that also reads it (R167 §2).
+      at: moroccoWallClockToInstant(2026, 9, 21, 6, 10, 0),
     });
     expect(title.length).toBeLessThanOrEqual(RECORDING_TITLE_LIMIT);
     expect(`${title} 999`.length).toBeLessThanOrEqual(120);

@@ -12,6 +12,8 @@
   --color-primary-emphasis: var(--brand-green-500);
   --color-primary-soft: var(--brand-green-100);
   --color-accent: var(--brand-gold);
+  /* The ground of a formal printed document — a certificate, never a screen. */
+  --color-paper: var(--paper-ivory);
 
   --color-background: var(--neutral-50);
   --color-surface: var(--neutral-0);

@@ -86,6 +86,7 @@ function ContentEditDialog({
     subjectId: string;
     visibility: string;
     isRecording: boolean;
+    wholeCategory: boolean;
   }) => void;
 }): ReactNode {
   const pristine = {
@@ -94,6 +95,7 @@ function ContentEditDialog({
     subjectId: row.subject_id,
     visibility: row.visibility,
     isRecording: row.origin === 'session_recording',
+    wholeCategory: row.whole_category,
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -149,6 +151,15 @@ function ContentEditDialog({
         hint={t('content.upload.isRecordingHint')}
       />
 
+      {/* R167 §5 — addressed to every Level of the chosen Level's Category. A
+          scope statement only: the file, its tier and where it is filed stay. */}
+      <CheckboxField
+        label={t('content.edit.wholeCategory')}
+        checked={form.wholeCategory}
+        onChange={(v) => setForm((f) => ({ ...f, wholeCategory: v }))}
+        hint={t('content.edit.wholeCategoryHint')}
+      />
+
       {consentLocked ? (
         /**
          * **Shown as a fact, not as a disabled control** (rule AF). The server
@@ -179,6 +190,8 @@ interface LibraryRow {
   /** R99.12's marker — «هذا تسجيل حصة». */
   origin: string;
   level_id: string;
+  /** R167 §5 — «لكل مستويات الفئة». */
+  whole_category: boolean;
   subject_id: string;
   academic_year_id: string;
   branch_id: string | null;
@@ -404,6 +417,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     subjectId: string;
     visibility: string;
     isRecording: boolean;
+    wholeCategory: boolean;
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -423,6 +437,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           ...(patch.isRecording !== (editing.origin === 'session_recording')
             ? { origin: (patch.isRecording ? 'session_recording' : 'uploaded') as
                 'session_recording' | 'uploaded' }
+            : {}),
+          ...(patch.wholeCategory !== editing.whole_category
+            ? { whole_category: patch.wholeCategory }
             : {}),
         },
         accessToken,

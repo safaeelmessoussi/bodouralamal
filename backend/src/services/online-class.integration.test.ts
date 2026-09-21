@@ -128,6 +128,9 @@ class RecordingProvider implements OnlineClassProvider {
   verifyCallback(): never {
     throw new Error("this suite does not record");
   }
+  reportRecording(): never {
+    throw new Error("this suite does not record");
+  }
 }
 
 /* ── Fixture ─────────────────────────────────────────────────────────────── */

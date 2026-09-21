@@ -11,6 +11,7 @@ import { ClassroomPage } from './pages/classroom.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentAssessmentsPage } from './pages/dashboard/assessments.js';
+import { StudentCertificatesPage } from './pages/dashboard/certificates.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentLibraryPage } from './pages/dashboard/library.js';
 import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
@@ -28,6 +29,8 @@ import {
 } from './pages/public.js';
 import { ResourcesPage } from './pages/resources.js';
 import './styles.css';
+import { registerServiceWorker } from './lib/install-app.js';
+import { loadMoroccoClock } from './lib/morocco-time.js';
 
 /**
  * Client entry (SRS §14.1, §16.1).
@@ -135,6 +138,13 @@ function App(): React.ReactNode {
           <StudentQuranPage />
         </PendingGuard>
       );
+    case 'dashboard-student-certificates':
+      // R167 §3 — the read carries no student id (§4.3), like حفظي above.
+      return (
+        <PendingGuard>
+          <StudentCertificatesPage />
+        </PendingGuard>
+      );
     case 'dashboard-student-assessments':
       // R124 — the same `PendingGuard` her other screens carry: a Pending
       // account reaches nothing (TD-1), and the guard is not this page's to
@@ -180,6 +190,11 @@ function App(): React.ReactNode {
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
+  // R167 §2 — Morocco's current offset, asked once; instants render with the
+  // browser's own `Africa/Casablanca` until (and unless) it arrives.
+  void loadMoroccoClock();
+// R167 §4 — installable from the browser. The worker caches nothing.
+registerServiceWorker();
   createRoot(rootElement).render(
     <StrictMode>
       <SessionProvider>

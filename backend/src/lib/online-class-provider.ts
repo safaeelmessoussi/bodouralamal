@@ -2,6 +2,7 @@ import {
   EncodedFileOutput,
   EncodedFileType,
   EgressStatus,
+  type EgressInfo,
   S3Upload,
   TrackSource,
 } from "@livekit/protocol";
@@ -133,6 +134,18 @@ export interface OnlineClassProvider {
    * longer matches the signature.
    */
   verifyCallback(rawBody: string, authHeader: string | undefined): Promise<RecordingReport | null>;
+
+  /**
+   * **What the provider says about one recording NOW — asked, not awaited**
+   * (SRS Revision 167 §5).
+   *
+   * A callback is delivered a handful of times and then never again: an API
+   * that was restarting at the moment a two-hour class ended would leave its
+   * recording `processing` for ever, with the finished file sitting in staging.
+   * The reconciler asks instead. `null` means the provider no longer knows the
+   * job (it forgets old ones) — which is an answer, not an error.
+   */
+  reportRecording(providerEgressId: string): Promise<RecordingReport | null>;
 }
 
 const SOURCES: Record<ParticipantGrants["canPublishSources"][number], TrackSource> =
@@ -282,22 +295,32 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
       return null;
     }
 
-    const info = event.egressInfo;
-    if (!info || !info.egressId) return null;
-
-    const file = info.fileResults?.[0];
-    const state = TRANSLATE[info.status];
-    if (!state) return null;
-
-    return {
-      providerEgressId: info.egressId,
-      state,
-      ...(file?.filename ? { outputKey: file.filename } : {}),
-      ...(file?.size ? { sizeBytes: Number(file.size) } : {}),
-      ...(file?.duration ? { durationMs: Number(file.duration) / 1_000_000 } : {}),
-      ...(info.error ? { failureReason: info.error } : {}),
-    };
+    return toReport(event.egressInfo);
   }
+
+  async reportRecording(providerEgressId: string): Promise<RecordingReport | null> {
+    const [info] = await this.egress.listEgress({ egressId: providerEgressId });
+    return toReport(info);
+  }
+}
+
+/** One translation for both doors — a callback that arrived and an answer that
+ *  was asked for must never disagree about what a provider's state means. */
+function toReport(info: EgressInfo | undefined): RecordingReport | null {
+  if (!info || !info.egressId) return null;
+
+  const file = info.fileResults?.[0];
+  const state = TRANSLATE[info.status];
+  if (!state) return null;
+
+  return {
+    providerEgressId: info.egressId,
+    state,
+    ...(file?.filename ? { outputKey: file.filename } : {}),
+    ...(file?.size ? { sizeBytes: Number(file.size) } : {}),
+    ...(file?.duration ? { durationMs: Number(file.duration) / 1_000_000 } : {}),
+    ...(info.error ? { failureReason: info.error } : {}),
+  };
 }
 
 /** The provider's status enum, translated into the platform's own states once

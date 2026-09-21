@@ -109,6 +109,15 @@ export interface SchedulingFormProps {
    *  (§4.4c), and a free-text title would be a second way to say the same thing. */
   showTitle: boolean;
   titleLabel?: string;
+  /**
+   * **What the platform WILL call this item** (SRS Revision 167 §1), for the
+   * kinds whose title is composed rather than typed (a class, a bare exam).
+   * Shown exactly where «العنوان» would be, read-only, and re-composed as the
+   * form changes — because a form with no title field and no explanation sent
+   * people to «الوصف» to type the title they thought was missing. `''` while
+   * there is nothing to compose yet; absent for a kind that has a typed title.
+   */
+  titlePreview?: string;
 
   description: string;
   onDescription: (v: string) => void;
@@ -162,6 +171,7 @@ export function SchedulingForm({
   onTitle,
   showTitle,
   titleLabel,
+  titlePreview,
   description,
   onDescription,
   showDescription,
@@ -207,6 +217,16 @@ export function SchedulingForm({
           onChange={onTitle}
           required
         />
+      ) : null}
+
+      {titlePreview !== undefined ? (
+        <div className="field" data-generated-title>
+          <span className="field__label">{t('scheduling.generatedTitle.label')}</span>
+          <output className="field__control field__control--static" aria-live="polite">
+            {titlePreview === '' ? t('scheduling.generatedTitle.pending') : titlePreview}
+          </output>
+          <p className="field__hint">{t('scheduling.generatedTitle.hint')}</p>
+        </div>
       ) : null}
 
       {showDescription ? (

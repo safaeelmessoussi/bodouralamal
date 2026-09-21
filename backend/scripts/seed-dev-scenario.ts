@@ -87,6 +87,9 @@ async function clean(): Promise<void> {
   });
   const levelIds = levels.map((l) => l.id);
   await prisma.educationalContent.deleteMany({ where: { levelId: { in: levelIds } } });
+  // R167 §3 — a completion mark is RESTRICT against the student, the Level and
+  // the branch; `verify-enrolments-dialog` records one on the scenario Level.
+  await prisma.levelCompletionMark.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.studentTeachingGroup.deleteMany({
@@ -109,6 +112,9 @@ async function clean(): Promise<void> {
   const userIds = users.map((u) => u.id);
   if (userIds.length > 0) {
     await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+    // Reading «إتمام المستوى» recalculates coverage, which writes the R10
+    // self-healing cache row for every Surah of her syllabus (R167 §3).
+    await prisma.studentSurahProgress.deleteMany({ where: { studentId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: userIds } } });
@@ -314,6 +320,17 @@ process.stdout.write(
       ineligible,
       sessions: created,
       circles,
+      // What the catalogue CALLS its first class type today. It is editable
+      // reference data (R110) — the Owner renamed «حصة دراسية» to «حصة» on
+      // 2026-09-21 and every harness that had typed the old name went blind.
+      classTypeName:
+        (
+          await prisma.schedulingType.findFirst({
+            where: { structuralKind: 'class', deletedAt: null },
+            orderBy: { displayOrder: 'asc' },
+            select: { name: true },
+          })
+        )?.name ?? null,
       // The occurrence the recorder harness attaches to: the earliest one, so a
       // rerun addresses the same row rather than whichever came back first.
       firstSessionId: (

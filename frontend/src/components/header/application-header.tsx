@@ -11,6 +11,7 @@ import { DashboardButton, SignInButton } from './auth-buttons.js';
 import { MobileMenu } from './mobile-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { InstallAppButton } from '../install/install-app-button.js';
 import { NotificationBell } from '../notifications/notification-bell.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { UserMenu } from './user-menu.js';
@@ -76,6 +77,9 @@ export function ApplicationHeader(): ReactNode {
             </nav>
 
             <div className="app-header__actions app-header__actions--desktop">
+              {/* R167 §4 — for everybody, signed in or not; renders nothing
+                  where the device has nothing to offer or it is installed. */}
+              <InstallAppButton />
               {navigation.isAuthenticated ? (
                 <>
                   {/* R62.9 — ONE switcher. The child list is a group inside

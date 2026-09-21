@@ -28,10 +28,12 @@ const item = (over: Partial<ContentItem> & Pick<ContentItem, 'id' | 'title' | 'k
   published_on: '2026-06-12',
   teacher_display_name: null,
   subject_name: null,
+  whole_category: false,
   ...over,
 });
 
 const level = (over: Partial<LevelSummary> = {}): LevelSummary => ({
+  kind: 'level',
   level_id: 'l1',
   level_name: 'المستوى الأول',
   category_id: 'c1',
@@ -106,6 +108,32 @@ describe('a level card', () => {
   it('omits the description when there is none', () => {
     const html = renderToStaticMarkup(<LevelCard level={level({ description: null })} />);
     expect(html).not.toContain('level-card__description');
+  });
+});
+
+describe('R167 §5 — «كل مستويات الفئة»', () => {
+  it('is the CATEGORY’s shelf: addressed by the Category, named by the page, never by the Level it is filed under', () => {
+    const html = renderToStaticMarkup(
+      <LevelCard
+        level={level({ kind: 'whole_category', level_id: 'c1', level_name: '', category_name: 'المرأة' })}
+      />,
+    );
+    expect(html).toContain('href="/resources?category=c1"');
+    expect(html).not.toContain('?level=');
+    expect(html).toContain('كل مستويات الفئة');
+    expect(html).toContain('جميع مستويات المرأة');
+  });
+
+  it('an item made for every Level says so wherever it is listed', () => {
+    const open = (): void => {};
+    const marked = renderToStaticMarkup(
+      <ContentCard item={item({ id: 'a', title: 'تسجيل', kind: 'audio', whole_category: true })} onOpen={open} />,
+    );
+    const plain = renderToStaticMarkup(
+      <ContentCard item={item({ id: 'b', title: 'ملف', kind: 'pdf' })} onOpen={open} />,
+    );
+    expect(marked).toContain('لكل مستويات الفئة');
+    expect(plain).not.toContain('لكل مستويات الفئة');
   });
 });
 

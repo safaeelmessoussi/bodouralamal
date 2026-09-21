@@ -48,6 +48,7 @@ import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FramingPreferenceValue } from '../../components/teaching/framing-preference-summary.js';
+import { formatInstant } from '../../lib/morocco-time.js';
 
 /**
  * A registration places its applicant only when that applicant asked to join
@@ -608,7 +609,7 @@ function ApprovalDetailsDialog({ row, onClose }: { row: Approval; onClose: () =>
               <dt>{t('admin.approvals.mediaConsent')}</dt><dd>{consent(child.media_release_consent)}</dd>
               <dt>{t('admin.approvals.consentVersion')}</dt><dd>{child.consent_text_version}</dd>
               <dt>{t('admin.approvals.consentAt')}</dt>
-              <dd>{new Date(child.consent_given_at).toLocaleString('ar-MA')}</dd>
+              <dd>{formatInstant(child.consent_given_at)}</dd>
             </dl>
           </fieldset>
         ))}

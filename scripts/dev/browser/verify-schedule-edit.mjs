@@ -58,7 +58,17 @@ const opened = await evaluate(`(async () => {
   if (!row) return { found: false };
   const edit = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'تعديل');
   edit.click();
-  await new Promise((r) => setTimeout(r, 2500));
+  // Until the form has its options, not for a fixed time: the scope read is a
+  // request, and on a busy machine 2.5 s was read as an unseeded form.
+  for (let i = 0; i < 60; i += 1) {
+    await new Promise((r) => setTimeout(r, 250));
+    const open = document.querySelector('dialog[open], .dialog');
+    const seeded = open && [...open.querySelectorAll('select')].some((sel) => {
+      const label = sel.closest('.field')?.querySelector('label')?.textContent ?? '';
+      return label.includes('الحلقة') && sel.options.length > 1 && sel.value !== '';
+    });
+    if (seeded) break;
+  }
   const dialog = document.querySelector('dialog[open], .dialog');
   const selects = [...dialog.querySelectorAll('select')].map((sel) => ({
     label: sel.closest('.field')?.querySelector('label')?.textContent?.trim() ?? '',

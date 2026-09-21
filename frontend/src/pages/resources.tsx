@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   fetchContentLevels,
+  fetchCategoryWideContent,
   fetchLevelContent,
   type ContentItem,
   type LevelContent,
@@ -65,7 +66,15 @@ export function ResourcesPage(): ReactNode {
     () => new URLSearchParams(window.location.search).get('level'),
     [],
   );
-  return levelId ? <LevelView levelId={levelId} /> : <LibraryView />;
+  // R167 §5 — «كل مستويات الفئة»: the shelf of what was made for every Level
+  // of one Category. The same view; only what it asks the server for differs.
+  const categoryId = useMemo(
+    () => new URLSearchParams(window.location.search).get('category'),
+    [],
+  );
+  if (levelId) return <LevelView shelf={{ kind: 'level', id: levelId }} />;
+  if (categoryId) return <LevelView shelf={{ kind: 'whole_category', id: categoryId }} />;
+  return <LibraryView />;
 }
 
 /* ── Page 1 — the library index ──────────────────────────────────────────── */
@@ -120,6 +129,12 @@ function LibraryView(): ReactNode {
       if (group) group.levels.push(level);
       else byCategory.set(level.category_id, { name: level.category_name, levels: [level] });
     }
+    // R167 §5 — «كل مستويات الفئة» opens each Category: it is for all of them.
+    for (const group of byCategory.values()) {
+      group.levels.sort(
+        (a, b) => Number(b.kind === 'whole_category') - Number(a.kind === 'whole_category'),
+      );
+    }
     return [...byCategory.values()].sort((a, b) => categoryRank(a.name) - categoryRank(b.name));
   }, [load]);
 
@@ -145,7 +160,7 @@ function LibraryView(): ReactNode {
           </h2>
           <ul className="level-grid">
             {group.levels.map((level) => (
-              <LevelCard key={level.level_id} level={level} />
+              <LevelCard key={`${level.kind}:${level.level_id}`} level={level} />
             ))}
           </ul>
         </section>
@@ -156,7 +171,11 @@ function LibraryView(): ReactNode {
 
 /* ── Page 2 — one level ──────────────────────────────────────────────────── */
 
-function LevelView({ levelId }: { levelId: string }): ReactNode {
+function LevelView({
+  shelf,
+}: {
+  shelf: { kind: 'level' | 'whole_category'; id: string };
+}): ReactNode {
   // Anonymous and authenticated readers share this surface. Both metadata and
   // bytes are server-scoped; the mint additionally verifies live child context.
   const { accessToken, status: sessionStatus } = useSession();
@@ -189,7 +208,10 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const data = await fetchLevelContent(levelId, accessToken);
+        const data =
+          shelf.kind === 'level'
+            ? await fetchLevelContent(shelf.id, accessToken)
+            : await fetchCategoryWideContent(shelf.id, accessToken);
         if (!cancelled) setLoad({ kind: 'ready', data });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -198,7 +220,7 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [levelId, accessToken]);
+  }, [shelf.kind, shelf.id, accessToken]);
 
   const content = load.kind === 'ready' ? load.data : null;
 
@@ -246,7 +268,11 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
 
   return (
     <Shell
-      title={content?.level_name ?? t('content.title')}
+      title={
+        shelf.kind === 'whole_category'
+          ? t('content.wholeCategory.title')
+          : (content?.level_name ?? t('content.title'))
+      }
       lede={content?.description ?? null}
       eyebrow={content?.category_name ?? null}
       back

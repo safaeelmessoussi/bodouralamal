@@ -1,4 +1,5 @@
 import { composeItemTitle } from './item-title.js';
+import { moroccoDateIso, moroccoTimeHHMM } from './morocco-clock.js';
 
 /**
  * **What a recording is called, decided by the server** (SRS Revision 75.6,
@@ -99,8 +100,9 @@ export function nextRecordingName(
  * was found in an R98 fixture and is not worth repeating here.
  */
 export function localDateIso(now: Date = new Date()): string {
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  // R167 §2 — Morocco's date from the HOST's zone rules (`morocco-clock`), not
+  // from the local getters: those read the zone data frozen into the image.
+  return moroccoDateIso(now);
 }
 
 /**
@@ -139,7 +141,6 @@ export interface SessionRecordingNameSource {
 export const RECORDING_TITLE_LIMIT = 120 - 6;
 
 export function sessionRecordingBaseName(source: SessionRecordingNameSource): string {
-  const pad = (n: number): string => String(n).padStart(2, '0');
   return composeItemTitle(
     {
       typeName: source.typeName,
@@ -147,7 +148,7 @@ export function sessionRecordingBaseName(source: SessionRecordingNameSource): st
       surahNames: source.surahNames,
       leadName: source.teacherName,
       date: localDateIso(source.at),
-      time: `${pad(source.at.getHours())}:${pad(source.at.getMinutes())}`,
+      time: moroccoTimeHHMM(source.at),
     },
     RECORDING_TITLE_LIMIT,
   );

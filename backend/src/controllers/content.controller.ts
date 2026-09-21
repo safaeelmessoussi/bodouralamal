@@ -91,6 +91,8 @@ const updateContentSchema = z
     visibility: z.enum(['public', 'private', 'hidden']).optional(),
     // R99.12's marker — «هذا تسجيل حصة». Same enum the upload ticket carries.
     origin: z.enum(['uploaded', 'session_recording']).optional(),
+    // R167 §5 — «كل مستويات الفئة»: addressed to every Level of its Category.
+    whole_category: z.boolean().optional(),
   })
   .strict();
 
@@ -102,6 +104,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       subject_id?: string;
       visibility?: 'public' | 'private' | 'hidden';
       origin?: 'uploaded' | 'session_recording';
+      whole_category?: boolean;
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.
@@ -121,6 +124,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
         ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
         ...(body.origin !== undefined ? { origin: body.origin } : {}),
+        ...(body.whole_category !== undefined ? { wholeCategory: body.whole_category } : {}),
       },
     );
     res.status(204).end();

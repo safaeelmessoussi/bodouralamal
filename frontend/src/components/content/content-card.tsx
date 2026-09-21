@@ -54,6 +54,11 @@ export function ContentCard({
             <time dateTime={item.published_on}>{formatDate(item.published_on)}</time>
             {item.size_bytes !== null ? <span>{formatSize(item.size_bytes)}</span> : null}
             {item.subject_name ? <span>{item.subject_name}</span> : null}
+            {item.whole_category ? (
+              <span className="content-card__scope" data-whole-category>
+                {t('content.wholeCategory.badge')}
+              </span>
+            ) : null}
           </span>
 
           {item.teacher_display_name ? (

@@ -5,6 +5,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import { requireMemorisationSubject } from "../test-support/quran-subject.js";
+import * as marks from "./level-completion-mark.service.js";
 import {
   correctLog,
   deleteLog,
@@ -122,6 +123,8 @@ async function clear(): Promise<void> {
     await prisma.studentSurahProgress.deleteMany({
       where: { studentId: { in: ids } },
     });
+    // R167 §3 — a mark is RESTRICT against the student, the Level and the branch.
+    await prisma.levelCompletionMark.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   }
   // R166 §1 — the sittings the completion tests create, by the Level they
@@ -547,6 +550,107 @@ describe("M4c — LevelSurah is Super Admin curriculum", () => {
         where: { studentId: student, deletedAt: null },
       }),
     ).toBe(1);
+  });
+});
+
+describe("SRS Revision 167 §3 — «إتمام المستوى»: the administration's attestation and its certificate", () => {
+  withOwnCurriculum();
+
+  const admin = (): Actor => actorOf(adminId, [{ role: "admin", branches: [branchA] }]);
+  const otherBranchAdmin = async (): Promise<Actor> => {
+    const elsewhere = await prisma.branch.create({ data: { name: `${TAG} فرع آخر` } });
+    return actorOf(adminId, [{ role: "admin", branches: [elsewhere.id] }]);
+  };
+  const row = async () =>
+    (await marks.listForStudent(prisma, admin(), student)).find((r) => r.level_id === levelId)!;
+
+  it("shows what BR-11 reads beside what was recorded — and refuses an UNMET mark until the caller says she has seen it", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    expect(await row()).toMatchObject({
+      requirements: { complete: false, configured_surahs: 1, memorised_surahs: 0 },
+      mark: null,
+    });
+
+    const refusal = await failure(() =>
+      marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: false }),
+    );
+    expect(refusal).toMatchObject({
+      code: "STATE_CONFLICT",
+      details: { reason: "REQUIREMENTS_NOT_MET", configured_surahs: 1, memorised_surahs: 0 },
+    });
+    expect((await row()).mark).toBeNull();
+
+    // Told, and marking anyway: allowed — and the record says so for ever.
+    await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true });
+    const marked = await row();
+    expect(marked.mark).toMatchObject({ requirements_met: false, certificate_number: null });
+    expect(marked.mark!.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // BR-11 itself is untouched by the attestation: still derived, still false.
+    expect(marked.requirements.complete).toBe(false);
+
+    // Idempotent, and audited once.
+    await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true });
+    expect(
+      await prisma.auditLog.count({ where: { actionType: "level_completion.mark", actorUserId: adminId } }),
+    ).toBe(1);
+  });
+
+  it("a MET Level needs no acknowledgement, and records that it was met", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: false });
+    expect((await row()).mark).toMatchObject({ requirements_met: true });
+  });
+
+  it("the certificate is a SECOND confirmation: nothing reaches her until it is given, and withdrawing keeps its number", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    expect(
+      await failure(() => marks.issueCertificate(prisma, admin(), student, levelId)),
+    ).toMatchObject({ code: "STATE_CONFLICT", details: { reason: "LEVEL_NOT_COMPLETED" } });
+
+    await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true });
+    expect(await marks.certificatesOf(prisma, student)).toEqual([]);
+
+    await marks.issueCertificate(prisma, admin(), student, levelId);
+    const [certificate] = await marks.certificatesOf(prisma, student);
+    expect(certificate).toMatchObject({
+      student_name: expect.stringContaining(TAG),
+      level_name: expect.stringContaining(TAG),
+      branch_name: expect.stringContaining(TAG),
+    });
+    expect(certificate!.certificate_number).toBeGreaterThan(0);
+    expect(certificate!.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    // What she can see and print cannot be unmade underneath her.
+    expect(
+      await failure(() => marks.unmarkCompleted(prisma, admin(), student, levelId)),
+    ).toMatchObject({ code: "STATE_CONFLICT", details: { reason: "CERTIFICATE_ISSUED" } });
+
+    await marks.withdrawCertificate(prisma, admin(), student, levelId);
+    expect(await marks.certificatesOf(prisma, student)).toEqual([]);
+    await marks.issueCertificate(prisma, admin(), student, levelId);
+    expect((await marks.certificatesOf(prisma, student))[0]!.certificate_number).toBe(
+      certificate!.certificate_number,
+    );
+
+    await marks.withdrawCertificate(prisma, admin(), student, levelId);
+    await marks.unmarkCompleted(prisma, admin(), student, levelId);
+    expect((await row()).mark).toBeNull();
+  });
+
+  it("is an Admin's act within her branches: a مؤطرة is refused, another branch's Admin finds nothing (404, never 403)", async () => {
+    expect(
+      await failure(() =>
+        marks.markCompleted(prisma, teacher(quranTeacher), student, levelId, { acknowledgeUnmet: true }),
+      ),
+    ).toMatchObject({ code: "FORBIDDEN" });
+    const elsewhere = await otherBranchAdmin();
+    expect(
+      await failure(() =>
+        marks.markCompleted(prisma, elsewhere, student, levelId, { acknowledgeUnmet: true }),
+      ),
+    ).toMatchObject({ code: "NOT_FOUND" });
+    expect(await marks.listForStudent(prisma, elsewhere, student)).toEqual([]);
   });
 });
 

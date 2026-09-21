@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { moroccoWallClockToInstant } from './morocco-clock.js';
 import {
   localDateIso,
   nextRecordingName,
@@ -96,13 +97,16 @@ describe('TD-11 — the association’s date, not UTC’s', () => {
   it('reads the local calendar date', () => {
     // 00:30 local on the 24th. `toISOString()` would say the 23rd wherever the
     // offset is positive, which is the browser defect this replaced.
-    const at = new Date(2026, 7, 24, 0, 30, 0);
+    // Built by the SAME authority that reads it (R167 §2): `new Date(y, m, d…)`
+    // goes through the zone data frozen in the runtime, which is exactly what
+    // disagreed with Morocco's clock after 2026-09-20.
+    const at = moroccoWallClockToInstant(2026, 8, 24, 0, 30, 0);
     expect(localDateIso(at)).toBe('2026-08-24');
   });
 });
 
 describe('SRS Revision 165 §1 — what the platform’s own capture of a class is called', () => {
-  const at = new Date(2026, 8, 20, 18, 5, 0);
+  const at = moroccoWallClockToInstant(2026, 9, 20, 18, 5, 0);
 
   it('type, Subject, Surah, main teacher, then the date and time she stopped it', () => {
     expect(

@@ -40,6 +40,9 @@ export function list(prisma: PrismaClient) {
         ? { academicYearId: filters.academic_year_id }
         : {}),
       ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
+      ...(filters.whole_category !== undefined
+        ? { wholeCategory: filters.whole_category === 'true' }
+        : {}),
       ...pageParamsFrom(req.query),
       ...sortParamsFrom(req.query),
     });

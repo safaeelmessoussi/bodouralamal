@@ -269,7 +269,7 @@ export async function ingestRecording(
    * Levels files its recording under the first in the Levels' own order —
    * deterministic, so a retry after a partial failure writes the same row.
    */
-  const levelId = await recordingLevelId(prisma, recording.session);
+  const { levelId, wholeCategory } = await recordingScope(prisma, recording.session);
   if (levelId === null) {
     // `EducationalContent.level_id` is NOT NULL, and §4.9 groups the library by
     // Level. Inventing one would file the class's recording under a curriculum
@@ -369,6 +369,7 @@ export async function ingestRecording(
         description: null,
         visibility: visibility as "public" | "private" | "hidden",
         levelId,
+        wholeCategory,
         subjectId: recording.session.schedule.subjectId,
         academicYearId: recording.session.schedule.academicYearId,
         // §4.9's Global scope is a deliberate act; a recording belongs to the
@@ -446,7 +447,19 @@ export async function ingestRecording(
 
 /* ───────────────────────────────── internals ───────────────────────────── */
 
-async function recordingLevelId(
+/**
+ * **Where a recording is filed, and whom it is addressed to** (SRS Revision
+ * 166 §4, Revision 167 §5).
+ *
+ * It is filed under ONE Level — the first, in the Levels' own order, of those
+ * the class addresses (the Owner keeps that rule). Where the class addresses
+ * **every live Level of exactly one Category**, the recording is addressed to
+ * the whole Category as well: `whole_category`, which every Level of it —
+ * including one added later — reads it through. A class over some Levels of a
+ * Category, or over Levels of two, stays with its first Level: «كل مستويات
+ * الفئة» is a statement about a Category, and neither of those is one.
+ */
+async function recordingScope(
   prisma: PrismaClient,
   session: {
     scheduleId: string;
@@ -457,15 +470,23 @@ async function recordingLevelId(
       teachingGroupId: string | null;
     };
   },
-): Promise<string | null> {
+): Promise<{ levelId: string | null; wholeCategory: boolean }> {
   const ids = await scheduleLevelIds(prisma, session.scheduleId, session.schedule);
-  if (ids.length <= 1) return ids[0] ?? null;
-  const first = await prisma.level.findFirst({
+  if (ids.length <= 1) return { levelId: ids[0] ?? null, wholeCategory: false };
+  const addressed = await prisma.level.findMany({
     where: { id: { in: ids }, deletedAt: null },
     orderBy: [{ displayOrder: { sort: "asc", nulls: "last" } }, { name: "asc" }, { id: "asc" }],
-    select: { id: true },
+    select: { id: true, categoryId: true },
   });
-  return first?.id ?? null;
+  const first = addressed[0];
+  if (!first) return { levelId: null, wholeCategory: false };
+
+  const oneCategory = addressed.every((level) => level.categoryId === first.categoryId);
+  const wholeCategory =
+    oneCategory &&
+    addressed.length ===
+      (await prisma.level.count({ where: { categoryId: first.categoryId, deletedAt: null } }));
+  return { levelId: first.id, wholeCategory };
 }
 
 /**

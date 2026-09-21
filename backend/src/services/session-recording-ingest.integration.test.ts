@@ -12,6 +12,7 @@ import {
   statObject,
   type StorageClients,
 } from "../lib/storage.js";
+import type { OnlineClassProvider, RecordingReport } from "../lib/online-class-provider.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import { createCourseSchedule } from "./course-schedule.service.js";
@@ -21,6 +22,11 @@ import {
   RecordingStagingCleanupFailure,
   requeueStrandedRecordings,
 } from "./session-recording-ingest.service.js";
+import {
+  activeRecordings,
+  RECONCILE_DEAD_AFTER_MS,
+  reconcileRecordings,
+} from "./session-recording-reconcile.service.js";
 import { applyProviderReport } from "./session-recording.service.js";
 
 /**
@@ -200,6 +206,8 @@ async function onlineClass(
   /** How the class is ADDRESSED. `filters` is what إضافة عنصر has built since
    *  Revision 163 §5: no single-target column at all, only scope rows. */
   addressedBy: "level" | "filters" = "level",
+  /** The Levels a filter-built class names; her own Level when not said. */
+  filterLevelIds?: string[],
 ): Promise<string> {
   const { id } = await createCourseSchedule(
     prisma,
@@ -209,7 +217,7 @@ async function onlineClass(
       subjectId,
       ...(addressedBy === "level"
         ? { teachingMode: "entire_level", targetId: levelId }
-        : { teachingMode: "multi_dimension", dimensions: { levelIds: [levelId] } }),
+        : { teachingMode: "multi_dimension", dimensions: { levelIds: filterLevelIds ?? [levelId] } }),
       branchId: branchA,
       roomId: null,
       startTime: at(15),
@@ -926,6 +934,51 @@ describe("SRS Revision 166 §4 — a filter-built class's recording is imported 
   });
 });
 
+/* ── A class for every Level of a Category ───────────────────────────────── */
+
+describe("SRS Revision 167 §5 — a class given to EVERY Level of one Category records for all of them", () => {
+  it("is filed under the first Level and addressed to the whole Category; some Levels only, and it stays with its first Level", async () => {
+    const { categoryId } = await prisma.level.findUniqueOrThrow({
+      where: { id: levelId },
+      select: { categoryId: true },
+    });
+    const sibling = async (name: string): Promise<string> => {
+      const id = (
+        await createLevel(prisma, superAdmin(), { name: `${TAG} ${name}`, categoryId, genderRestriction: "any" })
+      ).level.id;
+      await prisma.levelSubject.create({ data: { levelId: id, subjectId: subjectAudio } });
+      return id;
+    };
+    const second = await sibling("مستوى ثانٍ");
+
+    const everyLevel = await onlineClass("audio_only", subjectAudio, "tuesday", "filters", [levelId, second]);
+    const whole = await completedRecording(everyLevel, "audio/ogg", oggBytes());
+    const wholeDone = await ingestRecording(prisma, clients, whole.id);
+    const filed = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: wholeDone.contentId! },
+      select: { wholeCategory: true, levelId: true },
+    });
+    expect(filed.wholeCategory).toBe(true);
+    expect([levelId, second]).toContain(filed.levelId);
+
+    // A third Level appears: the SAME two-Level class is no longer «every Level».
+    await sibling("مستوى ثالث");
+    const [, nextOccurrence] = await prisma.session.findMany({
+      where: { schedule: { sessions: { some: { id: everyLevel } } }, date: { gte: day(CLASS_DATE) } },
+      orderBy: { date: "asc" },
+      take: 2,
+      select: { id: true },
+    });
+    const some = await completedRecording(nextOccurrence!.id, "audio/ogg", oggBytes());
+    const someDone = await ingestRecording(prisma, clients, some.id);
+    const partial = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: someDone.contentId! },
+      select: { wholeCategory: true },
+    });
+    expect(partial.wholeCategory).toBe(false);
+  });
+});
+
 /* ── A stranded import is put back ───────────────────────────────────────── */
 
 describe("SRS Revision 166 §4 — `ops:requeue-recordings` puts a stranded import back", () => {
@@ -967,6 +1020,188 @@ describe("SRS Revision 166 §4 — `ops:requeue-recordings` puts a stranded impo
     await ingestRecording(prisma, clients, stranded.id);
     const after = await requeueStrandedRecordings(prisma, { dryRun: true });
     expect(after.recording_ids).not.toContain(stranded.id);
+  });
+});
+
+/* ── Nothing is left to a delivery that may not happen ───────────────────── */
+
+describe("SRS Revision 167 §5 — the reconciler: a recording is never left behind", () => {
+  /** A recording the platform started and has heard nothing more about. */
+  async function openRecording(
+    sessionId: string,
+    status: "recording" | "stopping" | "processing",
+    startedAt: Date,
+    staged: Buffer | null,
+  ): Promise<{ id: string; egressId: string; key: string }> {
+    const egressId = `EG_${Math.random().toString(36).slice(2)}`;
+    const created = await prisma.sessionRecording.create({
+      data: {
+        sessionId,
+        startedById: adminId,
+        status,
+        providerEgressId: egressId,
+        outputBucket: STAGING,
+        outputKey: "placeholder",
+        mimeType: "audio/ogg",
+        startedAt,
+      },
+      select: { id: true },
+    });
+    const key = `session-recordings/${sessionId}/${created.id}.bin`;
+    await prisma.sessionRecording.update({ where: { id: created.id }, data: { outputKey: key } });
+    if (staged) await putStaging(key, staged);
+    return { id: created.id, egressId, key };
+  }
+
+  /** `n` occurrences of ONE class — one live recording is allowed per
+   *  occurrence, and two classes at one hour would be a room/teacher conflict. */
+  async function occurrences(n: number): Promise<string[]> {
+    const first = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const { scheduleId } = await prisma.session.findUniqueOrThrow({
+      where: { id: first },
+      select: { scheduleId: true },
+    });
+    const rows = await prisma.session.findMany({
+      where: { scheduleId, date: { gte: day(CLASS_DATE) } },
+      orderBy: { date: "asc" },
+      take: n,
+      select: { id: true },
+    });
+    expect(rows).toHaveLength(n);
+    return rows.map((row) => row.id);
+  }
+
+  /** Answers only what it was told to; `throws` is a provider that is down. */
+  function providerSaying(
+    answers: Record<string, RecordingReport | null>,
+    throws = false,
+  ): OnlineClassProvider {
+    return {
+      issueJoinCredentials: () => Promise.reject(new Error("not used")),
+      startRecording: () => Promise.reject(new Error("not used")),
+      stopRecording: () => Promise.resolve(),
+      verifyCallback: () => Promise.resolve(null),
+      reportRecording: (egressId: string) =>
+        throws ? Promise.reject(new Error("provider down")) : Promise.resolve(answers[egressId] ?? null),
+    };
+  }
+
+  const statusOf = async (id: string): Promise<string> =>
+    (await prisma.sessionRecording.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
+  const pendingImport = async (id: string): Promise<number> =>
+    Number(
+      (
+        await prisma.$queryRaw<{ n: bigint }[]>`
+          select count(*) as n from pgboss.job
+           where name = 'session-recording-ingest'
+             and data->>'recording_id' = ${id}
+             and state in ('created', 'retry')`
+      )[0]!.n,
+    );
+
+  const LONG_AGO = new Date(Date.now() - 2 * 60 * 60_000);
+
+  it("a completion whose callback never arrived is ASKED for — and its import is queued exactly as a callback would", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const missed = await openRecording(sessionId, "processing", LONG_AGO, oggBytes());
+
+    const outcome = await reconcileRecordings(
+      prisma,
+      clients,
+      providerSaying({
+        [missed.egressId]: { providerEgressId: missed.egressId, state: "completed", outputKey: missed.key },
+      }),
+    );
+    expect(outcome.advanced).toBeGreaterThanOrEqual(1);
+    expect(await statusOf(missed.id)).toBe("completed");
+    expect(await pendingImport(missed.id)).toBe(1);
+
+    // …and the import it queued is an ordinary one.
+    await ingestRecording(prisma, clients, missed.id);
+    const row = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: missed.id },
+      select: { educationalContentId: true },
+    });
+    expect(row.educationalContentId).not.toBeNull();
+  });
+
+  it("where the provider has no answer, the staged FILE is the fact — forgotten by the provider, or the provider down", async () => {
+    const [forgottenSession, downSession, noneSession] = (await occurrences(3)) as [string, string, string];
+    const forgotten = await openRecording(forgottenSession, "stopping", LONG_AGO, oggBytes());
+    const forgottenOutcome = await reconcileRecordings(prisma, clients, providerSaying({}));
+    expect(forgottenOutcome.recovered_from_staging).toBeGreaterThanOrEqual(1);
+    expect(await statusOf(forgotten.id)).toBe("completed");
+    expect(await pendingImport(forgotten.id)).toBe(1);
+
+    const down = await openRecording(downSession, "processing", LONG_AGO, oggBytes());
+    const downOutcome = await reconcileRecordings(prisma, clients, providerSaying({}, true));
+    expect(downOutcome.provider_unreachable).toBeGreaterThanOrEqual(1);
+    expect(await statusOf(down.id)).toBe("completed");
+
+    // No provider configured at all (TD-13) is the same: the file is believed.
+    const none = await openRecording(noneSession, "processing", LONG_AGO, oggBytes());
+    await reconcileRecordings(prisma, clients, null);
+    expect(await statusOf(none.id)).toBe("completed");
+  });
+
+  it("concludes NOTHING from silence: young, still running, or unreachable-with-no-file are all left exactly as they are", async () => {
+    const [youngSession, runningSession, unreachableSession] = (await occurrences(3)) as [string, string, string];
+    const young = await openRecording(youngSession, "processing", new Date(), null);
+    const running = await openRecording(runningSession, "recording", LONG_AGO, null);
+
+    await reconcileRecordings(
+      prisma,
+      clients,
+      providerSaying({
+        [running.egressId]: { providerEgressId: running.egressId, state: "recording" },
+      }),
+    );
+    expect(await statusOf(young.id)).toBe("processing");
+    expect(await statusOf(running.id)).toBe("recording");
+
+    // Three days old, no file — but the provider could not be ASKED, so it is
+    // not declared dead.
+    const ancient = new Date(Date.now() - 3 * 24 * 60 * 60_000);
+    const unreachable = await openRecording(unreachableSession, "recording", ancient, null);
+    await reconcileRecordings(prisma, clients, providerSaying({}, true));
+    expect(await statusOf(unreachable.id)).toBe("recording");
+  });
+
+  it("a recording the provider positively no longer knows, a day on, with nothing staged, is recorded as failed — so the class can be recorded again", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const dead = await openRecording(
+      sessionId,
+      "recording",
+      new Date(Date.now() - RECONCILE_DEAD_AFTER_MS - 60_000),
+      null,
+    );
+    const outcome = await reconcileRecordings(prisma, clients, providerSaying({}));
+    expect(outcome.marked_failed).toBeGreaterThanOrEqual(1);
+    expect(await statusOf(dead.id)).toBe("failed");
+    expect(await pendingImport(dead.id)).toBe(0);
+  });
+
+  it("re-queues every import that has not succeeded, every time it runs — a deployed fix heals without an operator", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const stranded = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    await prisma.sessionRecording.update({
+      where: { id: stranded.id },
+      data: { ingestionFailureReason: "a defect since fixed" },
+    });
+    const before = await pendingImport(stranded.id);
+    const outcome = await reconcileRecordings(prisma, clients, null);
+    expect(outcome.stranded).toBeGreaterThanOrEqual(1);
+    expect(await pendingImport(stranded.id)).toBe(before + 1);
+    // The staged file is still there for it: nothing collects it.
+    expect(await statObject(clients, STAGING, stranded.key)).not.toBeNull();
+  });
+
+  it("`ops:active-recordings` names what a deployment must wait for", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const live = await openRecording(sessionId, "recording", new Date(), null);
+    expect((await activeRecordings(prisma)).map((r) => r.id)).toContain(live.id);
+    await prisma.sessionRecording.update({ where: { id: live.id }, data: { status: "aborted" } });
+    expect((await activeRecordings(prisma)).map((r) => r.id)).not.toContain(live.id);
   });
 });
 

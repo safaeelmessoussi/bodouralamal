@@ -18,7 +18,7 @@ deliberately narrow:
 | Checkout | `/opt/bodour`, owned by that account, not group/world-writable; approved commit checked out detached and clean |
 | State | Docker named volumes `bodour_db-data`, `bodour_seaweedfs-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage — the same four names for every tier (Owner decision, 2026-09-20) |
 | Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; admitted externally: SSH, TCP 80/443, and the two online-class media ports **7881/tcp and 7882/udp** — nothing else |
-| Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics |
+| Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics. **The host's `tzdata` package is kept current by unattended upgrades, and `/usr/share/zoneinfo` is mounted read-only into `api` and `db`** (SRS Revision 167 §2): the host's copy is the platform's authority for the offset Morocco observes, because an image's copy is frozen on its build day. Verified after every deployment by `GET /api/v1/clock` answering `"source":"host-zoneinfo"` with the offset the host itself reports (`TZ=Africa/Casablanca date +%z`) |
 | Secrets | `.env` and `infra.env` are regular, deployment-user-owned mode-`0600` files; an optional Docker credential file is held to the same rule |
 
 Compose 2.24.4 is the floor because repository verification overlays use the documented
@@ -200,6 +200,15 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
   "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-web:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
+
+# 4b Existing deployment with online classes: NEVER restart the recorder under
+#    a class (SRS Revision 167 §5). It holds a class's file locally until the
+#    class ends; a restart loses the capture and nothing can bring it back.
+#    Exit 0 = nothing is recording; exit 3 names what is — wait and ask again.
+#    (Uses the RUNNING release; skip on a first deployment or where the running
+#    release predates Revision 167.)
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml exec -T api npm run --silent ops:active-recordings
 
 # 5  Existing deployment: stop the legacy cookie issuer, then start data services
 #    R101's next migration invalidates every live refresh session. The old API

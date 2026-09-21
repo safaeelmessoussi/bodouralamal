@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { Navigation } from '../../hooks/use-navigation.js';
+import { InstallAppButton } from '../install/install-app-button.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { AccountButton, DashboardButton, SignInButton, SignOutButton } from './auth-buttons.js';
@@ -39,6 +40,11 @@ export function MobileMenu({
           className="mobile-menu__list"
           onNavigate={onNavigate}
         />
+
+        {/* R167 §4 — «تثبيت التطبيق», where a phone user will look for it. */}
+        <div className="mobile-menu__actions mobile-menu__actions--install">
+          <InstallAppButton block />
+        </div>
 
         {navigation.isAuthenticated ? (
           <div className="mobile-menu__actions">

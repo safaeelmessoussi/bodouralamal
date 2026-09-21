@@ -310,8 +310,17 @@ const exam = await prisma.exam.create({
   select: { id: true },
 });
 
+// What the catalogue CALLS its first class type today — editable reference data
+// (R110), renamed by the Owner on 2026-09-21; a harness must not type a name.
+const classType = await prisma.schedulingType.findFirst({
+  where: { structuralKind: 'class', deletedAt: null },
+  orderBy: { displayOrder: 'asc' },
+  select: { name: true },
+});
+
 console.log(
   JSON.stringify({
+    classTypeName: classType?.name ?? null,
     targaSchedule: targaClass.id,
     secondSchedule: secondClass.id,
     level: level.id,

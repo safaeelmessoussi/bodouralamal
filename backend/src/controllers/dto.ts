@@ -1045,6 +1045,9 @@ export interface LibraryItemDto {
    *  its own control from. */
   origin: string;
   level_id: string;
+  /** R167 §5 — addressed to EVERY Level of `category_id`; `level_id` is then
+   *  only where it is filed. Rendered under «كل مستويات الفئة». */
+  whole_category: boolean;
   subject_id: string;
   academic_year_id: string;
   /** `null` is **Global**, not unknown (§7) — it renders as its own container. */
@@ -1091,6 +1094,7 @@ export function libraryItemDto(row: {
   visibility: string;
   origin: string;
   levelId: string;
+  wholeCategory: boolean;
   subjectId: string;
   academicYearId: string;
   branchId: string | null;
@@ -1113,6 +1117,7 @@ export function libraryItemDto(row: {
     // A content-type fact, not consent state: it says what the file IS.
     origin: row.origin,
     level_id: row.levelId,
+    whole_category: row.wholeCategory,
     subject_id: row.subjectId,
     academic_year_id: row.academicYearId,
     branch_id: row.branchId,

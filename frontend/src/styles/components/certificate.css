@@ -1,0 +1,258 @@
+/*
+ * شهادة إتمام مستوى (SRS Revision 167 §3).
+ *
+ * One drawing at every size: the certificate is an A4-landscape box and every
+ * length inside it is in `cqw` — a fraction of ITS OWN width — so the preview
+ * in her dashboard, a phone and the printed page differ only in scale.
+ *
+ * Printing: `html.print-certificate` is set for the duration of one
+ * `window.print()`. Everything except the portal that holds the chosen
+ * certificate is removed from the flow (not merely hidden — hidden boxes still
+ * produce blank pages), and the named page asks for A4 landscape with no
+ * margin. A browser that ignores `@page size` (Safari) prints the same box
+ * scaled to the paper it has.
+ */
+.certificate {
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 297 / 210;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 9%, transparent) 0, transparent 55%),
+    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--color-primary-emphasis) 8%, transparent) 0, transparent 55%),
+    var(--color-paper);
+  color: var(--color-primary-strong);
+  box-shadow: 0 0.6rem 2rem color-mix(in srgb, var(--color-primary-strong) 14%, transparent);
+  font-family: var(--font-family-base, inherit);
+  /* Backgrounds are part of the document, not decoration to be dropped. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.certificate__frame {
+  position: absolute;
+  inset: 2.6cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3.4cqw 6cqw 2.6cqw;
+  border: 0.32cqw solid var(--color-accent);
+  outline: 0.12cqw solid var(--color-primary);
+  outline-offset: 0.7cqw;
+  text-align: center;
+}
+
+.certificate__corner {
+  position: absolute;
+  width: 9cqw;
+  height: 9cqw;
+  fill: none;
+}
+.certificate__corner--ts { inset-block-start: 0.9cqw; inset-inline-start: 0.9cqw; transform: scaleX(-1); }
+.certificate__corner--te { inset-block-start: 0.9cqw; inset-inline-end: 0.9cqw; }
+.certificate__corner--bs { inset-block-end: 0.9cqw; inset-inline-start: 0.9cqw; transform: scale(-1, -1); }
+.certificate__corner--be { inset-block-end: 0.9cqw; inset-inline-end: 0.9cqw; transform: scaleY(-1); }
+/* The star sits in the physical top-left of the drawing; in RTL «start» is the
+   right edge, so the mirrors above are written for RTL, the platform's only
+   direction at launch (§6). */
+.certificate__corner-line {
+  stroke: var(--color-accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.certificate__corner-star rect {
+  fill: color-mix(in srgb, var(--color-accent) 22%, var(--color-paper));
+  stroke: var(--color-accent);
+  stroke-width: 1.4;
+}
+.certificate__corner-dot {
+  fill: var(--color-primary);
+}
+
+.certificate__head {
+  display: grid;
+  justify-items: center;
+  gap: 0.4cqw;
+}
+.certificate__logo {
+  width: 10.5cqw;
+  height: 10.5cqw;
+  object-fit: contain;
+}
+.certificate__association {
+  margin: 0;
+  font-size: 1.75cqw;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--color-primary);
+}
+.certificate__basmala {
+  margin: 0;
+  font-size: 1.7cqw;
+  color: var(--color-accent);
+}
+.certificate__title {
+  margin: 0;
+  font-size: 5cqw;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--color-primary-strong);
+}
+.certificate__divider {
+  width: 30cqw;
+  height: 2cqw;
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
+  stroke-width: 1.2;
+}
+.certificate__line {
+  margin: 0;
+  font-size: 2.05cqw;
+  color: var(--color-primary);
+}
+.certificate__line--small {
+  font-size: 1.75cqw;
+}
+.certificate__name {
+  margin: 0;
+  padding: 0 4cqw 0.5cqw;
+  border-block-end: 0.16cqw solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  font-size: 4.3cqw;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--color-accent);
+}
+.certificate__level {
+  margin: 0;
+  font-size: 3cqw;
+  font-weight: 800;
+  color: var(--color-primary-strong);
+}
+.certificate__category {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.certificate__hadith {
+  margin: 0;
+  font-size: 1.85cqw;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.certificate__hadith-source {
+  display: block;
+  font-size: 1.2cqw;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-primary) 75%, transparent);
+}
+.certificate__foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  width: 100%;
+  gap: 2cqw;
+  /* Clear of the two bottom corner ornaments, which reach 10cqw in. */
+  padding-inline: 5.5cqw;
+  box-sizing: border-box;
+}
+.certificate__meta {
+  display: grid;
+  gap: 0.2cqw;
+  justify-items: start;
+  text-align: start;
+  font-size: 1.35cqw;
+  color: var(--color-primary);
+}
+.certificate__meta strong {
+  font-size: 1.6cqw;
+  color: var(--color-primary-strong);
+}
+.certificate__meta--end {
+  justify-items: end;
+  text-align: end;
+}
+.certificate__signature {
+  margin-block-start: 0.6cqw;
+  padding-block-start: 0.4cqw;
+  border-block-start: 0.12cqw solid var(--color-primary);
+  font-weight: 700;
+}
+.certificate__seal {
+  width: 9.5cqw;
+  height: 9.5cqw;
+}
+.certificate__seal-burst {
+  fill: var(--color-accent);
+}
+.certificate__seal-ring {
+  fill: none;
+  stroke: var(--color-paper);
+  stroke-width: 1.2;
+}
+.certificate__seal-star rect {
+  fill: none;
+  stroke: var(--color-paper);
+  stroke-width: 1.6;
+}
+
+/* ── «شهاداتي» — the page around it ─────────────────────────────────────── */
+.certificate-list {
+  display: grid;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.certificate-list__item {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 56rem;
+}
+.certificate-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* Holds the one certificate being printed. Off-screen, never `display:none`:
+   the logo must be loaded and laid out before the print snapshot is taken. */
+.certificate-print-root {
+  position: fixed;
+  inset-inline-start: -200vw;
+  inset-block-start: 0;
+  width: 297mm;
+}
+
+@page certificate {
+  size: A4 landscape;
+  margin: 0;
+}
+
+@media print {
+  html.print-certificate body > *:not(.certificate-print-root) {
+    display: none !important;
+  }
+  html.print-certificate,
+  html.print-certificate body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-surface);
+  }
+  html.print-certificate .certificate-print-root {
+    position: static;
+    width: 100%;
+    page: certificate;
+  }
+  html.print-certificate .certificate--printing {
+    width: 100%;
+    /* A hair shorter than the sheet: at exactly 297 / 210 a sub-pixel rounding
+       spills onto a second, blank page. */
+    aspect-ratio: 297 / 209;
+    border-radius: unset;
+    box-shadow: none;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+}

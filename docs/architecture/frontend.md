@@ -502,6 +502,43 @@ also applies to personal and administrative calendars. Authentication changes th
 not the public page's chosen filters. Profile defaults must not silently replace the view
 while the refresh-cookie exchange completes; test that transition with a populated profile.
 
+### Installable, and deliberately NOT offline (R167 §4)
+
+`/manifest.json` (standalone, RTL Arabic, 192/512 icons and a maskable one), `/sw.js`, and
+«تثبيت التطبيق» in the top menu — desktop bar and mobile sheet, signed in or not.
+
+**The button does what the DEVICE can do**, decided once in `lib/install-app.ts`
+(`installOffer`, pure and unit-tested): the browser's own install sheet where it announced
+`beforeinstallprompt` (Chrome, Edge, Samsung Internet, Opera — the event is held at module level,
+because it fires once and often before the header mounts); the Share-sheet steps on iPhone and
+iPad, where every browser is Safari underneath and nothing else installs; the browser-menu steps
+on other phones; and **nothing** once installed or on a desktop that cannot install — so it takes
+no room in an installed app.
+
+**The service worker caches nothing, and that is the design.** It exists because some browsers
+still ask for one before offering installation. Every request goes to the network exactly as in a
+tab: the caching table above already does the right thing for the shell and the assets, the API is
+never cacheable (tiers, consent and child context are decided per request), and a private
+recording must never be readable from a device after its permission is gone. Offline is the
+browser's own offline page. An offline mode is a separate decision with privacy consequences — it
+must never arrive as a side effect of a caching library. `sw.js` and `manifest.json` are served by
+`location /` and therefore `no-cache`: a new worker is picked up on the next load. A unit test
+holds the worker to containing no `respondWith` and no cache write.
+
+### Printing one document from a page of many (R167 §3)
+
+«شهاداتي» prints ONE certificate as an A4-landscape PDF with the browser's own print-to-PDF — the
+browser's text engine shapes the Arabic, so the file holds real, selectable text; nothing is
+generated, stored or sent, and no dependency is added. The mechanism is reusable: the chosen
+document renders into a portal directly under `<body>` (`.certificate-print-root`),
+`html.print-certificate` is set for the duration of that one `window.print()`, and the print
+stylesheet removes every other child of `<body>` from the flow (`display: none` — hidden boxes
+still produce blank pages). A named `@page` asks for A4 landscape so no other print on the
+platform is affected; a browser that ignores `@page size` prints the same box scaled to its paper.
+The box is a hair shorter than the sheet (`297 / 209`): at exactly `297 / 210` a sub-pixel
+rounding spills onto a second, blank page. Every length inside the certificate is in `cqw`, so
+the preview, a phone and the printed page are one drawing at different scales.
+
 ## The educational library, as a second worked example
 
 `/resources` (§5.2, §4.9) — two views of a drilling folder system: a level index grouped by
@@ -512,6 +549,11 @@ category, and one level's contents grouped **academic year → branch**.
 §14.1's sitemap defines exactly **one** resources node, and §5.2 describes it as a *drilling
 folder system* with a "Level List" and a "Level Resources View". Those two views are therefore
 one route with a **`?level=` parameter**, not a second path segment.
+
+**R167 §5 added a third view by the same rule — `?category=`**, «كل مستويات الفئة»: the shelf of
+what was made for EVERY Level of one Category (`whole_category`). It is the Category's shelf, so
+the index opens each Category with its card, counts its items there rather than under the one
+Level they are filed under, and an item carries a «لكل مستويات الفئة» badge wherever it is listed.
 
 The reasoning is worth reusing: **a new path segment would be a navigation node the sitemap
 does not list**, and inventing navigation outside §14.1 is prohibited (§20 rule 16). A query

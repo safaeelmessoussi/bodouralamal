@@ -16,6 +16,9 @@ export const listLibraryQuerySchema = z.object({
   level_id: uuid.optional(),
   academic_year_id: uuid.optional(),
   subject_id: uuid.optional(),
+  // R167 §5 — «كل مستويات الفئة»: only the items addressed to every Level of
+  // their Category (`true`), or only those that are not (`false`).
+  whole_category: z.enum(['true', 'false']).optional(),
   // R76 — validated against the endpoint's own allow-list in the service, which
   // refuses an unknown field rather than ignoring it.
   sort_by: z.string().optional(),

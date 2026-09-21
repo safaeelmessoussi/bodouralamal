@@ -682,8 +682,16 @@ if (physicalDraftId) {
   // SRS Revision 166 §3 — a bare sitting is no longer GIVEN a title: the form
   // does not ask for one, and the server calls it what it is. «الوصف» is where
   // anything typed goes, so that is what carries this run's tag.
-  const titleAsked = (await fieldSnapshot('العنوان')).present === true;
-  check('D4b · a bare exam is not asked for «العنوان» — the server composes it', titleAsked === false);
+  // R167 §1 — the composed title is now SHOWN there, read-only. «Asked» means a
+  // control she could type into; the shown one has none (`value` is null).
+  const titleField = await fieldSnapshot('العنوان');
+  const titleAsked = titleField.present === true && titleField.value !== null;
+  check('D4b · a bare exam is not asked for «العنوان» — the server composes it', titleAsked === false, JSON.stringify(titleField));
+  check(
+    'D4c · …and the form SHOWS the title it will be given, read-only (R167 §1)',
+    titleField.present === true && titleField.value === null,
+    JSON.stringify(titleField),
+  );
   await setTextByLabel('الوصف', TITLE_PHYSICAL_BARE);
   await setSelectByLabel('الفرع', S.branchId);
   await new Promise((r) => setTimeout(r, 900));

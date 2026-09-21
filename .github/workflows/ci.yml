@@ -41,6 +41,8 @@ jobs:
         run: bash scripts/ci/check-prisma-mass-write.sh
       - name: Header navigation exclusivity (burger vs horizontal nav)
         run: bash scripts/ci/check-header-nav-exclusive.sh
+      - name: The backend never reads the process's local clock (Morocco's time comes from the host)
+        run: bash scripts/ci/check-no-local-clock.sh
       - name: Design-token discipline (components use semantic tokens only)
         run: bash scripts/ci/check-design-tokens.sh
       - name: Closed dialogs stay out of layout until opened

@@ -32,10 +32,12 @@ import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as schedulingTypes from './controllers/scheduling-type.controller.js';
+import * as clock from './controllers/clock.controller.js';
 import * as scopeOptions from './controllers/scope-options.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as enrollments from './controllers/enrollment.controller.js';
+import * as levelCompletionMarks from './controllers/level-completion-mark.controller.js';
 import * as exams from './controllers/exam.controller.js';
 import * as examScheduling from './controllers/exam-scheduling.controller.js';
 import * as grades from './controllers/grade.controller.js';
@@ -324,6 +326,8 @@ export function createApp(
   // TD-3.10 (Revision 36): the calendar screen's reference data in one read.
   // Public and cacheable; mounted before the guarded router for that reason.
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
+  // R167 §2 — Morocco's current official offset, from the host's zone database.
+  api.get('/clock', clock.read());
 
   api.get('/branches', publicBranches.list(prisma));
   // NEW N — §5.1's partners section. Public and unauthenticated, exactly as the
@@ -562,6 +566,19 @@ export function createApp(
   guarded.post('/admin/enrollments', enrollments.create(prisma));
   guarded.patch('/admin/enrollments/:id', enrollments.update(prisma));
   guarded.delete('/admin/enrollments/:id', enrollments.remove(prisma));
+  // R167 §3 — «إتمام المستوى»: the administration's attestation and its
+  // certificate. BR-11 itself stays derived; these record and publish.
+  guarded.get('/admin/students/:id/level-completions', levelCompletionMarks.list(prisma));
+  guarded.put('/admin/students/:id/level-completions/:levelId', levelCompletionMarks.mark(prisma));
+  guarded.delete('/admin/students/:id/level-completions/:levelId', levelCompletionMarks.unmark(prisma));
+  guarded.put(
+    '/admin/students/:id/level-completions/:levelId/certificate',
+    levelCompletionMarks.issueCertificate(prisma),
+  );
+  guarded.delete(
+    '/admin/students/:id/level-completions/:levelId/certificate',
+    levelCompletionMarks.withdrawCertificate(prisma),
+  );
 
   // The roster (§5.6). Enrolment reads the Level FROM the group and enqueues
   // consent re-evaluation per session in the same transaction (§4.1a, TD-7).
@@ -868,6 +885,9 @@ export function createApp(
   // مؤطرة's working note (BR-8) and is absent from the query, not filtered out
   // of its result.
   guarded.get('/students/me/grades', childContext(prisma), grades.myGrades(prisma));
+  // R167 §3 — the certificates the administration has confirmed, for the
+  // ACTING student (§4.3).
+  guarded.get('/students/me/certificates', childContext(prisma), levelCompletionMarks.mine(prisma));
 
   // §4.5 Quran memorization (M4a, R73). The coverage read hangs off the student
   // because that is what it is about; the logs are their own collection because

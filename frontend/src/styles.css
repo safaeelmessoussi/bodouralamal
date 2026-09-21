@@ -104,6 +104,7 @@
 @import './styles/components/progress.css';
 /* The shared person QR (R96). Standalone — extends nothing. */
 @import './styles/components/user-qr.css';
+@import './styles/components/certificate.css';
 /* R138 §12/§13 — the versioned Privacy Policy/Terms body. Standalone. */
 @import './styles/components/legal.css';
 /* The online classroom (R98). Loaded LAST and deliberately so: it is the one

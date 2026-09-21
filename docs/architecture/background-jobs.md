@@ -67,6 +67,7 @@ duplicate concurrent runs.
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
 | `session-recording-ingest` | A **verified** provider completion callback (R99) | Singleton per recording. Turns a provider staging object into an `EducationalContent` + `SessionContent`. See below |
+| `session-recording-reconcile` | Cron, **every fifteen minutes** (R167 §5) | Idempotent; deletes nothing. Asks the provider about recordings whose callback never came, believes a staged file where the provider has no answer, and re-queues every import that has not succeeded — indefinitely. See below |
 
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
@@ -77,7 +78,7 @@ restore refuses an expired User window even before that sweep runs. It is not a
 new account-purge queue. Application/rejected-registration retention handlers are
 also part of the current runtime catalog in `jobs/runner.ts`.
 
-All nine daily application cron registrations explicitly pass `tz: config.TZ`
+All nine daily application cron registrations (and the quarter-hourly reconciler, for which a zone means nothing) explicitly pass `tz: config.TZ`
 (`Africa/Casablanca`); pg-boss otherwise defaults to UTC even in a correctly
 configured container. This differs from B8's deliberately UTC host backup timer.
 Recording metadata corrections join consent reevaluation and commit the public
@@ -253,6 +254,32 @@ already there, so the key is still written exactly once (§20 rule 15).
 `ingestion_failure_reason`, because the canonical object, content row and relation already
 exist. Repeated storage failure remains on the existing pg-boss job under TD-7's retry budget
 and terminal failed-job observability; it never creates a second worker or an in-memory retry.
+
+### `session-recording-reconcile` — a recording is never left to a delivery that may not happen
+
+SRS Revision 167 §5; `services/session-recording-reconcile.service.ts`. A finished recording
+reaches the library through two hand-offs, and each used to be attempted a fixed number of times
+and then never again:
+
+| Hand-off | How it was lost | What the reconciler does |
+|---|---|---|
+| The provider's completion callback | The API was restarting when a two-hour class ended. The row stayed `processing` for ever with the finished file in staging, and the occurrence could not be recorded again | After a three-minute grace the recording is **asked about** (`OnlineClassProvider.reportRecording`) and the answer goes through `applyProviderReport` — the same door a verified callback uses |
+| …and the provider has no answer (it forgets old jobs; it is down; TD-13 has none configured) | — | **The staged object is the fact.** The recorder uploads it in one atomic PUT after finalising, so an object that exists is a complete recording: marked `completed`, import queued |
+| The import job | TD-7's four retries ran out in a minute against a defect (R166 §4 was one); a deployed FIX healed nothing until an operator ran `ops:requeue-recordings` | Every `completed` recording with no `educational_content_id` is re-queued every run, indefinitely. The singleton key collapses a re-queue onto a job already waiting |
+
+A recording the provider **positively** no longer knows, twenty-four hours on, with nothing
+staged, is recorded `failed` — otherwise «جاري التسجيل» would show for ever and the class could
+never be recorded again. An unreachable provider concludes nothing.
+
+It deletes nothing, and nothing else deletes a recording's staged file either: `upload.gc`'s scope
+catalogue is fixed and does not name the recording staging bucket, and the import sweeps staging
+only after the library row and its relation are committed.
+
+**What it cannot repair is prevented.** The recorder holds a class's file locally until the class
+ends; restarting it mid-class loses the capture. A deployment therefore asks first:
+`npm run ops:active-recordings` prints the open recordings and exits `3` while there are any
+([deployment](../operations/deployment.md#the-pipeline)). A recorder *crash* mid-class is the
+declared residual risk; segmented output uploaded during the class would close it and is not built.
 
 ### `session.materialize` — eager, and the reason is correctness
 

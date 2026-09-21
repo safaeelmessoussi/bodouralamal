@@ -62,6 +62,8 @@ export interface LibraryFilters extends PageParams {
   levelId?: string;
   academicYearId?: string;
   subjectId?: string;
+  /** R167 §5 — only (or never) the items addressed to a whole Category. */
+  wholeCategory?: boolean;
   sortBy?: string | undefined;
   sortDir?: string | undefined;
 }
@@ -140,6 +142,8 @@ export interface LibraryItem {
   /** R99.12's marker — whether this file IS a class recording. */
   origin: string;
   levelId: string;
+  /** R167 §5 — addressed to every Level of `categoryId`, not to `levelId` alone. */
+  wholeCategory: boolean;
   subjectId: string;
   academicYearId: string;
   branchId: string | null;
@@ -295,11 +299,20 @@ function tierPredicate(
   if (privateLevels.length === 0) {
     return Prisma.sql`(c."visibility" = 'public' AND c."consent_forced_private" = false)`;
   }
+  const mine = Prisma.join(privateLevels.map((id) => Prisma.sql`${id}::uuid`));
+  // SRS Revision 167 §5 — an item addressed to EVERY Level of its Category is
+  // hers when any of her Levels belongs to that Category. The Category is read
+  // through the item's own Level, here, at the moment of the read.
   return Prisma.sql`(
     (c."visibility" = 'public' AND c."consent_forced_private" = false)
-    OR (c."visibility" = 'private' AND c."level_id" IN (${Prisma.join(
-      privateLevels.map((id) => Prisma.sql`${id}::uuid`),
-    )}))
+    OR (c."visibility" = 'private' AND (
+      c."level_id" IN (${mine})
+      OR (c."whole_category" = true AND EXISTS (
+        SELECT 1 FROM "level" home
+        JOIN "level" own ON own."category_id" = home."category_id"
+        WHERE home."id" = c."level_id" AND own."id" IN (${mine})
+      ))
+    ))
   )`;
 }
 
@@ -334,8 +347,25 @@ export async function listLibrary(
     Prisma.sql`c."deleted_at" IS NULL`,
     tierPredicate(actor, privateLevels),
   ];
-  if (filters.levelId) conditions.push(Prisma.sql`c."level_id" = ${filters.levelId}::uuid`);
+  if (filters.levelId) {
+    // A Level's shelf holds what is filed under it AND what is addressed to
+    // every Level of its Category (R167 §5) — otherwise filtering by her own
+    // Level would hide exactly the recordings that were made for everybody.
+    conditions.push(
+      Prisma.sql`(
+        c."level_id" = ${filters.levelId}::uuid
+        OR (c."whole_category" = true AND EXISTS (
+          SELECT 1 FROM "level" home
+          JOIN "level" asked ON asked."category_id" = home."category_id"
+          WHERE home."id" = c."level_id" AND asked."id" = ${filters.levelId}::uuid
+        ))
+      )`,
+    );
+  }
   if (filters.subjectId) conditions.push(Prisma.sql`c."subject_id" = ${filters.subjectId}::uuid`);
+  if (filters.wholeCategory !== undefined) {
+    conditions.push(Prisma.sql`c."whole_category" = ${filters.wholeCategory}`);
+  }
   if (filters.academicYearId) {
     conditions.push(Prisma.sql`c."academic_year_id" = ${filters.academicYearId}::uuid`);
   }
@@ -372,6 +402,7 @@ export async function listLibrary(
              c."visibility"::text        AS "visibility",
              c."origin"::text            AS "origin",
              c."level_id"                AS "levelId",
+             c."whole_category"          AS "wholeCategory",
              c."subject_id"              AS "subjectId",
              c."academic_year_id"        AS "academicYearId",
              c."branch_id"               AS "branchId",

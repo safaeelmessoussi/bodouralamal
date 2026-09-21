@@ -42,6 +42,8 @@ export type Route =
    *  published grade once there is one (Revision 153 merged «نقاطي» into
    *  this route rather than keeping a second one). */
   | 'dashboard-student-assessments'
+  /** R167 §3 — شهاداتي: her confirmed Level certificates. */
+  | 'dashboard-student-certificates'
   /**
    * **R98 — the online classroom**, `/classroom/{sessionId}`.
    *
@@ -122,6 +124,7 @@ export function resolveRoute(pathname: string): Route {
   // (Revision 153) her published grade on either mode — «نقاطي»'s old,
   // separate `/dashboard/student/grades` route no longer exists.
   if (path === '/dashboard/student/assessments') return 'dashboard-student-assessments';
+  if (path === '/dashboard/student/certificates') return 'dashboard-student-certificates';
   if (path === '/dashboard/student') return 'dashboard-student';
   // R65 — the personal section, and the child-registration page under it.
   // Registering is an act of a PERSON, so neither is under a role's area: R64

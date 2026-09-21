@@ -16,6 +16,8 @@
   /* Brass, the single accent. Dark enough to carry text at 4.5:1 on both the
      surface and the background — it is used for eyebrows and step numbers. */
   --brand-gold: #8f6720;
+  /* The warm paper a printed document sits on (R167 §3 — شهادة إتمام مستوى). */
+  --paper-ivory: #fffdf7;
 
   /* ── The association's two brand colours ─────────────────────────────────
      The OFFICIAL brand values, supplied by the Document Owner. The dual

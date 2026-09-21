@@ -112,6 +112,9 @@ class FakeProvider implements OnlineClassProvider {
   verifyCallback(): Promise<null> {
     return Promise.resolve(null);
   }
+  reportRecording(): Promise<null> {
+    return Promise.resolve(null);
+  }
 }
 
 /* ── Fixture ─────────────────────────────────────────────────────────────── */

@@ -56,8 +56,10 @@ import {
   SurahField,
   SurahsField,
   subjectWorksBySurah,
+  surahNamesOf,
   surahChoices,
 } from '../../components/scheduling/surahs.js';
+import { composeTitlePreview } from '../../components/scheduling/title-preview.js';
 import {
   initialMediaMode,
   type DeliveryMode,
@@ -1711,6 +1713,36 @@ export function SchedulingDialog({
     if (bounded.length !== surahIds.length) setSurahIds(bounded);
   }, [scope.ready, asksSurahs, offeredSurahKey, surahIds, type]);
 
+  /**
+   * **«العنوان» — shown, not asked** (SRS Revision 167 §1). Revision 166 removed
+   * the title field for a class and an exam and said nothing in its place, so a
+   * form with no title sent people to «الوصف» to type one. The title the
+   * platform will compose is now shown where the field was, live, with a line
+   * saying what «الوصف» is for. A sitting scheduled from an authored paper
+   * keeps the PAPER's title, so that is what is shown for it.
+   */
+  const leadId =
+    type === 'class'
+      ? (staffing.find((p) => p.position === 'teacher')?.user_id ?? '')
+      : supervisorId;
+  const titlePreview =
+    type === 'exam' && examSource.sourceId !== ''
+      ? examSource.sourceTitle
+      : composeTitlePreview({
+          typeName: catalogue.find((r) => r.id === schedulingTypeId)?.name ?? null,
+          subjectName:
+            scope.options.subjectId.find((o) => o.value === surahSubjectId)?.label ?? null,
+          surahNames: asksSurahs ? surahNamesOf(scope, surahIds) : [],
+          // A مؤطِّرة scheduling her own class is its teacher; she is in the
+          // narrow list she may name, which is how her own name is found.
+          leadName:
+            teachers.find((x) => x.id === (canAssignStaff ? leadId : (me?.id ?? leadId)))
+              ?.name_arabic ?? null,
+          date:
+            type === 'class' && recurrence.type !== 'none' ? null : recurrence.startDate || null,
+          time: allDay ? null : startTime || null,
+        });
+
   const targetId =
     mode === 'entire_level'
       ? scope.value.levelId
@@ -2306,6 +2338,7 @@ export function SchedulingDialog({
         // and does not name it: two classes in one Subject for one group were
         // indistinguishable at a glance.
         showTitle={spec.hasTitle}
+        {...(spec.hasTitle ? {} : { titlePreview })}
         description={description}
         onDescription={setDescription}
         showDescription={spec.hasDescription}

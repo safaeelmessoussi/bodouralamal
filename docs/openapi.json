@@ -1891,6 +1891,27 @@
         }
       }
     },
+    "/clock": {
+      "get": {
+        "summary": "Morocco’s official time, as this platform knows it",
+        "description": "SRS Revision 167 §2. **Public, no caller, no data about anybody.** Answers `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }`; the offset holds for instants between the two bounds, and an instant EARLIER than `in_force_since` is formatted from the client’s own zone data — old rules are the ones an outdated device does know. The platform follows Morocco’s official time from the HOST’s zone database (`lib/morocco-clock.ts`) rather than from the copy frozen into an image or into a phone: a browser formats every instant it shows with `utc_offset_minutes`, and asks again at `next_change_at`. `source` is `host-zoneinfo` ordinarily and `icu-fallback` when the zone file could not be read — said, so a stale answer is visible rather than merely wrong. Dates and class times are unaffected: they are zone-free by design (TD-11). Cacheable for five minutes.",
+        "responses": {
+          "200": {
+            "description": "The current offset and the next known change."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/calendar/bootstrap": {
       "get": {
         "summary": "Calendar bootstrap",
@@ -7879,6 +7900,287 @@
         }
       }
     },
+    "/admin/students/{id}/level-completions": {
+      "get": {
+        "summary": "A beneficiary’s Levels: what BR-11 reads, and what the administration recorded",
+        "description": "SRS Revision 167 §3. One row per Level she is enrolled at **within the caller’s branch reach** (§7, R24): `requirements` is BR-11 read NOW by the one rule `policies/level-completion` owns (`complete` is `null` where the Level has no «مقرر الحفظ»), and `mark` is the stored attestation — `completed_on`, `completed_by_name`, `requirements_met` (what BR-11 read at the moment it was recorded) and the certificate’s number and date — or `null`. **BR-11 stays derived and is never stored**; the mark is a different fact. Admin or Super Admin.",
+        "responses": {
+          "200": {
+            "description": "The Levels, in their own order."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/students/{id}/level-completions/{levelId}": {
+      "put": {
+        "summary": "Record that she completed the Level",
+        "description": "SRS Revision 167 §3. **Allowed while BR-11 is unmet — never unknowingly.** Without `acknowledge_unmet: true` an unmet Level answers `409 STATE_CONFLICT` / `REQUIREMENTS_NOT_MET` carrying the same counts the list does, so the screen can say exactly what is missing («الحفظ» and «اختبارات التفسير») and ask her to confirm; with it, the mark is written with `requirements_met: false`, permanently. Idempotent: a second call keeps the first date. Audited. Out of the caller’s reach is `404`, never `403` (§20 rule 17).",
+        "responses": {
+          "204": {
+            "description": "Recorded (or already was)."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown key; the body is strict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — she has no live enrolment at this Level within the caller’s reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT / REQUIREMENTS_NOT_MET — BR-11 is not met and the caller has not acknowledged it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a completion recorded in error",
+        "description": "SRS Revision 167 §3. A hard delete, audited — there is no Trash entry because nothing of hers is lost: BR-11 and every log behind it are untouched. **Refused while a certificate is showing** (`409 CERTIFICATE_ISSUED`): what she can see and print is withdrawn first, deliberately.",
+        "responses": {
+          "204": {
+            "description": "Removed (or there was none)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — out of the caller’s reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT / CERTIFICATE_ISSUED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/students/{id}/level-completions/{levelId}/certificate": {
+      "put": {
+        "summary": "Confirm the certificate — it appears in her dashboard",
+        "description": "SRS Revision 167 §3. A SECOND confirmation, separate from the mark: recording a completion is a record, showing a certificate is a publication. The number is drawn from a sequence at first issue and **kept for ever** — re-issuing after a withdrawal reuses it, so a copy printed earlier names the same certificate. `409 LEVEL_NOT_COMPLETED` where there is no mark. Idempotent. Audited.",
+        "responses": {
+          "204": {
+            "description": "Issued (or already was)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — out of the caller’s reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT / LEVEL_NOT_COMPLETED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Withdraw the certificate",
+        "description": "SRS Revision 167 §3. Stops showing it in her dashboard; the mark and the number stay. Idempotent. Audited.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn (or none was showing)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — out of the caller’s reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/teaching-groups": {
       "get": {
         "summary": "List teaching groups across Levels",
@@ -11692,6 +11994,47 @@
         }
       }
     },
+    "/students/me/certificates": {
+      "get": {
+        "summary": "The acting student’s Level certificates",
+        "description": "SRS Revision 167 §3, §5.3. **Only certificates the administration has CONFIRMED** — a recorded completion whose certificate was not issued, or was withdrawn, is absent. `me` resolves exactly as `GET /students/me` does (§4.3): the مستفيدة herself, or the child an approved parent is acting for; the route carries no id, so nobody else’s can be named. Each row is what the printed certificate states: `certificate_number`, `student_name` (her recorded name — this is her own document, never a public surface), `level_name`, `category_name`, `branch_name`, and `completed_on`/`issued_on` as Morocco calendar dates (TD-11). The page renders and prints it; no file is stored.",
+        "responses": {
+          "200": {
+            "description": "Her confirmed certificates, oldest first."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — no student context (TD-2, §4.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/library/{id}/sessions": {
       "get": {
         "summary": "Which class sessions reference this content",
@@ -11889,7 +12232,7 @@
     "/library": {
       "get": {
         "summary": "The public Educational Library",
-        "description": "TD-3.13 (Revision 43), §5.2, §4.9. **PUBLIC and anonymous.** An invalid credential is *ignored* rather than refused, so this endpoint **never answers `401`** — a public surface that can `401` is not public. `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=` `?page_size=`; **the filter set is identical for anonymous and authenticated callers**, and a signed-in-only filter would make navigation differ by audience, which §5.2 forbids. **Signing in REORDERS, it does not unlock:** the same set comes back in the §5.2 order — **own branch → Global → other branches**. `branch_id IS NULL` is *Global*, not *unknown* (§7), which is why it sorts second and not last: a platform-wide resource is more relevant to a reader than another branch's local one. A caller with no branch context has no first bucket and the ordering degrades without a special case; own branch resolves through `Enrollment → AdministrativeGroup.branch_id` for a member and through role scopes for staff (§7 names this ordering as one of the three things that resolve through that column). **§4.9's three tiers still apply, and that is not a contradiction of \"nothing hidden\":** TD-3.13's sentence is about *personalisation*, §5.2's *\"identical filters never means identical results\"* is about the tiers, which are a property of who the caller is rather than a personalisation. `public` is visible to everyone including anonymous; `private` to logged-in students enrolled in the target Level **and parents of such students** — resolved through approved `FamilyLink`s without requiring an `X-Active-Child-ID` context, since the library is one shared reading surface and a parent must be able to compare two children's materials; `hidden` is **excluded from Student/Parent directories** and visible to Admins and Teachers only. A **Pending** account sees the public tier exactly like an anonymous visitor (TD-1). **BR-2: `consent_forced_private` items are excluded from the public tier explicitly**, not merely trusted to have had their visibility moved by the re-evaluation engine — a hard constraint that holds only while a background job is current is a race, not a constraint. **Listing is not the download gate:** a restricted item appears with its `visibility` so a client can badge it, and `GET /content/{id}/download-url` (TD-3.5) performs the §4.9 check before any presigned URL is minted. **The DTO deliberately omits `storage_bucket`, `storage_key`, `original_filename` and `consent_forced_private`** — the first three are the object's location, and publishing them on a public endpoint would hand every anonymous visitor the input the permission check exists to protect; the fourth is a fact about a child. **Paginated (TD-10).** **Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`, `level_name`, `subject_name`, `academic_year_label`, `branch_name` — because that view groups Category → Level → Academic Year → Branch and **no public endpoint publishes Subject or Academic Year names**: `/admin/subjects` and `/admin/academic-years` are Admin-only by design (R30), and `/calendar/bootstrap` carries Categories, Levels and Branches but neither of those. Carrying them makes the response self-sufficient, which TD-3.4 already requires of the calendar; the alternatives were widening that cached payload for an unrelated screen, or a new public reference surface exposing the whole curriculum to anonymous callers. **They are labels, never identifiers** — the ids remain what a client filters and links by. `branch_name` is `null` exactly where `branch_id` is, and that means **Global**, not unknown. **`suggested_recording_name` (R75.6, server-owned since R99)** sits beside `data`/`meta`: what to call a recording made from this screen, named after the Subject in view and the association's own date and numbered by the same shared rule. `null` when no Subject is in view — a name of nothing but a date identifies nothing. The rule lives on the server because R99 added a producer of recordings that is not a browser at all, and a rule one producer cannot reach is a rule implemented twice.",
+        "description": "TD-3.13 (Revision 43), §5.2, §4.9. **PUBLIC and anonymous.** An invalid credential is *ignored* rather than refused, so this endpoint **never answers `401`** — a public surface that can `401` is not public. `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?whole_category=` `?page=` `?page_size=`; **R167 §5 — an item may be addressed to EVERY Level of its Category** (`whole_category: true` on the row; `level_id` is then only where it is filed): a private one is readable by a member of ANY Level of that Category, `?level_id=` returns the items filed under that Level AND the whole-category items of its Category, and `?whole_category=true|false` isolates either set; **the filter set is identical for anonymous and authenticated callers**, and a signed-in-only filter would make navigation differ by audience, which §5.2 forbids. **Signing in REORDERS, it does not unlock:** the same set comes back in the §5.2 order — **own branch → Global → other branches**. `branch_id IS NULL` is *Global*, not *unknown* (§7), which is why it sorts second and not last: a platform-wide resource is more relevant to a reader than another branch's local one. A caller with no branch context has no first bucket and the ordering degrades without a special case; own branch resolves through `Enrollment → AdministrativeGroup.branch_id` for a member and through role scopes for staff (§7 names this ordering as one of the three things that resolve through that column). **§4.9's three tiers still apply, and that is not a contradiction of \"nothing hidden\":** TD-3.13's sentence is about *personalisation*, §5.2's *\"identical filters never means identical results\"* is about the tiers, which are a property of who the caller is rather than a personalisation. `public` is visible to everyone including anonymous; `private` to logged-in students enrolled in the target Level **and parents of such students** — resolved through approved `FamilyLink`s without requiring an `X-Active-Child-ID` context, since the library is one shared reading surface and a parent must be able to compare two children's materials; `hidden` is **excluded from Student/Parent directories** and visible to Admins and Teachers only. A **Pending** account sees the public tier exactly like an anonymous visitor (TD-1). **BR-2: `consent_forced_private` items are excluded from the public tier explicitly**, not merely trusted to have had their visibility moved by the re-evaluation engine — a hard constraint that holds only while a background job is current is a race, not a constraint. **Listing is not the download gate:** a restricted item appears with its `visibility` so a client can badge it, and `GET /content/{id}/download-url` (TD-3.5) performs the §4.9 check before any presigned URL is minted. **The DTO deliberately omits `storage_bucket`, `storage_key`, `original_filename` and `consent_forced_private`** — the first three are the object's location, and publishing them on a public endpoint would hand every anonymous visitor the input the permission check exists to protect; the fourth is a fact about a child. **Paginated (TD-10).** **Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`, `level_name`, `subject_name`, `academic_year_label`, `branch_name` — because that view groups Category → Level → Academic Year → Branch and **no public endpoint publishes Subject or Academic Year names**: `/admin/subjects` and `/admin/academic-years` are Admin-only by design (R30), and `/calendar/bootstrap` carries Categories, Levels and Branches but neither of those. Carrying them makes the response self-sufficient, which TD-3.4 already requires of the calendar; the alternatives were widening that cached payload for an unrelated screen, or a new public reference surface exposing the whole curriculum to anonymous callers. **They are labels, never identifiers** — the ids remain what a client filters and links by. `branch_name` is `null` exactly where `branch_id` is, and that means **Global**, not unknown. **`suggested_recording_name` (R75.6, server-owned since R99)** sits beside `data`/`meta`: what to call a recording made from this screen, named after the Subject in view and the association's own date and numbered by the same shared rule. `null` when no Subject is in view — a name of nothing but a date identifies nothing. The rule lives on the server because R99 added a producer of recordings that is not a browser at all, and a rule one producer cannot reach is a rule implemented twice.",
         "responses": {
           "200": {
             "description": "A page of library items in the TD-10 envelope."
@@ -12103,7 +12446,7 @@
     "/content/{id}": {
       "patch": {
         "summary": "Edit what a content item IS, never the file it holds",
-        "description": "TD-3.5, §4.9, B-01/B-02, **UAT 2026-09-02**. Corrects `title`, `level_id`, `subject_id`, `visibility` and `origin` — R99.12's «هذا تسجيل حصة» marker, the authoritative field the upload form already sets — on an existing item. `origin` is a plain column with no storage meaning: changing it moves no object and re-uploads nothing. **The file is never re-uploaded**: TD-9's replacement path exists for new bytes and is the wrong instrument for a wrong word. `.strict()`, so a filename, size or storage key is REFUSED rather than ignored — this route cannot replace an object and a request that appeared to have done so must not receive a 204. **A visibility change may MOVE the object**, because B-02 makes the bucket follow the database: `private` and `hidden` share the private bucket, so those two swap a column and nothing else, while any change crossing `public` copies → verifies → commits → deletes the source, in that order, so a failure leaves a readable object rather than none. Publishing a recording that consent forced private is refused (`CONSENT_FORCED_PRIVATE`) — a dropdown does not overrule B-01. Authorization is the upload scope: §4.9's branch rule, and out of scope answers 404 (§20 rule 17). **No notification** — R116(9) settled that content storage transitions are not publication events, and a metadata correction is less of one than an upload.",
+        "description": "TD-3.5, §4.9, B-01/B-02, **UAT 2026-09-02**. Corrects `title`, `level_id`, `subject_id`, `visibility`, `origin` — R99.12's «هذا تسجيل حصة» marker, the authoritative field the upload form already sets — and **`whole_category` (R167 §5 — «كل مستويات الفئة»: the item is addressed to every Level of its Level's Category; a scope statement only, moving no object and changing no tier)** on an existing item. `origin` is a plain column with no storage meaning: changing it moves no object and re-uploads nothing. **The file is never re-uploaded**: TD-9's replacement path exists for new bytes and is the wrong instrument for a wrong word. `.strict()`, so a filename, size or storage key is REFUSED rather than ignored — this route cannot replace an object and a request that appeared to have done so must not receive a 204. **A visibility change may MOVE the object**, because B-02 makes the bucket follow the database: `private` and `hidden` share the private bucket, so those two swap a column and nothing else, while any change crossing `public` copies → verifies → commits → deletes the source, in that order, so a failure leaves a readable object rather than none. Publishing a recording that consent forced private is refused (`CONSENT_FORCED_PRIVATE`) — a dropdown does not overrule B-01. Authorization is the upload scope: §4.9's branch rule, and out of scope answers 404 (§20 rule 17). **No notification** — R116(9) settled that content storage transitions are not publication events, and a metadata correction is less of one than an upload.",
         "responses": {
           "204": {
             "description": "The item was updated."

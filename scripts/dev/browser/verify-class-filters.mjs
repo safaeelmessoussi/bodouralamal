@@ -32,6 +32,10 @@ import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
 const S = JSON.parse(process.env.SCENARIO);
+// The catalogue is editable reference data (R110): the class type is called
+// whatever the Owner calls it today, and the scenario says what that is.
+const CLASS_TYPE = S.classTypeName;
+if (!CLASS_TYPE) throw new Error('the scenario names no class scheduling type');
 const TITLE = process.env.CLASS_TITLE;
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9267');
 const { check, finish } = results();
@@ -98,7 +102,7 @@ const opened = await page(`
   add.click();
   await wait(1500);
   if (!dlg()) return { noDialog: true };
-  if (!setSelect('نوع العنصر', (o) => o.textContent.trim() === 'حصة دراسية')) return { noClassType: true };
+  if (!setSelect('نوع العنصر', (o) => o.textContent.trim() === ${JSON.stringify(CLASS_TYPE)})) return { noClassType: true };
   await wait(1800);
   const labels = [...dlg().querySelectorAll('.field__label')].map((l) => l.textContent.trim());
   const summaries = ['فروع', 'فئات', 'مستويات', 'مجموعات', 'حلقات'].map((name) =>
@@ -197,8 +201,12 @@ const surah = await page(`
   const refusedInWords = dlg() !== null && (dlg().textContent ?? '').includes('اختاري السورة');
   const offered = await multi('السور', 'الفاتحة');
   await wait(500);
-  const titleAsked = fieldOf('العنوان') !== undefined;
-  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, titleAsked };
+  // R167 §1 — nothing is TYPED, and the composed title is SHOWN while composing.
+  const titleAsked = fieldOf('العنوان')?.querySelector('input, textarea') != null;
+  const shown = dlg().querySelector('[data-generated-title]');
+  const titleShown = shown ? (shown.querySelector('output')?.textContent ?? '') : null;
+  const titleHint = shown ? (shown.querySelector('.field__hint')?.textContent ?? '') : null;
+  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, titleAsked, titleShown, titleHint };
 `);
 check(
   '5e · a by-Surah Subject asks «السور» — the Level’s «مقرر الحفظ» and nothing else — and refuses to save without one',
@@ -213,6 +221,14 @@ check(
   '5f · the form asks for no «العنوان» — a class is called what it is, by the server (R166 §3)',
   surah.titleAsked === false,
   JSON.stringify({ titleAsked: surah.titleAsked }),
+);
+check(
+  '5g · …and SHOWS it while she composes: Subject and Surah already in it, and a sentence pointing to «الوصف» (R167 §1)',
+  typeof surah.titleShown === 'string' &&
+    surah.titleShown.includes('[dev-scenario] تفسير القرآن') &&
+    surah.titleShown.includes('الفاتحة') &&
+    (surah.titleHint ?? '').includes('الوصف'),
+  JSON.stringify({ titleShown: surah.titleShown, titleHint: surah.titleHint }),
 );
 
 const saved = await page(`
@@ -273,7 +289,7 @@ check(
   '5g · and it is CALLED what it is: type — Subject — Surah — when (a one-off carries its date)',
   stored !== null &&
     typeof stored.title === 'string' &&
-    stored.title.startsWith('حصة دراسية — [dev-scenario] تفسير القرآن — الفاتحة') &&
+    stored.title.startsWith(CLASS_TYPE + ' — [dev-scenario] تفسير القرآن — الفاتحة') &&
     /\d{4}-\d{2}-\d{2} 07:00$/.test(stored.title),
   JSON.stringify({ title: stored?.title }),
 );
@@ -526,7 +542,7 @@ if (successor) {
           audienceLegend: has('لمن هذه الحصة'),
         },
         titleIsAsked: titleInput !== null,
-        titleIsShown: (dlg()?.textContent ?? '').includes('حصة دراسية — [dev-scenario] تفسير القرآن') || seen.length > 0,
+        titleIsShown: (dlg()?.textContent ?? '').includes(${JSON.stringify(CLASS_TYPE + ' — [dev-scenario] تفسير القرآن')}) || seen.length > 0,
         before,
         ticked: level.ticked,
         closed: dlg() === null,

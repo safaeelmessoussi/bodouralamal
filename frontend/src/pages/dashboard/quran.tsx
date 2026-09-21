@@ -15,6 +15,7 @@ import { useActiveChild } from '../../contexts/active-child.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { formatInstant } from '../../lib/morocco-time.js';
 
 /**
  * `/dashboard/student/quran` — **حفظي** (§14.1, §4.5; M4b, redesigned §C15).
@@ -202,7 +203,7 @@ function logColumns(surahs: SurahCoverage[], levels: LevelCoverage[]): Column<Qu
       key: 'date',
       header: t('student.quran.date'),
       // TD-11 — the calendar date, in the reader's own locale digits.
-      cell: (l) => new Date(l.logged_at).toLocaleDateString('ar-MA'),
+      cell: (l) => formatInstant(l.logged_at, 'date'),
     },
     {
       key: 'category',

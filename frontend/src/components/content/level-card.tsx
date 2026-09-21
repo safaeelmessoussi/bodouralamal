@@ -18,14 +18,32 @@ import { Icon } from '../ui/icon.js';
  * reads as machine output.
  */
 export function LevelCard({ level }: { level: LevelSummary }): ReactNode {
+  // R167 §5 — the shelf of what was made for EVERY Level of the Category. It is
+  // the Category's, so it is addressed by the Category and named by the page.
+  const categoryWide = level.kind === 'whole_category';
+  const href = categoryWide
+    ? `/resources?category=${encodeURIComponent(level.level_id)}`
+    : `/resources?level=${encodeURIComponent(level.level_id)}`;
   return (
     <li>
-      <a className="level-card" href={`/resources?level=${encodeURIComponent(level.level_id)}`}>
+      <a
+        className={categoryWide ? 'level-card level-card--whole-category' : 'level-card'}
+        href={href}
+        {...(categoryWide ? { 'data-whole-category': level.level_id } : {})}
+      >
         <span className="level-card__icon" aria-hidden="true">
-          <Icon name="folder" size={22} />
+          <Icon name={categoryWide ? 'book' : 'folder'} size={22} />
         </span>
 
-        <span className="level-card__title">{level.level_name}</span>
+        <span className="level-card__title">
+          {categoryWide ? t('content.wholeCategory.title') : level.level_name}
+        </span>
+
+        {categoryWide ? (
+          <span className="level-card__description">
+            {t('content.wholeCategory.lede').replace('{category}', level.category_name)}
+          </span>
+        ) : null}
 
         {level.description ? (
           <span className="level-card__description">{level.description}</span>

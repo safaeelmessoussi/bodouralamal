@@ -10757,3 +10757,72 @@ From outside: all 19 class occurrences of the month carry a composed `item_title
 and the served bundle contains the completion and single-session strings. Those three recordings'
 titles read one hour EARLIER than the moment they were really stopped — they were written before the
 UTC fix, the consequence this revision accepted; every recording from now on is right.
+
+## 2026-09-21 — SRS Revision 167: the platform follows Morocco's clock, a recording is never left behind, whole-Category content, «إتمام المستوى» and its certificate, one enrolments dialog, install as an app
+
+Owner-reported batch of six; five built, the sixth delivered as a proposal
+([`SRS-PROPOSAL-R168.md`](SRS-PROPOSAL-R168.md)) because it reverses four stated rules. One migration
+(`20260922090000_r167_whole_category_content_and_level_completion_mark`).
+
+**The clock (§2).** Morocco moved to UTC+0 on 20 September. The host knew (tzdata 2026c, unattended
+upgrades); the API container's Node did not (ICU 2025b, compiled into the binary) and neither did the
+`db` image. Pinning tzdata in an image — what TD-11 prescribed — is exactly what goes stale. The host's
+`/usr/share/zoneinfo` is now mounted read-only into `api` and `db`; `lib/morocco-clock.ts` parses the
+TZif itself and re-reads it on change; `wallClockInstant`, the recording title's time and «today» for
+file names go through it; `check-no-local-clock.sh` (32nd guard, proven against a planted violation)
+forbids the process's local clock in `backend/src`; `GET /clock` publishes the offset and the browser's
+`formatInstant` uses it. **Measured on Localhost after the rebuild:** `/clock` →
+`utc_offset_minutes: 0`, `in_force_since: 2026-09-20T01:00Z`, `source: host-zoneinfo`; the same
+container's own `Intl` still says `GMT+1`; PostgreSQL's `Africa/Casablanca` now reads `+00`. The zone
+file also lists a transition that changes nothing (zic's 2038 marker) — `next_change_at` reported it
+until `offsetChangesAround` was made to name only a change of OFFSET. Three unit tests had been
+building instants with `new Date(y, m, d…)` and asserting the STALE rule; they now build them through
+the same authority that reads them, so they hold under any tzdata.
+
+**Recordings (§5).** `upload.gc` never addressed recording staging (confirmed in its fixed scope
+catalogue), so the losses were the two hand-offs: a completion callback that never arrived, and an
+import that spent its four retries. `session-recording-reconcile` (every fifteen minutes) asks the
+provider (`reportRecording`, one translation shared with the webhook path), believes a staged object
+where the provider has no answer, re-queues every un-imported recording indefinitely, and closes a
+recording the provider positively no longer knows after a day. `ops:active-recordings` (exit 3) is what
+a deployment asks before it restarts the recorder. `whole_category` files a class given to EVERY live
+Level of one Category for all of them — one boolean read through the Level's Category at read time, in
+the one tier predicate and the Level filter; «كل مستويات الفئة» shelf and badge on المحتوى التعليمي;
+a checkbox in the staff edit dialog. **Not built, declared:** a recorder crash mid-class still loses
+that capture.
+
+**«إتمام المستوى» (§3).** `LevelCompletionMark` beside the derived BR-11, never instead of it; marking an
+unmet Level is refused `409 REQUIREMENTS_NOT_MET` until `acknowledge_unmet`, and what is missing is on
+screen, in words, before anything is pressed. The certificate is a second confirmation with a
+sequence number kept for ever. «إدارة التسجيلات» replaces «تسجيل»/«تعديل» with one dialog (the existing
+edit/end/enrol dialogs open over it; no enrolment rule moved). «شهاداتي» draws the certificate in
+HTML/CSS (container-query units, A4 landscape) and «تحميل PDF» is the browser's print-to-PDF of that one
+certificate through a portal — checked with a real headless print: **one page, 841.92 × 594.96 pt,
+selectable Arabic** (at exactly 297/210 a sub-pixel rounding produced a second blank page; the printed
+box is 297/209).
+
+**Install (§4).** Manifest, three icons rendered from the logo, «تثبيت التطبيق» in both menus doing what
+the device can do, and a service worker that caches nothing (unit-tested to contain no `respondWith`
+and no cache write). Headless Chrome itself announced `beforeinstallprompt` — the platform is
+installable by Chrome's own judgement.
+
+**Title preview (§1).** «العنوان (يُنشأ تلقائيًا)», read-only and live, in the place the field used to be.
+
+**Found on the way.** (1) My install button parked a closed `<dialog>` at the top of every page, and
+`verify-schedule-edit`'s `'dialog[open], .dialog'` selector found it first — the help dialog now mounts
+only while open. (2) The Owner renamed the «حصة دراسية» type to «حصة» on Localhost this morning and two
+harnesses went blind; both scenarios now publish `classTypeName` and the harnesses read it.
+`verify-scheduling-types`, `verify-visibility-ui` still assert the SEEDED names and are not repaired.
+(3) Reading «إتمام المستوى» writes the R10 coverage-cache row, which `seed-dev-scenario --clean` did
+not unwind — the wrapper's warning (added in R166) said so on the first run. (4)
+`pending-denial` refused the public `/clock` until it was declared public there, which is that test
+doing its job.
+
+**Verification.** Backend typecheck, lint, unit **357/357**; frontend typecheck, lint, **1,427/1,427**;
+31 guards + doc links; full disposable integration **2,730 passed / 1 failed** (`/clock` in
+pending-denial) → fixed and that file re-run **227/227**; seed drill exit 0 (read from the log, not from
+the wrapper); harnesses `verify-enrolments-dialog` **24/24**, `verify-class-filters` **21/21**,
+`verify-teacher-scheduling` **14/14**, `verify-schedule-edit` **13/13**, `verify-exam-scheduling`
+**93/93**. pg-boss computes its `tz` crons from its own bundled zone data, so after a decree the nightly
+jobs may run an hour off until the image is rebuilt — housekeeping with no wall-clock meaning; recorded,
+not changed.

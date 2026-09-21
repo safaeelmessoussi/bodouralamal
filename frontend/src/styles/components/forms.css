@@ -41,6 +41,16 @@
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
+/* A value the platform computes and SHOWS, never a control she could edit: the
+   generated title (SRS Revision 167 §1). Dashed and on the page's own ground so
+   it does not read as one more input waiting to be filled. */
+.field__control--static {
+  display: block;
+  border-style: dashed;
+  background: var(--color-background);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
 .field__control--area {
   resize: vertical;
   /* Opening hours are multiline free text displayed verbatim (§7), so the

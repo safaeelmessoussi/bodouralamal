@@ -128,9 +128,34 @@ The specification calls this out as *a known agent trap*, and it is worth the sp
 
 A class at 17:00 is at 17:00 on the wall clock. Always.
 
-Rendering, recurrence expansion, and "today" boundaries are computed in `Africa/Casablanca`,
-with tzdata pinned in the Docker image so the transitions stay current. **Week starts
-Monday** everywhere.
+Rendering, recurrence expansion, and "today" boundaries are computed in `Africa/Casablanca`.
+**Week starts Monday** everywhere.
+
+### Which offset Morocco observes — read from the host, never from an image
+
+SRS Revision 167 §2. Morocco changes its clock by decree, and did on 20 September 2026 (to
+UTC+0). The host knew the same day — `tzdata` arrives through unattended upgrades — and the
+platform did not: **Node converts local time with the ICU zone data compiled into its binary**
+(`process.versions.tz`), and an image freezes that and its own `tzdata` on the day it was built.
+Pinning tzdata in the image, which this page used to prescribe, is exactly what went stale.
+
+| Piece | What it does |
+|---|---|
+| `docker-compose.yml` | Mounts the HOST's `/usr/share/zoneinfo` read-only into `api` and `db` — one file is the authority for the application and for PostgreSQL's `Africa/Casablanca` alike |
+| `backend/src/lib/morocco-clock.ts` | Parses that TZif itself (RFC 8536, the 64-bit block), answers `moroccoOffsetMinutes`, `moroccoParts`, `moroccoDateIso`, `moroccoTimeHHMM` and `moroccoWallClockToInstant`, and **re-reads the file when its mtime changes** (checked every five minutes) — a host update reaches a RUNNING platform with no rebuild, release or restart |
+| `scripts/ci/check-no-local-clock.sh` | Nothing in `backend/src` may read the process's local clock — `getHours`, `new Date(y, m, d…)`, `toLocale…String` — because those go through ICU. Proven to fail on a planted violation |
+| `GET /clock` | Public, cacheable five minutes: `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }` |
+| `frontend/src/lib/morocco-time.ts` | `formatInstant` uses the SERVER's offset for instants inside its window, so a phone with outdated zone data still shows Morocco's time; older instants use the device's own `Africa/Casablanca` rules, which old rules it does know |
+
+If the file cannot be read the backend falls back to ICU and **says so**: `source:
+"icu-fallback"` on `/clock`, wrong by at most the staleness of the image, never silently.
+`source: "host-zoneinfo"` is what a deployment verifies. `TZ` stays set in the containers only
+so that a line the guard missed fails by an hour rather than by a whole zone.
+
+pg-boss computes its `tz`-qualified crons through its own bundled zone data, so after a decree
+the nightly jobs may run an hour early or late until the image is rebuilt. They are
+housekeeping with no wall-clock meaning, and `session-recording-reconcile` runs every quarter
+hour in no zone at all.
 
 A named regression test asserts that wall-clock times survive a simulated Ramadan
 transition.

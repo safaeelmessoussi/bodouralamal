@@ -821,6 +821,11 @@ model User {
   legalDocumentsCreated      LegalDocument[]         @relation("LegalDocumentCreatedBy")
   legalDocumentsActivated    LegalDocument[]         @relation("LegalDocumentActivatedBy")
 
+  /// SRS Revision 167 §3 — «إتمام المستوى».
+  levelCompletionMarks         LevelCompletionMark[] @relation("LevelCompletionMarkStudent")
+  levelCompletionMarksRecorded LevelCompletionMark[] @relation("LevelCompletionMarkBy")
+  levelCertificatesIssued      LevelCompletionMark[] @relation("LevelCertificateIssuedBy")
+
   @@index([accountStatus])
   @@index([deletedAt])
   // TD-10 shadow-column indexes. These MUST be declared here even though the
@@ -1029,6 +1034,9 @@ model Branch {
   /// R92 — occurrences whose audience explicitly includes this branch.
   sessionAudiences     SessionAudienceBranch[]
 
+  /// SRS Revision 167 §3 — «إتمام المستوى».
+  levelCompletionMarks LevelCompletionMark[]
+
   @@index([displayOrder])
   @@map("branch")
 }
@@ -1167,6 +1175,9 @@ model Level {
   /// Owner-reported, 2026-09-17 — mirrors `courseScheduleScopes` above, one
   /// occurrence at a time instead of a whole schedule (R92 generalised).
   sessionAudiences     SessionAudienceLevel[]
+
+  /// SRS Revision 167 §3 — «إتمام المستوى».
+  completionMarks LevelCompletionMark[]
 
   @@index([categoryId, displayOrder])
   @@map("level")
@@ -1508,6 +1519,46 @@ model Enrollment {
   @@index([studentId, deletedAt])
   @@index([branchId, deletedAt])
   @@map("enrollment")
+}
+
+/// **«إتمام المستوى» — the administration's attestation, and its certificate**
+/// (SRS Revision 167 §3).
+///
+/// BR-11 stays DERIVED and is never stored (Revision 166 §1). This is a
+/// different fact: an Admin or Super Admin RECORDED that a مستفيدة completed a
+/// Level — knowingly, even where BR-11 is not yet met. `requirementsMet` keeps
+/// what BR-11 read at that moment.
+///
+/// One row per (student, Level): completion is about her and the Level, not
+/// about one semester's enrolment (R122). No soft delete — removing a mark made
+/// in error is a correction the audit log records, and a mark whose certificate
+/// is showing cannot be removed (the certificate is withdrawn first).
+model LevelCompletionMark {
+  id        String @id @default(uuid()) @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation("LevelCompletionMarkStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  levelId   String @map("level_id") @db.Uuid
+  level     Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  /// Where she was enrolled at this Level when it was marked — what an Admin's
+  /// scope is checked against, and what the certificate names.
+  branchId  String @map("branch_id") @db.Uuid
+  branch    Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  requirementsMet Boolean  @map("requirements_met")
+  completedAt     DateTime @default(now()) @map("completed_at") @db.Timestamptz(6)
+  completedById   String   @map("completed_by") @db.Uuid
+  completedBy     User     @relation("LevelCompletionMarkBy", fields: [completedById], references: [id], onDelete: Restrict)
+
+  /// From `level_certificate_number_seq` at FIRST issue; kept when a
+  /// certificate is withdrawn, so a printed copy stays traceable.
+  certificateNumber     Int?      @unique @map("certificate_number")
+  certificateIssuedAt   DateTime? @map("certificate_issued_at") @db.Timestamptz(6)
+  certificateIssuedById String?   @map("certificate_issued_by") @db.Uuid
+  certificateIssuedBy   User?     @relation("LevelCertificateIssuedBy", fields: [certificateIssuedById], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, levelId])
+  @@index([levelId])
+  @@map("level_completion_mark")
 }
 
 /// §4.4 — the unit of DELIVERY. Materializes `Session` rows.
@@ -3634,6 +3685,12 @@ model EducationalContent {
 
   levelId String @map("level_id") @db.Uuid
   level   Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  /// **Addressed to EVERY Level of `level`'s Category** (SRS Revision 167 §5).
+  /// The Category is read through `level` at the moment of the read and is
+  /// never copied here, so a Level added to it later is included and the two
+  /// can never disagree. `branchId` keeps its meaning: NULL is every branch.
+  wholeCategory Boolean @default(false) @map("whole_category")
 
   /// NULL = the Global / بدون فرع scope. Assignable only by Admins and Super
   /// Admins; Teachers are locked to their own branch scope (BR-20, §4.9).

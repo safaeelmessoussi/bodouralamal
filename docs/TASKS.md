@@ -5292,3 +5292,66 @@ required; nothing dropped or rewritten).
       exam with no «العنوان» and read what they are called; record an online
       class and find it under «التسجيلات»; and open «حفظي» for a مستفيدة whose
       Level teaches تفسير to read her completion.
+
+## SRS Revision 167 — Morocco's clock, recordings never left behind, whole-Category content, «إتمام المستوى» and its certificate, install as an app — 2026-09-21
+
+Owner-reported batch of six. One migration
+(`20260922090000_r167_whole_category_content_and_level_completion_mark` — one
+column, one table, one sequence; nothing dropped or rewritten).
+
+- [x] **§1 — «العنوان (يُنشأ تلقائيًا)» is shown in «إضافة عنصر»**, read-only and
+      live, where the field used to be, with a sentence pointing to «الوصف».
+      A preview by the same parts in the same order; the server stays the
+      authority on the stored title.
+- [x] **§2 — the platform follows the time Morocco actually observes.** The
+      host's `Africa/Casablanca` zone file is mounted read-only into `api` and
+      `db`; the backend parses it itself, re-reads it when it changes, and no
+      backend code may read the process's local clock
+      (`check-no-local-clock.sh`). `GET /clock` publishes the offset in force
+      and the browser formats instants with it. On Localhost: `/clock` answers
+      offset 0 from `host-zoneinfo` while the container's own ICU (2025b) still
+      says +01 — the defect, measured.
+- [x] **§3 — one «إدارة التسجيلات» dialog** replaces «تسجيل» and «تعديل»: every
+      placement, edit/end each, place in another Level.
+- [x] **§3 — «إتمام المستوى» is recorded, with BR-11 said in words first.** A
+      stored attestation (`LevelCompletionMark`) beside the derived rule, never
+      instead of it. Unmet is stated under the Level; marking anyway needs
+      `acknowledge_unmet` and is kept as `requirements_met: false` for ever.
+- [x] **§3 — the certificate is a second confirmation**, numbered from a
+      sequence at first issue; withdrawing hides it and keeps the number.
+- [x] **§3 — «شهاداتي»** in the beneficiary portal (child context): the
+      certificate at A4-landscape proportions, «تحميل PDF / طباعة» by the
+      browser's own print-to-PDF — one page, real Arabic text, nothing stored.
+- [x] **§4 — «تثبيت التطبيق»** in the top menu (desktop bar and phone sheet):
+      the browser's install sheet where announced, the Share-sheet steps on
+      iPhone/iPad, the browser-menu steps on other phones, nothing once
+      installed. Manifest, icons and a service worker that caches NOTHING.
+- [x] **§5 — a recording for a whole Category.** `whole_category` on the item,
+      read through its Level's Category at read time; set by the ingest when
+      the class addresses every live Level of exactly one Category, settable by
+      staff; «كل مستويات الفئة» shelf on المحتوى التعليمي. One Level otherwise
+      (kept, as the Owner decided).
+- [x] **§5 — a recording is never left behind.** `session-recording-reconcile`
+      every fifteen minutes: asks the provider about recordings whose callback
+      never came, believes a staged file where the provider has no answer,
+      re-queues every import that has not succeeded — indefinitely — and
+      closes a recording the provider positively no longer knows after a day.
+      `npm run ops:active-recordings` is asked before a deployment restarts
+      the recorder.
+- [ ] **Declared residual risk (not built):** a recorder CRASH mid-class still
+      loses that class's capture. Segmented output uploaded during the class
+      would close it.
+- [ ] **§6 — one registration form for several roles: PROPOSAL ONLY**,
+      [`SRS-PROPOSAL-R168.md`](SRS-PROPOSAL-R168.md). Six decisions are the
+      Owner's — first, whether administrative staff may ask through the public
+      form at all (R49 says no today).
+- [x] Harnesses read the class type's NAME from their scenario: the Owner
+      renamed «حصة دراسية» to «حصة» on Localhost and two harnesses went blind.
+- [ ] **Not repaired:** `verify-scheduling-types`, `verify-visibility-ui` and
+      `verify-exam-scheduling` still type «حصة دراسية» in assertions about the
+      SEEDED catalogue; on the Owner's renamed Localhost they will report it.
+- [ ] **For the Owner to try on Staging:** المستفيدات → «إدارة التسجيلات» (mark a
+      Level, read the warning, confirm the certificate); sign in as that
+      مستفيدة → «شهاداتي» → «تحميل PDF»; «تثبيت التطبيق» from a phone; schedule a
+      class and watch «العنوان» compose; and read any time on screen against a
+      clock on the wall.

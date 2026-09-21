@@ -77,6 +77,8 @@ export interface ContentItem {
   /** Optional subject label. A BADGE, not a hierarchy tier — see the note in
    *  `resources.tsx` about §5.2's third tier. */
   subject_name: string | null;
+  /** R167 §5 — addressed to EVERY Level of its Category («كل مستويات الفئة»). */
+  whole_category: boolean;
 }
 
 export interface BranchGroup {
@@ -96,6 +98,12 @@ export interface YearGroup {
 
 /** One level as it appears on the library index. */
 export interface LevelSummary {
+  /**
+   * R167 §5 — `whole_category` is the shelf of what was made for EVERY Level of
+   * a Category. It is a Category's shelf, so `level_id` then carries the
+   * CATEGORY id and `level_name` is empty: the page names it.
+   */
+  kind: 'level' | 'whole_category';
   level_id: string;
   level_name: string;
   category_id: string;
@@ -152,11 +160,15 @@ export async function fetchContentLevels(token: string | null = null): Promise<L
 
   const byLevel = new Map<string, LevelSummary & { years: Set<string> }>();
   for (const row of rows) {
-    let entry = byLevel.get(row.level_id);
+    // What was made for every Level of a Category is counted on the Category's
+    // own shelf — never on the one Level it happens to be filed under.
+    const shelf = row.whole_category ? `category:${row.category_id}` : row.level_id;
+    let entry = byLevel.get(shelf);
     if (!entry) {
       entry = {
-        level_id: row.level_id,
-        level_name: row.level_name,
+        kind: row.whole_category ? 'whole_category' : 'level',
+        level_id: row.whole_category ? row.category_id : row.level_id,
+        level_name: row.whole_category ? '' : row.level_name,
         category_id: row.category_id,
         category_name: row.category_name,
         description: null,
@@ -164,7 +176,7 @@ export async function fetchContentLevels(token: string | null = null): Promise<L
         academic_year_count: 0,
         years: new Set<string>(),
       };
-      byLevel.set(row.level_id, entry);
+      byLevel.set(shelf, entry);
     }
     entry.content_count = (entry.content_count ?? 0) + 1;
     entry.years.add(row.academic_year_id);
@@ -231,6 +243,7 @@ interface LibraryItemWire {
   description: string | null;
   visibility: string;
   level_id: string;
+  whole_category: boolean;
   subject_id: string;
   academic_year_id: string;
   branch_id: string | null;
@@ -259,8 +272,34 @@ interface LibraryItemWire {
  * is the server's; re-sorting here would be a second implementation of it.
  */
 export async function fetchLevelContent(levelId: string, token: string | null = null): Promise<LevelContent | null> {
+  return shelfOf(`level_id=${encodeURIComponent(levelId)}`, levelId, false, token);
+}
+
+/**
+ * R167 §5 — «كل مستويات الفئة»: what was made for EVERY Level of one Category.
+ * The same shelf a Level has, grouped the same way, read through the same
+ * route; `level_name` is empty because the page names this shelf itself.
+ */
+export async function fetchCategoryWideContent(
+  categoryId: string,
+  token: string | null = null,
+): Promise<LevelContent | null> {
+  return shelfOf(
+    `category_id=${encodeURIComponent(categoryId)}&whole_category=true`,
+    categoryId,
+    true,
+    token,
+  );
+}
+
+async function shelfOf(
+  query: string,
+  shelfId: string,
+  categoryWide: boolean,
+  token: string | null,
+): Promise<LevelContent | null> {
   const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
-    `/library?level_id=${encodeURIComponent(levelId)}&page_size=${MAX_PAGE_SIZE}`,
+    `/library?${query}&page_size=${MAX_PAGE_SIZE}`,
     { token },
   );
   const rows = body.data;
@@ -298,13 +337,14 @@ export async function fetchLevelContent(levelId: string, token: string | null = 
       // `EducationalContent` records no uploader — see the note at the top.
       teacher_display_name: null,
       subject_name: row.subject_name,
+      whole_category: row.whole_category,
     });
   }
 
   const first = rows[0]!;
   return {
-    level_id: levelId,
-    level_name: first.level_name,
+    level_id: shelfId,
+    level_name: categoryWide ? '' : first.level_name,
     category_name: first.category_name,
     description: null,
     years,

@@ -119,8 +119,19 @@ since Revision 163 §5) has none: each of its recordings was refused with *"the 
 resolves to no Level"*, spent its four retries on the same refusal, and the classroom said
 *«انتهى التسجيل لكن تعذّرت تهيئته للنشر»*. A class addressing several Levels files its
 recording under the first in the Levels' own order — deterministic, so a retry writes the same
-row. **Known limit:** the content's Level is single, so a *private* recording of a two-Level
-class is listed for the first Level's beneficiaries only.
+row. **Known limit, kept by the Owner (R167 §5):** the content's Level is single, so a *private*
+recording of a class over SOME Levels is listed for the first Level's beneficiaries only. **A class
+over EVERY live Level of exactly one Category is different:** its recording is filed under the
+first Level and marked `whole_category`, and every Level of that Category reads it
+([database](../architecture/database.md)). Staff can set or clear the mark on any item from
+مكتبة المحتوى → تعديل.
+
+**Since Revision 167 §5 nothing here needs an operator:** `session-recording-reconcile` runs every
+fifteen minutes, re-queues every import that has not succeeded, asks the provider about recordings
+whose callback never arrived, and believes a staged file where the provider has no answer
+([background jobs](../architecture/background-jobs.md)). The tool below stays for an immediate,
+hand-run pass and for its dry run. `npm run ops:active-recordings` (read-only; exit `3` while
+anything is recording) is what a deployment asks before it restarts the recorder.
 
 The job retries under TD-7's backoff and then stops, which is right for a transient failure
 and useless once a DEFECT is fixed: the staging object is still there and nothing is left to

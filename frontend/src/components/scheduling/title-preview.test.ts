@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+
+import { composeTitlePreview } from './title-preview.js';
+import form from './scheduling-form.tsx?raw';
+import page from '../../pages/admin/scheduling.tsx?raw';
+
+/**
+ * SRS Revision 167 §1 — the form SHOWS the title the server will compose. These
+ * are the same three examples `backend/src/lib/item-title.test.ts` holds the
+ * server to, so the preview and the real thing cannot drift apart unnoticed.
+ */
+const parts = {
+  typeName: 'حصة دراسية',
+  subjectName: 'تفسير القرآن',
+  surahNames: ['الفاتحة', 'البقرة'],
+  leadName: 'صفاء',
+  date: '2026-09-22',
+  time: '15:00',
+};
+
+describe('the previewed title is the server’s wording', () => {
+  it('type — Subject — Surah(s) — main teacher — when', () => {
+    expect(composeTitlePreview(parts)).toBe(
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 2026-09-22 15:00',
+    );
+  });
+
+  it('a repeating class’s own row carries its time alone', () => {
+    expect(composeTitlePreview({ ...parts, date: null })).toBe(
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 15:00',
+    );
+  });
+
+  it('omits what the item does not have', () => {
+    expect(
+      composeTitlePreview({
+        typeName: null,
+        subjectName: 'فقه',
+        surahNames: [],
+        leadName: null,
+        date: '2026-09-22',
+        time: null,
+      }),
+    ).toBe('فقه — 2026-09-22');
+  });
+});
+
+describe('where it is shown', () => {
+  it('in the title’s own place, read-only, with a line saying what «الوصف» is for', () => {
+    expect(form).toContain('data-generated-title');
+    expect(form).toContain("t('scheduling.generatedTitle.hint')");
+    // An <output>, not an input: it cannot be typed into and is announced when it changes.
+    expect(form).toContain('<output className="field__control field__control--static" aria-live="polite">');
+  });
+
+  it('for the kinds that have no typed title — and a paper’s own title for a sitting scheduled from one', () => {
+    expect(page).toContain('{...(spec.hasTitle ? {} : { titlePreview })}');
+    expect(page).toContain("type === 'exam' && examSource.sourceId !== ''");
+  });
+});
