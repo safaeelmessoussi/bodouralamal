@@ -185,6 +185,35 @@ export function createBoss(config: AppConfig): PgBoss {
  * `startJobRunner` registers this list and readiness derives its expectations
  * from the same list, so health cannot drift onto a second set of queue names.
  */
+/**
+ * Unschedules every cron schedule whose queue this release does not own, and
+ * removes that queue's never-started jobs. See the call site for why. Exported
+ * and boss-shaped so it is testable without a live queue.
+ */
+export async function retireUnownedSchedules(
+  boss: {
+    getSchedules: () => Promise<{ name: string }[]>;
+    unschedule: (name: string) => Promise<void>;
+    deleteQueuedJobs: (name: string) => Promise<void>;
+  },
+  ownedQueues: readonly string[],
+  log: (queue: string, detail: Record<string, unknown>) => void,
+): Promise<string[]> {
+  const owned = new Set(ownedQueues);
+  const retired: string[] = [];
+  for (const schedule of await boss.getSchedules()) {
+    if (owned.has(schedule.name) || retired.includes(schedule.name)) continue;
+    await boss.unschedule(schedule.name);
+    // Only what is still QUEUED: a retired queue's completed and failed history
+    // is evidence, and is left to pg-boss's own retention. A queue that no
+    // longer exists has nothing to delete — that is not a failure.
+    await boss.deleteQueuedJobs(schedule.name).catch(() => undefined);
+    log(schedule.name, { schedule_retired: true });
+    retired.push(schedule.name);
+  }
+  return retired;
+}
+
 export function createWorkerCatalog(
   prisma: PrismaClient,
   storage: ReturnType<typeof createStorageClients>,
@@ -518,7 +547,25 @@ export async function startJobRunner(
     // Trash by age. pg-boss retry exhaustion cannot erase the domain backlog.
     await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' }, dailyOptions);
     await boss.schedule(QUEUES.sessionRecordingReconcile, EVERY_15_MINUTES, {}, dailyOptions);
-    
+
+    /**
+     * **A schedule the code no longer owns is RETIRED, not left to fire**
+     * (found 2026-09-21 by «حالة النظام» on its first reading, R169 §11).
+     *
+     * pg-boss keeps a cron schedule in the DATABASE. When a release removes a
+     * queue, its schedule stays — and goes on creating, every night, a job no
+     * worker will ever take: `retention.educational-purge` (added by the
+     * ten-year retention work, removed by R133) had piled up nine «late» jobs on
+     * an installation that once ran it. Harmless to data, but it is exactly the
+     * noise that teaches an operator to ignore the alarm.
+     *
+     * So after registering what this release DOES own, anything else is
+     * unscheduled and its never-started jobs are removed. Only jobs still
+     * QUEUED go — a retired queue's completed and failed history is evidence
+     * and is left to pg-boss's own retention.
+     */
+    await retireUnownedSchedules(boss, Object.values(QUEUES), log);
+
     readiness.ready();
   } catch (error) {
     readiness.failed();

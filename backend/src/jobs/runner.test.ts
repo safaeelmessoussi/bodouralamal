@@ -53,6 +53,11 @@ function fakeRunner() {
       return `${name}-worker`;
     }),
     schedule: vi.fn(async () => undefined),
+    // R169 §11 — start-up retires schedules this release no longer owns. This
+    // fake installation has none, so nothing is unscheduled.
+    getSchedules: vi.fn(async () => []),
+    unschedule: vi.fn(async () => undefined),
+    deleteQueuedJobs: vi.fn(async () => undefined),
     getWipData: vi.fn(() => live),
   };
   return { boss, live };

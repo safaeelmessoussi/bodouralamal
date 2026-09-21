@@ -108,6 +108,8 @@ describe('the registry matches §14.1', () => {
         // lists the node, so this expectation and the SRS agree because they
         // were both read, not because they were copied from each other.
         '/admin/teachers',
+        // R169 §11 — «حالة النظام», the operational alert read (TD-14/TD-16).
+        '/admin/operations',
         // R52 — §14.1's Administration group gained the Trash node when the
         // Revision 6 deferral was superseded.
         '/admin/trash',
@@ -431,6 +433,9 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/trash', // سلة المحذوفات
     '/superadmin/hijri-calendar', // التقويم الهجري
     '/superadmin/settings', // إعدادات المنصة
+    // R169 §11 — a NEW node, appended: R105's sequence is extended at its end,
+    // never reinterpreted. The Owner may move it.
+    '/admin/operations', // حالة النظام
   ] as const;
 
   it('lists the main navigation in the Owner\'s exact sequence', () => {

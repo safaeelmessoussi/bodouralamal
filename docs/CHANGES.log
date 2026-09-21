@@ -11252,3 +11252,64 @@ choosing a Level while the integration suite was loading the machine; alone, **1
 **Full gates, once, at the boundary (part five).** Backend unit **361/361**; frontend **1,465/1,465**; 32
 guards + doc links; OpenAPI regenerated, no drift; full disposable integration **2,775 passed, exit 0**,
 isolation passed; seed drill **exit 0**.
+
+## 2026-09-21 — SRS Revision 169 (part six): «حالة النظام» — the administrator is told what is failing quietly
+
+**What the Owner said yes to.** TD-14/TD-16 had always required that a job failing for good, a queue
+falling behind, a failed backup and an expiring certificate reach an administrator. Nothing did: the
+only reader was the host's own monitor, which speaks to whoever has SSH. The open box had asked her
+for «the smallest route/DTO and whether this is a new entity or a derived projection».
+
+**What was built: the smallest thing that is true.** A derived read — no new entity, and nothing in
+anybody's inbox (`Notification` stays what R77–R93 made it). `GET /admin/operations/status`, Super Admin
+only, runs the MONITOR'S OWN SQL verbatim, so the screen and the monitor cannot disagree about what
+«late» means, and answers counts only: a job's payload may carry ids of people and an error may quote a
+request. The page says what each number means and what to do about it.
+
+**What it cannot see, it says.** The backup repository and `/etc/letsencrypt` are deliberately not
+mounted into the API container. Rather than show a reassuring blank, the answer carries
+`host_checks: "not_visible_from_here"` and the screen states that the zeros above say nothing about
+the backup or the certificate. Closing that half is an infrastructure decision, recorded, not taken.
+
+**Where it sits.** Last in الإدارة — R105's sequence is the Owner's, so the node is appended and flagged
+as hers to move; four pinned navigation tests were updated with it.
+
+**CI, honestly.** Part five's hosted run had one RED job, «Production — anonymous browser +
+restart/recovery smoke»: the runner could not reach Docker Hub to pull the pinned backup image (exit
+125 on a registry timeout) — infrastructure, not code. My watcher had also died on a network error and
+printed an EMPTY conclusion, which I did not read as green. The failed job is re-run and the true
+conclusion recorded below.
+
+**Verification (part six).** `operations-status.integration` **2/2** on the disposable stack (a Super
+Admin is shown it, an Admin is refused; one real unfinished retirement moves each of the four numbers
+by exactly one, and neither its key nor its error code appears anywhere in the answer) and
+`pending-denial` **232** — the new route is guarded, as a new route is until somebody says otherwise.
+Frontend: `operations` 4 tests, `admin-modules` 33.
+
+**It found a real defect on its first reading.** Localhost answered «9 jobs late» in a queue called
+`retention.educational-purge` — which no code in the repository mentions. pg-boss keeps a cron schedule
+in the DATABASE; that queue was added by the ten-year-retention work and removed by R133, and its
+schedule stayed behind, creating every night a job no worker would ever take. Harmless to data, and
+exactly the noise that teaches an operator to ignore an alarm. The worker now RETIRES, at start-up,
+every schedule this release does not own, and removes that queue's never-started jobs (its completed
+and failed history is evidence and is left to pg-boss's own retention) — `retireUnownedSchedules`,
+unit-tested 3/3, and watched on the real stack: after the rebuild the orphan schedule and its nine
+jobs were gone. Staging never had it (it was rebuilt after R133). The other number Localhost shows —
+7 `session-recording-ingest` jobs failed on 2026-09-20 — is true history from that day's recorder
+drills, not a fault of today.
+
+**In the browser.** `verify-operations-status` **8/8**: refused anonymously; in the Super Admin's menu,
+last in الإدارة; five counts, each saying what it MEANS; the headline agreeing with the numbers; the
+sentence about what it cannot see; and no payload, key or error text on the screen.
+
+**Hosted CI for part five, re-run: `439f1ba` 8/8. Deployed to `staging.bodouralamal.com` at
+`439f1bae9a333ac7d2dd6564f1c468be2efdcec3` (SRS Revision 169, part five), upgrading from `ede0770`. No
+Production action.** Recordings asked first; dump taken; one older release image removed (22 GiB free);
+preflight PASS; both labels exact; migration `20260924100000_r169_content_additional_levels` applied;
+`/healthz` 200, `/rtc/validate` 401; zero error-level lines.
+
+**Full gates, once, at the boundary (part six).** Backend unit **364/364** (the runner's start-up test
+needed its fake queue taught the three calls start-up now makes); frontend **1,469/1,469**; 32 guards +
+doc links (one link repointed: I had renamed the observability heading another page links to); OpenAPI
+regenerated (189 paths, 243 operations); full disposable integration **2,778 passed, exit 0**, isolation
+passed; seed drill **exit 0**.

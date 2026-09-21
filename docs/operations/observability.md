@@ -152,32 +152,42 @@ A **log audit** is an explicit item on the deployment checklist.
 `LOG_LEVEL` defaults to `info`. **`debug` is prohibited in production**, where it would
 otherwise be the fastest route to the rule above being violated.
 
-## Required alerts — not implemented yet
+## Required alerts — two of four are on the Super Admin's screen (R169 §11)
 
-There is currently **no Admin-visible operational-alert surface**. Terminal pg-boss rows remain
-durable and diagnosable through the SQL/log runbook, but the application does not project them,
-queue lag, backup failure, or certificate expiry onto the Admin dashboard. The table below is the
-binding TD-14/TD-16 target, not a description of current behaviour:
+«حالة النظام» (`/admin/operations`, `GET /admin/operations/status`, Super Admin only) is the
+Admin-visible surface TD-14/TD-16 asked for, **for the half the application can see**:
 
-| Condition | Surfaces as |
-|---|---|
-| A job exhausts its four retries (five total attempts) | Dead-lettered, with an **Admin-visible failure** |
-| **Backup replication fails** | A **critical** Admin-visible alert. Two consecutive failures escalate to the owner |
-| Job queue lag past 10 minutes | An alarm on the Admin dashboard |
-| TLS renewal failing | Alert at **21 days remaining** — never discovered as a browser error |
+| Condition (TD-14/TD-16) | Surfaces as | State |
+|---|---|---|
+| A job exhausts its four retries (five total attempts) | «مهام فشلت نهائيًا» — a count, and the ten worst queues by name | **built** |
+| Job queue lag past 10 minutes | «مهام متأخرة أكثر من عشر دقائق» | **built** |
+| Storage retirement failed, late, or of unknown copy outcome | «ملفات في انتظار الإزالة من التخزين» | **built** (not in TD-16's list; it is the monitor's third number) |
+| **Backup replication fails** | the host monitor only — `ESCALATE_OWNER` after two failures | **not on the screen**, and the screen says so |
+| TLS renewal failing (alert at 21 days) | nothing yet | **not built** — no expiry check exists anywhere |
 
-**Backup failure is treated as critical** even under the Owner-authorized temporary same-VPS
-architecture. B8's [host monitor](recovery.md#operator-signals-not-an-invented-dashboard) now
-combines backup failure/staleness, disk, workers and durable retirement backlog using aggregate
-read-only checks. It exits nonzero and journals stable codes; two failures emit `ESCALATE_OWNER`.
-It is not an Admin dashboard or automatic email alert, and cannot detect death of its own VPS.
+**One definition.** The read runs the host monitor's own SQL, verbatim
+(`scripts/backup/check-readiness.sh`: the same two tables, the same ten-minute grace), so the screen
+and the monitor cannot disagree. **Counts only** — never a payload, an error text or a storage key: a
+job's `data` may carry ids of people and an error may quote a request (TD-14). Queue names ARE sent;
+they are the platform's own fixed vocabulary (`jobs/runner.ts`).
 
-> **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require the
-> dashboard outcomes above, but TD-3 defines no operational-alert read, and the existing
-> `Notification` entity is deliberately restricted by Revisions 77–93 to targeted Session,
-> Event and Exam facts. Specify the smallest route/DTO and whether operational alarms use a new
-> entity or a derived read. Engineering must not smuggle platform-wide security/backup state into
-> a person's domain notification inbox or invent an undocumented endpoint.
+**Why backup and TLS are not there.** The restic repository and `/etc/letsencrypt` are deliberately
+NOT mounted into the API container, so the application cannot read them. The answer carries
+`host_checks: "not_visible_from_here"` and the screen states it in words, because a page of zeros would
+otherwise read as «the backup is fine», which it does not know. Putting them on the screen needs the
+HOST to publish its status somewhere the API may read (a read-only mounted status file, or a row the
+monitor writes) — an infrastructure decision, recorded in TASKS, not taken here.
+
+**A schedule the code no longer owns is retired at start-up.** pg-boss keeps cron schedules in the
+database, so a release that removes a queue leaves its schedule behind, creating every night a job no
+worker will ever take — «late» for ever on this screen. `retireUnownedSchedules` (`jobs/runner.ts`)
+unschedules anything not in `QUEUES` and removes that queue's never-started jobs; its completed and
+failed history is left to pg-boss's retention. Found by this screen on its first reading.
+
+**It is a read, not a notification.** Nothing is pushed into anybody's inbox: `Notification` stays
+restricted to targeted Session, Event and Exam facts (R77–R93), exactly as the earlier note required.
+B8's [host monitor](recovery.md#operator-signals-not-an-invented-dashboard) is unchanged and remains
+the only thing that can notice the application itself being down.
 
 ## The audit log as an operational tool
 

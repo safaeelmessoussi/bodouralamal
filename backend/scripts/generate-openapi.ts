@@ -402,6 +402,13 @@ const document = {
         },
       ),
     },
+    '/admin/operations/status': {
+      get: op(
+        'What is failing quietly',
+        '**SRS Revision 169 §11 — the administrator\'s operational alert read** (TD-14/TD-16 required it; nothing provided it). Failed and late background jobs, in total and for the ten worst queues, and storage retirements that are pending, failed, late or of unknown copy state. **The definitions are the host monitor\'s own, verbatim** (`scripts/backup/check-readiness.sh`: the same tables, the same ten-minute grace), so the screen and the monitor cannot disagree. **Counts only**: no job payload, no error text, no storage key — a payload may carry ids of people, and an error may quote a request (TD-14). Queue NAMES are sent: they are the platform\'s own fixed vocabulary, never data. `host_checks: "not_visible_from_here"` is said rather than left blank: backup freshness and the certificate\'s expiry live on the host, which the API container deliberately cannot read. **Super Admin only**, asserted against live role rows — the counts span every branch.',
+        { '200': '`{ jobs: { failed, late, queues[] }, storage_retirement: { pending, failed, late, copy_unknown }, host_checks, checked_at }`.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN — not a Super Admin.` },
+      ),
+    },
     '/profile/role-requests': {
       get: op(
         'My role requests, and what I may still ask for',

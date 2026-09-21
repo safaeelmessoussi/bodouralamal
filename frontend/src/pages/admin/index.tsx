@@ -29,6 +29,7 @@ import { PartnersPage } from './partners.js';
 import { AcademicPeriodsPage } from './academic-periods.js';
 import { AssessmentsPage } from './assessments.js';
 import { SchedulingTypesPage } from './scheduling-types.js';
+import { OperationsPage } from './operations.js';
 import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
 
@@ -78,6 +79,8 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   // NEW N — the partners the landing page renders.
   '/admin/partners',
   '/admin/trash',
+  // R169 §11 — «حالة النظام»: what is failing quietly. Super Admin only.
+  '/admin/operations',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -254,6 +257,8 @@ export function AdminRouter(): ReactNode {
       return <ContentPage portal="admin" />;
     case '/admin/trash':
       return <TrashPage />;
+    case '/admin/operations':
+      return <OperationsPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':

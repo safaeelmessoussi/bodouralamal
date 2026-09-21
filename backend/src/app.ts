@@ -44,6 +44,7 @@ import * as grades from './controllers/grade.controller.js';
 import * as quran from './controllers/quran.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
 import * as students from './controllers/student.controller.js';
+import * as operations from './controllers/operations.controller.js';
 import * as profile from './controllers/profile.controller.js';
 import { circleSlots, createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
@@ -383,6 +384,9 @@ export function createApp(
   // §7/TD-5/BR-15 (R52, R59) — soft-deleted records. Super Admin only, asserted
   // in the SERVICE against live role rows: the `/admin/` prefix is a URL, not a
   // boundary, and both write verbs here are irreversible or nearly so.
+  // R169 §11 — the administrator's operational alert read: counts of failed and
+  // late jobs and unfinished storage retirements. Super Admin only.
+  guarded.get('/admin/operations/status', operations.status(prisma));
   guarded.get('/admin/trash', trash.list(prisma));
   guarded.post('/admin/trash/:id/restore', trash.restore(prisma));
   // R59.1 — the permanent delete Revision 52 forbade until a revision existed.

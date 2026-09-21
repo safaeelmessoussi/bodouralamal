@@ -44,6 +44,7 @@ POST /profile/role-requests                   # R169 §1; an ACTIVE account asks
 
 # ── Registration & approvals (TD-3.2)
 POST /registrations                           # TD-3.2, §4.1b step 5; R49 optional requested_role (hint only, grants nothing)
+GET /admin/operations/status                  # R169 §11 (TD-14/TD-16); Super Admin only; COUNTS of failed/late jobs and unfinished storage retirements — never a payload
 GET /admin/trash                              # §7/TD-5/BR-15 (R52) — soft-deleted records; Super Admin only; read-only
 POST /admin/trash/{id}/restore                # §7 (R52) — only where the TD-5 cascade does not arise; refused loudly otherwise
 DELETE /admin/trash/{id}                      # §7 (R59.1) — permanent delete; Super Admin only; declared cascade children; DEPENDENTS_EXIST otherwise

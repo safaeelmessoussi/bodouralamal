@@ -114,9 +114,11 @@ Compose — and installed only on the target host. A placeholder shown here is a
 | `BODOUR_RELEASE_TAG` | Public (a commit SHA, not a secret) | Set to the exact accepted 40-character commit | Every Compose command in the pipeline |
 
 Logging/monitoring destinations and required alerts are **not** environment variables in
-this codebase — there is currently no external log/metrics sink and no Admin-visible
-alert surface; see [Observability](observability.md#required-alerts--not-implemented-yet)
-for the exact gap and the interim host-level [operator signal](recovery.md#operator-signals-not-an-invented-dashboard).
+this codebase — there is no external log/metrics sink. The Admin-visible alert surface is
+«حالة النظام» (R169 §11), which needs no configuration; see
+[Observability](observability.md#required-alerts--two-of-four-are-on-the-super-admins-screen-r169-11)
+for what it shows and the half it cannot (backup, certificate), and the host-level
+[operator signal](recovery.md#operator-signals-not-an-invented-dashboard) that still covers those.
 
 ## Secrets have no defaults, by design
 

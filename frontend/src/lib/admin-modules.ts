@@ -542,6 +542,20 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     // Revision 42 — first iteration carries `legal.consent_text_version`,
     // without which no registration can be accepted at all.
     status: 'ready',
+  },  {
+    /**
+     * R169 §11 (TD-14/TD-16) — «حالة النظام»: failed and late background jobs
+     * and unfinished storage retirements, in counts. Super Admin only: the
+     * numbers span every branch, which no branch-scoped reader is shown.
+     *
+     * **LAST, after الإعدادات** — a new node, so R105's sequence is extended at
+     * its end rather than reinterpreted; the Owner may move it.
+     */
+    path: '/admin/operations',
+    labelKey: 'admin.nav.operations',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
   },
 ];
 

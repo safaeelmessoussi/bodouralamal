@@ -1969,7 +1969,7 @@ was hiding behind it: the run went green on the first attempt.
   These integration points are adapted and verified locally; live provisioning and any
   populated migration require separate authorization. See
   [Storage](architecture/storage.md#owner-decision-required--object-store).
-- [ ] **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** TD-14/TD-16 require
+- [x] **DOCUMENT OWNER ACTION REQUIRED — OPERATIONAL ALERT SURFACE.** **[Closed 2026-09-21 — the Owner said yes. Built as R169 §11: «حالة النظام», a derived Super-Admin read (no new entity, no inbox): failed and late jobs and unfinished storage retirements. The backup and certificate halves cannot be read from inside the API container and are carried as their own box in R169's section]** TD-14/TD-16 require
   terminal job failures, queue lag, backup failure and TLS expiry to surface on the Admin
   dashboard. The implementation has no such read, TD-3 names no route, and R77–R93 deliberately
   constrain `Notification` to targeted Session/Event/Exam facts. Define the smallest route/DTO
@@ -5491,7 +5491,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       (the Owner: do it if it can be done). It can; it is a join table and a
       wide read-side change (library predicate, consent re-evaluation, DTOs,
       the content form).
-- [ ] **Part six — the administrator's operational alert read** (the Owner:
+- [x] **Part six — BUILT (the half the application can see), R169 §11: the administrator's operational alert read** (the Owner:
       yes). Job failures and queue lag can be read from PostgreSQL now; backup
       failure and TLS expiry live on the HOST, which the API container cannot
       see — they need the host monitor to write its status where the API reads.
@@ -5548,3 +5548,20 @@ The Owner's six replies to Revision 167's report. One migration so far
       `verify-content-scope` «the LIBRARY RESULTS change» read the table 0.9 s
       after choosing a Level while the machine was running the integration
       suite; alone it passes 14/14. Its detail now prints its numbers.
+- [ ] **§11's other half — backup freshness and certificate expiry on «حالة
+      النظام».** They live on the HOST; the API container deliberately cannot
+      read the backup repository or `/etc/letsencrypt`. Needs the host monitor
+      to publish its status where the API may read it (a read-only mounted
+      file, or a row it writes), and a certificate-expiry check, which exists
+      nowhere yet. Infrastructure, for the go-live runway.
+- [ ] **«حالة النظام» sits LAST in الإدارة** — appended to the Owner's R105
+      sequence, not placed by her. Hers to move.
+- [x] **Found by «حالة النظام» on its first reading, and fixed:** an orphan
+      cron schedule (`retention.educational-purge`, retired by R133) was still
+      creating a job every night that no worker could take — nine «late» on
+      Localhost. The worker now retires, at start-up, every schedule this
+      release does not own. Staging never had it.
+- [x] **Hosted CI 8/8 on `439f1ba` (part five) after re-running ONE job** — the
+      «Production smoke» job had failed on a Docker Hub registry timeout (exit
+      125), not on code. **Deployed to Staging at `439f1ba`** from `ede0770`;
+      migration `20260924100000` applied; `/healthz` 200; zero error lines.
