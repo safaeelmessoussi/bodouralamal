@@ -184,6 +184,9 @@ async function clear(): Promise<void> {
 
   await clearTeachingContext(prisma, TAG);
   contexts.clear();
+  // R169 §6 — the scratch Category an activity was addressed to; it holds no
+  // Level, and its event joins went with the events above.
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG }, levels: { none: {} } } });
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -569,6 +572,52 @@ describe("§4.4 — three-tier visibility", () => {
       `${TAG} private`,
       `${TAG} public`,
     ]);
+  });
+});
+
+describe("R169 §6 — an activity's audience dimensions INTERSECT, in every read", () => {
+  it("a مؤطِّرة sees a private activity only where EVERY named dimension reaches her teaching — a shared Level at another branch is not enough", async () => {
+    const here = await makeBranch("تاركة");
+    const there = await makeBranch("أمرشيش");
+    // Both groups sit in the suite's ONE Level — the shared dimension.
+    const hers = await makeAdminGroup(here);
+    const theirs = await makeAdminGroup(there);
+    const t = await teacherUser("مؤطرة تاركة");
+    await staffSchedule(prisma, contexts.get(hers)!, t);
+
+    const forHere = await makeEvent("private", { branchIds: [here], levelIds: [levelId] });
+    // The Level is hers; the branch is not. The union used to show it to her.
+    const forThere = await makeEvent("private", { branchIds: [there], levelIds: [levelId] });
+    // A dimension left empty is «الكل»: the Level alone reaches her…
+    const wholeLevel = await makeEvent("private", { levelIds: [levelId] });
+    // …and so does a global activity, by the same rule rather than its own arm.
+    const global = await makeEvent("private");
+    void theirs;
+
+    const ids = scoped(await readCalendar(prisma, viewer(t, ["teacher"]), range)).map((r) => r.id);
+    expect(ids).toContain(forHere);
+    expect(ids).not.toContain(forThere);
+    expect(ids).toContain(wholeLevel);
+    expect(ids).toContain(global);
+  });
+
+  it("«the calendar of this Level» is every activity that CONCERNS it — its Category's, its branch's, a global one — and never another Category's", async () => {
+    const branchId = await makeBranch("الرباط");
+    const otherCategory = await prisma.category.create({ data: { name: `${TAG} فئة أخرى` } });
+    const named = await makeEvent("public", { levelIds: [levelId] });
+    const wholeCategory = await makeEvent("public", { categoryIds: [categoryId] });
+    const wholeBranch = await makeEvent("public", { branchIds: [branchId] });
+    const global = await makeEvent("public");
+    const elsewhere = await makeEvent("public", { categoryIds: [otherCategory.id] });
+
+    const ids = scoped(await readCalendar(prisma, null, { ...range, levelId })).map((r) => r.id);
+    expect(ids).toEqual(expect.arrayContaining([named, wholeCategory, wholeBranch, global]));
+    expect(ids).not.toContain(elsewhere);
+
+    // The Category filter reads the same way, from the other side.
+    const byCategory = scoped(await readCalendar(prisma, null, { ...range, categoryId })).map((r) => r.id);
+    expect(byCategory).toEqual(expect.arrayContaining([named, wholeCategory, wholeBranch, global]));
+    expect(byCategory).not.toContain(elsewhere);
   });
 });
 

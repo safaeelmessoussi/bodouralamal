@@ -140,6 +140,18 @@ export interface UseScopeOptionsInput {
    *  filter silently hides rows. */
   defaultCurrentYear?: boolean;
   /**
+   * **A form in which «no Level» is a real answer** (SRS Revision 169 §7).
+   *
+   * A class may be addressed to «الكل» — every Level that teaches its Subject —
+   * so its form must let a Subject be chosen with no Level in play. What is
+   * offered then is every Subject SOME Level teaches (never the whole catalogue:
+   * a Subject no Level teaches has nobody to reach, and the server refuses it,
+   * `NO_LEVEL_TEACHES_SUBJECT`), and clearing the Level keeps the Subject, as a
+   * filter does, because the pair is valid here. Off by default: every other
+   * form still holds no Subject without a Level.
+   */
+  subjectsTaughtAnywhere?: boolean;
+  /**
    * **Whether these selectors narrow a list or fill a form** (2026-08-18).
    *
    * This replaced a `subjectsUnscoped` boolean, and the reason is the defect that
@@ -199,6 +211,7 @@ export function useScopeOptions({
   defaultCurrentYear = false,
   mode = 'form',
   restrictToOwnCapability = false,
+  subjectsTaughtAnywhere = false,
 }: UseScopeOptionsInput): ScopeOptions {
   const subjectsUnscoped = mode === 'filter';
   /**
@@ -418,10 +431,15 @@ export function useScopeOptions({
    */
   const subjects = useMemo<SubjectRef[]>(() => {
     if (!wants('subjectId')) return [];
-    if (value.levelId === '') return subjectsUnscoped ? allSubjects : [];
+    if (value.levelId === '') {
+      if (subjectsUnscoped) return allSubjects;
+      if (!subjectsTaughtAnywhere) return [];
+      const somewhere = new Set([...levelSubjects.values()].flat());
+      return allSubjects.filter((s) => somewhere.has(s.id));
+    }
     const taught = new Set(levelSubjects.get(value.levelId) ?? []);
     return allSubjects.filter((s) => taught.has(s.id));
-  }, [value.levelId, wants, subjectsUnscoped, allSubjects, levelSubjects]);
+  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
   useEffect(() => {
@@ -513,8 +531,8 @@ export function useScopeOptions({
    * that depended on the flag would change identity and re-run every effect
    * keyed on it, which is the bug this hook's own docstring records for `fields`.
    */
-  const unscopedSubjectsRef = useRef(subjectsUnscoped);
-  unscopedSubjectsRef.current = subjectsUnscoped;
+  const unscopedSubjectsRef = useRef(subjectsUnscoped || subjectsTaughtAnywhere);
+  unscopedSubjectsRef.current = subjectsUnscoped || subjectsTaughtAnywhere;
 
   const set = useCallback((field: ScopeField, next: string) => {
     setValue((current) => {

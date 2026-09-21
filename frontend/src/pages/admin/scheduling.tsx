@@ -49,7 +49,6 @@ import {
 import {
   audienceDimensions,
   homeBranchOf,
-  namesATeachingPopulation,
   useAudienceFilters,
 } from '../../components/scheduling/audience-filters.js';
 import {
@@ -153,6 +152,8 @@ const STAFFING_REFUSALS: Record<string, string> = {
    * list. The server names it now, so this can too.
    */
   EXAM_STAFF_DUPLICATE: 'admin.schedules.examStaffDuplicate',
+  /** R169 §7 — «الكل» was chosen for a Subject no Level teaches: nobody to reach. */
+  NO_LEVEL_TEACHES_SUBJECT: 'admin.schedules.noLevelTeachesSubject',
 };
 
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;
@@ -1436,6 +1437,10 @@ export function SchedulingDialog({
     fields: SCOPE_FIELDS,
     defaultCurrentYear: true,
     restrictToOwnCapability: !canAssignStaff && type === 'class',
+    // R169 §7 — a filter-built class may be addressed to «الكل»: every Level
+    // that teaches its Subject. So its Subject can be chosen with no Level in
+    // play — from the Subjects SOME Level teaches, never the whole catalogue.
+    subjectsTaughtAnywhere: type === 'class' && mode === 'multi_dimension' && !editing,
   });
 
   /**
@@ -1989,19 +1994,14 @@ export function SchedulingDialog({
     if (type === 'class') {
       if (homeBranchId === '') return t('scheduling.invalid.branch');
       /**
-       * **Owner-reported, 2026-09-16 — `multi_dimension`'s own check, never
-       * on edit** (§4.4 populates the five join tables at creation only —
-       * the same "never re-derived on edit" rule `ActivitySection`'s own
-       * scope validation above already states). Mirrors the server's
-       * `MULTI_DIMENSION_NEEDS_A_LEVEL`: a class delivers a curriculum
-       * Subject, so branches/categories alone name no population to check
-       * it against — at least one of Level, administrative group or
-       * Teaching Circle is required.
+       * **A filter-built class needs no Level, group or circle any more** (SRS
+       * Revision 169 §7). Left at «الكل» on all three it reaches every Level
+       * that teaches its Subject — the server resolves which when it saves, and
+       * refuses in words a Subject no Level teaches
+       * (`NO_LEVEL_TEACHES_SUBJECT`). The form says so beside the filters.
        */
       if (mode === 'multi_dimension') {
-        if (!editing && !namesATeachingPopulation(audienceSelection)) {
-          return t('scheduling.invalid.multiDimensionNeedsLevel');
-        }
+        // Nothing to pre-check: every combination of the five filters is valid.
       } else {
         if (scope.value.levelId === '') return t('scheduling.invalid.level');
         if (targetId === '') return t('scheduling.invalid.target');

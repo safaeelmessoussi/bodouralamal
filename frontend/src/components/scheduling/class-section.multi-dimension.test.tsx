@@ -183,7 +183,18 @@ describe('scheduling.tsx wires multi_dimension end to end', () => {
 
   it('builds the payload and the create-only rule from the shared module, never a second copy', () => {
     expect(source).toContain('? { dimensions: audienceDimensions(audienceSelection) }');
-    expect(source).toContain('if (!editing && !namesATeachingPopulation(audienceSelection)) {');
+    // R169 §7 — the create-only «needs a Level» pre-check is GONE: «الكل» on
+    // Level, group and circle is a real answer (every Level teaching the
+    // Subject), so the form refuses nothing here and the server's one refusal
+    // (`NO_LEVEL_TEACHES_SUBJECT`) has its own sentence.
+    expect(source).not.toContain('!namesATeachingPopulation(audienceSelection)');
+    expect(source).toContain("NO_LEVEL_TEACHES_SUBJECT: 'admin.schedules.noLevelTeachesSubject'");
+    expect(source).toContain("subjectsTaughtAnywhere: type === 'class' && mode === 'multi_dimension' && !editing,");
+  });
+
+  it('says what «الكل» on all three MEANS, exactly when nothing names a population', () => {
+    expect(FILTERS_RAW).toContain('{namesATeachingPopulation(selection) ? null : (');
+    expect(FILTERS_RAW).toContain("t('admin.calendar.scopeEveryLevelHint')");
   });
 
   it('runs the filters only where they are on screen — a new class, for an administrator', () => {
@@ -220,7 +231,7 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     ).toEqual({ branchIds: ['b1'], administrativeGroupIds: ['g1', 'g2'], teachingGroupIds: ['c1'] });
   });
 
-  it('holds a class to a real teaching population — a branch or a Category alone names none', () => {
+  it('knows when a selection names a teaching population — what the «الكل» hint and the per-occurrence override read', () => {
     expect(namesATeachingPopulation(none)).toBe(false);
     expect(namesATeachingPopulation({ ...none, branchIds: ['b1'], categoryIds: ['k1'] })).toBe(false);
     expect(namesATeachingPopulation({ ...none, levelIds: ['l1'] })).toBe(true);

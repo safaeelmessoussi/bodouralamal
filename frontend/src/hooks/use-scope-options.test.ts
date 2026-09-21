@@ -45,7 +45,11 @@ describe('the Subject filter does not require a Level', () => {
      * every Subject in a filter and none in a form; a Level chosen means that
      * Level's.
      */
-    expect(code(HOOK)).toContain('subjectsUnscoped ? allSubjects : []');
+    expect(code(HOOK)).toContain('if (subjectsUnscoped) return allSubjects;');
+    // R169 §7 — a FORM in which «no Level» is a real answer offers the Subjects
+    // some Level teaches; every other form still offers none.
+    expect(code(HOOK)).toContain('if (!subjectsTaughtAnywhere) return [];');
+    expect(code(HOOK)).toContain('[...levelSubjects.values()].flat()');
     expect(code(HOOK)).toContain('levelSubjects.get(value.levelId)');
     /**
      * **RESTATED AGAIN 2026-08-27 — and the second half is now load-bearing.**

@@ -5015,7 +5015,7 @@ changed destructively; Production go-live remains on hold.
       self-hosting (media ports published, reversing §19.1's 80/443-only rule,
       and tight memory on Staging). Recorded in `deployment-readiness.md`.
       Nothing was provisioned.
-- [ ] **§5 (i) — OWNER DECISION: should activities intersect like classes?**
+- [x] **§5 (i) — OWNER DECISION: should activities intersect like classes?** **[Closed 2026-09-21 — the Owner: YES. Built as R169 §6. Notifications, attendance and personal calendars already intersected (R140); the teacher's private view, the calendar's Level/Category/group filters and the form's wording were what still unioned]**
       Their dimensions are UNIONED today (R139), so an unselected one means
       *nobody through this one*, not «الكل». «الكل»-by-default filters for
       activities means changing who existing multi-dimension activities reach.
@@ -5026,7 +5026,7 @@ changed destructively; Production go-live remains on hold.
       scope all read that one Level. `exam.surah_id` exists but no route has
       ever accepted it — new API surface whose placement (exam only, or a حفظ
       class too) is the Owner's.
-- [ ] **Kept, for the Owner to confirm or overturn:** a class must still name
+- [x] **Kept, for the Owner to confirm or overturn:** a class must still name **[Closed 2026-09-21 — OVERTURNED by the Owner. Built as R169 §7 — «الكل» on all three = every Level that teaches the Subject, resolved when the class is saved]**
       a Level, a group or a circle. «الكل» on all three is refused in words,
       because a class's Subject must be taught at every Level it reaches
       (R43/R155). The alternative — «الكل» meaning *every Level that teaches
@@ -5473,7 +5473,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       already obeys the active role; descriptions already exist; one notice per
       decision; teaching = the one role مؤطِّرة.
 - [x] Ledger: eleven boxes closed with their evidence (six were stale).
-- [ ] **Part two — audience rules (the Owner: YES to both):** activities combine
+- [x] **Part two — audience rules (the Owner: YES to both) — BUILT, R169 §6/§7:** activities combine
       their audience dimensions as classes do (the notification, attendance and
       personal-filter reads ALREADY intersect; the teacher's visibility filter,
       `teacherEventScope` and the calendar grid's scope filters still union, and
@@ -5514,3 +5514,10 @@ The Owner's six replies to Revision 167's report. One migration so far
       job EXISTS (`trash.retention-purge` → `deIdentifyAccountSystem`) and the
       window is SEVEN days, but §5.2/§14.1 still call account deletion
       unapproved and TD-7 lists no such job. To be reconciled in the SRS.
+- [x] **Hosted CI 8/8 on `6d7f2c1` (part one); deployed to Staging at
+      `6d7f2c1`** from `0c6f24a` — the running release was asked
+      `ops:active-recordings` first; no pending migration; `/healthz` 200; zero
+      error lines; `GET /profile/role-requests` answers 401 without a session.
+      My first attempt started BEFORE the CI run had finished (I misread my own
+      log line); the host preflight refused — the images were not published
+      yet — and nothing on Staging changed. Redeployed once CI was green.

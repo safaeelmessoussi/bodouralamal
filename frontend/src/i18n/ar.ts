@@ -1928,10 +1928,15 @@ export const ar = {
       // R139 — the picker itself now shows "اختاري…" only until something is
       // chosen (`MultiSelectField`'s own empty state); this names what an
       // EMPTY choice under a real dimension means, once submission refuses it.
-      scopeTargetEmpty: 'لم تُختَر جهة بعد.',
       // R139 — stated once the reader has chosen at least one فرع, so "no
       // Level chosen" reads as a decision rather than an omission.
-      scopeAllLevelsHint: 'بلا اختيار مستوى، يشمل هذا كل المستويات في الفرع (الفروع) المختارة.',
+      // القرار 169 §6 — اختيارات النشاط تجتمع كما في الحصص: ما اختير معًا يُضيّق
+      // بعضه بعضًا، وما تُرك على «الكل» لا يُضيّق شيئًا.
+      // القرار 169 §7 — حصة بلا مستوى ولا مجموعة ولا حلقة = كل مستوى تُدرَّس فيه المادة.
+      scopeEveryLevelHint:
+        'بلا مستوى ولا مجموعة ولا حلقة: تخصّ الحصة كل المستويات التي تُدرَّس فيها هذه المادة. تُحدَّد هذه المستويات عند الحفظ وتظهر عند «تعديل»؛ مستوى يبدأ تدريس المادة لاحقًا يُضاف يدويًا.',
+      scopeCombineHint:
+        'يخصّ النشاط من ينطبق عليها كل ما اخترتِه معًا (مثلًا: هذا المقر وهذا المستوى). ما تُرك على «الكل» لا يُضيّق شيئًا.',
       // النطاق يُحدَّد عند الإنشاء: إعادة توجيهه لاحقاً تغيّر — بصمت — من كان يرى النشاط.
       responsible: 'المؤطِّرة المسؤولة',
       eventAssistants: 'المؤطِّرات المساعدات',
@@ -1944,7 +1949,7 @@ export const ar = {
       // Owner-reported, 2026-09-16 — SRS Revision 155's fifth dimension, a
       // Teaching Circle. `Event` never had this arm; a class does.
       scopeCircle: 'حلقات',
-      // A class's own hint, distinct from `scopeAllLevelsHint` above: a
+      // A class's own hint, distinct from `scopeCombineHint` above: a
       // Teaching Circle UNIONS with the rest instead of narrowing it (§4.4c —
       // a circle is already Level-locked), which is the one composition
       // rule Event never needed.
@@ -2817,6 +2822,8 @@ export const ar = {
       overlappingAssignment: 'لهذه المؤطّرة إسنادان متداخلان في هذه الحصة. عدّلي المدد.',
       // «شخص واحد بموقع واحد». الرسالة القديمة كانت «هذا العنصر موجود مسبقاً»
       // وهي جملة عن الاختبار، والاختبار سليم: مؤطِّرة واحدة أُسندت مرتين.
+      noLevelTeachesSubject:
+        'لا يوجد مستوى تُدرَّس فيه هذه المادة، فلا أحد تصل إليه الحصة. أضيفي المادة إلى مستوى من «المستويات»، أو اختاري مستوى أو مجموعة أو حلقة.',
       examStaffDuplicate:
         'لا يمكن إسناد المؤطِّرة نفسها مرتين لنفس الاختبار: اختاريها مسؤولةً أو مساعدةً، لا الاثنين معاً.',
       staffPeriodOutside: 'مدّة الإسناد خارج فترة الحصة كلّها.',

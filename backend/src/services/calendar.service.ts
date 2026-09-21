@@ -423,24 +423,35 @@ async function visibilityFilter(
     // intersection no longer reaches a hidden event, ownership does.
     const staffed = [...(await eventsStaffedBy(prisma, actor.userId)).keys()];
 
-    const intersects = {
+    /**
+     * **R169 §6 — an activity's audience dimensions INTERSECT, here as everywhere
+     * else** (the Owner, 2026-09-21: activities combine their filters the way
+     * classes do). Who an activity notifies, who is expected at it and whose
+     * personal calendar it is on have intersected since R140 — *branch B1 AND
+     * Level Y* means the people in both at once, and a dimension left empty is
+     * «الكل». This read alone still UNIONed them: a مؤطِّرة teaching Level Y at
+     * another branch saw a private activity addressed to *B1 ∧ Y*, which concerns
+     * nobody she teaches. Now each dimension the activity NAMES must reach her
+     * teaching scope, and one it leaves empty constrains nothing — so a global
+     * activity (every dimension empty) falls out of the same rule rather than
+     * needing an arm of its own.
+     */
+    const reaches = (
+      field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
+      idField: "branchId" | "categoryId" | "levelId" | "administrativeGroupId",
+      mine: string[],
+    ): Prisma.EventWhereInput => ({
+      OR: [{ [field]: { none: {} } }, { [field]: { some: { [idField]: { in: mine } } } }],
+    });
+    const intersects: Prisma.EventWhereInput = {
       OR: [
         { id: { in: staffed } },
         {
-          administrativeGroupScopes: {
-            some: { administrativeGroupId: { in: groupIds } },
-          },
-        },
-        { levelScopes: { some: { levelId: { in: levelIds } } } },
-        { categoryScopes: { some: { categoryId: { in: categoryIds } } } },
-        { branchScopes: { some: { branchId: { in: branchIds } } } },
-        // A global event reaches everyone with no scope rows to intersect.
-        {
           AND: [
-            { administrativeGroupScopes: { none: {} } },
-            { levelScopes: { none: {} } },
-            { categoryScopes: { none: {} } },
-            { branchScopes: { none: {} } },
+            reaches("branchScopes", "branchId", branchIds),
+            reaches("categoryScopes", "categoryId", categoryIds),
+            reaches("levelScopes", "levelId", levelIds),
+            reaches("administrativeGroupScopes", "administrativeGroupId", groupIds),
           ],
         },
       ],
@@ -1248,28 +1259,89 @@ export async function readCalendar(
   if (from > query.to) return [];
 
   // ── Events, filtered by tier and by the requested scope.
-  const scopeFilters: Record<string, unknown>[] = [];
+  /**
+   * **R169 §6 — «show me the calendar of Level X» means every activity that
+   * CONCERNS Level X**, and an activity concerns it when each dimension it names
+   * admits it — an empty dimension is «الكل». Only `branch_id` read that way
+   * before: asking for a Level returned the activities that NAMED the Level and
+   * dropped one addressed to its whole Category, or to its branch. Each filter
+   * now asks the same question of every dimension, through the taxonomy's own
+   * relations (a Level has a Category; a group has a Level and a branch), so an
+   * activity for *Category B* is still correctly absent from *Level X of
+   * Category A*.
+   */
+  const open = (
+    field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
+  ): Prisma.EventWhereInput => ({ [field]: { none: {} } });
+  const scopeFilters: Prisma.EventWhereInput[] = [];
   if (query.branchId) {
     scopeFilters.push({
-      OR: [
-        { branchScopes: { some: { branchId: query.branchId } } },
-        { branchScopes: { none: {} } },
-      ],
+      OR: [open("branchScopes"), { branchScopes: { some: { branchId: query.branchId } } }],
     });
   }
-  if (query.levelId)
-    scopeFilters.push({ levelScopes: { some: { levelId: query.levelId } } });
+  if (query.levelId) {
+    const levelId = query.levelId;
+    scopeFilters.push(
+      { OR: [open("levelScopes"), { levelScopes: { some: { levelId } } }] },
+      {
+        OR: [
+          open("categoryScopes"),
+          { categoryScopes: { some: { category: { levels: { some: { id: levelId } } } } } },
+        ],
+      },
+      {
+        OR: [
+          open("administrativeGroupScopes"),
+          { administrativeGroupScopes: { some: { administrativeGroup: { levelId } } } },
+        ],
+      },
+    );
+  }
   if (query.categoryId) {
-    scopeFilters.push({
-      categoryScopes: { some: { categoryId: query.categoryId } },
-    });
+    const categoryId = query.categoryId;
+    scopeFilters.push(
+      { OR: [open("categoryScopes"), { categoryScopes: { some: { categoryId } } }] },
+      { OR: [open("levelScopes"), { levelScopes: { some: { level: { categoryId } } } }] },
+      {
+        OR: [
+          open("administrativeGroupScopes"),
+          { administrativeGroupScopes: { some: { administrativeGroup: { level: { categoryId } } } } },
+        ],
+      },
+    );
   }
   if (query.administrativeGroupId) {
-    scopeFilters.push({
-      administrativeGroupScopes: {
-        some: { administrativeGroupId: query.administrativeGroupId },
+    const id = query.administrativeGroupId;
+    scopeFilters.push(
+      {
+        OR: [
+          open("administrativeGroupScopes"),
+          { administrativeGroupScopes: { some: { administrativeGroupId: id } } },
+        ],
       },
-    });
+      {
+        OR: [
+          open("levelScopes"),
+          { levelScopes: { some: { level: { administrativeGroups: { some: { id } } } } } },
+        ],
+      },
+      {
+        OR: [
+          open("categoryScopes"),
+          {
+            categoryScopes: {
+              some: { category: { levels: { some: { administrativeGroups: { some: { id } } } } } },
+            },
+          },
+        ],
+      },
+      {
+        OR: [
+          open("branchScopes"),
+          { branchScopes: { some: { branch: { administrativeGroups: { some: { id } } } } } },
+        ],
+      },
+    );
   }
 
   /**

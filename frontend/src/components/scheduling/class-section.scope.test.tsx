@@ -88,7 +88,7 @@ describe('each dimension is independent, always visible, and takes several at on
     expect(html).not.toContain(t('admin.calendar.scopeLevel'));
   });
 
-  it('states the empty case in words, not a blank control', () => {
+  it('an untouched dimension reads «الكل» — it narrows nothing (R169 §6)', () => {
     const html = renderToStaticMarkup(
       <ActivitySection
         {...baseProps}
@@ -96,42 +96,43 @@ describe('each dimension is independent, always visible, and takes several at on
         values={{ branch: dim(), category: dim(), level: dim(), group: dim() }}
       />,
     );
-    expect(html).toContain(t('admin.calendar.scopeTargetEmpty'));
+    expect(html).toContain(t('common.all'));
   });
 });
 
-describe('"all Levels within the chosen branch(es)" is stated, not left implicit', () => {
-  it('shows the hint once at least one branch is chosen', () => {
+describe('how the choices combine is said once something is chosen (R169 §6)', () => {
+  it('says the filters narrow each other as soon as ANY dimension is chosen', () => {
+    for (const values of [
+      { branch: dim(['b1']), category: dim(), level: dim(), group: dim() },
+      { branch: dim(), category: dim(), level: dim(['l1']), group: dim() },
+    ]) {
+      const html = renderToStaticMarkup(
+        <ActivitySection {...baseProps} dimensions={['branch', 'level']} values={values} />,
+      );
+      expect(html).toContain(t('admin.calendar.scopeCombineHint'));
+    }
+  });
+
+  it('says nothing while every dimension is still «الكل»', () => {
     const html = renderToStaticMarkup(
       <ActivitySection
         {...baseProps}
         dimensions={['branch', 'level']}
-        values={{ branch: dim(['b1']), category: dim(), level: dim(), group: dim() }}
+        values={{ branch: dim(), category: dim(), level: dim(), group: dim() }}
       />,
     );
-    expect(html).toContain(t('admin.calendar.scopeAllLevelsHint'));
+    expect(html).not.toContain(t('admin.calendar.scopeCombineHint'));
   });
 
-  it('does not show it before any branch is chosen', () => {
-    const html = renderToStaticMarkup(
-      <ActivitySection
-        {...baseProps}
-        dimensions={['branch', 'level']}
-        values={{ branch: dim(), category: dim(), level: dim(['l1']), group: dim() }}
-      />,
-    );
-    expect(html).not.toContain(t('admin.calendar.scopeAllLevelsHint'));
-  });
-
-  it('does not render at all when branch is not among the caller\'s dimensions', () => {
+  it('ignores a dimension the caller is not offered', () => {
     const html = renderToStaticMarkup(
       <ActivitySection
         {...baseProps}
         dimensions={['level']}
-        values={{ branch: dim(['b1']), category: dim(), level: dim(['l1']), group: dim() }}
+        values={{ branch: dim(['b1']), category: dim(), level: dim(), group: dim() }}
       />,
     );
-    expect(html).not.toContain(t('admin.calendar.scopeAllLevelsHint'));
+    expect(html).not.toContain(t('admin.calendar.scopeCombineHint'));
   });
 });
 
@@ -221,6 +222,6 @@ describe('locked (editing) shows the fixed-at-creation notice and nothing choosa
     );
     expect(html).toContain(t('admin.calendar.scopeFixed'));
     expect(html).not.toContain(t('admin.calendar.scopeTargetLabel'));
-    expect(html).not.toContain(t('admin.calendar.scopeAllLevelsHint'));
+    expect(html).not.toContain(t('admin.calendar.scopeCombineHint'));
   });
 });

@@ -1172,7 +1172,7 @@ describe("Revision 155 — a multi_dimension schedule", () => {
     expect(row?.dimensions).toEqual(schedule.dimensions);
   });
 
-  it("refuses branches/categories alone — a class must name a level, group or circle", async () => {
+  it("R169 §7 — «الكل» on level, group AND circle reaches every Level that TEACHES the Subject, stored as ordinary Level rows", async () => {
     const res = await call(
       "POST",
       "/admin/course-schedules",
@@ -1182,12 +1182,41 @@ describe("Revision 155 — a multi_dimension schedule", () => {
         target_id: undefined,
         dimensions: { branch_ids: [branchA] },
         staff: [],
+        // Its own weekday and hour: the suite's slot allocator walks Tuesday in
+        // 15-minute steps and eventually reaches other tests' pinned hours.
+        weekdays: ["friday"],
+        start_time: "21:00",
+        end_time: "21:10",
+      }),
+    );
+    expect({ status: res.status, error: res.body.error }).toEqual({ status: 201, error: undefined });
+    const made = (res.body as unknown as { schedule: { id: string; dimensions: Record<string, string[]> } })
+      .schedule;
+    // The suite's Subject is taught at exactly one Level — and that is what
+    // «everybody» resolved to, explicitly, so every reader sees a Level.
+    expect(made.dimensions["level_ids"]).toEqual([levelId]);
+    expect(made.dimensions["branch_ids"]).toEqual([branchA]);
+    expect(
+      await prisma.courseScheduleLevel.count({ where: { scheduleId: made.id } }),
+    ).toBe(1);
+  });
+
+  it("R169 §7 — a Subject NO Level teaches has nobody to reach, and is refused in words", async () => {
+    const orphan = await prisma.subject.create({ data: { name: `${TAG} مادة بلا مستوى` } });
+    const res = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        subject_id: orphan.id,
+        dimensions: { branch_ids: [branchA] },
+        staff: [],
       }),
     );
     expect(res.status).toBe(400);
-    expect(res.body.error?.details?.["reason"]).toBe(
-      "MULTI_DIMENSION_NEEDS_A_LEVEL",
-    );
+    expect(res.body.error?.details?.["reason"]).toBe("NO_LEVEL_TEACHES_SUBJECT");
   });
 
   it("refuses a level id that does not exist", async () => {

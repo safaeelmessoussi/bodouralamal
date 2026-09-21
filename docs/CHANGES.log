@@ -11062,3 +11062,47 @@ scenario left nothing behind. Full gates run once at the end of the part — rec
 **Full gates, once, at the boundary.** Backend unit **360/360**, frontend **1,456/1,456**, 32 guards + doc
 links, OpenAPI regenerated (188 paths, 242 operations); full disposable integration **2,764 passed, exit
 0**, all-table isolation passed; seed drill **exit 0** (both read from the logs' own lines).
+
+**Hosted CI green on the first push — `6d7f2c1` 8/8 (run `35631066933`). Deployed to
+`staging.bodouralamal.com` at `6d7f2c16444e1136a566e1592bbe72bc81d592ea` (SRS Revision 169, part one),
+upgrading from `0c6f24a`, by the documented Staging pipeline. No Production action.** Recordings asked
+first (`{"active":0}`, exit 0); dump taken; preflight PASS; both revision labels exact; no pending
+migration; TLS active; `/healthz` 200, `/rtc/validate` 401, `GET /profile/role-requests` 401 without a
+session; zero error-level API lines. **One mistake of mine, caught by the pipeline:** I started this
+deployment while the CI run was still in progress — I had read my own `echo exit=` line as the
+watcher's. `preflight-host.sh` refused («exact API image is unavailable»), because the release job had
+not published the images yet, and nothing on Staging had changed beyond a dump and the checkout. The
+CI conclusion is now read from `gh run view … --json conclusion`, never from a wrapper's echo.
+
+## 2026-09-21 — SRS Revision 169 (part two): an activity's audience dimensions combine in every read; a class may be addressed to «الكل»
+
+**§6 — activities.** The Owner's *yes* to «should activities combine their filters the way classes
+do?». The investigation found the platform already disagreed with ITSELF: who is notified, who is
+expected and whose personal calendar an activity is on have intersected since R140, while a مؤطِّرة's
+view of a private activity, the calendar's Level/Category/group filters and the form's own wording
+still unioned. So nobody's notifications change; three reads and one form now say what the rest
+said. The teacher arm asks each NAMED dimension to reach her teaching scope (a global activity falls
+out of the same rule); the grid filters ask every dimension the same question through the taxonomy's
+relations — typed against `Prisma.EventWhereInput`, after I noticed the untyped version would have
+compiled with a misspelt relation; the form reads «الكل» and says how choices combine.
+
+**§7 — classes.** «الكل» on Level, group and circle = every Level that teaches the Subject, RESOLVED
+WHEN SAVED into ordinary Level rows. The dynamic alternative would have taught a second rule to ten
+readers (audience, personal calendar, notifications, Surahs on offer, a recording's Level, a DB
+trigger…); resolving at the write teaches it to one function, keeps R43/R155's curriculum check true by
+construction, and shows her the Levels on «تعديل». The cost is said on the form. A Subject nobody
+teaches is refused in words (`NO_LEVEL_TEACHES_SUBJECT`). The shared scope hook gained one form
+option (`subjectsTaughtAnywhere`): with no Level in play it offers the Subjects SOME Level teaches.
+
+**Verification (part two).** Focused disposable integration: calendar service + calendar HTTP +
+visibility matrix **89/89** (two new tests: a teacher across two branches; the Level and Category
+filters admitting a whole-Category, a whole-branch and a global activity and refusing another
+Category's), course-schedule HTTP **43/43** (the pinned refusal test became two) — isolation passed.
+Frontend hooks + scheduling **198/198**. On the rebuilt Localhost: `verify-class-filters` **21/21**
+(check 4 restated: it asserted the refusal this revision removes), `verify-visibility-ui` **20/20**,
+`verify-teacher-scheduling` **14/14**, `verify-public-calendar` **18/18**.
+
+**Full gates, once, at the boundary (part two).** Backend unit **360/360**; frontend **1,457/1,457** (one
+run lost `admin-modules.test.ts` to its 5 s timeout while Docker builds were running beside it — it
+passes alone in 1 s and the whole suite was re-run for a real exit 0); 32 guards + doc links; full
+disposable integration **2,767 passed, exit 0**, isolation passed; seed drill **exit 0**.

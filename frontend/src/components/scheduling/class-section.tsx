@@ -247,18 +247,20 @@ export function ClassSection({
  * anyone else, and the server refuses regardless: hiding is not enforcement.
  */
 /**
- * **Each dimension is its own independent, optional control** (Owner-reported,
- * 2026-09-14 — replacing the single "choose ONE kind" selector this file used
- * to have). `EventScopes` (`event.service.ts`) has always accepted an array
- * per dimension and the audience-matching read has always UNIONed them
- * (`OR`, `calendar.service.ts`) — an event reaches someone whose branch, OR
- * category, OR Level, OR group matches ANY chosen dimension. Only the form
- * ever forced a single choice, which is what made picking "this branch AND
- * that category" impossible to express, and — for a caller whose allowed
- * dimensions did not include the ONE kind the control defaulted to
- * (`'global'` regardless of type) — made the picker default to a value with
- * no matching `<option>`, silently showing nothing until the reader
- * happened to reselect it (the exact defect reported).
+ * **Each dimension is its own optional filter, and the filters COMBINE** (SRS
+ * Revision 169 §6 — the Owner, 2026-09-21: activities combine their filters the
+ * way classes do).
+ *
+ * *Branch B1* and *Level Y* together mean the people in BOTH at once; two
+ * branches mean either; a dimension left alone is «الكل» and narrows nothing.
+ * That is what `eventAudienceWhere` has always resolved for notifications and
+ * attendance, and what her personal calendar has read since R140 — only this
+ * form still said the dimensions were UNIONed («لم تُختَر جهة بعد»), and two
+ * reads still behaved that way. They now agree, and the form says what happens.
+ *
+ * History worth keeping: before 2026-09-14 this was one «choose ONE kind»
+ * selector, which made *this branch AND that category* impossible to express and
+ * defaulted a branch-scoped caller to a value with no matching `<option>`.
  */
 export type ScopeDimensionKey = 'branch' | 'category' | 'level' | 'group';
 
@@ -399,17 +401,16 @@ export function ActivitySection({
                     selected={value.selected}
                     onChange={value.onChange}
                     options={value.options.map((o) => ({ value: o.id, label: o.name }))}
-                    emptyLabel={t('admin.calendar.scopeTargetEmpty')}
+                    emptyLabel={t('common.all')}
                   />
                 );
               })}
-              {/* **The "all Levels within these branches" reading, stated
-                  rather than left implicit** (R139). True whenever branches
-                  are chosen and shown once, beside the branch picker itself,
-                  regardless of what any OTHER dimension separately carries —
-                  every dimension here is UNIONed, never narrowed by another. */}
-              {dimensions.includes('branch') && values.branch.selected.length > 0 ? (
-                <Feedback>{t('admin.calendar.scopeAllLevelsHint')}</Feedback>
+              {/* **How the choices combine, said once something is chosen**
+                  (R169 §6): they narrow each other, and what is left at «الكل»
+                  narrows nothing — so *a branch with no Level* is every Level
+                  there, which R139 used to state as a special case. */}
+              {dimensions.some((key) => values[key].selected.length > 0) ? (
+                <Feedback>{t('admin.calendar.scopeCombineHint')}</Feedback>
               ) : null}
             </>
           )}

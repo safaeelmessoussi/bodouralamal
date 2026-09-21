@@ -153,24 +153,34 @@ check(
   JSON.stringify(branched),
 );
 
-const refused = await page(`
+const everybody = await page(`
   // (The title is left alone: it is SUGGESTED, and check 5e reads it.)
-  // The form names the FIRST thing missing, in its own order — so the date goes
-  // in first, or this would be reading the start-date message instead.
+  // R169 §7 — Level, group and circle all at «الكل» used to be refused
+  // («اختاري مستوى…»). It is a real answer now: every Level that teaches the
+  // Subject. What the form owes her is to SAY so where she chose it, to offer
+  // the Subjects some Level teaches although no Level is in play, and to stop
+  // naming a missing Level as the thing to fix.
   const dateField = fieldOf('تاريخ البداية');
   dateField?.querySelector('.date-picker__trigger')?.click();
   await wait(350);
   dateField?.querySelector('.date-picker__day.is-today')?.click();
   await wait(250);
+  const subjects = [...(fieldOf('المادة')?.querySelectorAll('select option') ?? [])].filter((o) => o.value !== '').length;
   const save = [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
   save.click();
   await wait(1200);
-  return { stillOpen: dlg() !== null, text: (dlg()?.textContent ?? '').includes('اختاري مستوى') };
+  const text = dlg()?.textContent ?? '';
+  return {
+    stillOpen: dlg() !== null,
+    saysWhatItMeans: text.includes('كل المستويات التي تُدرَّس فيها هذه المادة'),
+    oldRefusal: text.includes('اختاري مستوى، مجموعة إدارية أو حلقة'),
+    subjects,
+  };
 `);
 check(
-  '4 · Level, group and circle all at «الكل» is refused in words, before any request',
-  refused.stillOpen === true && refused.text === true,
-  JSON.stringify(refused),
+  '4 · Level, group and circle all at «الكل» is a real answer: the form says what it means, offers Subjects with no Level in play, and no longer asks for a Level',
+  everybody.stillOpen === true && everybody.saysWhatItMeans === true && everybody.oldRefusal === false && everybody.subjects > 0,
+  JSON.stringify(everybody),
 );
 
 const filled = await page(`

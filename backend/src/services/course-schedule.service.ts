@@ -528,6 +528,9 @@ async function resolveTarget(
   branchId: string,
   /** Revision 155 — required, and read, only for `multi_dimension`. */
   dimensions?: CourseScheduleInput["dimensions"],
+  /** R169 §7 — the class's Subject: what «الكل» on Level, group and circle is
+   *  resolved against. Read only for `multi_dimension`. */
+  subjectId?: string,
 ): Promise<{
   levelId: string | null;
   administrativeGroupId: string | null;
@@ -622,26 +625,57 @@ async function resolveTarget(
       const teachingGroupIds = [...new Set(dimensions?.teachingGroupIds ?? [])];
 
       /**
-       * **A class must name a real teaching population — Level, Group or
-       * Circle — not only an organisational filter.** Unlike an Event,
-       * which has no Subject and for which "everyone in this Category" is
-       * a complete audience on its own, a class delivers a curriculum
-       * Subject, and `assertSubjectTaughtAtLevel` needs an actual Level to
-       * check the Subject against. Branches/Categories alone would leave
-       * nothing for it to check — refused here rather than left to the
-       * DB's own coarser "at least one of the five" trigger, which cannot
-       * express this narrower, curriculum-specific rule.
+       * **«الكل» on Level, group AND circle = every Level that teaches this
+       * Subject** (SRS Revision 169 §7 — the Owner, 2026-09-21; it used to be
+       * refused, `MULTI_DIMENSION_NEEDS_A_LEVEL`).
+       *
+       * A class delivers a curriculum Subject, so «everybody» can only mean
+       * everybody who is TAUGHT it: the live Levels whose `LevelSubject` lists
+       * the Subject, narrowed to the Categories she chose if she chose any
+       * (branches narrow enrolments, not Levels, and are left to the audience
+       * read as always).
+       *
+       * **Resolved NOW, and stored as ordinary Level rows.** Every reader —
+       * the audience, her personal calendar, notifications, the Surahs on
+       * offer, a recording's Level — goes on reading explicit Levels, so
+       * nothing downstream learns a second rule, the curriculum check below
+       * holds by construction, and on «تعديل» she SEES which Levels the class
+       * reaches. The cost is stated on the form: a Level that starts teaching
+       * the Subject later is added to the class by hand.
+       *
+       * A Subject no Level teaches has nobody to reach, and is refused in words.
        */
       if (
         levelIds.length === 0 &&
         administrativeGroupIds.length === 0 &&
         teachingGroupIds.length === 0
       ) {
-        throw new AppError(
-          "VALIDATION_FAILED",
-          "a class must name at least one level, administrative group or teaching circle",
-          { reason: "MULTI_DIMENSION_NEEDS_A_LEVEL" },
-        );
+        if (subjectId === undefined) {
+          throw new AppError(
+            "VALIDATION_FAILED",
+            "a class must name at least one level, administrative group or teaching circle",
+            { reason: "MULTI_DIMENSION_NEEDS_A_LEVEL" },
+          );
+        }
+        const teaching = await tx.levelSubject.findMany({
+          where: {
+            subjectId,
+            deletedAt: null,
+            level: {
+              deletedAt: null,
+              ...(categoryIds.length > 0 ? { categoryId: { in: categoryIds } } : {}),
+            },
+          },
+          select: { levelId: true },
+        });
+        if (teaching.length === 0) {
+          throw new AppError(
+            "VALIDATION_FAILED",
+            "no level teaches this subject, so «everybody» names nobody",
+            { reason: "NO_LEVEL_TEACHES_SUBJECT" },
+          );
+        }
+        levelIds.push(...new Set(teaching.map((row) => row.levelId)));
       }
 
       const [branches, categories, levels, groups, circles] = await Promise.all([
@@ -912,6 +946,7 @@ export async function createCourseSchedule(
       input.targetId,
       input.branchId,
       input.dimensions,
+      input.subjectId,
     );
 
     // **The rule this surface was missing entirely.** Teaching Groups and
@@ -1895,6 +1930,7 @@ async function splitCourseSchedule(
           data.teachingMode !== undefined
             ? data.dimensions
             : (existingDimensions ?? undefined),
+          successorSubjectId,
         );
         const subject = await tx.subject.findFirst({
           where: { id: successorSubjectId, deletedAt: null },

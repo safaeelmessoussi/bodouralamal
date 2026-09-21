@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Feedback } from '../ui/feedback.js';
 
 import { listAdministrativeGroups } from '../../adapters/administrative-groups.js';
 import { listCircles } from '../../adapters/teaching-groups.js';
@@ -251,9 +252,13 @@ export function audienceDimensions(selection: AudienceSelection): {
 }
 
 /**
- * A class delivers a curriculum Subject, so its audience must name a real
- * teaching population — the server's `MULTI_DIMENSION_NEEDS_A_LEVEL`, stated
- * before the request rather than after it.
+ * Whether the selection names a Level, a group or a circle.
+ *
+ * **No longer a requirement for a class** (SRS Revision 169 §7): with none
+ * named, the class reaches every Level that teaches its Subject, and the filters
+ * say so. It still IS one for a single occurrence's audience override
+ * (`schedule-sessions.tsx`), where «everybody» has no Subject-wide meaning to
+ * fall back on.
  */
 export function namesATeachingPopulation(selection: AudienceSelection): boolean {
   return (
@@ -313,6 +318,12 @@ export function AudienceFilters({
         options={asOptions(choices.circles)}
         emptyLabel={t('common.all')}
       />
+      {/* R169 §7 — «الكل» on Level, group AND circle is a real answer now, and
+          what it MEANS is said where it is chosen: every Level that teaches the
+          Subject, fixed when the class is saved and visible on «تعديل». */}
+      {namesATeachingPopulation(selection) ? null : (
+        <Feedback>{t('admin.calendar.scopeEveryLevelHint')}</Feedback>
+      )}
     </>
   );
 }

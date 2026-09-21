@@ -179,6 +179,24 @@ staffing. **Neither widens anything**: the admin endpoints still refuse her.
 > **The standing rule this is the third instance of:** when a screen cannot
 > work, the fix is a *smaller question*, never a wider permission (rule O).
 
+### An activity's audience dimensions combine — in every read (R169 §6)
+
+*Branch B1* with *Level Y* is the people in both at once; two branches are either; a dimension left
+alone is «الكل» and narrows nothing. One rule, five readers, and they now agree:
+
+| Reader | Where | Since |
+|---|---|---|
+| who is notified, who is expected (attendance) | `eventAudienceWhere` — ONE enrolment must satisfy every named kind | R82 |
+| her personal calendar | `personalFilters`, the event arm (`dimensionMatch`) | R140 |
+| a مؤطِّرة's view of a PRIVATE activity | `visibilityFilter`, the teacher arm (`reaches`) — each named dimension must reach her teaching scope | **R169 §6** (it unioned) |
+| «the calendar of this Level / Category / group» | `readCalendar`'s scope filters — through the taxonomy's own relations, so another Category's activity stays absent | **R169 §6** (only `branch_id` read so) |
+| the form | `ActivitySection` — «الكل» when untouched, and how the choices combine once one is made | **R169 §6** (it said the dimensions union) |
+
+Two things are deliberately NOT this rule. **The activities she STAFFS are hers whatever their
+scope** (R71.2) — that union is about *reach* (staffed ∪ scope), not about dimensions. And a
+**class's حلقة unions with its other filters** (§4.4c: a circle is already Level-locked) — an
+activity has no حلقة dimension at all.
+
 ### The assignment notice
 
 | | |
