@@ -5441,3 +5441,16 @@ The Owner's six replies to Revision 167's report. One migration so far
       shipped image; a reconciler pass is clean; `/healthz` 200; zero error
       lines. The first class type on Staging is already «حصة» (the Owner's own
       rename), and the deployment left it alone. No Production action.
+- [x] **Hosted CI 8/8 on `0c6f24a` (first push); deployed to Staging at
+      `0c6f24a`** by the documented pipeline, from `072b611` — the running
+      release was asked `ops:active-recordings` first. Migration
+      `20260923100000_r168_role_requests` applied (no pending registration
+      there, so nothing to back-fill); `/healthz` 200; zero error lines; the two
+      new routes answer 400 (public, validated) and 401 (guarded) from outside.
+      No Production action.
+- [ ] **For the Owner to try on Staging** (a session there needs Google
+      sign-in): register with a second Google account ticking several choices;
+      as Super Admin open طلبات الانضمام → «البتّ في الصفات المطلوبة» and decide
+      each role. The circle question appears once the three حلقات and their
+      weekly classes exist there (the data item above), and placing a مستفيدة
+      needs an academic period covering today (الفصول الدراسية).

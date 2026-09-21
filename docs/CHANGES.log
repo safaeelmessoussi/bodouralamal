@@ -10999,3 +10999,18 @@ passes). The scenario left nothing behind (checked: no tagged user, Level, fixtu
 preference or e-mail lock). **Found on Localhost, for the Owner:** no academic period covers today, so
 approving a مستفيدة there is refused with «لا يوجد فصل دراسي…» until الفصول الدراسية is filled — the
 harness brings, and removes, its own fixture period.
+
+**Hosted CI green on the first push — `0c6f24a` 8/8 (run `35620476295`). Deployed to
+`staging.bodouralamal.com` at `0c6f24af01aa9798c5aa3f4d56b5056ff56b281e` (SRS Revision 168, part two),
+upgrading from `072b611`, by the documented Staging pipeline. No Production action.** The RUNNING
+release was asked `ops:active-recordings` before anything stopped (`{"active":0}`, exit 0); dump taken
+(`~/bodour-predeploy/pre-0c6f24a-…dump`); preflight PASS; both revision labels exact before and after
+start; migration `20260923100000_r168_role_requests` applied — Staging held no pending registration, so
+the back-fill wrote nothing (`role_request` 0 rows, `circle_preference` 0 rows); the seed answered
+*«ownership exists — bootstrap configuration ignored»*; TLS active; `/healthz` 200, `/rtc/validate` 401,
+`/clock` from the host zone file, every service healthy, zero error-level API lines. The new routes
+answer as designed from outside: `GET /registration/circle-slots` with no parameters `400` (public,
+validated), `POST /admin/approvals/{id}/roles/student/approve` with no session `401`. One thing learnt
+about the recipe itself: `docker compose exec -T` inside a script fed over `ssh … 'bash -s'` reads that
+same stdin and silently swallows the REST of the script — every `exec`/`run` in it needs `</dev/null`.
+The first attempt stopped, harmlessly, right after the recording question for that reason.

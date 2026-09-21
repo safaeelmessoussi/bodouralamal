@@ -207,6 +207,10 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 #    Exit 0 = nothing is recording; exit 3 names what is — wait and ask again.
 #    (Uses the RUNNING release; skip on a first deployment or where the running
 #    release predates Revision 167.)
+#    **Running these steps as ONE script over `ssh host 'bash -s' <<EOF`?** Give
+#    every `exec -T` / `run` its own `</dev/null`: they read the script's stdin
+#    and silently swallow the rest of it (2026-09-21 — the pipeline stopped,
+#    harmlessly, right after this question). Typed interactively it cannot happen.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml exec -T api npm run --silent ops:active-recordings
 
