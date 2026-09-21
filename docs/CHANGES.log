@@ -10909,3 +10909,16 @@ now records and plays as `audio/mp4`), `verify-enrolments-dialog` **24/24**, `ve
 **21/21**, `verify-scheduling-types` **11/11**, `verify-visibility-ui` **20/20**,
 `verify-teacher-scheduling` **14/14**, `verify-exam-scheduling` **93/93**. The API image is 730 MB with
 ffmpeg in it.
+
+**Hosted CI green on the first push — `072b611` 8/8 (run `35608475892`), the release job pulling the
+digest-pinned ffmpeg image without complaint. Deployed to `staging.bodouralamal.com` at
+`072b611ff99b463e9e98549d6203515134c9866e` (SRS Revision 168, part one), upgrading from `7655a6b`, by the
+documented Staging pipeline — including, for the first time, its new step 4b: the RUNNING release was
+asked `ops:active-recordings` before anything stopped (`{"active":0}`, exit 0). No Production action.**
+Dump taken (`~/bodour-predeploy/pre-072b611-…dump`); preflight PASS; both revision labels exact before
+and after start; migration `20260923090000_r168_recording_recovered_from_segments` applied; the seed
+answered *«scheduling types: already initialized — the database is authoritative»*, and the first class
+type there is «حصة» — the Owner's own rename, untouched by the deployment, which is §4 observed in the
+wild; TLS active; `/healthz` 200, `/rtc/validate` 401, every service healthy, zero error-level API
+lines. Inside the shipped image: `ffmpeg version 7.1` runs, and one `ops:reconcile-recordings` pass
+reported nothing open, nothing to retire, nothing to assemble.

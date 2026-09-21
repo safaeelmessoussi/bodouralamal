@@ -5406,5 +5406,9 @@ The Owner's six replies to Revision 167's report. One migration so far
       create three حلقات (حلقات المواد → حفظ القرآن), then one weekly class per
       حلقة in الجدولة — الثلاثاء 15:00–20:00, الخميس 09:00–12:00, السبت
       15:00–20:00 — and تفسير on الأربعاء 09:00–12:00 for the whole Level.
-- [ ] Staging's first class type is still called «حصة دراسية»; renaming it is
-      one edit in أنواع الجدولة (the seed will never undo it).
+- [x] **Hosted CI 8/8 on `072b611` (first push); deployed to Staging at
+      `072b611`** by the documented pipeline, from `7655a6b` — the running
+      release was asked `ops:active-recordings` first. ffmpeg runs inside the
+      shipped image; a reconciler pass is clean; `/healthz` 200; zero error
+      lines. The first class type on Staging is already «حصة» (the Owner's own
+      rename), and the deployment left it alone. No Production action.
