@@ -62,16 +62,16 @@ describe('the occurrence editor’s wider scopes ask the SAME question, item 6',
   });
 });
 
-describe('R138 §4.4 item 2 — title/description are unified into the Session editor', () => {
+describe('R138 §4.4 item 2 — the description is unified into the Session editor (the title is composed — R166 §3)', () => {
   const src = code(SCHEDULE_SESSIONS_SOURCE);
 
-  it('the occurrence editor opens on the occurrence’s OWN title/description', () => {
-    expect(src).toContain('useState(session.title)');
+  it('the occurrence editor opens on the occurrence’s OWN description, and no longer holds a title of its own', () => {
     expect(src).toContain("useState(session.description ?? '')");
+    expect(src).not.toContain('useState(session.title)');
   });
 
-  it('title/description travel with the wider scopes, like delivery_mode/visibility', () => {
-    expect(src).toContain('title: edit.title');
+  it('the description travels with the wider scopes, like delivery_mode/visibility — and no title does', () => {
     expect(src).toContain('description: edit.description');
+    expect(src).not.toContain('title: edit.title');
   });
 });

@@ -1521,7 +1521,10 @@ model RecurringCourseSchedule {
   /// Collated `ar-x-icu` in SQL (TD-6a). A label, never an identifier: not
   /// unique, and no part of conflict detection, recurrence, materialization,
   /// the R50 split or audience resolution.
-  title       String  @db.VarChar(120)
+  /// **Retired in place by R166 §3** — a class's title is COMPOSED at read time
+  /// (`lib/item-title.ts`); this column is no longer written or read. Kept,
+  /// nullable, so what was typed before stays exactly as it was.
+  title       String? @db.VarChar(120)
   description String? @db.VarChar(2000)
 
   id               String          @id @default(uuid()) @db.Uuid
@@ -1942,7 +1945,8 @@ model Session {
   /// codebase that construct a scratch Session for an unrelated scenario
   /// (attendance, content, delivery, trash-lifecycle...) do not all need an
   /// edit for a value none of them assert on.
-  title       String  @default("حصة") @db.VarChar(120)
+  /// **Retired in place by R166 §3**, with the schedule's own column above.
+  title       String? @db.VarChar(120)
   description String? @db.VarChar(2000)
 
   /// A calendar date, never an instant (TD-11).

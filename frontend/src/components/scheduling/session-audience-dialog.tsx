@@ -83,6 +83,183 @@ export async function fetchAllPages<T>(
   return rows;
 }
 
+/** The five lists, as `PUT /sessions/{id}/audience` and «تعديل الحصة» send them. */
+export interface SessionAudienceChoice {
+  branchIds: string[];
+  categoryIds: string[];
+  levelIds: string[];
+  administrativeGroupIds: string[];
+  teachingGroupIds: string[];
+}
+
+export interface SessionAudienceState {
+  roster: SessionRoster | null;
+  chosen: SessionAudienceChoice;
+  set: <K extends keyof SessionAudienceChoice>(key: K, next: string[]) => void;
+  options: {
+    categories: { value: string; label: string }[];
+    levels: { value: string; label: string }[];
+    groups: { value: string; label: string }[];
+    circles: { value: string; label: string }[];
+  };
+  /** Differs from what it opened on — order-blind. What decides whether a save
+   *  SENDS the audience at all: re-sending an inherited audience untouched
+   *  would turn it into an override nobody made. */
+  dirty: boolean;
+  loadFailed: boolean;
+}
+
+const EMPTY_CHOICE: SessionAudienceChoice = {
+  branchIds: [],
+  categoryIds: [],
+  levelIds: [],
+  administrativeGroupIds: [],
+  teachingGroupIds: [],
+};
+
+/**
+ * **One occurrence's audience, as state** — shared by the «الحضور» dialog and by
+ * «تعديل الحصة» (SRS Revision 166 §2), so the two cannot seed, offer or compare
+ * an audience differently.
+ *
+ * Unscoped lists, like the multi_dimension class picker's own reads (Revision
+ * 157): every group and circle on the platform, never the Level+branch-chained
+ * list — combining across boundaries is exactly the case that list cannot
+ * answer. **Every page**, and a failed load says so rather than silently
+ * offering fewer options than the platform has (codex review, 2026-09-20).
+ *
+ * **Seeded with the inherited value(s)**, which is what makes *replacement* the
+ * only rule anybody has to hold in their head. `active: false` requests nothing.
+ */
+export function useSessionAudience({
+  sessionId,
+  token,
+  active,
+}: {
+  sessionId: string;
+  token: string | null;
+  active: boolean;
+}): SessionAudienceState {
+  const scope = useScopeOptions({
+    token,
+    fields: active ? (['categoryId', 'levelId'] as const) : [],
+    mode: 'form',
+  });
+  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
+  const [roster, setRoster] = useState<SessionRoster | null>(null);
+  const [chosen, setChosen] = useState<SessionAudienceChoice>(EMPTY_CHOICE);
+  const [initial, setInitial] = useState<SessionAudienceChoice>(EMPTY_CHOICE);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    void fetchAllPages((page) => listAdministrativeGroups(token, page, {}, null, 100))
+      .then(setGroups)
+      .catch(() => setLoadFailed(true));
+    void fetchAllPages((page) => listCircles(token, page, {}, null, 100))
+      .then(setCircles)
+      .catch(() => setLoadFailed(true));
+  }, [token, active]);
+
+  useEffect(() => {
+    if (!active) return;
+    void fetchSessionRoster(sessionId, token)
+      .then((r) => {
+        setRoster(r);
+        const seeded: SessionAudienceChoice = {
+          branchIds: r.audience.branches.map((b) => b.id),
+          categoryIds: r.audience.categories.map((c) => c.id),
+          levelIds: r.audience.levels.map((l) => l.id),
+          administrativeGroupIds: r.audience.administrative_groups.map((g) => g.id),
+          teachingGroupIds: r.audience.teaching_groups.map((c) => c.id),
+        };
+        setChosen(seeded);
+        setInitial(seeded);
+      })
+      .catch(() => setLoadFailed(true));
+  }, [sessionId, token, active]);
+
+  // Through the shared comparison rather than a hand-rolled join. Sorted
+  // first, because a picker returns ids in click order and choosing A then B
+  // is the same audience as choosing B then A — `isDirty` is deliberately
+  // order-sensitive, so the sort is what makes it mean *changed*.
+  const dirty = (Object.keys(EMPTY_CHOICE) as (keyof SessionAudienceChoice)[]).some((key) =>
+    isDirty([...chosen[key]].sort(), [...initial[key]].sort()),
+  );
+
+  return {
+    roster,
+    chosen,
+    set: (key, next) => setChosen((current) => ({ ...current, [key]: next })),
+    options: {
+      categories: scope.options.categoryId,
+      levels: scope.options.levelId,
+      groups: groups.map((g) => ({ value: g.id, label: g.name })),
+      circles: circles.map((c) => ({ value: c.id, label: c.name })),
+    },
+    dirty,
+    loadFailed,
+  };
+}
+
+/** The five pickers and the head-count — the same in both places that show them. */
+export function SessionAudienceFields({
+  audience,
+  branches,
+}: {
+  audience: SessionAudienceState;
+  branches: { id: string; name: string }[];
+}): ReactNode {
+  const { roster, chosen, set, options } = audience;
+  return (
+    <>
+      <MultiSelectField
+        label={t('admin.calendar.scopeBranch')}
+        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+        selected={chosen.branchIds}
+        onChange={(next) => set('branchIds', next)}
+        hint={t('admin.sessions.audienceBranchesHint')}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeCategory')}
+        options={options.categories}
+        selected={chosen.categoryIds}
+        onChange={(next) => set('categoryIds', next)}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeLevel')}
+        options={options.levels}
+        selected={chosen.levelIds}
+        onChange={(next) => set('levelIds', next)}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeGroup')}
+        options={options.groups}
+        selected={chosen.administrativeGroupIds}
+        onChange={(next) => set('administrativeGroupIds', next)}
+      />
+      <MultiSelectField
+        label={t('admin.calendar.scopeCircle')}
+        options={options.circles}
+        selected={chosen.teachingGroupIds}
+        onChange={(next) => set('teachingGroupIds', next)}
+      />
+
+      {roster ? (
+        <p className="staff-picker__warnings">
+          <Badge tone={roster.overridden ? 'warn' : 'neutral'}>
+            {t('admin.sessions.audienceCount').replace('{n}', String(roster.students.length))}
+          </Badge>
+          {roster.overridden ? (
+            <Badge tone="warn">{t('admin.sessions.audienceOverridden')}</Badge>
+          ) : null}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function SessionAudienceDialog({
   sessionId,
   version,
@@ -100,99 +277,24 @@ export function SessionAudienceDialog({
   onSaved: (message: string) => void;
   token: string | null;
 }): ReactNode {
-  const scope = useScopeOptions({ token, fields: ['categoryId', 'levelId'], mode: 'form' });
-  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
-  const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
-
-  const [roster, setRoster] = useState<SessionRoster | null>(null);
-  const [chosenBranches, setChosenBranches] = useState<string[]>([]);
-  const [chosenCategories, setChosenCategories] = useState<string[]>([]);
-  const [chosenLevels, setChosenLevels] = useState<string[]>([]);
-  const [chosenGroups, setChosenGroups] = useState<string[]>([]);
-  const [chosenCircles, setChosenCircles] = useState<string[]>([]);
-  const [initial, setInitial] = useState<{
-    branches: string[];
-    categories: string[];
-    levels: string[];
-    groups: string[];
-    circles: string[];
-  }>({ branches: [], categories: [], levels: [], groups: [], circles: [] });
+  const audience = useSessionAudience({ sessionId, token, active: true });
+  const { roster } = audience;
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  // Unscoped, like the multi_dimension class picker's own reads (Revision
-  // 157): this dialog offers every group/circle on the platform, never the
-  // ordinary Level+branch-chained list — combining across boundaries is
-  // exactly the case that list cannot answer. **Every page**, and a failed
-  // load says so, rather than the picker silently offering fewer options
-  // than the platform actually has (codex review, 2026-09-20).
-  useEffect(() => {
-    void fetchAllPages((page) => listAdministrativeGroups(token, page, {}, null, 100))
-      .then(setGroups)
-      .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
-    void fetchAllPages((page) => listCircles(token, page, {}, null, 100))
-      .then(setCircles)
-      .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
-  }, [token]);
-
-  useEffect(() => {
-    void fetchSessionRoster(sessionId, token)
-      .then((r) => {
-        setRoster(r);
-        // **Seeded with the inherited value(s)**, which is what makes
-        // *replacement* the only rule anybody has to hold in their head.
-        const seeded = {
-          branches: r.audience.branches.map((b) => b.id),
-          categories: r.audience.categories.map((c) => c.id),
-          levels: r.audience.levels.map((l) => l.id),
-          groups: r.audience.administrative_groups.map((g) => g.id),
-          circles: r.audience.teaching_groups.map((c) => c.id),
-        };
-        setChosenBranches(seeded.branches);
-        setChosenCategories(seeded.categories);
-        setChosenLevels(seeded.levels);
-        setChosenGroups(seeded.groups);
-        setChosenCircles(seeded.circles);
-        setInitial(seeded);
-      })
-      .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
-  }, [sessionId, token]);
-
-  // Through the shared comparison rather than a hand-rolled join. Sorted
-  // first, because a picker returns ids in click order and choosing A then B
-  // is the same audience as choosing B then A — `isDirty` is deliberately
-  // order-sensitive, so the sort is what makes it mean *changed*.
-  const dirty =
-    isDirty([...chosenBranches].sort(), [...initial.branches].sort()) ||
-    isDirty([...chosenCategories].sort(), [...initial.categories].sort()) ||
-    isDirty([...chosenLevels].sort(), [...initial.levels].sort()) ||
-    isDirty([...chosenGroups].sort(), [...initial.groups].sort()) ||
-    isDirty([...chosenCircles].sort(), [...initial.circles].sort());
 
   return (
     <FormDialog
       open
       wide
       title={t('admin.sessions.audienceTitle').replace('{date}', date)}
-      notice={notice}
+      notice={notice ?? (audience.loadFailed ? t('admin.sessions.audienceLoadFailed') : null)}
       busy={busy}
-      dirty={dirty}
+      dirty={audience.dirty}
       onCancel={onClose}
       onSubmit={async () => {
         setBusy(true);
         try {
-          await setSessionAudienceOverrides(
-            sessionId,
-            version,
-            {
-              branchIds: chosenBranches,
-              categoryIds: chosenCategories,
-              levelIds: chosenLevels,
-              administrativeGroupIds: chosenGroups,
-              teachingGroupIds: chosenCircles,
-            },
-            token,
-          );
+          await setSessionAudienceOverrides(sessionId, version, audience.chosen, token);
           onSaved(t('admin.sessions.audienceSaved'));
         } catch {
           setNotice(t('admin.sessions.audienceSaveFailed'));
@@ -214,51 +316,7 @@ export function SessionAudienceDialog({
         </p>
       ) : null}
 
-      <MultiSelectField
-        label={t('admin.calendar.scopeBranch')}
-        options={branches.map((b) => ({ value: b.id, label: b.name }))}
-        selected={chosenBranches}
-        onChange={setChosenBranches}
-        hint={t('admin.sessions.audienceBranchesHint')}
-      />
-      <MultiSelectField
-        label={t('admin.calendar.scopeCategory')}
-        options={scope.options.categoryId}
-        selected={chosenCategories}
-        onChange={setChosenCategories}
-      />
-      <MultiSelectField
-        label={t('admin.calendar.scopeLevel')}
-        options={scope.options.levelId}
-        selected={chosenLevels}
-        onChange={setChosenLevels}
-      />
-      <MultiSelectField
-        label={t('admin.calendar.scopeGroup')}
-        options={groups.map((g) => ({ value: g.id, label: g.name }))}
-        selected={chosenGroups}
-        onChange={setChosenGroups}
-      />
-      <MultiSelectField
-        label={t('admin.calendar.scopeCircle')}
-        options={circles.map((c) => ({ value: c.id, label: c.name }))}
-        selected={chosenCircles}
-        onChange={setChosenCircles}
-      />
-
-      {roster ? (
-        <p className="staff-picker__warnings">
-          <Badge tone={roster.overridden ? 'warn' : 'neutral'}>
-            {t('admin.sessions.audienceCount').replace(
-              '{n}',
-              String(roster.students.length),
-            )}
-          </Badge>
-          {roster.overridden ? (
-            <Badge tone="warn">{t('admin.sessions.audienceOverridden')}</Badge>
-          ) : null}
-        </p>
-      ) : null}
+      <SessionAudienceFields audience={audience} branches={branches} />
 
       {/* The roster itself, so an administrator reads who is expected rather
           than inferring it from calendar behaviour. Each name carries the branch

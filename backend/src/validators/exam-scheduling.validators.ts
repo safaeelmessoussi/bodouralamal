@@ -50,7 +50,8 @@ const availability = z
 
 const bare = z
   .object({
-    title: z.string().trim().min(1).max(120),
+    // (SRS Revision 166 §3 — no `title`: a bare sitting is called what it is,
+    // composed by the server. `.strict()` refuses the key rather than drop it.)
     // **Owner-reported, 2026-09-15 — no longer asked here.** She sets it while
     // authoring an exam, not while scheduling one; a bare occurrence has no
     // authoring step of its own, so the service defaults it (see

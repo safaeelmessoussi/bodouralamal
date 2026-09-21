@@ -5,12 +5,12 @@ import {
   SurahField,
   SurahsField,
   subjectWorksBySurah,
-  suggestedTitle,
   surahChoices,
-  surahNamesOf,
 } from './surahs.js';
 import schedulingPage from '../../pages/admin/scheduling.tsx?raw';
 import sessionsPage from '../../pages/admin/schedule-sessions.tsx?raw';
+import schedulingAdapter from '../../adapters/scheduling.ts?raw';
+import { STRUCTURAL_KIND_SPECS } from '../../adapters/scheduling-types.js';
 
 /**
  * SRS Revision 165 §2/§5 — «أي سورة؟». The server owns the rule
@@ -71,50 +71,35 @@ describe('the fields', () => {
   });
 });
 
-describe('the title «إضافة عنصر» opens with', () => {
-  const base = {
-    typeName: 'حصة',
-    subjectName: 'تفسير القرآن',
-    surahNames: surahNamesOf(FACTS, [2, 1]),
-    teacherName: 'صفاء',
-    date: '2026-09-22',
-    time: '15:00',
-  };
+describe('SRS Revision 166 §3 — a class and an exam are CALLED what they are; nobody types it', () => {
+  it('only an activity and a holiday still have a typed title — theirs is their identity', () => {
+    expect(STRUCTURAL_KIND_SPECS.class.hasTitle).toBe(false);
+    expect(STRUCTURAL_KIND_SPECS.exam.hasTitle).toBe(false);
+    expect(STRUCTURAL_KIND_SPECS.activity.hasTitle).toBe(true);
+    expect(STRUCTURAL_KIND_SPECS.holiday.hasTitle).toBe(true);
+  });
 
-  it('type, Subject, Surah, main teacher, then the date and time', () => {
-    expect(suggestedTitle({ ...base, repeats: false })).toBe(
-      'حصة — تفسير القرآن — الفاتحة، البقرة — صفاء — 2026-09-22 15:00',
+  it('the form neither suggests nor sends a class title, and asks for one only where the kind has one', () => {
+    expect(schedulingPage).not.toContain('titleSuggestion');
+    expect(schedulingPage).toContain("if (spec.hasTitle && title.trim() === '') return t('scheduling.invalid.title');");
+    // The class branches of the one save build no `title` key at all.
+    const classBranch = schedulingAdapter.slice(
+      schedulingAdapter.indexOf("if (input.type === 'class') {"),
+      schedulingAdapter.indexOf("if (input.type === 'exam') {"),
     );
+    expect(classBranch).not.toContain('title:');
   });
 
-  it('a repeating class carries its time and NOT a date — its title is copied onto every occurrence', () => {
-    const title = suggestedTitle({ ...base, repeats: true });
-    expect(title).toBe('حصة — تفسير القرآن — الفاتحة، البقرة — صفاء — 15:00');
-    expect(title).not.toContain('2026-09-22');
-  });
-
-  it('omits what the item does not have rather than leaving empty separators', () => {
-    expect(
-      suggestedTitle({
-        typeName: 'اختبار',
-        subjectName: 'فقه',
-        surahNames: [],
-        teacherName: null,
-        date: '2026-09-22',
-        time: null,
-        repeats: false,
-      }),
-    ).toBe('اختبار — فقه — 2026-09-22');
+  it('«تعديل الحصة» SHOWS the composed title and asks for «الوصف» instead', () => {
+    expect(sessionsPage).toContain("<strong>{t('scheduling.title')}:</strong> {session.title}");
+    expect(sessionsPage).not.toContain("<TextField label={t('scheduling.title')}");
   });
 });
 
 describe('the forms that ask', () => {
-  it('«إضافة عنصر» requires a Surah of a by-Surah class and exam, and follows the suggestion until she types', () => {
+  it('«إضافة عنصر» requires a Surah of a by-Surah class and exam', () => {
     expect(schedulingPage).toContain("if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.surahs');");
     expect(schedulingPage).toContain("return t('scheduling.invalid.examSurah');");
-    expect(schedulingPage).toContain('if (titleTouched || !spec.hasTitle) return;');
-    // An existing item keeps the title somebody already gave it.
-    expect(schedulingPage).toContain('useState(item !== null)');
     // Sent only for the kind that owns the key, and only when it was asked.
     expect(schedulingPage).toContain("type === 'class' && asksSurahs ? { surahIds }");
     expect(schedulingPage).toContain("type === 'exam' && asksSurahs ? { examSurahId: surahIds[0] ?? null }");

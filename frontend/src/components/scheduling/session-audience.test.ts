@@ -24,20 +24,24 @@ describe('replacement per dimension, not addition — and the control says which
     // combine, you add the second value to what is already chosen. An empty
     // start would make the same submission mean "instead of", and nobody
     // could tell the two apart from the screen.
-    expect(code(DIALOG)).toContain('branches: r.audience.branches.map((b) => b.id)');
-    expect(code(DIALOG)).toContain('categories: r.audience.categories.map((c) => c.id)');
-    expect(code(DIALOG)).toContain('levels: r.audience.levels.map((l) => l.id)');
-    expect(code(DIALOG)).toContain('groups: r.audience.administrative_groups.map((g) => g.id)');
-    expect(code(DIALOG)).toContain('circles: r.audience.teaching_groups.map((c) => c.id)');
+    expect(code(DIALOG)).toContain('branchIds: r.audience.branches.map((b) => b.id)');
+    expect(code(DIALOG)).toContain('categoryIds: r.audience.categories.map((c) => c.id)');
+    expect(code(DIALOG)).toContain('levelIds: r.audience.levels.map((l) => l.id)');
+    expect(code(DIALOG)).toContain(
+      'administrativeGroupIds: r.audience.administrative_groups.map((g) => g.id)',
+    );
+    expect(code(DIALOG)).toContain('teachingGroupIds: r.audience.teaching_groups.map((c) => c.id)');
+    // …and BOTH what is chosen and what it is compared against start there.
+    expect(code(DIALOG)).toContain('setChosen(seeded);');
+    expect(code(DIALOG)).toContain('setInitial(seeded);');
   });
 
   it('submits all five as one call, never five requests', () => {
-    expect(code(DIALOG)).toContain('setSessionAudienceOverrides(');
-    expect(code(DIALOG)).toContain('branchIds: chosenBranches');
-    expect(code(DIALOG)).toContain('categoryIds: chosenCategories');
-    expect(code(DIALOG)).toContain('levelIds: chosenLevels');
-    expect(code(DIALOG)).toContain('administrativeGroupIds: chosenGroups');
-    expect(code(DIALOG)).toContain('teachingGroupIds: chosenCircles');
+    // The five lists are ONE value (`SessionAudienceChoice`), handed over whole.
+    expect(code(DIALOG)).toContain(
+      'await setSessionAudienceOverrides(sessionId, version, audience.chosen, token);',
+    );
+    expect(code(DIALOG).match(/setSessionAudienceOverrides\(/g)?.length).toBe(1);
   });
 
   it('says that clearing every branch restores the usual audience', () => {
@@ -66,7 +70,9 @@ describe('replacement per dimension, not addition — and the control says which
     // in `session-audience-dialog.fetch-all-pages.test.ts`; this only pins
     // that both reads actually go through it.
     expect(code(DIALOG)).toContain('export async function fetchAllPages');
-    expect(code(DIALOG)).toContain('.catch(() => setNotice(');
+    // A failed load is SAID, in both places that show these fields.
+    expect(code(DIALOG)).toContain('.catch(() => setLoadFailed(true))');
+    expect(code(DIALOG)).toContain("audience.loadFailed ? t('admin.sessions.audienceLoadFailed')");
   });
 });
 
@@ -98,6 +104,24 @@ describe('the action is offered for every teaching mode now (§14.4 — never of
   });
 });
 
+describe('SRS Revision 166 §2 — «تعديل الحصة» offers the SAME audience and staff editors, in its one save', () => {
+  it('renders the shared fields and the shared staff picker for «هذه الحصة فقط», managers only', () => {
+    expect(code(PAGE)).toContain("{scope === 'this_session' && token ? (");
+    expect(code(PAGE)).toContain('<SessionAudienceFields audience={audience} branches={branches} />');
+    expect(code(PAGE)).toContain('<StaffPicker');
+  });
+
+  it('sends the audience and the staff ONLY when she changed them — an inherited audience re-sent is an override nobody made', () => {
+    expect(code(PAGE)).toContain("...(scope === 'this_session' && token !== null && audience.dirty");
+    expect(code(PAGE)).toContain("...(scope === 'this_session' && token !== null && staffDirty");
+  });
+
+  it('asks the server for nothing while another scope is chosen', () => {
+    expect(code(PAGE)).toContain("active: token !== null && scope === 'this_session',");
+    expect(code(DIALOG)).toContain('if (!active) return;');
+  });
+});
+
 describe('the roster is shown, not inferred', () => {
   it('lists the expected students with the branch each comes from', () => {
     // §B12 — an administrator must not have to read calendar behaviour to learn
@@ -114,15 +138,16 @@ describe('the roster is shown, not inferred', () => {
 
 describe('unsaved work is not lost to a stray click (rule U)', () => {
   it('passes dirty, computed against what it opened with, across all five controls', () => {
-    expect(code(DIALOG)).toContain('dirty={dirty}');
+    expect(code(DIALOG)).toContain('dirty={audience.dirty}');
     // **The property, restated 2026-08-27, extended 2026-09-17** — what must
     // hold is that `dirty` is computed against the values the dialog opened
     // with, for EVERY dimension, using the shared `isDirty` comparison. A
     // form comparing against emptiness instead is the NEW E defect.
-    expect(code(DIALOG)).toMatch(/const dirty =\s*\n?\s*isDirty\([^;]*initial\.branches[^;]*\)/s);
-    expect(code(DIALOG)).toContain('initial.categories');
-    expect(code(DIALOG)).toContain('initial.levels');
-    expect(code(DIALOG)).toContain('initial.groups');
-    expect(code(DIALOG)).toContain('initial.circles');
+    // One comparison over EVERY key of the choice, so a sixth dimension cannot
+    // be added to the value and forgotten here.
+    expect(code(DIALOG)).toContain(
+      'const dirty = (Object.keys(EMPTY_CHOICE) as (keyof SessionAudienceChoice)[]).some((key) =>',
+    );
+    expect(code(DIALOG)).toContain('isDirty([...chosen[key]].sort(), [...initial[key]].sort())');
   });
 });

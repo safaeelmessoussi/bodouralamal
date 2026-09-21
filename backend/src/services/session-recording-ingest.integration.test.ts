@@ -196,6 +196,9 @@ async function onlineClass(
   media: "audio_video" | "audio_only",
   subjectId: string,
   weekday: string,
+  /** How the class is ADDRESSED. `filters` is what إضافة عنصر has built since
+   *  Revision 163 §5: no single-target column at all, only scope rows. */
+  addressedBy: "level" | "filters" = "level",
 ): Promise<string> {
   const { id } = await createCourseSchedule(
     prisma,
@@ -203,8 +206,9 @@ async function onlineClass(
     {
       title: `${TAG} ${media}`,
       subjectId,
-      teachingMode: "entire_level",
-      targetId: levelId,
+      ...(addressedBy === "level"
+        ? { teachingMode: "entire_level", targetId: levelId }
+        : { teachingMode: "multi_dimension", dimensions: { levelIds: [levelId] } }),
       branchId: branchA,
       roomId: null,
       startTime: at(15),
@@ -880,6 +884,44 @@ describe("ingestion happens EXACTLY once (R99.15)", () => {
     // Same key, so the first attempt's object is the one that is used rather
     // than orphaned — and it was never overwritten (§20 rule 15).
     expect(again.storageKey).toBe(content.storageKey);
+  });
+});
+
+/* ── A class built through the five filters ──────────────────────────────── */
+
+describe("SRS Revision 166 §4 — a filter-built class's recording is imported like any other", () => {
+  it("resolves its Level through the class's scope rows — it used to stop at «the occurrence resolves to no Level»", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday", "filters");
+    const schedule = await prisma.recurringCourseSchedule.findFirstOrThrow({
+      where: { sessions: { some: { id: sessionId } } },
+      select: { teachingMode: true, levelId: true, administrativeGroupId: true, teachingGroupId: true },
+    });
+    // The shape that broke it: a real class with NONE of the three target columns.
+    expect(schedule).toEqual({
+      teachingMode: "multi_dimension",
+      levelId: null,
+      administrativeGroupId: null,
+      teachingGroupId: null,
+    });
+
+    const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const done = await ingestRecording(prisma, clients, rec.id);
+
+    expect(done.contentId).not.toBeNull();
+    const content = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: done.contentId! },
+      select: { levelId: true, origin: true },
+    });
+    expect(content).toEqual({ levelId, origin: "session_recording" });
+    // Linked to the occurrence, which is what lists it under «التسجيلات».
+    expect(
+      await prisma.sessionContent.count({ where: { sessionId, contentId: done.contentId! } }),
+    ).toBe(1);
+    const row = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: rec.id },
+      select: { ingestionFailureReason: true },
+    });
+    expect(row.ingestionFailureReason).toBeNull();
   });
 });
 

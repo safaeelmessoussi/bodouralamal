@@ -11,6 +11,7 @@ import {
   type AcceptedMime,
 } from "../lib/file-types.js";
 import { verifyStoredObject } from "../lib/object-verification.js";
+import { scheduleLevelIds } from "../policies/roster-resolution.js";
 import { publicDisplayName } from "../lib/display-name.js";
 import {
   nextRecordingName,
@@ -252,11 +253,22 @@ export async function ingestRecording(
     );
   }
 
-  const levelId =
-    recording.session.schedule.level?.id ??
-    recording.session.schedule.administrativeGroup?.levelId ??
-    recording.session.schedule.teachingGroup?.levelId ??
-    null;
+  /**
+   * **The Level the recording is filed under — for EVERY kind of class**
+   * (Owner-reported, 2026-09-21; SRS Revision 166 §4). This read the three
+   * single-target columns only. A class built through the five filters
+   * (`multi_dimension` — every class created since Revision 163 §5) has none
+   * of them, so each of its recordings stopped here with *«the occurrence
+   * resolves to no Level»*, was retried into the same refusal, and reached
+   * nobody: «انتهى التسجيل لكن تعذّرت تهيئته للنشر». `scheduleLevelIds` is the
+   * one resolution every other surface already uses (the Subject and Surah
+   * rules), so a filter-built class answers here exactly as it does there.
+   *
+   * `EducationalContent.level_id` is single, so a class addressing SEVERAL
+   * Levels files its recording under the first in the Levels' own order —
+   * deterministic, so a retry after a partial failure writes the same row.
+   */
+  const levelId = await recordingLevelId(prisma, recording.session);
   if (levelId === null) {
     // `EducationalContent.level_id` is NOT NULL, and §4.9 groups the library by
     // Level. Inventing one would file the class's recording under a curriculum
@@ -432,6 +444,28 @@ export async function ingestRecording(
 }
 
 /* ───────────────────────────────── internals ───────────────────────────── */
+
+async function recordingLevelId(
+  prisma: PrismaClient,
+  session: {
+    scheduleId: string;
+    schedule: {
+      teachingMode: string;
+      levelId: string | null;
+      administrativeGroupId: string | null;
+      teachingGroupId: string | null;
+    };
+  },
+): Promise<string | null> {
+  const ids = await scheduleLevelIds(prisma, session.scheduleId, session.schedule);
+  if (ids.length <= 1) return ids[0] ?? null;
+  const first = await prisma.level.findFirst({
+    where: { id: { in: ids }, deletedAt: null },
+    orderBy: [{ displayOrder: { sort: "asc", nulls: "last" } }, { name: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  return first?.id ?? null;
+}
 
 /**
  * Records why the attempt was refused and **throws**, so pg-boss retries under

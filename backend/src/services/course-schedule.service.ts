@@ -40,6 +40,7 @@ import {
   scheduleDimensions,
   scheduleLevelIds,
 } from "../policies/roster-resolution.js";
+import { scheduleTitles, sessionTitles } from "./class-title.js";
 import * as audit from "../repositories/audit.repository.js";
 import * as trash from "../repositories/trash.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
@@ -434,7 +435,12 @@ async function assertStaffIntervals(
 }
 
 export interface CourseScheduleInput {
-  title: string;
+  /**
+   * **No `title`** (SRS Revision 166 §3). A class is called what it is — type,
+   * Subject, Surah, main teacher, when — composed at read time by
+   * `lib/item-title.ts`, so a change to any of those can never leave a stale
+   * name behind. What somebody wants to say in her own words is `description`.
+   */
   description?: string | null;
   subjectId: string;
   teachingMode: TeachingMode;
@@ -1028,7 +1034,6 @@ export async function createCourseSchedule(
 
     const schedule = await tx.recurringCourseSchedule.create({
       data: {
-        title: input.title,
         description: input.description ?? null,
         subjectId: input.subjectId,
         teachingMode: input.teachingMode,
@@ -1189,7 +1194,6 @@ export async function updateCourseSchedule(
   actor: Actor,
   id: string,
   data: {
-    title?: string;
     description?: string | null;
     roomId?: string | null;
     startTime?: Date;
@@ -1449,7 +1453,6 @@ export async function updateCourseSchedule(
       // which is exactly what `effective_until` did from R55 until R57 found it,
       // because that revision was only ever tested through the CREATE path.
       data: {
-        ...(data.title === undefined ? {} : { title: data.title }),
         ...(data.description === undefined
           ? {}
           : { description: data.description }),
@@ -1654,7 +1657,6 @@ async function splitCourseSchedule(
   id: string,
   fromDate: Date,
   data: {
-    title?: string;
     description?: string | null;
     roomId?: string | null;
     startTime?: Date;
@@ -1706,7 +1708,6 @@ async function splitCourseSchedule(
   const existing = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null },
     select: {
-      title: true,
       description: true,
       subjectId: true,
       teachingMode: true,
@@ -1988,8 +1989,7 @@ async function splitCourseSchedule(
 
     const successorValues = {
       // **The successor IS the same class**, split at a date (R50) — so it keeps
-      // its name, and an edit that renames it renames both halves' successor.
-      title: data.title ?? existing.title,
+      // its note unless this edit changes it. (It has no typed name: R166 §3.)
       description:
         data.description === undefined
           ? existing.description
@@ -2423,7 +2423,6 @@ export async function listScheduleSessions(
       take: window.take,
       select: {
         id: true,
-        title: true,
         description: true,
         date: true,
         startTime: true,
@@ -2470,9 +2469,16 @@ export async function listScheduleSessions(
     })),
   );
 
+  // R166 §3 — each occurrence's own composed title: ITS Subject, Surahs and
+  // main teacher where it has its own, and its own date.
+  const titles = await sessionTitles(
+    prisma,
+    rows.map((r) => r.id),
+  );
   return page(
     rows.map((r) => ({
       ...r,
+      title: titles.get(r.id) ?? "",
       surahIds: r.surahs.map((row) => row.surahId),
       staff: r.staff.map((s) => ({
         userId: s.userId,
@@ -2600,7 +2606,9 @@ export async function listCourseSchedules(
   } & PageParams,
 ): Promise<
   Page<
-    RecurringCourseSchedule & {
+    // R166 §3 — `title` is the COMPOSED one, never the retired column.
+    Omit<RecurringCourseSchedule, "title"> & {
+      title: string;
       staff: {
         userId: string;
         position: string;
@@ -2676,9 +2684,15 @@ export async function listCourseSchedules(
     }),
     prisma.recurringCourseSchedule.count({ where }),
   ]);
+  // R166 §3 — what each class is CALLED, composed from the rows as they stand.
+  const titles = await scheduleTitles(
+    prisma,
+    rows.map((row) => row.id),
+  );
   return page(
     rows.map((row) => ({
       ...row,
+      title: titles.get(row.id) ?? "",
       staff: row.staff.map((s) => ({
         userId: s.userId,
         position: s.position,

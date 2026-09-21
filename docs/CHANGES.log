@@ -10694,3 +10694,46 @@ filters-combine sentence. What only a signed-in person can do on Staging — sch
 with its Surah, edit one occurrence's Surah, record a class and read its title under «التسجيلات» —
 is left for the Owner, because a Staging session can only come from Google sign-in; the same paths
 were driven in a real browser on Localhost (16/16, 13/13, 14/14, 28/28, 61/61).
+
+## 2026-09-21 — SRS Revision 166: Level completion, everything about one session in one dialog, composed titles, stranded recordings — and every instant an hour off
+
+**Level completion (§1).** BR-11's second clause was unreachable (nothing could mark a Level's final
+exam). Defined by the Owner: every Surah of the «مقرر الحفظ» memorised AND, where the Level teaches a
+by-Surah Subject other than the tracker, an exam of it taken — a mark that is not «غائبة», or a
+submitted remote paper; no pass mark, because there is none. `policies/level-completion.ts` holds the
+pure rule and two list-wide loaders; `levelCompletion` and the per-beneficiary progress read both use
+it. Shown on «حفظي» and the مؤطِّرة's Quran screen through one component that names what is missing.
+
+**One session, one dialog, one save (§2).** `setSessionAudienceOverrides` was split into a validator
+and a transaction-scoped writer; `overrideSession` takes `audience` and calls the same writer, so the
+audit row, the consent re-evaluation and the rows cannot differ between the two routes. The frontend
+extracted `useSessionAudience`/`SessionAudienceFields` from the «الحضور» dialog and renders them, with
+the staff picker, inside «تعديل الحصة» for «هذه الحصة فقط»; only a dirty audience or staff is sent.
+
+**A class is called what it is (§3).** `lib/item-title.ts` composes; `services/class-title.ts` loads
+for lists and write responses; the calendar composes inline. `title` removed from `CourseScheduleInput`,
+both update shapes, `SessionOverride` and `bare`; the materializer no longer snapshots one. The R57 and
+R138 tests were restated on `description`, which runs through the same snapshot/override/resync
+machinery and is what remains typed. **The blast radius I measured before deciding was forty title-keyed
+cleanups; the real one was ten** — only fixtures that create classes THROUGH the service store no title.
+Those now use `test-support/owned-schedules.ts`. A bare exam's title is composed after its Surah is
+written (composed in the same statement, it read a sitting that had no Surah yet — caught by its test),
+and recomposed on `PATCH /exams/{id}` only while it still equals what composing the row as it stands
+would give — no marker column; the text is the evidence.
+
+**Recordings (§4).** `recordingLevelId` → `scheduleLevelIds`. The seven jobs on Localhost had used 4/4
+retries; `requeue-recording-ingest.ts` re-queued them and all seven imported.
+
+**Every instant, an hour off.** Found checking a recording title against `psql`: the database said
+17:28 UTC, the app read 18:28 UTC. A probe then showed the write direction too (sent 12:00 UTC,
+understood 11:00 UTC). `options: '-c TimeZone=UTC'` on the adapter's pool. The regression test fails 3/3
+with the option commented out and passes with it; it also asserts the database it runs against is NOT
+UTC, so it cannot go vacuous. Existing instants on Localhost and Staging are an hour early in absolute
+terms and now read as such; there is no Production data.
+
+**Harnesses.** `verify-class-filters` 20/20 (journey D drives «تعديل الحصة» for one session and reads
+the one PATCH it sends), `verify-schedule-edit` 13/13, `verify-teacher-scheduling` 14/14,
+`verify-exam-scheduling` 92/92 (six of its checks had been looking for «امتحان» where the screen says
+«اختبار»). Journey D writes a per-session audience, which `seed-dev-scenario --clean` did not unwind —
+and the wrapper's `|| true` hid that failure until the NEXT harness died parsing an empty scenario. The
+cleanup unwinds all five audience tables; the two wrappers now say when it fails.

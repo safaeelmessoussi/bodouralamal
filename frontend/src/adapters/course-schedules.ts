@@ -211,7 +211,7 @@ export async function deleteCourseSchedule(
 }
 
 export interface CourseScheduleInput {
-  title: string;
+  // (SRS Revision 166 §3 — no `title`: the server composes what a class is called.)
   description?: string | null;
   /**
    * **R109 — the DEFAULT tier for the Sessions this schedule materializes.**
@@ -329,7 +329,6 @@ export async function updateCourseSchedule(
     Pick<
       CourseScheduleInput,
       // R57 — editable, unlike the scope fields §4.4 freezes.
-      | 'title'
       | 'description'
       | 'room_id'
       // R97 — editable, and it resyncs the FUTURE un-protected occurrences.

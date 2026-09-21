@@ -1,3 +1,5 @@
+import { composeItemTitle } from './item-title.js';
+
 /**
  * **What a recording is called, decided by the server** (SRS Revision 75.6,
  * carried to the server by Revision 99).
@@ -126,16 +128,27 @@ export interface SessionRecordingNameSource {
   at: Date;
 }
 
+/**
+ * A recording's title is STORED, in `EducationalContent.title` — `VARCHAR(120)`.
+ * A class about several Surahs, or led by somebody with a long name, overflowed
+ * it (found 2026-09-21, a day after this rule shipped): the row is then refused
+ * rather than truncated, which is one more way for «إيقاف التسجيل» to end in a
+ * recording nobody can reach. Six characters are kept back for R75.6's ` 2`…
+ * ` 999` suffix. `composeItemTitle` decides what gives way, and never «when».
+ */
+export const RECORDING_TITLE_LIMIT = 120 - 6;
+
 export function sessionRecordingBaseName(source: SessionRecordingNameSource): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
-  const time = `${pad(source.at.getHours())}:${pad(source.at.getMinutes())}`;
-  return [
-    (source.typeName ?? '').trim(),
-    source.subjectName.trim(),
-    source.surahNames.join('، '),
-    (source.teacherName ?? '').trim(),
-    `${localDateIso(source.at)} ${time}`,
-  ]
-    .filter((part) => part !== '')
-    .join(' — ');
+  return composeItemTitle(
+    {
+      typeName: source.typeName,
+      subjectName: source.subjectName,
+      surahNames: source.surahNames,
+      leadName: source.teacherName,
+      date: localDateIso(source.at),
+      time: `${pad(source.at.getHours())}:${pad(source.at.getMinutes())}`,
+    },
+    RECORDING_TITLE_LIMIT,
+  );
 }

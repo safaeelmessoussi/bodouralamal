@@ -124,6 +124,12 @@ async function clear(): Promise<void> {
     });
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   }
+  // R166 §1 — the sittings the completion tests create, by the Level they
+  // belong to (a Grade and an Exam are both RESTRICT against what they name).
+  const sittings = { exam: { level: { name: { startsWith: TAG } } } };
+  await prisma.grade.deleteMany({ where: sittings });
+  await prisma.studentExamSubmission.deleteMany({ where: sittings });
+  await prisma.exam.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   const schedules = await prisma.recurringCourseSchedule.findMany({
     where: { title: { startsWith: TAG } },
     select: { id: true },
@@ -598,6 +604,165 @@ describe("M4c — BR-11 level completion", () => {
     expect(mine.configured_surahs).toBe(2);
     expect(mine.completed_surahs).toBe(1);
     expect(mine.complete).toBe(false);
+  });
+
+  /**
+   * **R166 §1 — BR-11's second clause**: where the Level teaches a Subject that
+   * works by Surah and is not the memorisation tracker (تفسير القرآن, by its
+   * COLUMNS — this fixture's is deliberately not called that), every Surah of
+   * the syllabus must also have had an exam TAKEN on it.
+   */
+  describe("R166 §1 — memorised AND examined", () => {
+    let tafseerLike: string;
+    const yearId = async (): Promise<string> =>
+      (await prisma.academicYear.findFirstOrThrow({ where: { deletedAt: null } })).id;
+
+    async function teachBySurahSubject(): Promise<void> {
+      tafseerLike = (
+        await prisma.subject.create({
+          data: { name: `${TAG} مادة تُختبَر بالسور`, requiresSurahs: true },
+        })
+      ).id;
+      await prisma.levelSubject.create({ data: { levelId, subjectId: tafseerLike } });
+    }
+
+    async function sitting(surahId: number): Promise<string> {
+      return (
+        await prisma.exam.create({
+          data: {
+            title: `${TAG} اختبار ${surahId}`,
+            mode: "physical",
+            status: "published",
+            maxGrade: 20,
+            levelId,
+            subjectId: tafseerLike,
+            surahId,
+            academicYearId: await yearId(),
+            targetKind: "level",
+            date: new Date("2026-06-10T00:00:00.000Z"),
+          },
+          select: { id: true },
+        })
+      ).id;
+    }
+
+    const mineOf = async () =>
+      (await levelCompletion(prisma, superAdmin(), levelId)).find((r) => r.student_id === student)!;
+
+    it("memorisation alone no longer completes a Level that teaches such a Subject", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+
+      const mine = await mineOf();
+      expect(mine.completed_surahs).toBe(1);
+      expect(mine.final_exam_configured).toBe(true);
+      expect(mine.examined_surahs).toBe(0);
+      expect(mine.surahs[0]?.exam_taken).toBe(false);
+      expect(mine.complete).toBe(false);
+    });
+
+    it("a recorded mark completes it — and a mark of «غائبة» does not", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+      const examId = await sitting(1);
+
+      const absent = await prisma.grade.create({
+        data: { examId, studentId: student, score: 0, absent: true },
+      });
+      expect((await mineOf()).complete).toBe(false);
+
+      // No pass mark exists on this platform (§4.6), so ANY recorded score is
+      // «taken» — the Owner's word — including a low one.
+      await prisma.grade.update({ where: { id: absent.id }, data: { absent: false, score: 3 } });
+      const mine = await mineOf();
+      expect(mine.surahs[0]?.exam_taken).toBe(true);
+      expect(mine.examined_surahs).toBe(1);
+      expect(mine.complete).toBe(true);
+    });
+
+    it("a SUBMITTED remote paper counts; one still in progress does not", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+      const examId = await sitting(1);
+      const paper = await prisma.studentExamSubmission.create({
+        data: { examId, studentId: student, state: "in_progress" },
+      });
+      expect((await mineOf()).complete).toBe(false);
+      await prisma.studentExamSubmission.update({
+        where: { id: paper.id },
+        data: { state: "submitted", submittedAt: new Date() },
+      });
+      expect((await mineOf()).complete).toBe(true);
+    });
+
+    it("needs an exam on EVERY Surah of the syllabus, and an exam of another Surah is no substitute", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 114);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+      await logProgress(prisma, teacher(quranTeacher), { ...range(1, 6), surahId: 114 });
+      await prisma.grade.create({
+        data: { examId: await sitting(1), studentId: student, score: 15 },
+      });
+
+      const half = await mineOf();
+      expect(half.completed_surahs).toBe(2);
+      expect(half.examined_surahs).toBe(1);
+      expect(half.complete).toBe(false);
+
+      await prisma.grade.create({
+        data: { examId: await sitting(114), studentId: student, score: 12 },
+      });
+      expect((await mineOf()).complete).toBe(true);
+    });
+
+    it("an exam of the MEMORISATION Subject is not the تفسير exam — the tracker is excluded by its column", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+      const hifzExam = await prisma.exam.create({
+        data: {
+          title: `${TAG} اختبار حفظ`,
+          mode: "physical",
+          status: "published",
+          maxGrade: 20,
+          levelId,
+          subjectId: quranSubject,
+          surahId: 1,
+          academicYearId: await yearId(),
+          targetKind: "level",
+          date: new Date("2026-06-10T00:00:00.000Z"),
+        },
+      });
+      await prisma.grade.create({ data: { examId: hifzExam.id, studentId: student, score: 18 } });
+      expect((await mineOf()).complete).toBe(false);
+    });
+
+    it("«حفظي» tells HER the same verdict, by the same rule", async () => {
+      await teachBySurahSubject();
+      await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+      await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+
+      const before = (await readOwnCoverage(prisma, student)).levels.find((l) => l.level_id === levelId)!;
+      expect(before.completion).toEqual({
+        complete: false,
+        configured_surahs: 1,
+        memorised_surahs: 1,
+        examined_surahs: 0,
+        exams_required: true,
+      });
+      expect(before.surahs[0]?.exam_taken).toBe(false);
+
+      await prisma.grade.create({
+        data: { examId: await sitting(1), studentId: student, score: 16 },
+      });
+      const after = (await readOwnCoverage(prisma, student)).levels.find((l) => l.level_id === levelId)!;
+      expect(after.completion.complete).toBe(true);
+      expect(after.surahs[0]?.exam_taken).toBe(true);
+    });
   });
 
   it("refuses a مؤطرة — completion is an Admin read", async () => {

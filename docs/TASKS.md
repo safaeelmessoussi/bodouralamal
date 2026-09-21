@@ -5221,3 +5221,61 @@ editor, المواد and the browser harnesses. One migration
       form asks «السور» and suggests the title — edit one occurrence's Surah,
       split a class at its first session, and record an online class to read
       its new title under «التسجيلات».
+
+## SRS Revision 166 — Level completion, one dialog for one session, composed titles, stranded recordings — 2026-09-21
+
+Owner-reported batch of five. One migration
+(`20260921090000_r166_class_title_is_composed` — two columns stop being
+required; nothing dropped or rewritten).
+
+- [x] **§1 — Level completion built.** BR-11's unreachable second clause is
+      defined: every Surah of the «مقرر الحفظ» memorised AND — where the Level
+      teaches تفسير (by-Surah, not the tracker; by columns, never the name) — an
+      exam of it TAKEN (a mark that is not «غائبة», or a submitted remote
+      paper). One pure rule (`policies/level-completion.ts`) behind both reads;
+      shown on «حفظي» and the مؤطِّرة's Quran screen, naming which Surahs are
+      still to memorise and which still need their exam. Derived, never stored.
+- [ ] **For the Owner to confirm:** *taken*, not *passed* — the platform has no
+      pass mark (§4.6), and her word was «taking». A pass mark would be a new
+      rule; this clause is where it would go.
+- [x] **§2 — «تعديل الحصة» changes everything about ONE session in one save**:
+      audience (five lists), Subject, Surah, room, delivery, date, times,
+      visibility, «الوصف», main teacher and assistants. `PATCH /sessions/{id}`
+      takes `audience`, written in the same transaction by the audience route's
+      own writer, under one version bump. Only what changed is sent.
+- [x] **§3 — a class is CALLED what it is.** No «العنوان» for a class or an
+      exam; the server composes *type — Subject — Surah — main teacher — when*
+      at read time, so a cover teacher or a changed Surah is in the title the
+      moment it is saved. «الوصف» carries anything typed and now reaches the
+      calendar dialog for a class. An activity, a holiday and a sitting from an
+      authored paper keep their typed title; a bare sitting's is composed and
+      stored, recomposed on edit only while it is still the composed one.
+      `title` is refused (not dropped) on the class, session and bare-exam
+      write bodies. The two class title columns are retired in place.
+- [x] **§4 — recordings of filter-built classes import.** The job resolved a
+      Level from the single-target columns only; every class since R163 §5 has
+      none, so each recording was refused four times and stranded.
+      `scripts/requeue-recording-ingest.ts` re-queues stranded imports; the
+      Owner's seven on Localhost imported.
+- [x] **A composed title can no longer overflow `VARCHAR(120)`** — it would
+      have REFUSED a recording's or a bare exam's row. Surahs give way first,
+      then the main teacher, never «when».
+- [x] **Platform-wide, found in passing: every instant was written an hour
+      early and read an hour late** (`@prisma/adapter-pg` assumes a UTC
+      session; the database's default is `Africa/Casablanca`). Self-cancelling
+      on a round trip, wrong everywhere else. Every application session is now
+      UTC; a test asks what a round trip cannot and fails 3/3 without the fix.
+- [ ] **Known limit, not changed:** a recording belongs to ONE Level, so a
+      *private* recording of a class addressing two Levels is listed for the
+      first Level's beneficiaries only.
+- [x] **§5 — the provider's written answers recorded** in
+      [provider acceptance](operations/provider-acceptance.md#what-the-provider-has-since-answered-in-writing-2026-09-21-and-what-is-still-open),
+      with what is still open (UDP 7882/TCP 7881, the platform, the art. 25
+      contract) and what launching without the backup line means. The final
+      email to the provider was drafted for the Owner; nothing was sent,
+      ordered or paid by this work.
+- [x] Harness cleanups no longer hide a failure: `verify-class-filters` and
+      `verify-schedule-edit` SAY when `seed-dev-scenario --clean` fails (it had
+      been `|| true`, and hid a failed cleanup three times in two days).
+      Fixtures and scenario seeds find the classes they own by what they are
+      attached to (`test-support/owned-schedules.ts`), not by a title.

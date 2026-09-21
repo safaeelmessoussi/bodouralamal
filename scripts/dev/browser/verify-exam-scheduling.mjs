@@ -477,14 +477,14 @@ if (onlineDraftId) {
 
 await goto('/admin/exam-grades', '.admin-nav');
 {
-  const clicked = await clickButtonContaining('جدولة امتحان');
+  const clicked = await clickButtonContaining('جدولة اختبار');
   if (clicked.noButton) {
     const debug = await evaluate(
       "(() => ({ href: window.location.href, buttons: [...document.querySelectorAll('a, button')].map((b) => b.textContent.trim()).filter(Boolean).slice(0, 40) }))()",
     ).catch(() => 'EVAL_ERR');
     check('B0b · debug — page state when the button was not found', true, JSON.stringify(debug));
   }
-  check('B0 · نقاط الامتحانات — ＋ جدولة امتحان is present and clicked', clicked.ok === true, JSON.stringify(clicked));
+  check('B0 · نقاط الامتحانات — ＋ جدولة اختبار is present and clicked', clicked.ok === true, JSON.stringify(clicked));
 
   const href = await waitFor(async () => {
     const p = await currentPath();
@@ -536,7 +536,7 @@ if (physicalDraftId) {
   check('C1 · a fresh create dialog opens (?kind=exam&new=1, no source)', isOpen === true);
 
   if (isOpen) {
-  const mode = await fieldSnapshot('نوع الامتحان');
+  const mode = await fieldSnapshot('نوع الاختبار');
   check('C2 · طريقة الأداء defaults to حضوري (physical)', mode.present === true && mode.selectedText === 'حضوري', JSON.stringify(mode));
 
   const paperBefore = await fieldSnapshot('ورقة الاختبار');
@@ -673,13 +673,18 @@ if (physicalDraftId) {
   check('D2 · «نوع العنصر» can be set to اختبار', typeSet.ok === true, JSON.stringify(typeSet));
   await new Promise((r) => setTimeout(r, 400));
 
-  const mode = await fieldSnapshot('نوع الامتحان');
+  const mode = await fieldSnapshot('نوع الاختبار');
   check('D3 · طريقة الأداء is (still) حضوري by default', mode.present === true && mode.selectedText === 'حضوري', JSON.stringify(mode));
 
   const paper = await fieldSnapshot('ورقة الاختبار');
   check('D4 · the paper picker starts at «بلا ورقة مُعدَّة» — no source chosen', paper.present === true && paper.value === '', JSON.stringify(paper));
 
-  await setTextByLabel('العنوان', TITLE_PHYSICAL_BARE);
+  // SRS Revision 166 §3 — a bare sitting is no longer GIVEN a title: the form
+  // does not ask for one, and the server calls it what it is. «الوصف» is where
+  // anything typed goes, so that is what carries this run's tag.
+  const titleAsked = (await fieldSnapshot('العنوان')).present === true;
+  check('D4b · a bare exam is not asked for «العنوان» — the server composes it', titleAsked === false);
+  await setTextByLabel('الوصف', TITLE_PHYSICAL_BARE);
   await setSelectByLabel('الفرع', S.branchId);
   await new Promise((r) => setTimeout(r, 900));
   await setSelectByLabel('المستوى', S.levelId);
@@ -707,12 +712,19 @@ if (physicalDraftId) {
   superToken = await browserToken();
   const listing = await api('GET', '/exams?page_size=100', superToken);
   const occurrence = (listing.body?.data ?? []).find(
-    (e) => e.title === TITLE_PHYSICAL_BARE && e.mode === 'physical',
+    (e) => e.description === TITLE_PHYSICAL_BARE && e.mode === 'physical',
   );
   check(
     'D7 · the bare physical sitting persisted, with no source',
     occurrence !== undefined,
     JSON.stringify({ status: listing.status, found: Boolean(occurrence) }),
+  );
+  check(
+    'D7b · and it is CALLED what it is — its type, its date and its time — not something typed',
+    typeof occurrence?.title === 'string' &&
+      occurrence.title.includes('اختبار') &&
+      /\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(occurrence.title),
+    JSON.stringify({ title: occurrence?.title }),
   );
   if (occurrence) {
     const authored = await api('GET', `/assessments/${occurrence.id}`, superToken);

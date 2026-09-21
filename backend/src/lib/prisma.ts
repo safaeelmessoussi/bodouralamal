@@ -36,6 +36,29 @@ export function createPrismaClient(
   const adapter = new PrismaPg({
     connectionString: databaseUrl,
     max: Math.min(maxConnections, PRISMA_CONNECTION_LIMIT),
+    /**
+     * **Every session this application opens is UTC — and that is a
+     * correctness requirement, not a preference** (found 2026-09-21).
+     *
+     * `@prisma/adapter-pg` exchanges `timestamptz` as text and ASSUMES the
+     * session is UTC: it sends an instant with no offset and reads one back by
+     * discarding the offset Postgres printed. This database's own default is
+     * `Africa/Casablanca` (the container's `TZ`, written into
+     * `postgresql.conf` at init), so every instant the application wrote was
+     * understood an hour EARLY and every instant it read came back an hour
+     * LATE. The two errors cancel on a round trip, which is how it passed
+     * every test — and they do not cancel anywhere else: a `DEFAULT now()`
+     * read by the app, raw SQL comparing a written instant with `now()`, a
+     * backup, an export, an operator in `psql`.
+     *
+     * Pinned HERE, on the connection, rather than on the database: it is the
+     * adapter's assumption, so it travels with the adapter to every tier and
+     * every disposable stack, and an operator's own `psql` session still reads
+     * the association's clock. Nothing in this codebase's SQL depends on the
+     * session zone — dates and wall-clock times are `date`/`time` columns
+     * (TD-11), which carry none.
+     */
+    options: '-c TimeZone=UTC',
   });
   return new PrismaClient({ adapter });
 }

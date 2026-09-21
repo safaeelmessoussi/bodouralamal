@@ -58,6 +58,14 @@ async function clean(): Promise<void> {
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   // R165 — an occurrence's own Surahs are RESTRICT against the Session.
   await prisma.sessionSurah.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  // R92/R161 — and so is its own audience, which `verify-class-filters`'
+  // journey D now writes through «تعديل الحصة» (R166 §2). All five tables.
+  const ofThese = { session: { scheduleId: { in: ids } } };
+  await prisma.sessionAudienceBranch.deleteMany({ where: ofThese });
+  await prisma.sessionAudienceCategory.deleteMany({ where: ofThese });
+  await prisma.sessionAudienceLevel.deleteMany({ where: ofThese });
+  await prisma.sessionAudienceAdministrativeGroup.deleteMany({ where: ofThese });
+  await prisma.sessionAudienceTeachingGroup.deleteMany({ where: ofThese });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
   // A filter-built class (SRS Revision 163 §5) owns rows in the five scope

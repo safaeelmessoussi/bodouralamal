@@ -32,7 +32,21 @@ export interface LevelCoverage {
   level_id: string;
   level_name: string;
   category_name: string;
-  surahs: SurahCoverage[];
+  /** `exam_taken` — SRS Revision 166 §1: she has taken a تفسير exam of this Surah. */
+  surahs: (SurahCoverage & { exam_taken?: boolean })[];
+  /**
+   * **SRS Revision 166 §1 — has she COMPLETED this Level?** BR-11, decided by
+   * the server: every Surah memorised and, where `exams_required`, an exam taken
+   * on each. `complete` is `null` for a Level with no «مقرر الحفظ». Optional only
+   * so an older server reads as "not told", never as "incomplete".
+   */
+  completion?: {
+    complete: boolean | null;
+    configured_surahs: number;
+    memorised_surahs: number;
+    examined_surahs: number;
+    exams_required: boolean;
+  };
 }
 
 export interface QuranProgressRead {

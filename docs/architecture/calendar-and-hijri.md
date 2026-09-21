@@ -62,6 +62,26 @@ that date, where its audience dimensions are ADDED** — a Surah is what is taug
 Calendar occurrences carry `surah_names`; the scheduling forms read the marker, each Level's
 syllabus and the Surah names from `/me/scope-options`, so a مؤطِّرة has them too.
 
+**A class is CALLED what it is; nobody types its title** (Revision 166 §3). A typed — or
+pre-filled — title went stale the first time a teacher, a Surah or an hour changed. A class and
+each of its occurrences now have none: every reader is given one composed at read time by
+`lib/item-title.ts` (*type — Subject — Surah(s) — main teacher's public name — when*), through
+`services/class-title.ts` for lists and write responses and inline in the calendar projection,
+which may hold a month of occurrences. A repeating class's own row carries its time and no date;
+each occurrence carries its own. What she wants to add goes in «الوصف», which the dialog shows.
+**An activity, a holiday and a sitting scheduled from an authored paper keep their typed title** —
+it is their identity. A bare sitting's is composed but STORED (`exam.title` is shared with
+authored titles), written by `scheduleExam` and recomposed on edit only while it is still the
+composed one. Where the text lands in a `VARCHAR(120)` column the composer takes a limit: Surahs
+give way first, then the main teacher, never «when». `recurring_course_schedule.title` and
+`session.title` are retired in place — nullable, unwritten, unread, nothing dropped.
+
+**«تعديل الحصة» changes everything about ONE session, in one save** (Revision 166 §2): its
+audience (the five lists), Subject, Surah, room, delivery, date, times, visibility, «الوصف» and
+staff. `PATCH /sessions/{id}` takes an optional `audience`, written in the same transaction by
+the writer `PUT /sessions/{id}/audience` uses — under one version bump, with its own audit row.
+Only what changed is sent: an inherited audience re-sent would become an override nobody made.
+
 **A class's own branch is derived, never asked twice** (Revision 165 §6). «فروع» says who the
 class is for; `branch_id` says whose administration runs it. إضافة عنصر asks only the first
 and derives the second (`homeBranchOf`): the one branch chosen, else the chosen room's, else

@@ -5,6 +5,7 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertSubjectTaughtAtLevel, resolveSurahs } from '../policies/curriculum.js';
+import { examTitle } from './class-title.js';
 import {
   assertExamInTeacherScope,
   examScopeWhereForTeacher,
@@ -491,6 +492,18 @@ export async function updatePhysicalExam(
       }
     }
 
+    /**
+     * **R166 §3 — is this title still the COMPOSED one?** Asked BEFORE anything
+     * changes, by composing from the row as it stands and comparing. A bare
+     * sitting scheduled since R166 says yes, so its title follows the edit
+     * below (a new date, supervisor or Surah); a title somebody typed, or a
+     * paper's own, says no and is left exactly as it is. No marker column: the
+     * text itself is the evidence, and a false "yes" is only possible for a
+     * typed title identical to the composed one — which is then no loss.
+     */
+    const titleIsComposed =
+      input.title === undefined && existing.title === (await examTitle(tx, id));
+
     // R165 §2 — validated only when this edit names it. Level and Subject are
     // not editable on a sitting, so the rule is asked of the row's own.
     const surahChange =
@@ -651,6 +664,12 @@ export async function updatePhysicalExam(
         tx,
         input.staff.map((person) => person.userId),
       );
+    }
+
+    // Recomposed LAST, once the staff above and the fields before them have
+    // landed — it reads the row, so it must read the row as it now is.
+    if (titleIsComposed) {
+      await tx.exam.update({ where: { id }, data: { title: await examTitle(tx, id) } });
     }
 
     await audit.write(tx, {

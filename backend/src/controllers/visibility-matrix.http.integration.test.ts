@@ -676,8 +676,12 @@ describe("§E — direct access is gated independently, and answers 404", () => 
     // management list could not un-hide it, so the tier would make hidden items
     // unadministrable rather than confidential.
     const res = await call("GET", "/admin/course-schedules?page_size=200", tokens["adminA"]);
-    const titles = (res.body.data ?? []).map((r) => String(r["title"]));
-    expect(titles).toContain(`${TAG} حصة hidden`);
+    // Found by what it IS — this fixture's Subject, at the hidden tier — not by
+    // a typed name: a class's `title` is composed since R166 §3.
+    const hidden = (res.body.data ?? []).filter(
+      (r) => r["subject_id"] === ids["subject"] && r["visibility"] === "hidden",
+    );
+    expect(hidden.length).toBeGreaterThan(0);
   });
 });
 

@@ -14,6 +14,7 @@ import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
 import { requireSeededSubject } from '../src/test-support/quran-subject.js';
+import { ownedSchedules } from '../src/test-support/owned-schedules.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -28,7 +29,8 @@ const day = (offset: number): Date => {
 
 async function wipe(): Promise<void> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);
@@ -135,7 +137,6 @@ const actor = {
 } as unknown as Parameters<typeof createCourseSchedule>[1];
 
 const created = await createCourseSchedule(prisma, actor, {
-  title: `${TAG} تفسير المستوى 1`,
   subjectId: subject.id,
   surahIds: [1],
   teachingMode: 'entire_level',

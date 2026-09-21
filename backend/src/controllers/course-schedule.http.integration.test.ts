@@ -363,8 +363,7 @@ function scheduleBody(
   over: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
-    // R57 — a class carries its own name.
-    title: `${TAG} حلقة`,
+    // (R166 §3 — no `title`: a class is called what it is, composed on read.)
     subject_id: subjectId,
     teaching_mode: "administrative_group",
     target_id: groupA,
@@ -462,6 +461,28 @@ describe("the response is an explicit contract DTO (§16.2)", () => {
     expect(schedule["end_time"]).toBe("16:30");
     expect(String(schedule["start_time"])).not.toContain("T");
     expect(String(schedule["start_time"])).not.toContain("Z");
+  });
+
+  it("R166 §3 — a typed `title` is REFUSED at the boundary, never accepted and dropped", async () => {
+    // Its own literal body, NOT `scheduleBody()`: that helper takes the next
+    // time slot, and a test that creates nothing must not shift every later
+    // fixture by a quarter of an hour into somebody else's explicit time.
+    const res = await call("POST", "/admin/course-schedules", superAdmin, {
+      title: `${TAG} اسم مكتوب`,
+      subject_id: subjectId,
+      teaching_mode: "administrative_group",
+      target_id: groupA,
+      branch_id: branchA,
+      room_id: roomA,
+      start_time: "23:40",
+      end_time: "23:50",
+      recurrence: "weekly",
+      weekdays: ["tuesday"],
+      academic_year_id: academicYearId,
+      staff: [],
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain("title");
   });
 
   it("exposes no internal column and no camelCase original", async () => {
@@ -1035,10 +1056,10 @@ describe("a Teacher reads the schedules they staff, through the same endpoint", 
       "PATCH",
       `/admin/course-schedules/${id}`,
       staffingTeacherToken,
-      { version, title: `${TAG} حلقة معدَّلة` },
+      { version, description: `${TAG} حلقة معدَّلة` },
     );
     expect(edited.status).toBe(200);
-    expect((edited.body.schedule as { title?: string }).title).toBe(
+    expect((edited.body.schedule as { description?: string }).description).toBe(
       `${TAG} حلقة معدَّلة`,
     );
 
@@ -1243,7 +1264,6 @@ let identitySlot = 0;
 function identityBody(over: Record<string, unknown> = {}): Record<string, unknown> {
   const hh = String(1 + identitySlot++).padStart(2, "0");
   return {
-    title: `${TAG} حلقة الهوية`,
     subject_id: subjectId,
     teaching_mode: "administrative_group",
     target_id: groupA,

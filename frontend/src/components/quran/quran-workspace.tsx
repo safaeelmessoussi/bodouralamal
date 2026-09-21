@@ -9,6 +9,7 @@ import {
   type QuranScope,
   type QuranScopeLevel,
   type SurahCoverage,
+  type LevelCoverage,
 } from '../../adapters/quran.js';
 import { useSession } from '../../contexts/session.js';
 import { levelLabel } from '../scope/level-select.js';
@@ -21,6 +22,7 @@ import { sortRows } from '../../lib/sort-rows.js';
 import { Feedback } from '../ui/feedback.js';
 import { SearchInput, SelectField, TextField } from '../ui/field.js';
 import { ProgressBar } from '../ui/progress-bar.js';
+import { LevelCompletionSummary } from './level-completion.js';
 
 /**
  * **إدخال الحفظ — one workspace, every portal that enters progress** (§C2,
@@ -72,6 +74,8 @@ export function QuranWorkspace({
 
   const [surahs, setSurahs] = useState<SurahCoverage[]>([]);
   const [logs, setLogs] = useState<QuranLogRow[]>([]);
+  /** SRS Revision 166 §1 — her syllabus by Level, with each Level's verdict. */
+  const [levelCoverage, setLevelCoverage] = useState<LevelCoverage[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error' | 'forbidden'>('idle');
 
   const [notice, setNotice] = useState<string | null>(null);
@@ -106,6 +110,7 @@ export function QuranWorkspace({
       const data = await fetchCoverage(studentId, accessToken);
       setSurahs(data.surahs);
       setLogs(data.logs);
+      setLevelCoverage(data.levels ?? []);
       setState('ready');
     } catch (error) {
       // §20 rule 17 answers 404 for a مستفيدة outside scope; this screen reports
@@ -397,6 +402,20 @@ export function QuranWorkspace({
           ))}
         </ul>
       )}
+
+      {/* SRS Revision 166 §1 — has she completed her Level(s)? The same
+          component «حفظي» shows the مستفيدة herself, so the two agree in words. */}
+      {levelCoverage.length > 0 ? (
+        <>
+          <h2>{t('quran.completion.heading')}</h2>
+          {levelCoverage.map((level) => (
+            <section key={level.level_id}>
+              <h3>{level.level_name}</h3>
+              <LevelCompletionSummary level={level} />
+            </section>
+          ))}
+        </>
+      ) : null}
 
       <h2>{t('quran.history')}</h2>
       <DataTable

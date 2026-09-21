@@ -24,6 +24,7 @@ import {
   requireMemorisationSubject,
   requireSeededSubject,
 } from '../src/test-support/quran-subject.js';
+import { ownedSchedules } from '../src/test-support/owned-schedules.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -54,7 +55,8 @@ const todayWeekday = WEEKDAYS[day(0).getUTCDay()]!;
 
 async function wipe(): Promise<void> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);
@@ -251,7 +253,6 @@ const base = {
 /** The whole-Level Quran class at فرع أ — نوال teaches, هدى assists. */
 const wholeLevel = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} حفظ كل المستوى`,
   subjectId: quran.id,
   // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
   surahIds: [AL_FATIHA],
@@ -269,7 +270,6 @@ const wholeLevel = await createCourseSchedule(prisma, actor, {
 /** The Administrative Group class — سميرة reaches خديجة and nobody else. */
 const groupClass = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} حفظ المجموعة`,
   subjectId: quran.id,
   // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
   surahIds: [AL_FATIHA],
@@ -284,7 +284,6 @@ const groupClass = await createCourseSchedule(prisma, actor, {
 /** The Circle class — لطيفة reaches مريم and nobody else. */
 const circleClass = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} حفظ الحلقة`,
   subjectId: quran.id,
   // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
   surahIds: [AL_FATIHA],
@@ -299,7 +298,6 @@ const circleClass = await createCourseSchedule(prisma, actor, {
 /** Tafseer only — رجاء must reach no memorisation through it (§C7). */
 await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} تفسير`,
   subjectId: tafseer.id,
   // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
   surahIds: [AL_FATIHA],
@@ -318,7 +316,6 @@ await createCourseSchedule(prisma, actor, {
  */
 const replaced = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} حفظ المستوى 2`,
   subjectId: quran.id,
   // R165 §2 — a by-Surah Subject names which Surah; الفاتحة is in this Level's «مقرر الحفظ».
   surahIds: [AL_FATIHA],

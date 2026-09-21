@@ -6,6 +6,7 @@ import {
   type QuranLogRow,
   type SurahCoverage,
 } from '../../adapters/quran.js';
+import { LevelCompletionSummary } from '../../components/quran/level-completion.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { StudentLayout } from '../../components/student/student-layout.js';
 import { DataTable, type Column } from '../../components/ui/data-table.js';
@@ -131,6 +132,8 @@ export function StudentQuranPage(): ReactNode {
               })}
             </h2>
           ) : null}
+          {/* SRS Revision 166 §1 — the verdict first, then what it is made of. */}
+          <LevelCompletionSummary level={level} />
           <SurahBars surahs={level.surahs} />
         </section>
       ))}

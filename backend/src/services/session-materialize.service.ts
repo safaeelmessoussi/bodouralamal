@@ -52,7 +52,8 @@ export interface MaterializableSchedule extends ScheduleRecurrence {
    * and an occurrence a human named individually is `overridden` and is
    * never reached here at all (unless `overwriteManuallyEdited`, below).
    */
-  title: string;
+  // (R166 §3 — no `title`: a class's title is composed at read time, so there
+  // is nothing to snapshot. `description`, which somebody does type, still is.)
   description: string | null;
   startTime: Date;
   endTime: Date;
@@ -242,7 +243,6 @@ export async function materializeSchedule(
       data: {
         scheduleId: schedule.id,
         date,
-        title: schedule.title,
         description: schedule.description,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
@@ -277,7 +277,6 @@ export async function materializeSchedule(
     await tx.session.update({
       where: { id: row.id },
       data: {
-        title: schedule.title,
         description: schedule.description,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
@@ -429,7 +428,6 @@ export async function loadSchedule(
     where: { id: scheduleId, deletedAt: null },
     select: {
       id: true,
-      title: true,
       description: true,
       startTime: true,
       endTime: true,

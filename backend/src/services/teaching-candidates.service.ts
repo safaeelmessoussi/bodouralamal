@@ -1,3 +1,4 @@
+import { scheduleTitles } from "./class-title.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { Actor } from "../policies/actor.js";
 import { AppError } from "../lib/errors.js";
@@ -203,7 +204,6 @@ export async function listTeachingCandidates(
       schedule: {
         select: {
           id: true,
-          title: true,
           recurrence: true,
           weekdays: true,
           anchorDate: true,
@@ -213,6 +213,10 @@ export async function listTeachingCandidates(
       },
     },
   });
+
+  // R166 §3 — a clashing class is named by its COMPOSED title, loaded once for
+  // every class these candidates already staff.
+  const titles = await scheduleTitles(prisma, [...new Set(staffing.map((row) => row.schedule.id))]);
 
   const byUser = new Map<string, typeof staffing>();
   for (const row of staffing) {
@@ -314,7 +318,7 @@ export async function listTeachingCandidates(
           if (!clash) continue;
           conflicts.push({
             schedule_id: other.id,
-            title: other.title,
+            title: titles.get(other.id) ?? "",
             weekday,
             start_time: hhmm(other.startTime),
             end_time: hhmm(other.endTime),

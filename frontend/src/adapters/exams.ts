@@ -253,7 +253,7 @@ export interface ScheduleExamInput {
    *  sitting — its own title/Level/Subject/year, since there is no source to
    *  take them from. */
   bare?: {
-    title: string;
+    // (SRS Revision 166 §3 — no `title`: the server composes a bare sitting's.)
     /** **Owner-reported, 2026-09-15 — no longer asked here.** Omitted, the
      *  server defaults it (`BARE_DEFAULT_MAX_GRADE`); `PATCH /exams/{id}`
      *  still edits it afterward. */

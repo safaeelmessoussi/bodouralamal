@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { pageParamsFrom } from "../lib/pagination.js";
 import { requireActor } from "../middleware/authenticate.js";
+import { scheduleTitles } from "../services/class-title.js";
 import * as schedules from "../services/course-schedule.service.js";
 import {
   courseScheduleDto,
@@ -61,7 +62,6 @@ export function create(prisma: PrismaClient) {
       prisma,
       requireActor(req),
       {
-        title: body.title,
         ...(body.description !== undefined
           ? { description: body.description }
           : {}),
@@ -191,7 +191,6 @@ export function update(prisma: PrismaClient) {
         ...(body.month_of_year !== undefined
           ? { monthOfYear: body.month_of_year }
           : {}),
-        ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.description !== undefined
           ? { description: body.description }
           : {}),
@@ -305,6 +304,8 @@ async function reload(
   });
   return {
     ...row,
+    // R166 §3 — composed from the row as it now stands, never a stored name.
+    title: (await scheduleTitles(prisma, [row.id])).get(row.id) ?? "",
     dimensions:
       row.teachingMode === "multi_dimension"
         ? {

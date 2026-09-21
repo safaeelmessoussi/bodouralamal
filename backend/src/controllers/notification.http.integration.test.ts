@@ -243,7 +243,6 @@ beforeAll(async () => {
 
   const created = await call("POST", "/admin/course-schedules", superAdmin, {
     staff: [{ user_id: teacherId, position: "teacher" }],
-    title: `${TAG} حلقة`,
     subject_id: subjectId,
     teaching_mode: "administrative_group",
     target_id: groupId,

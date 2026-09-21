@@ -119,8 +119,13 @@ only حفظ participates in the memorisation progress engine.
 generation; later formula edits never retroactively change an issued document.
 
 ### BR-11
-**Level completion.** 100 % Quran memorisation coverage, plus passing the level's final exam **only if one
-is configured.** No configured final exam → coverage alone completes the level.
+**Level completion.** For every Surah of the Level's «مقرر الحفظ»: 100 % Quran memorisation
+coverage **and** — only where the Level teaches تفسير (a Subject that works by Surah and is not
+the memorisation tracker) — an exam of that Surah **taken**. A Level that teaches none is
+completed by coverage alone; a Level with no syllabus is neither complete nor incomplete.
+*Taken* is a recorded mark that is not «غائبة» or a submitted remote paper — **no pass mark,
+because the platform has none** (SRS Revision 166 §1). One rule, `policies/level-completion.ts`;
+derived on read, never stored, and shown on «حفظي» and the مؤطِّرة's Quran screen.
 
 ### BR-12
 **Manual overrides win.** A manual pass/fail override always takes precedence over computed

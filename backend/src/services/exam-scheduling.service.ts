@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { resolveSurahs } from '../policies/curriculum.js';
+import { examTitle } from './class-title.js';
 import { wallClockInstant } from '../lib/wall-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -90,7 +91,8 @@ export interface ScheduleExamInput {
    *  take title/maximum/Level/Subject from). Ignored when a source is given —
    *  the source's own content is always authoritative for what it is used as. */
   bare?: {
-    title: string;
+    // (SRS Revision 166 §3 — no `title`: a bare sitting is called what it is;
+    // `examTitle` composes it once its Surah and supervisor are written.)
     /** **Owner-reported, 2026-09-15 — no longer asked at scheduling time.**
      *  `Exam.maxGrade` stays `NOT NULL`; `BARE_DEFAULT_MAX_GRADE` below is
      *  what fills it when this is omitted, editable afterward exactly as any
@@ -242,7 +244,9 @@ export async function scheduleExam(
         data: {
           mode: 'physical',
           status: 'draft',
-          title: bare.title,
+          // Provisional, and never read: recomposed below, in this same
+          // transaction, once the Surah and the supervisor exist to compose from.
+          title: '—',
           description: bare.description ?? null,
           maxGrade: bare.maxGrade ?? BARE_DEFAULT_MAX_GRADE,
           levelId: bare.levelId,
@@ -389,6 +393,16 @@ export async function scheduleExam(
       where: { id: occurrence.id },
       data: { surahId: surahId ?? null },
     });
+    // R166 §3 — a BARE sitting is called what it is; one scheduled from a paper
+    // keeps the paper's title, which `copyContentIntoNewRow` wrote. **A second
+    // write, after the Surah's**: `examTitle` reads the row, and composed in
+    // the same statement it read a sitting that did not have its Surah yet.
+    if (!input.sourceExamId) {
+      await tx.exam.update({
+        where: { id: occurrence.id },
+        data: { title: await examTitle(tx, occurrence.id) },
+      });
+    }
 
     const fresh = await tx.exam.findUniqueOrThrow({
       where: { id: occurrence.id },

@@ -9,6 +9,7 @@ import {
   recordingBaseName,
 } from "../lib/recording-name.js";
 import { publicDisplayName } from "../lib/display-name.js";
+import { composeItemTitle } from "../lib/item-title.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
 import * as scope from "../policies/branch-scope.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
@@ -508,8 +509,12 @@ const SESSION_OCCURRENCE_INCLUDE = {
   staff: {
     where: { deletedAt: null },
     select: {
+      // R166 §3 — the position is what says which of them LEADS this date, and
+      // so whose name the composed title carries.
+      position: true,
       user: { select: { id: true, nameArabic: true, publicDisplayName: true } },
     },
+    orderBy: { createdAt: 'asc' },
   },
   schedule: {
     select: {
@@ -584,6 +589,10 @@ function sessionOccurrence(
   // session with no override carries `subject: null` and falls back to the
   // schedule's, unchanged.
   const subject = session.subject ?? sch.subject;
+  const surahNames = (session.surahs.length > 0 ? session.surahs : sch.surahs).map(
+    (row) => row.surah.nameArabic,
+  );
+  const lead = session.staff.find((person) => person.position === "teacher");
   return {
     kind: "session",
     schedulingTypeId: sch.schedulingType?.id ?? null,
@@ -596,10 +605,19 @@ function sessionOccurrence(
     viewerMayMarkAttendance: false,
     id: session.id,
     title: subject.name,
-    itemTitle: session.title,
-    surahNames: (session.surahs.length > 0 ? session.surahs : sch.surahs).map(
-      (row) => row.surah.nameArabic,
-    ),
+    // **R166 §3 — COMPOSED, never a stored name**: this occurrence's own
+    // Subject, Surahs and main teacher where it has its own, and its own date.
+    // A cover teacher or a Surah changed for one date is therefore in the
+    // title the moment it is saved, with nothing to keep in step.
+    itemTitle: composeItemTitle({
+      typeName: sch.schedulingType?.name ?? null,
+      subjectName: subject.name,
+      surahNames,
+      leadName: lead === undefined ? null : publicDisplayName(lead.user),
+      date: iso(session.date),
+      time: hhmm(session.startTime),
+    }),
+    surahNames,
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -609,7 +627,11 @@ function sessionOccurrence(
     branchId: sch.branchId,
     // A Session has no description of its own; the audience label that used to
     // be smuggled in here now has its own field.
-    description: null,
+    // **R166 §3 — «الوصف» is where somebody adds what the composed title
+    // cannot say, so it has to reach the dialog.** This sent `null` on the
+    // reasoning that *a Session has no description of its own* — true until
+    // R138 gave every occurrence one, and never revisited.
+    description: session.description,
     subjectId: subject.id,
     subjectName: subject.name,
     teachingMode: sch.teachingMode,

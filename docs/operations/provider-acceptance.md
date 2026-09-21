@@ -155,6 +155,30 @@ this host would be set when it is provisioned.
 Also worth noticing before signing: the quotation's customer identification field for the
 association was blank, and the offer is for twelve months.
 
+### What the provider has since answered in writing (2026-09-21), and what is still open
+
+Recorded without names, prices or quotation numbers, as this page requires. **The Owner has
+decided to launch WITHOUT the external-backup line**, which makes the last row below matter more.
+
+| Question | Written answer | Status |
+|---|---|---|
+| 2 · vCPU model | Dedicated vCPUs, recent processors | **Answered.** A recording's two sustained cores are available |
+| 3 · Residency | Server and data physically in Morocco, in an ISO 27001 / Tier III datacentre; backup copies on an external space also in Morocco | **Answered in substance; not yet evidence.** City/site and the legal entity operating it are not named — needed for the CNDP file, so asked for in the contract rather than in another email |
+| 5 · Upgrade path | CPU and RAM on demand, no migration or reinstall, same public IPv4, ~15 minutes at an agreed time; storage can also be added separately | **Answered for CPU/RAM; disk not explicit** — whether a disk extension is online and keeps the data is asked once more |
+| Storage | NVMe, no stated IOPS cap | Better than the quotation's «SSD» |
+| Payment | No monthly billing; quarterly with an annual commitment | Commercial, the Owner's to accept |
+| 1 · Media ports | *not answered* | **OPEN — the one that decides online classes.** Inbound UDP 7882 and TCP 7881 through the anti-DDoS layer |
+| 4 · Platform | *implied only* («conservant votre application Docker») | **OPEN.** Ubuntu 24.04 LTS AMD64, root, key-only SSH, Docker, rescue/serial console |
+| Contract | *not yet provided* | **OPEN, and mandatory.** Loi 09-08 art. 25 as the CNDP applies it: a written contractual commitment by the host on the security and confidentiality of the data. Without it the hosting cannot be declared |
+| Migration service | Offered, billed | Declined: this repository deploys itself by a documented pipeline |
+
+**Launching without the backup line — what that means.** The only recovery point is then the
+encrypted repository ON the same VPS ([recovery](recovery.md), the temporary B8 exception):
+it survives a bad deployment, a dropped table or a deleted recording, and **does not survive
+the loss of the VPS or its disk**. That is an accepted risk for a first couple of months, not a
+design; the backup line (or another Moroccan second location) is what ends it, and the disk
+arithmetic above assumes it eventually does.
+
 ## Technical acceptance after shortlisting
 
 Before an empty deployment is accepted on the selected host:

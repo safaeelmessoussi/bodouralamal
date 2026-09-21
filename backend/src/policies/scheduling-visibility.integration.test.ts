@@ -14,6 +14,7 @@ import {
 import { overrideSession } from "../services/session.service.js";
 import { horizonFor } from "../services/session-materialize.service.js";
 import type { RoleScope } from "./branch-scope.js";
+import { ownedSchedules } from "../test-support/owned-schedules.js";
 
 /**
  * **SRS Revision 109 — the visibility tier, on all three kinds of scheduling
@@ -256,7 +257,8 @@ beforeAll(async () => {
 async function clear(): Promise<void> {
   const tagged = { startsWith: TAG };
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: tagged },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const scheduleIds = schedules.map((s) => s.id);
@@ -583,7 +585,6 @@ describe("the tier travels schedule → occurrence, and an override survives", (
       prisma,
       admin(),
       {
-        title: `${TAG} حصة متكررة`,
         subjectId,
         teachingMode: "administrative_group",
         targetId: groupA,

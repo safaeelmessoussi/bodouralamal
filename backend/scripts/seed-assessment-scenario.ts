@@ -33,7 +33,15 @@ const WEEKDAYS = [
 
 async function wipe(): Promise<void> {
   const exams = await prisma.exam.findMany({
-    where: { title: { startsWith: TAG } },
+    // By title, by description, or by the Level it belongs to: a bare sitting is
+    // CALLED what it is since R166 §3 and carries no tag in its title.
+    where: {
+      OR: [
+        { title: { startsWith: TAG } },
+        { description: { startsWith: TAG } },
+        { level: { name: { startsWith: TAG } } },
+      ],
+    },
     select: { id: true },
   });
   const examIds = exams.map((e) => e.id);

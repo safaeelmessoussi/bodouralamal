@@ -110,6 +110,26 @@ settles; and the state line is not printed when it would only repeat the live «
 banner. Before this it was read once, so «جارٍ بدء التسجيل…» stayed beside a banner that
 already said the recording was running.
 
+### Which Level a recording is filed under, and what to do when an import is stranded (SRS Revision 166 §4)
+
+`EducationalContent.level_id` is required, so the import resolves the class's Level —
+through `scheduleLevelIds`, the one resolution the Subject and Surah rules use. It used to read
+the three single-target columns only, and a class built through the five filters (every class
+since Revision 163 §5) has none: each of its recordings was refused with *"the occurrence
+resolves to no Level"*, spent its four retries on the same refusal, and the classroom said
+*«انتهى التسجيل لكن تعذّرت تهيئته للنشر»*. A class addressing several Levels files its
+recording under the first in the Levels' own order — deterministic, so a retry writes the same
+row. **Known limit:** the content's Level is single, so a *private* recording of a two-Level
+class is listed for the first Level's beneficiaries only.
+
+The job retries under TD-7's backoff and then stops, which is right for a transient failure
+and useless once a DEFECT is fixed: the staging object is still there and nothing is left to
+try it. `backend/scripts/requeue-recording-ingest.ts` puts the ordinary import job back for
+every recording that is `completed`, has an output object and no content — idempotently (the
+job's first step is its own idempotency anchor), printing counts and recording ids only.
+`--dry-run` lists without writing. On Staging and Production it is a queue mutation and needs
+the Owner's authorization like any other.
+
 ## What it actually costs (MEASURED)
 
 Measured on 2026-09-20 with real rooms and real recordings (three participants,

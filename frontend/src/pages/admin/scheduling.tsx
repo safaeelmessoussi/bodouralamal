@@ -56,9 +56,7 @@ import {
   SurahField,
   SurahsField,
   subjectWorksBySurah,
-  suggestedTitle,
   surahChoices,
-  surahNamesOf,
 } from '../../components/scheduling/surahs.js';
 import {
   initialMediaMode,
@@ -1053,13 +1051,6 @@ export function SchedulingDialog({
     item?.type ?? (initialType && types.includes(initialType) ? initialType : types[0] ?? 'class'),
   );
   const [title, setTitle] = useState(item?.title ?? '');
-  /**
-   * SRS Revision 165 §2 — the title opens as a SUGGESTION (type, Subject,
-   * Surah, main teacher, date and time) and follows the form until she types
-   * in it. An existing item keeps the title it has: nothing rewrites a name
-   * somebody already gave.
-   */
-  const [titleTouched, setTitleTouched] = useState(item !== null);
   /** R165 §2 — a class's Surahs (one or more) or an exam's one, in one shape. */
   const [surahIds, setSurahIds] = useState<number[]>(item?.ids.surahIds ?? []);
   const [description, setDescription] = useState(item?.description ?? '');
@@ -1720,38 +1711,6 @@ export function SchedulingDialog({
     if (bounded.length !== surahIds.length) setSurahIds(bounded);
   }, [scope.ready, asksSurahs, offeredSurahKey, surahIds, type]);
 
-  /**
-   * **The title she is offered** (Owner, 2026-09-20 — R165 §2): type, Subject,
-   * Surah, main teacher, date and time — `suggestedTitle` states the rule and
-   * why a repeating class carries its time but no date. A class and an exam
-   * only: an activity's title IS its identity («حفل ختم القرآن») and nothing
-   * here could compose it. A مؤطِّرة scheduling her own class is its teacher, but
-   * her session carries no name to print, so hers is simply left out.
-   */
-  const leadId =
-    type === 'class'
-      ? (staffing.find((p) => p.position === 'teacher')?.user_id ?? '')
-      : supervisorId;
-  const titleSuggestion =
-    type === 'class' || type === 'exam'
-      ? suggestedTitle({
-          typeName: catalogue.find((r) => r.id === schedulingTypeId)?.name ?? null,
-          subjectName:
-            scope.options.subjectId.find((o) => o.value === surahSubjectId)?.label ?? null,
-          surahNames: asksSurahs ? surahNamesOf(scope, surahIds) : [],
-          teacherName: canAssignStaff
-            ? (teachers.find((x) => x.id === leadId)?.name_arabic ?? null)
-            : null,
-          date: recurrence.startDate,
-          time: allDay ? null : startTime,
-          repeats: type === 'class' && recurrence.type !== 'none',
-        })
-      : '';
-  useEffect(() => {
-    if (titleTouched || !spec.hasTitle) return;
-    setTitle(titleSuggestion);
-  }, [titleTouched, spec.hasTitle, titleSuggestion]);
-
   const targetId =
     mode === 'entire_level'
       ? scope.value.levelId
@@ -1819,23 +1778,10 @@ export function SchedulingDialog({
    * points at the next field rather than the last one.
    */
   function validationError(): string | null {
-    /**
-     * **R57 — required for every kind whose own title the write actually
-     * sends.** Found by the real-browser verification this frontend-
-     * completion pass exists to do (`verify-exam-scheduling.mjs`, journeys
-     * A and C): once an exam has an authored source — always true for
-     * `online`, optionally true for `physical` — `saveSchedulingItem`'s
-     * exam branch never sends `bare.title` at all (`scheduleExam` copies
-     * the title FROM the source; see `adapters/scheduling.ts`'s
-     * `...(input.examSourceId ? {} : { bare: { title: input.title, ... } })`).
-     * The shared «العنوان» field stays on screen for every kind (it is a
-     * bare physical sitting's own title otherwise), but demanding it be
-     * filled in first was refusing a save over a value the request was
-     * about to discard — every ?source=&mode= scheduler prefill and every
-     * manually-chosen physical source hit this and could not be saved.
-     */
-    const titleSuppliedBySource = type === 'exam' && examSource.sourceId !== '';
-    if (!titleSuppliedBySource && title.trim() === '') return t('scheduling.invalid.title');
+    // SRS Revision 166 §3 — asked only of the kinds that still HAVE a typed
+    // title (an activity, a holiday). A class and an exam are called what they
+    // are by the server; a sitting from a paper keeps the paper's title.
+    if (spec.hasTitle && title.trim() === '') return t('scheduling.invalid.title');
     /**
      * **R110 — every schedulable item states which type it is** (Owner,
      * 2026-09-02; activities only before that).
@@ -2354,10 +2300,7 @@ export function SchedulingDialog({
         visibility={visibility}
         onVisibility={setVisibility}
         title={title}
-        onTitle={(next: string) => {
-          setTitleTouched(true);
-          setTitle(next);
-        }}
+        onTitle={setTitle}
         // **R57 — every schedulable item is named by something a person typed.**
         // A class used to borrow its name from its Subject, which identifies it
         // and does not name it: two classes in one Subject for one group were

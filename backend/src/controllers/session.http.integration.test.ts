@@ -299,7 +299,6 @@ beforeAll(async () => {
   // the real path would never produce.
   const created = await call("POST", "/admin/course-schedules", superAdmin, {
     // R57 — a class carries its own name.
-    title: `${TAG} حلقة`,
     subject_id: subjectId,
     teaching_mode: "administrative_group",
     target_id: groupA,
@@ -325,7 +324,6 @@ beforeAll(async () => {
     "/admin/course-schedules",
     superAdmin,
     {
-      title: `${TAG} حصة متعددة الأبعاد`,
       subject_id: subjectId,
       teaching_mode: "multi_dimension",
       dimensions: { administrative_group_ids: [groupA] },
@@ -442,24 +440,28 @@ describe("PATCH is a field edit, not a second entrance to the state machine", ()
     expect(res.body.overridden).toBe(true);
   });
 
-  it("R138 — تعديل الحصة may set this occurrence's OWN title/description", async () => {
+  it("R138/R166 — تعديل الحصة may set this occurrence's OWN description; its title comes back COMPOSED", async () => {
     const s = await freshSession();
     const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
       version: s.version,
-      title: `${TAG} عنوان هذه الحصة فقط`,
       description: `${TAG} وصف خاص بهذه الحصة`,
     });
     expect(res.status).toBe(200);
-    expect(res.body.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
     expect(res.body.description).toBe(`${TAG} وصف خاص بهذه الحصة`);
     expect(res.body.overridden).toBe(true);
+    // Composed from what the occurrence says: at least its Subject and its date.
+    const date = (await prisma.session.findUniqueOrThrow({ where: { id: s.id } })).date
+      .toISOString()
+      .slice(0, 10);
+    expect(typeof res.body.title).toBe("string");
+    expect(res.body.title as string).toContain(date);
   });
 
-  it("R138 — an empty title is refused, the same TD-9 bound the series form has", async () => {
+  it("R166 §3 — a typed title is REFUSED at the boundary, never accepted and dropped", async () => {
     const s = await freshSession();
     const res = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
       version: s.version,
-      title: "   ",
+      title: `${TAG} عنوان مكتوب`,
     });
     expect(res.status).toBe(400);
   });
@@ -566,7 +568,7 @@ describe("Owner-reported, 2026-09-17 — this occurrence's own Subject", () => {
 
     const unrelated = await call("PATCH", `/sessions/${s.id}`, superAdmin, {
       version: (set.body.version as number),
-      title: `${TAG} تعديل آخر لا يخص المادة`,
+      description: `${TAG} تعديل آخر لا يخص المادة`,
     });
     expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);
     expect(unrelated.body.subject_id).toBe(subjectId2);

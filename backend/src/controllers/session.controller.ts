@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { requireActor } from "../middleware/authenticate.js";
+import { sessionTitles } from "../services/class-title.js";
 import * as sessions from "../services/session.service.js";
 import { sessionContentLinkDto, sessionDto, sessionRosterDto } from "./dto.js";
 import { idParam, parse } from "./parse.js";
@@ -32,6 +33,19 @@ import {
  * no endpoint for it, and §20 rule 16 forbids inventing one.
  */
 
+/**
+ * R166 §3 — a write answers with the occurrence as it now reads, COMPOSED title
+ * included: the stored column is retired, and the title a client is handed
+ * must be the one every other reader is given.
+ */
+async function titled<T extends { id: string }>(
+  prisma: PrismaClient,
+  session: T,
+): Promise<Omit<T, "title"> & { title: string }> {
+  const title = (await sessionTitles(prisma, [session.id])).get(session.id) ?? "";
+  return { ...session, title };
+}
+
 export function override(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(overrideSessionSchema, req.body ?? {});
@@ -42,7 +56,6 @@ export function override(prisma: PrismaClient) {
       {
         version: body.version,
         ...(body.date !== undefined ? { date: body.date } : {}),
-        ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.start_time !== undefined
           ? { startTime: body.start_time }
@@ -70,6 +83,17 @@ export function override(prisma: PrismaClient) {
         // makes.
         ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
         ...(body.surah_ids !== undefined ? { surahIds: body.surah_ids } : {}),
+        ...(body.audience !== undefined
+          ? {
+              audience: {
+                branchIds: body.audience.branch_ids,
+                categoryIds: body.audience.category_ids,
+                levelIds: body.audience.level_ids,
+                administrativeGroupIds: body.audience.administrative_group_ids,
+                teachingGroupIds: body.audience.teaching_group_ids,
+              },
+            }
+          : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.
@@ -83,7 +107,7 @@ export function override(prisma: PrismaClient) {
           : {}),
       },
     );
-    res.json(sessionDto(session));
+    res.json(sessionDto(await titled(prisma, session)));
   };
 }
 
@@ -97,7 +121,7 @@ export function cancel(prisma: PrismaClient) {
       body.reason,
       body.version,
     );
-    res.json(sessionDto(session));
+    res.json(sessionDto(await titled(prisma, session)));
   };
 }
 
@@ -110,7 +134,7 @@ export function restore(prisma: PrismaClient) {
       idParam(req, "id"),
       body.version,
     );
-    res.json(sessionDto(session));
+    res.json(sessionDto(await titled(prisma, session)));
   };
 }
 

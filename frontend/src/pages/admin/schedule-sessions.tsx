@@ -17,7 +17,11 @@ import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { SessionAudienceDialog } from '../../components/scheduling/session-audience-dialog.js';
+import {
+  SessionAudienceDialog,
+  SessionAudienceFields,
+  useSessionAudience,
+} from '../../components/scheduling/session-audience-dialog.js';
 import {
   SurahsField,
   subjectWorksBySurah,
@@ -72,8 +76,8 @@ interface SessionScopeEdit {
   delivery_mode: DeliveryMode;
   online_media_mode: OnlineMediaMode | null;
   visibility: string;
-  /** R138 — on the same footing as `delivery_mode`/`visibility` above. */
-  title: string;
+  /** R138 — on the same footing as `delivery_mode`/`visibility` above. (No
+   *  `title`: it is composed by the server since SRS Revision 166 §3.) */
   description: string | null;
   /**
    * **Owner-reported, 2026-09-17 — this occurrence's own Subject** (§4.4),
@@ -92,6 +96,21 @@ interface SessionScopeEdit {
    * successor's) Surahs, replaced whole.
    */
   surah_ids?: number[];
+  /**
+   * SRS Revision 166 §2 — **`this_session` only, and only what she changed.**
+   * The occurrence's own audience (the five lists `PUT /sessions/{id}/audience`
+   * takes) and its own staffing, sent in the SAME save as everything above so
+   * one «حفظ» is one decision. Absent leaves each exactly as it is — re-sending
+   * an inherited audience untouched would turn it into an override nobody made.
+   */
+  audience?: {
+    branch_ids: string[];
+    category_ids: string[];
+    level_ids: string[];
+    administrative_group_ids: string[];
+    teaching_group_ids: string[];
+  };
+  staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
   /**
    * **Owner-reported, 2026-09-15 — a "good, simple" design for editing what
    * §4.4 otherwise freezes**, present only for `this_and_future` (the split
@@ -533,7 +552,6 @@ export function ScheduleSessionsPage({
       delivery_mode: edit.delivery_mode,
       online_media_mode: edit.online_media_mode,
       visibility: edit.visibility,
-      title: edit.title,
       description: edit.description,
       // R165 §2 — the class's (or the successor's) Surahs, when the dialog asked.
       ...(edit.surah_ids !== undefined ? { surah_ids: edit.surah_ids } : {}),
@@ -672,6 +690,8 @@ export function ScheduleSessionsPage({
           token={isTeacherPortal ? null : accessToken}
           identity={isTeacherPortal || !scope || !klass ? null : { ...scope, ...klass }}
           scheduleSubjectId={isTeacherPortal ? null : scope?.subjectId ?? null}
+          teachers={teachers}
+          branches={branches}
         />
       ) : null}
 
@@ -847,9 +867,15 @@ function ScopeDialog({
   token,
   identity,
   scheduleSubjectId,
+  teachers,
+  branches,
 }: {
   session: ScheduleSession;
   total: number;
+  /** SRS Revision 166 §2 — whom «هذه الحصة فقط» may be staffed with, and the
+   *  branches its audience may draw from; both already loaded by the page. */
+  teachers: DirectoryEntry[];
+  branches: { id: string; name: string }[];
   /** R97 — the branch's rooms; empty until the schedule's scope has loaded,
    *  which only affects the in-person branch of the section below. */
   rooms: { id: string; name: string; capacity: number | null }[];
@@ -919,7 +945,6 @@ function ScopeDialog({
    * form**, opened on THIS occurrence's own name and note for the identical
    * reason `delivery`/`visibility` are above.
    */
-  const [title, setTitle] = useState(session.title);
   const [description, setDescription] = useState(session.description ?? '');
   /**
    * **Owner-reported, 2026-09-17 — opened on THIS occurrence's effective
@@ -946,6 +971,31 @@ function ScopeDialog({
    * **SRS Revision 165 §2/§5 — «السور», opened on what THIS occurrence is
    * about**: its own Surahs where it has them, else the class's.
    */
+  /**
+   * **SRS Revision 166 §2 — everything about ONE occurrence, in this one
+   * dialog** (Owner, 2026-09-21: *«like how it's done for an event»*). Its
+   * audience — branch, Category, Level, group, circle — used to live behind a
+   * separate «الحضور» row action and its staff behind «طاقم التدريس», so
+   * «تعديل الحصة» looked as though it could not change them. Both are still
+   * there; this dialog now offers the same two editors, through the same
+   * shared pieces, and sends whatever changed in its single save.
+   * Manager-only, on the footing the Subject below has (`token`).
+   */
+  const audience = useSessionAudience({
+    sessionId: session.id,
+    token,
+    active: token !== null && scope === 'this_session',
+  });
+  const initialLead = session.staff.find((x) => x.position === 'teacher')?.user_id ?? '';
+  const initialAssistants = session.staff
+    .filter((x) => x.position === 'assistant')
+    .map((x) => x.user_id);
+  const [leadId, setLeadId] = useState(initialLead);
+  const [assistantIds, setAssistantIds] = useState<string[]>(initialAssistants);
+  const staffDirty =
+    leadId !== initialLead ||
+    [...assistantIds].sort().join(',') !== [...initialAssistants].sort().join(',');
+
   const classSurahIds = identity?.surahIds ?? [];
   const [surahIds, setSurahIds] = useState<number[]>(
     (session.surah_ids ?? []).length > 0 ? (session.surah_ids ?? []) : classSurahIds,
@@ -1107,12 +1157,16 @@ function ScopeDialog({
             .replace('{total}', String(total))}
         </Feedback>
 
-        {/* **R138 §4.4 item 2 — the same title/description the series form
-            edits.** Opened on this occurrence's own value, exactly as
-            `delivery`/`visibility` are above: a wider scope carries the new
-            value into the rule, and the narrow scope leaves it as this
-            occurrence's own override. */}
-        <TextField label={t('scheduling.title')} value={title} onChange={setTitle} required />
+        {/* **What the occurrence is CALLED is composed by the server** (SRS
+            Revision 166 §3) and shown, not asked: it follows the Subject, the
+            Surah, the main teacher and the time below the moment they change.
+            «الوصف» is where she adds anything in her own words — opened on
+            this occurrence's own value, exactly as `delivery`/`visibility` are:
+            a wider scope carries it into the rule, the narrow one keeps it as
+            this occurrence's own. */}
+        <p className="field__hint">
+          <strong>{t('scheduling.title')}:</strong> {session.title}
+        </p>
         <TextArea
           label={t('scheduling.description')}
           value={description}
@@ -1189,6 +1243,33 @@ function ScopeDialog({
             selected={surahIds}
             onChange={setSurahIds}
           />
+        ) : null}
+
+        {/* SRS Revision 166 §2 — who this ONE occurrence is for, and who takes
+            it. The same shared editors the «الحضور» and «طاقم التدريس» row
+            actions open; nothing here touches the class. */}
+        {scope === 'this_session' && token ? (
+          <>
+            <fieldset>
+              <legend>{t('admin.sessions.audienceLegend')}</legend>
+              <p className="field__hint">{t('admin.sessions.audienceHint')}</p>
+              <SessionAudienceFields audience={audience} branches={branches} />
+            </fieldset>
+            <fieldset>
+              <legend>{t('admin.sessions.staffLegend')}</legend>
+              <p className="field__hint">{t('admin.sessions.staffHint')}</p>
+              <StaffPicker
+                staff={teachers}
+                leadLabel={t('admin.schedules.teacher')}
+                leadId={leadId}
+                onLead={setLeadId}
+                assistantsLabel={t('admin.schedules.assistants')}
+                assistantsHint={t('admin.schedules.assistantsHint')}
+                assistantIds={assistantIds}
+                onAssistants={setAssistantIds}
+              />
+            </fieldset>
+          </>
         ) : null}
 
         {/* **Owner-reported, 2026-09-15 — the good, simple design for editing
@@ -1280,7 +1361,6 @@ function ScopeDialog({
                 delivery_mode: delivery,
                 online_media_mode: delivery === 'online' ? mediaMode : null,
                 visibility,
-                title,
                 description: description.trim() === '' ? null : description,
                 // Owner-reported, 2026-09-17 — only `this_session` carries a
                 // Subject override; the wider scopes touch the schedule's
@@ -1291,6 +1371,29 @@ function ScopeDialog({
                 // override: `[]` keeps it following the class when that changes.
                 ...(sendsSurahs
                   ? { surah_ids: scope === 'this_session' && sameAsClass ? [] : surahIds }
+                  : {}),
+                // R166 §2 — only what she changed, and only for this occurrence.
+                ...(scope === 'this_session' && token !== null && audience.dirty
+                  ? {
+                      audience: {
+                        branch_ids: audience.chosen.branchIds,
+                        category_ids: audience.chosen.categoryIds,
+                        level_ids: audience.chosen.levelIds,
+                        administrative_group_ids: audience.chosen.administrativeGroupIds,
+                        teaching_group_ids: audience.chosen.teachingGroupIds,
+                      },
+                    }
+                  : {}),
+                ...(scope === 'this_session' && token !== null && staffDirty
+                  ? {
+                      staff: [
+                        ...(leadId ? [{ user_id: leadId, position: 'teacher' as const }] : []),
+                        ...assistantIds.map((id) => ({
+                          user_id: id,
+                          position: 'assistant' as const,
+                        })),
+                      ],
+                    }
                   : {}),
                 ...(scope === 'this_and_future' && identity
                   ? {

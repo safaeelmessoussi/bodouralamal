@@ -160,7 +160,6 @@ async function onlineClass(
     prisma,
     superAdmin(),
     {
-      title: `${TAG} تفسير`,
       subjectId,
       teachingMode: "entire_level",
       targetId: levelId,
@@ -189,7 +188,6 @@ async function inPersonClass(): Promise<{ sessionId: string }> {
     prisma,
     superAdmin(),
     {
-      title: `${TAG} فقه`,
       subjectId,
       teachingMode: "entire_level",
       targetId: levelId,

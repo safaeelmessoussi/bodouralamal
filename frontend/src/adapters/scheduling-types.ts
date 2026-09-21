@@ -57,8 +57,14 @@ export interface SchedulingTypeSpec {
   available: boolean;
   /** Why it is unavailable — rendered beside the option. */
   unavailableReasonKey?: string;
-  /** A free-text name of its own. False only where the entity has no such
-   *  column and borrowing one would be a second way to say the same thing. */
+  /**
+   * A free-text name of its own — **true only where the name IS the item's
+   * identity and nothing could compose it** («حفل ختم القرآن», «عطلة عيد
+   * الفطر»). A class and an exam are CALLED what they are — type, Subject,
+   * Surah, main teacher, when — by the server, at read time (SRS Revision 166
+   * §3): a typed or pre-filled title went stale the first time a teacher, a
+   * Surah or an hour changed. What she wants to add goes in «الوصف».
+   */
   hasTitle: boolean;
   hasDescription: boolean;
   /** Whether the item can span a whole day with no clock times. */
@@ -79,7 +85,7 @@ export interface SchedulingTypeSpec {
 export const STRUCTURAL_KIND_SPECS: Record<SchedulingType, SchedulingTypeSpec> = {
   class: {
     available: true,
-    hasTitle: true,
+    hasTitle: false,
     hasDescription: true,
     // A lesson that happens at no particular time is not a lesson (§4.4).
     hasAllDay: false,
@@ -126,7 +132,9 @@ export const STRUCTURAL_KIND_SPECS: Record<SchedulingType, SchedulingTypeSpec> =
     // inside the exam section, disabled, with its reason stated (§14.4); the
     // server refuses it too, so the block is not merely a client courtesy.
     available: true,
-    hasTitle: true,
+    // A sitting scheduled from an authored paper keeps the PAPER's title; a
+    // bare one is composed by the server, like a class (R166 §3).
+    hasTitle: false,
     hasDescription: true,
     // A sitting happens at a time — an exam with no clock window is one nobody
     // can attend, which is why the database refuses a half-specified place.

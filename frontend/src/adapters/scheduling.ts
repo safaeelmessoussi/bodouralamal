@@ -733,7 +733,6 @@ export async function saveSchedulingItem(
         existing.id,
         existing.version,
         {
-          title: input.title,
           description: input.description,
           start_time: input.startTime ?? '',
           end_time: input.endTime ?? '',
@@ -785,7 +784,6 @@ export async function saveSchedulingItem(
     }
     await createCourseSchedule(
       {
-        title: input.title,
         description: input.description,
         subject_id: input.subjectId!,
         teaching_mode: input.teachingMode!,
@@ -886,7 +884,8 @@ export async function saveSchedulingItem(
         existing.id,
         existing.version,
         {
-          title: input.title,
+          // (SRS Revision 166 §3 — no `title`: a bare sitting's is composed by the
+          // server and follows this edit; a paper's own title is the paper's.)
           description: input.description,
           date: input.startDate,
           start_time: input.startTime ?? '',
@@ -995,7 +994,6 @@ export async function saveSchedulingItem(
           ? {}
           : {
               bare: {
-                title: input.title,
                 description: input.description,
                 // **Owner-reported, 2026-09-15 — no longer asked at
                 // creation.** Omitted rather than sent as `null`: the

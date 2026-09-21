@@ -92,7 +92,6 @@ async function grantTeacherBranch(userId: string, branch: string | null): Promis
 }
 
 const baseInput = (over: Partial<CourseScheduleInput> = {}): CourseScheduleInput => ({
-  title: `${TAG} حلقة`,
   subjectId,
   teachingMode: "entire_level",
   targetId: levelId,
@@ -302,12 +301,12 @@ describe("§2 — editing is bounded by CURRENT staffing, never by declared capa
       prisma,
       teacherActor(),
       id,
-      { title: `${TAG} حلقة معدَّلة`, version: row.version },
+      { description: `${TAG} حلقة معدَّلة`, version: row.version },
       NOW,
     );
     expect(updated.id).toBe(id);
-    const after = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id }, select: { title: true } });
-    expect(after.title).toBe(`${TAG} حلقة معدَّلة`);
+    const after = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id }, select: { description: true } });
+    expect(after.description).toBe(`${TAG} حلقة معدَّلة`);
   });
 
   it("refuses editing a class she does not staff — answered as not-found, never forbidden (§20 rule 17)", async () => {
@@ -324,7 +323,7 @@ describe("§2 — editing is bounded by CURRENT staffing, never by declared capa
     });
 
     const err = await failure(() =>
-      updateCourseSchedule(prisma, teacherActor(), created.id, { title: "x", version: row.version }, NOW),
+      updateCourseSchedule(prisma, teacherActor(), created.id, { description: "x", version: row.version }, NOW),
     );
     expect(err.code).toBe("NOT_FOUND");
   });

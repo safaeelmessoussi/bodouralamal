@@ -13,6 +13,7 @@ import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
 import { overrideSession } from '../src/services/session.service.js';
+import { ownedSchedules } from '../src/test-support/owned-schedules.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -27,7 +28,8 @@ const day = (offset: number): Date => {
 
 async function wipe(): Promise<void> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);
@@ -143,14 +145,12 @@ const base = {
 
 const targaClass = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} تفسير تاركة`,
   branchId: targa.id,
   roomId: room.id,
   staff: [{ userId: safa, position: 'teacher' }],
 });
 const secondClass = await createCourseSchedule(prisma, actor, {
   ...base,
-  title: `${TAG} تفسير الفرع الثاني`,
   branchId: second.id,
   staff: [{ userId: nadia, position: 'teacher' }],
 });

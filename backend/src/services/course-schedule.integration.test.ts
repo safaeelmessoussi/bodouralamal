@@ -14,6 +14,7 @@ import {
   updateCourseSchedule,
   type CourseScheduleInput,
   listScheduleSessions,
+  listCourseSchedules,
 } from "./course-schedule.service.js";
 import { runMaterialization } from "./session-materialize.service.js";
 import { deleteOwnAccount } from "./account-deletion.service.js";
@@ -104,8 +105,6 @@ async function person(label: string): Promise<string> {
 const baseInput = (
   over: Partial<CourseScheduleInput> = {},
 ): CourseScheduleInput => ({
-  // R57 — a class carries its own name.
-  title: `${TAG} حلقة`,
   subjectId,
   teachingMode: "administrative_group",
   targetId: groupId,
@@ -1092,37 +1091,37 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
    * **R138 — title/description join the resync/override/protection machinery
    * on exactly the same footing every other Session field already has.**
    */
-  it("a Session's own title/description are snapshotted from the schedule, and follow future resyncs", async () => {
+  it("a Session's own description is snapshotted from the schedule, and follows future resyncs (its TITLE is composed — R166 §3)", async () => {
     const { id } = await createCourseSchedule(
       prisma,
       superAdmin(),
-      baseInput({ title: `${TAG} العنوان الأصلي` }),
+      baseInput({ description: `${TAG} العنوان الأصلي` }),
       NOW,
     );
     const before = await prisma.session.findFirstOrThrow({
       where: { scheduleId: id, date: day("2026-06-16") },
     });
-    expect(before.title).toBe(`${TAG} العنوان الأصلي`);
+    expect(before.description).toBe(`${TAG} العنوان الأصلي`);
 
     await updateCourseSchedule(
       prisma,
       superAdmin(),
       id,
-      { title: `${TAG} العنوان الجديد`, version: 0 },
+      { description: `${TAG} العنوان الجديد`, version: 0 },
       NOW,
     );
 
     const after = await prisma.session.findUniqueOrThrow({
       where: { id: before.id },
     });
-    expect(after.title).toBe(`${TAG} العنوان الجديد`);
+    expect(after.description).toBe(`${TAG} العنوان الجديد`);
   });
 
-  it("تعديل الحصة (this session only) can give ONE occurrence its own title, protected from the next series edit", async () => {
+  it("تعديل الحصة (this session only) can give ONE occurrence its own description, protected from the next series edit", async () => {
     const { id } = await createCourseSchedule(
       prisma,
       superAdmin(),
-      baseInput({ title: `${TAG} حلقة الأصل` }),
+      baseInput({ description: `${TAG} حلقة الأصل` }),
       NOW,
     );
     const target = await prisma.session.findFirstOrThrow({
@@ -1130,12 +1129,10 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
     });
 
     const overridden = await overrideSession(prisma, superAdmin(), target.id, {
-      title: `${TAG} عنوان هذه الحصة فقط`,
       description: `${TAG} وصف خاص بهذه الحصة`,
       version: target.version,
     });
     expect(overridden.overridden).toBe(true);
-    expect(overridden.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
     expect(overridden.description).toBe(`${TAG} وصف خاص بهذه الحصة`);
 
     // The series is then renamed — an ordinary all_sessions edit.
@@ -1143,7 +1140,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       prisma,
       superAdmin(),
       id,
-      { title: `${TAG} حلقة معاد تسميتها`, version: 0 },
+      { description: `${TAG} حلقة معاد تسميتها`, version: 0 },
       NOW,
     );
 
@@ -1152,14 +1149,14 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
     const stillHers = await prisma.session.findUniqueOrThrow({
       where: { id: target.id },
     });
-    expect(stillHers.title).toBe(`${TAG} عنوان هذه الحصة فقط`);
+    expect(stillHers.description).toBe(`${TAG} وصف خاص بهذه الحصة`);
 
     // A DIFFERENT, un-overridden Session of the same series DID pick up the
     // rename — proving this is a per-Session decision, not a series-wide one.
     const ordinary = await prisma.session.findFirstOrThrow({
       where: { scheduleId: id, date: day("2026-06-23") },
     });
-    expect(ordinary.title).toBe(`${TAG} حلقة معاد تسميتها`);
+    expect(ordinary.description).toBe(`${TAG} حلقة معاد تسميتها`);
   });
 
   /**
@@ -1175,14 +1172,14 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       const { id } = await createCourseSchedule(
         prisma,
         superAdmin(),
-        baseInput({ title: `${TAG} حلقة أ` }),
+        baseInput({ description: `${TAG} حلقة أ` }),
         NOW,
       );
       const target = await prisma.session.findFirstOrThrow({
         where: { scheduleId: id, date: day("2026-06-16") },
       });
       await overrideSession(prisma, superAdmin(), target.id, {
-        title: `${TAG} حصة معدَّلة يدويًا`,
+        description: `${TAG} حصة معدَّلة يدويًا`,
         roomId: roomB,
         version: target.version,
       });
@@ -1191,7 +1188,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
         prisma,
         superAdmin(),
         id,
-        { title: `${TAG} حلقة أ المعدَّلة`, roomId: roomA, version: 0 },
+        { description: `${TAG} حلقة أ المعدَّلة`, roomId: roomA, version: 0 },
         NOW,
       );
       expect(result.materialized.overwritten).toBe(0);
@@ -1203,7 +1200,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
         where: { id: target.id },
       });
       expect(still.overridden).toBe(true);
-      expect(still.title).toBe(`${TAG} حصة معدَّلة يدويًا`);
+      expect(still.description).toBe(`${TAG} حصة معدَّلة يدويًا`);
       expect(still.roomId).toBe(roomB);
     });
 
@@ -1211,7 +1208,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       const { id } = await createCourseSchedule(
         prisma,
         superAdmin(),
-        baseInput({ title: `${TAG} حلقة ب` }),
+        baseInput({ description: `${TAG} حلقة ب` }),
         NOW,
       );
       const target = await prisma.session.findFirstOrThrow({
@@ -1230,7 +1227,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
         superAdmin(),
         id,
         {
-          title: `${TAG} حلقة ب المعاد تسميتها`,
+          description: `${TAG} حلقة ب المعاد تسميتها`,
           roomId: roomA,
           overwriteManuallyEdited: true,
           version: 0,
@@ -1250,7 +1247,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       // room — the same loss of field-level precision the Owner named
       // explicitly as acceptable for the simpler mechanism.
       expect(after.overridden).toBe(false);
-      expect(after.title).toBe(`${TAG} حلقة ب المعاد تسميتها`);
+      expect(after.description).toBe(`${TAG} حلقة ب المعاد تسميتها`);
       expect(after.roomId).toBe(roomA);
     });
 
@@ -1269,7 +1266,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       const { id } = await createCourseSchedule(
         prisma,
         superAdmin(),
-        baseInput({ title: `${TAG} حلقة تجاوز المادة` }),
+        baseInput({ description: `${TAG} حلقة تجاوز المادة` }),
         NOW,
       );
       const target = await prisma.session.findFirstOrThrow({
@@ -1287,7 +1284,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
         prisma,
         superAdmin(),
         id,
-        { title: `${TAG} حلقة تجاوز المادة`, overwriteManuallyEdited: true, version: 0 },
+        { description: `${TAG} حلقة تجاوز المادة`, overwriteManuallyEdited: true, version: 0 },
         NOW,
       );
       expect(result.materialized.overwritten).toBe(1);
@@ -1301,7 +1298,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       const { id } = await createCourseSchedule(
         prisma,
         superAdmin(),
-        baseInput({ title: `${TAG} حلقة ج` }),
+        baseInput({ description: `${TAG} حلقة ج` }),
         NOW,
       );
       const target = await prisma.session.findFirstOrThrow({
@@ -1348,7 +1345,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
       const { id } = await createCourseSchedule(
         prisma,
         superAdmin(),
-        baseInput({ title: `${TAG} حلقة د` }),
+        baseInput({ description: `${TAG} حلقة د` }),
         NOW,
       );
       const target = await prisma.session.findFirstOrThrow({
@@ -1395,7 +1392,7 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
         // A different weekday than the first half above (whose leftover,
         // still-overridden Session in roomB survives its schedule's deletion
         // by design, §4.4) — orthogonal to what this half actually tests.
-        baseInput({ title: `${TAG} حلقة هـ`, weekdays: ["wednesday"] }),
+        baseInput({ description: `${TAG} حلقة هـ`, weekdays: ["wednesday"] }),
         NOW,
       );
       const target2 = await prisma.session.findFirstOrThrow({
@@ -2366,21 +2363,22 @@ describe("listing a schedule's occurrences (§4.4, Revision 50)", () => {
  *
  * So this asserts **persistence**, never the status code.
  */
-describe("a schedule carries its own name (R57)", () => {
-  it("stores the title and description it was given", async () => {
+describe("a schedule carries its own note — and is CALLED what it is (R57, R166 §3)", () => {
+  it("stores the description it was given, and NO typed title", async () => {
     const created = await createCourseSchedule(
       prisma,
       superAdmin(),
-      baseInput({ title: `${TAG} حلقة التحفيظ`, description: "وصف أولي" }),
+      baseInput({ description: "وصف أولي" }),
     );
     const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
       where: { id: created.id },
     });
-    expect(row.title).toBe(`${TAG} حلقة التحفيظ`);
     expect(row.description).toBe("وصف أولي");
+    // The column is retired in place: nothing writes it any more.
+    expect(row.title).toBeNull();
   });
 
-  it("APPLIES a rename rather than reporting one", async () => {
+  it("APPLIES a changed description rather than reporting one", async () => {
     const created = await createCourseSchedule(
       prisma,
       superAdmin(),
@@ -2388,7 +2386,6 @@ describe("a schedule carries its own name (R57)", () => {
     );
     await updateCourseSchedule(prisma, superAdmin(), created.id, {
       version: 0,
-      title: `${TAG} الاسم الجديد`,
       description: "وصف معدَّل",
     });
     const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
@@ -2396,8 +2393,42 @@ describe("a schedule carries its own name (R57)", () => {
     });
     // Reading the ROW, not the response: a handler that echoes its input would
     // satisfy an assertion on the response while persisting nothing.
-    expect(row.title).toBe(`${TAG} الاسم الجديد`);
     expect(row.description).toBe("وصف معدَّل");
+  });
+
+  it("its title is COMPOSED from what the rows say — and follows them when they change", async () => {
+    const lead = await person("المؤطِّرة الأولى");
+    const cover = await person("المُغطِّية");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: lead, position: "teacher" }] }),
+      NOW,
+    );
+    const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId } });
+
+    const listed = await listCourseSchedules(prisma, superAdmin(), { subjectId });
+    const row = listed.data.find((r) => r.id === id)!;
+    // Subject — main teacher — time. No catalogue type and no Surah on this
+    // fixture, and a repeating class's own row carries no date.
+    expect(row.title).toBe(`${subject.name} — ${TAG} المؤطِّرة الأولى — 15:00`);
+
+    const sessions = await listScheduleSessions(prisma, superAdmin(), id, {});
+    const first = sessions.data[0]!;
+    const date = first.date.toISOString().slice(0, 10);
+    expect(first.title).toBe(`${subject.name} — ${TAG} المؤطِّرة الأولى — ${date} 15:00`);
+
+    // A cover teacher takes ONE date: that occurrence's title says so at once,
+    // and nothing had to be kept in step to make it true.
+    await overrideSession(prisma, superAdmin(), first.id, {
+      version: first.version,
+      staff: [{ userId: cover, position: "teacher" }],
+    });
+    const again = await listScheduleSessions(prisma, superAdmin(), id, {});
+    expect(again.data.find((r) => r.id === first.id)!.title).toBe(
+      `${subject.name} — ${TAG} المُغطِّية — ${date} 15:00`,
+    );
+    expect(again.data.find((r) => r.id !== first.id)!.title).toContain("المؤطِّرة الأولى");
   });
 
   it("APPLIES effective_until on edit — the same defect, found with it", async () => {

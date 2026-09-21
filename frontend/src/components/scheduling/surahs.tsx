@@ -105,35 +105,3 @@ export function SurahField({
     />
   );
 }
-
-/**
- * **The title «إضافة عنصر» opens with** (Owner, 2026-09-20 — R165 §2): *the type
- * of the session, the Subject, the Surah where there is one, the main teacher,
- * and the date and time*. A suggestion she may overwrite — the form stops
- * following it the moment she types.
- *
- * **A repeating class carries its TIME and not a date.** Its title is
- * snapshotted onto every occurrence (R138), so a date here would print the
- * first session's date on all the others. A one-off carries both.
- */
-export function suggestedTitle(parts: {
-  typeName: string | null;
-  subjectName: string | null;
-  surahNames: readonly string[];
-  teacherName: string | null;
-  date: string;
-  time: string | null;
-  repeats: boolean;
-}): string {
-  const when = [parts.repeats ? '' : parts.date, parts.time ?? ''].filter((x) => x !== '').join(' ');
-  return [
-    parts.typeName ?? '',
-    parts.subjectName ?? '',
-    parts.surahNames.join('، '),
-    parts.teacherName ?? '',
-    when,
-  ]
-    .map((part) => part.trim())
-    .filter((part) => part !== '')
-    .join(' — ');
-}

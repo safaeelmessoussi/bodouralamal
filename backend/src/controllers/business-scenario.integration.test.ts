@@ -364,7 +364,6 @@ describe("the scenario, step by step — each step through the API a screen uses
         { user_id: safaId, position: "teacher" },
         { user_id: aminaId, position: "assistant" },
       ],
-      title: `${TAG} حلقة التفسير`,
       subject_id: subjectId,
       teaching_mode: "administrative_group",
       target_id: groupId,

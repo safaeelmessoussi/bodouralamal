@@ -110,7 +110,7 @@ export interface SessionEdit {
    * and the server always marks the occurrence `overridden` on this write, so
    * it is protected from a later resync exactly as an untouched field would be.
    */
-  title?: string;
+  // (SRS Revision 166 §3 — no `title`: an occurrence's title is composed by the server.)
   description?: string | null;
   /**
    * **R97 — this occurrence's own delivery.** Sent as a unit: naming the mode
@@ -148,6 +148,15 @@ export interface SessionEdit {
   /** SRS Revision 165 §2/§5 — named, they REPLACE the class's for this date;
    *  `[]` returns the occurrence to the class's own; absent leaves it alone. */
   surah_ids?: number[];
+  /** SRS Revision 166 §2 — this occurrence's own audience, in the same save as
+   *  the rest of the edit. All five lists or none; absent leaves it as it is. */
+  audience?: {
+    branch_ids: string[];
+    category_ids: string[];
+    level_ids: string[];
+    administrative_group_ids: string[];
+    teaching_group_ids: string[];
+  };
 }
 
 /**

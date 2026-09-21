@@ -18,7 +18,15 @@ cleanup() {
   rm -rf "$WORK" 2>/dev/null || true
   # The scenario's own wipe removes every `[dev-scenario]`-titled schedule,
   # which is why the class this harness creates carries that prefix (P1.2).
-  bash scripts/dev/seed-dev-scenario.sh --clean >/dev/null 2>&1 || true
+  # **A failed cleanup is SAID, never swallowed** (2026-09-21). This was
+  # `|| true`, and it hid a cleanup that could not finish three times in two
+  # days — each time leaving rows behind on a populated Localhost that then
+  # broke the NEXT harness, far from the cause. It cannot change this script's
+  # exit status from inside an EXIT trap, so it says so where it will be read.
+  if ! bash scripts/dev/seed-dev-scenario.sh --clean >/dev/null 2>&1; then
+    echo "WARNING: seed-dev-scenario --clean FAILED — [dev-scenario] rows were left behind." >&2
+    echo "         Run: bash scripts/dev/seed-dev-scenario.sh --clean   (and read its error)" >&2
+  fi
 }
 trap cleanup EXIT
 

@@ -82,7 +82,6 @@ async function failure(
 const baseInput = (
   over: Partial<CourseScheduleInput> = {},
 ): CourseScheduleInput => ({
-  title: `${TAG} حلقة`,
   subjectId,
   teachingMode: "administrative_group",
   targetId: groupId,
@@ -337,7 +336,6 @@ describe("creating a class with a delivery mode (R97.1)", () => {
 
 describe("the boundary refuses what cannot be stored", () => {
   const bodyBase = {
-    title: "حلقة",
     subject_id: "00000000-0000-4000-8000-000000000001",
     teaching_mode: "administrative_group" as const,
     target_id: "00000000-0000-4000-8000-000000000002",

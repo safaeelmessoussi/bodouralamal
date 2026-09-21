@@ -173,7 +173,7 @@ export interface SessionOverride {
    * resync by the SAME `overridden` flag every other field on this row
    * shares — no per-field marker, no second mechanism.
    */
-  title?: string;
+  // (R166 §3 — no `title`: an occurrence's title is composed at read time.)
   description?: string | null;
   startTime?: Date;
   endTime?: Date;
@@ -224,6 +224,14 @@ export interface SessionOverride {
    * occurrence will teach AFTER the edit and the schedule's own Level(s).
    */
   surahIds?: number[];
+  /**
+   * SRS Revision 166 §2 — **this occurrence's own audience, in the SAME save**
+   * as everything else «تعديل الحصة» changes. The five lists R92/R161 already
+   * define (`setSessionAudienceOverrides`), written by the same code in this
+   * transaction: one «حفظ» is one decision, never an edit that landed beside an
+   * audience that did not. Absent leaves the audience exactly as it is.
+   */
+  audience?: SessionAudienceOverrideInput;
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
   staff?: { userId: string; position: "teacher" | "assistant" }[];
@@ -353,6 +361,10 @@ export async function overrideSession(
     }
   }
 
+  // R166 §2 — validated before the transaction, like everything above it.
+  const audience =
+    data.audience === undefined ? undefined : await knownAudience(prisma, data.audience);
+
   // Plain strings so the payload is a valid JSON value for the audit column,
   // and so a reviewer reading the row sees exactly what an operator saw.
   const changed: Record<string, { from: string | null; to: string | null }> =
@@ -407,7 +419,6 @@ export async function overrideSession(
       requireNotDeleted: true,
       data: {
         ...(data.date === undefined ? {} : { date: atMidnightUtc(data.date) }),
-        ...(data.title === undefined ? {} : { title: data.title }),
         ...(data.description === undefined ? {} : { description: data.description }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
@@ -439,6 +450,12 @@ export async function overrideSession(
           data: surahPlan.map((surahId) => ({ sessionId, surahId })),
         });
       }
+    }
+
+    // R166 §2 — the audience, by the SAME writer the audience route uses: its
+    // own `session.audience` audit row and its consent re-evaluation included.
+    if (audience !== undefined) {
+      await writeAudienceOverrides(tx, actor, sessionId, audience);
     }
 
     if (
@@ -1246,28 +1263,7 @@ export async function setSessionAudienceOverrides(
   input: SessionAudienceOverrideInput,
 ): Promise<SessionAudienceOverrideInput & { overridden: boolean }> {
   await loadForWrite(prisma, actor, sessionId);
-
-  const wanted: SessionAudienceOverrideInput = {
-    branchIds: [...new Set(input.branchIds)],
-    categoryIds: [...new Set(input.categoryIds)],
-    levelIds: [...new Set(input.levelIds)],
-    administrativeGroupIds: [...new Set(input.administrativeGroupIds)],
-    teachingGroupIds: [...new Set(input.teachingGroupIds)],
-  };
-
-  // Refused rather than silently dropped: an administrator must never plan
-  // against a value the platform did not record.
-  await Promise.all([
-    assertKnown(prisma.branch, wanted.branchIds, "UNKNOWN_BRANCH"),
-    assertKnown(prisma.category, wanted.categoryIds, "UNKNOWN_CATEGORY"),
-    assertKnown(prisma.level, wanted.levelIds, "UNKNOWN_LEVEL"),
-    assertKnown(
-      prisma.administrativeGroup,
-      wanted.administrativeGroupIds,
-      "UNKNOWN_ADMINISTRATIVE_GROUP",
-    ),
-    assertKnown(prisma.teachingGroup, wanted.teachingGroupIds, "UNKNOWN_TEACHING_GROUP"),
-  ]);
+  const wanted = await knownAudience(prisma, input);
 
   return prisma.$transaction(async (tx) => {
     await updateWithVersion<Session>({
@@ -1280,7 +1276,51 @@ export async function setSessionAudienceOverrides(
       // overwrite.
       data: {},
     });
+    return writeAudienceOverrides(tx, actor, sessionId, wanted);
+  });
+}
 
+/** Deduplicated, and every id a live row — refused rather than silently
+ *  dropped: an administrator must never plan against a value the platform did
+ *  not record. */
+async function knownAudience(
+  prisma: PrismaClient,
+  input: SessionAudienceOverrideInput,
+): Promise<SessionAudienceOverrideInput> {
+  const wanted: SessionAudienceOverrideInput = {
+    branchIds: [...new Set(input.branchIds)],
+    categoryIds: [...new Set(input.categoryIds)],
+    levelIds: [...new Set(input.levelIds)],
+    administrativeGroupIds: [...new Set(input.administrativeGroupIds)],
+    teachingGroupIds: [...new Set(input.teachingGroupIds)],
+  };
+  await Promise.all([
+    assertKnown(prisma.branch, wanted.branchIds, "UNKNOWN_BRANCH"),
+    assertKnown(prisma.category, wanted.categoryIds, "UNKNOWN_CATEGORY"),
+    assertKnown(prisma.level, wanted.levelIds, "UNKNOWN_LEVEL"),
+    assertKnown(
+      prisma.administrativeGroup,
+      wanted.administrativeGroupIds,
+      "UNKNOWN_ADMINISTRATIVE_GROUP",
+    ),
+    assertKnown(prisma.teachingGroup, wanted.teachingGroupIds, "UNKNOWN_TEACHING_GROUP"),
+  ]);
+  return wanted;
+}
+
+/**
+ * **The audience write itself, in the CALLER's transaction** — shared by the
+ * audience route and by «تعديل الحصة»'s single save (SRS Revision 166 §2), so
+ * the two cannot write different rows, enqueue different obligations or leave
+ * different audit trails. The caller owns authorization and the version bump.
+ */
+async function writeAudienceOverrides(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  sessionId: string,
+  wanted: SessionAudienceOverrideInput,
+): Promise<SessionAudienceOverrideInput & { overridden: boolean }> {
+  {
     await tx.sessionAudienceBranch.deleteMany({ where: { sessionId } });
     if (wanted.branchIds.length > 0) {
       await tx.sessionAudienceBranch.createMany({
@@ -1340,5 +1380,5 @@ export async function setSessionAudienceOverrides(
     });
 
     return { ...wanted, overridden };
-  });
+  }
 }

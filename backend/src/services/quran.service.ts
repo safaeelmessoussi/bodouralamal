@@ -1,3 +1,8 @@
+import {
+  decideCompletion,
+  examinedSurahs,
+  levelsRequiringSurahExams,
+} from '../policies/level-completion.js';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
@@ -175,7 +180,21 @@ export interface LevelCoverage {
   level_id: string;
   level_name: string;
   category_name: string;
-  surahs: SurahCoverage[];
+  /** Each Surah of the syllabus, with `exam_taken` — R166 §1's second half. */
+  surahs: (SurahCoverage & { exam_taken: boolean })[];
+  /**
+   * **R166 §1 — has she COMPLETED this Level?** BR-11, by the one rule in
+   * `policies/level-completion.ts`: every Surah memorised and, where the Level
+   * teaches تفسير, an exam taken on each. `complete` is `null` for a Level with
+   * no «مقرر الحفظ».
+   */
+  completion: {
+    complete: boolean | null;
+    configured_surahs: number;
+    memorised_surahs: number;
+    examined_surahs: number;
+    exams_required: boolean;
+  };
 }
 
 export interface QuranProgressRead {
@@ -468,17 +487,48 @@ async function coverageFor(
     surahs.push(await coverageOf(surahId, meta));
   }
 
+  // R166 §1 — the second clause of completion, read once for all her Levels.
+  const ownLevels = [...levelById.values()];
+  const [requiring, examinedByStudent] = await Promise.all([
+    levelsRequiringSurahExams(
+      prisma,
+      ownLevels.map((l) => l.id),
+    ),
+    examinedSurahs(
+      prisma,
+      [studentId],
+      ownLevels.flatMap((l) => l.surahs.map((entry) => entry.surah.surahId)),
+    ),
+  ]);
+  const examined = examinedByStudent.get(studentId) ?? new Set<number>();
+
   const levels: LevelCoverage[] = [];
-  for (const level of [...levelById.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'))) {
-    const rows: SurahCoverage[] = [];
+  for (const level of ownLevels.sort((a, b) => a.name.localeCompare(b.name, 'ar'))) {
+    const rows: LevelCoverage['surahs'] = [];
     for (const entry of level.surahs) {
-      rows.push(await coverageOf(entry.surah.surahId, entry.surah));
+      rows.push({
+        ...(await coverageOf(entry.surah.surahId, entry.surah)),
+        exam_taken: examined.has(entry.surah.surahId),
+      });
     }
+    const verdict = decideCompletion({
+      configuredSurahIds: rows.map((r) => r.surah_id),
+      memorisedSurahIds: new Set(rows.filter((r) => r.coverage_percent >= 100).map((r) => r.surah_id)),
+      examinedSurahIds: examined,
+      examsRequired: requiring.has(level.id),
+    });
     levels.push({
       level_id: level.id,
       level_name: level.name,
       category_name: level.category.name,
       surahs: rows,
+      completion: {
+        complete: verdict.complete,
+        configured_surahs: verdict.configuredSurahs,
+        memorised_surahs: verdict.memorisedSurahs,
+        examined_surahs: verdict.examinedSurahs,
+        exams_required: verdict.examsRequired,
+      },
     });
   }
 
@@ -860,9 +910,24 @@ export interface LevelCompletion {
   complete: boolean | null;
   configured_surahs: number;
   completed_surahs: number;
-  /** Always `false` today: nothing in the model can configure one (§4.6). */
+  /**
+   * **R166 §1 — BR-11's second clause, now reachable.** `true` when this Level
+   * teaches a Subject that works by Surah and is not the memorisation tracker
+   * (تفسير القرآن, by its columns): completion then also needs an exam TAKEN on
+   * every Surah of the syllabus. It was always `false`, truthfully, while
+   * nothing in the model could configure one; the key keeps its name so the
+   * day it became reachable is a change of value, not of contract.
+   */
   final_exam_configured: boolean;
-  surahs: { surah_id: number; name_arabic: string; coverage_percent: number }[];
+  /** R166 §1 — how many of the syllabus's Surahs she has been examined on. */
+  examined_surahs: number;
+  surahs: {
+    surah_id: number;
+    name_arabic: string;
+    coverage_percent: number;
+    /** R166 §1 — she has taken an exam of this Surah (`policies/level-completion`). */
+    exam_taken: boolean;
+  }[];
 }
 
 export async function levelCompletion(
@@ -902,6 +967,17 @@ export async function levelCompletion(
 
   const surahIds = configured.map((c) => c.surah.surahId);
 
+  // R166 §1 — the second clause, read ONCE for the whole Level.
+  const [requiring, examined] = await Promise.all([
+    levelsRequiringSurahExams(prisma, [levelId]),
+    examinedSurahs(
+      prisma,
+      enrolments.map((e) => e.studentId),
+      surahIds,
+    ),
+  ]);
+  const examsRequired = requiring.has(levelId);
+
   return Promise.all(
     enrolments.map(async (e) => {
       const perSurah = await Promise.all(
@@ -913,20 +989,28 @@ export async function levelCompletion(
             surah_id: surahId,
             name_arabic: coverage.name_arabic,
             coverage_percent: coverage.coverage_percent,
+            exam_taken: examined.get(e.studentId)?.has(surahId) ?? false,
           };
         }),
       );
-      const completed = perSurah.filter((x) => x.coverage_percent >= 100).length;
+      // BR-11, decided by the ONE rule «حفظي» also shows her (R166 §1).
+      const verdict = decideCompletion({
+        configuredSurahIds: surahIds,
+        memorisedSurahIds: new Set(
+          perSurah.filter((x) => x.coverage_percent >= 100).map((x) => x.surah_id),
+        ),
+        examinedSurahIds: examined.get(e.studentId) ?? new Set(),
+        examsRequired,
+      });
 
       return {
         student_id: e.studentId,
         student_name: e.student.nameArabic,
-        // BR-11: 100% of the configured syllabus. `null` where none is
-        // configured — the question cannot be asked yet.
-        complete: surahIds.length === 0 ? null : completed === surahIds.length,
-        configured_surahs: surahIds.length,
-        completed_surahs: completed,
-        final_exam_configured: false,
+        complete: verdict.complete,
+        configured_surahs: verdict.configuredSurahs,
+        completed_surahs: verdict.memorisedSurahs,
+        final_exam_configured: verdict.examsRequired,
+        examined_surahs: verdict.examinedSurahs,
         surahs: perSurah,
       };
     }),

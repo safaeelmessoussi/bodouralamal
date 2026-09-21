@@ -9,6 +9,7 @@ import {
   ownedOnboardingTokens,
 } from '../test-support/consumed-tokens.js';
 import { httpCall } from '../test-support/http-client.js';
+import { ownedSchedules } from '../test-support/owned-schedules.js';
 
 /**
  * **The whole business journey, through the real routes** (Document Owner,
@@ -225,7 +226,8 @@ async function clear(): Promise<void> {
   }
 
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const scheduleIds = schedules.map((s) => s.id);
@@ -685,7 +687,6 @@ describe('the journey · 6 · the مؤطِّرة is assigned to teach LEVEL A', 
      */
     const created = await call('POST', '/admin/course-schedules', superAdmin, {
       staff: [{ user_id: teacherUserId, position: 'teacher' }],
-      title: `${TAG} حلقة القرآن`,
       subject_id: subjectId,
       // R165 §2 — حفظ القرآن works by Surah, so the class names which one: the
       // Surah step 2 put in LEVEL A's «مقرر الحفظ», the only one it may name.
@@ -1138,7 +1139,7 @@ describe('the journey · 12 · the LEVEL-A Quran class and its roster', () => {
      * as rows; what follows asserts they are hers and that she can work on them.
      */
     const schedule = await prisma.recurringCourseSchedule.findFirstOrThrow({
-      where: { title: { startsWith: TAG }, deletedAt: null },
+      where: { AND: [ownedSchedules(TAG), { deletedAt: null }] },
       select: { id: true, subjectId: true, levelId: true },
     });
     expect(schedule.subjectId).toBe(subjectId);
@@ -1162,7 +1163,6 @@ describe('the journey · 12 · the LEVEL-A Quran class and its roster', () => {
   it('a مؤطِّرة may NOT open a class herself — and that boundary is not widened here', async () => {
     const res = await call('POST', '/admin/course-schedules', teacherToken, {
       staff: [{ user_id: teacherUserId, position: 'teacher' }],
-      title: `${TAG} حلقة لا يجوز إنشاؤها`,
       subject_id: subjectId,
       teaching_mode: 'entire_level',
       target_id: levelAId,

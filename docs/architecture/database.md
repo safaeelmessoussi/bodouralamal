@@ -227,6 +227,28 @@ upsert.
 pair's latest log id — never as per-row cache reads plus per-row max lookups, which would be
 an N+1 wearing a cache costume.
 
+### Every application session is UTC — the adapter assumes it (found 2026-09-21)
+
+`@prisma/adapter-pg` exchanges `timestamptz` as text: it sends an instant with no offset and
+reads one back by discarding the offset Postgres printed. That is correct only in a UTC session.
+This database's own default zone is `Africa/Casablanca` (the `db` container's `TZ`, written into
+`postgresql.conf` at init), so every instant the application wrote was understood **an hour
+early** and every instant it read came back **an hour late**. The errors cancel on a round trip —
+which is how it passed every test — and cancel nowhere else: a `DEFAULT now()` read by the app,
+raw SQL comparing a written instant with `now()`, a backup, an export, an operator's `psql`.
+
+`createPrismaClient` therefore opens every session with `options: '-c TimeZone=UTC'`. It is
+pinned on the connection rather than on the database because it is the ADAPTER's assumption: it
+travels with the adapter to every tier and every disposable stack, and an operator's own session
+still reads the association's clock. Nothing in this codebase's SQL depends on the session zone —
+dates and wall-clock times are `date`/`time` columns (TD-11), which carry none.
+`lib/prisma-timezone.integration.test.ts` asks the two questions a round trip cannot (what did
+Postgres understand; what does the app make of `now()`) and holds the precondition that the
+database it runs against is NOT UTC, so it cannot go quietly vacuous.
+
+**Data written before the fix** is one hour earlier, in absolute terms, than was meant, and now
+reads as such. There was no Production data; Localhost and Staging carry it knowingly.
+
 ### `Subject.tracks_quran_progress` — authorization, not curriculum type
 
 SRS R107–R108 keeps the existing boolean and partial unique index, and narrows their meaning.

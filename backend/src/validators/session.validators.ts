@@ -7,7 +7,6 @@ import {
   deliveryMode,
   onlineMediaMode,
   scheduleDescription,
-  scheduleTitle,
   visibility,
   wallClock,
 } from "./course-schedule.validators.js";
@@ -40,7 +39,7 @@ export const overrideSessionSchema = z
      * one occurrence: the exact `scheduleTitle`/`scheduleDescription` bounds
      * the series uses, not a second, independently-drifting definition.
      */
-    title: scheduleTitle.optional(),
+    // (R166 §3 — no `title`; an occurrence's title is composed, never typed.)
     description: scheduleDescription,
     start_time: wallClock.optional(),
     end_time: wallClock.optional(),
@@ -81,6 +80,22 @@ export const overrideSessionSchema = z
      * the class's for this date; `[]` clears the override; absent leaves it.
      */
     surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),
+    /**
+     * SRS Revision 166 §2 — this occurrence's own audience, in the same save.
+     * The five lists `PUT /sessions/{id}/audience` takes, all or none: a partial
+     * object would make *«leave that dimension alone»* and *«clear it»* the same
+     * request. Absent leaves the audience exactly as it is.
+     */
+    audience: z
+      .object({
+        branch_ids: z.array(uuid).max(20),
+        category_ids: z.array(uuid).max(20),
+        level_ids: z.array(uuid).max(20),
+        administrative_group_ids: z.array(uuid).max(20),
+        teaching_group_ids: z.array(uuid).max(20),
+      })
+      .strict()
+      .optional(),
     /**
      * Supplying this **replaces** this occurrence's staffing snapshot; omitting
      * it leaves the snapshot untouched. An empty array is therefore a real

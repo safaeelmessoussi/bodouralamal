@@ -71,9 +71,11 @@ async function cleanup(): Promise<void> {
   const taggedPerson = { nameArabic: { startsWith: TAG } };
   const ofTaggedSchedule = { schedule: { subject: tagged } };
 
-  await prisma.examStaff.deleteMany({ where: { exam: { title: { startsWith: TAG } } } });
-  await prisma.exam.deleteMany({ where: { title: { startsWith: TAG } } });
+  // By the Level they belong to: a bare sitting's title is composed (R166 §3).
+  await prisma.examStaff.deleteMany({ where: { exam: { level: tagged } } });
+  await prisma.exam.deleteMany({ where: { level: tagged } });
   await prisma.sessionSurah.deleteMany({ where: { session: ofTaggedSchedule } });
+  await prisma.sessionAudienceLevel.deleteMany({ where: { session: ofTaggedSchedule } });
   await prisma.sessionStaff.deleteMany({ where: { session: ofTaggedSchedule } });
   await prisma.notification.deleteMany({ where: { session: ofTaggedSchedule } });
   await prisma.session.deleteMany({ where: ofTaggedSchedule });
@@ -144,7 +146,6 @@ afterAll(async () => {
 });
 
 const classInput = (over: Partial<CourseScheduleInput> = {}): CourseScheduleInput => ({
-  title: `${TAG} حلقة`,
   subjectId: tafseerId,
   teachingMode: "entire_level",
   targetId: levelId,
@@ -210,8 +211,14 @@ describe("a class of a Subject that works by Surah", () => {
     expect(row.surahNames).toEqual(["الفاتحة", "البقرة"]);
 
     const occurrences = await calendarOn(FIRST);
-    const mine = occurrences.find((o) => o.kind === "session" && o.itemTitle === `${TAG} حلقة`);
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(FIRST) },
+      select: { id: true },
+    });
+    const mine = occurrences.find((o) => o.id === session.id);
     expect(mine?.surahNames).toEqual(["الفاتحة", "البقرة"]);
+    // R166 §3 — and it is CALLED what it is: Subject — Surahs — date and time.
+    expect(mine?.itemTitle).toBe(`${TAG} مادة بالسور — الفاتحة، البقرة — ${FIRST} 15:00`);
   });
 
   it("a Subject that is NOT taught by Surah refuses one rather than keeping an invented value", async () => {
@@ -250,7 +257,7 @@ describe("a class of a Subject that works by Surah", () => {
       ),
     ).toBe("SURAHS_REQUIRED");
     // An edit that does not mention them leaves them alone.
-    await updateCourseSchedule(prisma, superAdmin(), id, { version: 1, title: `${TAG} حلقة 2` }, NOW);
+    await updateCourseSchedule(prisma, superAdmin(), id, { version: 1, description: `${TAG} حلقة 2` }, NOW);
     expect(await surahsOf(id)).toEqual([BAQARA]);
   });
 
@@ -396,12 +403,106 @@ describe("§5 — one occurrence may name its own Surahs", () => {
   });
 });
 
+describe("SRS Revision 166 §2 — «تعديل الحصة» changes everything about ONE occurrence in one save", () => {
+  it("audience, Subject, Surah and staff land together, under one version bump — and the class is untouched", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      classInput({ surahIds: [FATIHA] }),
+      NOW,
+    );
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(FIRST) },
+      select: { id: true, version: true },
+    });
+    const otherLevel = (
+      await createLevel(prisma, superAdmin(), {
+        name: `${TAG} المستوى 2`,
+        categoryId: (await prisma.level.findUniqueOrThrow({ where: { id: levelId } })).categoryId,
+        genderRestriction: "any",
+      })
+    ).level.id;
+    const cover = (
+      await prisma.user.create({
+        data: { sex: "female", nameArabic: `${TAG} مُغطِّية`, accountStatus: "active" },
+      })
+    ).id;
+
+    await overrideSession(prisma, superAdmin(), session.id, {
+      version: session.version,
+      surahIds: [BAQARA],
+      staff: [{ userId: cover, position: "teacher" }],
+      audience: {
+        branchIds: [],
+        categoryIds: [],
+        levelIds: [otherLevel],
+        administrativeGroupIds: [],
+        teachingGroupIds: [],
+      },
+    });
+
+    const after = await prisma.session.findUniqueOrThrow({
+      where: { id: session.id },
+      select: {
+        version: true,
+        overridden: true,
+        surahs: { select: { surahId: true } },
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        audienceLevels: { select: { levelId: true } },
+      },
+    });
+    // ONE decision: one bump, not one per part.
+    expect(after.version).toBe(session.version + 1);
+    expect(after.overridden).toBe(true);
+    expect(after.surahs.map((r) => r.surahId)).toEqual([BAQARA]);
+    expect(after.staff).toEqual([{ userId: cover, position: "teacher" }]);
+    expect(after.audienceLevels.map((r) => r.levelId)).toEqual([otherLevel]);
+    // The audience keeps its own audit row, written by the one shared writer.
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "session.audience", targetId: session.id },
+      }),
+    ).toBe(1);
+    // …and the CLASS still says what it said.
+    expect(await surahsOf(id)).toEqual([FATIHA]);
+    expect(await prisma.courseScheduleLevel.count({ where: { scheduleId: id } })).toBe(0);
+  });
+
+  it("an unknown id in the audience refuses the WHOLE save — nothing else lands beside it", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      classInput({ surahIds: [FATIHA] }),
+      NOW,
+    );
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(FIRST) },
+      select: { id: true, version: true },
+    });
+    expect(
+      await reason(() =>
+        overrideSession(prisma, superAdmin(), session.id, {
+          version: session.version,
+          surahIds: [BAQARA],
+          audience: {
+            branchIds: [],
+            categoryIds: [],
+            levelIds: ["00000000-0000-4000-8000-000000000000"],
+            administrativeGroupIds: [],
+            teachingGroupIds: [],
+          },
+        }),
+      ),
+    ).toBe("UNKNOWN_LEVEL");
+    expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(0);
+  });
+});
+
 describe("an exam of a Subject that works by Surah", () => {
-  const sitting = (over: { surahId?: number | null; subjectId?: string; title: string }) =>
+  const sitting = (over: { surahId?: number | null; subjectId?: string } = {}) =>
     scheduleExam(prisma, superAdmin(), {
       mode: "physical",
       bare: {
-        title: over.title,
         levelId,
         subjectId: over.subjectId ?? tafseerId,
         academicYearId,
@@ -416,18 +517,18 @@ describe("an exam of a Subject that works by Surah", () => {
     });
 
   it("must name its Surah, from the Level's «مقرر الحفظ»", async () => {
-    expect(await reason(() => sitting({ title: `${TAG} بلا سورة` }))).toBe("SURAHS_REQUIRED");
-    expect(await reason(() => sitting({ title: `${TAG} خارج المقرر`, surahId: NAS }))).toBe(
+    expect(await reason(() => sitting())).toBe("SURAHS_REQUIRED");
+    expect(await reason(() => sitting({ surahId: NAS }))).toBe(
       "SURAH_NOT_IN_SYLLABUS",
     );
     expect(
-      await reason(() => sitting({ title: `${TAG} فقه`, subjectId: fiqhId, surahId: FATIHA })),
+      await reason(() => sitting({ subjectId: fiqhId, surahId: FATIHA })),
     ).toBe("SURAHS_NOT_APPLICABLE");
   });
 
   it("any number of exams may examine the same Surah", async () => {
-    const first = await sitting({ title: `${TAG} اختبار 1`, surahId: FATIHA });
-    const second = await sitting({ title: `${TAG} اختبار 2`, surahId: FATIHA });
+    const first = await sitting({ surahId: FATIHA });
+    const second = await sitting({ surahId: FATIHA });
     const stored = await prisma.exam.findMany({
       where: { id: { in: [first.id, second.id] } },
       select: { surahId: true },
@@ -435,8 +536,32 @@ describe("an exam of a Subject that works by Surah", () => {
     expect(stored.map((e) => e.surahId)).toEqual([FATIHA, FATIHA]);
   });
 
+  it("R166 §3 — a bare sitting is CALLED what it is, and its title follows an edit; a typed one is never overwritten", async () => {
+    const { id } = await sitting({ surahId: FATIHA });
+    const subject = await prisma.subject.findUniqueOrThrow({ where: { id: tafseerId } });
+    const composed = (await prisma.exam.findUniqueOrThrow({ where: { id } })).title;
+    // Subject — Surah — date and time. No catalogue type and no supervisor here.
+    expect(composed).toBe(`${subject.name} — الفاتحة — 2026-06-10 09:00`);
+
+    const version = (await prisma.exam.findUniqueOrThrow({ where: { id } })).version;
+    await updatePhysicalExam(prisma, superAdmin(), id, { version, surahId: BAQARA });
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).title).toBe(
+      `${subject.name} — البقرة — 2026-06-10 09:00`,
+    );
+
+    // Somebody types a title of her own: it is hers from then on.
+    await updatePhysicalExam(prisma, superAdmin(), id, {
+      version: version + 1,
+      title: `${TAG} اختبار نهاية الدورة`,
+    });
+    await updatePhysicalExam(prisma, superAdmin(), id, { version: version + 2, surahId: FATIHA });
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).title).toBe(
+      `${TAG} اختبار نهاية الدورة`,
+    );
+  });
+
   it("its Surah is editable, and held to the same rule", async () => {
-    const { id } = await sitting({ title: `${TAG} اختبار`, surahId: FATIHA });
+    const { id } = await sitting({ surahId: FATIHA });
     const version = (await prisma.exam.findUniqueOrThrow({ where: { id } })).version;
     await updatePhysicalExam(prisma, superAdmin(), id, { version, surahId: BAQARA });
     expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).surahId).toBe(BAQARA);

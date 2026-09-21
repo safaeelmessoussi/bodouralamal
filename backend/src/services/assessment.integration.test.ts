@@ -30,6 +30,7 @@ import {
 } from './assessment.service.js';
 import { scheduleExam } from './exam-scheduling.service.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { ownedSchedules } from '../test-support/owned-schedules.js';
 
 /**
  * **The assessment builder, end to end** (SRS §4.6 as extended by R124).
@@ -276,7 +277,9 @@ async function clear(): Promise<void> {
   const ids = users.map((u) => u.id);
 
   const exams = await prisma.exam.findMany({
-    where: { title: { startsWith: TAG } },
+    // By title OR by the Level it belongs to: a BARE sitting's title is
+    // composed by the server since R166 §3, so it carries no tag of its own.
+    where: { OR: [{ title: { startsWith: TAG } }, { level: { name: { startsWith: TAG } } }] },
     select: { id: true },
   });
   const examIds = exams.map((e) => e.id);
@@ -319,8 +322,8 @@ async function clear(): Promise<void> {
   await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });
   await prisma.sessionStaff.deleteMany({ where: { userId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.session.deleteMany({ where: { schedule: { title: { startsWith: TAG } } } });
-  await prisma.recurringCourseSchedule.deleteMany({ where: { title: { startsWith: TAG } } });
+  await prisma.session.deleteMany({ where: { schedule: ownedSchedules(TAG) } });
+  await prisma.recurringCourseSchedule.deleteMany({ where: ownedSchedules(TAG) });
   await prisma.studentTeachingGroup.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.teachingGroup.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
@@ -2893,7 +2896,6 @@ describe('Codex B2/B3 · source-backed physical scheduling: branch authorization
       scheduleExam(prisma, superAdmin(), {
         mode: 'physical',
         bare: {
-          title: `${TAG} عارية`,
           maxGrade: 20,
           levelId: localOnlyLevelId,
           subjectId,
@@ -2914,7 +2916,6 @@ describe('Codex B2/B3 · source-backed physical scheduling: branch authorization
     const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
       mode: 'physical',
       bare: {
-        title: `${TAG} بلا نقطة قصوى`,
         levelId: localOnlyLevelId,
         subjectId,
         academicYearId,
@@ -2936,7 +2937,6 @@ describe('Codex B2/B3 · source-backed physical scheduling: branch authorization
     const { id: occurrenceId } = await scheduleExam(prisma, superAdmin(), {
       mode: 'physical',
       bare: {
-        title: `${TAG} بنقطة قصوى`,
         maxGrade: 100,
         levelId: localOnlyLevelId,
         subjectId,

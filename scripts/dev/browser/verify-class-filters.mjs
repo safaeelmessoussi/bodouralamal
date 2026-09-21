@@ -11,9 +11,10 @@
  * 3. a filter names WHAT was chosen, never «1 محددة» (Revision 165 §7);
  * 4. leaving Level, group and circle at «الكل» is refused IN WORDS before any
  *    request — a class delivers a curriculum Subject;
- * 5. a Subject that works by Surah asks «السور», refuses to save without one,
- *    and the title is SUGGESTED from type, Subject, Surah and time until she
- *    types in it (Revision 165 §2);
+ * 5. a Subject that works by Surah asks «السور» and refuses to save without one
+ *    (Revision 165 §2); the form asks for NO «العنوان» — a class is called what
+ *    it is, by the server, from its type, Subject, Surah and time (Revision 166
+ *    §3);
  *    the saved row is filter-built, carries exactly what was chosen — Surah
  *    included — and the list names its audience instead of a storage mode.
  *
@@ -196,8 +197,8 @@ const surah = await page(`
   const refusedInWords = dlg() !== null && (dlg().textContent ?? '').includes('اختاري السورة');
   const offered = await multi('السور', 'الفاتحة');
   await wait(500);
-  const title = fieldOf('العنوان')?.querySelector('input')?.value ?? null;
-  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, title };
+  const titleAsked = fieldOf('العنوان') !== undefined;
+  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, titleAsked };
 `);
 check(
   '5e · a by-Surah Subject asks «السور» — the Level’s «مقرر الحفظ» and nothing else — and refuses to save without one',
@@ -209,19 +210,19 @@ check(
   JSON.stringify(surah),
 );
 check(
-  '5f · the title is SUGGESTED from the form: type, Subject, Surah, then when',
-  typeof surah.title === 'string' &&
-    surah.title.includes('حصة دراسية') &&
-    surah.title.includes('[dev-scenario] تفسير القرآن') &&
-    surah.title.includes('الفاتحة') &&
-    surah.title.endsWith('07:00'),
-  JSON.stringify({ title: surah.title }),
+  '5f · the form asks for no «العنوان» — a class is called what it is, by the server (R166 §3)',
+  surah.titleAsked === false,
+  JSON.stringify({ titleAsked: surah.titleAsked }),
 );
 
 const saved = await page(`
-  // Typing in the title is what stops it following the suggestion; the harness
-  // needs its own tag on the row so the wrapper's cleanup owns it.
-  setInput('العنوان', ${JSON.stringify(TITLE)});
+  // «الوصف» is where anything typed goes now, so it carries this run's tag —
+  // what the row is then FOUND by, since its title is composed.
+  const note = fieldOf('الوصف')?.querySelector('textarea');
+  if (note) {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(note, ${JSON.stringify(TITLE)});
+    note.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   await wait(300);
   const save = [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
   save.click();
@@ -241,9 +242,12 @@ const stored = await page(`
   const res = await fetch('/api/v1/admin/course-schedules?page_size=100', {
     headers: { Authorization: 'Bearer ' + access_token },
   });
-  const row = (await res.json()).data.find((x) => x.title === ${JSON.stringify(TITLE)});
-  const cell = [...document.querySelectorAll('tr')].find((tr) => tr.textContent.includes(${JSON.stringify(TITLE)}));
+  const row = (await res.json()).data.find((x) => x.description === ${JSON.stringify(TITLE)});
+  const cell = row
+    ? [...document.querySelectorAll('tr')].find((tr) => tr.textContent.includes(row.title))
+    : null;
   return row ? {
+    title: row.title,
     teaching_mode: row.teaching_mode,
     dimensions: row.dimensions,
     surah_ids: row.surah_ids,
@@ -264,6 +268,14 @@ check(
     stored.dimensions?.teaching_group_ids.length === 0 &&
     stored.branch_id === S.branchId,
   JSON.stringify(stored),
+);
+check(
+  '5g · and it is CALLED what it is: type — Subject — Surah — when (a one-off carries its date)',
+  stored !== null &&
+    typeof stored.title === 'string' &&
+    stored.title.startsWith('حصة دراسية — [dev-scenario] تفسير القرآن — الفاتحة') &&
+    /\d{4}-\d{2}-\d{2} 07:00$/.test(stored.title),
+  JSON.stringify({ title: stored?.title }),
 );
 check(
   '5d · the list names WHO the class is for — never «أبعاد متعددة»',
@@ -452,6 +464,7 @@ if (successor) {
       statuses: seen.map((x) => x.status),
       emptiedClassStillListed: live.includes(${JSON.stringify(successor.id)}),
       replacementListed: replacementId !== null && live.includes(replacementId),
+      replacementId,
       // Read only when it failed: what the dialog is saying instead of closing.
       tail: (dlg()?.textContent ?? '').replace(/\\s+/g, ' ').slice(-300),
     };
@@ -464,6 +477,94 @@ if (successor) {
       first.replacementListed === true,
     JSON.stringify(first),
   );
+
+  /* ── Journey D — «تعديل الحصة» changes EVERYTHING about one session ─────────
+   *
+   * SRS Revision 166 §2. Who the session is for (branch, Category, Level, group,
+   * circle) and who takes it lived behind two other row actions, so the edit
+   * dialog looked as though it could not change them. It offers them now, and
+   * ONE «حفظ» sends whatever changed — here, the audience and nothing else.
+   */
+  if (first.replacementId) {
+    await send('Page.navigate', { url: `${BASE}/admin/schedules/${first.replacementId}/sessions` });
+    await new Promise((r) => setTimeout(r, 5000));
+    const one = await page(`
+      const seen = [];
+      const realFetch = window.fetch;
+      window.fetch = async function (input, init) {
+        const response = await realFetch.apply(this, arguments);
+        if (init && init.method === 'PATCH') {
+          seen.push({ status: response.status, sent: String(init.body ?? ''), url: String(input) });
+        }
+        return response;
+      };
+      const edit = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'تعديل');
+      if (!edit) return { noOccurrence: true };
+      edit.click();
+      await wait(3500);
+      if (!dlg()) return { noDialog: true };
+      // «هذه الحصة فقط» is the scope the dialog opens on.
+      const labels = [...dlg().querySelectorAll('.field__label, legend')].map((l) => l.textContent.trim());
+      const has = (name) => labels.some((l) => l.indexOf(name) === 0);
+      const titleInput = fieldOf('العنوان')?.querySelector('input') ?? null;
+      const before = ['فروع', 'فئات', 'مستويات', 'مجموعات', 'حلقات'].map((name) =>
+        fieldOf(name)?.querySelector('button.dropdown-trigger')?.textContent.trim() ?? null);
+      // Add the scenario's Level to THIS session's audience, and change nothing else.
+      const level = await multi('مستويات', '[dev-scenario] وميض الأمل');
+      await wait(500);
+      [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ').click();
+      await wait(4500);
+      window.fetch = realFetch;
+      let sent = null;
+      try { sent = JSON.parse(seen[seen.length - 1]?.sent ?? 'null'); } catch { sent = null; }
+      return {
+        offered: {
+          audience: ['فروع', 'فئات', 'مستويات', 'مجموعات', 'حلقات'].every(has),
+          subject: has('المادة'),
+          surahs: has('السور'),
+          staff: has('من يؤطِّر هذه الحصة'),
+          audienceLegend: has('لمن هذه الحصة'),
+        },
+        titleIsAsked: titleInput !== null,
+        titleIsShown: (dlg()?.textContent ?? '').includes('حصة دراسية — [dev-scenario] تفسير القرآن') || seen.length > 0,
+        before,
+        ticked: level.ticked,
+        closed: dlg() === null,
+        patches: seen.map((x) => ({ status: x.status, url: x.url.split('/api/v1')[1] ?? x.url })),
+        sentKeys: sent ? Object.keys(sent).sort() : null,
+        sentAudience: sent?.audience ?? null,
+        sentStaff: sent ? 'staff' in sent : null,
+      };
+    `);
+    check(
+      'D1 · «تعديل الحصة» offers, for this ONE session: its audience (all five), its Subject, its Surah and who takes it',
+      one.offered?.audience === true &&
+        one.offered?.subject === true &&
+        one.offered?.surahs === true &&
+        one.offered?.staff === true &&
+        one.offered?.audienceLegend === true,
+      JSON.stringify({ offered: one.offered, before: one.before }),
+    );
+    check(
+      'D2 · and asks for no «العنوان» — the session’s title is shown, composed',
+      one.titleIsAsked === false,
+      JSON.stringify({ titleIsAsked: one.titleIsAsked }),
+    );
+    check(
+      'D3 · ONE save, to the session itself, carrying the audience she changed — and not the staff she did not',
+      one.ticked === true &&
+        one.closed === true &&
+        one.patches?.length === 1 &&
+        one.patches[0].status === 200 &&
+        /^\/sessions\/[0-9a-f-]+$/.test(one.patches[0].url) &&
+        Array.isArray(one.sentAudience?.level_ids) &&
+        one.sentAudience.level_ids.includes(S.levelId) &&
+        one.sentStaff === false,
+      JSON.stringify({ patches: one.patches, sentKeys: one.sentKeys, audience: one.sentAudience }),
+    );
+  } else {
+    check('D1 · «تعديل الحصة» offers everything about one session', false, 'journey C produced no class to open');
+  }
 } else {
   check('C1 · a split at the class’s FIRST session saves', false, 'journey B produced no successor to split');
 }

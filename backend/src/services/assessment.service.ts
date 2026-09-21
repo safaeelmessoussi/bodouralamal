@@ -1,3 +1,4 @@
+import { sessionTitles } from './class-title.js';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { notifyOnlineExamScheduled } from './notification.service.js';
@@ -2172,11 +2173,13 @@ export async function targetCandidates(
           )
             .filter((row) => row.ok)
             .map((row) => row.s);
-    return filtered.map((s) => ({
-      id: s.id,
-      // The date is half the identity of an occurrence, so it is half the label.
-      label: `${s.schedule.title} — ${s.date.toISOString().slice(0, 10)}`,
-    }));
+    // R166 §3 — each occurrence's COMPOSED title, which already carries its
+    // date: half the identity of an occurrence, so half the label.
+    const titles = await sessionTitles(
+      prisma,
+      filtered.map((s) => s.id),
+    );
+    return filtered.map((s) => ({ id: s.id, label: titles.get(s.id) ?? "" }));
   }
 
   /**

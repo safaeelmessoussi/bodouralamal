@@ -29,6 +29,7 @@ import { createPrismaClient } from '../src/lib/prisma.js';
 import { createStorageClients, deleteObject } from '../src/lib/storage.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
 import { overrideSession } from '../src/services/session.service.js';
+import { ownedSchedules } from '../src/test-support/owned-schedules.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -81,7 +82,8 @@ function nowBlock(): { start: Date; end: Date } {
 
 async function wipe(): Promise<void> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { title: { startsWith: TAG } },
+    // R166 §3 — by what it is attached to: a class has no typed title.
+    where: ownedSchedules(TAG),
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);

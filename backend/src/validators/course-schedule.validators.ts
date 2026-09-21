@@ -197,12 +197,12 @@ export function checkDelivery(
  *  Exported (R138) — `session.validators.ts`'s `overrideSessionSchema` reuses
  *  these verbatim, since a single occurrence's title/description are the
  *  exact same field under the exact same bounds, not a second definition. */
-export const scheduleTitle = z.string().trim().min(1).max(120);
 export const scheduleDescription = z.string().trim().max(2000).nullable().optional();
 
 export const createCourseScheduleSchema = z
   .object({
-    title: scheduleTitle,
+    // (R166 §3 — no `title`: a class is called what it is, composed at read
+    // time. `.strict()` refuses the key rather than dropping it unseen.)
     description: scheduleDescription,
     subject_id: uuid,
     teaching_mode: teachingMode,
@@ -322,7 +322,6 @@ export const updateCourseScheduleSchema = z
     // **Editable, unlike the scope fields below.** Renaming a class changes
     // nothing about what was taught, to whom or when — which is exactly why
     // §4.4 freezes subject/target/branch/year and does not freeze this (R57).
-    title: scheduleTitle.optional(),
     description: scheduleDescription,
     room_id: uuid.nullable().optional(),
     /** R97 — editable, and it rewrites the FUTURE un-protected occurrences
