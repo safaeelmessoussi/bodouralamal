@@ -402,6 +402,24 @@ const document = {
         },
       ),
     },
+    '/profile/role-requests': {
+      get: op(
+        'My role requests, and what I may still ask for',
+        '**SRS Revision 169 §1.** The caller\'s own `RoleRequest` rows — `kind`, `status`, `decided_at` — and `askable`: the kinds she may ask for NOW (not held, not already waiting). **The decline reason is never returned**: it is operator-facing (§5.6); she is told THAT a request was declined, never why in an operator\'s words. `guardian` is never «askable» here — registering a child (`POST /child-applications`) IS that request.',
+        { '200': '`{ requests[], askable[] }`.', '401': ENVELOPE },
+      ),
+      post: op(
+        'Ask for a further role',
+        '**SRS Revision 169 §1 — an account that already exists asks for a further role, or AGAIN for one that was declined** (Owner, 2026-09-21). The same sections the registration form carries, one role at a time, and no `applicant`: who she is comes from the session. `student` → `{ student: { branch_id, category_id, first_time, circle_preferences? }, birth_date?, consents }` — a date of birth only COMPLETES a record that has none (R130); `teaching` → `{ teaching: { framing } }` (R115); `administration` → `{ administration: { branch_id | null } }` — a preference for where she would serve, never a role. **Asking grants nothing.** It opens one `RoleRequest`, or RE-OPENS the existing row (one line of history per person and role), and tells the approvers; the decision is `POST /admin/approvals/{id}/roles/{kind}/approve|decline`, unchanged, and an administration request stays a Super Admin\'s alone.',
+        {
+          '201': '`{ kind, status: "pending", reopened }`.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — a malformed section; \`BIRTH_DATE_REQUIRED\` when a beneficiary request comes from a record with no date of birth; \`CIRCLE_NOT_OFFERED\`.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN — only an active account may ask.`,
+          '409': `${ENVELOPE} STATE_CONFLICT — \`ROLE_ALREADY_HELD\`, \`ALREADY_PENDING\`, or \`BIRTH_DATE_ALREADY_RECORDED\`.`,
+        },
+      ),
+    },
     '/students/me': {
       get: op(
         "The acting student's identity block",

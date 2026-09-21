@@ -1121,9 +1121,9 @@ export function SchedulingDialog({
   const [rooms, setRooms] = useState<
     { id: string; name: string; capacity: number | null; branchId: string }[]
   >([]);
-  // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
-  // enforced nowhere, so putting it on this wire is a further contract change
-  // and is recorded as such rather than smuggled in here.
+  // R169 §3 — `RoomDto` publishes `capacity` now (the Owner, 2026-09-21), so the
+  // hint beside the chosen room finally renders. BR-23: it informs and refuses
+  // nothing.
   const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /**
    * **R91 — staffing is a list of dated assignments**, for a class.
@@ -1624,7 +1624,7 @@ export function SchedulingDialog({
             p.data.map((r) => ({
               id: r.id,
               name: candidates.length > 1 ? `${nameOf(branchId)} — ${r.name}` : r.name,
-              capacity: null,
+              capacity: r.capacity,
               branchId,
             })),
           )

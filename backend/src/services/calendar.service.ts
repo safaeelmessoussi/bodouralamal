@@ -2116,6 +2116,13 @@ export async function listSessionsForContent(
       deletedAt: null,
       session: {
         deletedAt: null,
+        // R169 §4 — a CANCELLED occurrence is not named here. The ordinary
+        // projection is what is ON (R83.1): the day read this list links into
+        // excludes cancelled occurrences, so naming one offered a link that
+        // opened «غير متاح» — and a class that did not happen is not where a
+        // content «was used». Its record, retention and visibility are
+        // untouched; `include_cancelled=true` on the calendar still finds it.
+        status: { not: "cancelled" },
         schedule: { deletedAt: null },
         // R109 — a hidden occurrence is not named here to a caller who may not
         // see it. Naming it would report that it exists (§20 rule 17), which is

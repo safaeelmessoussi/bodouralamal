@@ -70,8 +70,20 @@ export const updateBranchSchema = z.object({
   google_maps_url: googleMapsUrl.nullable().optional(),
 });
 
-export const createRoomSchema = z.object({ name: entityName });
+/**
+ * `capacity` — how many people the room holds (SRS Revision 169 §3). **It
+ * informs and refuses nothing** (BR-23, §20 rule 22): the scheduling form shows
+ * it beside the chosen room, and no roster is ever compared against it. A
+ * positive whole number, or `null` for «not stated» — the column's own CHECK.
+ */
+const roomCapacity = z.number().int().min(1).max(10_000).nullable();
 
-export const updateRoomSchema = z.object({ version, name: entityName.optional() });
+export const createRoomSchema = z.object({ name: entityName, capacity: roomCapacity.optional() });
+
+export const updateRoomSchema = z.object({
+  version,
+  name: entityName.optional(),
+  capacity: roomCapacity.optional(),
+});
 
 export const uuidParam = uuid;

@@ -329,7 +329,7 @@
   SRS §4.4 / TD-3.4 / J6, with a narrow supersession note preserving Revision
   43(12). Public filters stay reader-selected; `prefilled_filters` remains API
   metadata and personal calendars retain their audience scoping. Docs/spec only.
-- [ ] **Separate follow-up, not settled by R135:** source inspection found that
+- [x] **Separate follow-up, not settled by R135:** **[Closed 2026-09-21 — fixed, R169 §4 — the content backlink no longer names a cancelled occurrence]** source inspection found that
   `listSessionsForContent` can return a cancelled Session while the calendar
   deep-link day read excludes cancelled Sessions, so a Library backlink may
   resolve as unavailable. Not dynamically reproduced or fixed; review its
@@ -1415,8 +1415,8 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Interval-merge union engine + percentage vs total_ayahs (BR-13) **[Closed 2026-09-21 ledger review — built as M4a, below]**
 - [x] StudentSurahProgress cache: post-commit upsert + read-side stamp guard with self-heal (§4.5, §7) **[Closed 2026-09-21 ledger review — built as M4a, below]**
 - [x] Synchronous per-surah recalc on create/update/soft-delete — derive-on-read immediately after commit, returned in response (§4.5, TD-4.11) **[Closed 2026-09-21 ledger review — built as M4a, below]**
-- [ ] Ayah bounds: CHECK + cross-table trigger + service validation (TD-6)
-- [ ] Audit rows quranlog.update / quranlog.delete (TD-8)
+- [x] Ayah bounds: CHECK + cross-table trigger + service validation (TD-6) **[Closed 2026-09-21 — STALE: all three layers exist — the CHECK and `quran_log_ayah_bounds_check()` trigger in `init_schema`, and `AYAH_OUT_OF_RANGE` / `INVALID_RANGE` in `quran.service.ts`]**
+- [x] Audit rows quranlog.update / quranlog.delete (TD-8) **[Closed 2026-09-21 — STALE: `correctLog` and `deleteLog` both write them (`quran.service.ts`); one detail TD-8 names — the recalculated coverage — is not in the row, because the recalculation runs after the transaction]**
 - [x] Student read-only per-surah expandable progress view (§5.3) **[Closed 2026-09-21 ledger review — built as M4b — `/dashboard/student/quran`]**
 - [ ] p95 < 100 ms incl. recalc verified (TD-11a)
 - [ ] §18 Quran Progress checklist green (incl. deletion-un-completes-level test)
@@ -1465,7 +1465,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] TD-6b expand → backfill from the Subject's name → contract to `NOT NULL`; DB CHECK refuses a blank title
 - [x] Both editable after creation, unlike the scope fields §4.4 freezes; a split successor inherits the name
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
-- [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
+- [x] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; **[Closed 2026-09-21 — STALE: checked on Localhost AND Staging 2026-09-21 — no «[تجريبي] حدث …» title exists on either; the fixtures carry proper names]** they are data and were not rewritten. Say the word and they can be cleaned
 
 ### R62 — parent/child registration (2026-08-11, in progress)
 - [x] SRS applied; `ChildApplication`, 4 enums, `FamilyLink.relationshipType`, `User.referenceCode`, `User.schoolingStage`; migration applied
@@ -1491,7 +1491,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] «＋ تسجيل طفل» → `/dashboard/student/register-child`, same fields as `/register`; `ولي الأمر` hidden until a child is approved
 - [x] نوع التسجيل relabelled so it stops naming a Category
 - [x] Table rule established and applied (branches +4 columns, levels +1); `إضافة مجموعة` converted to `FormDialog`
-- [ ] **OWNER DECISION — Categories and Levels have no `description`, and NEW K/L supplied one for each.** The Owner's canonical dataset gives every Category a description (المرأة: *النساء من سن الجامعة الى ما فوق*, and so on) and every Level one of the form *المستوى N - برنامج X*. **Neither entity has a column to store it**, and §7 defines Category as carrying only `name` and `display_order`, and Level only those plus `gender_restriction` — the seed says so in a deliberate comment. Storing the descriptions is a schema addition against a normative §7 clause, which is the Document Owner's call and not the agent's. Everything else in NEW J/K/L shipped on 2026-08-27. **In simple words: do you want the platform to store and show a short description under each Category and Level? If yes, that is a small change to §7 and to the database, and the descriptions you already wrote are ready to load.**
+- [x] **OWNER DECISION — Categories and Levels have no `description`, and NEW K/L supplied one for each.** **[Closed 2026-09-21 — STALE: both columns exist since migration `20260827160000`, with DTOs, admin forms, the public programme page and the Owner's texts in the production seed. Her «yes» is R169 §5c]** The Owner's canonical dataset gives every Category a description (المرأة: *النساء من سن الجامعة الى ما فوق*, and so on) and every Level one of the form *المستوى N - برنامج X*. **Neither entity has a column to store it**, and §7 defines Category as carrying only `name` and `display_order`, and Level only those plus `gender_restriction` — the seed says so in a deliberate comment. Storing the descriptions is a schema addition against a normative §7 clause, which is the Document Owner's call and not the agent's. Everything else in NEW J/K/L shipped on 2026-08-27. **In simple words: do you want the platform to store and show a short description under each Category and Level? If yes, that is a small change to §7 and to the database, and the descriptions you already wrote are ready to load.**
 - [x] **R130 — a full date of birth for every beneficiary (Owner, 2026-09-03).**
       `User.birth_date` is the durable answer and `ChildApplication.birth_date`
       the submitted one, materialised unchanged at approval. Required at the
@@ -1675,7 +1675,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Approval button traced: the DATA violates TD-4.6b's invariant — 18 of 20 Levels have no group, so `complete` could never be true and the control was disabled. Unassignable Levels are now excluded, with a route to fix
 - [x] «＋ تسجيل طفل» removed from the account menu; `/profile/register-child` unchanged
 - [x] `.field--choice` had no CSS rule at all — one rule fixes five usages (RTL-safe)
-- [ ] **AUDITED, NOT IMPLEMENTED — see [audit-2026-08-11.md](development/audit-2026-08-11.md):**
+- [x] **AUDITED, NOT IMPLEMENTED — see [audit-2026-08-11.md](development/audit-2026-08-11.md):** **[Closed 2026-09-21 — re-audited against the code 2026-09-21: four of its five items shipped (R66, R67, R143, the retention purge). What remains lives in its own boxes — widening the restorable set, the quarantine-purge question (R169 open questions), and the M8 deployment steps]**
   - **Level creation's branch** conflicts with TD-4.6b (Level + first group, atomic). Three resolutions costed; **A recommended** (retire the invariant). Needs a revision + a decision on the 18 existing group-less Levels
   - **Per-child branch/category** needs **no migration** — `child_application` already holds both per row. Only the validator and two forms treat them as request-level. Needs a revision amending R62/R64.2
   - **Deletion**: 28 of 45 models soft-delete; 7 are currently restorable and the purgeable
@@ -1702,7 +1702,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Section rule, enforced by a test over `section: 'administration'` rather than per module
 - [x] `/admin/branches` joins the other three; writes were already Super Admin only
 - [x] `GET /admin/branches` stays Admin-readable as a selector feed — verified that groups, scheduling and content depend on it
-- [ ] **Open for the Owner:** this is a visibility boundary, not a data one. An Admin can still *see* branch names through selectors. Withholding the data too means re-feeding every branch selector in the back office — a larger decision, not a consequence of this one
+- [x] **Open for the Owner:** this is a visibility boundary, not a data one. **[Closed 2026-09-21 — DECIDED by the Owner, R169 §5a: an Admin may see branch names in selectors; nothing to build]** An Admin can still *see* branch names through selectors. Withholding the data too means re-feeding every branch selector in the back office — a larger decision, not a consequence of this one
 
 ### R60 follow-up — the active role drives the interface (2026-08-11)
 - [x] `useActiveRole().activeRoles` is what presentation reads; `me.roles` is for the switcher's menu only
@@ -1729,8 +1729,8 @@ was hiding behind it: the run went green on the first attempt.
 - [x] A portal the active role does not own renders a named state offering the switch, never a blank page
 - [x] A role the person does not hold cannot be selected — the list comes from the server-issued token
 - [x] Trash restore, purge and list made TD-12 fresh: a revoked Super Admin loses them at once
-- [ ] **Server authority does NOT narrow to the active role** — a Super Admin acting as مؤطِّرة still holds Super Admin authority on every endpoint. Making the server honour the active role is a new normative concept; Owner decision required (draft R60)
-- [ ] Roles come from the JWT, so a newly assigned role appears only after re-login. Worth stating on the Users screen
+- [x] **Server authority does NOT narrow to the active role** **[Closed 2026-09-21 — STALE: it does, since R60 — the claim is narrowed when the token is minted, `assertFreshActive` re-narrows from live rows, and `active-role.http.integration.test.ts` proves a Super Admin acting as مؤطِّرة is refused `/admin/settings`. The Owner's «yes» (R169 §5b) needed nothing built]** — a Super Admin acting as مؤطِّرة still holds Super Admin authority on every endpoint. Making the server honour the active role is a new normative concept; Owner decision required (draft R60)
+- [x] Roles come from the JWT, so a newly assigned role appears only after re-login. **[Closed 2026-09-21 — WRONG by the time it was read, and now proven (R169 §2): every page load refreshes, and the refresh reads live assignments — a granted role is hers at her next page. «المستخدمون» says so]** Worth stating on the Users screen
 
 ### R59 — deletion authority across the platform (2026-08-09)
 - [x] **Permanent delete exists**: `DELETE /admin/trash/{id}`, Super Admin only, one transaction, `trash.permanent_delete` audit row retained indefinitely. Cascade children **declared per type**; anything else refuses with `DEPENDENTS_EXIST` naming the constraint
@@ -1792,7 +1792,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] One `RecurrenceEditor` — the two `weekly` semantics reconciled without a backend change
 - [x] `SchedulingForm` shell with composable type sections — **cashed by R58**: Exams became a third section with nothing in the shell moving
 - [x] `/admin/schedules/{id}/sessions` unchanged, keeping R50's three scopes
-- [ ] **`RoomDto` publishes no `capacity`** — BR-23 makes it informational and enforced nowhere, so the form's capacity hint renders nothing. Publishing it is a small contract change, recorded rather than taken unilaterally
+- [x] **`RoomDto` publishes no `capacity`** **[Closed 2026-09-21 — built, R169 §3 — published, editable, and the scheduling hint renders; still informational only (BR-23)]** — BR-23 makes it informational and enforced nowhere, so the form's capacity hint renders nothing. Publishing it is a small contract change, recorded rather than taken unilaterally
 - [x] Sweep `approvals`, `levels` and `users` for hand-rolled filter rows (unchanged from R55) — **verified clean 2026-09-04**: all three use `DataTable`'s toolbar with `SearchInput`/`SelectField`/`BranchSelector` and contain no raw `<select>`/`<input>`. The sweep found a different rule-C drift instead — four hand-written `field field--choice` copies — now owned by `ChoiceField` and guarded (rule AM)
 - [ ] **`schedule-sessions.tsx` keeps its own choice markup** — it renders the hint *inside* the label beside a `<strong>`, so converting it moves a hint on a live screen. Needs a browser measurement, not a rewrite; named as the one exception in the rule AM guard
 
@@ -5421,11 +5421,11 @@ The Owner's six replies to Revision 167's report. One migration so far
       repaired; `date-picker.mjs` DRIVES the calendar for every harness.
 - [x] R160 §8 kept: the self-managed claim has no entry on the form (reached by
       `/register?mode=self-managed`); its harness now asserts exactly that.
-- [ ] **§1 — not built, and said:** an account that already EXISTS cannot yet
+- [x] **§1 — not built, and said:** an account that already EXISTS cannot yet **[Closed 2026-09-21 — built, R169 §1 — «طلب صفة إضافية», and a declined role is asked for again by re-opening its row]**
       ask for a further role through a form («a declined role may be asked for
       again» is, for now, the administration granting it from «المستخدمون»).
       Wants the Owner's word on whether it is needed before go-live.
-- [ ] **§1 — the proposal's five other recommendations were taken as drafted**
+- [x] **§1 — the proposal's five other recommendations were taken as drafted** **[Closed 2026-09-21 — the Owner confirmed three (one notice per decision; a declined role may be asked again; teaching = مؤطِّرة) and asked my view on two, carried in R169's section]**
       (one notification per decision; a declined role may be asked again;
       slots = scheduled classes; a returning مستفيدة is asked nothing more;
       teaching = the one role مؤطِّرة). Each is the Owner's to change.
@@ -5454,3 +5454,63 @@ The Owner's six replies to Revision 167's report. One migration so far
       each role. The circle question appears once the three حلقات and their
       weekly classes exist there (the data item above), and placing a مستفيدة
       needs an academic period covering today (الفصول الدراسية).
+
+## SRS Revision 169 — the Owner's answers to the open-decision list — 2026-09-21
+
+- [x] **§1 — an existing account asks for a further role, and again for a
+      declined one.** «حسابي» → «صفاتي وطلباتي» → «طلب صفة إضافية»: the
+      registration form's own role sections, one role at a time.
+      `GET|POST /profile/role-requests`. Re-opens the same row; grants nothing;
+      the decline reason never reaches her. The queue marks such an item
+      `account_active` and offers the per-role review only.
+- [x] §1 — registering a child re-opens a declined guardian request.
+- [x] **§2 — a granted role needs no new sign-in.** Already true; now proven by
+      an HTTP test and said on «المستخدمون».
+- [x] **§3 — room capacity** published, editable, shown beside the room when
+      scheduling. Informational only.
+- [x] **§4 — a cancelled class is not named as where a content was used.**
+- [x] §5 — answered with nothing to build: Admin sees branch names; the server
+      already obeys the active role; descriptions already exist; one notice per
+      decision; teaching = the one role مؤطِّرة.
+- [x] Ledger: eleven boxes closed with their evidence (six were stale).
+- [ ] **Part two — audience rules (the Owner: YES to both):** activities combine
+      their audience dimensions as classes do (the notification, attendance and
+      personal-filter reads ALREADY intersect; the teacher's visibility filter,
+      `teacherEventScope` and the calendar grid's scope filters still union, and
+      the form still says «لم تُختَر جهة بعد» where a class says «الكل»); and a
+      class addressed to «الكل» on Level, group AND circle = every Level that
+      teaches its Subject at its branch(es).
+- [ ] **Part three — the Trash restores a Subject circle, a class schedule and
+      a Level** (the Owner: build). A Level's event-audience joins are hard-
+      deleted today; they must be snapshotted from now on.
+- [ ] **Part four — a date of birth for every beneficiary** (the Owner: fill the
+      gaps so it can be mandatory). To be built with a MARKER on a filled date:
+      a placeholder that looks real would drive the 18-year rule (R132) for a
+      child, and «completion, never correction» would stop anyone fixing it.
+- [ ] **Part five — a recording or content item belonging to several Levels**
+      (the Owner: do it if it can be done). It can; it is a join table and a
+      wide read-side change (library predicate, consent re-evaluation, DTOs,
+      the content form).
+- [ ] **Part six — the administrator's operational alert read** (the Owner:
+      yes). Job failures and queue lag can be read from PostgreSQL now; backup
+      failure and TLS expiry live on the HOST, which the API container cannot
+      see — they need the host monitor to write its status where the API reads.
+- [ ] **Automatic grading components (the Owner: build).** NOT started, and said
+      why: the SRS lists the grading-template engine as «not present by design»
+      (§10.1, §20 rule 16 — «do not pre-create»), and it has no tables, weights
+      or screens specified to the point of building. Needs a proposal first.
+- [ ] **For the Owner — her questions back to me, answered in the report:**
+      slots from scheduled classes (keep); a returning مستفيدة asked nothing
+      more (keep, with one optional line for «مستواي السابق»).
+- [ ] **Owner questions still open** (each one sentence, in the report): the
+      adult-Category marker; a spoken reference code for every beneficiary;
+      schedule history in the Trash; retention of old reference rows; automatic
+      destruction of quarantined files after 90 days; the login audit's e-mail;
+      exact storage keys in the audit; free text in the audit; whether a
+      guardianship document is checked and recorded; a refused applicant's
+      right to the real reason; the three sensitive fields for minors; the
+      CNDP filing and the Arabic privacy notice's TEXT (hers to supply).
+- [ ] **R111 SRS reconciliation — document work, not code:** the account purge
+      job EXISTS (`trash.retention-purge` → `deIdentifyAccountSystem`) and the
+      window is SEVEN days, but §5.2/§14.1 still call account deletion
+      unapproved and TD-7 lists no such job. To be reconciled in the SRS.

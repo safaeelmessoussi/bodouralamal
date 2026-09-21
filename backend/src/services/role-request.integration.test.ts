@@ -12,12 +12,16 @@ import {
   type InstalledConsentText,
 } from '../test-support/legal-consent-text.js';
 import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
-import { registrationSchema, type RegistrationInput } from '../validators/registration.validators.js';
+import {
+  furtherRoleRequestSchema,
+  registrationSchema,
+  type RegistrationInput,
+} from '../validators/registration.validators.js';
 import { decide, listApprovals } from './approval.service.js';
-import { decideChildApplication } from './child-application.service.js';
+import { decideChildApplication, submitChildApplications } from './child-application.service.js';
 import { offeredCircleSlots } from './registration-circle-slots.service.js';
 import { register } from './registration.service.js';
-import { decideRoleRequest } from './role-request.service.js';
+import { decideRoleRequest, myRoleRequests, requestFurtherRole } from './role-request.service.js';
 
 /**
  * **SRS Revision 168 §1 — one registration form, four roles, each decided on
@@ -546,5 +550,145 @@ describe('each requested role is decided separately', () => {
     }
     expect(await requestsOf(id)).toEqual({ administration: 'pending' });
     expect(await statusOf(id)).toBe('pending');
+  });
+});
+
+/* ── A further role, from an account that already exists (R169 §1) ────────── */
+
+describe('an existing account asks for a further role — and again after a decline', () => {
+  /** An ACTIVE teacher: registered for teaching, approved. */
+  async function teacher(): Promise<string> {
+    const id = await submit(body({ roles: ['teaching'], teaching: { framing: { mode: 'online' } } }));
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'teaching', {
+      approve: true,
+      grant: { role: 'teacher', branchId: null },
+    });
+    return id;
+  }
+  /** Through the SCHEMA, as a browser's request is — it is what turns the date
+   *  of birth into a date. */
+  const studentAsk = (extra: Record<string, unknown> = {}) =>
+    furtherRoleRequestSchema.parse({
+      kind: 'student',
+      student: { branch_id: placement.branchId, category_id: placement.categoryId, first_time: false },
+      birth_date: '1991-07-09',
+      consents: { data_processing: true, consent_text_id: consentText!.id },
+      ...extra,
+    });
+
+  it('opens ONE pending request, tells the approvers, grants nothing — and the queue lists the ACTIVE account', async () => {
+    const id = await teacher();
+    const me = await actorFor(prisma, id);
+    expect((await myRoleRequests(prisma, me)).askable).toEqual(['student', 'administration']);
+
+    const asked = await requestFurtherRole(prisma, me, studentAsk());
+    expect(asked).toEqual({ kind: 'student', status: 'pending', reopened: false });
+    expect(await requestsOf(id)).toEqual({ teaching: 'approved', student: 'pending' });
+    expect(await rolesOf(id)).toEqual(['teacher']);
+    expect((await myRoleRequests(prisma, me)).askable).toEqual(['administration']);
+    expect(
+      await prisma.notification.count({
+        where: { subjectUserId: id, type: 'registration_review_required', userId: superAdminId },
+      }),
+    ).toBe(1);
+
+    // …by the exact coordinate her notification carries, too.
+    const queue = await listApprovals(prisma, await actorFor(prisma, superAdminId), { reviewUserId: id });
+    expect(queue.data[0]).toMatchObject({ id, type: 'registration', accountActive: true });
+
+    // The decision is the ordinary per-role one, and ADDS the role.
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'student', {
+      approve: true,
+      placement: { administrativeGroupId: placement.groupId },
+    });
+    expect(await rolesOf(id)).toEqual(['student', 'teacher']);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).birthDate).not.toBeNull();
+  });
+
+  it('refuses a role she holds, a request already waiting, and an account that is not active', async () => {
+    const id = await teacher();
+    const me = await actorFor(prisma, id);
+    expect(
+      await failure(() =>
+        requestFurtherRole(prisma, me, { kind: 'teaching', teaching: { framing: { mode: 'online' } } } as never),
+      ),
+    ).toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'ROLE_ALREADY_HELD' } });
+
+    await requestFurtherRole(prisma, me, { kind: 'administration', administration: { branch_id: null } });
+    expect(
+      await failure(() =>
+        requestFurtherRole(prisma, me, { kind: 'administration', administration: { branch_id: null } }),
+      ),
+    ).toMatchObject({ code: 'STATE_CONFLICT', details: { reason: 'ALREADY_PENDING' } });
+
+    // A beneficiary request from a record with no date of birth must bring one.
+    expect(
+      await failure(() => requestFurtherRole(prisma, me, studentAsk({ birth_date: undefined }))),
+    ).toMatchObject({ code: 'VALIDATION_FAILED', details: { reason: 'BIRTH_DATE_REQUIRED' } });
+
+    const pending = await submit(body({ roles: ['teaching'], teaching: { framing: { mode: 'online' } } }));
+    expect(
+      await failure(async () =>
+        requestFurtherRole(
+          prisma,
+          { userId: pending, activeRole: null, roleScopes: [] } as never,
+          { kind: 'administration', administration: { branch_id: null } },
+        ),
+      ),
+    ).toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('a DECLINED role is asked for again by RE-OPENING its row — one line of history, two audit facts', async () => {
+    const id = await teacher();
+    const me = await actorFor(prisma, id);
+    const boss = await actorFor(prisma, superAdminId);
+    await requestFurtherRole(prisma, me, { kind: 'administration', administration: { branch_id: null } });
+    await decideRoleRequest(prisma, boss, id, 'administration', { approve: false, reason: 'لا حاجة حاليًا' });
+    // Declining a FURTHER role never touches the account she already has.
+    expect(await statusOf(id)).toBe('active');
+    expect((await myRoleRequests(prisma, me)).askable).toContain('administration');
+
+    const again = await requestFurtherRole(prisma, me, { kind: 'administration', administration: { branch_id: null } });
+    expect(again.reopened).toBe(true);
+    const rows = await prisma.roleRequest.findMany({ where: { userId: id, kind: 'administration' } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: 'pending', decidedAt: null, decidedById: null, declineReason: null });
+    expect(
+      await prisma.auditLog.count({ where: { targetId: id, actionType: { in: ['rolerequest.decline', 'rolerequest.reopen'] } } }),
+    ).toBe(2);
+  });
+
+  it('registering a child RE-OPENS a declined guardian request, so the application is not dead on arrival', async () => {
+    const id = await submit(
+      body({ roles: ['guardian', 'teaching'], children: [child('ابنة')], teaching: { framing: { mode: 'online' } } }),
+    );
+    const boss = await actorFor(prisma, superAdminId);
+    await decideRoleRequest(prisma, boss, id, 'teaching', { approve: true, grant: { role: 'teacher', branchId: null } });
+    await decideRoleRequest(prisma, boss, id, 'guardian', { approve: false, reason: 'لا مقاعد' });
+
+    const made = await prisma.$transaction((tx) =>
+      submitChildApplications(tx, id, {
+        consentDataProcessing: true,
+        consentTextVersion: consentText!.versionLabel,
+        consentTextId: consentText!.id,
+        children: [
+          {
+            firstNameArabic: `${TAG} ابنة ثانية`,
+            lastNameArabic: 'العلوي',
+            sex: 'female',
+            birthDate: new Date('2017-01-02T00:00:00.000Z'),
+            consentMediaRelease: false,
+            requestedBranchId: placement.branchId,
+            requestedCategoryId: placement.categoryId,
+          },
+        ],
+      } as never),
+    );
+    expect(await requestsOf(id)).toMatchObject({ guardian: 'pending' });
+    await decideChildApplication(prisma, boss, made.applicationIds[0]!, {
+      approve: true,
+      placement: { administrativeGroupId: placement.groupId },
+    });
+    expect(await requestsOf(id)).toMatchObject({ guardian: 'approved' });
   });
 });

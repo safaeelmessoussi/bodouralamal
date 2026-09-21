@@ -57,6 +57,7 @@ export type Route =
   | 'profile'
   /** §14.1 (R65) — any account registers a child, from the personal section. */
   | 'register-child'
+  | 'request-role'
   /** The back office, resolved by its module registry. */
   | 'admin'
   /** The teacher portal, resolved by its own registry — a separate application
@@ -132,6 +133,8 @@ export function resolveRoute(pathname: string): Route {
   // who is nobody's student with no way to register her own child.
   if (path === '/profile') return 'profile';
   if (path === '/profile/register-child') return 'register-child';
+  // R169 §1 — «طلب صفة إضافية»: also an act of a PERSON, not of a role.
+  if (path === '/profile/request-role') return 'request-role';
 
   // §14.1 defines these; no milestone has delivered them. "Not built yet" and
   // "does not exist" are different facts and get different pages.

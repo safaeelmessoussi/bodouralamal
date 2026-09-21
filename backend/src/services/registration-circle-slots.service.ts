@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
 import { wallClockHHMM } from '../lib/item-title.js';
 import { moroccoDateIso } from '../lib/morocco-clock.js';
 
@@ -155,4 +156,35 @@ export async function offeredCircleSlots(
       end_time: wallClockHHMM(row.endTime) ?? '',
     })),
   };
+}
+
+/**
+ * **Writes her ranked circles — and only circles that are really on offer.**
+ *
+ * One implementation for the two places a مستفيدة is asked: the registration
+ * form, and «طلب صفة إضافية» from an account that already exists (R169 §1). It
+ * REPLACES what she ranked before: a wish is what she says now.
+ */
+export async function replaceCirclePreferences(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  student: { categoryId: string; branchId: string; circlePreferences: string[] },
+  now: Date,
+): Promise<number> {
+  const ranked = student.circlePreferences;
+  await tx.circlePreference.deleteMany({ where: { userId } });
+  if (ranked.length === 0) return 0;
+  const offered = await offeredCircleSlots(tx, student.categoryId, student.branchId, now);
+  const onOffer = new Set(offered.circles.map((circle) => circle.teaching_group_id));
+  const stranger = ranked.find((id) => !onOffer.has(id));
+  if (stranger !== undefined) {
+    throw new AppError('VALIDATION_FAILED', 'a ranked circle is not on offer', {
+      reason: 'CIRCLE_NOT_OFFERED',
+      teaching_group_id: stranger,
+    });
+  }
+  await tx.circlePreference.createMany({
+    data: ranked.map((teachingGroupId, index) => ({ userId, teachingGroupId, rank: index + 1 })),
+  });
+  return ranked.length;
 }

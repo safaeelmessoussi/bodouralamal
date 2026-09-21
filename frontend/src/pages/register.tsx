@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { CheckboxField, SelectField, TextField } from '../components/ui/field.js';
-import { MultiSelectField } from '../components/ui/multi-select.js';
+import { CheckboxField, TextField } from '../components/ui/field.js';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
   LIMITS,
   PHONE_PATTERN,
   fetchActiveConsentText,
-  fetchCircleSlots,
   submitRegistration,
   type ActiveConsentText,
-  type CircleSlots,
   type PersonInput,
   type RegistrationInput,
   type RoleChoice,
@@ -20,7 +17,6 @@ import { SiteFooter } from '../components/site-footer.js';
 import { ConsentNotice } from '../components/consent-notice.js';
 import { consentFailure } from '../lib/consent-failure.js';
 import { ErrorState } from '../components/states.js';
-import { BranchSelector } from '../components/ui/branch-selector.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../adapters/calendar.js';
 import { Button, ButtonLink } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
@@ -31,7 +27,16 @@ import {
   validateChildren,
   type ChildForm,
 } from '../components/registration/children.js';
-import { CircleRanking } from '../components/registration/circle-ranking.js';
+import {
+  AdministrationSectionFields,
+  StudentSectionFields,
+  TeachingSectionFields,
+  framingPayload,
+  studentSectionPayload,
+  useCircleSlots,
+  validateStudentSection,
+  validateTeachingSection,
+} from '../components/registration/role-sections.js';
 import { PersonFields } from '../components/registration/person-fields.js';
 import { requestSelfManagedClaim } from '../adapters/self-managed-claims.js';
 import { t } from '../i18n/index.js';
@@ -121,7 +126,6 @@ export function Register(): ReactNode {
   const asks = (role: RoleChoice): boolean => roles.includes(role);
   /** «هل هذه أول مرة تلتحقين فيها؟» — asked of a مستفيدة, never defaulted. */
   const [firstTime, setFirstTime] = useState<'' | 'yes' | 'no'>('');
-  const [circleSlots, setCircleSlots] = useState<CircleSlots | null>(null);
   const [circlePreferences, setCirclePreferences] = useState<string[]>([]);
   const [administrationBranchId, setAdministrationBranchId] = useState<string | null>(null);
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
@@ -216,23 +220,11 @@ export function Register(): ReactNode {
    * first Level there. A failed read offers nothing rather than blocking the
    * form: the order is a wish, and the administration places her either way.
    */
-  const wantsSlots = roles.includes('student') && firstTime === 'yes' && branchId && categoryId;
-  useEffect(() => {
-    setCircleSlots(null);
-    setCirclePreferences([]);
-    if (!wantsSlots) return;
-    let cancelled = false;
-    void fetchCircleSlots(categoryId, branchId)
-      .then((slots) => {
-        if (!cancelled) setCircleSlots(slots);
-      })
-      .catch(() => {
-        if (!cancelled) setCircleSlots({ level: null, circles: [], fixed: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [wantsSlots, branchId, categoryId]);
+  const circleSlots = useCircleSlots(
+    { branchId, categoryId, firstTime },
+    roles.includes('student'),
+    () => setCirclePreferences([]),
+  );
 
   const localErrors = validate({
     selfManaged,
@@ -530,61 +522,16 @@ export function Register(): ReactNode {
             {asks('teaching') ? (
               <fieldset className="register-form__group" data-role-section="teaching">
                 <legend>{t('register.framingLegend')}</legend>
-                {/* Said plainly rather than implied: submitting this asks for
-                    something a person has to grant. */}
-                <p className="state" role="status">
-                  {t('register.teacherNotice')}
-                </p>
-                <SelectField
-                  label={t('register.framingModeLabel')}
-                  value={framingMode}
+                <TeachingSectionFields
+                  value={{ mode: framingMode, allBranches: allFramingBranches, branchIds: framingBranchIds }}
                   onChange={(next) => {
-                    const mode = next as typeof framingMode;
-                    setFramingMode(mode);
-                    if (mode === 'online' || mode === '') {
-                      setAllFramingBranches(false);
-                      setFramingBranchIds([]);
-                    }
+                    setFramingMode(next.mode);
+                    setAllFramingBranches(next.allBranches);
+                    setFramingBranchIds(next.branchIds);
                   }}
-                  required
-                  options={[
-                    { value: '', label: t('register.framingModeEmpty') },
-                    { value: 'in_person', label: t('register.framingMode_in_person') },
-                    { value: 'online', label: t('register.framingMode_online') },
-                    { value: 'both', label: t('register.framingMode_both') },
-                  ]}
-                  hint={t('register.framingModeHint')}
-                  error={touched ? (errors['framingMode'] ?? null) : null}
+                  branches={branches}
+                  errors={touched ? errors : {}}
                 />
-
-                {framingMode === 'in_person' || framingMode === 'both' ? (
-                  <>
-                    <CheckboxField
-                      label={t('register.framingAllBranches')}
-                      checked={allFramingBranches}
-                      onChange={(checked) => {
-                        setAllFramingBranches(checked);
-                        if (checked) setFramingBranchIds([]);
-                      }}
-                      hint={t('register.framingAllBranchesHint')}
-                    />
-                    {allFramingBranches ? null : (
-                      <MultiSelectField
-                        label={t('register.framingBranchesLabel')}
-                        options={branches.map((branch) => ({
-                          value: branch.id,
-                          label: branch.name,
-                        }))}
-                        selected={framingBranchIds}
-                        onChange={setFramingBranchIds}
-                        required
-                        hint={t('register.framingBranchesHint')}
-                        emptyLabel={t('register.framingBranchesEmpty')}
-                        error={touched ? (errors['framingBranches'] ?? null) : null}
-                      />
-                    )}
-                  </>
-                ) : null}
               </fieldset>
             ) : null}
 
@@ -597,17 +544,10 @@ export function Register(): ReactNode {
                */
               <fieldset className="register-form__group" data-role-section="administration">
                 <legend>{t('register.administrationLegend')}</legend>
-                <p className="state" role="status">
-                  {t('register.administrationNotice')}
-                </p>
-                <BranchSelector
-                  branches={branches}
-                  value={administrationBranchId}
+                <AdministrationSectionFields
+                  branchId={administrationBranchId}
                   onChange={setAdministrationBranchId}
-                  label={t('register.administrationBranchLabel')}
-                  allowAll={false}
-                  emptyLabel={t('register.administrationBranchEmpty')}
-                  hint={t('register.administrationBranchHint')}
+                  branches={branches}
                 />
               </fieldset>
             ) : null}
@@ -615,58 +555,19 @@ export function Register(): ReactNode {
             {asks('student') ? (
               <fieldset className="register-form__group" data-role-section="student">
                 <legend>{t('register.branchLegend')}</legend>
-                <BranchSelector
-                  branches={branches}
-                  value={branchId}
-                  onChange={setBranchId}
-                  label={t('register.branchLabel')}
-                  allowAll={false}
-                  emptyLabel={t('register.branchEmpty')}
-                  required
-                  hint={t('register.branchHint')}
-                  error={touched ? (errors['branch'] ?? null) : null}
-                />
-
-                <SelectField
-                  label={t('register.categoryLabel')}
-                  value={categoryId ?? ''}
-                  onChange={(v) => setCategoryId(v === '' ? null : v)}
-                  required
-                  options={[
-                    { value: '', label: t('register.categoryEmpty') },
-                    ...categories.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                  hint={t('register.categoryHint')}
-                  error={touched ? (errors['category'] ?? null) : null}
-                />
-
-                {/* «هل هذه أول مرة؟» — a choice, never a default: a returning
-                    مستفيدة is placed by the administration, who know her. */}
-                <SelectField
-                  label={t('register.firstTimeLabel')}
-                  value={firstTime}
+                <StudentSectionFields
+                  value={{ branchId, categoryId, firstTime, circlePreferences }}
                   onChange={(next) => {
-                    setFirstTime(next as typeof firstTime);
-                    if (next !== 'yes') setCirclePreferences([]);
+                    setBranchId(next.branchId);
+                    setCategoryId(next.categoryId);
+                    setFirstTime(next.firstTime);
+                    setCirclePreferences(next.circlePreferences);
                   }}
-                  required
-                  options={[
-                    { value: '', label: t('common.choose') },
-                    { value: 'yes', label: t('register.firstTimeYes') },
-                    { value: 'no', label: t('register.firstTimeNo') },
-                  ]}
-                  hint={t('register.firstTimeHint')}
-                  error={touched ? (errors['firstTime'] ?? null) : null}
+                  branches={branches}
+                  categories={categories}
+                  slots={circleSlots}
+                  errors={touched ? errors : {}}
                 />
-
-                {firstTime === 'yes' && circleSlots ? (
-                  <CircleRanking
-                    slots={circleSlots}
-                    value={circlePreferences}
-                    onChange={setCirclePreferences}
-                    error={touched ? (errors['circles'] ?? null) : null}
-                  />
-                ) : null}
               </fieldset>
             ) : null}
 
@@ -1041,19 +942,27 @@ export function validate(state: FormState): Record<string, string> {
   // R67 — the applicant's own branch, on the adult path only. The parent+child
   // path asks it per child, and the server derives the applicant's from the
   // first.
-  if (asks('student') && !state.branchId) errors['branch'] = t('register.errBranch');
 
   // R49 — required for a student, and meaningless for a staff request: a
   // teacher is admitted to no Level, and the server refuses the pair together.
-  if (asks('student') && !state.categoryId) errors['category'] = t('register.errCategory');
 
   // R168 §1 — the first-time question is asked of a مستفيدة and never defaulted;
   // a first-timer orders at least one circle WHERE there is a choice to make.
+  // The rules live with the fields (`role-sections.tsx`), so this form and
+  // «طلب صفة إضافية» validate identically by construction.
   if (asks('student')) {
-    if (state.firstTime === '') errors['firstTime'] = t('register.errRequired');
-    if (state.firstTime === 'yes' && state.circlesOffered >= 2 && state.circlePreferences.length === 0) {
-      errors['circles'] = t('register.errCircles');
-    }
+    Object.assign(
+      errors,
+      validateStudentSection(
+        {
+          branchId: state.branchId,
+          categoryId: state.categoryId,
+          firstTime: state.firstTime,
+          circlePreferences: state.circlePreferences,
+        },
+        state.circlesOffered,
+      ),
+    );
   }
 
   /**
@@ -1072,14 +981,14 @@ export function validate(state: FormState): Record<string, string> {
   }
 
   if (asks('teaching')) {
-    if (state.framingMode === '') errors['framingMode'] = t('register.errFramingMode');
-    if (
-      (state.framingMode === 'in_person' || state.framingMode === 'both') &&
-      !state.allFramingBranches &&
-      state.framingBranchIds.length === 0
-    ) {
-      errors['framingBranches'] = t('register.errFramingBranches');
-    }
+    Object.assign(
+      errors,
+      validateTeachingSection({
+        mode: state.framingMode,
+        allBranches: state.allFramingBranches,
+        branchIds: state.framingBranchIds,
+      }),
+    );
   }
 
   // §4.1: there is no lawful basis to create the record without this, so it is
@@ -1144,7 +1053,6 @@ export function buildPayload(state: {
    * hidden field happens to still hold a value.
    */
   const asks = (role: RoleChoice): boolean => state.roles.includes(role);
-  const mode = state.framingMode as 'in_person' | 'online' | 'both';
   return {
     kind: 'roles',
     // A stable order, so the same ticks always make the same request.
@@ -1153,14 +1061,12 @@ export function buildPayload(state: {
     applicant: asks('student') ? beneficiary(state.applicant) : person(state.applicant),
     ...(asks('student')
       ? {
-          student: {
-            branch_id: state.branchId!,
-            category_id: state.categoryId!,
-            first_time: state.firstTime === 'yes',
-            ...(state.firstTime === 'yes' && state.circlePreferences.length > 0
-              ? { circle_preferences: state.circlePreferences }
-              : {}),
-          },
+          student: studentSectionPayload({
+            branchId: state.branchId,
+            categoryId: state.categoryId,
+            firstTime: state.firstTime,
+            circlePreferences: state.circlePreferences,
+          }),
         }
       : {}),
     // R67 — each child carries its own branch and stage.
@@ -1168,15 +1074,11 @@ export function buildPayload(state: {
     ...(asks('teaching')
       ? {
           teaching: {
-            framing:
-              mode === 'online'
-                ? { mode }
-                : {
-                    mode,
-                    willingness: state.allFramingBranches
-                      ? { all_branches: true as const }
-                      : { all_branches: false as const, branch_ids: state.framingBranchIds },
-                  },
+            framing: framingPayload({
+              mode: state.framingMode,
+              allBranches: state.allFramingBranches,
+              branchIds: state.framingBranchIds,
+            }),
           },
         }
       : {}),

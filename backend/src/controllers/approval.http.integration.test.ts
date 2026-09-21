@@ -292,6 +292,9 @@ describe("GET /api/v1/admin/approvals", () => {
     )!;
 
     expect(Object.keys(item).sort()).toEqual([
+      // R169 §1 — the applicant's account is ALREADY active (a further role asked
+      // for after admission): such an item has no whole-account decision.
+      "account_active",
       "applicants",
       "branch",
       "bundle",

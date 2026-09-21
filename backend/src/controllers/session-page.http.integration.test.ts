@@ -594,6 +594,17 @@ describe("which sessions reference a content (§4.9, R43)", () => {
     expect(res.body.data!.map((o) => o["id"])).toContain(sessionId);
   });
 
+  it("does NOT name a cancelled session — the link would open «غير متاح» (R169 §4)", async () => {
+    await prisma.session.update({ where: { id: sessionId }, data: { status: "cancelled" } });
+    try {
+      const res = await call(`/library/${content.publicPdf}/sessions`);
+      expect(res.status).toBe(200);
+      expect(res.body.data!.map((o) => o["id"])).not.toContain(sessionId);
+    } finally {
+      await prisma.session.update({ where: { id: sessionId }, data: { status: "scheduled" } });
+    }
+  });
+
   it("returns the SAME occurrence projection the calendar returns", async () => {
     // One mapper, not a second shape for the same fact: a reader gets the date,
     // the times, the level, the subject and the audience exactly as the grid and

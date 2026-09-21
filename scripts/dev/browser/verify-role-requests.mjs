@@ -398,5 +398,79 @@ check(
   (await waitFor(`!(${rowOf}) && !document.querySelector('dialog[open] [data-role-review]')`)) === true,
 );
 
+/* ══ Journey D — an account that ALREADY exists asks for a further role (R169 §1) ═ */
+
+const EXISTING = process.env.EXISTING_REFRESH_COOKIE;
+if (EXISTING) {
+  const EXISTING_NAME = `${S.tag} مؤطِّرة قائمة`;
+  const herRow = `[...document.querySelectorAll('.admin-table tbody tr')].find((tr) => tr.textContent.includes(${q(EXISTING_NAME)}) && tr.querySelector('[data-role-requests]'))`;
+
+  /** Asks from the session ALREADY in the browser — never by presenting a
+   *  rotated cookie a second time, which the platform treats as a replay. */
+  const ask = async (label) => {
+    await send('Page.navigate', { url: `${BASE}/profile/request-role` });
+    if (!(await waitFor(`document.querySelector('[data-role-choices] select')`))) return 'no form';
+    const chosen = await setSelect('[data-role-choices]', 'ما الصفة التي تطلبينها', label);
+    if (chosen !== 'ok') return chosen;
+    await sleep(200);
+    await evaluate(`document.querySelector('form.register-form button[type="submit"]')?.click()`);
+    return (await waitFor(`document.body.innerText.includes('تم استلام طلبك')`, 40)) ? 'sent' : 'not sent: ' + (await evaluate(`document.body.innerText`)).slice(0, 200);
+  };
+
+  await actAs(EXISTING);
+  await send('Page.navigate', { url: `${BASE}/profile` });
+  check('«حسابي» offers «طلب صفة إضافية» to an account with something left to ask for', await waitFor(`[...document.querySelectorAll('[data-role-requests] a')].some((a) => a.textContent.includes('طلب صفة إضافية'))`));
+
+  await send('Page.navigate', { url: `${BASE}/profile/request-role` });
+  await waitFor(`document.querySelector('[data-role-choices] select')`);
+  const offeredRoles = await selectOptions('[data-role-choices]', 'ما الصفة التي تطلبينها');
+  check(
+    'she is offered what she does NOT hold — never هيئة التدريس, which she has, and never «أسجّل أبنائي»',
+    JSON.stringify(offeredRoles?.options) === JSON.stringify(['اختر…', 'مستفيدة', 'هيئة الإدارة والمساعدة في الإدارة']) ||
+      (offeredRoles?.options.length === 3 && !offeredRoles.options.some((o) => o.includes('التدريس') || o.includes('وليّة'))),
+    JSON.stringify(offeredRoles),
+  );
+  const firstAsk = await ask('هيئة الإدارة');
+  check('asking for هيئة الإدارة is received — and says it grants nothing', firstAsk === 'sent', firstAsk);
+
+  await actAs(process.env.SUPER_REFRESH_COOKIE_2);
+  await send('Page.navigate', { url: `${BASE}/admin/approvals` });
+  check('the ACTIVE account appears in the queue', await waitFor(herRow));
+  const herActions = await evaluate(`[...((${herRow})?.querySelectorAll('button') ?? [])].map((b) => (b.textContent ?? '').trim()).filter(Boolean)`);
+  check(
+    'an active account has no whole-account decision — only the per-role review',
+    herActions.includes('البتّ في الصفات المطلوبة') && !herActions.includes('موافقة') && !herActions.includes('رفض'),
+    JSON.stringify(herActions),
+  );
+  await evaluate(`[...((${herRow})?.querySelectorAll('button') ?? [])].find((b) => (b.textContent ?? '').trim() === 'البتّ في الصفات المطلوبة')?.click()`);
+  await waitFor(`document.querySelector('dialog[open] [data-role-review]')`);
+  check('her request is declined, with a reason', (await clickIn('dialog[open] [data-role-review-item="administration"]', 'رفض')) === 'clicked' && (await waitFor(`document.querySelector('dialog[open] .confirm textarea, dialog[open] .confirm input')`)));
+  await setInput('dialog[open] .confirm', 'سبب الرفض', 'لا حاجة حاليًا');
+  await sleep(150);
+  await clickIn('dialog[open] .confirm', 'رفض');
+  check(
+    'declining a FURTHER role never rejects the account she already has',
+    (await waitFor(`document.querySelector('main').innerText.includes('تم رفض «هيئة الإدارة والمساعدة في الإدارة».')`)) &&
+      !(await notice()).includes('فرُفض الحساب'),
+    await notice(),
+  );
+
+  await actAs(process.env.EXISTING_REFRESH_COOKIE_2);
+  await send('Page.navigate', { url: `${BASE}/profile` });
+  await waitFor(`document.querySelector('[data-role-requests] [data-role-request="administration"]')`);
+  const declinedState = await evaluate(`(() => { const li = document.querySelector('[data-role-requests] [data-role-request="administration"]'); return { status: li?.getAttribute('data-role-status'), text: li?.textContent ?? '' }; })()`);
+  check(
+    '«حسابي» tells her it was declined — and never the administration’s reason',
+    declinedState.status === 'declined' && declinedState.text.includes('مرفوض') && !declinedState.text.includes('لا حاجة حاليًا'),
+    JSON.stringify(declinedState),
+  );
+  const secondAsk = await ask('هيئة الإدارة');
+  check('a declined role may be asked for AGAIN', secondAsk === 'sent', secondAsk);
+  await send('Page.navigate', { url: `${BASE}/profile` });
+  await waitFor(`document.querySelector('[data-role-requests] [data-role-request="administration"]')`);
+  const reopened = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-role-requests] [data-role-request="administration"]')].map((li) => li.getAttribute('data-role-status')))`);
+  check('…and it is ONE line of history, pending again', reopened === JSON.stringify(['pending']), reopened);
+}
+
 close();
 process.exit(finish());

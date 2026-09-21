@@ -43,6 +43,9 @@ export interface Room {
   id: string;
   name: string;
   branch_id: string;
+  /** How many people it holds, or `null` — not stated (R169 §3). Informational
+   *  only: BR-23 — nothing compares a roster against it. */
+  capacity: number | null;
   version: number;
 }
 
@@ -127,18 +130,24 @@ export async function listRooms(branchId: string, token: string | null): Promise
 export async function createRoom(
   branchId: string,
   name: string,
+  capacity: number | null,
   token: string | null,
 ): Promise<Room> {
-  return api<Room>(`/admin/branches/${branchId}/rooms`, { method: 'POST', token, body: { name } });
+  return api<Room>(`/admin/branches/${branchId}/rooms`, {
+    method: 'POST',
+    token,
+    body: { name, capacity },
+  });
 }
 
 export async function updateRoom(
   id: string,
   version: number,
   name: string,
+  capacity: number | null,
   token: string | null,
 ): Promise<Room> {
-  return api<Room>(`/admin/rooms/${id}`, { method: 'PATCH', token, body: { version, name } });
+  return api<Room>(`/admin/rooms/${id}`, { method: 'PATCH', token, body: { version, name, capacity } });
 }
 
 export async function deleteRoom(id: string, token: string | null): Promise<void> {

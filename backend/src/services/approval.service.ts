@@ -86,6 +86,13 @@ export interface ApprovalItem {
    * decision predates the back-fill.
    */
   roleRequests: { kind: string; status: string; firstTime: boolean | null }[];
+  /**
+   * R169 §1 — `true` when the applicant's ACCOUNT is already active: she asked
+   * for a further role (or again for a declined one) after being admitted. Such
+   * an item has no whole-account decision at all — there is no pending account
+   * to approve or reject — so the screen offers the per-role review only.
+   */
+  accountActive: boolean;
   /** The memorisation circles a first-time مستفيدة ranked, most convenient
    *  first. A wish shown beside the placement control — never a seat. */
   circlePreferences: { teachingGroupId: string; name: string; rank: number }[];
@@ -413,6 +420,7 @@ export async function listApprovals(
           status: request.status,
           firstTime: request.firstTime,
         })),
+        accountActive: applicant.accountStatus === 'active',
         circlePreferences: applicant.circlePreferences.map((preference) => ({
           teachingGroupId: preference.teachingGroup.id,
           name: preference.teachingGroup.name,
@@ -494,6 +502,7 @@ export async function listApprovals(
         // and no stage: the child's placement already exists.
         requestedRole: null,
         roleRequests: [],
+        accountActive: false,
         circlePreferences: [],
         registrationDetails: null,
         framing: null,
@@ -607,6 +616,7 @@ export async function listApprovals(
           : null,
         requestedRole: null,
         roleRequests: [],
+        accountActive: false,
         circlePreferences: [],
         registrationDetails: { applicant: registrationPerson(first.parent) },
         framing: null,
@@ -696,6 +706,7 @@ export async function listApprovals(
         branch: null,
         requestedRole: null,
         roleRequests: [],
+        accountActive: false,
         circlePreferences: [],
         registrationDetails: null,
         framing: null,

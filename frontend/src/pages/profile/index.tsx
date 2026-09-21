@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { fetchMyChildApplications, type MyChildApplication } from '../../adapters/child-applications.js';
+import { fetchMyRoleRequests, type MyRoleRequests } from '../../adapters/role-requests.js';
 import {
   deleteOwnAccount,
   fetchOwnProfile,
@@ -49,6 +50,9 @@ export function ProfilePage(): ReactNode {
 
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [applications, setApplications] = useState<MyChildApplication[]>([]);
+  /** R169 §1 — what she asked for and may still ask for. `null`: not loaded,
+   *  or the read failed — the section is then simply absent. */
+  const [roleRequests, setRoleRequests] = useState<MyRoleRequests | null>(null);
   const [childIdentity, setChildIdentity] = useState<StudentIdentity | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState(false);
@@ -58,15 +62,17 @@ export function ProfilePage(): ReactNode {
     setLoading(true);
     setFailure(false);
     try {
-      const [own, mine] = await Promise.all([
+      const [own, mine, asked] = await Promise.all([
         fetchOwnProfile(accessToken),
         // A person's own requests, and nothing else — the endpoint scopes to
         // the caller (R62). Failing this must not blank the whole page, so the
         // two loads share one try and the list is simply empty on error.
         fetchMyChildApplications(accessToken).catch(() => []),
+        fetchMyRoleRequests(accessToken).catch(() => null),
       ]);
       setProfile(own);
       setApplications(mine);
+      setRoleRequests(asked);
     } catch {
       setFailure(true);
     } finally {
@@ -127,6 +133,7 @@ export function ProfilePage(): ReactNode {
                 <ChildIdentitySection name={activeChild.label} identity={childIdentity} />
               ) : null}
               <ChildSection applications={applications} />
+              {roleRequests ? <RoleRequestsSection mine={roleRequests} /> : null}
               <DeleteAccountSection />
             </>
           )}
@@ -536,6 +543,46 @@ function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
  * student or a parent. The Parent *role* is about reaching already-approved
  * children; asking for a new one is not a role's act.
  */
+/**
+ * **«صفاتي وطلباتي»** (SRS Revision 169 §1) — what she asked the association
+ * for, what became of each request, and the way to ask for more.
+ *
+ * The state is said in WORDS beside each role, and a declined one says only
+ * that: the reason is the administration's own note and never reaches her
+ * (§5.6). «طلب صفة إضافية» is offered exactly when the server says there is
+ * something left to ask for — never as a button that leads to a refusal.
+ */
+function RoleRequestsSection({ mine }: { mine: MyRoleRequests }): ReactNode {
+  if (mine.requests.length === 0 && mine.askable.length === 0) return null;
+  return (
+    <section className="card" aria-labelledby="role-requests-heading" data-role-requests>
+      <h2 id="role-requests-heading">{t('profile.requestRole.sectionTitle')}</h2>
+      <p className="muted">{t('profile.requestRole.sectionLede')}</p>
+
+      {mine.askable.length > 0 ? (
+        <div className="register-form__actions">
+          <ButtonLink variant="add" href="/profile/request-role">
+            {t('profile.requestRole.title')}
+          </ButtonLink>
+        </div>
+      ) : null}
+
+      {mine.requests.length === 0 ? null : (
+        <ul className="detail-list">
+          {mine.requests.map((request) => (
+            <li key={request.kind} data-role-request={request.kind} data-role-status={request.status}>
+              {t(`admin.approvals.roleKind.${request.kind}`)}{' '}
+              <Badge tone={request.status === 'approved' ? 'ok' : request.status === 'pending' ? 'warn' : 'neutral'}>
+                {t(`admin.approvals.roleStatus.${request.status}`)}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function ChildSection({ applications }: { applications: MyChildApplication[] }): ReactNode {
   return (
     <section className="card" aria-labelledby="children-heading">

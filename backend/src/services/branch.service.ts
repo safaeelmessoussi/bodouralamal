@@ -421,7 +421,7 @@ export async function createRoom(
   prisma: PrismaClient,
   actor: Actor,
   branchId: string,
-  data: { name: string },
+  data: { name: string; capacity?: number | null | undefined },
 ): Promise<Room> {
   assertCanWriteReferenceData(actor);
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId);
@@ -431,7 +431,13 @@ export async function createRoom(
     if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
 
     const room = await tx.room.create({
-      data: { name: data.name, branchId, createdById: actor.userId },
+      data: {
+        name: data.name,
+        branchId,
+        createdById: actor.userId,
+        // R169 §3 — informational only (BR-23): shown, never enforced.
+        ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
+      },
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -450,7 +456,7 @@ export async function updateRoom(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string },
+  data: { name?: string; capacity?: number | null },
 ): Promise<Room> {
   assertCanWriteReferenceData(actor);
   const room = await prisma.room.findFirst({ where: { id, deletedAt: null } });

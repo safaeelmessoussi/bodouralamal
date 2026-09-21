@@ -548,6 +548,47 @@ export const rolesRegistrationSchema = z
     }
   });
 
+/**
+ * **A further role, asked for by an account that already exists** (SRS Revision
+ * 169 §1) — `POST /profile/role-requests`.
+ *
+ * The same sections the registration form carries, one role at a time, and no
+ * `applicant`: who she is comes from her session, never from the body.
+ * `guardian` is absent on purpose — an active account registers a child through
+ * `POST /child-applications`, and doing so IS asking (again) to be a guardian.
+ *
+ * A date of birth is accepted with `student` only, and only COMPLETES a record
+ * that has none (R130: completion, never correction — the service refuses a
+ * second one).
+ */
+export const furtherRoleRequestSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('student'),
+      student: studentSection,
+      birth_date: person.birthDate.optional(),
+      consents,
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (!value.student.first_time && (value.student.circle_preferences?.length ?? 0) > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['student', 'circle_preferences'],
+          message: 'circle preferences are asked of a first-time beneficiary only',
+        });
+      }
+    }),
+  z.object({ kind: z.literal('teaching'), teaching: z.object({ framing: framingPreference }).strict() }).strict(),
+  z
+    .object({
+      kind: z.literal('administration'),
+      administration: z.object({ branch_id: branchId.nullable() }).strict(),
+    })
+    .strict(),
+]);
+export type FurtherRoleRequestInput = z.infer<typeof furtherRoleRequestSchema>;
+
 export const registrationSchema = z.discriminatedUnion('kind', [
   adultRegistrationSchema,
   parentChildRegistrationSchema,

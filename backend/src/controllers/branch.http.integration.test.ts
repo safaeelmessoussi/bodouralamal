@@ -43,7 +43,8 @@ const BRANCH_KEYS = [
   "phone_secondary",
   "version",
 ];
-const ROOM_KEYS = ["branch_id", "id", "name", "version"];
+// `capacity` — R169 §3: published, informational only (BR-23).
+const ROOM_KEYS = ["branch_id", "capacity", "id", "name", "version"];
 
 interface Res {
   status: number;

@@ -39,6 +39,8 @@ POST /auth/logout                             # TD-3.1, TD-4.14
 GET /me                                       # TD-3.1, TD-1
 GET /profile                                  # TD-3.1, §5.2 (R65) — the caller's OWN details; no id, no role gate
 PATCH /profile                                # §5.2 (R65) — own basic contact info only (phone, nickname); TD-15
+GET /profile/role-requests                    # R169 §1; her own role requests and what she may still ask for; never the decline reason
+POST /profile/role-requests                   # R169 §1; an ACTIVE account asks for a further role, or again for a declined one; grants nothing
 
 # ── Registration & approvals (TD-3.2)
 POST /registrations                           # TD-3.2, §4.1b step 5; R49 optional requested_role (hint only, grants nothing)

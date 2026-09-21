@@ -118,6 +118,10 @@ export interface Approval {
    *  types. More than one, or an `administration` request, is decided per role
    *  (`decideRoleRequest`) — the server refuses the whole-account act for it. */
   role_requests: ApprovalRoleRequest[];
+  /** R169 §1 — the applicant's ACCOUNT is already active: she asked for a
+   *  further role (or again for a declined one) after being admitted. There is
+   *  no pending account to approve or reject, so the item is decided per role. */
+  account_active: boolean;
   /** The memorisation circles a first-time مستفيدة ranked, most convenient
    *  first. **A wish, never a seat** — shown beside the placement control. */
   circle_preferences: { teaching_group_id: string; name: string; rank: number }[];
@@ -286,14 +290,18 @@ export async function decideRoleRequest(
  *
  * The server's rule, stated once for the screen: several requests have no single
  * «approve», and a lone `administration` request is a Super Admin's decision
- * that the whole-account act — open to every approver — may not take. A
- * registration that asked for one ordinary thing keeps the one decision it has
- * always been.
+ * that the whole-account act — open to every approver — may not take. An account
+ * that is ALREADY active (a further role asked for later, R169 §1) has no
+ * whole-account decision at all. A registration that asked for one ordinary
+ * thing keeps the one decision it has always been.
  */
-export function decidedPerRole(row: Pick<Approval, 'type' | 'role_requests'>): boolean {
+export function decidedPerRole(
+  row: Pick<Approval, 'type' | 'role_requests'> & Partial<Pick<Approval, 'account_active'>>,
+): boolean {
   return (
     row.type === 'registration' &&
-    (row.role_requests.length > 1 ||
+    (row.account_active === true ||
+      row.role_requests.length > 1 ||
       row.role_requests.some((request) => request.kind === 'administration'))
   );
 }

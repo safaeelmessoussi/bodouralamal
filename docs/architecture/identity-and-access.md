@@ -105,6 +105,25 @@ request was **declined** (`GUARDIAN_REQUEST_DECLINED`). Declining `guardian` rej
 child applications with it (`not_eligible`): a child is not admitted under a guardian the
 association did not accept.
 
+**After admission, the same request — one role at a time (R169 §1).** `requestFurtherRole`
+(`POST /profile/role-requests`) lets an ACTIVE account ask for a role it does not hold, or again for
+one that was declined. It writes no authority either: it opens one `RoleRequest` or **re-opens the
+existing row** (UNIQUE `(user_id, kind)` keeps one line of history; the audit log keeps both
+decisions), replaces her ranked circles and framing preference with what she says NOW, completes a
+missing date of birth (never corrects one), and raises the approvers' ordinary
+`registration_review_required` notice. The queue lists such an account because it lists any account
+with a pending request, and marks the item `account_active` — there is no pending ACCOUNT to approve
+or reject, so the whole-account act does not apply and the screen offers the per-role review only.
+Registering a child re-opens a declined `guardian` request for the same reason. **The decline
+reason is never returned to her** (`GET /profile/role-requests` omits it by projection).
+
+**A granted role is hers at her next page, not at her next sign-in (R169 §2).** The access token
+lives in memory only; every page load calls `POST /auth/refresh`, which reads the live
+`UserBranchRole` rows and re-resolves the active role. Nothing is revoked when a role is ADDED —
+revocation is for suspension, rejection, deletion and replay — and
+`auth-refresh.http.integration.test.ts` pins that the very next refresh of the same session carries
+the new role.
+
 **The self-managed claim (R132) is not one of the roles** — it claims a record that exists. Its
 entry stays withdrawn from the form (R160 §8) and is reached by `/register?mode=self-managed`.
 

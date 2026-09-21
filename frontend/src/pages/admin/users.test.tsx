@@ -65,6 +65,7 @@ const QUEUE_ITEM: Approval = {
   branch: { id: ASSIGNMENT.branch_id!, name: ASSIGNMENT.branch_name! },
   requested_role: null,
   role_requests: [],
+  account_active: false,
   circle_preferences: [],
   framing: null,
   category: { id: '00000000-0000-4000-8000-00000000000a', name: 'طفل' },

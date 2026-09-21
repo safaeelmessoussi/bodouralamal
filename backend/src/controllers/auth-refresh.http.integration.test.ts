@@ -71,6 +71,7 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
   });
@@ -206,6 +207,41 @@ describe("the CSRF posture (TD-12)", () => {
       where: { userId, revokedAt: null },
     });
     expect(live).toBe(1);
+  });
+});
+
+describe("a role granted mid-session needs no new sign-in (R169 §2)", () => {
+  /**
+   * The Owner, 2026-09-21: a newly assigned role must show without signing in
+   * again. It does, and this pins WHY: the access token is never trusted for
+   * longer than a page — every page load refreshes, and the refresh reads the
+   * LIVE assignments. So the old note «appears only after re-login» was wrong by
+   * the time she read it; what is tested is that it stays wrong.
+   */
+  const rolesIn = (token: string): string[] =>
+    (JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8")) as { roles: string[] }).roles;
+
+  it("the next refresh of the SAME session carries the new role, and /me lists it", async () => {
+    const before = await postRefresh({ cookie, "x-requested-with": XHR, origin: config.PUBLIC_BASE_URL });
+    expect(rolesIn(before.body.access_token!)).toEqual([]);
+
+    const teacher = await prisma.role.findUniqueOrThrow({ where: { name: "teacher" } });
+    await prisma.userBranchRole.create({ data: { userId, roleId: teacher.id, branchId: null } });
+
+    const after = await postRefresh({
+      cookie: cookieFrom(before.headers.get("set-cookie") ?? ""),
+      "x-requested-with": XHR,
+      origin: config.PUBLIC_BASE_URL,
+    });
+    expect(after.status).toBe(200);
+    expect(rolesIn(after.body.access_token!)).toEqual(["teacher"]);
+
+    const me = await fetch(`${config.PUBLIC_BASE_URL}/api/v1/me`, {
+      headers: { authorization: `Bearer ${after.body.access_token!}` },
+    });
+    expect(((await me.json()) as { roles: string[] }).roles).toEqual(["teacher"]);
+
+    await prisma.userBranchRole.deleteMany({ where: { userId } });
   });
 });
 

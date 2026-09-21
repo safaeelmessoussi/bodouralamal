@@ -145,6 +145,7 @@ export function updateRoom(prisma: PrismaClient) {
     const body = parse(updateRoomSchema, req.body);
     const room = await branches.updateRoom(prisma, requireActor(req), id(req, 'id'), body.version, {
       ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.capacity !== undefined ? { capacity: body.capacity } : {}),
     });
     res.json(roomDto(room));
   };

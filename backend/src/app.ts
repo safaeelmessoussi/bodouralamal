@@ -443,6 +443,11 @@ export function createApp(
    */
   guarded.get('/profile', profile.read(prisma));
   guarded.patch('/profile', profile.update(prisma));
+  // R169 §1 — an account that already exists asks for a FURTHER role (or again
+  // for a declined one). Asking grants nothing; the decision stays
+  // `POST /admin/approvals/{id}/roles/{kind}/…`.
+  guarded.get('/profile/role-requests', profile.roleRequests(prisma));
+  guarded.post('/profile/role-requests', profile.requestRole(prisma));
   // R111 — anyone may delete their own account. No role gate: the subject is the
   // JWT `sub`, so a caller cannot name somebody else. A role can BLOCK it (live
   // teaching responsibilities, the last active Super Admin), never forbid it.

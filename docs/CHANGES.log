@@ -11014,3 +11014,51 @@ validated), `POST /admin/approvals/{id}/roles/student/approve` with no session `
 about the recipe itself: `docker compose exec -T` inside a script fed over `ssh … 'bash -s'` reads that
 same stdin and silently swallows the REST of the script — every `exec`/`run` in it needs `</dev/null`.
 The first attempt stopped, harmlessly, right after the recording question for that reason.
+
+## 2026-09-21 — SRS Revision 169 (part one): the Owner's answers — a further role from an existing account, a new role without a new sign-in, room capacity, the cancelled-class backlink, and six boxes that were already done
+
+**What the Owner sent.** Her answers to the open-decision list of the R168 report: a run of *yes*, three
+«build this», four «what do you think / explain», and three left blank. Before building anything, four
+read-only investigations checked each item against the CODE rather than against the ledger — because
+the last ledger review had found twenty boxes already done.
+
+**Six more were.** The server DOES obey the active role (R60: narrowed at issue, re-narrowed from live
+rows by `assertFreshActive`, proven over HTTP); Categories and Levels HAVE descriptions (since
+2026-08-27, her own texts in the seed); ayah bounds ARE validated at three layers; Quran-log edits and
+deletions ARE audited; no «[تجريبي] حدث …» title exists on Localhost or Staging; and four of the five
+items of the 2026-08-11 audit bundle shipped long ago. Closed with their evidence, not built twice.
+
+**§1 — a further role.** «حسابي» → «صفاتي وطلباتي» → «طلب صفة إضافية». The three role sections were
+EXTRACTED from the registration form (`role-sections.tsx`: fields, validation, request body, and the
+circle-slots hook) so the new page is a second caller, not a copy — `register.tsx` shed ~150 lines and
+its 58 tests did not move. `POST /profile/role-requests` opens one `RoleRequest` or RE-OPENS the
+declined row (UNIQUE `(user_id, kind)` keeps one line; the audit log keeps both decisions), completes a
+missing date of birth and never corrects one, records her consent for a beneficiary request, and raises
+the approvers' ordinary notice. The queue item gains `account_active`: an active account has no
+whole-account decision, so only the per-role review is offered — without it, «موافقة» on such a row
+would have answered 404. Registering a child re-opens a declined guardian request.
+
+**§2 — no new sign-in.** Nothing to change: the access token lives in memory, every page load
+refreshes, the refresh reads live assignments. The old note was wrong. Now an HTTP test grants a role
+mid-session and finds it in the very next refresh and in `/me`, and «المستخدمون» says when a saved
+role takes effect.
+
+**§3 — room capacity.** On `RoomDto`, on both writes, on the rooms dialog, and the scheduling hint that
+had never once rendered finally does. BR-23 untouched.
+
+**§4 — the backlink.** `listSessionsForContent` names what is ON; a cancelled occurrence opened
+«غير متاح».
+
+**A harness lesson, kept.** Journey D first «signed in» three times with one refresh cookie. The
+platform had rotated it after the first page, so the second presentation was a replay — and reuse
+detection revoked the session, exactly as R101 says it must. One session per sign-in step now.
+
+**Verification (part one).** Backend typecheck, lint; frontend typecheck, lint; focused disposable
+integration on the seven affected files — role-request **20/20**, then approval / branch / session-page
+/ auth-refresh / pending-denial / child-application **338/338**, isolation passed both times. On the
+rebuilt Localhost: `verify-role-requests` **80/80** (was 70), `verify-room-capacity` **8/8**, and the
+scenario left nothing behind. Full gates run once at the end of the part — recorded below.
+
+**Full gates, once, at the boundary.** Backend unit **360/360**, frontend **1,456/1,456**, 32 guards + doc
+links, OpenAPI regenerated (188 paths, 242 operations); full disposable integration **2,764 passed, exit
+0**, all-table isolation passed; seed drill **exit 0** (both read from the logs' own lines).

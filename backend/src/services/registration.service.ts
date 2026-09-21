@@ -11,7 +11,7 @@ import type {
   RegistrationInput,
   RoleRequestKindInput,
 } from '../validators/registration.validators.js';
-import { offeredCircleSlots } from './registration-circle-slots.service.js';
+import { replaceCirclePreferences } from './registration-circle-slots.service.js';
 import {
   approvalReviewRecipients,
   notifySubjectUserChange,
@@ -433,28 +433,8 @@ export async function register(
       // The circles a first-time مستفيدة can attend, most convenient first —
       // and only circles that are really on offer for her Category and branch.
       const ranked = request.student?.circlePreferences ?? [];
-      if (ranked.length > 0 && request.student) {
-        const offered = await offeredCircleSlots(
-          tx,
-          request.student.categoryId,
-          request.student.branchId,
-          now,
-        );
-        const onOffer = new Set(offered.circles.map((circle) => circle.teaching_group_id));
-        const stranger = ranked.find((id) => !onOffer.has(id));
-        if (stranger !== undefined) {
-          throw new AppError('VALIDATION_FAILED', 'a ranked circle is not on offer', {
-            reason: 'CIRCLE_NOT_OFFERED',
-            teaching_group_id: stranger,
-          });
-        }
-        await tx.circlePreference.createMany({
-          data: ranked.map((teachingGroupId, index) => ({
-            userId: applicant.id,
-            teachingGroupId,
-            rank: index + 1,
-          })),
-        });
+      if (request.student) {
+        await replaceCirclePreferences(tx, applicant.id, request.student, now);
       }
 
       let childApplications: { requestId: string; applicationIds: string[] } | null = null;

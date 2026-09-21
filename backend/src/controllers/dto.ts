@@ -108,6 +108,12 @@ export interface RoomDto {
   id: string;
   name: string;
   branch_id: string;
+  /**
+   * How many people the room holds, or `null` — not stated (SRS Revision 169
+   * §3). **Informational only**: BR-23 and §20 rule 22 — nothing compares a
+   * roster against it, and publishing it changes no rule.
+   */
+  capacity: number | null;
   version: number;
 }
 
@@ -115,12 +121,14 @@ export function roomDto(row: {
   id: string;
   name: string;
   branchId: string;
+  capacity: number | null;
   version: number;
 }): RoomDto {
   return {
     id: row.id,
     name: row.name,
     branch_id: row.branchId,
+    capacity: row.capacity,
     version: row.version,
   };
 }
@@ -1439,6 +1447,9 @@ export interface ApprovalDto {
    * where nobody was asked). `[]` on item types that request no role.
    */
   role_requests: { kind: string; status: string; first_time: boolean | null }[];
+  /** R169 §1 — the applicant's account is already ACTIVE (a further role asked
+   *  for after admission): the item is decided per role, never whole. */
+  account_active: boolean;
   /** The memorisation circles a first-time مستفيدة ranked, most convenient
    *  first — a wish shown beside the placement control, never a seat. */
   circle_preferences: { teaching_group_id: string; name: string; rank: number }[];
@@ -1557,6 +1568,7 @@ export function approvalDto(row: {
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
   roleRequests: { kind: string; status: string; firstTime: boolean | null }[];
+  accountActive: boolean;
   circlePreferences: { teachingGroupId: string; name: string; rank: number }[];
   framing: {
     mode: 'in_person' | 'online' | 'both';
@@ -1617,6 +1629,7 @@ export function approvalDto(row: {
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
     requested_role: row.requestedRole,
+    account_active: row.accountActive,
     role_requests: row.roleRequests.map((request) => ({
       kind: request.kind,
       status: request.status,

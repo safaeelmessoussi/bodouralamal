@@ -429,7 +429,7 @@ export function ScheduleSessionsPage({
     const branchId = scope?.branchId;
     if (!branchId) return;
     void listRooms(branchId, accessToken)
-      .then((p) => setRooms(p.data.map((r) => ({ id: r.id, name: r.name, capacity: null }))))
+      .then((p) => setRooms(p.data.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))))
       .catch(() => setRooms([]));
   }, [scope?.branchId, accessToken]);
 

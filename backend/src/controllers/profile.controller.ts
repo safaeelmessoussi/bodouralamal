@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
 import { getOwnProfile, updateOwnProfile } from '../services/profile.service.js';
+import { myRoleRequests, requestFurtherRole } from '../services/role-request.service.js';
+import { furtherRoleRequestSchema } from '../validators/registration.validators.js';
 import { birthDate } from '../validators/person.js';
 import { parse } from './parse.js';
 
@@ -131,5 +133,30 @@ export function remove(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await deleteOwnAccount(prisma, requireActor(req));
     res.status(204).end();
+  };
+}
+
+/**
+ * `GET /profile/role-requests` — what she asked for, what became of each, and
+ * what she may still ask for (SRS Revision 169 §1). Hers alone: the subject is
+ * the JWT `sub`, like everything under `/profile`.
+ */
+export function roleRequests(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: await myRoleRequests(prisma, requireActor(req)) });
+  };
+}
+
+/**
+ * `POST /profile/role-requests` — an existing account asks for a further role,
+ * or asks AGAIN for one that was declined. Grants nothing: it opens (or
+ * re-opens) the request the approvers decide.
+ */
+export function requestRole(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(furtherRoleRequestSchema, req.body);
+    const result = await requestFurtherRole(prisma, requireActor(req), body);
+    res.status(201).json({ kind: result.kind, status: result.status, reopened: result.reopened });
   };
 }

@@ -30,12 +30,7 @@ import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
-import {
-  DateField,
-  SearchInput,
-  TextArea,
-  TextField,
-} from '../../components/ui/field.js';
+import { DateField, NumberField, SearchInput, TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -407,6 +402,9 @@ function RoomsDialog({
   const [rows, setRows] = useState<Room[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [draft, setDraft] = useState('');
+  /** R169 §3 — how many people the room holds; '' is «not stated». Shown on the
+   *  scheduling form beside the room and enforced nowhere (BR-23). */
+  const [capacityDraft, setCapacityDraft] = useState('');
   const [editing, setEditing] = useState<Room | null>(null);
   /** Deleting a room is destructive and confirms, like **every** other
    *  destructive action in the back office (§14.2). It did not, which was an
@@ -436,6 +434,9 @@ function RoomsDialog({
     onCancel: onClose,
   });
 
+  /** A positive whole number, or nothing — the column's own CHECK. */
+  const capacityValid = capacityDraft.trim() === '' || /^[1-9][0-9]{0,3}$/.test(capacityDraft.trim());
+
   const load = useCallback(async () => {
     try {
       setRows((await listRooms(branch.id, accessToken)).data);
@@ -451,13 +452,15 @@ function RoomsDialog({
 
   async function submit(): Promise<void> {
     const name = draft.trim();
-    if (name === '') return;
+    if (name === '' || !capacityValid) return;
+    const capacity = capacityDraft.trim() === '' ? null : Number(capacityDraft);
     setBusy(true);
     setNotice(null);
     try {
-      if (editing) await updateRoom(editing.id, editing.version, name, accessToken);
-      else await createRoom(branch.id, name, accessToken);
+      if (editing) await updateRoom(editing.id, editing.version, name, capacity, accessToken);
+      else await createRoom(branch.id, name, capacity, accessToken);
       setDraft('');
+      setCapacityDraft('');
       setEditing(null);
       await load();
     } catch (error) {
@@ -526,7 +529,15 @@ function RoomsDialog({
             <ul className="admin-list">
               {rows.map((room) => (
                 <li key={room.id}>
-                  <span>{room.name}</span>
+                  <span>
+                    {room.name}
+                    {room.capacity !== null ? (
+                      <span className="muted">
+                        {' '}
+                        — {t('admin.branches.roomCapacityShort').replace('{n}', String(room.capacity))}
+                      </span>
+                    ) : null}
+                  </span>
                   {canWrite ? (
                     <>
                       <Button
@@ -534,6 +545,7 @@ function RoomsDialog({
                         onClick={() => {
                           setEditing(room);
                           setDraft(room.name);
+                          setCapacityDraft(room.capacity === null ? '' : String(room.capacity));
                         }}
                       >
                         {t('common.edit')}
@@ -555,6 +567,16 @@ function RoomsDialog({
                 value={draft}
                 onChange={setDraft}
               />
+              <NumberField
+                label={t('admin.branches.roomCapacity')}
+                value={capacityDraft}
+                onChange={setCapacityDraft}
+                min={1}
+                max={9999}
+                step={1}
+                hint={t('admin.branches.roomCapacityFieldHint')}
+                error={capacityValid ? null : t('admin.branches.roomCapacityInvalid')}
+              />
               <div className="form__actions">
                 {editing ? (
                   <Button
@@ -562,12 +584,17 @@ function RoomsDialog({
                     onClick={() => {
                       setEditing(null);
                       setDraft('');
+                      setCapacityDraft('');
                     }}
                   >
                     {t('common.cancel')}
                   </Button>
                 ) : null}
-                <Button variant="primary" disabled={busy || draft.trim() === ''} onClick={() => void submit()}>
+                <Button
+                  variant="primary"
+                  disabled={busy || draft.trim() === '' || !capacityValid}
+                  onClick={() => void submit()}
+                >
                   {t(editing ? 'common.save' : 'admin.branches.roomAdd')}
                 </Button>
               </div>

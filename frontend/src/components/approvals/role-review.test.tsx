@@ -19,6 +19,7 @@ const ROW: Approval = {
   bundle: { child_count: 0, link_count: 0 },
   branch: { id: 'b-1', name: 'مقر تاركة' },
   requested_role: 'teacher',
+  account_active: false,
   role_requests: [
     { kind: 'student', status: 'approved', first_time: true },
     { kind: 'teaching', status: 'pending', first_time: null },
@@ -67,6 +68,9 @@ describe('which registrations are decided one role at a time', () => {
     expect(decidedPerRole(one('student'))).toBe(false);
     expect(decidedPerRole(one('guardian'))).toBe(false);
     expect(decidedPerRole(one('teaching'))).toBe(false);
+    // R169 §1 — a lone request from an account that is ALREADY active has no
+    // whole-account decision to fall back on.
+    expect(decidedPerRole({ ...one('teaching'), account_active: true })).toBe(true);
     // A registration from before the requests existed, and every other item type.
     expect(decidedPerRole({ type: 'registration', role_requests: [] })).toBe(false);
     expect(decidedPerRole({ type: 'child-application', role_requests: ROW.role_requests })).toBe(false);

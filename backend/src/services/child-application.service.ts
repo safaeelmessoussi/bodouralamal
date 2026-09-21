@@ -116,6 +116,15 @@ export async function submitChildApplications(
     throw new AppError('VALIDATION_FAILED', 'a request must name at least one child');
   }
 
+  // R169 §1 — «a declined role may be asked for again», and for a guardian
+  // registering a child IS asking. A declined `guardian` request is re-opened
+  // here, so the new application is not dead on arrival
+  // (`GUARDIAN_REQUEST_DECLINED`); the decision is still the approver's.
+  await tx.roleRequest.updateMany({
+    where: { userId: parentId, kind: 'guardian', status: 'declined' },
+    data: { status: 'pending', decidedAt: null, decidedById: null, declineReason: null },
+  });
+
   const requestId = randomUUID();
   const givenAt = new Date();
   const applicationIds: string[] = [];

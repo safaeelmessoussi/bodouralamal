@@ -16,6 +16,7 @@ import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentLibraryPage } from './pages/dashboard/library.js';
 import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
+import { RequestRolePage } from './pages/profile/request-role.js';
 import { ProfilePage } from './pages/profile/index.js';
 import { Landing } from './pages/landing.js';
 import { PrivacyPage, TermsPage } from './pages/legal.js';
@@ -168,6 +169,14 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <RegisterChildPage />
+        </PendingGuard>
+      );
+    case 'request-role':
+      // R169 §1. Authenticated, role-independent; the server refuses an
+      // account that is not active.
+      return (
+        <PendingGuard>
+          <RequestRolePage />
         </PendingGuard>
       );
     case 'screen-pending':

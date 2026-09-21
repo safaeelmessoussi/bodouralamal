@@ -77,6 +77,14 @@ async function wipe(): Promise<void> {
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.level.deleteMany({ where: { id: { in: levels } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  // Rooms a harness created at the scenario's branch (R169 §3), their Trash and
+  // audit rows with them — a room is soft-deleted through the API, never gone.
+  const rooms = (
+    await prisma.room.findMany({ where: { branch: { name: { startsWith: TAG } } }, select: { id: true } })
+  ).map((room) => room.id);
+  await prisma.trash.deleteMany({ where: { targetEntity: 'Room', targetId: { in: rooms } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'Room', targetId: { in: rooms } } });
+  await prisma.room.deleteMany({ where: { id: { in: rooms } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 
   // The fixture period, once nothing is enrolled in it — never anybody else's.
@@ -166,6 +174,14 @@ const admin = await prisma.user.create({
 });
 await prisma.userBranchRole.create({ data: { userId: admin.id, roleId: adminRole.id, branchId: null } });
 
+// R169 §1 — an account that ALREADY exists: an active مؤطِّرة with no request
+// row at all (she was pre-provisioned), who will ask for a further role.
+const teacherRole = await prisma.role.findUniqueOrThrow({ where: { name: 'teacher' } });
+const existing = await prisma.user.create({
+  data: { nameArabic: `${TAG} مؤطِّرة قائمة`, sex: 'female', accountStatus: 'active' },
+});
+await prisma.userBranchRole.create({ data: { userId: existing.id, roleId: teacherRole.id, branchId: null } });
+
 // R122 — approval enrols as of TODAY and fails closed with no period covering it.
 const today = new Date();
 const covering = await prisma.academicPeriod.findFirst({
@@ -188,6 +204,7 @@ console.log(
   JSON.stringify({
     tag: TAG,
     admin: admin.id,
+    existing: existing.id,
     branch: { id: branch.id, name: branch.name },
     category: { id: category.id, name: category.name },
     firstLevel: { id: first.id, name: first.name },

@@ -29,6 +29,14 @@ export ONBOARDING_TOKEN="$(bash scripts/dev/issue-dev-onboarding.sh "$ONBOARDING
 export SUPER_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
 # The Admin HERSELF, minted as she is — never a narrowed Super Admin token.
 export ADMIN_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$ADMIN_ID")"
+# R169 §1 — an account that already exists, asking for a further role.
+EXISTING_ID="$(node -e 'process.stdout.write(JSON.parse(process.env.SCENARIO).existing)')"
+# ONE session per sign-in step: a refresh cookie is rotated by the first page
+# that uses it (R101), so presenting the original again IS the replay the
+# platform detects — and it revokes the whole session, correctly.
+export EXISTING_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$EXISTING_ID")"
+export EXISTING_REFRESH_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh "$EXISTING_ID")"
+export SUPER_REFRESH_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh)"
 
 WORK="$(mktemp -d)"
 cleanup() {
