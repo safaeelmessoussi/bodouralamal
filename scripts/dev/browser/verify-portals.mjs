@@ -75,7 +75,8 @@ check(
 // harness kept the old label and had been failing quietly ever since; restated
 // 2026-08-27 rather than deleted, because the property is that the entry is
 // reachable, not what it happens to be called.
-for (const label of ['الجدولة', 'نقاط الامتحانات', 'مكتبة المحتوى', 'إدخال حفظ المستفيدات']) {
+// «نقاط الاختبارات» since R165 §6 (the Owner's own word for the module).
+for (const label of ['الجدولة', 'نقاط الاختبارات', 'مكتبة المحتوى', 'إدخال حفظ المستفيدات']) {
   check(
     `2 · her menu reaches «${label}»`,
     teacherHome.menu.some((m) => m.includes(label)),
@@ -135,7 +136,9 @@ check(
   studentHome.menu.length >= 5,
   JSON.stringify(studentHome.menu),
 );
-for (const label of ['تقويمي', 'مكتبة المحتوى', 'حفظي', 'نقاطي', 'حسابي']) {
+// «نقاطي» merged into «اختباراتي» (R153); «حسابي» lives in the header's account
+// menu for every role (R146), not in the portal's own menu.
+for (const label of ['تقويمي', 'مكتبة المحتوى', 'حفظي', 'اختباراتي', 'شهاداتي']) {
   check(
     `10 · her menu reaches «${label}»`,
     studentHome.menu.some((m) => m.includes(label)),

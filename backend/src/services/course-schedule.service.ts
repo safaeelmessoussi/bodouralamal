@@ -2361,9 +2361,9 @@ export async function deleteCourseSchedule(
      * under a tombstoned schedule: on no calendar, in no Trash — held nowhere
      * anybody could see. Protection (R43.6) is about FUTURE occurrences someone
      * edited; a held occurrence is history, and history follows its class.
-     * What it carries — attendance, a recording — is untouched by the tombstone
-     * and is what decides, seven days later, whether it can be destroyed at all
-     * (`trash.service.ts`, `SESSIONS_HAVE_RECORDS`).
+     * What it carries — attendance, a recording — goes with the class seven
+     * days later, at the Owner's word (2026-09-22); only an exam sat in it
+     * keeps it (`trash.service.ts`, `SESSIONS_HAVE_EXAMS`).
      */
     const past = await tx.session.findMany({
       where: { scheduleId: id, deletedAt: null, date: { lt: now } },

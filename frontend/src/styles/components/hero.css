@@ -11,38 +11,32 @@
 }
 
 /*
- * A zellij-derived motif built from two overlaid conic gradients — CSS rather
- * than an image or SVG path data, so it costs no request on a weak connection
- * (§2.2), scales without artefacts, and stays crisp at any density.
+ * **R170 — the checkerboard is gone.** The two conic gradients read as a
+ * tiled board behind the title on every screen the Owner looked at, and a
+ * pattern that competes with the reading is the opposite of what a hero is
+ * for. What remains is light: one soft glow behind the badge and one behind
+ * the title, in the same CSS-only spirit (no request on a weak connection,
+ * §2.2), and a single fine ring as a nod to the zellij circle the logo sits in.
  */
 .hero::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-image:
-    conic-gradient(
-      from 22.5deg at 50% 50%,
-      var(--color-on-primary-motif) 0 25%,
-      transparent 0 50%,
-      var(--color-on-primary-motif) 0 75%,
-      transparent 0
-    ),
-    conic-gradient(
-      from 0deg at 50% 50%,
-      var(--color-on-primary-motif-soft) 0 25%,
-      transparent 0 50%,
-      var(--color-on-primary-motif-soft) 0 75%,
-      transparent 0
-    );
-  background-size: 88px 88px, 88px 88px;
+  background:
+    radial-gradient(38rem 24rem at 18% 50%, var(--color-on-primary-glow), transparent 70%),
+    radial-gradient(30rem 22rem at 82% 40%, var(--color-on-primary-glow-accent), transparent 70%),
+    linear-gradient(160deg, var(--color-primary-strong), var(--color-primary-emphasis));
   pointer-events: none;
 }
-/* Fade the motif behind the text so nothing competes with the reading. */
 .hero::after {
   content: '';
   position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 90% at 78% 30%, transparent 20%, var(--color-primary-strong) 78%);
+  inset-inline-start: -8rem;
+  inset-block-end: -10rem;
+  inline-size: 26rem;
+  block-size: 26rem;
+  border: 1px solid var(--color-on-primary-panel-border);
+  border-radius: var(--radius-full);
   pointer-events: none;
 }
 
@@ -64,11 +58,14 @@
 }
 .hero__title {
   font-size: var(--font-size-2xl);
+  line-height: 1.2;
   margin-block-end: var(--space-4);
+  text-wrap: balance;
 }
 .hero__lede {
   color: var(--color-on-primary-secondary);
   font-size: var(--font-size-md);
+  line-height: 1.75;
   max-width: 46ch;
 }
 .hero__actions {
@@ -98,6 +95,8 @@
   justify-self: center;
   display: grid;
   place-items: center;
+  /* A soft halo, so the badge sits IN the hero rather than on it. */
+  box-shadow: 0 0 0 1rem var(--color-on-primary-halo), 0 24px 60px -24px var(--color-on-primary-halo-shadow);
   /* Tighter than before: the asset used to carry ~100px of dead canvas on one
      side and none on the other, so the logo looked small AND off-centre inside
      its circle. It is now cropped to its own artwork, which lets the padding do
@@ -123,3 +122,65 @@
   block-size: 100%;
   object-fit: contain;
 }
+
+/* ── The three doors (R170) ──────────────────────────────────────────────── */
+
+/* Lifted INTO the hero's lower edge: the cards overlap it by half their
+   height, which is what makes them read as the hero's own next step rather
+   than a first section. The negative margin is matched by the padding the
+   hero already has below its content. */
+.entry {
+  position: relative;
+  z-index: 1;
+  margin-block-start: calc(-1 * clamp(2.5rem, 6vw, 4rem));
+}
+.entry__tiles {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 44rem) {
+  .entry__tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.entry__tile {
+  display: grid;
+  gap: var(--space-2);
+  block-size: 100%;
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+.entry__tile:hover,
+.entry__tile:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--color-primary-emphasis);
+  box-shadow: var(--shadow-lg);
+}
+.entry__icon {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.entry__title {
+  font-weight: 700;
+  font-size: var(--font-size-md);
+}
+.entry__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+

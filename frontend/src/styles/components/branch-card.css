@@ -40,3 +40,31 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ── R170 — one line per fact, an icon saying what it is ────────────────── */
+.branch-card__line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+}
+.branch-card__icon {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  margin-block-start: -0.15rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.branch-card .card__title {
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+}
+.branch-card__hours {
+  border-block-start: none;
+  padding-block-start: 0;
+}
+

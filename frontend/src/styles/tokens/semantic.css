@@ -80,4 +80,10 @@
   --color-on-primary-panel-border: rgb(255 255 255 / 14%);
   --color-on-primary-motif: rgb(255 255 255 / 5%);
   --color-on-primary-motif-soft: rgb(255 255 255 / 4%);
+  /* R170 — the hero's two soft glows and the badge's halo (the checkerboard
+     motif above is kept as a token; the hero no longer paints it). */
+  --color-on-primary-glow: rgb(255 255 255 / 9%);
+  --color-on-primary-glow-accent: rgb(212 175 55 / 14%);
+  --color-on-primary-halo: rgb(255 255 255 / 4%);
+  --color-on-primary-halo-shadow: rgb(0 0 0 / 45%);
 }

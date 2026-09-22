@@ -6,7 +6,9 @@ import { BranchesSection } from '../components/branches-section.js';
 import { PartnersSection } from '../components/partners-section.js';
 import { ProgramsSection } from '../components/programs-section.js';
 import { SiteFooter } from '../components/site-footer.js';
+import { ButtonLink } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
+import { Icon } from '../components/ui/icon.js';
 import { useNavigation } from '../hooks/use-navigation.js';
 import { t } from '../i18n/index.js';
 
@@ -30,6 +32,7 @@ export function Landing(): ReactNode {
       <ApplicationHeader />
       <main id="main">
         <Hero />
+        <EntryTiles />
 
         {/* The mission section was removed on the Owner's instruction. Its
             substance now lives in the hero lede, which states the association's
@@ -100,11 +103,18 @@ export function Hero(): ReactNode {
               {t('landing.heroTitle')}
             </h1>
             <p className="hero__lede">{t('landing.heroLede')}</p>
-            {/* R138 item 9 — no button at all once signed in, not a smaller
-                or differently-labelled one. See the doc comment above. */}
+            {/* R138 item 9 — no hero CTA block at all once signed in, not a
+                smaller or differently-labelled one. See the doc comment above.
+                R170 (the Owner, 2026-09-22: «beautiful, elegant, easy to use»):
+                for a VISITOR, a second way in that needs no account — the
+                programmes on this very page — so a first visit is never met by
+                a login wall alone. */}
             {isAuthenticated ? null : (
               <div className="hero__actions">
                 <SignInButton />
+                <ButtonLink href="#programs" variant="secondary">
+                  {t('landing.ctaPrograms')}
+                </ButtonLink>
               </div>
             )}
           </div>
@@ -119,6 +129,39 @@ export function Hero(): ReactNode {
             <img src="/logo-large.png" alt="" width={500} height={500} />
           </div>
         </div>
+      </Container>
+    </section>
+  );
+}
+
+/**
+ * **Three doors, said plainly** (R170 — the landing-page redesign). What a
+ * visitor can do here without an account: read the programmes, look at the
+ * timetable, browse the public library. Each tile is a real link to a public
+ * route (§14.1's PUBLIC branch); nothing here claims a figure or a promise.
+ */
+function EntryTiles(): ReactNode {
+  const tiles: { href: string; icon: 'book' | 'calendar' | 'folder'; title: string; text: string }[] = [
+    { href: '#programs', icon: 'book', title: t('landing.tilePrograms'), text: t('landing.tileProgramsText') },
+    { href: '/calendar', icon: 'calendar', title: t('landing.tileCalendar'), text: t('landing.tileCalendarText') },
+    { href: '/resources', icon: 'folder', title: t('landing.tileLibrary'), text: t('landing.tileLibraryText') },
+  ];
+  return (
+    <section className="entry" aria-label={t('landing.tilesLabel')}>
+      <Container>
+        <ul className="entry__tiles">
+          {tiles.map((tile) => (
+            <li key={tile.href}>
+              <a className="entry__tile" href={tile.href}>
+                <span className="entry__icon" aria-hidden="true">
+                  <Icon name={tile.icon} size={22} />
+                </span>
+                <span className="entry__title">{tile.title}</span>
+                <span className="entry__text">{tile.text}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
       </Container>
     </section>
   );

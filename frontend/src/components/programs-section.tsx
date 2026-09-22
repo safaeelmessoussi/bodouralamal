@@ -78,16 +78,30 @@ export function ProgramsSection(): ReactNode {
 
 function CategoryCard({ category }: { category: PublicProgramCategory }): ReactNode {
   return (
-    <article className="card">
-      <h3>{category.name}</h3>
-      {category.description ? <p className="muted">{category.description}</p> : null}
+    <article className="card programs__card">
+      {/* R170 — the Category is the card's HEADING BAND: name, then what it is
+          in the association's words, then how many Levels it holds. */}
+      <header className="programs__head">
+        <h3>{category.name}</h3>
+        {category.description ? <p className="programs__description">{category.description}</p> : null}
+        <span className="programs__count">
+          {t('programs.levelCount').replace('{n}', String(category.levels.length))}
+        </span>
+      </header>
       {category.levels.length === 0 ? (
         <p className="muted">{t('programs.noLevels')}</p>
       ) : (
         <ul className="programs__levels">
-          {category.levels.map((level) => (
+          {category.levels.map((level, index) => (
             <li key={level.id} className="programs__level">
-              <p className="programs__levelName">{level.name}</p>
+              <p className="programs__levelName">
+                {/* The position in the Category's own order (`/programs` lists
+                    Levels by `display_order`), as a small numeral. */}
+                <span className="programs__levelIndex" aria-hidden="true">
+                  {index + 1}
+                </span>
+                {level.name}
+              </p>
               {level.description ? <p className="muted">{level.description}</p> : null}
               {level.subjects.length > 0 ? (
                 <p className="programs__row">

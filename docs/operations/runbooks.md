@@ -117,7 +117,7 @@ One type has no destruction plan at all, and one is conditional:
 | Type | Reason | What to do instead |
 |---|---|---|
 | `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and institutional records, so destroying it takes their meaning and the record of who acted | Use R111 permanent de-identification. The non-identifying tombstone remains; its personal fields, credentials, planning data and recoverable snapshot do not |
-| `RecurringCourseSchedule` | **Purged WITH its occurrences after the seven days (SRS Revision 170 §8, superseding R118 (1))** — each record-free occurrence and its owned rows go with the class. `SESSIONS_HAVE_RECORDS` refuses while any occurrence is LIVE or carries a student's record (attendance, a recording, an exam sat in it): R133 destroys a person's history only with her own account | Keep it; it is presented as retained. Never delete a Session by SQL. Whether attendance and recordings should go with a class is the one question R170 §8 left with the Owner |
+| `RecurringCourseSchedule` | **Purged WITH its occurrences, their attendance and their recordings after the seven days (SRS Revision 170 §8, superseding R118 (1); the Owner's word of 2026-09-22)** — attendance rows go; a recording becomes an ordinary deleted library item with its quarantine obligation. `SESSIONS_HAVE_EXAMS` refuses while any occurrence is LIVE or an exam was sat in it (R136 keeps an exam's evidence) | Keep it; it is presented as retained. Never delete a Session by SQL |
 
 `QuranProgressLog` is different from account deletion: deleting an account retains every
 institutional progress row, but a teacher's deliberate correction already tombstones one exact

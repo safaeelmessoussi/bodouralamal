@@ -5633,10 +5633,10 @@ The Owner's six replies to Revision 167's report. One migration so far
       same window as everything else. **BUILT** — supersedes R118 (1): past
       occurrences go to the Trash with the class and come back with it; after
       seven days the class is destroyed WITH its record-free occurrences.
-      **One point back to the Owner:** an occurrence carrying attendance, a
-      recording or an exam keeps its class retained (`SESSIONS_HAVE_RECORDS`),
-      because R133 destroys a person's history only with her account — say if
-      a class's attendance and recordings should go with it after seven days.
+      **The Owner (2026-09-22): yes, attendance and recordings go with the
+      class** — built: attendance rows destroyed, recordings become deleted
+      library items with their quarantine obligation; only an exam sat in an
+      occurrence keeps the class (`SESSIONS_HAVE_EXAMS`, R136's evidence).
 - [x] §9 — a closed branch, room or subject still pointed to by old records is
       kept for ever; deletable only once nothing points to it. **CONFIRMED AS
       BUILT (R118 (2)) — nothing changed**: retained while referenced; the nightly
@@ -5689,3 +5689,10 @@ The Owner's six replies to Revision 167's report. One migration so far
       API down for minutes — a fixture title I had renamed is the seed's
       idempotency key on an existing database; title restored, and the drill
       now runs the fixtures seed twice on one database (`verify-production-seed.sh`).
+- [x] **§17 — the landing page redesigned** (the Owner, 2026-09-22): calm hero,
+      second visitor CTA to the programmes, three entry tiles, programme cards
+      with a heading band and numbered Levels, branch lines with icons,
+      partners as a grid. No new data, figure or promise; R138 item 9 stands.
+- [x] `verify-portals` was stale (expected «نقاطي»/«حسابي»/«نقاط الامتحانات»
+      in portal menus — merged, moved and renamed by R153/R146/R165) →
+      expectations updated, 25/25.

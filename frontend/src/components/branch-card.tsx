@@ -1,3 +1,4 @@
+import { Icon } from './ui/icon.js';
 import type { ReactNode } from 'react';
 
 import type { PublicBranch } from '../adapters/branches.js';
@@ -16,23 +17,41 @@ export function BranchCard({ branch }: { branch: PublicBranch }): ReactNode {
     <article className="card branch-card">
       <h3 className="card__title">{branch.name}</h3>
 
-      {branch.address ? <p className="branch-card__address">{branch.address}</p> : null}
+      {/* R170 — each line says what it IS with an icon a phone-sized screen
+          reads faster than a label; the words stay for the screen reader. */}
+      {branch.address ? (
+        <p className="branch-card__line branch-card__address">
+          <span className="branch-card__icon" aria-hidden="true"><Icon name="signal" size={18} /></span>
+          <span>{branch.address}</span>
+        </p>
+      ) : null}
 
       <div className="branch-card__contact">
         {branch.phone ? (
           // `tel:` because on the phones §2.2 targets this is the difference
           // between reading a number and calling it.
-          <a href={`tel:${branch.phone.replace(/\s+/g, '')}`} dir="ltr">
-            {branch.phone}
-          </a>
+          <p className="branch-card__line">
+            <span className="branch-card__icon" aria-hidden="true"><Icon name="user" size={18} /></span>
+            <a href={`tel:${branch.phone.replace(/\s+/g, '')}`} dir="ltr">
+              {branch.phone}
+            </a>
+          </p>
         ) : null}
-        {branch.email ? <a href={`mailto:${branch.email}`} dir="ltr">{branch.email}</a> : null}
+        {branch.email ? (
+          <p className="branch-card__line">
+            <span className="branch-card__icon" aria-hidden="true"><Icon name="document" size={18} /></span>
+            <a href={`mailto:${branch.email}`} dir="ltr">{branch.email}</a>
+          </p>
+        ) : null}
       </div>
 
       {branch.opening_hours_ar ? (
         // Free multiline Arabic text, displayed verbatim and never parsed (§7).
         // `white-space: pre-line` is what preserves the author's line breaks.
-        <p className="branch-card__hours">{branch.opening_hours_ar}</p>
+        <p className="branch-card__line branch-card__hours">
+          <span className="branch-card__icon" aria-hidden="true"><Icon name="calendar" size={18} /></span>
+          <span>{branch.opening_hours_ar}</span>
+        </p>
       ) : null}
 
       <div className="branch-card__action">

@@ -48,6 +48,19 @@ const superAdmin = (): Actor => ({
 });
 
 async function cleanup(): Promise<void> {
+  // A recording the §8 purge turned into a deleted library item (with the
+  // Trash row, the obligation and the audit it wrote) — FIRST, because it
+  // references the suite's Level, which is deleted below.
+  const recordings = await prisma.educationalContent.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const recIds = recordings.map((r) => r.id);
+  await prisma.sessionRecording.deleteMany({ where: { educationalContentId: { in: recIds } } });
+  await prisma.storageRetirement.deleteMany({ where: { contentId: { in: recIds } } });
+  await prisma.trash.deleteMany({ where: { targetEntity: 'EducationalContent', targetId: { in: recIds } } });
+  await prisma.auditLog.deleteMany({ where: { targetId: { in: recIds } } });
+  await prisma.educationalContent.deleteMany({ where: { id: { in: recIds } } });
   // The 2026-09-02 lifecycle fixtures build a schedule (and sometimes an
   // occurrence) of their own. Sessions are RESTRICT against the schedule, so
   // they go first; every row here is created by this suite and tagged.
@@ -58,7 +71,10 @@ async function cleanup(): Promise<void> {
   if (mySchedules.length > 0) {
     const ids = mySchedules.map((s) => s.id);
     await prisma.attendance.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+    await prisma.sessionRecording.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+    await prisma.exam.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
     await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
+
     await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
@@ -590,18 +606,45 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
   });
 
   /**
-   * **R170 §8 (the Owner, 2026-09-21) supersedes R118 (1).** A deleted class
-   * leaves the Trash after seven days WITH its occurrences. What keeps it is an
-   * occurrence carrying a student's record (R133: her history goes only with her
-   * account) — or a LIVE one.
+   * **R170 §8 (the Owner, 2026-09-21, completed 2026-09-22) supersedes R118 (1).**
+   * A deleted class leaves the Trash after seven days WITH its occurrences —
+   * their attendance and their recordings included, at her word. What keeps it
+   * is an occurrence an EXAM was sat in (R136's evidence), or a LIVE one.
    */
-  it('R170 §8 — a schedule whose occurrences carry NO record is destroyed WITH them', async () => {
+  it('R170 §8 — a schedule is destroyed WITH its occurrences, their attendance and their recordings', async () => {
     const { scheduleId, entryId } = await deletedSchedule(true);
-    // In the Trash with its class (as `deleteSchedule` writes it since R170).
-    await prisma.session.updateMany({
-      where: { scheduleId },
-      data: { deletedAt: new Date(), deletedById: actorUserId },
+    const session = await prisma.session.findFirstOrThrow({ where: { scheduleId }, select: { id: true } });
+    const student = await prisma.user.create({
+      data: { nameArabic: `${TAG} حاضرة`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
     });
+    await prisma.attendance.create({
+      data: { sessionId: session.id, occurrenceDate: new Date('2026-09-07'), studentId: student.id, markedById: actorUserId },
+    });
+    const { levelId, subjectId } = await curriculum();
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const recordingId = randomUUID();
+    const recording = await prisma.educationalContent.create({
+      data: {
+        id: recordingId,
+        title: `${TAG} تسجيل الحصة`,
+        levelId,
+        subjectId,
+        academicYearId: year.id,
+        origin: 'session_recording',
+        visibility: 'private',
+        storageBucket: 'private',
+        // The canonical shape (TD-9): the obligation refuses anything else.
+        storageKey: `content/${recordingId}/aa/bb/rec.mp4`,
+        originalFilename: 'rec.mp4',
+        mimeType: 'audio/mp4',
+        sizeBytes: BigInt(10),
+      },
+    });
+    await prisma.sessionRecording.create({
+      data: { sessionId: session.id, startedById: actorUserId, status: 'completed', educationalContentId: recording.id },
+    });
+    // In the Trash with its class (as `deleteSchedule` writes it since R170).
+    await prisma.session.updateMany({ where: { scheduleId }, data: { deletedAt: new Date(), deletedById: actorUserId } });
     const listed = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
     ).data.find((r) => r.targetId === scheduleId)!;
@@ -610,12 +653,18 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     await purgeEntry(prisma, superAdmin(), entryId);
     expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(0);
     expect(await prisma.session.count({ where: { scheduleId } })).toBe(0);
-    expect(await prisma.trash.count({ where: { id: entryId } })).toBe(0);
+    expect(await prisma.attendance.count({ where: { studentId: student.id } })).toBe(0);
+    // The recording became an ordinary deleted library item: in the Trash,
+    // with the obligation that moves its file — never an orphan.
+    const rec = await prisma.educationalContent.findUniqueOrThrow({ where: { id: recording.id } });
+    expect(rec.deletedAt).not.toBeNull();
+    expect(await prisma.trash.count({ where: { targetEntity: 'EducationalContent', targetId: recording.id } })).toBe(1);
+    expect(await prisma.storageRetirement.count({ where: { contentId: recording.id, operation: 'quarantine_retired_object' } })).toBe(1);
     const trail = await prisma.auditLog.findFirst({
       where: { actionType: 'trash.permanent_delete', targetId: scheduleId },
       orderBy: { createdAt: 'desc' },
     });
-    expect(trail?.detail).toMatchObject({ sessions_purged: 1 });
+    expect(trail?.detail).toMatchObject({ sessions_purged: 1, attendance_purged: 1, recordings_deleted: 1 });
   });
 
   it('R170 §8 — a LIVE occurrence still keeps its class: nothing is destroyed from under the calendar', async () => {
@@ -624,38 +673,36 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
     ).data.find((r) => r.targetId === scheduleId)!;
     expect(listed.purgeable).toBe(false);
-    expect(listed.purgeBlockedReason).toBe('SESSIONS_HAVE_RECORDS');
+    expect(listed.purgeBlockedReason).toBe('SESSIONS_HAVE_EXAMS');
     await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_RECORDS' }),
+      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_EXAMS' }),
     });
     expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
   });
 
-  it('R170 §8 — an occurrence that carries a STUDENT’S RECORD keeps its class, and is never destroyed with it', async () => {
+  it('R170 §8 — an occurrence an EXAM was sat in keeps its class: an exam’s evidence never goes with a class', async () => {
     const { scheduleId, entryId } = await deletedSchedule(true);
     const session = await prisma.session.findFirstOrThrow({ where: { scheduleId }, select: { id: true } });
-    const student = await prisma.user.create({
-      data: { nameArabic: `${TAG} حاضرة`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
-    });
-    await prisma.attendance.create({
+    const { levelId, subjectId } = await curriculum();
+    const exam = await prisma.exam.create({
       data: {
+        title: `${TAG} اختبار في الحصة`,
+        levelId,
+        subjectId,
+        date: new Date('2026-09-07'),
+        maxGrade: 20,
+        targetKind: 'session',
         sessionId: session.id,
-        occurrenceDate: new Date('2026-09-07'),
-        studentId: student.id,
-        markedById: actorUserId,
+        status: 'published',
       },
     });
-    await prisma.session.updateMany({
-      where: { scheduleId },
-      data: { deletedAt: new Date(), deletedById: actorUserId },
-    });
+    await prisma.session.updateMany({ where: { scheduleId }, data: { deletedAt: new Date(), deletedById: actorUserId } });
     await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_RECORDS' }),
+      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_EXAMS' }),
     });
-    // The class, the occurrence and the record are all still there — R133.
     expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(1);
     expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
-    expect(await prisma.attendance.count({ where: { sessionId: session.id } })).toBe(1);
+    await prisma.exam.delete({ where: { id: exam.id } });
   });
 
   it('unblocks its AdministrativeGroup once the empty schedule is purged (ordered)', async () => {

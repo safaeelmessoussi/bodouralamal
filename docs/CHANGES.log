@@ -11513,3 +11513,30 @@ the seed drill ran `seed:fixtures` once, on an empty database — never the depl
 It now runs it twice on one database and asserts the second run added nothing (exit 0, 4 fixture
 content rows both times). Two lessons kept in memory: a rename in a seed is a data change; a
 deployment step that stops the API must be rehearsed exactly as it runs.
+
+## 2026-09-22 — SRS Revision 170, part four: §8 completed at the Owner's word, and the landing page redesigned
+
+**§8 completed.** The Owner answered the one open point: a deleted class's attendance and recordings
+go with it after seven days. `purgeScheduleSessions` now deletes each occurrence's attendance rows and
+turns each recording it produced into an ordinary deleted library item (Trash snapshot + exact-key
+quarantine obligation, so the file follows the content lifecycle instead of becoming an orphan);
+`SESSIONS_HAVE_RECORDS` → `SESSIONS_HAVE_EXAMS`: only an exam sat in an occurrence keeps a class
+(R136's evidence). The audit row counts `sessions_purged`, `attendance_purged`, `recordings_deleted`.
+Trash-lifecycle tests restated (three §8 cases; cleanup extended) — 124/124 with the Trash and
+course-schedule suites.
+
+**The landing page** (her words: «beautiful, elegant, user friendly, easy to use»). The checkerboard
+motif behind the hero is gone (a calm gradient with one glow and a fine ring — CSS only); a second
+visitor CTA «اكتشفي برامجنا» beside «تسجيل الدخول» (a signed-in reader still gets no CTA block — R138
+item 9, and its test caught my first draft); three entry tiles lifted into the hero's edge (programmes ·
+timetable · library, each a public route); programme cards with a heading band and numbered Level
+rows; branch cards with an icon per line; partners as a grid of equal cards. Looked at on desktop
+and at 400 px. The atomic-components guard also caught a hand-written `btn` class — replaced by
+`ButtonLink`.
+
+**Harness repaired in passing:** `verify-portals` expected «نقاطي», «حسابي» and «نقاط الامتحانات» in
+portal menus — merged into اختباراتي (R153), moved to the header (R146) and renamed (R165) — 25/25 now.
+
+**Verification.** Frontend 1,490/1,490; backend typecheck/lint/unit; Trash + schedule integration
+124/124 on a disposable stack; browser: platform-owner-framing 23/23, error-experience 7/7, portals
+25/25 (after the repair).
