@@ -11547,3 +11547,31 @@ Recordings asked first; dump taken; two older release images removed (23 GiB fre
 labels exact; no pending migration; both seeds clean; TLS active; `/healthz` 200, `/rtc/validate`
 401; zero error-level lines.
 
+## 2026-09-22 — three Staging defects the Owner met, fixed before anything else
+
+**(1) «عدّل مستخدم آخر هذا السجل» on «إضافة عنصر».** She scheduled «دورة علوم القرآن» for six Women's
+Levels; one teaches it. The server refused correctly (`SUBJECT_NOT_IN_LEVEL`, R155 — every Level a
+class names must teach its Subject) but الجدولة had no words for that code and fell back to the
+generic 409, the concurrency sentence. The policy now names `level_name`/`subject_name` in the
+details (reference data, never a person) and the form says: «المستوى «المرأة — نور الأمل» لا تُدرَّس
+فيه مادة «دورة علوم القرآن». أزيليه من المستويات المختارة، أو أضيفي المادة إلى مواده من «المستويات»
+أولًا.» Pinned in `educational-organisation.integration`.
+
+**(2) A recording that would not save.** From «مكتبة المحتوى» with no Subject filter the server
+suggests no name (R75.6: nothing to name after), the recorder's comment said «neither can be empty in
+practice», and the completion schema refused the empty `title` — after a fifteen-second upload,
+twice (Staging log: PUT 200 ×2, then `complete` 400 in 8 ms). The recorder asks for the name BEFORE
+uploading (required, its own hint when nothing is suggested, 120-character bound = the schema's) and
+says so on the field. Source-pinned test.
+
+**(3) DELETE on library items → 500.** The seed's four fixture items were keyed `content/fixture-N/…`;
+every storage obligation requires `content/<id>/…` and threw a bare Error → «حدث خطأ غير متوقع».
+The seed mints the id first and keys canonically; migration `20260925110000` repairs the rows already
+seeded (Localhost 4 → 0, Staging on deploy); and a non-canonical key answers `STATE_CONFLICT /
+NON_CANONICAL_COORDINATE` instead of crashing. Pinned in `content.integration`.
+
+**Verification.** Frontend 1,493/1,493; backend unit 371/371; content + educational-organisation +
+course-schedule + session HTTP integration 227/227 on a disposable stack; Localhost rebuilt and
+migrated; browser: recorder 22/22, library-recorder 16/16, content-visibility 24/24, class-filters
+21/21.
+

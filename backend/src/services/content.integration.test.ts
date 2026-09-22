@@ -1155,6 +1155,23 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     expect(row.title).toBe(`${TAG} خارج النطاق`);
   });
 
+  it("refuses to delete a row whose key is not canonical — a coded 409, never a 500 (Staging, 2026-09-22)", async () => {
+    // The seed once wrote fixture rows keyed `content/fixture-N/…`; every storage
+    // obligation requires `content/<id>/…`, and the bare Error it threw reached
+    // the Owner as «حدث خطأ غير متوقع». Such a row is refused in words now.
+    const { id } = await uploadPdf(admin(), "مفتاح قديم");
+    await prisma.educationalContent.update({
+      where: { id },
+      data: { storageKey: "content/fixture-9/a1b2c3d4/fixture-file-9.pdf" },
+    });
+    await expect(deleteContent(prisma, clients, admin(), id)).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      details: expect.objectContaining({ reason: "NON_CANONICAL_COORDINATE" }),
+    });
+    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { deletedAt: true } });
+    expect(row.deletedAt).toBeNull();
+  });
+
   it("R170 §3 — PUBLISHES a warned recording: nothing is forced, the warning is the staff member's to weigh", async () => {
     const { id } = await uploadPdf(admin(), "تسجيل", {
       origin: "session_recording",

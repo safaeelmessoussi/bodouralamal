@@ -5700,4 +5700,15 @@ The Owner's six replies to Revision 167's report. One migration so far
       at `142631c`** from `5a5d036` — recordings asked first; dump taken; no
       pending migration; `seed:fixtures` ran clean this time; `/healthz` 200;
       zero error lines.
+- [x] **Three Staging defects the Owner met on 2026-09-22, fixed first:**
+      (1) «إضافة عنصر» refused a class whose chosen Levels do not all teach the
+      Subject (`SUBJECT_NOT_IN_LEVEL`, R155's rule) but الجدولة showed the
+      CONCURRENCY sentence — it now names the Level and the Subject and what to
+      do; (2) the recorder on «مكتبة المحتوى» with no Subject in view suggested
+      no name, uploaded for fifteen seconds and was refused by the completion
+      schema (empty `title`) — the name is asked before a byte is spent, the
+      field says so; (3) DELETE on the seed's fixture library items answered
+      500 — their keys were `content/fixture-N/…`, not canonical: seed fixed,
+      rows repaired by migration `20260925110000`, and a non-canonical key is a
+      coded 409 (`NON_CANONICAL_COORDINATE`) now, never a crash.
 

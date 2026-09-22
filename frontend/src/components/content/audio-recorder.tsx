@@ -86,6 +86,10 @@ export interface AudioRecorderProps {
 
 type RecorderState = 'idle' | 'recording' | 'paused' | 'saving';
 
+/** §7: `EducationalContent.title` is `VarChar(120)` (TD-9) — the same bound the
+ *  completion schema holds; asked here first so no upload is spent on it. */
+export const RECORDING_NAME_MAX = 120;
+
 export function AudioRecorder({
   meta,
   token,
@@ -106,6 +110,7 @@ export function AudioRecorder({
   const [error, setError] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
   const [title, setTitle] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [backgrounded, setBackgrounded] = useState(false);
 
@@ -208,13 +213,24 @@ export function AudioRecorder({
 
   async function save(): Promise<void> {
     if (blob === null) return;
+    // The typed name wins; the server's suggestion fills an untouched field.
+    // **Both CAN be empty**: «مكتبة المحتوى» offers the recorder with no
+    // Subject in view, and then suggests nothing (R75.6 — nothing to name
+    // after). The Owner met that on 2026-09-22: a fifteen-second upload, then
+    // «تعذّر الحفظ» from the completion's schema (`title` 1–120). So the rule is
+    // asked HERE, before a byte is spent, in her words and on the field.
+    const name = title.trim() === '' ? suggestedName.trim() : title.trim();
+    if (name === '') {
+      setNameError(t('recorder.nameRequired'));
+      return;
+    }
+    if (name.length > RECORDING_NAME_MAX) {
+      setNameError(t('recorder.nameTooLong').replace('{max}', String(RECORDING_NAME_MAX)));
+      return;
+    }
+    setNameError(null);
     setState('saving');
     setError(null);
-    // The typed name wins; the server's suggestion fills an untouched field.
-    // Neither can be empty in practice — a screen that cannot name a recording
-    // does not offer the recorder — and an empty one would be refused by the
-    // upload schema anyway, which is the right place for that rule.
-    const name = title.trim() === '' ? suggestedName.trim() : title.trim();
     // The extension follows the MIME the browser agreed to: the server checks
     // the declared type AND the magic bytes (TD-9), so a mismatched name is
     // rejected at `complete`, after the whole upload has been spent.
@@ -336,9 +352,14 @@ export function AudioRecorder({
           <TextField
             label={t('recorder.name')}
             value={title}
-            onChange={setTitle}
+            onChange={(next) => {
+              setTitle(next);
+              setNameError(null);
+            }}
             placeholder={suggestedName}
-            hint={t('recorder.nameHint')}
+            required={suggestedName.trim() === ''}
+            hint={t(suggestedName.trim() === '' ? 'recorder.nameHintNoSuggestion' : 'recorder.nameHint')}
+            error={nameError}
           />
           {state === 'saving' ? (
             <progress className="upload__progress" value={percent} max={100} />

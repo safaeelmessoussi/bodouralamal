@@ -154,6 +154,14 @@ const STAFFING_REFUSALS: Record<string, string> = {
   EXAM_STAFF_DUPLICATE: 'admin.schedules.examStaffDuplicate',
   /** R169 §7 — «الكل» was chosen for a Subject no Level teaches: nobody to reach. */
   NO_LEVEL_TEACHES_SUBJECT: 'admin.schedules.noLevelTeachesSubject',
+  /**
+   * **A chosen Level does not teach the Subject** (`policies/curriculum.ts`,
+   * R155). It came back as the generic 409 — «عدّل مستخدم آخر هذا السجل» — a
+   * sentence about concurrency for a fact about the curriculum (the Owner,
+   * 2026-09-22: six Levels chosen, one teaching the Subject). Named now, with
+   * the Level and the Subject filled in below.
+   */
+  SUBJECT_NOT_IN_LEVEL: 'admin.schedules.subjectNotInLevel',
 };
 
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;
@@ -2288,7 +2296,12 @@ export function SchedulingDialog({
         typeof (error.details as { reason?: string } | undefined)?.reason === 'string' &&
         STAFFING_REFUSALS[(error.details as { reason: string }).reason] !== undefined
       ) {
-        setNotice(t(STAFFING_REFUSALS[(error.details as { reason: string }).reason]!));
+        const details = error.details as { reason: string; level_name?: string | null; subject_name?: string | null };
+        setNotice(
+          t(STAFFING_REFUSALS[details.reason]!)
+            .replace('{level}', details.level_name ?? '…')
+            .replace('{subject}', details.subject_name ?? '…'),
+        );
       } else if (error instanceof ApiError && error.status === 409) {
         setNotice(t('common.conflict'));
       } else {

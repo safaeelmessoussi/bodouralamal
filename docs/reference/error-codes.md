@@ -106,7 +106,8 @@ generic message for all of these is hiding the only useful part of the answer.**
 
 | `reason` | Raised by | The user's next step |
 |---|---|---|
-| `SUBJECT_NOT_IN_LEVEL` | Creating a Teaching Group | Assign the Subject to the Level first (§4.4b) |
+| `SUBJECT_NOT_IN_LEVEL` | Creating a Teaching Group, scheduling a class, filing content | Assign the Subject to the Level first (§4.4b). Since 2026-09-22 the details name `level_name` and `subject_name`, and الجدولة says which Level — it used to fall back to the concurrency sentence |
+| `NON_CANONICAL_COORDINATE` | `DELETE /content/{id}` (and any storage obligation) on a row whose key is not `content/<id>/…` | Repair the row's key; only the seed's pre-2026-09-22 fixture rows ever had one (repaired by migration `20260925110000`). It used to be a 500 |
 | `TEACHING_GROUPS_EXIST` | Removing a Subject from a Level | Delete the splits first — their members would otherwise hold seats in a subject that is not offered |
 | `SCHEDULES_EXIST` | Deleting a Teaching Group | Move or delete the timetable entries that target it |
 | `ALREADY_IN_SUBJECT_SPLIT` | Placing a student | They are in another split of the same Subject — the intent was almost certainly a *move* |

@@ -1,3 +1,4 @@
+import { AppError } from '../lib/errors.js';
 import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { assertQueueRegistered, enqueue, JOB_QUEUES, legacyStorageJobs } from './jobs.repository.js';
@@ -15,7 +16,13 @@ export interface RetirementInput {
 export async function requireRetirement(tx: Prisma.TransactionClient, input: RetirementInput, renewResolved = false) {
   if (!['public', 'private'].includes(input.bucket) ||
       !input.storageKey.startsWith(`content/${input.contentId}/`)) {
-    throw new Error('retirement requires an exact canonical coordinate');
+    // A coded refusal, not a crash: a row whose key is not `content/<id>/…`
+    // cannot be given a storage obligation, and the person deleting it must
+    // be told so rather than shown «حدث خطأ غير متوقع» (Staging, 2026-09-22:
+    // four fixture rows keyed `content/fixture-N/…`). The row is untouched.
+    throw new AppError('STATE_CONFLICT', 'this item has no canonical storage coordinate', {
+      reason: 'NON_CANONICAL_COORDINATE',
+    });
   }
   const dedupKey = createHash('sha256').update(JSON.stringify([
     'storage-retirement-v1', input.operation, input.bucket, input.storageKey,

@@ -33,7 +33,7 @@ import { AppError } from '../lib/errors.js';
 
 /** Accepts a transaction client so the check joins the caller's transaction —
  *  a pairing verified outside it could be revoked before the write lands. */
-type Db = Pick<Prisma.TransactionClient, 'levelSubject'>;
+type Db = Pick<Prisma.TransactionClient, 'levelSubject' | 'level' | 'subject'>;
 
 export async function assertSubjectTaughtAtLevel(
   db: Db,
@@ -55,10 +55,19 @@ export async function assertSubjectTaughtAtLevel(
   });
 
   if (!assigned) {
+    // Named, so the screen can say WHICH Level (the Owner met this as the
+    // concurrency sentence on 2026-09-22 — a class for six Levels of which five
+    // do not teach the Subject). Reference-data names, never a person's.
+    const [level, subject] = await Promise.all([
+      db.level.findUnique({ where: { id: levelId }, select: { name: true, category: { select: { name: true } } } }),
+      db.subject.findUnique({ where: { id: subjectId }, select: { name: true } }),
+    ]);
     throw new AppError('STATE_CONFLICT', 'subject is not assigned to this level', {
       reason: 'SUBJECT_NOT_IN_LEVEL',
       level_id: levelId,
       subject_id: subjectId,
+      level_name: level ? `${level.category.name} — ${level.name}` : null,
+      subject_name: subject?.name ?? null,
     });
   }
 }

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   ConsentMethod,
   ConsentType,
@@ -635,8 +635,15 @@ async function main(): Promise<void> {
       where: { title, deletedAt: null },
     });
     if (!existing) {
+      // The key must be the CANONICAL shape `content/<id>/…` (TD-9): every
+      // storage obligation refuses any other, so a fixture keyed
+      // `content/fixture-0/…` could be listed but never deleted — DELETE
+      // answered 500 on Staging (2026-09-22). The id is minted first so the
+      // key can carry it.
+      const id = randomUUID();
       await prisma.educationalContent.create({
         data: {
+          id,
           title,
           visibility: spec.visibility,
           mediaConsentMissing: spec.forced,
@@ -649,7 +656,7 @@ async function main(): Promise<void> {
           // Hash-segmented immutable key shape (TD-9); visibility is never
           // encoded in the key — the bucket carries it.
           storageBucket: spec.visibility === Visibility.public ? 'public' : 'private',
-          storageKey: `content/fixture-${index}/a1b2c3d4/fixture-file-${index}.pdf`,
+          storageKey: `content/${id}/a1b2c3d4/fixture-file-${index}.pdf`,
           originalFilename: `fixture-${index}.pdf`,
           mimeType: 'application/pdf',
           sizeBytes: BigInt(1024 * (index + 1)),

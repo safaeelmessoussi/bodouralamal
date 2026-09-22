@@ -825,6 +825,10 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       }),
     );
     expect(err.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
+    // 2026-09-22 — NAMED, so a screen can say which Level and which Subject
+    // instead of the concurrency sentence the Owner met (reference-data names).
+    expect(err.details?.["subject_name"]).toBe(`${TAG} مادة غريبة`);
+    expect(String(err.details?.["level_name"])).toContain(" — ");
   });
 });
 
