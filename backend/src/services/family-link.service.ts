@@ -204,9 +204,10 @@ export async function decideLink(
     });
   }
 
-  // §7's attribution invariant: who asked, who decided and why must be
-  // reconstructable from the audit row alone, without reading a row that is now
-  // soft-deleted. Ids and a reason only — never a name (TD-14).
+  // §7's attribution invariant: who asked and who decided are reconstructable
+  // from the audit row alone. The WHY — a person's sentence about a person — is
+  // on the link's own `decision_reason` (and in its Trash snapshot), never in
+  // the audit (R170 §18: fixed codes there, the sentence on the record).
   await audit.write(tx, {
     actorUserId: actor.userId,
     activeRole: actor.activeRole,
@@ -216,7 +217,7 @@ export async function decideLink(
     detail: {
       parent_id: link.parentId,
       student_id: link.studentId,
-      ...(reason ? { reason } : {}),
+      reason_recorded: Boolean(reason),
     },
   });
 }
@@ -263,7 +264,10 @@ export async function revokeLink(
     // TD-4.8: soft delete + Trash snapshot + audit, all in one transaction.
     await tx.familyLink.update({
       where: { id: link.id },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      // R170 §18 — the sentence lives on the record it is about (kept while
+      // the soft-deleted link is retained, gone with it); the audit row below
+      // says only THAT one was recorded.
+      data: { deletedAt: new Date(), deletedById: actor.userId, ...(reason ? { decisionReason: reason } : {}) },
     });
     await trash.snapshot(tx, {
       targetEntity: 'FamilyLink',
@@ -287,10 +291,11 @@ export async function revokeLink(
       actionType: 'familylink.revoke',
       targetEntity: 'FamilyLink',
       targetId: link.id,
-      // TD-8: link parties, actor, reason. The actor is `actor_user_id`; §7's
-      // attribution invariant requires who/when/why to be reconstructable from
-      // the audit row alone, without reading the (now soft-deleted) link.
-      detail: { parent_id: link.parentId, student_id: link.studentId, reason },
+      // TD-8: link parties and actor. §7's attribution invariant (who/when) is
+      // met by the row alone; the WHY — a person's sentence about a person — is
+      // on the link's own `decision_reason` (R170 §18: fixed codes in the audit,
+      // the sentence only on the record that owns it).
+      detail: { parent_id: link.parentId, student_id: link.studentId, reason_recorded: Boolean(reason) },
     });
     await notifySubjectUserChange(tx, {
       type: 'family_link_revoked',

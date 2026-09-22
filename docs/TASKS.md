@@ -5500,7 +5500,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       yes). Job failures and queue lag can be read from PostgreSQL now; backup
       failure and TLS expiry live on the HOST, which the API container cannot
       see — they need the host monitor to write its status where the API reads.
-- [ ] **Automatic grading components (the Owner: build).** NOT started, and said
+- [x] **[Decided 2026-09-22 — not before launch (R170 §20).]** **Automatic grading components (the Owner: build).** NOT started, and said
       why: the SRS lists the grading-template engine as «not present by design»
       (§10.1, §20 rule 16 — «do not pre-create»), and it has no tables, weights
       or screens specified to the point of building. Needs a proposal first.
@@ -5581,7 +5581,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       a class with Level, group and circle all left at «الكل»; delete a حلقة
       with no class and restore it from «سلة المحذوفات»; «مكتبة المحتوى» →
       تعديل → «مستويات أخرى ينتمي إليها»; and «حالة النظام».
-- [ ] **AUTOMATIC GRADING COMPONENTS — the Owner said «build this»; NOT started,
+- [x] **[Decided 2026-09-22 — the Owner: not before launch (R170 §20).]** **AUTOMATIC GRADING COMPONENTS — the Owner said «build this»; NOT started,
       and the reason is hers to weigh.** It is the weight-template engine she
       herself postponed to after launch (R12/R13, «deadline protection»; §10.1
       «do not pre-create»): weighted averages, a Draft↔Active template per
@@ -5673,11 +5673,13 @@ The Owner's six replies to Revision 167's report. One migration so far
       journeys need the Owner's own sign-in (Google) for the steps a minted
       session cannot stand in for, so the next session begins by running the
       §18 list against Staging and recording each row's evidence here.
-- [ ] **Still the Owner's, one sentence each:** the login audit — keep the
-      e-mail, or the user id only? (her answer named both); exact storage keys
-      vs a non-reversible id in the audit; free text vs fixed codes in the
-      audit; and whether the automatic grading components are wanted BEFORE
-      launch.
+- [x] **Answered by the Owner, 2026-09-22 — built as R170 §18–§20:** user id only
+      in the login audit (TD-8 grid reconciled; the code already complied);
+      content id + digest for storage coordinates (already the practice,
+      recorded); fixed codes in the audit, the sentence on the record
+      (`reason_recorded`; `familylink.*`, `user.reject`, `rolerequest.decline`);
+      the circle picker defaults to beneficiaries with «إظهار الجميع»; NO
+      automatic grading components before launch.
 - [x] **Additional defect found by `verify-sorting` (2026-09-22), fixed:**
       «التسجيلات» forwarded `sort_by=first_name|last_name` to a read whose
       allow-list did not know them → 400 → blank table on the first header
@@ -5711,4 +5713,7 @@ The Owner's six replies to Revision 167's report. One migration so far
       500 — their keys were `content/fixture-N/…`, not canonical: seed fixed,
       rows repaired by migration `20260925110000`, and a non-canonical key is a
       coded 409 (`NON_CANONICAL_COORDINATE`) now, never a crash.
+- [x] **Date bomb found by CI (2026-09-22, 10:00 UTC): two `refresh-token`
+      tests used the fixed clock `2026-08-23`, whose successor tokens expired
+      today — anchored to `Date.now() - 60 s`. Not a product defect.**
 

@@ -31,7 +31,7 @@ import {
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { CheckboxField, SelectField, TextField } from '../../components/ui/field.js';
 import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -552,6 +552,16 @@ function RosterDialog({
     void load();
   }, [load]);
 
+  /**
+   * **Beneficiaries by default, everyone on request** (the Owner, 2026-09-22 —
+   * R170 §19). This picker offered every active account: teachers,
+   * administrators and guardians among the مستفيدات, because nothing marked a
+   * beneficiary before her first placement. `is_beneficiary` (R79.7) does, and
+   * a mother enrolling her daughter's circle should not have to scroll past the
+   * staff to find her. «إظهار الجميع» is the way back for the rare case.
+   */
+  const [everyone, setEveryone] = useState(false);
+
   // **Loaded on open, not on keystroke.** One read of the accounts the server
   // lets this caller see; the control filters that list client-side.
   useEffect(() => {
@@ -561,12 +571,12 @@ function RosterDialog({
     }
     void (async () => {
       try {
-        setCandidates((await searchDirectory(token, {})).data);
+        setCandidates((await searchDirectory(token, everyone ? {} : { beneficiaries_only: 'true' })).data);
       } catch {
         setCandidates([]);
       }
     })();
-  }, [group, canWrite, token]);
+  }, [group, canWrite, token, everyone]);
 
   /** Already on this roster — excluded, because offering them offers a refusal. */
   const onRoster = new Set(entries.map((e) => e.student_id));
@@ -614,10 +624,18 @@ function RosterDialog({
             options={offerable}
             value={picked}
             onChange={setPicked}
-            hint={t('admin.groups.findStudentHint')}
+            hint={t(everyone ? 'admin.groups.findStudentHintEveryone' : 'admin.groups.findStudentHint')}
             emptyLabel={t('admin.groups.noCandidates')}
             disabled={busy}
           />
+          <div data-picker-scope>
+            <CheckboxField
+              label={t('admin.groups.showEveryone')}
+              checked={everyone}
+              onChange={setEveryone}
+              hint={t('admin.groups.showEveryoneHint')}
+            />
+          </div>
           <div className="form__actions">
             <Button
               variant="add"

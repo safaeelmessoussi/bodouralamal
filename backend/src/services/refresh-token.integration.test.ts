@@ -554,7 +554,13 @@ describe("§18 token lifecycle acceptance criteria", () => {
 
   it("R101 — purge cannot remove a predecessor anchor and make logout lose the successor", async () => {
     const userId = await makeUser();
-    const refreshAt = new Date("2026-08-23T10:00:00.000Z");
+    // **Anchored to the wall clock, not a date.** This was `2026-08-23T10:00Z`,
+    // so the successor minted at `refreshAt` reached its 30-day expiry at
+    // exactly that hour on 2026-09-22 — and from then on the last assertion saw
+    // «rejected» (expired) where it expects «reuse_detected». A minute ago is
+    // the same scenario every day: the predecessor a millisecond inside its
+    // window at `refreshAt`, the successor valid for the rest of the month.
+    const refreshAt = new Date(Date.now() - 60_000);
     const issuedAt = new Date(refreshAt.getTime() - (30 * 24 * 60 * 60 * 1000) + 1);
     const purgeAt = new Date(refreshAt.getTime() + 2);
     const predecessor = await issueNewSession(prisma, userId, issuedAt);
@@ -638,7 +644,8 @@ describe("§18 token lifecycle acceptance criteria", () => {
 
   it("R101 — purge after rotation removes only the expired predecessor and leaves the session usable", async () => {
     const userId = await makeUser();
-    const refreshAt = new Date("2026-08-23T11:00:00.000Z");
+    // Anchored like the test above (a fixed date expired on 2026-09-22).
+    const refreshAt = new Date(Date.now() - 60_000);
     const issuedAt = new Date(refreshAt.getTime() - (30 * 24 * 60 * 60 * 1000) + 1);
     const predecessor = await issueNewSession(prisma, userId, issuedAt);
     const refreshed = await rotate(prisma, predecessor.rawToken, refreshAt);

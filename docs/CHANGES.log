@@ -11575,3 +11575,30 @@ course-schedule + session HTTP integration 227/227 on a disposable stack; Localh
 migrated; browser: recorder 22/22, library-recorder 16/16, content-visibility 24/24, class-filters
 21/21.
 
+## 2026-09-22 — SRS Revision 170, part five: what the audit keeps (§18), the circle picker (§19), no grading engine before launch (§20)
+
+**§18 — three answers.** (a) User id only in the login audit: the code had complied with TD-14
+since Revision 15; TD-8's grid row still promised «identity email» — reconciled, and the audit page's
+I.8 row closed. (b) Storage coordinates as content id + SHA-256 digest: already every content audit
+row's practice (`storageCoordinateId`); recorded as the rule. (c) Fixed codes in the audit, the
+sentence on the record: `rolerequest.decline`, `user.reject` (both bundle rows), `familylink.approve
+| reject | revoke` and `familylink.identity_review` no longer carry the approver's or reviewer's
+sentence — `reason_recorded: true` (and R170 §11's `reason_shared`) say that one exists on
+`role_request.decline_reason` / `family_link.decision_reason`, which the identity-review revoke and
+the plain revoke now WRITE (they used to keep the sentence in the audit only). Two family-link tests
+restated to assert the sentence on the row and its absence from the audit.
+
+**§19.** «إضافة مستفيدة إلى المجموعة» (circle membership) lists beneficiaries (`beneficiaries_only`)
+by default and offers «إظهار الجميع»; its hint said «كل الحسابات النشطة معروضة» and now says what is
+shown. «التسجيلات» already united the Student role with `is_beneficiary`.
+
+**Verification.** Frontend 1,493/1,493; backend typecheck/lint; family-link + role-request +
+approval + approval HTTP + family-link HTTP integration 105/105 on a disposable stack.
+
+**Hosted CI on `d9b1051` (the three fixes) failed one integration test twice — a date bomb, not the
+fixes:** `refresh-token.integration` «R101 — purge cannot remove a predecessor anchor …» used the
+fixed clock `2026-08-23T10:00Z`, so its successor token reached the 30-day expiry at 10:00 UTC on
+2026-09-22 and the last assertion saw «rejected» (expired) instead of «reuse_detected». My local full
+run passed at 06:xx UTC; CI ran at 17:08. Both tests in that file are anchored to the wall clock now
+(a minute ago, the same scenario every day); 24/24.
+

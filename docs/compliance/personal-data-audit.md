@@ -631,7 +631,7 @@ how backup retention interacts with an erasure obligation.
 | **I.5** | Backup **retention** period unset — an erased record may survive in backups indefinitely | Medium | See H.4. The policy itself exists and is sound |
 | **I.6** | **No emergency contact** | Medium | Safeguarding gap (C) |
 | **I.7** | `data_processing` consent exists but is **not enforced as a gate** on registration **[CONFIRM]** | Medium | Verify the flow records it before processing begins |
-| **I.8** | ~~No documented minimisation rule for audit `detail`~~ **Resolved in code/docs/CI:** personal values stay on their governed entity; audit detail uses ids, structural coordinates and changed field names. The TD-8 identity-email contradiction is separately Owner-blocked | Low | Keep `check-no-pii-logs.sh` and the hostile-value behavior regressions green |
+| **I.8** | ~~No documented minimisation rule for audit `detail`~~ **Resolved in code/docs/CI:** personal values stay on their governed entity; audit detail uses ids, structural coordinates and changed field names. The TD-8 identity-email contradiction is **closed by SRS Revision 170 §18 (2026-09-22): user id only, and the grid now says so**; free-text reasons left the audit for the record that owns them the same day | Low | Keep `check-no-pii-logs.sh` and the hostile-value behavior regressions green |
 
 ---
 

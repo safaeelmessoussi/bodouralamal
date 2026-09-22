@@ -237,9 +237,10 @@ export async function decideRoleRequest(
         granted,
         ...(enrolled ? { enrolled } : {}),
         ...(childrenRejected > 0 ? { child_applications_rejected: childrenRejected } : {}),
-        ...(decision.approve ? {} : { reason: decision.reason!.trim().slice(0, 500) }),
-        // R170 §11 — whether the applicant was told it: a fact about the act.
-        ...(decision.approve ? {} : { reason_shared: decision.shareReason === true }),
+        // R170 §18 — the sentence is on `role_request.decline_reason`, above in
+        // this transaction; the audit carries codes: that one was recorded, and
+        // whether the applicant was told it (R170 §11).
+        ...(decision.approve ? {} : { reason_recorded: true, reason_shared: decision.shareReason === true }),
       },
     });
 

@@ -1113,9 +1113,10 @@ export async function decide(
               ? { administrative_group_id: e.placement.administrativeGroupId }
               : { level_id: e.placement.levelId, branch_id: e.placement.branchId }),
           })),
-          ...(decision.reason ? { reason: decision.reason } : {}),
-          // R170 §11 — whether the applicant was told it.
-          ...(decision.approve ? {} : { reason_shared: decision.shareReason === true }),
+          // R170 §18 — the sentence is on `role_request.decline_reason`, written
+          // above in this transaction; the audit says that it was, and whether
+          // the applicant was told it (R170 §11).
+          ...(decision.approve ? {} : { reason_recorded: true, reason_shared: decision.shareReason === true }),
         },
       });
 
@@ -1132,7 +1133,7 @@ export async function decide(
           detail: {
             type: 'registration_bundle_child',
             parent_applicant_id: applicant.id,
-            ...(decision.reason ? { reason: decision.reason } : {}),
+            reason_recorded: Boolean(decision.reason),
           },
         });
       }
@@ -1192,6 +1193,8 @@ export async function decide(
           // revocation, and the child-context middleware answers 404 on the
           // very next request.
           ...(decision.approve ? {} : { deletedAt: now, deletedById: actor.userId }),
+          // R170 §18 — the reviewer's sentence lives on the links it is about.
+          ...(decision.reason ? { decisionReason: decision.reason } : {}),
         },
       });
 
@@ -1207,7 +1210,8 @@ export async function decide(
           outcome: decision.approve ? 'links_stand' : 'links_revoked',
           link_ids: linkIds,
           parent_ids: flagged.map((link) => link.parentId),
-          ...(decision.reason ? { reason: decision.reason } : {}),
+          // R170 §18 — the sentence is on each link's `decision_reason`.
+          reason_recorded: Boolean(decision.reason),
         },
       });
 
@@ -1232,7 +1236,9 @@ export async function decide(
             detail: {
               parent_id: link.parentId,
               student_id: link.studentId,
-              reason: decision.reason ?? 'identity_review',
+              // A fixed code — never the reviewer's sentence (R170 §18).
+              reason: 'identity_review',
+              reason_recorded: Boolean(decision.reason),
             },
           });
           await notifySubjectUserChange(tx, {

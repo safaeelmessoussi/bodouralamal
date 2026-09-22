@@ -157,12 +157,15 @@ describe("§4.3 Revision 16 — revoking an approved link", () => {
     });
     expect(row).not.toBeNull();
     expect(row!.actorUserId).toBe(admin);
-    // §7 attribution invariant: who/when/why reconstructable from the audit row
-    // alone, without reading the soft-deleted link.
+    // §7 attribution invariant: who/when from the audit row alone. The WHY is
+    // on the link itself (R170 §18): the audit says only that one was recorded.
     const detail = row!.detail as Record<string, unknown>;
     expect(detail["parent_id"]).toBe(p);
     expect(detail["student_id"]).toBe(c);
-    expect(detail["reason"]).toBe("بناء على طلب الأسرة");
+    expect(detail["reason_recorded"]).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain("بناء على طلب الأسرة");
+    const revoked = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId }, select: { decisionReason: true } });
+    expect(revoked.decisionReason).toBe("بناء على طلب الأسرة");
   });
 
   it("TD-6: the same pair can be linked again afterwards as a fresh Pending row", async () => {
@@ -443,9 +446,10 @@ describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09
       where: { targetEntity: "FamilyLink", targetId: linkId, actionType: "familylink.reject" },
     });
     expect(row.actorUserId).toBe(admin);
-    expect(row.detail).toMatchObject({ parent_id: parent, student_id: student, reason: "غير مطابق" });
-    // TD-14 — ids and a reason, never a person's name.
+    expect(row.detail).toMatchObject({ parent_id: parent, student_id: student, reason_recorded: true });
+    // TD-14 / R170 §18 — ids and codes, never a person's name nor a person's sentence.
     expect(JSON.stringify(row.detail)).not.toContain(TAG);
+    expect(JSON.stringify(row.detail)).not.toContain("غير مطابق");
   });
 
   it("THE POINT: the same adult may make a corrected request afterwards", async () => {
