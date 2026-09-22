@@ -5716,4 +5716,9 @@ The Owner's six replies to Revision 167's report. One migration so far
 - [x] **Date bomb found by CI (2026-09-22, 10:00 UTC): two `refresh-token`
       tests used the fixed clock `2026-08-23`, whose successor tokens expired
       today — anchored to `Date.now() - 60 s`. Not a product defect.**
+- [x] **Hosted CI 8/8 on `8f0feee` (the three Staging fixes + part five), first
+      run of that commit; deployed to Staging at `8f0feee`** from `142631c` —
+      recordings asked first; dump taken; migration `20260925110000` applied
+      (fixture keys repaired: 4 → 0 non-canonical); both seeds clean;
+      `/healthz` 200; zero error lines.
 

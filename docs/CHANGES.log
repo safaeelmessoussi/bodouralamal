@@ -11608,3 +11608,11 @@ asserts `reason_recorded: true`, the sentence's absence from the audit, and its 
 applicant's `role_request.decline_reason` (its fixture gained the request row every real applicant
 has). **Full disposable integration afterwards: 2,789 passed, 19 skipped, exit 0.**
 
+**Hosted CI 8/8 on `8f0feee`, first run. Deployed to `staging.bodouralamal.com` at
+`8f0feee86c25ae717de096ca3e2bef90f15095ed`, upgrading from `142631c`. No Production action.** The
+three defects the Owner met are fixed there: «إضافة عنصر» names the Level that does not teach the
+Subject; the recorder asks for a name before uploading; the four fixture items delete (their keys
+repaired by migration `20260925110000`). Recordings asked first; dump taken; two older release images
+removed (23 GiB free); preflight PASS; labels exact; TLS active; `/healthz` 200, `/rtc/validate` 401;
+zero error-level lines.
+
