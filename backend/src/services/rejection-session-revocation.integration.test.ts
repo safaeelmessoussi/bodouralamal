@@ -43,6 +43,11 @@ async function makeUser(params: {
       data: { userId: user.id, roleId: role.id, branchId: null },
     });
   }
+  // A pending applicant carries the request she made (R168 §1; every earlier
+  // one was back-filled) — the record the decline reason is written on (R170 §18).
+  if ((params.status ?? 'pending') === 'pending') {
+    await prisma.roleRequest.create({ data: { userId: user.id, kind: 'student', status: 'pending' } });
+  }
   return user.id;
 }
 
@@ -106,8 +111,14 @@ describe('R102 Pending to Rejected session revocation', () => {
     const rejectionAudit = await prisma.auditLog.findFirstOrThrow({
       where: { actorUserId: adminId, targetId, actionType: 'user.reject' },
     });
-    expect((rejectionAudit.detail as { reason?: string }).reason)
-      .toBe('R102 deterministic rejection');
+    // R170 §18 — the sentence is on the record (`role_request.decline_reason`),
+    // never in the audit; the audit says that one was recorded.
+    expect((rejectionAudit.detail as { reason_recorded?: boolean }).reason_recorded).toBe(true);
+    expect(JSON.stringify(rejectionAudit.detail)).not.toContain('R102 deterministic rejection');
+    expect(
+      (await prisma.roleRequest.findMany({ where: { userId: targetId }, select: { declineReason: true } }))
+        .map((row) => row.declineReason),
+    ).toContain('R102 deterministic rejection');
     const revocationAudit = await prisma.auditLog.findFirstOrThrow({
       where: { actorUserId: adminId, targetId, actionType: 'auth.token_revoked' },
     });

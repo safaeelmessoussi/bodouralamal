@@ -11602,3 +11602,9 @@ fixed clock `2026-08-23T10:00Z`, so its successor token reached the 30-day expir
 run passed at 06:xx UTC; CI ran at 17:08. Both tests in that file are anchored to the wall clock now
 (a minute ago, the same scenario every day); 24/24.
 
+**Hosted CI on `7aac682` failed one more pinned test — mine to restate:** `rejection-session-revocation`
+asserted the rejection sentence in the `user.reject` audit row, which §18 removed. The test now
+asserts `reason_recorded: true`, the sentence's absence from the audit, and its presence on the
+applicant's `role_request.decline_reason` (its fixture gained the request row every real applicant
+has). **Full disposable integration afterwards: 2,789 passed, 19 skipped, exit 0.**
+
