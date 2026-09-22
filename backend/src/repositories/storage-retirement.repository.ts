@@ -70,10 +70,16 @@ export async function lockRetirement(tx: Prisma.TransactionClient, id: string): 
   await tx.$queryRaw`SELECT id FROM storage_retirement WHERE id = ${id}::uuid FOR UPDATE`;
 }
 
-export async function completeRetirement(tx: Prisma.TransactionClient, id: string): Promise<void> {
+export async function completeRetirement(
+  tx: Prisma.TransactionClient,
+  id: string,
+  /** A fixed code saying WHY a completion did no work (R170 §3's withdrawn
+   *  consent migration); `null` — the ordinary case — is a completion that did. */
+  reason: string | null = null,
+): Promise<void> {
   await tx.storageRetirement.updateMany({
     where: { id, completedAt: null },
-    data: { completedAt: new Date(), storageKey: null, lastErrorCode: null },
+    data: { completedAt: new Date(), storageKey: null, lastErrorCode: reason },
   });
 }
 

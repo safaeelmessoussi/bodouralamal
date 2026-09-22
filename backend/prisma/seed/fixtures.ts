@@ -619,12 +619,13 @@ async function main(): Promise<void> {
   }
   console.log(`  events: ${recurrences.length} (every recurrence type incl. biweekly-alternating)`);
 
-  // --- Content in all three visibility tiers + one consent-forced-private
+  // --- Content in all three visibility tiers + one carrying the consent WARNING
+  //     (R170 §3: `media_consent_missing`, staff-read; nothing forced)
   const contentSpecs = [
     { title: 'ملف عام', visibility: Visibility.public, forced: false },
     { title: 'ملف خاص', visibility: Visibility.private, forced: false },
     { title: 'ملف مخفي', visibility: Visibility.hidden, forced: false },
-    { title: 'تسجيل محمي بالموافقة', visibility: Visibility.private, forced: true },
+    { title: 'تسجيل بلا موافقة نشر', visibility: Visibility.private, forced: true },
   ];
   for (const [index, spec] of contentSpecs.entries()) {
     const title = `${FIXTURE_TAG} ${spec.title}`;
@@ -636,7 +637,7 @@ async function main(): Promise<void> {
         data: {
           title,
           visibility: spec.visibility,
-          consentForcedPrivate: spec.forced,
+          mediaConsentMissing: spec.forced,
           levelId: levels[0]!.id,
           // Required since the Revision 43 contract phase (§7): content belongs
           // to a Subject as well as a Level.
@@ -654,7 +655,7 @@ async function main(): Promise<void> {
       });
     }
   }
-  console.log('  content: 3 tiers + 1 consent-forced-private');
+  console.log('  content: 3 tiers + 1 with the consent warning');
 
   // --- Exams. NOTE: §15.2's grading-template fixtures are deliberately absent
   //     — the weight-template engine is post-MVP and §7 forbids pre-creating

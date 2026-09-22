@@ -53,16 +53,19 @@ import { visibleContentIds } from './library.service.js';
 import {
   enqueueConsentSafeguardingSweep,
   enqueueConsentReevaluationForStudent,
-  migrateConsentForcedContent,
   reevaluateSessionConsent,
 } from './consent-reevaluation.service.js';
 
 /**
- * B-01 against real PostgreSQL, MinIO and pg-boss.
+ * B-01 against real PostgreSQL, MinIO and pg-boss — restated for SRS Revision
+ * 170 §3, under which the consent gate is a WARNING (`media_consent_missing`)
+ * and nothing is forced private any more.
  *
- * These tests exercise the boundary mocks cannot prove: anonymous public bytes,
- * server-side copy metadata, full-stream SHA-256 equality, public-object
- * retirement, same-transaction pg-boss rows, retry, and process restart.
+ * These tests exercise the boundary mocks cannot prove: anonymous public bytes
+ * that stay readable under a warning, the Nginx auth subrequest deciding on
+ * `visibility` and the exact current key alone, the ordinary quarantine of an
+ * exact old key on replacement/deletion, same-transaction pg-boss rows, retry,
+ * and process restart.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
@@ -133,6 +136,25 @@ async function expectNoBucketListing(url: string): Promise<void> {
   expect(response.headers.get('content-type') ?? '').not.toContain('application/xml');
 }
 
+/** The production delivery path: Nginx admits an anonymous GET/HEAD only while
+ * the database names that exact public key on a live public row (R170 §3: on
+ * `visibility` alone — a warned recording is served like any other). */
+async function expectServedAtNginx(key: string): Promise<void> {
+  expect((await fetch(proxiedPublicObjectUrl(key))).status, `GET ${key}`).toBe(200);
+  expect(
+    (await fetch(proxiedPublicObjectUrl(key), { method: 'HEAD', redirect: 'manual' })).status,
+    `HEAD ${key}`,
+  ).toBe(200);
+}
+
+async function expectUnavailableAtNginx(key: string): Promise<void> {
+  const response = await fetch(proxiedPublicObjectUrl(key), { redirect: 'manual' });
+  expect(response.status, key).toBe(302);
+  expect(
+    new URL(response.headers.get('location') ?? '', config.STORAGE_BASE_URL).pathname,
+  ).toBe('/content-unavailable');
+}
+
 function adminActor(s: Pick<Scenario, 'actorId' | 'branchId'>): Actor {
   return {
     userId: s.actorId,
@@ -147,13 +169,8 @@ function canonicalBytes(label: string): Buffer {
   return Buffer.from(`%PDF-1.7\n${label}\n${'safe-canonical-bytes'.repeat(64)}`);
 }
 
-function expectConvergedMigration(
-  result: Awaited<ReturnType<typeof migrateConsentForcedContent>>,
-): void {
-  // The live API worker shares this database. Once a durable job exists, it
-  // may complete the exact obligation before a direct retry reaches the lock.
-  // Callers of this helper still assert the authoritative row/object state.
-  expect(['completed', 'already_completed']).toContain(result.state);
+function digestOf(bytes: Buffer): { sizeBytes: number; sha256: string } {
+  return { sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 
 async function putCanonical(bucket: string, key: string, bytes: Buffer): Promise<void> {
@@ -216,7 +233,7 @@ async function scenario(label: string): Promise<Scenario> {
       id: contentId,
       title: `${TAG} ${label} recording`,
       visibility: 'public',
-      consentForcedPrivate: false,
+      mediaConsentMissing: false,
       levelId: fixture.levelId,
       branchId: branch.id,
       subjectId: fixture.subjectId,
@@ -266,6 +283,46 @@ async function decide(
   });
 }
 
+/**
+ * Holds the LIVE worker off one Session's pending obligation. The stack's own
+ * API shares this database and drains `consent.reevaluate`; a test that pins
+ * the exact counters of ITS OWN call must be the only evaluator, or the worker
+ * can legitimately write the same warning first and the direct call reports it
+ * unchanged. The obligation's existence is still asserted; only its delivery
+ * is deferred, and the fixture teardown removes it.
+ */
+async function deferLiveDelivery(sessionId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE pgboss.job SET start_after = now() + interval '1 hour'
+    WHERE name = ${JOB_QUEUES.consentReevaluate}
+      AND data->>'session_id' = ${sessionId}
+      AND state = 'created'
+  `;
+}
+
+/** The precondition of a recording that IS warned, set without a job: the
+ * release is gone from the ledger and the flag already says so, so the live
+ * worker, wherever it wakes, finds nothing to change. */
+async function warnedWithoutJob(s: Scenario): Promise<void> {
+  await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
+  await prisma.educationalContent.update({
+    where: { id: s.contentId },
+    data: { mediaConsentMissing: true },
+  });
+}
+
+function contentRow(contentId: string) {
+  return prisma.educationalContent.findUniqueOrThrow({ where: { id: contentId } });
+}
+
+function consentWarningAudits(contentId: string) {
+  return prisma.auditLog.findMany({
+    where: { targetId: contentId, actionType: 'content.consent_warning' },
+    orderBy: { createdAt: 'asc' },
+    select: { detail: true },
+  });
+}
+
 async function replaceScenarioFile(
   s: Scenario,
   label: string,
@@ -298,17 +355,7 @@ async function replaceScenarioFile(
     body: bytes,
   });
   expect(uploaded.status).toBe(200);
-  const unsignedStagingRead = await fetch(
-    `${config.STORAGE_BASE_URL}/${BUCKETS.public}/${initiated.key}`,
-    { redirect: 'manual' },
-  );
-  expect(unsignedStagingRead.status).toBe(302);
-  expect(
-    new URL(
-      unsignedStagingRead.headers.get('location') ?? '',
-      config.STORAGE_BASE_URL,
-    ).pathname,
-  ).toBe('/content-unavailable');
+  await expectUnavailableAtNginx(initiated.key);
   expect(
     (
       await fetch(`${config.STORAGE_BASE_URL}/${BUCKETS.public}/${initiated.key}`, {
@@ -494,14 +541,17 @@ async function cleanup(): Promise<void> {
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   for (const object of trackedObjects.values()) {
     await deleteObject(clients, object.bucket, object.key).catch(() => undefined);
-    // A migration writes the same key in private without going through `track`.
     await deleteObject(clients, BUCKETS.private, object.key).catch(() => undefined);
+    // The ordinary quarantine transition copies an exact old key to
+    // `quarantine/…` in ITS OWN bucket, without going through `track`.
     for (const contentId of contentIds) {
-      await deleteObject(
-        clients,
-        BUCKETS.private,
-        quarantineKeyFor(contentId, object.key),
-      ).catch(() => undefined);
+      for (const bucket of [BUCKETS.public, BUCKETS.private]) {
+        await deleteObject(
+          clients,
+          bucket,
+          quarantineKeyFor(contentId, object.key),
+        ).catch(() => undefined);
+      }
     }
   }
   trackedObjects.clear();
@@ -561,12 +611,23 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+// R170 §3 withdrew the consent-forced migration; these cases pinned it and are
+// gone: «withdrawal durably closes the application gate and migrates identical
+// canonical bytes» (its warning half lives on below), «B5: a new revocation
+// before/after completion cannot be lost behind an old stale migration» (its
+// obligation now completes as `withdrawn_r170`, pinned below), «a transient
+// public-delete failure stays fail-closed and retryable» (the consent
+// migration's retry; the ordinary obligation's retry is pinned below), «a
+// migration snapshot cannot overwrite a replacement or a deletion» (the
+// replacement and deletion cases below pin the ordinary transition instead),
+// and the bucket-migration half of «keeps both safeguarding state transitions
+// atomic with their mandatory audits».
 describe('B-01 consent safeguarding', () => {
-  it('rolls metadata, safeguard and jobs back when the mandatory retag audit fails', async () => {
+  it('rolls metadata, warning and jobs back when the mandatory warning audit fails', async () => {
     const s = await scenario('h6-retag-rollback');
     await prisma.educationalContent.update({ where: { id: s.contentId }, data: { origin: 'uploaded' } });
     await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
-    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+    const before = await contentRow(s.contentId);
     const jobsBefore = await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId);
     vi.spyOn(audit, 'write').mockRejectedValueOnce(new Error('controlled retag audit failure'));
     try {
@@ -575,7 +636,7 @@ describe('B-01 consent safeguarding', () => {
     } finally {
       vi.restoreAllMocks();
     }
-    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } })).toEqual(before);
+    expect(await contentRow(s.contentId)).toEqual(before);
     expect(await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId)).toBe(jobsBefore);
     expect(await prisma.storageRetirement.count({ where: { contentId: s.contentId } })).toBe(0);
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
@@ -586,7 +647,7 @@ describe('B-01 consent safeguarding', () => {
     await prisma.educationalContent.update({ where: { id: s.contentId }, data: { origin: 'uploaded' } });
     await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
     await prisma.sessionContent.deleteMany({ where: { contentId: s.contentId } });
-    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
+    const before = await contentRow(s.contentId);
     let inserted = false;
     const racing = prisma.$extends({ query: { sessionContent: { async findMany({ args, query }) {
       const rows = await query(args);
@@ -601,63 +662,75 @@ describe('B-01 consent safeguarding', () => {
     await expect(updateContentMetadata(racing, clients, adminActor(s), s.contentId,
       { origin: 'session_recording' })).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
     expect(inserted).toBe(true);
-    expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } })).toEqual(before);
+    expect(await contentRow(s.contentId)).toEqual(before);
   });
 
   it.each(['session_recording', 'uploaded'] as const)(
-    'retagging to %s commits the owed safeguard without a bucket move', async (origin) => {
+    'retagging to %s commits the warning with the edit, without a bucket move or a change of visibility', async (origin) => {
       const s = await scenario(`h6-retag-${origin}`);
       // Establish a linked file whose consent is missing, without enqueueing a
-      // worker first: the metadata transaction itself must close the read gate.
+      // worker first: the metadata transaction itself must write the warning
+      // (R170 §3). A warning describes the PRESENT: an item retagged TO a
+      // recording is warned; one retagged AWAY from it is outside the graph
+      // the job re-evaluates, so it carries none (a warning nothing could ever
+      // clear would be a stale one, and R170 §3 has no closed state to fail
+      // into). Seeded warned when retagging away, so the CLEAR is asserted.
+      const becomesRecording = origin === 'session_recording';
       await prisma.educationalContent.update({ where: { id: s.contentId }, data: {
-        origin: origin === 'session_recording' ? 'uploaded' : 'session_recording',
+        origin: becomesRecording ? 'uploaded' : 'session_recording',
+        mediaConsentMissing: !becomesRecording,
       } });
       await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
       await updateContentMetadata(prisma, clients, adminActor(s), s.contentId, { origin });
-      const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
-      expect(row.origin).toBe(origin);
-      expect(row.consentForcedPrivate).toBe(true);
-      // The worker may already have converged; either way public access is gone.
-      expect(await visibleContentIds(prisma, null, [s.contentId])).not.toContain(s.contentId);
-      expectConvergedMigration(await migrateConsentForcedContent(prisma, clients, s.contentId, s.key));
-      const final = await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } });
-      track(final.storageBucket, final.storageKey);
-      expect(final).toMatchObject({ visibility: 'private', storageBucket: 'private', consentForcedPrivate: true });
-      expect(await hashStoredObject(clients, BUCKETS.private, final.storageKey))
-        .toMatchObject({ sha256: createHash('sha256').update(s.bytes).digest('hex') });
-      expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+      const row = await contentRow(s.contentId);
+      expect(row).toMatchObject({
+        origin,
+        mediaConsentMissing: becomesRecording,
+        consentForcedPrivate: false,
+        visibility: 'public',
+        storageBucket: BUCKETS.public,
+        storageKey: s.key,
+      });
+      expect(await consentWarningAudits(s.contentId)).toEqual([
+        { detail: { reason: 'consent_gate', media_consent_missing: becomesRecording } },
+      ]);
+      // Nothing moved and nothing closed: the same public bytes, still served.
+      expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual(digestOf(s.bytes));
+      expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
+      expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set([s.contentId]));
+      await expectServedAtNginx(s.key);
+      expect(await prisma.storageRetirement.count({ where: { contentId: s.contentId } })).toBe(0);
     },
   );
 
-  it.each(['before_completion', 'after_completion'] as const)(
-    'B5: a new revocation %s cannot be lost behind an old stale migration', async (timing) => {
-      const s = await scenario(`durable-regrant-${timing}`);
-      const obligation = await prisma.$transaction(async (tx) => {
-        const row = await requireRetirement(tx, { contentId: s.contentId, bucket: BUCKETS.public,
-          storageKey: s.key, operation: 'consent_migrate' });
-        await tx.$executeRaw`UPDATE pgboss.job SET start_after=now()+interval '1 hour'
-          WHERE name='content.bucket-migrate' AND data->>'retirement_id'=${row.id}`;
-        return row;
-      });
-      const revoke = async () => {
-        await decide(s, false);
-        await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-      };
-      if (timing === 'before_completion') {
-        await expect(executeRetirement(prisma, clients, obligation.id, { afterConsentMigration: revoke }))
-          .rejects.toThrow('not yet converged');
-        expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).completedAt).toBeNull();
-      } else {
-        await executeRetirement(prisma, clients, obligation.id);
-        expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).completedAt).not.toBeNull();
-        await revoke();
-      }
-      await executeRetirement(prisma, clients, obligation.id);
-      expect(await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }))
-        .toMatchObject({ visibility: 'private', consentForcedPrivate: true, storageBucket: 'private' });
-      expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
-      expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } })).storageKey).toBeNull();
+  it('a pre-R170 consent migration obligation completes as withdrawn and moves nothing', async () => {
+    const s = await scenario('withdrawn-consent-migrate');
+    // Even one the old rule would have OWED — the release is gone — because
+    // there is nothing left to converge to (R170 §3): the row is completed with
+    // the code that says why, through the production handler that still
+    // receives such a durable job, and no byte moves.
+    await prisma.consentRecord.deleteMany({ where: { studentId: s.studentId } });
+    const obligation = await prisma.$transaction((tx) => requireRetirement(tx, {
+      contentId: s.contentId, bucket: BUCKETS.public, storageKey: s.key, operation: 'consent_migrate',
+    }));
+    await runProductionJob(JOB_QUEUES.contentBucketMigrate, 'retirement_id', obligation.id);
+    expect(
+      await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } }),
+    ).toMatchObject({ completedAt: expect.any(Date), storageKey: null, lastErrorCode: 'withdrawn_r170' });
+    expect(await contentRow(s.contentId)).toMatchObject({
+      visibility: 'public',
+      storageBucket: BUCKETS.public,
+      storageKey: s.key,
+      consentForcedPrivate: false,
+      mediaConsentMissing: false,
     });
+    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual(digestOf(s.bytes));
+    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
+    await expectServedAtNginx(s.key);
+    // A repeat delivery finds it completed and does nothing again.
+    await executeRetirement(prisma, clients, obligation.id);
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
+  });
 
   it('allows only exact public reads and signed PUTs at the production Nginx origin', async () => {
     const s = await scenario('nginx-public-allowlist');
@@ -684,10 +757,7 @@ describe('B-01 consent safeguarding', () => {
       redirect: 'manual',
     });
     expect(unsignedCanonicalPut.status).toBe(403);
-    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
-    });
+    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual(digestOf(s.bytes));
 
     const initiated = await initiateUpload(
       prisma,
@@ -747,10 +817,7 @@ describe('B-01 consent safeguarding', () => {
         })
       ).status,
     ).toBe(403);
-    expect(await hashStoredObject(clients, BUCKETS.public, initiated.key)).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
-    });
+    expect(await hashStoredObject(clients, BUCKETS.public, initiated.key)).toEqual(digestOf(s.bytes));
 
     const publicRoot = `${config.STORAGE_BASE_URL}/${BUCKETS.public}`;
     for (const rootUrl of [
@@ -778,7 +845,7 @@ describe('B-01 consent safeguarding', () => {
     }
   });
 
-  it('closes the real HTTP consent-withdrawal flow and preserves authorized private mint', async () => {
+  it('the real HTTP consent-withdrawal flow warns, keeps the recording public and preserves the authorized mint', async () => {
     const s = await scenario('http-withdrawal');
     const token = issueAccessToken(
       {
@@ -811,18 +878,19 @@ describe('B-01 consent safeguarding', () => {
       'session_id',
       s.fixture.sessionId,
     );
-    await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
-      'content_id',
-      s.contentId,
-    );
-    expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
-    const proxied = await fetch(proxiedPublicObjectUrl(s.key), {
-      redirect: 'manual',
+    // R170 §3: warned, and public exactly as before — nothing was forced, no
+    // migration was owed, and the anonymous reader still gets the bytes.
+    expect(await contentRow(s.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      consentForcedPrivate: false,
+      visibility: 'public',
+      storageBucket: BUCKETS.public,
     });
-    expect(proxied.status).toBe(302);
-    expect(proxied.headers.get('location')).toBe('/content-unavailable');
+    expect(await jobCount(JOB_QUEUES.contentBucketMigrate, 'content_id', s.contentId)).toBe(0);
+    expect(await prisma.storageRetirement.count({ where: { contentId: s.contentId } })).toBe(0);
+    expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set([s.contentId]));
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
+    await expectServedAtNginx(s.key);
 
     const mint = await fetch(`${apiBase}/content/${s.contentId}/download-url`, {
       headers: { authorization: `Bearer ${token}` },
@@ -831,29 +899,21 @@ describe('B-01 consent safeguarding', () => {
     expect(await mint.json()).toMatchObject({ expires_in: 600 });
   });
 
-  it('withdrawal durably closes the application gate and migrates identical canonical bytes', async () => {
+  it('withdrawal raises the warning, leaves the public object readable and audits the change', async () => {
     const s = await scenario('withdrawal');
     expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
-    expect((await fetch(proxiedPublicObjectUrl(s.key))).status).toBe(200);
-    expect(
-      (
-        await fetch(proxiedPublicObjectUrl(s.key), {
-          method: 'HEAD',
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(200);
+    await expectServedAtNginx(s.key);
     const internalAuthorizeUrl = new URL(
       '/internal/storage/public-authorize',
       apiBase,
     );
-    expect(
+    const authorize = async (): Promise<number> =>
       (
         await fetch(internalAuthorizeUrl, {
           headers: { 'x-original-uri': `/storage/public/${s.key}` },
         })
-      ).status,
-    ).toBe(204);
+      ).status;
+    expect(await authorize()).toBe(204);
     expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(
       new Set([s.contentId]),
     );
@@ -862,89 +922,57 @@ describe('B-01 consent safeguarding', () => {
     expect(
       await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId),
     ).toBeGreaterThan(0);
+    await deferLiveDelivery(s.fixture.sessionId);
 
     const reevaluated = await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-    expect(reevaluated).toMatchObject({
+    expect(reevaluated).toEqual({
+      sessionId: s.fixture.sessionId,
       recordingsInspected: 1,
-      recordingsForced: 1,
-      migrationsEnqueued: 1,
+      warningsRaised: 1,
+      warningsCleared: 0,
     });
-    const pending = await prisma.educationalContent.findUniqueOrThrow({
-      where: { id: s.contentId },
-    });
-    expect(pending).toMatchObject({
+    const warned = await contentRow(s.contentId);
+    expect(warned).toMatchObject({
       visibility: 'public',
       storageBucket: BUCKETS.public,
-      consentForcedPrivate: true,
-    });
-    // The physical copy/delete remains a durable job, but the application and
-    // the only production object origin both consult this committed row. Direct
-    // MinIO below is deliberately the container-internal storage truth, not a
-    // production delivery path.
-    expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
-    const pendingProxy = await fetch(proxiedPublicObjectUrl(s.key), {
-      redirect: 'manual',
-    });
-    expect(pendingProxy.status).toBe(302);
-    expect(pendingProxy.headers.get('location')).toBe('/content-unavailable');
-    expect(
-      (
-        await fetch(proxiedPublicObjectUrl(s.key), {
-          method: 'HEAD',
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(302);
-    const internalDenied = await fetch(internalAuthorizeUrl, {
-      headers: { 'x-original-uri': `/storage/public/${s.key}` },
-    });
-    expect(internalDenied.status).toBe(403);
-    expect(await internalDenied.json()).toMatchObject({
-      error: {
-        code: 'FORBIDDEN',
-        message_key: 'errors.forbidden',
-        details: {},
-        request_id: expect.any(String),
-      },
-    });
-
-    expectConvergedMigration(
-      await migrateConsentForcedContent(prisma, clients, s.contentId),
-    );
-    const completed = await prisma.educationalContent.findUniqueOrThrow({
-      where: { id: s.contentId },
-    });
-    expect(completed).toMatchObject({
-      visibility: 'private',
-      storageBucket: BUCKETS.private,
       storageKey: s.key,
-      consentForcedPrivate: true,
+      mediaConsentMissing: true,
+      // Retired by R170 §3: never written again.
+      consentForcedPrivate: false,
     });
-    // The observable commit cannot be separated from anonymous revocation.
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
-    expect(
-      (
-        await fetch(proxiedPublicObjectUrl(s.key), {
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(302);
-    expect(await hashStoredObject(clients, BUCKETS.private, s.key)).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
-    });
+    // The warning is a fact told to staff; it closes NOTHING — not the
+    // application read, not the database-authorized public origin, not the
+    // storage object itself.
+    expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(
+      new Set([s.contentId]),
+    );
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
+    await expectServedAtNginx(s.key);
+    expect(await authorize()).toBe(204);
+    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual(digestOf(s.bytes));
+    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
+    // No migration is owed and none is enqueued.
+    expect(await jobCount(JOB_QUEUES.contentBucketMigrate, 'content_id', s.contentId)).toBe(0);
+    expect(await prisma.storageRetirement.count({ where: { contentId: s.contentId } })).toBe(0);
+    // One audit row says what changed and from where (TD-14: never who lacks
+    // the release); the visibility never changed, so no such row exists.
+    expect(await consentWarningAudits(s.contentId)).toEqual([
+      {
+        detail: {
+          reason: 'consent_gate',
+          media_consent_missing: true,
+          source_session_id: s.fixture.sessionId,
+        },
+      },
+    ]);
     expect(
       await prisma.auditLog.count({
-        where: {
-          targetId: s.contentId,
-          actionType: 'content.visibility_change',
-        },
+        where: { targetId: s.contentId, actionType: 'content.visibility_change' },
       }),
-    ).toBe(2);
+    ).toBe(0);
   });
 
-  it('an R92 audience override transaction enqueues and safeguards a newly unsafe recording', async () => {
+  it('an R92 audience override transaction enqueues and warns a newly unsafe recording', async () => {
     const s = await scenario('r92-audience');
     await prisma.recurringCourseSchedule.update({
       where: { id: s.fixture.scheduleId },
@@ -1033,15 +1061,13 @@ describe('B-01 consent safeguarding', () => {
       'session_id',
       s.fixture.sessionId,
     );
-    await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
-      'content_id',
-      s.contentId,
-    );
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+    expect(await contentRow(s.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      consentForcedPrivate: false,
+      visibility: 'public',
+    });
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
+    await expectServedAtNginx(s.key);
   });
 
   it('a consent change still reaches a protected Session after its schedule is soft-deleted', async () => {
@@ -1063,12 +1089,11 @@ describe('B-01 consent safeguarding', () => {
       'session_id',
       s.fixture.sessionId,
     );
-    await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
-      'content_id',
-      s.contentId,
-    );
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+    expect(await contentRow(s.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      visibility: 'public',
+    });
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
   });
 
   it('the bounded rollout sweep discovers a live recording with no historical job', async () => {
@@ -1087,10 +1112,8 @@ describe('B-01 consent safeguarding', () => {
     });
     await prisma.$executeRaw`
       DELETE FROM pgboss.job
-      WHERE (name = ${JOB_QUEUES.consentReevaluate}
-             AND data->>'session_id' = ${s.fixture.sessionId})
-         OR (name = ${JOB_QUEUES.contentBucketMigrate}
-             AND data->>'content_id' = ${s.contentId})
+      WHERE name = ${JOB_QUEUES.consentReevaluate}
+        AND data->>'session_id' = ${s.fixture.sessionId}
     `;
 
     const first = await enqueueConsentSafeguardingSweep(prisma, {
@@ -1123,15 +1146,14 @@ describe('B-01 consent safeguarding', () => {
       'session_id',
       s.fixture.sessionId,
     );
-    await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
-      'content_id',
-      s.contentId,
-    );
-    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+    expect(await contentRow(s.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      visibility: 'public',
+    });
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
   });
 
-  it('locks a shared recording graph once in global order and gates the union audience', async () => {
+  it('locks a shared recording graph once in global order and warns on the union audience', async () => {
     const first = await scenario('shared-lock-first');
     const second = await scenario('shared-lock-second');
     await prisma.sessionContent.updateMany({
@@ -1146,6 +1168,7 @@ describe('B-01 consent safeguarding', () => {
       data: { sessionId: second.fixture.sessionId, contentId: first.contentId },
     });
     await decide(second, false);
+    await deferLiveDelivery(second.fixture.sessionId);
 
     const barrier = twoPartyBarrier();
     const discovered: string[][] = [];
@@ -1163,14 +1186,20 @@ describe('B-01 consent safeguarding', () => {
 
     const expectedGraph = [first.fixture.sessionId, second.fixture.sessionId].sort();
     expect(discovered).toEqual([expectedGraph, expectedGraph]);
-    expect(outcomes.reduce((sum, outcome) => sum + outcome.recordingsForced, 0)).toBe(1);
-    expect(outcomes.reduce((sum, outcome) => sum + outcome.migrationsEnqueued, 0)).toBe(1);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: first.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
-
-    await migrateConsentForcedContent(prisma, clients, first.contentId, first.key);
-    expect(await statObjectStrict(clients, BUCKETS.public, first.key)).toBeNull();
+    // Both passes inspect the one shared recording; whichever commits first
+    // raises its warning, the other finds it already said.
+    expect(outcomes.map((outcome) => outcome.recordingsInspected)).toEqual([1, 1]);
+    expect(outcomes.reduce((sum, outcome) => sum + outcome.warningsRaised, 0)).toBe(1);
+    expect(outcomes.reduce((sum, outcome) => sum + outcome.warningsCleared, 0)).toBe(0);
+    expect(await contentRow(first.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      visibility: 'public',
+      storageBucket: BUCKETS.public,
+    });
+    expect(await consentWarningAudits(first.contentId)).toHaveLength(1);
+    // The recording whose link was retired is outside the graph: untouched.
+    expect(await contentRow(second.contentId)).toMatchObject({ mediaConsentMissing: false });
+    await expectServedAtNginx(first.key);
   });
 
   it('duplicates are idempotent and a grant committed before an old job runs wins', async () => {
@@ -1178,322 +1207,180 @@ describe('B-01 consent safeguarding', () => {
     await decide(safeNow, false);
     await decide(safeNow, true);
     const oldJob = await reevaluateSessionConsent(prisma, safeNow.fixture.sessionId);
-    expect(oldJob.recordingsForced).toBe(0);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: safeNow.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: false, visibility: 'public' });
+    expect(oldJob).toMatchObject({ recordingsInspected: 1, warningsRaised: 0, warningsCleared: 0 });
+    expect(await contentRow(safeNow.contentId)).toMatchObject({
+      mediaConsentMissing: false,
+      visibility: 'public',
+    });
+    expect(await consentWarningAudits(safeNow.contentId)).toEqual([]);
 
     const unsafe = await scenario('duplicate');
     await decide(unsafe, false);
     await reevaluateSessionConsent(prisma, unsafe.fixture.sessionId);
     const duplicate = await reevaluateSessionConsent(prisma, unsafe.fixture.sessionId);
-    expect(duplicate.recordingsForced).toBe(0);
-    await Promise.all([
-      migrateConsentForcedContent(prisma, clients, unsafe.contentId),
-      migrateConsentForcedContent(prisma, clients, unsafe.contentId),
-    ]);
-    expect(
-      await migrateConsentForcedContent(prisma, clients, unsafe.contentId),
-    ).toMatchObject({ state: 'already_completed' });
-    expect(await statObjectStrict(clients, BUCKETS.public, unsafe.key)).toBeNull();
-    expect(await statObjectStrict(clients, BUCKETS.private, unsafe.key)).not.toBeNull();
+    expect(duplicate).toMatchObject({ recordingsInspected: 1, warningsRaised: 0, warningsCleared: 0 });
+    const row = await contentRow(unsafe.contentId);
+    expect(row).toMatchObject({ mediaConsentMissing: true, visibility: 'public' });
+    // A repeat says nothing new: one audit row, one version step, whoever
+    // (this call or the live worker) wrote the warning first.
+    expect(await consentWarningAudits(unsafe.contentId)).toHaveLength(1);
+    expect(await reevaluateSessionConsent(prisma, unsafe.fixture.sessionId)).toMatchObject({
+      warningsRaised: 0,
+      warningsCleared: 0,
+    });
+    expect((await contentRow(unsafe.contentId)).version).toBe(row.version);
   });
 
-  it('never lifts a committed consent safeguard when consent is later re-granted', async () => {
-    const s = await scenario('monotonic-regrant');
+  it('a later grant CLEARS the warning: it describes the present, unlike the safeguard it replaced', async () => {
+    const s = await scenario('regrant-clears');
     await decide(s, false);
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
-
-    await decide(s, true);
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
-
-    await migrateConsentForcedContent(prisma, clients, s.contentId, s.key);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
-  });
-
-  it('a transient public-delete failure stays fail-closed and retryable', async () => {
-    const s = await scenario('delete-retry');
-    // This test owns fail-closed retryability, not asynchronous consent
-    // delivery. Going through `decide` + `reevaluate` puts the obligation on the
-    // LIVE application queue, whose worker may legitimately complete the
-    // migration — deleting the public object — between the injected failure and
-    // the assertion below that it is still there. Establishing the precondition
-    // directly is the same isolation the replacement, deletion and pg-boss
-    // retry tests in this file already use, and it removes the only shared
-    // dependency without touching a single assertion.
-    await prisma.educationalContent.update({
-      where: { id: s.contentId },
-      data: { consentForcedPrivate: true },
+    await deferLiveDelivery(s.fixture.sessionId);
+    expect(await reevaluateSessionConsent(prisma, s.fixture.sessionId)).toMatchObject({
+      recordingsInspected: 1,
+      warningsRaised: 1,
+      warningsCleared: 0,
     });
-
-    await expect(
-      migrateConsentForcedContent(
-        prisma,
-        failingPublicDelete(clients, s.key, 'before'),
-        s.contentId,
-      ),
-    ).rejects.toThrow('controlled transient public-delete failure');
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({
-      visibility: 'public',
-      storageBucket: BUCKETS.public,
-      consentForcedPrivate: true,
-    });
-    // The physical transition remains retryable without reopening either the
-    // application read or the database-authorized public origin.
-    expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
-    expect(
-      (
-        await fetch(proxiedPublicObjectUrl(s.key), {
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(302);
-    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
-    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).not.toBeNull();
-
-    expectConvergedMigration(
-      await migrateConsentForcedContent(prisma, clients, s.contentId),
-    );
-    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
-  });
-
-  it('recovers when public delete succeeded but the database transaction rolled back', async () => {
-    const s = await scenario('ambiguous-delete');
-    await decide(s, false);
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-
-    await expect(
-      migrateConsentForcedContent(
-        prisma,
-        failingPublicDelete(clients, s.key, 'after'),
-        s.contentId,
-      ),
-    ).rejects.toThrow('controlled ambiguous delete response');
-    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ visibility: 'public', storageBucket: BUCKETS.public });
-
-    expectConvergedMigration(
-      await migrateConsentForcedContent(prisma, clients, s.contentId),
-    );
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({
-      consentForcedPrivate: true,
-      visibility: 'private',
-      storageBucket: BUCKETS.private,
-      storageKey: s.key,
-    });
-    expect(await hashStoredObject(clients, BUCKETS.private, s.key)).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
-    });
-  });
-
-  it('keeps both safeguarding state transitions atomic with their mandatory audits', async () => {
-    const flag = await scenario('flag-audit-rollback');
-    await decide(flag, false);
-    vi.spyOn(audit, 'write').mockRejectedValueOnce(
-      new Error('controlled consent visibility audit failure'),
-    );
-    await expect(
-      reevaluateSessionConsent(prisma, flag.fixture.sessionId),
-    ).rejects.toThrow('controlled consent visibility audit failure');
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: flag.contentId } }),
-    ).toMatchObject({
+    const warned = await contentRow(s.contentId);
+    expect(warned).toMatchObject({
+      mediaConsentMissing: true,
       consentForcedPrivate: false,
       visibility: 'public',
       storageBucket: BUCKETS.public,
     });
-    expect(
-      await jobCount(JOB_QUEUES.contentBucketMigrate, 'content_id', flag.contentId),
-    ).toBe(0);
-    vi.restoreAllMocks();
+    await expectServedAtNginx(s.key);
 
-    const placement = await scenario('placement-audit-rollback');
-    await decide(placement, false);
-    await reevaluateSessionConsent(prisma, placement.fixture.sessionId);
-    vi.spyOn(audit, 'write').mockRejectedValueOnce(
-      new Error('controlled bucket migration audit failure'),
-    );
-    await expect(
-      migrateConsentForcedContent(prisma, clients, placement.contentId),
-    ).rejects.toThrow('controlled bucket migration audit failure');
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({
-        where: { id: placement.contentId },
-      }),
-    ).toMatchObject({
-      consentForcedPrivate: true,
+    // The reverse of the withdrawn «never lifts a committed safeguard»: the
+    // same trigger, the same engine, and the warning goes with the reason for
+    // it (R170 §3 — «in BOTH directions»).
+    await decide(s, true);
+    expect(await reevaluateSessionConsent(prisma, s.fixture.sessionId)).toMatchObject({
+      recordingsInspected: 1,
+      warningsRaised: 0,
+      warningsCleared: 1,
+    });
+    const cleared = await contentRow(s.contentId);
+    expect(cleared).toMatchObject({
+      mediaConsentMissing: false,
+      consentForcedPrivate: false,
       visibility: 'public',
       storageBucket: BUCKETS.public,
+      storageKey: s.key,
+      version: warned.version + 1,
     });
-    // Storage cannot roll back with PostgreSQL. The verified private copy and
-    // its digest are the recovery boundary after the public delete succeeded.
-    expect(await statObjectStrict(clients, BUCKETS.public, placement.key)).toBeNull();
-    expect(await statObjectStrict(clients, BUCKETS.private, placement.key)).not.toBeNull();
-    vi.restoreAllMocks();
-    expectConvergedMigration(
-      await migrateConsentForcedContent(prisma, clients, placement.contentId),
+    expect(await consentWarningAudits(s.contentId)).toEqual([
+      {
+        detail: {
+          reason: 'consent_gate',
+          media_consent_missing: true,
+          source_session_id: s.fixture.sessionId,
+        },
+      },
+      {
+        detail: {
+          reason: 'consent_gate',
+          media_consent_missing: false,
+          source_session_id: s.fixture.sessionId,
+        },
+      },
+    ]);
+    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual(digestOf(s.bytes));
+    await expectServedAtNginx(s.key);
+  });
+
+  it('keeps the warning atomic with its mandatory audit', async () => {
+    const s = await scenario('warning-audit-rollback');
+    await decide(s, false);
+    await deferLiveDelivery(s.fixture.sessionId);
+    const before = await contentRow(s.contentId);
+    vi.spyOn(audit, 'write').mockRejectedValueOnce(
+      new Error('controlled consent warning audit failure'),
     );
+    try {
+      await expect(
+        reevaluateSessionConsent(prisma, s.fixture.sessionId),
+      ).rejects.toThrow('controlled consent warning audit failure');
+    } finally {
+      vi.restoreAllMocks();
+    }
+    // The flag and its version step rolled back with the audit row (TD-4).
+    expect(await contentRow(s.contentId)).toEqual(before);
+    expect(await consentWarningAudits(s.contentId)).toEqual([]);
     expect(
-      await prisma.educationalContent.findUniqueOrThrow({
-        where: { id: placement.contentId },
-      }),
-    ).toMatchObject({
-      consentForcedPrivate: true,
-      visibility: 'private',
-      storageBucket: BUCKETS.private,
-      storageKey: placement.key,
+      await jobCount(JOB_QUEUES.contentBucketMigrate, 'content_id', s.contentId),
+    ).toBe(0);
+
+    // The obligation is durable: the retry commits the warning with its audit.
+    expect(await reevaluateSessionConsent(prisma, s.fixture.sessionId)).toMatchObject({
+      warningsRaised: 1,
     });
+    expect(await contentRow(s.contentId)).toMatchObject({
+      mediaConsentMissing: true,
+      visibility: 'public',
+      version: before.version + 1,
+    });
+    expect(await consentWarningAudits(s.contentId)).toHaveLength(1);
   });
 
-  it('a migration snapshot cannot overwrite a replacement or a deletion', async () => {
-    const replacement = await scenario('replacement-race');
-    await decide(replacement, false);
-    await reevaluateSessionConsent(prisma, replacement.fixture.sessionId);
-    const replacementKey = `content/${replacement.contentId}/replacement.pdf`;
-    const replacementBytes = canonicalBytes('replacement-winner');
-    await expect(
-      migrateConsentForcedContent(prisma, clients, replacement.contentId, {
-        afterVerifiedCopy: async () => {
-          await putCanonical(BUCKETS.public, replacementKey, replacementBytes);
-          await prisma.educationalContent.update({
-            where: { id: replacement.contentId },
-            data: {
-              storageKey: replacementKey,
-              sizeBytes: BigInt(replacementBytes.length),
-              version: { increment: 1 },
-            },
-          });
-        },
-      }),
-    ).resolves.toMatchObject({ state: 'retired' });
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({
-        where: { id: replacement.contentId },
-      }),
-    ).toMatchObject({ storageKey: replacementKey, visibility: 'public' });
-    expect(await hashStoredObject(clients, BUCKETS.public, replacementKey)).toEqual({
-      sizeBytes: replacementBytes.length,
-      sha256: createHash('sha256').update(replacementBytes).digest('hex'),
-    });
-    expect(await statObjectStrict(clients, BUCKETS.public, replacement.key)).toBeNull();
-
-    // A fresh full recompute migrates the winner, never the stale coordinate.
-    await reevaluateSessionConsent(prisma, replacement.fixture.sessionId);
-    await migrateConsentForcedContent(prisma, clients, replacement.contentId);
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({
-        where: { id: replacement.contentId },
-      }),
-    ).toMatchObject({ storageKey: replacementKey, visibility: 'private' });
-
-    const deleted = await scenario('deletion-race');
-    await decide(deleted, false);
-    await reevaluateSessionConsent(prisma, deleted.fixture.sessionId);
-    await expect(
-      migrateConsentForcedContent(prisma, clients, deleted.contentId, {
-        afterVerifiedCopy: async () => {
-          await prisma.educationalContent.update({
-            where: { id: deleted.contentId },
-            data: { deletedAt: new Date(), version: { increment: 1 } },
-          });
-        },
-      }),
-    ).resolves.toMatchObject({ state: 'retired' });
-    expect(await statObjectStrict(clients, BUCKETS.public, deleted.key)).toBeNull();
-  });
-
-  it('replacement closes the new coordinate and durably retires the exact old public key', async () => {
+  it('replacement of a warned public recording goes through the ordinary quarantine transition and the old public key stops being served', async () => {
     const s = await scenario('service-replacement');
     // This test owns replacement behavior, not asynchronous consent delivery.
-    // Set its exact precondition directly so the live consent worker cannot
-    // increment the optimistic version between upload initiation and commit.
-    await prisma.educationalContent.update({
-      where: { id: s.contentId },
-      data: { consentForcedPrivate: true },
-    });
+    // Replacement itself wakes the consent worker for every linked Session, so
+    // the precondition is set directly AND made genuine: the worker must find
+    // the warning already right, or it could clear it — and move the
+    // optimistic version — between upload initiation and commit.
+    await warnedWithoutJob(s);
     const replacement = await replaceScenarioFile(s, 'service-replacement-winner');
 
-    const current = await prisma.educationalContent.findUniqueOrThrow({
-      where: { id: s.contentId },
-    });
+    const current = await contentRow(s.contentId);
     expect(current).toMatchObject({
       storageKey: replacement.key,
       storageBucket: BUCKETS.public,
       visibility: 'public',
-      consentForcedPrivate: true,
+      mediaConsentMissing: true,
+      consentForcedPrivate: false,
     });
+    // The exact old key was copied to `quarantine/…` in its own bucket and
+    // removed (TD-9), never migrated to private on consent grounds (R170 §3).
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
     expect(await hashStoredObject(
       clients,
+      BUCKETS.public,
+      quarantineKeyFor(s.contentId, s.key),
+    )).toEqual(digestOf(s.bytes));
+    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
+    expect(await statObjectStrict(
+      clients,
       BUCKETS.private,
       quarantineKeyFor(s.contentId, s.key),
-    )).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
-    });
+    )).toBeNull();
+    // The old coordinate is no longer named by any live row, so Nginx refuses
+    // it; the quarantine copy is never a public coordinate at all.
+    await expectUnavailableAtNginx(s.key);
+    await expectUnavailableAtNginx(quarantineKeyFor(s.contentId, s.key));
+    // The NEW key is public and served: the warning forced nothing.
     expect((await fetch(publicObjectUrl(replacement.key))).status).toBe(200);
-    expect(
-      (
-        await fetch(proxiedPublicObjectUrl(replacement.key), {
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(302);
-
-    const obligation = await prisma.storageRetirement.findFirstOrThrow({
-      where: { contentId: s.contentId, operation: 'retire_public' },
-    });
-    const retireJobs = await prisma.$queryRaw<
-      { retirement_id: string | null; singleton_key: string | null }[]
-    >`
-      SELECT data->>'retirement_id' AS retirement_id, singleton_key
-      FROM pgboss.job
-      WHERE name = ${JOB_QUEUES.contentBucketMigrate}
-        AND data->>'content_id' = ${s.contentId}
-        AND data->>'operation' = 'retire_public'
-    `;
-    expect(retireJobs).toContainEqual({
-      retirement_id: obligation.id,
-      singleton_key: `retirement:${obligation.id}`,
-    });
-
-    await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
-      'content_id',
-      s.contentId,
-      null,
+    await expectServedAtNginx(replacement.key);
+    expect(await hashStoredObject(clients, BUCKETS.public, replacement.key)).toEqual(
+      digestOf(replacement.bytes),
     );
-    expect(await hashStoredObject(clients, BUCKETS.private, replacement.key)).toEqual({
-      sizeBytes: replacement.bytes.length,
-      sha256: createHash('sha256').update(replacement.bytes).digest('hex'),
-    });
-    expect(await statObjectStrict(clients, BUCKETS.public, replacement.key)).toBeNull();
+
+    // One obligation, the ordinary one, settled with the request.
+    expect(
+      await prisma.storageRetirement.findMany({ where: { contentId: s.contentId } }),
+    ).toEqual([
+      expect.objectContaining({
+        operation: 'quarantine_retired_object',
+        bucket: BUCKETS.public,
+        storageKey: null,
+        completedAt: expect.any(Date),
+      }),
+    ]);
+    expect(await jobCount(JOB_QUEUES.contentBucketMigrate, 'content_id', s.contentId)).toBe(0);
   });
 
-  it('deletion denies the stale coordinate and recovers its exact-key retirement job', async () => {
+  it('deletion of a warned public recording quarantines the exact old key through the ordinary transition and recovers its retirement job', async () => {
     const s = await scenario('service-deletion');
-    await prisma.educationalContent.update({
-      where: { id: s.contentId },
-      data: { consentForcedPrivate: true },
-    });
+    await warnedWithoutJob(s);
     await deleteContent(
       prisma,
       failingPublicDelete(clients, s.key, 'before'),
@@ -1501,42 +1388,79 @@ describe('B-01 consent safeguarding', () => {
       s.contentId,
     );
 
-    expect(
-      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
-    ).toMatchObject({ deletedAt: expect.any(Date) });
+    expect(await contentRow(s.contentId)).toMatchObject({ deletedAt: expect.any(Date) });
+    // The stale coordinate is denied by the database gate at once, even while
+    // the failed delete has left the object in place.
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
+    await expectUnavailableAtNginx(s.key);
     expect(
-      (
-        await fetch(proxiedPublicObjectUrl(s.key), {
-          redirect: 'manual',
-        })
-      ).status,
-    ).toBe(302);
+      await prisma.storageRetirement.findMany({
+        where: { contentId: s.contentId },
+        select: { operation: true, bucket: true },
+      }),
+    ).toEqual([{ operation: 'quarantine_retired_object', bucket: BUCKETS.public }]);
 
     await runProductionJob(
-      JOB_QUEUES.contentBucketMigrate,
+      JOB_QUEUES.contentQuarantinePurge,
       'content_id',
       s.contentId,
-      'retire_public',
+      'quarantine_retired_object',
     );
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
     expect(await hashStoredObject(
       clients,
-      BUCKETS.private,
+      BUCKETS.public,
       quarantineKeyFor(s.contentId, s.key),
-    )).toEqual({
-      sizeBytes: s.bytes.length,
-      sha256: createHash('sha256').update(s.bytes).digest('hex'),
+    )).toEqual(digestOf(s.bytes));
+    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
+    expect(
+      await prisma.storageRetirement.findFirstOrThrow({ where: { contentId: s.contentId } }),
+    ).toMatchObject({ completedAt: expect.any(Date), storageKey: null });
+  });
+
+  it('recovers when the quarantine delete succeeded but the transaction rolled back', async () => {
+    const s = await scenario('ambiguous-delete');
+    await warnedWithoutJob(s);
+    await deleteContent(
+      prisma,
+      failingPublicDelete(clients, s.key, 'after'),
+      adminActor(s),
+      s.contentId,
+    );
+    // The delete really happened; only its reply was lost. A missing source is
+    // success on retry: the verified quarantine copy is the recovery boundary.
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+    expect(await hashStoredObject(
+      clients,
+      BUCKETS.public,
+      quarantineKeyFor(s.contentId, s.key),
+    )).toEqual(digestOf(s.bytes));
+
+    await runProductionJob(
+      JOB_QUEUES.contentQuarantinePurge,
+      'content_id',
+      s.contentId,
+      'quarantine_retired_object',
+    );
+    expect(
+      await prisma.storageRetirement.findFirstOrThrow({ where: { contentId: s.contentId } }),
+    ).toMatchObject({
+      operation: 'quarantine_retired_object',
+      completedAt: expect.any(Date),
+      storageKey: null,
     });
+    expect(await hashStoredObject(
+      clients,
+      BUCKETS.public,
+      quarantineKeyFor(s.contentId, s.key),
+    )).toEqual(digestOf(s.bytes));
   });
 
   it('a durable obligation survives a worker restart and drains through pg-boss', async () => {
     const firstProcess = boss();
     await firstProcess.start();
     await firstProcess.createQueue(JOB_QUEUES.consentReevaluate, TD7_RETRY_POLICY);
-    await firstProcess.createQueue(JOB_QUEUES.contentBucketMigrate, TD7_RETRY_POLICY);
     await firstProcess.updateQueue(JOB_QUEUES.consentReevaluate, TD7_RETRY_POLICY);
-    await firstProcess.updateQueue(JOB_QUEUES.contentBucketMigrate, TD7_RETRY_POLICY);
     await firstProcess.stop({ graceful: true });
 
     const s = await scenario('restart');
@@ -1564,23 +1488,12 @@ describe('B-01 consent safeguarding', () => {
         await reevaluateSessionConsent(prisma, data.session_id);
       },
     );
-    await restarted.work(
-      JOB_QUEUES.contentBucketMigrate,
-      { pollingIntervalSeconds: 0.5 },
-      async ([job]) => {
-        if (!job) throw new Error('bucket worker received no job');
-        const data = job.data as { content_id: string };
-        await migrateConsentForcedContent(prisma, clients, data.content_id);
-      },
-    );
     try {
       try {
         await waitUntil(async () => {
-          const row = await prisma.educationalContent.findUniqueOrThrow({
-            where: { id: s.contentId },
-          });
-          return row.visibility === 'private' && row.storageBucket === BUCKETS.private;
-        }, 'consent and bucket workers to drain', 5_000);
+          const row = await contentRow(s.contentId);
+          return row.mediaConsentMissing;
+        }, 'consent worker to drain', 5_000);
       } catch (error) {
         const jobs = await prisma.$queryRaw<
           {
@@ -1597,15 +1510,11 @@ describe('B-01 consent safeguarding', () => {
           SELECT name, state::text, retry_count, output, created_on,
                  start_after, blocked, policy
           FROM pgboss.job
-          WHERE (name = ${JOB_QUEUES.consentReevaluate}
-                 AND data->>'session_id' = ${s.fixture.sessionId})
-             OR (name = ${JOB_QUEUES.contentBucketMigrate}
-                 AND data->>'content_id' = ${s.contentId})
+          WHERE name = ${JOB_QUEUES.consentReevaluate}
+            AND data->>'session_id' = ${s.fixture.sessionId}
           ORDER BY created_on
         `;
-        const row = await prisma.educationalContent.findUniqueOrThrow({
-          where: { id: s.contentId },
-        });
+        const row = await contentRow(s.contentId);
         const wip = restarted.getWipData().map((entry) => ({
           name: entry.name,
           state: entry.state,
@@ -1632,54 +1541,68 @@ describe('B-01 consent safeguarding', () => {
           `${String(error)}; queue=${JSON.stringify(queue)}; routing=${JSON.stringify(routing)}; jobs=${JSON.stringify(jobs)}; wip=${JSON.stringify(wip)}; content=${JSON.stringify({
             visibility: row.visibility,
             storageBucket: row.storageBucket,
-            consentForcedPrivate: row.consentForcedPrivate,
+            mediaConsentMissing: row.mediaConsentMissing,
           })}`,
         );
       }
     } finally {
       await restarted.stop({ graceful: true });
     }
-    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
-    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).not.toBeNull();
+    // Drained into a warning, and nothing else: the object stayed where it was.
+    expect(await contentRow(s.contentId)).toMatchObject({
+      visibility: 'public',
+      storageBucket: BUCKETS.public,
+    });
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
+    expect(await statObjectStrict(clients, BUCKETS.private, s.key)).toBeNull();
   });
 
   it('pg-boss retries a transient storage failure with the registered TD-7 policy', async () => {
     const s = await scenario('pgboss-retry');
-    // Establish the migration precondition without putting this content on the
-    // live application's shared queue. Otherwise its worker can finish the row
-    // while this test's worker is proving retry behavior, or a concurrent full
-    // recompute can legitimately enqueue a follow-up while the first row is
-    // active. Both are correct production behavior and neither isolates which
-    // execution consumed the injected storage failure.
+    // Establish an ordinary exact-key obligation WITHOUT putting it on the live
+    // application's shared queue: its worker would otherwise complete the row
+    // first and nothing would isolate which execution consumed the injected
+    // storage failure. The row is soft-deleted directly so the coordinate is
+    // no longer canonical, and the obligation is written as `requireRetirement`
+    // would, minus its wake-up.
     await prisma.educationalContent.update({
       where: { id: s.contentId },
-      data: { consentForcedPrivate: true },
+      data: { deletedAt: new Date(), deletedById: s.actorId },
+    });
+    const obligation = await prisma.storageRetirement.create({
+      data: {
+        dedupKey: createHash('sha256').update(`b01-storage-retry:${s.contentId}`).digest('hex'),
+        contentId: s.contentId,
+        operation: 'quarantine_retired_object',
+        bucket: BUCKETS.public,
+        storageKey: s.key,
+      },
     });
 
     const flaky = failingPublicDelete(clients, s.key, 'before');
     const queue = `b01-storage-retry-${randomUUID()}`;
     const worker = boss();
     await worker.start();
-    const registered = await worker.getQueue(JOB_QUEUES.contentBucketMigrate);
+    const registered = await worker.getQueue(JOB_QUEUES.contentQuarantinePurge);
     expect(registered).toMatchObject(TD7_RETRY_POLICY);
     await worker.createQueue(queue, TD7_RETRY_POLICY);
-    const id = await worker.send(queue, { content_id: s.contentId });
+    const id = await worker.send(queue, { retirement_id: obligation.id });
     if (!id) throw new Error('pg-boss did not return a storage retry job id');
     await worker.work(
       queue,
       { pollingIntervalSeconds: 0.5 },
       async ([job]) => {
-        if (!job) throw new Error('bucket worker received no job');
-        const data = job.data as { content_id: string };
-        await migrateConsentForcedContent(prisma, flaky, data.content_id);
+        if (!job) throw new Error('quarantine worker received no job');
+        const data = job.data as { retirement_id: string };
+        await executeRetirement(prisma, flaky, data.retirement_id);
       },
     );
     try {
       await waitUntil(async () => {
-        const row = await prisma.educationalContent.findUniqueOrThrow({
-          where: { id: s.contentId },
+        const record = await prisma.storageRetirement.findUniqueOrThrow({
+          where: { id: obligation.id },
         });
-        return row.visibility === 'private';
+        return record.completedAt !== null;
       }, 'TD-7 storage retry to complete');
       await waitUntil(async () => {
         const [job] = await prisma.$queryRaw<{ state: string; retry_count: number }[]>`
@@ -1695,7 +1618,17 @@ describe('B-01 consent safeguarding', () => {
         WHERE name = ${queue} AND id = ${id}::uuid
       `;
       expect(jobs[0]).toMatchObject({ state: 'completed', retry_count: 1 });
+      // The first attempt recorded its failure on the domain row; the retry
+      // found the verified quarantine copy and finished the exact-key delete.
+      expect(
+        await prisma.storageRetirement.findUniqueOrThrow({ where: { id: obligation.id } }),
+      ).toMatchObject({ attempts: 1, lastErrorCode: null, storageKey: null });
       expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+      expect(await hashStoredObject(
+        clients,
+        BUCKETS.public,
+        quarantineKeyFor(s.contentId, s.key),
+      )).toEqual(digestOf(s.bytes));
     } finally {
       await worker.deleteQueue(queue);
       await worker.stop({ graceful: true });

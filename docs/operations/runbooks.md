@@ -165,10 +165,10 @@ WHERE action_type = 'auth.token_revoked'
   AND detail->>'reason' = 'reuse_detected'
 ORDER BY created_at DESC;
 
--- Consent-gate overrides, with their mandatory justifications
-SELECT created_at, actor_user_id, target_id, detail->>'justification' AS justification
+-- Consent warnings raised and cleared by the engine (R170 §3)
+SELECT created_at, target_id, detail->>'media_consent_missing' AS missing, detail->>'source_session_id' AS session
 FROM "AuditLog"
-WHERE action_type = 'consent_gate.override'
+WHERE action_type = 'content.consent_warning'
 ORDER BY created_at DESC;
 ```
 
@@ -357,15 +357,15 @@ job after restoring MinIO. Do not delete the canonical content key, do not enque
 bucket sweep, and do not use `upload.gc` for this recording-specific obligation.
 
 For `consent.reevaluate`, first inspect the named `session_id`. A missing/deleted occurrence
-converges as an empty no-op; a repeated storage/placement inconsistency is fail-closed and must
-be investigated rather than bypassed. Do not clear `consent_forced_private` to make the job
-green.
+converges as an empty no-op. Since R170 §3 the job writes only `media_consent_missing` (a
+warning, both directions) and moves no bytes; do not hand-edit that flag — the next run
+recomputes it from the audience.
 
 For `content.bucket-migrate`, inspect `content_id` and the current row before redrive:
 
-- `consent_forced_private = true`, `visibility = public`, `storage_bucket = public` is a valid
-  pending safeguard. Public application reads and Nginx's stable object URL are already
-  closed; only the network-internal public-bucket copy remains until migration succeeds.
+- A `consent_migrate` obligation is a pre-R170 leftover: the worker completes it with
+  `last_error_code = 'withdrawn_r170'` and touches no object. There is no pending consent
+  safeguard state any more.
 - Resolve the job's `retirement_id` to its `StorageRetirement` record. Legacy jobs alone
   still carry `source_key`; they must be imported before retention can remove them.
   An ordinary consent migration must

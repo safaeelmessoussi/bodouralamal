@@ -143,15 +143,17 @@ true.
 
 ### The Session consent gate
 
-This is where consent becomes structural rather than administrative.
+This is where consent becomes structural rather than administrative — **and, since SRS
+Revision 170 §3 (the Owner, 2026-09-21), a warning rather than a lock.**
 
 > If a Session's resolved audience has **even one** beneficiary without effective media
-> consent, every recording linked to it is forced private. Shared recordings use the union
-> of all linked Session audiences.
+> consent, every recording linked to it is **warned**. Shared recordings use the union of
+> all linked Session audiences. Nothing is forced; the staff member reads the warning and
+> switches to private herself.
 > — [`BR-2`](../reference/business-rules.md#br-2)
 
 Crucially, this is **not a check performed at upload time**. It is a continuously
-maintained invariant, re-evaluated automatically whenever any of three things happen:
+maintained fact, re-evaluated automatically whenever any of three things happen:
 
 1. a beneficiary joins/leaves/moves in an enrollment or Teaching Group, or a Session-content
    link or R92 occurrence-audience branch changes,
@@ -163,20 +165,18 @@ soft-deleted. Deployment startup also walks live recording-linked Sessions in bo
 and inserts the same idempotent reevaluation obligations, so older backlog converges without a
 separate policy path.
 
-A recording published while everyone consented **flips to private** when a non-consenting
-beneficiary later joins the resolved audience, or when consent is revoked. Application reads
-and the stable public storage origin fail closed when re-evaluation commits; the durable
-worker pins, copies and hashes the exact canonical key, retires its network-internal public
-copy, then commits private placement. Replacement/deletion retain exact old-key obligations,
-so stale work cannot delete newer bytes. General visibility editing remains separate.
+Where the warning is seen: on «مكتبة المحتوى», beside the visibility control and as a badge on
+the tier; and on the class occurrence dialog **before** the مؤطِّرة presses record. It is shown
+to teachers, Admins and Super Admins, and to nobody else — a fact about a child. A later grant,
+or a change of roster that removes the last non-consenting beneficiary, **clears** the warning.
 
-**Only an Admin can lift a consent-forced private state, and only with a written
-justification** that is recorded in the audit log. A teacher can never do it
-([`BR-3`](../reference/business-rules.md#br-3)).
+*Until R170* the same job forced every such recording private and moved its bytes to the
+private bucket, and only an Admin with a written justification could release it (BR-3). The
+Owner replaced that with the warning; BR-3 is withdrawn.
 
 One edge case is worth stating because it looks like a bug: a Session whose resolved audience
-is empty has no non-consenting beneficiary, so the gate does not engage. The first audience
-mutation adding a beneficiary without consent triggers re-evaluation and forces the flip.
+is empty has no non-consenting beneficiary, so nothing is warned. The first audience mutation
+adding a beneficiary without consent raises the warning.
 
 > SRS §4.1a, §4.9 · [Storage](../architecture/storage.md#consent-gating) ·
 > [Background jobs](../architecture/background-jobs.md)

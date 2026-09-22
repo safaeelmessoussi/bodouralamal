@@ -41,8 +41,12 @@ import { requireRetirement } from '../repositories/storage-retirement.repository
 export interface ConsentReevaluationOutcome {
   sessionId: string;
   recordingsInspected: number;
-  recordingsForced: number;
-  migrationsEnqueued: number;
+  /** R170 §3 — warnings RAISED this pass (a student without media release
+   *  joined the recording's audience, or her release was withdrawn). */
+  warningsRaised: number;
+  /** …and CLEARED (a later grant, or a change of roster): a warning describes
+   *  the present, unlike the one-way safeguard it replaced. */
+  warningsCleared: number;
 }
 
 export interface BucketMigrationOutcome {
@@ -421,6 +425,31 @@ async function linkedSessionIdsForContent(
   ).map((row) => row.sessionId);
 }
 
+/**
+ * **Does this class contain a beneficiary whose guardian refused media release?**
+ * (SRS Revision 170 §3 — the warning, asked BEFORE anything is recorded.) The
+ * same audience resolution and the same BR-1 «latest row wins, absence is no
+ * consent» the recording warning uses; a class with no audience warns nothing.
+ * Read-only, no locks: it is a warning on a screen, not a safeguard on a write.
+ */
+export async function sessionAudienceLacksMediaConsent(
+  db: PrismaClient | Prisma.TransactionClient,
+  sessionId: string,
+): Promise<boolean> {
+  const spec = await audienceForSession(db, sessionId);
+  if (spec === null) return false;
+  const audience = (await resolveAudience(db, spec)).map((row) => row.id);
+  if (audience.length === 0) return false;
+  const consent = latestMediaConsent(
+    await db.consentRecord.findMany({
+      where: { studentId: { in: audience }, consentType: 'media_release' },
+      orderBy: [{ grantedAt: 'desc' }, { id: 'desc' }],
+      select: { studentId: true, granted: true },
+    }),
+  );
+  return audience.some((id) => consent.get(id) !== true);
+}
+
 async function unsafeRecordingContentIds(
   tx: Prisma.TransactionClient,
   contentIds: readonly string[],
@@ -481,15 +510,16 @@ export async function recordingContentRequiresSafeguardUnderLocks(
   return (await unsafeRecordingContentIds(tx, [contentId], lockedSessionIds)).has(contentId);
 }
 
-/** Metadata corrections can make an already-linked file a recording. The caller
- * holds all live Session anchors before the Content lock and invokes this after
- * the metadata CAS, so both the flag and exact-key obligation commit with it.
- * Also check removal of the recording marker: it cannot outrun an owed safeguard. */
+/** Metadata corrections can make an already-linked file a recording (or stop it
+ * being one). The caller holds all live Session anchors before the Content lock
+ * and invokes this after the metadata CAS, so the warning commits with the edit
+ * (R170 §3: a warning, never a forced state). */
 export async function safeguardRetaggedRecordingUnderLocks(
   tx: Prisma.TransactionClient,
   contentId: string,
   lockedSessionIds: readonly string[],
 ): Promise<void> {
+  let missing: boolean;
   try {
     // Empty discovery is still a snapshot: a first link may have committed
     // before the caller acquired Content. Never skip graph validation merely
@@ -497,7 +527,7 @@ export async function safeguardRetaggedRecordingUnderLocks(
     if (lockedSessionIds.length === 0 && (await linkedSessionIdsForContent(tx, [contentId])).length > 0) {
       throw new ConsentGraphChangedError('recording link graph changed while acquiring locks');
     }
-    if (!(await recordingContentRequiresSafeguardUnderLocks(tx, contentId, lockedSessionIds))) return;
+    missing = await recordingContentRequiresSafeguardUnderLocks(tx, contentId, lockedSessionIds);
   } catch (error) {
     // Workers retry graph discovery internally; an interactive metadata edit
     // must instead expose the ordinary coded conflict, never an HTTP 500.
@@ -510,36 +540,48 @@ export async function safeguardRetaggedRecordingUnderLocks(
   }
   const content = await tx.educationalContent.findFirst({
     where: { id: contentId, deletedAt: null },
-    select: { id: true, visibility: true, consentForcedPrivate: true, storageKey: true },
+    select: { id: true, mediaConsentMissing: true, origin: true },
   });
-  if (content) await forceContentSafeguard(tx, content);
+  if (!content) return;
+  // A warning describes the PRESENT: an item that is no longer a recording is
+  // outside the graph the job re-evaluates, so nothing would ever clear a
+  // warning left on it. It carries none. (Under BR-2 the stickiness was the
+  // point — fail closed; R170 §3 has no closed state to fail into.)
+  await writeConsentWarning(tx, content, content.origin === 'session_recording' && missing);
 }
 
-async function forceContentSafeguard(
+/**
+ * **The warning, written where it changed** (SRS Revision 170 §3 — the Owner:
+ * *«just a warning … nothing should be forced, keep the by default public»*).
+ * This replaced `forceContentSafeguard`, which set `consent_forced_private`
+ * and enqueued the public→private migration. Nothing is forced now: the flag
+ * says «a student in this recording's audience has no media release», in BOTH
+ * directions, and the audit row says when it changed and why.
+ */
+async function writeConsentWarning(
   tx: Prisma.TransactionClient,
-  content: { id: string; visibility: string; consentForcedPrivate: boolean; storageKey: string },
+  content: { id: string; mediaConsentMissing: boolean },
+  missing: boolean,
   sourceSessionId?: string,
-): Promise<{ forced: boolean; enqueued: boolean }> {
-  if (!content.consentForcedPrivate) {
-    await tx.educationalContent.update({
-      where: { id: content.id },
-      data: { consentForcedPrivate: true, version: { increment: 1 } },
-    });
-    await audit.write(tx, {
-      actorUserId: null,
-      actionType: 'content.visibility_change',
-      targetEntity: 'EducationalContent', targetId: content.id,
-      detail: {
-        reason: 'consent_gate', old_visibility: content.visibility, new_visibility: content.visibility,
-        old_consent_forced_private: false, new_consent_forced_private: true,
-        bucket_migration_pending: content.visibility === 'public',
-        ...(sourceSessionId === undefined ? {} : { source_session_id: sourceSessionId }),
-      },
-    });
-  }
-  const enqueued = content.visibility === 'public' &&
-    await enqueueConsentContentMigration(tx, content.id, content.storageKey);
-  return { forced: !content.consentForcedPrivate, enqueued };
+): Promise<'raised' | 'cleared' | 'unchanged'> {
+  if (content.mediaConsentMissing === missing) return 'unchanged';
+  await tx.educationalContent.update({
+    where: { id: content.id },
+    data: { mediaConsentMissing: missing, version: { increment: 1 } },
+  });
+  await audit.write(tx, {
+    actorUserId: null,
+    actionType: 'content.consent_warning',
+    targetEntity: 'EducationalContent',
+    targetId: content.id,
+    // TD-14: the fact and its source, never who lacks the release.
+    detail: {
+      reason: 'consent_gate',
+      media_consent_missing: missing,
+      ...(sourceSessionId === undefined ? {} : { source_session_id: sourceSessionId }),
+    },
+  });
+  return missing ? 'raised' : 'cleared';
 }
 
 async function reevaluateSessionConsentOnce(
@@ -556,12 +598,7 @@ async function reevaluateSessionConsentOnce(
     await hooks.beforeSessionLocks?.([...new Set(initialSessionIds)].sort());
     const lockedSessionIds = await lockLiveSessions(tx, initialSessionIds);
     if (!lockedSessionIds.includes(sessionId)) {
-      return {
-        sessionId,
-        recordingsInspected: 0,
-        recordingsForced: 0,
-        migrationsEnqueued: 0,
-      };
+      return { sessionId, recordingsInspected: 0, warningsRaised: 0, warningsCleared: 0 };
     }
 
     // Re-read after the one global lock acquisition. A link writer also locks
@@ -574,12 +611,7 @@ async function reevaluateSessionConsentOnce(
       throw new ConsentGraphChangedError('recording graph grew before Session locks settled');
     }
     if (contentIds.length === 0) {
-      return {
-        sessionId,
-        recordingsInspected: 0,
-        recordingsForced: 0,
-        migrationsEnqueued: 0,
-      };
+      return { sessionId, recordingsInspected: 0, warningsRaised: 0, warningsCleared: 0 };
     }
 
     const unsafeContentIds = await unsafeRecordingContentIds(
@@ -591,40 +623,20 @@ async function reevaluateSessionConsentOnce(
     await lockEducationalContent(tx, sortedContentIds);
     const contents = await tx.educationalContent.findMany({
       where: { id: { in: sortedContentIds }, deletedAt: null },
-      select: {
-        id: true,
-        visibility: true,
-        consentForcedPrivate: true,
-        storageBucket: true,
-        storageKey: true,
-      },
+      select: { id: true, mediaConsentMissing: true },
     });
 
-    let recordingsForced = 0;
-    let migrationsEnqueued = 0;
+    // R170 §3 — every recording of the graph is told the PRESENT: warned when a
+    // student of its audience has no release, cleared when nobody lacks one.
+    let warningsRaised = 0;
+    let warningsCleared = 0;
     for (const content of contents.sort((a, b) => a.id.localeCompare(b.id))) {
-      if (!unsafeContentIds.has(content.id)) continue;
-      const expectedBucket = content.visibility === 'public' ? BUCKETS.public : BUCKETS.private;
-      if (content.storageBucket !== expectedBucket) {
-        throw new Error(
-          `content ${content.id} violates visibility/bucket placement before consent reconciliation`,
-        );
-      }
-
-      // Re-enqueue even when the flag was already true. The exact source key
-      // makes a stale retry safe across replacement/deletion, while the public
-      // proxy gate above already denies this coordinate after COMMIT.
-      const result = await forceContentSafeguard(tx, content, sessionId);
-      if (result.forced) recordingsForced += 1;
-      if (result.enqueued) migrationsEnqueued += 1;
+      const result = await writeConsentWarning(tx, content, unsafeContentIds.has(content.id), sessionId);
+      if (result === 'raised') warningsRaised += 1;
+      if (result === 'cleared') warningsCleared += 1;
     }
 
-    return {
-      sessionId,
-      recordingsInspected: contents.length,
-      recordingsForced,
-      migrationsEnqueued,
-    };
+    return { sessionId, recordingsInspected: contents.length, warningsRaised, warningsCleared };
   });
 }
 

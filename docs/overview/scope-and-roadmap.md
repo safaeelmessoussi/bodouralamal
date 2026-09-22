@@ -39,7 +39,7 @@ operations across 35 paths**, **ten CI guards**.
 - Dockerized deployment to a Moroccan VPS
 - **Google OAuth only**, provider-abstracted, OAuth-first onboarding
 - Unified parent + child registration as one transaction
-- Approvals and **versioned consent records**, with continuous re-evaluation and forced-private enforcement
+- Approvals and **versioned consent records**, with continuous re-evaluation and a staff warning (R170 §3; forced-private until then)
 - **Branch-scoped access control**, teacher scoping through group assignment, per-request child-context verification
 - Group timetables plus an event exception layer, with explicit scope joins and branch-activation backfill
 - Dual Gregorian/Hijri calendar, the Hijri side reproducing the Ministry's recorded announcements

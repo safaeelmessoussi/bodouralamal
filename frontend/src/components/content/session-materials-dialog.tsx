@@ -5,6 +5,7 @@ import { linkSessionContent, unlinkSessionContent } from '../../adapters/session
 import { t } from '../../i18n/index.js';
 import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { api } from '../../lib/api.js';
+import { Feedback } from '../ui/feedback.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 import { SearchableSelect } from '../ui/searchable-select.js';
@@ -75,6 +76,8 @@ export function SessionMaterialsDialog({
    * right.
    */
   const [suggestedName, setSuggestedName] = useState('');
+  /** R170 §3 — a warning, read before recording; never a lock. */
+  const [consentWarning, setConsentWarning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +91,7 @@ export function SessionMaterialsDialog({
     setLinked(page.linked_content);
     setRecordings(page.recordings);
     setSuggestedName(page.suggested_recording_name);
+    setConsentWarning(page.audience_media_consent_missing === true);
     // The candidates are the library items in this session's own Level and
     // Subject — the ones a teacher would plausibly attach. A full library list
     // would make the picker a search problem the dialog is not.
@@ -237,6 +241,14 @@ export function SessionMaterialsDialog({
           The recorder renders its own *not supported* state, so no condition
           lives here — a check in this file would be a second opinion about the
           browser, and the two would disagree the first time either changed. */}
+      {/* R170 §3 — the Owner: «just a warning should be shown for the teacher,
+          admin/super admin, but nothing should be forced». Said BEFORE she
+          records, where the decision is made; the recorder stays hers. */}
+      {canRecord && consentWarning ? (
+        <Feedback tone="warn" data-consent-warning>
+          {t('session.consentWarning')}
+        </Feedback>
+      ) : null}
       {!canRecord ? null : recording ? (
         <AudioRecorder
           meta={{

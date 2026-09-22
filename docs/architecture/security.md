@@ -20,7 +20,7 @@ threats that actually matter here are:
 | **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
 | **Registration races staff pre-provisioning** | One verified email could become attached to two different accounts through separate tables | Shared normalized-email row lock; cross-channel re-read inside each ownership transaction |
 | **The last accountable platform owner is disabled or two transfers race** | Administrative continuity and accountability could disappear or fork | Protected singleton; owner-first/deterministic locks; DB eligibility/lifecycle triggers; explicit atomic transfer |
-| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated monotonic consent gate; exact-row authorization on the only public object origin; forced bucket migration |
+| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated consent WARNING to staff, before recording and beside the visibility control (R170 §3 — nothing forced); exact-row authorization on the only public object origin |
 | **Production/beneficiary data leaves Moroccan infrastructure** | Law 09-08 violation | No Production copies outside Morocco; controlled-UAT Staging permits only the exact R115 Owner staff identity |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |
 

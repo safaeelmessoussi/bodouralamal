@@ -36,6 +36,7 @@ import {
   sessionTierWhere,
   teacherEventVisibility,
 } from "../policies/scheduling-visibility.js";
+import { sessionAudienceLacksMediaConsent } from "./consent-reevaluation.service.js";
 
 /**
  * Calendar read (SRS §4.4, TD-3.4, TD-11, §19.2).
@@ -2047,6 +2048,14 @@ export interface SessionPage {
    * in R125's target model forbids a second quiz for the same lesson.
    */
   linkedExams: SessionLinkedExam[];
+  /**
+   * **R170 §3 — the consent warning, before anything is recorded.** `true` when
+   * this class's audience includes a beneficiary whose guardian refused (or
+   * never gave) media release; **`null` for every reader who is not staff** —
+   * it is a fact about a child, told to the people who decide whether and how
+   * to record, and to nobody else.
+   */
+  audienceMediaConsentMissing: boolean | null;
 }
 
 export interface SessionLinkedExam {
@@ -2267,5 +2276,9 @@ export async function readSessionPage(
       }),
       items.map((c) => c.title),
     ),
+    audienceMediaConsentMissing:
+      actor !== null && actor.accountStatus === "active" && (isAdmin(actor) || isTeacher(actor))
+        ? await sessionAudienceLacksMediaConsent(prisma, sessionId)
+        : null,
   };
 }

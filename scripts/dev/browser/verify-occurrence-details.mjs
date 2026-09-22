@@ -85,10 +85,24 @@ const openFirstOccurrence = () =>
      * if this one has no class in it.
      */
     let entries = [...document.querySelectorAll('.cal-day__events .event-chip--session')];
+    // Forward first, then BACK: the R82 scenario's one occurrence sits on a
+    // fixed date (2026-08-24), and a personal calendar opened at a later month
+    // showed nothing at all once September came (stale since 2026-09-01; found
+    // 2026-09-22). Addressed by its ARIA label, never by an arrow glyph.
+    const step = (label) => [...document.querySelectorAll('button')].find(
+      (b) => b.getAttribute('aria-label') === label || b.textContent.trim() === label,
+    );
     for (let hop = 0; hop < 4 && entries.length === 0; hop += 1) {
-      const next = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'التالي');
+      const next = step('الشهر التالي') ?? step('التالي');
       if (!next) break;
       next.click();
+      await new Promise((r) => setTimeout(r, 2200));
+      entries = [...document.querySelectorAll('.cal-day__events .event-chip--session')];
+    }
+    for (let hop = 0; hop < 10 && entries.length === 0; hop += 1) {
+      const previous = step('الشهر السابق') ?? step('السابق');
+      if (!previous) break;
+      previous.click();
       await new Promise((r) => setTimeout(r, 2200));
       entries = [...document.querySelectorAll('.cal-day__events .event-chip--session')];
     }

@@ -53,7 +53,8 @@ export async function isCurrentPublicObject(
     where: {
       deletedAt: null,
       visibility: 'public',
-      consentForcedPrivate: false,
+      // R170 §3 — `consent_forced_private` no longer gates a read: the warning
+      // is staff's to act on, and the row's `visibility` is the whole answer.
       storageBucket: 'public',
       storageKey,
     },

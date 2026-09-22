@@ -7,6 +7,10 @@ supersedes historical inventory/filing suggestions, not the preserved evidence.
 
 ## Current filing preparation — 2026-09-13
 
+> **2026-09-22 (R170 §13):** the declaration's answers and the full Arabic privacy-notice text are
+> prepared in [cndp-filing-and-privacy-notice.md](cndp-filing-and-privacy-notice.md) for the
+> Owner's review; the regime and transfer determinations below still stand as open.
+
 **Preparation only; not legal advice, filing, receipt or approval.** Reconciled
 2026-09-13 against repository HEAD `4e43697` — H1–H6 and H3 closed locally, the
 `docker-compose.storage.yml` deploy fix applied, hosted CI green — superseding the

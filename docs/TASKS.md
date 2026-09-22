@@ -5604,8 +5604,14 @@ The Owner's six replies to Revision 167's report. One migration so far
       section cards; two columns on a wide screen, one on a phone; required
       before optional, the optional block said once per person. No field or
       request key changed. Five harnesses moved onto `role-chooser.mjs`.
-- [ ] **§3 — the consent gate becomes a WARNING** (nothing forced, default
-      public, staff switch to private themselves). Reverses BR-2/BR-3.
+- [x] **§3 — the consent gate becomes a WARNING** (nothing forced, default
+      public, staff switch to private themselves). Reverses BR-2/BR-3. **BUILT
+      (part three):** the engine writes `media_consent_missing` both ways;
+      no refusal, no forced migration, no fail-closed read; staff see the
+      warning on «مكتبة المحتوى» (badge + beside the visibility control) and on
+      the class dialog before recording; `consent_forced_private` retired;
+      `CONSENT_GATE_LOCKED` removed; BR-2/BR-3/§4.9/§4.1a/TD-2/§20 r7
+      annotated in place. One migration.
 - [x] §4 — editing an already-scheduled remote session's arrangements.
       **[Closed 2026-09-22 — FOUND ALREADY BUILT by R145 §1/R146 §2 (`PATCH
       /exams/{id}/schedule`, الجدولة's «تعديل», 10 HTTP tests); the ledger box
@@ -5645,8 +5651,13 @@ The Owner's six replies to Revision 167's report. One migration so far
       «حسابي» under the declined request; audit `reason_shared`.
 - [x] §12 — recorded, nothing to build: no guardianship-document check; health,
       family situation and home address are NOT collected for minors. (SRS R170 §12.)
-- [ ] §13 — CNDP filing material and the Arabic privacy-notice TEXT, drafted for
-      the Owner's review.
+- [x] §13 — CNDP filing material and the Arabic privacy-notice TEXT, drafted for
+      the Owner's review. **DRAFTED:** `docs/compliance/cndp-filing-and-privacy-notice.md`
+      — F211-structured answers from verified facts (`[OWNER INPUT]` /
+      `[PROVIDER EVIDENCE]` where only she or the host can say), and the full
+      Arabic notice for `/privacy` reflecting R170 (§3 warning, §7 code, §11
+      shared reason, §10 ninety days, §12 nothing sensitive for minors).
+      Nothing filed, nothing activated — hers to recheck.
 - [ ] §15 — run the performance measurement (TD-11a).
 - [ ] §16 — start the §18 acceptance checklists and journeys J1–J8 on Staging;
       prepare for Production whatever needs neither its server nor a payment.

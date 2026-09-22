@@ -171,21 +171,20 @@ Completion checks the signed ticket against that authoritative visibility again 
 a contradictory object before any database write. The second check matters across deployments:
 an already-issued ticket remains valid for up to two hours.
 
-There is deliberately no literal-bucket `CHECK` on `educational_content`. A consent-forced
-transition is asynchronous copy–verify–delete. Its explicit pending state is the existing
-combination `consent_forced_private = true`, `visibility = public`, `storage_bucket = public`:
-application reads fail closed while visibility and bucket continue to describe the physical
-source honestly. A check equating the flag with private placement would reject that safe
-state; a check changing visibility first would claim privacy while anonymous bytes still
-exist. General visibility editing uses the separate placement intent/adoption path with unique
-destination keys and durable loser retirement; it cannot use the safeguarding arm as a
-publication path or automatically lift `consent_forced_private`.
+There is deliberately no literal-bucket `CHECK` on `educational_content`. A visibility
+transition is asynchronous copy–verify–delete, and a check changing visibility first would
+claim privacy while anonymous bytes still exist. General visibility editing uses the placement
+intent/adoption path with unique destination keys and durable loser retirement. *(Until SRS
+Revision 170 §3 this paragraph also described the consent-forced pending state,
+`consent_forced_private = true` with `visibility = public`; the Owner retired the forcing, and
+that flag is never written again.)*
 
 The public bucket's anonymous S3 policy is not the production access boundary. The S3 service is
 network-internal; Nginx is the only published object origin. Every canonical public GET/HEAD
-asks the API whether one undeleted row still names that exact key as public/public with
-`consent_forced_private = false`. A committed flag, replacement or deletion therefore closes
-the stable public origin immediately even while object retirement is still pending. The
+asks the API whether one undeleted row still names that exact key as public/public. A
+committed visibility change, replacement or deletion therefore closes the stable public origin
+immediately even while object retirement is still pending (R170 §3: the consent warning is
+not a gate here). The
 external method allowlist is deliberately smaller than the S3 API: canonical paths admit
 database-gated GET/HEAD and SigV4 PUT only; `public/staging/` admits SigV4 PUT only, with
 GET/HEAD sent to the unavailable page. Nginx refuses every other method before MinIO, so an
@@ -545,40 +544,40 @@ the display name stored in the database.
 
 ## Consent gating
 
-The storage-facing half of [`BR-2`](../reference/business-rules.md#br-2).
+The storage-facing half of [`BR-2`](../reference/business-rules.md#br-2) — **a warning since SRS
+Revision 170 §3 (the Owner, 2026-09-21), no longer a gate on storage.**
 
 > If a Session's resolved audience has **even one** beneficiary without effective media
-> consent, every recording linked to that Session is forced private. A recording shared by
-> Sessions uses the union of those audiences.
+> consent, every recording linked to that Session is **warned** (`media_consent_missing`). A
+> recording shared by Sessions is warned by the union of those audiences. Nothing is forced.
 
-This is a **continuously maintained invariant**, not an upload-time check. Re-evaluation is
+This is still a **continuously maintained fact**, not an upload-time check. Re-evaluation is
 triggered by roster/Teaching Group membership changes, consent changes, recording
-upload/import/replacement, Session-content link changes and R92 occurrence-audience changes.
-Retained live occurrences remain affected after their recurring schedule is soft-deleted, and
-startup scans live recording links in bounded batches for older backlog. Every path enqueues
-the same full current-state job for the affected occurrence.
+upload/import/replacement, Session-content link changes and R92 occurrence-audience changes;
+retained live occurrences remain covered after their recurring schedule is soft-deleted, and
+startup scans live recording links in bounded batches. Every path enqueues the same
+full-current-state job for the affected occurrence. The metadata path also re-evaluates when
+adding **or removing** the recording marker, under the same ordered Session anchors, and a graph
+that grows during acquisition refuses the transaction rather than evaluating unlocked audiences.
 
-The H6 metadata path also checks linked audiences when adding **or removing** the
-recording marker, even with no visibility/bucket change. Ordered Session anchors
-precede the Content lock; metadata CAS, an owed monotonic flag, structural audit
-and exact-current-key migration obligation commit together. A missing queue/audit
-failure rolls the edit back. Graph growth, including a first link after an empty
-discovery, refuses the transaction rather than evaluating unlocked audiences.
-It reuses B4/B5 placement/retirement; it neither re-uploads canonical bytes nor
-lifts a prior restriction. [Real-stack acceptance passed](../development/testing.md#high-readiness-checkpoint-2026-09-13),
-including the rollback and first-link race regressions, with no B4/B5 regression.
+**What storage no longer does (withdrawn by R170 §3):** the public→private consent migration
+(`content.bucket-migrate`'s consent arm), the retirement of a public recording's old object on
+consent grounds at replacement/deletion, the `consent_forced_private = false` conjunct in the
+library predicate, the download-URL mint and the Nginx auth subrequest. A public recording is
+served by the stable public origin exactly when its row says `visibility = public` and its key is
+the current one — the same rule as every other public item. The flag `consent_forced_private`
+stays in the schema, never written; the migration moved every `true` onto the warning and
+completed pending consent obligations with the code `withdrawn_r170`.
 
-A recording published while everyone consented **flips to private** when a non-consenting
-student later enrols.
-
-**Only an Admin can lift the forced state, and only with a written justification** recorded
-in the audit log. The engine deliberately never clears the flag after a later grant. The
-Admin override surface is still a separate M6 item and is not invented by this worker.
+**Who reads the warning:** staff, and nobody else. `GET /library` projects
+`media_consent_missing` for a staff caller and `null` otherwise; `GET /calendar/sessions/{id}`
+answers `audience_media_consent_missing` for staff — the class's audience checked BEFORE
+anything is recorded — and `null` otherwise. It is a fact about a child, told to the people who
+decide the visibility.
 
 One edge case that reads like a bug and is not: a Session with a **zero-person resolved
-audience** has no non-consenting beneficiary, so the gate does not engage and an unforced
-upload keeps its Category default. The first audience mutation adding a non-consenting
-beneficiary triggers the flip.
+audience** has no non-consenting beneficiary, so nothing is warned; the first audience mutation
+adding a non-consenting beneficiary raises the warning, and a later grant clears it.
 
 > [Business processes](../overview/business-processes.md#the-session-consent-gate) ·
 > [Background jobs](background-jobs.md)

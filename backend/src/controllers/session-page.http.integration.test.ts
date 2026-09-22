@@ -37,6 +37,9 @@ const TAG = "[http-session-page-test]";
 const YEAR_LABEL = "2096-2097";
 
 const PAGE_KEYS = [
+  // R170 §3 — the consent warning BEFORE recording: a boolean for staff,
+  // `null` for every other reader (asserted null for the anonymous caller below).
+  "audience_media_consent_missing",
   "linked_content",
   // R137 — a scheduled exam addressed to this session, at the caller's own
   // calendar tier.
@@ -378,6 +381,7 @@ describe("the page is public, at the caller’s tier (§5.2)", () => {
     const res = await call(`/calendar/sessions/${sessionId}`);
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(PAGE_KEYS);
+    expect(res.body["audience_media_consent_missing"]).toBeNull();
     expect(res.body.occurrence!.kind).toBe("session");
     expect(res.body.occurrence!.id).toBe(sessionId);
   });

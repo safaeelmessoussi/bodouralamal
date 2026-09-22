@@ -29,7 +29,9 @@ export const ERROR_CODES = {
    *  an overlapping session. Detected against MATERIALIZED sessions, so the
    *  answer is exact rather than an approximate rule comparison. */
   SCHEDULE_CONFLICT: { status: 409, messageKey: 'errors.schedule_conflict' },
-  CONSENT_GATE_LOCKED: { status: 403, messageKey: 'errors.consent_gate_locked' },
+  /* CONSENT_GATE_LOCKED was RETIRED by Revision 170 §3 (the consent gate is a
+   * warning; nothing is locked) and is deliberately absent. It was declared for
+   * BR-3's Teacher-override refusal and never thrown. */
   CONSENT_REQUIRED: { status: 400, messageKey: 'errors.consent_required' },
   FAMILY_LINK_PENDING: { status: 409, messageKey: 'errors.family_link_pending' },
   /* SINGLE_SUBMISSION_FINAL was RETIRED by Revision 127 and is deliberately
@@ -107,7 +109,6 @@ const FALLBACK_MESSAGES: Record<ErrorCode, string> = {
   WEIGHT_SUM_EXCEEDED: 'مجموع الأوزان يتجاوز الحد المسموح.',
   TEMPLATE_NOT_ACTIVE: 'هذه العملية تتطلب نموذجاً مُفعّلاً.',
   SCHEDULE_CONFLICT: 'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت.',
-  CONSENT_GATE_LOCKED: 'لا يمكن نشر هذا المحتوى: الموافقة على النشر غير متوفرة.',
   CONSENT_REQUIRED: 'يجب الموافقة على الشروط للمتابعة.',
   FAMILY_LINK_PENDING: 'طلب الربط قيد المراجعة.',
   UPLOAD_INCOMPLETE: 'لم يكتمل رفع الملف.',

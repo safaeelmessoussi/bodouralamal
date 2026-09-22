@@ -141,6 +141,13 @@ export interface LibraryItem {
   visibility: string;
   /** R99.12's marker — whether this file IS a class recording. */
   origin: string;
+  /**
+   * **R170 §3 — the consent WARNING, for staff only.** `true`: a student in this
+   * recording's audience has no media release. Always `null` for a student, a
+   * guardian or an anonymous reader — it is a fact about a child, told to the
+   * people who decide the visibility and to nobody else.
+   */
+  mediaConsentMissing: boolean | null;
   levelId: string;
   /** R167 §5 — addressed to every Level of `categoryId`, not to `levelId` alone. */
   wholeCategory: boolean;
@@ -278,12 +285,10 @@ async function ownBranchIds(prisma: PrismaClient, actor: LibraryActor): Promise<
 /**
  * The §4.9 tier predicate for this caller.
  *
- * **`consent_forced_private` is excluded explicitly rather than trusted to have
- * moved `visibility`** (BR-2). The re-evaluation engine (§4.1a) does set
- * visibility when the gate engages, so on a consistent database this term
- * changes nothing — which is the point: BR-2 calls a recording appearing on a
- * public surface a hard constraint, and a hard constraint that holds only while
- * a background job is up to date is a race, not a constraint.
+ * Until SRS Revision 170 §3 it also excluded `consent_forced_private` rows from
+ * the public tier — BR-2's forced-private rule, held here so it could not race a
+ * background job. The Owner replaced forcing with a WARNING: a recording is as
+ * visible as its `visibility` says, and the staff who chose that were warned.
  */
 function tierPredicate(
   actor: LibraryActor | null,
@@ -292,7 +297,7 @@ function tierPredicate(
   // Anonymous, or an account that is not yet approved: the public tier only.
   // A Pending account exists but grants nothing (TD-1).
   if (actor === null || actor.accountStatus !== 'active') {
-    return Prisma.sql`(c."visibility" = 'public' AND c."consent_forced_private" = false)`;
+    return Prisma.sql`(c."visibility" = 'public')`;
   }
 
   // §4.9 tier 3: hidden is excluded from Student/Parent directories and visible
@@ -300,7 +305,7 @@ function tierPredicate(
   if (isStaff(actor)) return Prisma.sql`TRUE`;
 
   if (privateLevels.length === 0) {
-    return Prisma.sql`(c."visibility" = 'public' AND c."consent_forced_private" = false)`;
+    return Prisma.sql`(c."visibility" = 'public')`;
   }
   const mine = Prisma.join(privateLevels.map((id) => Prisma.sql`${id}::uuid`));
   // SRS Revision 169 §10 — an item may ALSO belong to other Levels
@@ -309,7 +314,7 @@ function tierPredicate(
   // hers when any of her Levels belongs to that Category. The Category is read
   // through the item's own Level, here, at the moment of the read.
   return Prisma.sql`(
-    (c."visibility" = 'public' AND c."consent_forced_private" = false)
+    (c."visibility" = 'public')
     OR (c."visibility" = 'private' AND (
       c."level_id" IN (${mine})
       OR EXISTS (
@@ -345,6 +350,8 @@ export async function listLibrary(
   actor: LibraryActor | null,
   filters: LibraryFilters,
 ): Promise<Page<LibraryItem> & { suggestedRecordingName: string | null }> {
+  // R170 §3 — the consent warning is projected for staff and for nobody else.
+  const staff = actor !== null && actor.accountStatus === 'active' && isStaff(actor);
   const privateLevels =
     actor !== null && actor.accountStatus === 'active' && !isStaff(actor)
       ? await privateLevelIds(prisma, actor)
@@ -421,6 +428,8 @@ export async function listLibrary(
              c."description",
              c."visibility"::text        AS "visibility",
              c."origin"::text            AS "origin",
+             -- R170 §3: the warning reaches STAFF and nobody else.
+             ${staff ? Prisma.sql`c."media_consent_missing"` : Prisma.sql`NULL::boolean`} AS "mediaConsentMissing",
              c."level_id"                AS "levelId",
              c."whole_category"          AS "wholeCategory",
              COALESCE((

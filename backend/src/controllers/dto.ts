@@ -1052,6 +1052,9 @@ export interface LibraryItemDto {
    *  content-type fact, not consent state, and the value the edit dialog seeds
    *  its own control from. */
   origin: string;
+  /** R170 §3 — `true` when a student of this recording's audience has no media
+   *  release; `null` for every reader who is not staff. */
+  media_consent_missing: boolean | null;
   level_id: string;
   /** R167 §5 — addressed to EVERY Level of `category_id`; `level_id` is then
    *  only where it is filed. Rendered under «كل مستويات الفئة». */
@@ -1087,16 +1090,18 @@ export interface LibraryItemDto {
 }
 
 /**
- * Deliberately **absent**: `storage_bucket`, `storage_key`, `original_filename`
- * and `consent_forced_private`.
+ * Deliberately **absent**: `storage_bucket`, `storage_key` and
+ * `original_filename` — the object's location, which TD-3.5 mints a short-lived
+ * presigned URL for through `GET /content/{id}/download-url` after a permission
+ * check; publishing the key on a **public** endpoint would hand every anonymous
+ * visitor the one input that check exists to protect.
  *
- * The first three are the object's location, and TD-3.5 mints a short-lived
- * presigned URL through `GET /content/{id}/download-url` after a permission
- * check — publishing the key on a **public** endpoint would hand every
- * anonymous visitor the one input that check exists to protect. The fourth is
- * the consent gate's internal state: it says *a student in this recording's
- * audience has no media release*, which is a fact about a child, and BR-2 needs
- * it enforced, not broadcast.
+ * **`media_consent_missing` is present for STAFF and `null` for everyone else**
+ * (SRS Revision 170 §3). It says *a student in this recording's audience has no
+ * media release* — a fact about a child, told to the people who choose the
+ * visibility and are warned when they choose public, and to nobody else. It
+ * replaced the withheld `consent_forced_private`, which the Owner retired
+ * along with the forcing it drove.
  */
 export function libraryItemDto(row: {
   id: string;
@@ -1104,6 +1109,7 @@ export function libraryItemDto(row: {
   description: string | null;
   visibility: string;
   origin: string;
+  mediaConsentMissing: boolean | null;
   levelId: string;
   wholeCategory: boolean;
   additionalLevels: { id: string; name: string }[];
@@ -1128,6 +1134,8 @@ export function libraryItemDto(row: {
     // R99.12's marker, so the edit dialog can show «هذا تسجيل حصة» as it stands.
     // A content-type fact, not consent state: it says what the file IS.
     origin: row.origin,
+    // R170 §3 — the warning; `null` unless the reader is staff.
+    media_consent_missing: row.mediaConsentMissing,
     level_id: row.levelId,
     whole_category: row.wholeCategory,
     // R169 §10 — the item's OTHER Levels (`level_id` is its home), so a card can

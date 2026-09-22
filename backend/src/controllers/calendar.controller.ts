@@ -279,6 +279,8 @@ export function readSession(prisma: PrismaClient) {
         mode: e.mode,
         available_from: e.availableFrom?.toISOString() ?? null,
       })),
+      // R170 §3 — the consent warning before recording; `null` unless staff.
+      audience_media_consent_missing: page.audienceMediaConsentMissing,
     });
   };
 }

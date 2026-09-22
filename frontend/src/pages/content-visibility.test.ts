@@ -176,17 +176,17 @@ describe('replacement changes the object, never the tier or the scope', () => {
   });
 });
 
-/* ── The consent safeguard is not reachable from this form ───────────────── */
+/* ── The consent WARNING is the server's to compute, never this form's to set ── */
 
-describe('consent-forced private cannot be overridden here', () => {
-  it('the upload form never sends consent_forced_private', () => {
-    // BR-2 owns that flag. A form that could set or clear it would be a
-    // publication override, which is BR-3's separate Admin-with-justification
-    // workflow and deliberately not this slice.
-    //
+describe('the consent warning is read, never written, from this page (R170 §3)', () => {
+  it('the upload form never sends the warning flag — the engine computes it from the audience', () => {
+    // R170 §3 retired `consent_forced_private` and the lock that went with it;
+    // `media_consent_missing` is what the engine writes and staff READ. A form
+    // that could set or clear it would be inventing the audience's consent.
+    expect(form()).not.toContain('media_consent_missing');
     expect(form()).not.toContain('consent_forced_private');
     const shared = scopeBlock();
-    expect(shared).not.toContain('consent_forced_private');
+    expect(shared).not.toContain('media_consent_missing');
     const meta = shared.slice(shared.indexOf('const meta = useMemo'), shared.indexOf('const problem'));
     expect(meta).toContain('visibility');
   });
@@ -216,3 +216,24 @@ function scopeBlock(): string {
 function readSource(): string {
   return CONTENT_PAGE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
+
+/**
+ * **R170 §3 — the consent gate became a WARNING** (the Owner, 2026-09-21:
+ * «nothing should be forced, keep the by default public»). The edit dialog
+ * used to withdraw the visibility control once the server refused; it never
+ * refuses now, and the control is always hers with the warning beside it.
+ */
+describe('the consent gate is a warning beside the visibility control, never a lock (R170 §3)', () => {
+  const page = CONTENT_PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+
+  it('renders the warning from the item, and the visibility control unconditionally', () => {
+    expect(page).toContain('row.media_consent_missing');
+    expect(page).toContain("t('content.edit.consentWarning')");
+    expect(page).not.toContain('consentLocked');
+    expect(page).not.toContain('CONSENT_FORCED_PRIVATE');
+  });
+
+  it('badges the tier in the list so the warning is seen before the dialog opens', () => {
+    expect(page).toContain("t('content.consentBadge')");
+  });
+});

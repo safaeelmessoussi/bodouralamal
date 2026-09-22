@@ -427,6 +427,14 @@ export interface SessionDetails {
    * otherwise discover on the calendar. Usually one row; not assumed to be.
    */
   linked_exams: SessionLinkedExamRef[];
+  /**
+   * **R170 §3 — the consent warning, before anything is recorded.** `true` when
+   * this class's audience includes a beneficiary whose guardian refused (or
+   * never gave) media release; `null` for a reader who is not staff. It forces
+   * nothing — the recorder and the visibility stay the teacher's — and it is
+   * what she reads before pressing record.
+   */
+  audience_media_consent_missing: boolean | null;
 }
 
 export interface SessionLinkedExamRef {

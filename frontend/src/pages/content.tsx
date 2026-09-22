@@ -30,6 +30,7 @@ import { formatDate } from '../lib/format-date.js';
 import { applySort } from '../adapters/reorder.js';
 import { api, ApiError } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
+import { Badge } from '../components/ui/badge.js';
 
 /**
  * The content library management screen — `/admin/content` (§5.6) and
@@ -89,7 +90,6 @@ function ContentEditDialog({
   levels,
   subjects,
   busy,
-  consentLocked,
   onCancel,
   onSave,
 }: {
@@ -97,8 +97,6 @@ function ContentEditDialog({
   levels: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
   busy: boolean;
-  /** The server has reported that consent keeps this item private (B-01). */
-  consentLocked: boolean;
   onCancel: () => void;
   onSave: (patch: {
     title: string;
@@ -199,24 +197,23 @@ function ContentEditDialog({
         />
       )}
 
-      {consentLocked ? (
-        /**
-         * **Shown as a fact, not as a disabled control** (rule AF). The server
-         * refuses to publish this item, so offering a select that implies it
-         * might one day be chosen here would be the same invitation again. The
-         * line names the rule and what would have to change.
-         */
-        <p className="field">
-          <span className="field__label">{t('content.col.visibility')}</span>
-          <span>{t(`calendar.visibility${form.visibility === 'hidden' ? 'Hidden' : 'Private'}`)}</span>
-          <span className="hint">{t('content.edit.consentLockedHint')}</span>
-        </p>
-      ) : (
-        <VisibilityField
-          value={form.visibility}
-          onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
-        />
-      )}
+      {/**
+        * **R170 §3 — a WARNING beside the choice, never a lock** (the Owner,
+        * 2026-09-21: «just a warning … nothing should be forced, keep the by
+        * default public, and it's up to the teacher/admin/super admin to read
+        * the warning and switch manually to private»). The control used to be
+        * withdrawn once the server refused; now it is always hers, and the
+        * sentence says what she is deciding about.
+        */}
+      {row.media_consent_missing ? (
+        <Feedback tone="warn" data-consent-warning>
+          {t('content.edit.consentWarning')}
+        </Feedback>
+      ) : null}
+      <VisibilityField
+        value={form.visibility}
+        onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
+      />
     </FormDialog>
   );
 }
@@ -228,6 +225,13 @@ interface LibraryRow {
   visibility: string;
   /** R99.12's marker — «هذا تسجيل حصة». */
   origin: string;
+  /**
+   * **R170 §3 — the consent WARNING.** `true`: a student in this recording's
+   * audience has no media release. `null` for a reader who is not staff (this
+   * page is staff's, so it is a boolean here in practice). It forces nothing:
+   * the visibility control stays hers, and this is what she reads beside it.
+   */
+  media_consent_missing: boolean | null;
   level_id: string;
   /** R167 §5 — «لكل مستويات الفئة». */
   whole_category: boolean;
@@ -298,7 +302,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [editing, setEditing] = useState<LibraryRow | null>(null);
   /** Set when the server reports consent keeps THIS item private (see the
    *  catch below). Cleared whenever a different item is opened. */
-  const [consentLocked, setConsentLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const { activeRoles } = useActiveRole();
@@ -407,7 +410,18 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     {
       key: 'visibility',
       header: t('content.col.visibility'),
-      cell: (r) => t(`content.visibility.${r.visibility}`),
+      // R170 §3 — the warning travels with the tier it warns about, in words.
+      cell: (r) => (
+        <>
+          {t(`content.visibility.${r.visibility}`)}
+          {r.media_consent_missing ? (
+            <>
+              {' '}
+              <Badge tone="warn">{t('content.consentBadge')}</Badge>
+            </>
+          ) : null}
+        </>
+      ),
     },
     {
       key: 'branch',
@@ -438,7 +452,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   const actions: RowAction<LibraryRow>[] = [
     // Rule AC — contextual, then تعديل, then the destructive one.
-    { label: t('common.edit'), onSelect: (r) => { setConsentLocked(false); setEditing(r); } },
+    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), onSelect: (r) => setDeleting(r), danger: true },
   ];
 
@@ -496,15 +510,11 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
       /**
-       * **Every coded refusal gets its own sentence** (UAT, 2026-09-02).
-       *
-       * Only `CONSENT_FORCED_PRIVATE` was named, so the other three arrived as
-       * «تعذّر الحفظ.» — an administrator meeting `OBJECT_MISSING` was told
-       * nothing she could act on, and the platform's own generic
-       * `STATE_CONFLICT` text tells her to refresh, which never helps here.
+       * **Every coded refusal gets its own sentence** (UAT, 2026-09-02). The
+       * consent refusal is gone (R170 §3): publishing is never refused on
+       * consent grounds now, only warned about beforehand.
        */
       const named: Record<string, string> = {
-        CONSENT_FORCED_PRIVATE: 'content.edit.consentForcedPrivate',
         OBJECT_MISSING: 'content.edit.objectMissing',
         STORAGE_MOVE_FAILED: 'content.edit.storageMoveFailed',
         CONCURRENT_MODIFICATION: 'content.edit.concurrent',
@@ -512,17 +522,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         UNKNOWN_SUBJECT: 'content.edit.unknownSubject',
       };
       setNotice(t(named[reason ?? ''] ?? 'common.saveFailed'));
-      /**
-       * **The impossible choice is withdrawn as soon as the platform knows.**
-       *
-       * The dialog cannot tell in advance that consent has locked an item
-       * private — `consent_forced_private` is safeguarding-adjacent and is not
-       * published on the anonymous `/library` read the page uses — so it offers
-       * «عام» like any other item. The moment the server says otherwise, the
-       * control is pinned to the effective value and explains itself, and the
-       * reader's other edits stay in the form to be saved.
-       */
-      if (reason === 'CONSENT_FORCED_PRIVATE') setConsentLocked(true);
     } finally {
       setBusy(false);
     }
@@ -652,10 +651,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           * All three tiers are offered to everyone who can reach this screen,
           * and that is derived rather than assumed: `assertUploadScope` gates
           * the Global/branch scope and nothing else, so §4.9 places no
-          * per-role limit on the tier itself. §14.1's *"not editable by
-          * Teachers"* is about the consent-forced state, which no new upload
-          * can be in — `consent_forced_private` starts false and only BR-2 may
-          * set it, never a person and never this form.
+          * per-role limit on the tier itself. (§14.1's *"not editable by
+          * Teachers"* was about the consent-forced state, which R170 §3
+          * retired: the consent gate is a warning now, and a new upload has no
+          * audience to be warned about yet.)
           */}
         {/* Mounted only while open, so each opening seeds itself from the
             filters as they are NOW rather than from a stale first render. */}
@@ -681,7 +680,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           levels={scope.options.levelId}
           subjects={scope.options.subjectId}
           busy={busy}
-          consentLocked={consentLocked}
           onCancel={() => setEditing(null)}
           onSave={(patch) => void confirmEdit(patch)}
         />

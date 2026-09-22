@@ -102,6 +102,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | | |
 |---|---|
 | [Personal data & CNDP readiness audit](compliance/personal-data-audit.md) | Every personal-data field: purpose, necessity, access, retention, and what needs a lawyer rather than an engineer |
+| [CNDP filing packet and the Arabic privacy notice](compliance/cndp-filing-and-privacy-notice.md) | R170 §13 — the declaration's answers prepared from verified facts, and the full Arabic notice text, for the Owner to complete, review and activate |
 | [Data-collection decision](compliance/data-collection-decision.md) | The recommended profile per person type, what to reject and why, and the decisions that block R62 |
 | [R62 design decisions](compliance/r62-design-decisions.md) | The nine architectural questions the parent/child model turns on, resolved with their impact |
 

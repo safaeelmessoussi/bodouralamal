@@ -62,6 +62,9 @@ const ITEM_KEYS = [
   "id",
   "level_id",
   "level_name",
+  // R170 §3 — the consent WARNING: a boolean for staff, `null` for everyone
+  // else. It replaced the withheld `consent_forced_private`.
+  "media_consent_missing",
   "mime_type",
   /* R99.12 — «هذا تسجيل حصة». It joined the projection with the edit dialog
      that seeds its control from it (2026-09-02) and this exact-key guard was
@@ -159,7 +162,7 @@ async function content(
       academicYearId,
       branchId: over.branchId === undefined ? branchA : over.branchId,
       visibility: (over.visibility ?? "public") as never,
-      consentForcedPrivate: over.forced ?? false,
+      mediaConsentMissing: over.forced ?? false,
       wholeCategory: over.wholeCategory ?? false,
       storageBucket: "content",
       storageKey: `${TAG}/${label}-${Date.now()}-${Math.random()}`,
@@ -261,9 +264,9 @@ beforeAll(async () => {
     levelId: otherLevelId,
   });
   ids.hidden = await content("مخفي", { visibility: "hidden" });
-  // BR-2: the gate has engaged but the visibility column still says public —
-  // the state a lagging re-evaluation job leaves behind.
-  ids.forced = await content("مسجّل-محجوب", { forced: true });
+  // R170 §3: a public recording whose audience lacks a media release — WARNED
+  // to staff, served like any public item.
+  ids.forced = await content("مسجّل-بتنبيه", { forced: true });
 
   const groupA = await prisma.administrativeGroup.create({
     data: { name: `${TAG} مجموعة`, levelId, branchId: branchA },
@@ -338,10 +341,10 @@ describe("the endpoint is public and never answers 401", () => {
     expect(res.status).toBe(200);
   });
 
-  it("never publishes the object location or the consent gate state", async () => {
+  it("never publishes the object location, and the retired forced flag", async () => {
     // storage_key on a PUBLIC endpoint would hand every anonymous visitor the
-    // one input the §4.9 permission check exists to protect; the gate flag is a
-    // fact about a child.
+    // one input the §4.9 permission check exists to protect. The consent
+    // WARNING is published to staff only (R170 §3) and is asserted above.
     const res = await call(`${scoped}${academicYearId}`);
     for (const row of res.body.data!) {
       for (const leak of [
@@ -367,11 +370,19 @@ describe("§4.9 tiers filter every result set", () => {
     expect(seen).not.toContain(ids.hidden);
   });
 
-  it("BR-2: a consent-forced item stays off the public surface even with visibility still public", async () => {
-    // Excluded explicitly rather than trusted to have had its visibility moved:
-    // a hard constraint that holds only while a background job is current is a
-    // race, not a constraint.
-    expect(await titlesFor()).not.toContain(ids.forced);
+  it("R170 §3: a WARNED item is as visible as its visibility says — the warning reaches staff, and nobody else", async () => {
+    // The Owner retired BR-2's forced-private exclusion: nothing is forced, and
+    // the public tier is the row's own `visibility`. What differs by reader is
+    // the WARNING: a boolean for staff, `null` for an anonymous reader.
+    expect(await titlesFor()).toContain(ids.forced);
+    const anonymous = (await call(`${scoped}${academicYearId}&page_size=100`)).body.data!;
+    const teacher = (await call(`${scoped}${academicYearId}&page_size=100`, teacherToken)).body.data!;
+    const anonRow = anonymous.find((r) => r.id === ids.forced) as Record<string, unknown> | undefined;
+    const staffRow = teacher.find((r) => r.id === ids.forced) as Record<string, unknown> | undefined;
+    expect(anonRow?.["media_consent_missing"]).toBeNull();
+    expect(staffRow?.["media_consent_missing"]).toBe(true);
+    const plainStaffRow = teacher.find((r) => r.id === ids.publicA) as Record<string, unknown> | undefined;
+    expect(plainStaffRow?.["media_consent_missing"]).toBe(false);
   });
 
   it("a Pending account sees exactly what an anonymous visitor sees (TD-1)", async () => {

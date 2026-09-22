@@ -2,7 +2,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { deleteObject, statObjectStrict, type StorageClients } from '../lib/storage.js';
 import { lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import * as retirements from '../repositories/storage-retirement.repository.js';
-import { migrateConsentForcedContent, retireConsentPublicObject } from './consent-reevaluation.service.js';
+import { retireConsentPublicObject } from './consent-reevaluation.service.js';
 import { quarantineRetiredContentObject, retirePurgedContentObjects } from './storage-lifecycle.service.js';
 
 /** Only the original caller may supply its positive settlement evidence: its
@@ -19,7 +19,7 @@ export async function acknowledgePlacementCopy(prisma: PrismaClient, id: string)
 
 /** Execution history may expire; the domain obligation may not disappear. */
 export async function executeRetirement(prisma: PrismaClient, storage: StorageClients, id: string,
-  hooks: { afterConsentMigration?: () => Promise<void> } = {}): Promise<void> {
+  _hooks: { afterConsentMigration?: () => Promise<void> } = {}): Promise<void> {
   const observed = await retirements.findRetirement(prisma, id);
   if (!observed || observed.completedAt !== null || observed.storageKey === null) return;
   try {
@@ -42,21 +42,13 @@ export async function executeRetirement(prisma: PrismaClient, storage: StorageCl
       if (!settled) return; // durable backlog retains the exact locator
     }
     if (observed.operation === 'consent_migrate') {
-      // This operation already owns the global Session→Content lock hierarchy.
-      await migrateConsentForcedContent(prisma, storage, observed.contentId, observed.storageKey);
-      await hooks.afterConsentMigration?.();
+      // R170 §3 — the consent-forced migration is WITHDRAWN: nothing forces a
+      // recording private any more. A row that reaches here predates the
+      // migration that completed every pending one; it is completed the same
+      // way, with the code that says why, and moves nothing.
       await prisma.$transaction(async (tx) => {
-        await lockEducationalContent(tx, [observed.contentId]);
         await retirements.lockRetirement(tx, id);
-        const current = await retirements.currentContent(tx, observed.contentId);
-        // A new revocation may have won after the migration found no work.
-        // Completing its still-pending shared obligation here would lose that
-        // transition. Keep it retryable; never acquire Session locks backwards.
-        if (current?.deletedAt === null && current.storageKey === observed.storageKey &&
-            current.storageBucket === 'public' && current.visibility === 'public' && current.consentForcedPrivate) {
-          throw new Error('consent retirement is not yet converged');
-        }
-        await retirements.completeRetirement(tx, id);
+        await retirements.completeRetirement(tx, id, 'withdrawn_r170');
       });
       return;
     }

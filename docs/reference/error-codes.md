@@ -62,7 +62,6 @@ audit log.
 | Code | When | What a client should do |
 |---|---|---|
 | `FORBIDDEN` | Permission-matrix violation, consent gate, global-scope violation | Red toast with the message key |
-| `CONSENT_GATE_LOCKED` | A **teacher** attempting to lift a consent-forced private state | Explain that only an Admin can, with justification |
 
 `403` is used **only** where the caller may know the resource exists. Out-of-scope access is
 `404` — see below.

@@ -188,7 +188,7 @@ a row lock. This is a **suggestion and never an invariant**; nothing reads it ba
 
 **Both lists pass the same §4.9 tier rule the library applies** — literally the same predicate,
 exported rather than restated, so a change to the tiers cannot reach one surface without the
-other. BR-2's `consent_forced_private` exclusion holds here too. Each item is exactly `id`,
+other (R170 §3: the tier alone; the consent gate is a staff warning). Each item is exactly `id`,
 `title`, `subject_id`, `level_id`: enough to open it **inside the Educational Library** (§5.2 —
 one reader, one permission path), and deliberately not the object location, which only
 `GET /content/{id}/download-url` hands out after its own check.
@@ -701,13 +701,10 @@ materials at all.
 **Listing is not the download gate.** A restricted item appears with its `visibility` so a
 client can badge it; `GET /content/{id}/download-url` (TD-3.5) performs the §4.9 check before
 any presigned URL is minted. The item DTO therefore **omits `storage_bucket`, `storage_key`,
-`original_filename` and `consent_forced_private`** — the first three are the object's location,
-and publishing them here would hand every anonymous visitor the input that check exists to
-protect; the fourth is a fact about a child.
-
-**BR-2 is enforced by an explicit exclusion**, not by trusting the re-evaluation engine to have
-moved `visibility` already. A hard constraint that holds only while a background job is current
-is a race, not a constraint.
+and `original_filename`** — the object's location, and publishing them here would hand every
+anonymous visitor the input that check exists to protect. **`media_consent_missing` is
+projected for staff and `null` for everyone else** (R170 §3): the consent warning, a fact about
+a child told to the people who choose the visibility.
 
 ## Storage — uploads, replacement, deletion and the mint (TD-3.5)
 
@@ -866,8 +863,8 @@ and impossible to add safely later:
 - **Visibility is resolved server-side from the live actor**, exactly as `GET /calendar` does
   (§4.4) — an anonymous visitor receives the public tier only, and no query parameter may widen
   it.
-- **`consent_forced_private` recordings never appear on a public surface** (BR-2). That is a
-  filter no client may be trusted to apply.
+- **A warned recording is as visible as its `visibility` says** (R170 §3); the warning itself
+  reaches staff only.
 
 **Two divergences from §5.2** for the Document Owner to settle: §5.2 specifies a **Subject**
 tier beneath Branch (rendered as a card badge instead) and pins the **`is_current`** academic

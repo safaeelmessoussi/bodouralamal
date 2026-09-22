@@ -3740,10 +3740,16 @@ model EducationalContent {
 
   visibility Visibility @default(private)
 
-  /// Maintained by the consent re-evaluation engine (§4.1a). Lifting it is
-  /// Admin-only with a mandatory justification — Teachers never can
-  /// (BR-3, §20 rule 7).
+  /// **RETIRED by SRS Revision 170 §3 — never written again.** Until then the
+  /// consent re-evaluation engine (§4.1a) set it to force a recording private
+  /// (BR-2/BR-3); the Owner replaced forcing with a WARNING. Kept so history
+  /// reads; the migration moved every `true` onto `mediaConsentMissing`.
   consentForcedPrivate Boolean @default(false) @map("consent_forced_private")
+  /// **R170 §3 — the warning**: a student in this recording's audience has no
+  /// media release. Maintained by the same engine, in BOTH directions (a later
+  /// grant clears it). It forces nothing; staff read it where they choose the
+  /// visibility and where they record, and switching to private is their act.
+  mediaConsentMissing  Boolean @default(false) @map("media_consent_missing")
 
   levelId String @map("level_id") @db.Uuid
   level   Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)

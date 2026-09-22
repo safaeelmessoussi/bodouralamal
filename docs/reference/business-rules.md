@@ -25,26 +25,28 @@ missing row.
 → [Business processes](../overview/business-processes.md#2-consent)
 
 ### BR-2
-**Session consent gate.** If **any** student in the audience a session resolves to lacks
-effective media-release consent, **every recording of that session is non-public.** The
-audience is the set of students the session is *for* — the whole level at that place, one
-organisational group, or one subject-specific group. A continuously maintained invariant —
-re-evaluated on enrolment change, split-group membership change, consent change, and upload
-— **not a point-in-time check.**
+**Session consent gate — a WARNING since SRS Revision 170 §3 (the Owner, 2026-09-21).** If
+**any** student in the audience a session resolves to lacks effective media-release consent,
+**every recording of that session is warned** — `media_consent_missing`, shown to staff where the
+visibility is chosen («مكتبة المحتوى») and before anything is recorded (the class dialog) — and
+**nothing is forced**: the recording's visibility is whatever the Category default or a staff
+member set, and switching it to private is the staff member's act. The audience is still the set
+of students the session is *for* (§4.4c); the warning is still re-evaluated on enrolment change,
+split-group membership change, consent change and upload — **not a point-in-time check** — and
+now in BOTH directions: a later grant clears it.
 
-*Before SRS Revision 43* this rule named a "group"; once a session could be for a
-subject-specific split or an entire level, that word had no referent.
+*Until R170* the rule forced every such recording non-public and migrated its bytes to the private
+bucket; the Owner replaced that with the warning. *Before SRS Revision 43* it named a "group".
 
-*Enforced:* a job recomputes the whole session state and forces bucket migration. Content
-referenced by several sessions is gated by the **union** of their audiences — otherwise
-privacy would depend on which route a viewer took to the file.
+*Enforced:* the same job recomputes the whole session graph and writes the flag (audited as
+`content.consent_warning`). Content referenced by several sessions is warned by the **union** of
+their audiences. The warning reaches staff and nobody else (`null` for every other reader).
 → [Storage](../architecture/storage.md#consent-gating)
 
 ### BR-3
-**Consent override authority.** Releasing a consent-gated resource to the public is an
-**Admin-level decision requiring a recorded justification.** Teachers can never perform it.
-
-*Enforced:* server-side, and tested at the **API** level rather than by hiding the control.
+**Consent override authority — WITHDRAWN by SRS Revision 170 §3.** There is no consent-forced
+state to release: whoever may edit an item's visibility may set it, and is warned. TD-2's
+«override consent gate» row and `CONSENT_GATE_LOCKED` went with it.
 
 ---
 

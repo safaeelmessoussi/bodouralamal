@@ -114,8 +114,7 @@ The journey that demonstrates why consent is an invariant rather than a check.
 Parent revokes media consent (or staff records the revocation in person)
   └─ ConsentRecord state change + re-evaluation job enqueued — one transaction
        └─ consent.reevaluate recomputes the whole group's consent state
-            └─ every affected recording is forced private
-                 └─ bucket-migration jobs move the objects
+            └─ every affected recording is WARNED (R170 §3) — staff see it, nothing moves
                       └─ a visitor following a stale public link
                          lands on /content-unavailable
 Admin may still release a specific resource — with a mandatory written
@@ -137,7 +136,7 @@ Teacher records on their phone's own voice-recorder app
             the server fetches only the first 512 bytes back from storage
             and checks the magic bytes — the file is never streamed through the API
        └─ EducationalContent created against an immutable hash-segmented key
-       └─ visibility takes the category default, unless the consent gate forces private
+       └─ visibility takes the category default; a consent warning is shown to staff (R170 §3)
        └─ appears in the /resources tree
 ```
 

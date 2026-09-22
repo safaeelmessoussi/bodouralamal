@@ -11428,3 +11428,68 @@ green; **seed drill exit 0.** Real browser on Localhost after the rebuild and th
 `verify-role-requests` 85/85, `verify-registration` 45/45 + 12/12 DB, `verify-trash-restore` 6/6,
 `verify-teacher-scheduling` 14/14, `verify-approvals-sorting` 7/7, `verify-reorder` 30/30,
 `verify-dialog-states` 105/105, `verify-sorting` 39/39 (after the fix above).
+
+## 2026-09-22 — SRS Revision 170, part three: the consent gate becomes a WARNING
+
+**The Owner's rule** (2026-09-21): «When a class contains a beneficiary whose guardian refused media
+release, just a warning should be shown for the teacher, admin/super admin, but nothing should be
+forced, keep the by default public, and it's up to the teacher/admin/super admin to read the warning
+and switch manually to private.» This reverses BR-2/BR-3 as written; the SRS records it as R170 §3 and
+annotates every superseded clause in place (§4.9, §4.1a, the state machine, TD-2, the error table, §20
+rule 7). The largest change of the batch, and the one with the fewest new lines: the engine already
+knew the answer — it now says it instead of acting on it.
+
+**What changed.** `consent-reevaluation.service.ts`: `forceContentSafeguard` → `writeConsentWarning`
+— every recording of the locked graph gets `media_consent_missing` set or CLEARED (a warning
+describes the present; the safeguard it replaced was one-way by design), audited as
+`content.consent_warning`; the outcome is `warningsRaised/warningsCleared`. `safeguardRetagged…`
+writes the same flag. `content.service.ts`: the `CONSENT_FORCED_PRIVATE` refusal is gone; the consent
+arm of replacement/deletion (retire the public object + migrate) is withdrawn — every replacement and
+deletion takes the ordinary quarantine path; the anonymous mint checks `visibility` and bucket only.
+`library.service.ts`: the three `consent_forced_private = false` conjuncts are gone; the projection
+carries `media_consent_missing` for STAFF and `NULL` for everyone else. `isCurrentPublicObject`
+(Nginx auth subrequest) reads visibility + current key. `storage-retirement.service.ts`: a
+`consent_migrate` obligation completes with `withdrawn_r170`, no I/O. New read
+`sessionAudienceLacksMediaConsent` → `audience_media_consent_missing` on `GET /calendar/sessions/{id}`
+(staff only, `null` otherwise): the warning BEFORE recording. `CONSENT_GATE_LOCKED` removed (declared,
+never thrown). Migration `20260925100000`: the column, every `true` moved onto it,
+`consent_forced_private` cleared, pending consent obligations completed. Localhost had 9 forced rows
+(all private, none pending), Staging 6 — both become warned, visibility untouched.
+
+**Where staff see it.** «مكتبة المحتوى»: a «بلا موافقة نشر» badge on the tier and, in the edit
+dialog, a warning ABOVE the visibility control — which is never withdrawn now (the `consentLocked`
+lock and its two strings are gone). The class occurrence dialog: «تنبيه قبل التسجيل …» above the
+recorder for a staff caller when the audience includes someone without release.
+
+**Tests restated, not deleted where a property survived:** `library.http` (a warned public item is
+served; the warning is `true` for a teacher, `null` anonymously, `false` on a plain item; key set +1),
+`visibility-matrix.http` (a warned public recording is public on the library, the session page and
+the mint), `content.integration` (publishing a warned recording succeeds and stays warned; the mint
+closes only when the item is made private), `content-visibility.test.ts` (frontend: the warning is
+read, never written; no lock), `errors.test.ts` (the dead code's pin), the seed fixture («تسجيل بلا
+موافقة نشر»). The `consent-safeguarding.integration` suite — 22 cases, 16 of them pinning the forcing
+and the migration mechanics — was restated case by case (a delegated pass, its list in the commit
+message): fourteen restated onto the warning and the ordinary quarantine transition, four withdrawn
+with the mechanics they pinned (the B5 staleness pair, the fail-closed consent retry, the migration
+snapshot race), one added (a pre-R170 `consent_migrate` obligation completes as `withdrawn_r170` and
+moves nothing) — 22/22. Its one finding in the sources was fixed: retagging a recording to
+«uploaded» left a warning nothing could ever clear (the job's graph holds recordings only); a
+non-recording now carries none. The runner's legacy non-durable `content.bucket-migrate` branch,
+which would still have moved a public object on a pre-durable payload, now moves nothing.
+
+**Also this part.** `docs/compliance/cndp-filing-and-privacy-notice.md` (R170 §13): the CNDP
+declaration's answers in the form's own structure, from verified facts, with `[OWNER INPUT]` and
+`[PROVIDER EVIDENCE]` where only she or the host can say; and the full Arabic privacy notice for
+`/privacy`, reflecting R170. Nothing filed, nothing activated. `verify-occurrence-details` was stale
+since 2026-09-01 (its scenario's occurrence is dated 2026-08-24 and the personal calendars open at
+today's month) → it walks back to the scenario's month by the nav's ARIA label; 13/13.
+
+**Verification.** Backend unit 371/371; frontend 1,488/1,488 (content-visibility restated: the
+warning is read, never written; no lock); 32 guards + doc links; OpenAPI regenerated (189/243).
+**Full disposable integration 2,788 passed, 19 skipped, exit 0** (two pinned key sets learnt the
+new fields on the way; one cleanup learnt the engine's actor-less audit rows), **seed drill exit 0**.
+Real browser on Localhost after the rebuild and migration `20260925100000` (9 forced → 9 warned,
+none forced, no pending consent obligation): `verify-content-visibility` 24/24,
+`verify-library-recorder` 16/16, `verify-consent-disclosure` 19/19, `verify-platform-owner-framing`
+23/23 + 8/8, `verify-livekit-ingest` 28/28, `verify-recorder` 22/22, `verify-occurrence-details`
+13/13 (after its repair).

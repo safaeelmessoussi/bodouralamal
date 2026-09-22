@@ -336,9 +336,9 @@ beforeAll(async () => {
     }
   }
 
-  // BR-2 — the consent gate forces non-public regardless of the chosen tier.
-  // Public on its face, refused in fact: the row that proves the gate outranks
-  // the tier rather than being one of its values.
+  // R170 §3 — a public recording whose audience lacks a media release is
+  // WARNED to staff and served like any public item: the tier is the whole
+  // answer, and the gate that once outranked it is retired.
   ids["forcedPrivate"] = (
     await prisma.educationalContent.create({
       data: {
@@ -347,9 +347,9 @@ beforeAll(async () => {
         levelId: ids["level"]!,
         academicYearId: ids["year"]!,
         visibility: "public",
-        consentForcedPrivate: true,
+        mediaConsentMissing: true,
         storageKey: `${TAG}/forced.pdf`,
-        storageBucket: "private",
+        storageBucket: "public",
         mimeType: "application/pdf",
         originalFilename: "forced.pdf",
         sizeBytes: 1024,
@@ -719,10 +719,10 @@ describe("§E — scheduling visibility and content visibility are independent",
     expect(anonymous).not.toContain(content.hidden);
   });
 
-  it("BR-2 — consent_forced_private outranks the tier, even on a public class", async () => {
-    // `visibility = 'public'` and refused in fact. The gate is not one of the
-    // tier's values; it overrides whatever the tier says.
-    expect(await libraryIds()).not.toContain(ids["forcedPrivate"]);
+  it("R170 §3 — the consent WARNING does not outrank the tier: a public, warned item is public", async () => {
+    // BR-2's gate used to refuse it in fact while `visibility` said public. The
+    // Owner replaced forcing with a warning to staff; the tier is the answer.
+    expect(await libraryIds()).toContain(ids["forcedPrivate"]);
   });
 
   it("the §5.2 session page shows each caller only the content SHE may see", async () => {
@@ -737,7 +737,8 @@ describe("§E — scheduling visibility and content visibility are independent",
     expect(anonIds).toContain(content.public);
     expect(anonIds).not.toContain(content.private);
     expect(anonIds).not.toContain(content.hidden);
-    expect(anonIds).not.toContain(ids["forcedPrivate"]);
+    // R170 §3 — warned, not withheld.
+    expect(anonIds).toContain(ids["forcedPrivate"]);
 
     // The enrolled beneficiary reaches the private tier at her own Level (§4.9),
     // and still never the hidden one.
@@ -777,13 +778,12 @@ describe("§E — scheduling visibility and content visibility are independent",
     const refused = await call("GET", `/content/${content.private}/download-url`);
     expect([401, 403, 404]).toContain(refused.status);
 
-    const forced = await call(
-      "GET",
-      `/content/${ids["forcedPrivate"]}/download-url`,
-      tokens["student"],
-    );
-    // BR-2 again, at the storage boundary rather than the directory one.
-    expect([401, 403, 404]).toContain(forced.status);
+    // R170 §3 — a public item mints for anyone the tier admits, an anonymous
+    // reader included; the warning is staff's to act on, not a gate at the
+    // storage boundary. (Anonymous, because this suite's «student» is a bearer
+    // claim with no live role row, and the mint re-reads live roles — TD-12.)
+    const forced = await call("GET", `/content/${ids["forcedPrivate"]}/download-url`);
+    expect(forced.status).toBe(200);
   });
 
   it("the sessions a content item names are filtered by the SESSION tier", async () => {

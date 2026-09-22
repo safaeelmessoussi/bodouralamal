@@ -291,6 +291,10 @@ async function clear(): Promise<void> {
     where: { targetId: { in: contents.map((c) => c.id) } },
   });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+  // R170 §3 — the engine's own warning rows carry no actor; they name the item.
+  await prisma.auditLog.deleteMany({
+    where: { actionType: 'content.consent_warning', targetId: { in: contents.map((c) => c.id) } },
+  });
   await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
   await prisma.sessionContent.deleteMany({
     where: { contentId: { in: contents.map((c) => c.id) } },
@@ -1151,29 +1155,29 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     expect(row.title).toBe(`${TAG} خارج النطاق`);
   });
 
-  it("refuses to publish a recording that consent forced private (B-01)", async () => {
+  it("R170 §3 — PUBLISHES a warned recording: nothing is forced, the warning is the staff member's to weigh", async () => {
     const { id } = await uploadPdf(admin(), "تسجيل", {
       origin: "session_recording",
       visibility: "private",
     });
     await prisma.educationalContent.update({
       where: { id },
-      data: { consentForcedPrivate: true },
+      data: { mediaConsentMissing: true },
     });
 
-    await expect(
-      updateContentMetadata(prisma, clients, admin(), id, { visibility: "public" }),
-    ).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: "CONSENT_FORCED_PRIVATE" }),
-    });
+    await updateContentMetadata(prisma, clients, admin(), id, { visibility: "public" });
 
-    // And it is still private, in the database and in storage.
+    // Public now, in the database and in storage. The edit also re-evaluated
+    // the warning from the linked audience — this item is linked to no
+    // occurrence, so it has nobody to warn about and the seeded flag CLEARS: a
+    // warning describes the present (R170 §3).
     const row = await prisma.educationalContent.findUniqueOrThrow({
       where: { id },
-      select: { visibility: true, storageBucket: true },
+      select: { visibility: true, storageBucket: true, mediaConsentMissing: true },
     });
-    expect(row.visibility).toBe("private");
-    expect(row.storageBucket).toBe(BUCKETS.private);
+    expect(row.visibility).toBe("public");
+    expect(row.storageBucket).toBe(BUCKETS.public);
+    expect(row.mediaConsentMissing).toBe(false);
   });
 
   it("changes the «هذا تسجيل حصة» marker without touching the stored object", async () => {
@@ -1427,8 +1431,13 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     expect(Buffer.from(await object.arrayBuffer())).toEqual(bytes);
     expect((await fetch(url, { method: 'HEAD' })).status).toBe(200);
 
-    // Revocation invalidates BOTH the mint and a URL already handed out.
-    await prisma.educationalContent.update({ where: { id }, data: { consentForcedPrivate: true } });
+    // R170 §3 — the consent WARNING closes nothing: the mint and a URL already
+    // handed out keep working. What closes both is the staff member making the
+    // item private — the act the warning asks her to consider.
+    await prisma.educationalContent.update({ where: { id }, data: { mediaConsentMissing: true } });
+    expect((await fetch(endpoint)).status).toBe(200);
+    expect((await fetch(url, { method: 'HEAD' })).status).toBe(200);
+    await prisma.educationalContent.update({ where: { id }, data: { visibility: 'private' } });
     expect((await fetch(endpoint)).status).toBe(404);
     expect((await fetch(url, { redirect: 'manual' })).status).not.toBe(200);
   });

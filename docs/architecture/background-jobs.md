@@ -397,35 +397,24 @@ The complete shared-recording Session graph is discovered first, then its rows a
 in global UUID order before audiences are resolved. Link/replacement/deletion writers take the
 same anchors; if the graph grows during acquisition, the worker retries rather than taking a
 late lower-order lock. Recording rows are then locked in UUID order. A concurrent mutation is
-therefore included or commits a follow-up. The worker can only move toward safety: it sets
-`consent_forced_private`, writes the system `content.visibility_change` audit, and enqueues an
-exact-source physical transition in one transaction. It never automatically clears a forced
-state after a later grant; BR-3 reserves that decision to an Admin with justification.
+therefore included or commits a follow-up.
 
-For a public item, `consent_forced_private = true` immediately removes it from application
-library/session reads and from Nginx's stable public origin. `visibility = public` and
-`storage_bucket = public` still honestly represent the network-internal source while physical
-work is pending. `content.bucket-migrate`, carrying the exact source key, then:
+**What it writes changed with SRS Revision 170 §3 (the Owner, 2026-09-21).** The worker used
+to move only toward safety — set `consent_forced_private`, audit `content.visibility_change`,
+enqueue the exact-source public→private migration, and never clear the flag after a later
+grant. It now writes **`media_consent_missing`** on every recording of the graph, **in both
+directions**: `true` when a student of the resolved audience has no effective `media_release`
+grant, `false` otherwise, each change audited as `content.consent_warning`. It forces nothing,
+moves no bytes, and enqueues no migration. The warning reaches staff on «مكتبة المحتوى» and on
+the class dialog before recording; the visibility stays whatever the Category default or a
+staff member set. `consent_forced_private` is retired (never written), and the consent arm of
+`content.bucket-migrate` completes any pre-R170 obligation with the code `withdrawn_r170`
+without touching storage. The trigger graph above is unchanged.
 
-1. hashes the immutable canonical source;
-2. server-side copies it to the private bucket with that SHA-256 as server metadata;
-3. hashes the destination and requires identical bytes and size;
-4. under a content row lock, re-reads the version/key/forced state;
-5. deletes the public source; and only then commits `visibility = private`, the private
-   bucket coordinate and mandatory system audit.
-
-A delete failure rolls the database transition back and TD-7 retries. If deletion succeeded
-but the database commit did not, the private object's server-written digest makes recovery
-provable even though the source is gone. Duplicate work is idempotent, and a stale snapshot
-cannot overwrite a replacement or a deletion. This worker implements only consent-forced
-public → private movement; it is not general visibility editing or bucket housekeeping.
-
-Replacement and deletion also commit exact-key retirement obligations in this same queue.
-Replacement can publish a new canonical key only with the monotonic flag already set, queues
-the new key's migration, and retires the old key into private quarantine. A stale migration
-whose row now names another key becomes that same retirement operation. A missing source is
-success, which is what makes a retry after an ambiguous successful delete converge without
-guessing or touching the replacement key.
+The physical machinery `content.bucket-migrate` still runs is the non-consent one: replacement
+and deletion commit exact-key retirement obligations in this queue — replacement retires the
+old key into same-bucket quarantine, deletion likewise — and a missing source is success,
+which is what makes a retry after an ambiguous successful delete converge without guessing.
 
 Rows committed before B-01 used the older three-column repository insert and therefore lack
 per-job retry/expiry policy. They are not bulk-rewritten. When such a row becomes active, the

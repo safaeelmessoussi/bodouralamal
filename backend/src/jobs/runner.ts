@@ -19,9 +19,7 @@ import {
 import {
   contentMigrationSingletonKey,
   enqueueConsentSafeguardingSweep,
-  migrateConsentForcedContent,
   reevaluateSessionConsent,
-  retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
 import {
   purgeElapsedApplications,
@@ -325,8 +323,9 @@ export function createWorkerCatalog(
         log(QUEUES.consentReevaluate, {
           session_id: outcome.sessionId,
           recordings_inspected: outcome.recordingsInspected,
-          recordings_forced: outcome.recordingsForced,
-          migrations_enqueued: outcome.migrationsEnqueued,
+          // R170 §3 — warnings, never forced states.
+          warnings_raised: outcome.warningsRaised,
+          warnings_cleared: outcome.warningsCleared,
         });
       },
     },
@@ -366,18 +365,12 @@ export function createWorkerCatalog(
             ? payload.content_id
             : contentMigrationSingletonKey(payload.content_id, payload.source_key),
         );
-        const outcome = payload.operation === 'retire_public'
-          ? await retireConsentPublicObject(
-              storage,
-              payload.content_id,
-              payload.source_key!,
-            ).then(() => ({ contentId: payload.content_id!, state: 'retired' as const }))
-          : await migrateConsentForcedContent(
-              prisma,
-              storage,
-              payload.content_id,
-              payload.source_key,
-            );
+        // R170 §3 — a legacy consent payload (pre-durable, no `retirement_id`)
+        // moves NOTHING now: the consent-forced migration and the public
+        // retirement on consent grounds are withdrawn. It is acknowledged and
+        // logged, never executed; the durable follow-up above keeps the
+        // obligation's history visible.
+        const outcome = { contentId: payload.content_id, state: 'withdrawn_r170' as const };
         log(QUEUES.contentBucketMigrate, {
           content_id: outcome.contentId,
           state: outcome.state,

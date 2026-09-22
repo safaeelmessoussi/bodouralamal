@@ -40,10 +40,8 @@ import { snapshot } from '../repositories/trash.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { visibleContentIds } from './library.service.js';
 import {
-  enqueueConsentContentMigration,
   enqueueConsentPublicRetirement,
   enqueueConsentReevaluationForSessions,
-  recordingContentRequiresSafeguardUnderLocks,
   safeguardRetaggedRecordingUnderLocks,
 } from './consent-reevaluation.service.js';
 import { lockLiveSessions, lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
@@ -1051,19 +1049,14 @@ async function replaceContentFile(
       where: { contentId: claims.cid, deletedAt: null, session: { deletedAt: null } },
       select: { sessionId: true },
     });
-    const lockedSessionIds = await enqueueConsentReevaluationForSessions(
+    await enqueueConsentReevaluationForSessions(
       tx,
       linkedSessions.map((link) => link.sessionId),
     );
-    const retireOldPublic =
-      existing.storageBucket === BUCKETS.public &&
-      existing.origin === 'session_recording' &&
-      (existing.consentForcedPrivate ||
-        (await recordingContentRequiresSafeguardUnderLocks(
-          tx,
-          claims.cid,
-          lockedSessionIds,
-        )));
+    // R170 §3 — the consent arm that retired a PUBLIC recording's old object
+    // on replacement is withdrawn with the forcing; the ordinary quarantine
+    // transition below is every replacement's path now.
+    const retireOldPublic = false;
 
     const written = await tx.educationalContent.updateMany({
       where: {
@@ -1076,7 +1069,6 @@ async function replaceContentFile(
       data: {
         title: input.title,
         description: input.description,
-        ...(retireOldPublic ? { consentForcedPrivate: true } : {}),
         storageBucket: claims.bucket,
         storageKey: canonicalKey,
         originalFilename: claims.filename,
@@ -1124,25 +1116,7 @@ async function replaceContentFile(
       },
     });
     if (retireOldPublic) {
-      if (!existing.consentForcedPrivate) {
-        await audit.write(tx, {
-          actorUserId: null,
-          actionType: 'content.visibility_change',
-          targetEntity: 'EducationalContent',
-          targetId: claims.cid,
-          detail: {
-            reason: 'consent_gate',
-            old_visibility: existing.visibility,
-            new_visibility: existing.visibility,
-            old_consent_forced_private: false,
-            new_consent_forced_private: true,
-            bucket_migration_pending: true,
-            source: 'content.replace',
-          },
-        });
-      }
-      await enqueueConsentPublicRetirement(tx, claims.cid, existing.storageKey);
-      await enqueueConsentContentMigration(tx, claims.cid, canonicalKey);
+      throw new Error('unreachable: the consent retirement arm was withdrawn by R170 §3');
     } else {
       await enqueueQuarantineTransition(
         tx,
@@ -1277,15 +1251,9 @@ export async function updateContentMetadata(
   const existing = await loadWritableContent(prisma, actor, contentId);
   await hooks.afterSnapshot?.();
 
-  if (
-    patch.visibility === 'public' &&
-    existing.consentForcedPrivate &&
-    existing.visibility !== 'public'
-  ) {
-    throw new AppError('STATE_CONFLICT', 'consent keeps this recording private', {
-      reason: 'CONSENT_FORCED_PRIVATE',
-    });
-  }
+  // R170 §3 — no refusal here any more: a recording whose audience includes a
+  // student without media release may be made public; the screen WARNS the
+  // person doing it (`media_consent_missing`), and the choice is hers.
 
   // §4.9's Global-scope and branch rules are the same ones initiation applies;
   // a Level change must not become a way to move content into a scope the
@@ -1488,15 +1456,9 @@ export async function deleteContent(
       tx,
       linkedSessions.map((link) => link.sessionId),
     );
-    const retireForConsent =
-      existing.storageBucket === BUCKETS.public &&
-      existing.origin === 'session_recording' &&
-      (existing.consentForcedPrivate ||
-        (await recordingContentRequiresSafeguardUnderLocks(
-          tx,
-          contentId,
-          lockedSessionIds,
-        )));
+    // R170 §3 — withdrawn with the forcing (see the replacement path).
+    const retireForConsent = false;
+    void lockedSessionIds;
     const row = await tx.educationalContent.findUnique({ where: { id: contentId } });
     const written = await tx.educationalContent.updateMany({
       where: {
@@ -1661,9 +1623,7 @@ export async function mintDownloadUrl(
       // visibility/placement change between these reads must never mint an
       // anonymous PRIVATE capability. Public coordinates remain DB-gated at
       // Nginx when the file itself is requested (including stale signed URLs).
-      ...(fresh === null ? {
-        visibility: 'public', consentForcedPrivate: false, storageBucket: 'public',
-      } : {}),
+      ...(fresh === null ? { visibility: 'public', storageBucket: 'public' } : {}),
     },
     select: { storageBucket: true, storageKey: true },
   });
