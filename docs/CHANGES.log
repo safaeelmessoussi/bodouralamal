@@ -11513,4 +11513,3 @@ the seed drill ran `seed:fixtures` once, on an empty database — never the depl
 It now runs it twice on one database and asserts the second run added nothing (exit 0, 4 fixture
 content rows both times). Two lessons kept in memory: a rename in a seed is a data change; a
 deployment step that stops the API must be rehearsed exactly as it runs.
-
