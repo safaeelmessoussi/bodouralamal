@@ -10,6 +10,9 @@ import { quarantineKeyFor } from '../lib/file-types.js';
 import { BUCKETS, type StorageClients } from '../lib/storage.js';
 import {
   collectAbandonedUploadPage,
+  collectExpiredQuarantinePage,
+  QUARANTINE_SWEEP_MIN_AGE_MS,
+  quarantinedContentId,
   quarantineRetiredContentObject,
   retirePurgedContentObjects,
   UPLOAD_GC_MIN_AGE_MS,
@@ -229,5 +232,98 @@ describe('manual content purge exact-key retirement', () => {
       }),
     ).rejects.toThrow('storage unavailable');
     expect(failed).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * **`content.quarantine-sweep` — the 90-day destruction the Owner switched on**
+ * (SRS Revision 170 §10). The same loop as `upload.gc` — one profile, not a
+ * copy — so the tests pin what is DIFFERENT: ninety days, `quarantine/` in both
+ * buckets, and that an object still OWED to something is kept however old.
+ */
+describe('content.quarantine-sweep — ninety days, and never what is still owed', () => {
+  const OWED = '11111111-1111-4111-8111-111111111111';
+  const FREE = '22222222-2222-4222-8222-222222222222';
+
+  it('deletes only quarantine objects strictly older than 90 days, owed to nobody, of a known shape', async () => {
+    const now = new Date('2026-09-22T12:00:00.000Z');
+    const cutoff = new Date(now.getTime() - QUARANTINE_SWEEP_MIN_AGE_MS);
+    const old = new Date(cutoff.getTime() - 1);
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof ListObjectsV2Command) {
+        expect(command.input).toMatchObject({ Bucket: BUCKETS.public, Prefix: 'quarantine/' });
+        return {
+          Contents: [
+            { Key: `quarantine/${FREE}/2026/08/a.pdf`, LastModified: old },
+            { Key: `quarantine/${OWED}/2026/08/b.pdf`, LastModified: old },
+            { Key: `quarantine/${FREE}/2026/09/young.pdf`, LastModified: new Date(cutoff.getTime() + 1) },
+            { Key: `quarantine/${FREE}/2026/09/exact.pdf`, LastModified: cutoff },
+            { Key: 'quarantine/not-a-uuid/c.pdf', LastModified: old },
+            { Key: 'quarantine/orphan.pdf', LastModified: old },
+          ],
+          IsTruncated: false,
+        };
+      }
+      if (command instanceof DeleteObjectCommand) return {};
+      throw new Error('unexpected command');
+    });
+    const asked: string[] = [];
+    const isOwed = async (contentId: string): Promise<boolean> => {
+      asked.push(contentId);
+      return contentId === OWED;
+    };
+
+    const result = await collectExpiredQuarantinePage(clients(send), {}, 'job-q', isOwed, now);
+
+    expect(result).toMatchObject({ scanned: 6, deleted: 1, retained: 5 });
+    // Asked only about objects old enough to go — never about the young ones.
+    expect(asked).toEqual([FREE, OWED]);
+    expect(result.next).toEqual({ run_id: 'job-q', cutoff: cutoff.toISOString(), scope_index: 1 });
+    const deletes = send.mock.calls
+      .map(([command]) => command)
+      .filter((command): command is DeleteObjectCommand => command instanceof DeleteObjectCommand);
+    expect(deletes.map((command) => command.input.Key)).toEqual([`quarantine/${FREE}/2026/08/a.pdf`]);
+  });
+
+  it('sweeps the private bucket second, and then stops', async () => {
+    const now = new Date('2026-09-22T12:00:00.000Z');
+    const cutoff = new Date(now.getTime() - QUARANTINE_SWEEP_MIN_AGE_MS).toISOString();
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof ListObjectsV2Command) {
+        expect(command.input).toMatchObject({ Bucket: BUCKETS.private, Prefix: 'quarantine/' });
+        return { Contents: [], IsTruncated: false };
+      }
+      throw new Error('unexpected command');
+    });
+    const result = await collectExpiredQuarantinePage(
+      clients(send),
+      { run_id: 'job-q', cutoff, scope_index: 1 },
+      'job-q2',
+      async () => false,
+      now,
+    );
+    expect(result).toMatchObject({ scanned: 0, deleted: 0, next: null, bucket: BUCKETS.private });
+  });
+
+  it('refuses a cutoff younger than 90 days — a payload cannot shorten the window', async () => {
+    const now = new Date('2026-09-22T12:00:00.000Z');
+    const send = vi.fn(async () => ({ Contents: [], IsTruncated: false }));
+    await expect(
+      collectExpiredQuarantinePage(
+        clients(send),
+        { run_id: 'job-q', cutoff: new Date(now.getTime() - 24 * 60 * 60 * 1_000).toISOString(), scope_index: 0 },
+        'job-q3',
+        async () => false,
+        now,
+      ),
+    ).rejects.toThrow('younger than 90 days');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('reads the content id only from `quarantine/<uuid>/…`', () => {
+    expect(quarantinedContentId(`quarantine/${FREE}/2026/08/a.pdf`)).toBe(FREE);
+    expect(quarantinedContentId('quarantine/not-a-uuid/c.pdf')).toBeNull();
+    expect(quarantinedContentId(`content/${FREE}/a.pdf`)).toBeNull();
+    expect(quarantinedContentId('quarantine/')).toBeNull();
   });
 });

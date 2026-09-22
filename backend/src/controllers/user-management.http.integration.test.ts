@@ -1267,6 +1267,10 @@ describe("account administration is Super Admin's, the directory is not", () => 
       "last_name_arabic",
       "name_arabic",
       "nickname",
+      // R170 §7 — argued on: the spoken reference code is NON-personal by
+      // design (R62.5) and is exactly what a picker is for — saying WHICH
+      // beneficiary without a name. Still no address, phone, status or version.
+      "reference_code",
       "roles",
     ]);
   });

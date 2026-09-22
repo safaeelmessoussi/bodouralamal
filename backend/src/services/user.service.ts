@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import { knownBirthDate } from '../lib/birth-date.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
+import { spokenReferenceCode } from '../lib/reference-code.js';
 import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
@@ -280,6 +281,8 @@ export interface UserListItem {
   /** R80.6 amended 2026-08-28 — see `UserDto.sex`. */
   sex: string | null;
   nickname: string | null;
+  /** R170 §7 — the spoken reference code; every beneficiary has one, staff none. */
+  referenceCode: string | null;
   publicDisplayName: string | null;
   phone: string | null;
   accountStatus: string;
@@ -431,6 +434,9 @@ async function listUsersUnchecked(
       // "Linked parent's name" — these are the links where this person is the
       // child, so the join reaches their parent.
       { childLinks: { some: { deletedAt: null, parent: { nameArabicNormalized: { contains: text } } } } },
+      // R170 §7 — the code is SPOKEN and typed whole, so it is matched whole
+      // (the unique index answers it): «BA-7K4M2», or «7k4m2» as it is said.
+      { referenceCode: { equals: spokenReferenceCode(raw) } },
     ];
   }
 
@@ -451,6 +457,7 @@ async function listUsersUnchecked(
         // R169 §9 — …and a PLACEHOLDER is a missing one.
         birthDateIsPlaceholder: true,
         nickname: true,
+        referenceCode: true,
         publicDisplayName: true,
         phone: true,
         accountStatus: true,
@@ -493,6 +500,7 @@ async function listUsersUnchecked(
       lastNameFrench: u.lastNameFrench,
       sex: u.sex,
       nickname: u.nickname,
+      referenceCode: u.referenceCode,
       publicDisplayName: u.publicDisplayName,
       phone: u.phone,
       accountStatus: u.accountStatus,
@@ -541,6 +549,12 @@ export interface DirectoryEntry {
   firstNameArabic: string | null;
   lastNameArabic: string | null;
   nickname: string | null;
+  /**
+   * R170 §7 — the spoken reference code. It belongs on a PICKER precisely
+   * because it is non-personal and exists to say *which* beneficiary is meant
+   * without speaking a name (R62.5); it identifies and never authorises.
+   */
+  referenceCode: string | null;
   roles: { role: string; branchId: string | null; branchName: string | null }[];
 }
 
@@ -585,6 +599,7 @@ export async function listDirectory(
       lastNameFrench: u.lastNameFrench,
       sex: u.sex,
       nickname: u.nickname,
+      referenceCode: u.referenceCode,
       roles: u.roles,
     })),
     meta: page.meta,
@@ -1304,6 +1319,7 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
       // R130 — as on the list read: §5.6 hydrates the completion field from it.
       birthDate: true,
       nickname: true,
+      referenceCode: true,
       publicDisplayName: true,
       phone: true,
       accountStatus: true,
@@ -1325,6 +1341,7 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
     lastNameFrench: u.lastNameFrench,
     sex: u.sex,
     nickname: u.nickname,
+    referenceCode: u.referenceCode,
     publicDisplayName: u.publicDisplayName,
     phone: u.phone,
     accountStatus: u.accountStatus,

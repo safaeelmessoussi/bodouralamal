@@ -27,6 +27,16 @@ export interface Category {
    * not a gap**, so screens render the absence rather than inventing filler.
    */
   description: string | null;
+  /**
+   * R170 §6 — who holds the login. `true`: its beneficiaries sign in themselves
+   * (offered to a woman registering HERSELF, never on a child application);
+   * `false`: a guardian registers them (the reverse); **`null` — not stated —
+   * restricts nothing.** The server enforces it; forms only stop offering.
+   */
+  holds_own_login: boolean | null;
+  /** R170 §6 — informational, whole years; gates nothing. */
+  min_age: number | null;
+  max_age: number | null;
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible. */
   level_count: number;
@@ -48,6 +58,10 @@ export interface TaxonomyInput {
    *  the boundary, so clearing a description is not the same as not mentioning
    *  one. Subjects accept it too on the wire and simply never send it. */
   description?: string | null;
+  /** R170 §6 — Categories only; omit to leave unchanged. */
+  holds_own_login?: boolean | null;
+  min_age?: number | null;
+  max_age?: number | null;
   display_order?: number | null;
   /** R73 — Subjects only; omit to leave unchanged. See `SubjectRef`'s own note. */
   tracks_quran_progress?: boolean;

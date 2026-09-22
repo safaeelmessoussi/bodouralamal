@@ -11,9 +11,19 @@ import { displayOrder, entityDescription, entityName, uuid, version } from './co
  * its own tests.
  */
 
+/**
+ * R170 §6 — a whole number of years, or `null` for «not stated». Informational:
+ * it is shown, and gates nothing. 0–120 is the database's own CHECK.
+ */
+const categoryAge = z.number().int().min(0).max(120).nullable();
+
 export const createCategorySchema = z.object({
   name: entityName,
   description: entityDescription.optional(),
+  // R170 §6 — `null` is «not stated», and restricts nothing.
+  holds_own_login: z.boolean().nullable().optional(),
+  min_age: categoryAge.optional(),
+  max_age: categoryAge.optional(),
   display_order: displayOrder.optional(),
 });
 
@@ -21,6 +31,9 @@ export const updateCategorySchema = z.object({
   version,
   name: entityName.optional(),
   description: entityDescription.optional(),
+  holds_own_login: z.boolean().nullable().optional(),
+  min_age: categoryAge.optional(),
+  max_age: categoryAge.optional(),
   display_order: displayOrder.optional(),
 });
 

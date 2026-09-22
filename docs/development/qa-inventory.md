@@ -89,7 +89,7 @@ under the table.
 | Harness | Area | Covers | 2026-08-19 |
 |---|---|---|---|
 | `verify-dialog-states.sh` | shared UI | **AG** — closed/open/close/reopen across 15 pages, from both the affected and the unaffected sets, plus page-flow impact and scroll ownership | 110/110 |
-| `verify-sorting.sh` | 2, 3, 4–9 | R76 sort contract across four tables: one directed header, the actions column never sortable, order survives paging | 39/39 |
+| `verify-sorting.sh` | 2, 3, 4–9 | R76 sort contract across four tables: one directed header, the actions column never sortable, order survives paging. **Found a shipped defect on 2026-09-22**: «التسجيلات» forwarded `sort_by=first_name` to a read whose allow-list did not know it (400 → blank table on the first header click, since `bab75ed` on 2026-08-28) | 39/39 |
 | `verify-approvals-sorting.sh` | 2, 3 | NEW C — طلبات الانضمام reorders on both its sortable columns, proved against three scenario-owned pending applicants whose name order and submission order are different lists | 7/7 |
 | `verify-reorder.sh` | 4–9 | R76 manual ordering on five screens; canonical order is the only state that offers the grip | 30/30 |
 | `verify-admin-navigation.sh` | — | R105's menu and R61's section, clicked. **Restated 2026-08-28**: an Admin's list is the same order **minus المستخدمون**, since account administration is Super Admin's | 32/32 |

@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '../../i18n/index.js';
 import { Button } from './button.js';
 import { Dialog } from './dialog.js';
-import { TextArea } from './field.js';
+import { CheckboxField, TextArea } from './field.js';
 
 /**
  * The one confirmation dialog. Every destructive or overriding action in the
@@ -70,6 +70,13 @@ export function ConfirmDialog({
   reasonMin = CONSENT_REASON_MIN,
   reasonMax = CONSENT_REASON_MAX,
   /**
+   * **An optional yes/no BESIDE the reason** (R170 §11: «إبلاغ المتقدّمة بهذا
+   * السبب»). Rendered only with a reason, starts UNTICKED on every opening —
+   * a decision to share what was written is taken each time, never inherited —
+   * and travels back as the second argument of `onConfirm`.
+   */
+  reasonOption,
+  /**
    * **The action was refused, and the dialog becomes the explanation** (TD-5).
    *
    * When set, the destructive button is withdrawn — there is nothing left to
@@ -99,16 +106,21 @@ export function ConfirmDialog({
   reasonHint?: string;
   reasonMin?: number;
   reasonMax?: number;
+  reasonOption?: { label: string; hint?: string };
   busy?: boolean;
-  onConfirm: (reason?: string) => void;
+  onConfirm: (reason?: string, option?: boolean) => void;
   onCancel: () => void;
 }): ReactNode {
   const [reason, setReason] = useState('');
+  const [option, setOption] = useState(false);
 
   // Reopening must not inherit the previous answer — a stale justification
   // attached to a different action would be written to the audit log.
   useEffect(() => {
-    if (open) setReason('');
+    if (open) {
+      setReason('');
+      setOption(false);
+    }
   }, [open]);
 
   const needsReason = reasonLabel !== undefined;
@@ -141,6 +153,16 @@ export function ConfirmDialog({
             error={tooLong ? t('common.reasonTooLong').replace('{max}', String(reasonMax)) : null}
           />
         ) : null}
+        {blocked === undefined && needsReason && reasonOption ? (
+          <div data-reason-option>
+            <CheckboxField
+              label={reasonOption.label}
+              checked={option}
+              onChange={setOption}
+              {...(reasonOption.hint ? { hint: reasonOption.hint } : {})}
+            />
+          </div>
+        ) : null}
 
         <div className="confirm__actions">
           <Button variant="secondary" onClick={onCancel}>
@@ -153,7 +175,9 @@ export function ConfirmDialog({
             <Button
               variant={danger ? 'danger' : 'primary'}
               disabled={busy || !reasonOk}
-              onClick={() => onConfirm(needsReason ? reason.trim() : undefined)}
+              onClick={() =>
+                onConfirm(needsReason ? reason.trim() : undefined, reasonOption ? option : undefined)
+              }
             >
               {confirmLabel ?? t('common.confirm')}
             </Button>

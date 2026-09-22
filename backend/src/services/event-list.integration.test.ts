@@ -153,14 +153,27 @@ describe("the date window filters by OVERLAP", () => {
 });
 
 describe("branch narrowing (TD-2)", () => {
-  it('B6: Teacher definitions require own groups or live EventStaff, not merely a Teacher role', async () => {
-    const unrelated = await makeEvent('unrelated global definition', '2026-09-01');
+  /**
+   * **R170 §5 supersedes the B6 rule this test pinned**: a مؤطِّرة's list shows
+   * what her calendar shows (`teacherEventVisibility`). A PUBLIC global
+   * definition is everyone's and reaches her; what she still cannot list is a
+   * PRIVATE activity for nobody she teaches, and a HIDDEN one she is not
+   * responsible for (R109) — assistant or not, staffed or not.
+   */
+  it('R170 §5: a Teacher lists public and reaching activities; hidden needs her responsibility', async () => {
+    const publicGlobal = await makeEvent('unrelated global definition', '2026-09-01');
     const mine = await makeEvent('my responsibility', '2026-09-01');
     await prisma.eventStaff.create({ data: { eventId: mine, userId: actorId, position: 'responsible' } });
     const teacher = actorOf([{ role: 'teacher', branches: null }]);
     const result = await listEvents(prisma, teacher, {});
     expect(result.data.map((e) => e.id)).toContain(mine);
-    expect(result.data.map((e) => e.id)).not.toContain(unrelated);
+    expect(result.data.map((e) => e.id)).toContain(publicGlobal);
+
+    // A private activity for another branch alone: nobody she teaches.
+    const privateElsewhere = await makeEvent('private, elsewhere', '2026-09-01', { branchIds: [branchB] });
+    await prisma.event.update({ where: { id: privateElsewhere }, data: { visibility: 'private' } });
+    expect((await listEvents(prisma, teacher, {})).data.map((e) => e.id)).not.toContain(privateElsewhere);
+
     await prisma.event.update({ where: { id: mine }, data: { visibility: 'hidden' } });
     expect((await listEvents(prisma, teacher, {})).data.map((e) => e.id)).toContain(mine);
     await prisma.eventStaff.updateMany({ where: { eventId: mine }, data: { position: 'assistant' } });

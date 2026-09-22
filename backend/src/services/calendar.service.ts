@@ -27,7 +27,6 @@ import type { RoleScope } from "../policies/branch-scope.js";
 import {
   audienceForSession,
   audienceWhere,
-  eventsStaffedBy,
   examAudienceWhere,
   teacherEventScope,
 } from "../policies/roster-resolution.js";
@@ -35,6 +34,7 @@ import {
   eventResponsibleWhere,
   examTierWhere,
   sessionTierWhere,
+  teacherEventVisibility,
 } from "../policies/scheduling-visibility.js";
 
 /**
@@ -399,71 +399,10 @@ async function visibilityFilter(
   }
 
   if (isTeacher(actor)) {
-    // Revision 43: resolved from the courses they staff (§4.4c), which is the
-    // single definition of a teacher's reach. The retired path asked
-    // `GroupTeacher` and then read `Group` for its level and branch; a schedule
-    // states its branch directly, and the derivation lives with the rest of the
-    // rule rather than here.
-    const {
-      branchIds,
-      levelIds,
-      categoryIds,
-      administrativeGroupIds: groupIds,
-    } = await teacherEventScope(prisma, actor.userId);
-
-    // §4.4: a Teacher sees Private events whose scope intersects their teaching
-    // scope — one of their Administrative Groups, or the level, category or
-    // branch of anything they teach, or a global event — and never one
-    // belonging exclusively to groups they do not teach.
-    // R71.2 — the union's other arm. A مؤطرة sees an event she staffs whether
-    // or not her teaching scope reaches it: an assistant at a celebration for
-    // another branch's group must still find it in her own calendar. **Both
-    // positions see; only `responsible` may edit** (R71.3, `event.service.ts`).
-    // **R109 narrowed the HIDDEN tier out of this union entirely** — scope
-    // intersection no longer reaches a hidden event, ownership does.
-    const staffed = [...(await eventsStaffedBy(prisma, actor.userId)).keys()];
-
-    /**
-     * **R169 §6 — an activity's audience dimensions INTERSECT, here as everywhere
-     * else** (the Owner, 2026-09-21: activities combine their filters the way
-     * classes do). Who an activity notifies, who is expected at it and whose
-     * personal calendar it is on have intersected since R140 — *branch B1 AND
-     * Level Y* means the people in both at once, and a dimension left empty is
-     * «الكل». This read alone still UNIONed them: a مؤطِّرة teaching Level Y at
-     * another branch saw a private activity addressed to *B1 ∧ Y*, which concerns
-     * nobody she teaches. Now each dimension the activity NAMES must reach her
-     * teaching scope, and one it leaves empty constrains nothing — so a global
-     * activity (every dimension empty) falls out of the same rule rather than
-     * needing an arm of its own.
-     */
-    const reaches = (
-      field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
-      idField: "branchId" | "categoryId" | "levelId" | "administrativeGroupId",
-      mine: string[],
-    ): Prisma.EventWhereInput => ({
-      OR: [{ [field]: { none: {} } }, { [field]: { some: { [idField]: { in: mine } } } }],
-    });
-    const intersects: Prisma.EventWhereInput = {
-      OR: [
-        { id: { in: staffed } },
-        {
-          AND: [
-            reaches("branchScopes", "branchId", branchIds),
-            reaches("categoryScopes", "categoryId", categoryIds),
-            reaches("levelScopes", "levelId", levelIds),
-            reaches("administrativeGroupScopes", "administrativeGroupId", groupIds),
-          ],
-        },
-      ],
-    };
-
-    return {
-      OR: [
-        { visibility: "public" },
-        { visibility: "private", ...intersects },
-        eventResponsibleWhere(actor),
-      ],
-    };
+    // The ONE definition of what reaches her (§4.4c, R71.2, R109, R169 §6) —
+    // shared with `GET /events` since R170 §5, so her قائمة and her calendar
+    // cannot disagree. See `teacherEventVisibility`.
+    return teacherEventVisibility(prisma, actor);
   }
 
   if (isStudentOrParent(actor)) {

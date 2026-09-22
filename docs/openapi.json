@@ -1589,10 +1589,10 @@
     "/profile/role-requests": {
       "get": {
         "summary": "My role requests, and what I may still ask for",
-        "description": "**SRS Revision 169 §1.** The caller's own `RoleRequest` rows — `kind`, `status`, `decided_at` — and `askable`: the kinds she may ask for NOW (not held, not already waiting). **The decline reason is never returned**: it is operator-facing (§5.6); she is told THAT a request was declined, never why in an operator's words. `guardian` is never «askable» here — registering a child (`POST /child-applications`) IS that request. `held` names the kinds she HOLDS, from live role rows (R170 §1): a person holding every role has nothing to ask for and no request to show, and a screen that then showed nothing left her unable to find it.",
+        "description": "**SRS Revision 169 §1.** The caller's own `RoleRequest` rows — `kind`, `status`, `decided_at` — and `askable`: the kinds she may ask for NOW (not held, not already waiting). **The decline reason is never returned**: it is operator-facing (§5.6); she is told THAT a request was declined, never why in an operator's words. `guardian` is never «askable» here — registering a child (`POST /child-applications`) IS that request. `held` names the kinds she HOLDS, from live role rows (R170 §1): a person holding every role has nothing to ask for and no request to show, and a screen that then showed nothing left her unable to find it. Each declined request carries `shared_reason` (R170 §11): the reason the approver CHOSE to tell her, or `null` — the operator-facing reason itself never travels.",
         "responses": {
           "200": {
-            "description": "`{ requests[], askable[], held[] }`."
+            "description": "`{ requests[] { kind, status, decided_at, shared_reason }, askable[], held[] }`."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -1984,7 +1984,7 @@
     "/admin/approvals/{id}/roles/{kind}/decline": {
       "post": {
         "summary": "Decline ONE requested role",
-        "description": "SRS Revision 168 §1. `reason` is mandatory (§5.6) and operator-facing. Declining takes nothing else away: a role already approved stays. **The account is `rejected` — sessions revoked in the same transaction (R102) — only when EVERY role she asked for has been declined**; while some are undecided and none approved it stays `pending`. Declining `guardian` rejects her pending child applications with it (`not_eligible`): a child is not admitted under a guardian the association declined. The whole-account `POST /admin/approvals/{id}/approve|reject` answers `400 DECIDE_PER_ROLE` for a registration that asked for more than one role. One audit row (`rolerequest.decline`) and one notification.",
+        "description": "SRS Revision 168 §1. `reason` is mandatory (§5.6) and operator-facing. **`share_reason: true` (R170 §11) tells the applicant that reason** — the approver's choice each time, never the default; it is written to its own column and is what `GET /profile/role-requests` shows her as `shared_reason`. Declining takes nothing else away: a role already approved stays. **The account is `rejected` — sessions revoked in the same transaction (R102) — only when EVERY role she asked for has been declined**; while some are undecided and none approved it stays `pending`. Declining `guardian` rejects her pending child applications with it (`not_eligible`): a child is not admitted under a guardian the association declined. The whole-account `POST /admin/approvals/{id}/approve|reject` answers `400 DECIDE_PER_ROLE` for a registration that asked for more than one role. One audit row (`rolerequest.decline`) and one notification.",
         "responses": {
           "200": {
             "description": "Declined."

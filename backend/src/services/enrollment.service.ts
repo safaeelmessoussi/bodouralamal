@@ -803,6 +803,16 @@ export interface EnrollmentRowView {
  */
 export const ENROLLMENT_SORT_FIELDS: SortableFields = {
   student: (dir) => [{ student: { nameArabic: dir } }],
+  /**
+   * **The two name parts «التسجيلات» sorts by since `bab75ed`** (2026-08-28).
+   * The page orders its assembled rows itself (R76.2's stated exception) but
+   * still forwards its sort to this read, and a name outside the allow-list is
+   * `400` by R76.1 — so the first click on «الاسم الشخصي» blanked the table.
+   * Found by `verify-sorting` on 2026-09-22; the same TD-6a shadow columns
+   * `/admin/users` sorts by, absent last in both directions.
+   */
+  first_name: (dir) => [{ student: { firstNameSort: { sort: dir, nulls: 'last' } } }],
+  last_name: (dir) => [{ student: { lastNameSort: { sort: dir, nulls: 'last' } } }],
   level: (dir) => [{ level: { name: dir } }],
   branch: (dir) => [{ branch: { name: dir } }],
 };

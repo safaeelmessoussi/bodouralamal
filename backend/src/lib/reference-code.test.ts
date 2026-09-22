@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocateReferenceCode,
   generateReferenceCode,
+  spokenReferenceCode,
 } from "./reference-code.js";
 
 /**
@@ -51,5 +52,22 @@ describe("allocation retries rather than failing a registration", () => {
     await expect(allocateReferenceCode(async () => true, 5)).rejects.toThrow(
       /could not allocate/,
     );
+  });
+});
+
+describe('spokenReferenceCode — the code as it is said (R170 §7)', () => {
+  it('reads one code however it is spoken or typed', () => {
+    for (const said of ['BA-7K4M2', 'ba-7k4m2', ' ba 7k4m2 ', '7k4m2', 'BA7K4M2']) {
+      expect(spokenReferenceCode(said)).toBe('BA-7K4M2');
+    }
+  });
+
+  it('does not mistake a body that begins with «BA» for the prefix', () => {
+    expect(spokenReferenceCode('BA2K4')).toBe('BA-BA2K4');
+    expect(spokenReferenceCode('BABA2K4')).toBe('BA-BA2K4');
+  });
+
+  it('never validates: a name typed into the search box is just a code nobody has', () => {
+    expect(spokenReferenceCode('مريم')).toBe('BA-مريم');
   });
 });

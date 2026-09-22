@@ -32,7 +32,7 @@ describe('the section never disappears', () => {
 
   it('lists what she asked for with its state, under its own heading', () => {
     const html = render({
-      requests: [{ kind: 'teaching', status: 'declined', decided_at: '2026-09-21T10:00:00.000Z' }],
+      requests: [{ kind: 'teaching', status: 'declined', decided_at: '2026-09-21T10:00:00.000Z', shared_reason: null }],
       askable: ['teaching'],
       held: [],
     });
@@ -46,5 +46,24 @@ describe('the section never disappears', () => {
     expect(html).toContain(t('profile.requestRole.sectionTitle'));
     expect(html).toContain('class="error-panel');
     expect(html).not.toContain('data-roles-held');
+  });
+});
+
+describe('a declined request says the reason ONLY when the approver chose to share it (R170 §11)', () => {
+  const declined = (shared_reason: string | null) =>
+    render({
+      requests: [{ kind: 'administration', status: 'declined', decided_at: '2026-09-21T10:00:00.000Z', shared_reason }],
+      askable: ['administration'],
+      held: ['teaching'],
+    });
+
+  it('shows the shared sentence, word for word', () => {
+    const html = declined('لا حاجة إلى إداريات جدد هذا الموسم.');
+    expect(html).toContain('data-shared-reason');
+    expect(html).toContain('لا حاجة إلى إداريات جدد هذا الموسم.');
+  });
+
+  it('shows nothing about a reason that was not shared', () => {
+    expect(declined(null)).not.toContain('data-shared-reason');
   });
 });

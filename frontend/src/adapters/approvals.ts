@@ -235,11 +235,13 @@ export async function rejectApproval(
   id: string,
   reason: string,
   token: string | null,
+  /** R170 §11 — tell the applicant this reason. The approver's choice, each time. */
+  shareReason = false,
 ): Promise<DecisionResult> {
   return api<DecisionResult>(`/admin/approvals/${id}/reject`, {
     method: 'POST',
     token,
-    body: { reason },
+    body: { reason, share_reason: shareReason },
   });
 }
 
@@ -258,7 +260,13 @@ export type RoleDecisionBody =
   | { approve: true; kind: 'student'; enrollment: PlacementBody }
   | { approve: true; kind: 'teaching' | 'administration'; grant: { role: string; branch_id: string | null } }
   | { approve: true; kind: 'guardian' }
-  | { approve: false; kind: RoleRequestKind; reason: string };
+  | {
+      approve: false;
+      kind: RoleRequestKind;
+      reason: string;
+      /** R170 §11 — tell the applicant this reason. The approver's choice, each time. */
+      share_reason?: boolean;
+    };
 
 export interface RoleDecisionResult {
   status: 'approved' | 'declined';
@@ -273,7 +281,7 @@ export async function decideRoleRequest(
   token: string | null,
 ): Promise<RoleDecisionResult> {
   const body = !decision.approve
-    ? { reason: decision.reason }
+    ? { reason: decision.reason, share_reason: decision.share_reason === true }
     : decision.kind === 'student'
       ? { enrollment: decision.enrollment }
       : decision.kind === 'guardian'

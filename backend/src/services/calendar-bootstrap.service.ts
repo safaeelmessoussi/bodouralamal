@@ -37,7 +37,17 @@ export interface GregorianMonthRef {
 export interface CalendarBootstrap {
   hijri: { days: HijriDay[]; months: HijriMonthRef[] };
   gregorianMonths: GregorianMonthRef[];
-  categories: { id: string; name: string; displayOrder: number | null }[];
+  /** R170 §6 — `holdsOwnLogin` and the age range travel with each Category so
+   *  the registration forms can offer the right ones and say the range. They
+   *  are facts about a Category, never about a person. */
+  categories: {
+    id: string;
+    name: string;
+    displayOrder: number | null;
+    holdsOwnLogin: boolean | null;
+    minAge: number | null;
+    maxAge: number | null;
+  }[];
   levels: { id: string; name: string; categoryId: string; displayOrder: number | null }[];
   branches: { id: string; name: string; displayOrder: number | null }[];
   /**
@@ -125,7 +135,7 @@ export async function calendarBootstrap(
     }),
     prisma.category.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, displayOrder: true },
+      select: { id: true, name: true, displayOrder: true, holdsOwnLogin: true, minAge: true, maxAge: true },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),
     prisma.level.findMany({

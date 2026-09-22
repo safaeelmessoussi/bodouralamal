@@ -106,6 +106,7 @@ export function explainRequestFailure(error: unknown): string {
     if (reason === 'ROLE_ALREADY_HELD') return t('profile.requestRole.errHeld');
     if (reason === 'ALREADY_PENDING') return t('profile.requestRole.errPending');
     if (reason === 'CIRCLE_NOT_OFFERED') return t('register.errCircleGone');
+    if (reason === 'CATEGORY_IS_GUARDIAN_MANAGED') return t('register.errCategoryGuardianManaged');
   }
   return t('profile.requestRole.failed');
 }

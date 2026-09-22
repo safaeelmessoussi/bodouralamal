@@ -12,7 +12,13 @@ import type { RoleRequestKind, RoleRequestStatus } from './approvals.js';
 export type AskableRole = Exclude<RoleRequestKind, 'guardian'>;
 
 export interface MyRoleRequests {
-  requests: { kind: RoleRequestKind; status: RoleRequestStatus; decided_at: string | null }[];
+  requests: {
+    kind: RoleRequestKind;
+    status: RoleRequestStatus;
+    decided_at: string | null;
+    /** R170 §11 — the reason the approver chose to tell her; `null` otherwise. */
+    shared_reason: string | null;
+  }[];
   /** What she may ask for NOW — not held, and not already waiting. `guardian`
    *  is never here: registering a child IS that request. */
   askable: AskableRole[];

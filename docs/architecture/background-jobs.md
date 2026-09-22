@@ -63,6 +63,7 @@ duplicate concurrent runs.
 | `backup.replicate` | TD-7 legacy catalog reference, **not registered** | Current approved B8 execution is the [monthly same-VPS host procedure](../operations/recovery.md); Document Owner must reconcile TD-7 execution/dashboard wording. No phantom healthy worker or nightly/offsite claim |
 | `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge; daily reconciliation | Moves one immutable old key to quarantine or retires exact leftovers. Its daily trigger retries existing `StorageRetirement` records only; Trash retention authorization remains with `trash.retention-purge` |
 | `upload.gc` | Daily cron | Deletes browser/server-finalization staging **strictly older than 48 h** in bounded durable pages — never younger, and never provider recording staging |
+| `content.quarantine-sweep` | Daily cron (R170 §10) | Deletes `quarantine/<content id>/…` objects in both buckets **strictly older than 90 days and owed to nobody** — one profile of `upload.gc`'s loop. Retained: an object whose content has a Trash entry (its own purge or restore owns it) or an unfinished storage obligation, and any key of another shape |
 | `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
@@ -152,6 +153,16 @@ they never accumulate retirement locks across unrelated content. Ordinary
 the fixed staging scopes, deletes only `LastModified < cutoff`, and enqueues the next opaque
 continuation transactionally. Retrying a page is safe because delete is idempotent. A provider
 recording never enters these prefixes and retains its R100 exact job instead.
+
+`content.quarantine-sweep` (SRS Revision 170 §10 — the Owner's «destroy automatically», closing
+R59.4) is the SAME loop with another profile (`sweepPage` in `storage-lifecycle.service.ts`):
+`quarantine/` in both buckets, ninety days instead of forty-eight hours, and one question the
+staging sweep never asks — `quarantinedObjectIsOwed`: an object of a content that still has a
+Trash entry, or an unfinished `StorageRetirement`, is retained however old, because its own purge
+or restore owns it. A key that is not `quarantine/<uuid>/…` is never touched. This is what finally
+destroys a REPLACED file's old object, which had no Trash entry and no day named for it; a deleted
+item's object still goes with its Trash entry through `trash.retention-purge`. The seven-day Trash
+window (R133) is untouched — ninety days is the object store's own number.
 
 The quarantine worker executes the persisted operation. A replacement or
 soft deletion transaction records `quarantine_retired_object` with its old bucket/key before

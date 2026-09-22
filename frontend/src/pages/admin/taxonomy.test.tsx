@@ -4,6 +4,7 @@ import type { SubjectRef } from '../../adapters/reference-data.js';
 import type { Category, Level, UpdateLevelInput } from '../../adapters/taxonomy.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
+import { ageRangeError } from './taxonomy.js';
 
 /**
  * The curriculum taxonomy screens — the client half of the contract guard.
@@ -18,6 +19,9 @@ const CATEGORY: Category = {
   id: '00000000-0000-4000-8000-000000000001',
   name: 'طفل',
   description: 'وصف الفئة',
+  holds_own_login: false,
+  min_age: 6,
+  max_age: 12,
   display_order: 1,
   level_count: 3,
   version: 0,
@@ -49,8 +53,13 @@ describe('the adapter types match the wire contract', () => {
     expect(Object.keys(CATEGORY).sort()).toEqual([
       'description',
       'display_order',
+      // R170 §6 — who holds the login (`null`: not stated), and the
+      // informational age range.
+      'holds_own_login',
       'id',
       'level_count',
+      'max_age',
+      'min_age',
       'name',
       'version',
     ]);
@@ -145,5 +154,25 @@ describe('the registry and the router agree', () => {
     // The server enforces TD-2 regardless; this test records the distinction so
     // the endpoints are not "tidied" to match the menu.
     expect(true).toBe(true);
+  });
+});
+
+/**
+ * R170 §6 — the Category's age range is whole years between 0 and 120 and never
+ * inverted; an empty box is «not stated». The server and the database hold the
+ * same rule — this is what says it beside the field.
+ */
+describe('ageRangeError (R170 §6)', () => {
+  it('accepts an empty pair, one end, and an ordered pair', () => {
+    for (const [min, max] of [['', ''], ['6', ''], ['', '12'], ['6', '12'], ['18', '18'], ['0', '5']]) {
+      expect(ageRangeError(min!, max!)).toBeNull();
+    }
+  });
+
+  it('refuses an inverted pair, a fraction, a negative and an impossible age', () => {
+    expect(ageRangeError('13', '12')).not.toBeNull();
+    expect(ageRangeError('6.5', '')).not.toBeNull();
+    expect(ageRangeError('-1', '')).not.toBeNull();
+    expect(ageRangeError('', '121')).not.toBeNull();
   });
 });

@@ -57,6 +57,7 @@ async function cleanup(): Promise<void> {
   });
   if (mySchedules.length > 0) {
     const ids = mySchedules.map((s) => s.id);
+    await prisma.attendance.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
     await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
     await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
@@ -588,37 +589,73 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     expect(await prisma.trash.count({ where: { id: entryId } })).toBe(0);
   });
 
-  it('REFUSES a schedule with any materialized Session, and says why', async () => {
+  /**
+   * **R170 §8 (the Owner, 2026-09-21) supersedes R118 (1).** A deleted class
+   * leaves the Trash after seven days WITH its occurrences. What keeps it is an
+   * occurrence carrying a student's record (R133: her history goes only with her
+   * account) — or a LIVE one.
+   */
+  it('R170 §8 — a schedule whose occurrences carry NO record is destroyed WITH them', async () => {
     const { scheduleId, entryId } = await deletedSchedule(true);
+    // In the Trash with its class (as `deleteSchedule` writes it since R170).
+    await prisma.session.updateMany({
+      where: { scheduleId },
+      data: { deletedAt: new Date(), deletedById: actorUserId },
+    });
+    const listed = (
+      await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
+    ).data.find((r) => r.targetId === scheduleId)!;
+    expect(listed.purgeable).toBe(true);
 
-    // Asked for explicitly: decision B keeps a history-protected row out of the
-    // default actionable view, which the next test asserts. What matters here
-    // is that when it IS shown, it does not advertise a purge the transaction
-    // would refuse.
+    await purgeEntry(prisma, superAdmin(), entryId);
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(0);
+    expect(await prisma.session.count({ where: { scheduleId } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: entryId } })).toBe(0);
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'trash.permanent_delete', targetId: scheduleId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(trail?.detail).toMatchObject({ sessions_purged: 1 });
+  });
+
+  it('R170 §8 — a LIVE occurrence still keeps its class: nothing is destroyed from under the calendar', async () => {
+    const { scheduleId, entryId } = await deletedSchedule(true);
     const listed = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
     ).data.find((r) => r.targetId === scheduleId)!;
     expect(listed.purgeable).toBe(false);
-    expect(listed.purgeBlockedReason).toBe('MATERIALIZED_HISTORY');
-
+    expect(listed.purgeBlockedReason).toBe('SESSIONS_HAVE_RECORDS');
     await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'MATERIALIZED_HISTORY' }),
+      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_RECORDS' }),
     });
-    // The schedule AND its occurrence are untouched — R59.
-    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(1);
     expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
   });
 
-  it('counts a TOMBSTONED Session as history too', async () => {
-    // A soft-deleted occurrence is still a coordinate the institution recorded.
+  it('R170 §8 — an occurrence that carries a STUDENT’S RECORD keeps its class, and is never destroyed with it', async () => {
     const { scheduleId, entryId } = await deletedSchedule(true);
+    const session = await prisma.session.findFirstOrThrow({ where: { scheduleId }, select: { id: true } });
+    const student = await prisma.user.create({
+      data: { nameArabic: `${TAG} حاضرة`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
+    });
+    await prisma.attendance.create({
+      data: {
+        sessionId: session.id,
+        occurrenceDate: new Date('2026-09-07'),
+        studentId: student.id,
+        markedById: actorUserId,
+      },
+    });
     await prisma.session.updateMany({
       where: { scheduleId },
       data: { deletedAt: new Date(), deletedById: actorUserId },
     });
     await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'MATERIALIZED_HISTORY' }),
+      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_RECORDS' }),
     });
+    // The class, the occurrence and the record are all still there — R133.
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(1);
+    expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
+    expect(await prisma.attendance.count({ where: { sessionId: session.id } })).toBe(1);
   });
 
   it('unblocks its AdministrativeGroup once the empty schedule is purged (ordered)', async () => {

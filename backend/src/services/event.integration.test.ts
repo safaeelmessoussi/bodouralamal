@@ -312,8 +312,18 @@ describe("§4.4 — recurrence is stored and validated", () => {
 });
 
 describe("TD-2 — who may schedule", () => {
-  it('B6: Teacher definition reads use the complete own-group boundary, not audience intersection', async () => {
+  /**
+   * **R170 §5 (the Owner: «I want teachers' activities listed too with the
+   * classes») supersedes the B6 rule this test used to pin.** A مؤطِّرة's list
+   * now shows the SAME activities her calendar does — `teacherEventVisibility`,
+   * where the audience dimensions INTERSECT (R169 §6): an activity for her group
+   * AND her branch reaches her; one for her group and a FOREIGN group reaches her
+   * too (she teaches one of its audiences); one for a foreign group alone never
+   * does. Editing is unchanged: she still edits only her own group's.
+   */
+  it('R170 §5: a Teacher LISTS every activity her calendar shows — the dimensions intersect', async () => {
     const branchId = await makeBranch('تعريفات');
+    const other = await makeBranch('مقر آخر');
     const mine = await makeGroup(branchId);
     const foreign = await makeGroup(branchId);
     const teacherId = await teacherUser('تعريفات');
@@ -322,10 +332,19 @@ describe("TD-2 — who may schedule", () => {
     const own = await createEvent(prisma, teacher, eventInput({ groupIds: [mine] }), TODAY);
     const mixed = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine, foreign] }), TODAY);
     const wider = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine], branchIds: [branchId] }), TODAY);
+    const branchOnly = await createEvent(prisma, superAdmin(), eventInput({ branchIds: [branchId] }), TODAY);
+    const global = await createEvent(prisma, superAdmin(), eventInput({}), TODAY);
+    const foreignOnly = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [foreign] }), TODAY);
+    const otherBranch = await createEvent(prisma, superAdmin(), eventInput({ branchIds: [other] }), TODAY);
+    // Her group AND another branch: the intersection is empty — nobody she teaches.
+    const disjoint = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine], branchIds: [other] }), TODAY);
+    const hidden = await createEvent(prisma, superAdmin(), eventInput({ groupIds: [mine], visibility: 'hidden' }), TODAY);
+
     const ids = (await listEvents(prisma, teacher, {})).data.map((event) => event.id);
-    expect(ids).toContain(own.event.id);
-    expect(ids).not.toContain(mixed.event.id);
-    expect(ids).not.toContain(wider.event.id);
+    for (const reaching of [own, mixed, wider, branchOnly, global]) expect(ids).toContain(reaching.event.id);
+    for (const beyond of [foreignOnly, otherBranch, disjoint, hidden]) expect(ids).not.toContain(beyond.event.id);
+
+    // Creating beyond her groups is still refused (unchanged).
     await expect(createEvent(prisma, teacher, eventInput({ groupIds: [mine, foreign] }), TODAY))
       .rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

@@ -11,6 +11,8 @@ import { ingestRecording } from '../services/session-recording-ingest.service.js
 import { reconcileRecordings } from '../services/session-recording-reconcile.service.js';
 import {
   collectAbandonedUploadPage,
+  collectExpiredQuarantinePage,
+  quarantineSweepContinuationSingletonKey,
   uploadGcContinuationSingletonKey,
   type UploadGcPayload,
 } from '../services/storage-lifecycle.service.js';
@@ -27,7 +29,12 @@ import {
 } from '../services/application-retention.service.js';
 import { purgeExpiredEntries } from '../services/trash.service.js';
 import { executeRetirement } from '../services/storage-retirement.service.js';
-import { importLegacyRetirement, importLegacyRetirements, reconcileRetirements } from '../repositories/storage-retirement.repository.js';
+import {
+  importLegacyRetirement,
+  importLegacyRetirements,
+  quarantinedObjectIsOwed,
+  reconcileRetirements,
+} from '../repositories/storage-retirement.repository.js';
 import { JobRunnerReadiness } from './readiness.js';
 import {
   enqueue,
@@ -88,6 +95,9 @@ export const QUEUES = {
   contentQuarantinePurge: 'content.quarantine-purge',
   /** TD-7's bounded, paginated abandoned browser-upload collector. */
   uploadGc: 'upload.gc',
+  /** R170 §10 — what has waited in `quarantine/` for more than ninety days and
+   *  is owed to nobody (a REPLACED file's old object) is destroyed. */
+  contentQuarantineSweep: 'content.quarantine-sweep',
 
   /**
    * `session.materialize` (TD-7, Revision 43) — turns a Recurring Course
@@ -434,6 +444,41 @@ export function createWorkerCatalog(
       },
     },
     {
+      /**
+       * **`content.quarantine-sweep`** (SRS Revision 170 §10) — the twin of
+       * `upload.gc` for `quarantine/`: one bounded page per job, the next page
+       * enqueued in a transaction, counts logged and never a key (TD-14).
+       */
+      name: QUEUES.contentQuarantineSweep,
+      handler: async ([job]) => {
+        if (!job) throw new Error('content.quarantine-sweep requires a pg-boss job');
+        const result = await collectExpiredQuarantinePage(
+          storage,
+          (job.data ?? {}) as UploadGcPayload,
+          job.id,
+          (contentId) => quarantinedObjectIsOwed(prisma, contentId),
+        );
+        if (result.next) {
+          await prisma.$transaction(async (tx) => {
+            await enqueue(
+              tx,
+              JOB_QUEUES.contentQuarantineSweep,
+              { ...result.next! },
+              quarantineSweepContinuationSingletonKey(result.next!),
+            );
+          });
+        }
+        log(QUEUES.contentQuarantineSweep, {
+          bucket: result.bucket,
+          prefix: result.prefix,
+          scanned: result.scanned,
+          deleted: result.deleted,
+          retained: result.retained,
+          continuation_enqueued: result.next !== null,
+        });
+      },
+    },
+    {
       // Nightly rolling-horizon extension. An empty payload sweeps every active
       // schedule; per-schedule reconciliation uses the same handler.
       name: QUEUES.sessionMaterialize,
@@ -543,6 +588,7 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.rejectedRegistrationPurge, DAILY_AT_0330, {}, dailyOptions);
     await boss.schedule(QUEUES.trashRetentionPurge, DAILY_AT_0330, {}, dailyOptions);
     await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330, {}, dailyOptions);
+    await boss.schedule(QUEUES.contentQuarantineSweep, DAILY_AT_0330, {}, dailyOptions);
     // Reconcile already-authorized exact obligations, never select objects or
     // Trash by age. pg-boss retry exhaustion cannot erase the domain backlog.
     await boss.schedule(QUEUES.contentQuarantinePurge, DAILY_AT_0330, { operation: 'reconcile' }, dailyOptions);

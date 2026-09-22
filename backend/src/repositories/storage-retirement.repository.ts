@@ -140,3 +140,22 @@ export async function importLegacyRetirement(tx: Prisma.TransactionClient, data:
   }
   return requireRetirement(tx, { contentId, storageKey, bucket, operation: operation as RetirementOperation });
 }
+
+/**
+ * **Is a quarantined object of this content still OWED to something?** (R170 §10)
+ *
+ * The 90-day sweep deletes by age, so it asks first. Two things own such an
+ * object: a Trash entry for the item (its own purge destroys the object, and a
+ * restore brings it back — the sweep must pre-empt neither), and an exact
+ * storage obligation that has not finished.
+ */
+export async function quarantinedObjectIsOwed(
+  db: PrismaClient | Prisma.TransactionClient,
+  contentId: string,
+): Promise<boolean> {
+  const [trashed, pending] = await Promise.all([
+    db.trash.count({ where: { targetEntity: 'EducationalContent', targetId: contentId } }),
+    db.storageRetirement.count({ where: { contentId, completedAt: null } }),
+  ]);
+  return trashed > 0 || pending > 0;
+}

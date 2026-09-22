@@ -28,6 +28,8 @@ import { idParam, parse } from './parse.js';
  */
 const decisionSchema = z.object({
   reason: z.string().trim().max(500).optional(),
+  /** R170 §11 — tell the applicant this reason. The approver's choice, each time. */
+  share_reason: z.boolean().optional(),
   assignments: z
     .array(z.object({ role: z.string().trim().min(1).max(40), branch_id: z.uuid().nullable() }))
     .max(20)
@@ -117,6 +119,7 @@ function decision(prisma: PrismaClient, approve: boolean) {
     const result = await decide(prisma, requireActor(req), id.data, {
       approve,
       ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+      ...(parsed.data.share_reason !== undefined ? { shareReason: parsed.data.share_reason } : {}),
       ...(parsed.data.assignments
         ? {
             assignments: parsed.data.assignments.map((a) => ({
@@ -161,6 +164,8 @@ const roleKindSchema = z.enum(ROLE_REQUEST_KINDS);
 const roleDecisionSchema = z
   .object({
     reason: z.string().trim().max(500).optional(),
+    /** R170 §11 — tell the applicant this reason. The approver's choice, each time. */
+    share_reason: z.boolean().optional(),
     grant: z
       .object({ role: z.string().min(1).max(40), branch_id: z.uuid().nullable() })
       .strict()
@@ -190,6 +195,7 @@ function roleDecision(prisma: PrismaClient, approve: boolean) {
     const result = await decideRoleRequest(prisma, requireActor(req), idParam(req, 'id'), kind, {
       approve,
       ...(body.reason !== undefined ? { reason: body.reason } : {}),
+      ...(body.share_reason !== undefined ? { shareReason: body.share_reason } : {}),
       ...(body.grant ? { grant: { role: body.grant.role, branchId: body.grant.branch_id } } : {}),
       ...(e
         ? {

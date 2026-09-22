@@ -11362,3 +11362,69 @@ finds the section, its roles named, the missing button explained), `verify-regis
 inside or below it), `verify-platform-owner-framing` 23/23 + 8/8, `verify-date-picker` 24/24,
 `verify-self-managed-claim` 20/20, `verify-error-experience` 7/7, `verify-consent-disclosure` 19/19.
 Looked at, not only asserted: desktop and 400 px screenshots, closed and open.
+
+## 2026-09-22 — SRS Revision 170, part two: the Category marker, a code for every beneficiary, the shared reason, the 90-day quarantine sweep, a class leaves the Trash with its occurrences, a مؤطِّرة's activities — and two things found already built
+
+**One migration** (`20260925090000_r170_category_own_login_and_reference_code_for_every_beneficiary`):
+`category.holds_own_login | min_age | max_age` (+ CHECK), `role_request.shared_decline_reason`, and on
+`user` the trigger `user_beneficiary_reference_code_fill` + CHECK `user_beneficiary_reference_code_check`.
+Applied on Localhost: the 3 beneficiaries without a code have one; المرأة reads «own login»,
+اليافعات/الطفل «guardian-managed» (answered ONCE from `self_attendance_allowed`, then separate).
+
+**§6 — who holds the login.** `policies/category-login.policy.ts` on the three request paths
+(registration, «طلب صفة إضافية», child applications): a self-registration into a guardian-managed
+Category is `CATEGORY_IS_GUARDIAN_MANAGED`, a child application into an own-login one is
+`CATEGORY_HOLDS_OWN_LOGIN`, and `null` restricts nothing. `lib/category-audience.ts` is the one place
+the forms decide what to OFFER and how to name it («اليافعات (من 13 إلى 17 سنة)»); «الفئات» edits the
+tick-box and the range and shows both as columns. The enrolment picker is deliberately untouched — it is
+about placement, which this marker does not gate; said in the ledger.
+
+**§7 — every beneficiary carries a code.** On the row, not in a service: whichever path makes her a
+beneficiary. Shown on «المستخدمون» and in the people-picker (`reference_code` on `/admin/directory`
+— non-personal by design, and what a picker is for); `spokenReferenceCode` lets the search find «7k4m2»
+or «ba7k4m2», matched whole; staff carry `null`. R62.5 unchanged: it identifies, never authorises.
+
+**§11 — the shared reason.** `share_reason` on `POST /admin/approvals/{id}/reject` and
+`…/roles/{kind}/decline`; `ConfirmDialog` gains an optional tick-box beside the reason, UNTICKED on
+every opening; what was shared lives in its own column and is what «حسابي» prints under the declined
+request; the operator's reason never leaves; re-asking clears both; audit `reason_shared`.
+
+**§10 — the sweep.** `collectAbandonedUploadPage` became one profile of `sweepPage`; the second
+profile is `content.quarantine-sweep` (`quarantine/` in both buckets, ninety days, and
+`quarantinedObjectIsOwed` — a Trash entry or an unfinished `StorageRetirement` retains the object).
+Daily at 03:30 with the others; continuations enqueued in a transaction; counts logged, never a key.
+
+**§8 — a class and its occurrences.** `deleteSchedule` tombstones the PAST occurrences too
+(`removed_past_session_ids`) and `restoreScheduleSessions` gives them back without a conflict check;
+`purgeScheduleSessions` destroys the record-free ones (owned rows first) inside the purge transaction,
+and `SESSIONS_HAVE_RECORDS` replaces `MATERIALIZED_HISTORY`: only a LIVE occurrence or one carrying a
+student's record (attendance, recording, exam) keeps the class. The runbook's Trash table and the
+Trash screen's wording follow. **Put to the Owner:** whether attendance and recordings should go with
+the class after seven days — today R133 keeps them, and I did not decide that for her.
+
+**§5 — her activities.** `teacherEventVisibility` (`policies/scheduling-visibility.ts`) is the
+calendar's teacher rule lifted out of `calendar.service.ts`; `GET /events` now uses it instead of a
+narrower own-groups-only rule, so «جدولي» lists what her calendar shows. The B6 test that pinned the
+old rule is restated for the new one (nine activities: five reach her, four do not).
+
+**§4 and §9 — found, not built.** Editing a remote sitting's arrangements has existed since R145 §1
+(`PATCH /exams/{id}/schedule`, «تعديل», 10 HTTP tests); the ledger box that said «deferred» was stale
+and is closed with that evidence. Retained reference rows (R118 (2)) already behave exactly as the
+Owner decided; confirmed, nothing changed.
+
+**Additional defect found in passing, fixed.** `verify-sorting` turned red on «التسجيلات»: the page
+forwards `sort_by=first_name|last_name` (since `bab75ed`, 2026-08-28) and the server's allow-list had
+only `student|level|branch` → 400 → the table blanked on the first header click. Two lines on the
+allow-list (the TD-6a shadow columns), pinned by a test; 39/39 after.
+
+**Verification.** Backend unit 371/371 (the runner's catalog and schedule counts +1 each; 4 sweep
+tests; 3 spoken-code tests); frontend 1,488/1,488; 32 guards + doc links; OpenAPI regenerated (189
+paths, 243 operations); focused integration on a disposable stack: taxonomy HTTP + user + role-request
+(105, then 48 after the pinned list learnt `referenceCode`), Trash lifecycle + Trash + course-schedule
+(124/124), event + role-request + scheduling-visibility + calendar (117/117). **Full disposable
+integration: 2,791 passed, 19 skipped, exit 0** — the first full run turned two pinned tests red
+(the directory's exact key set, and B6's old teacher-list rule), both restated for the new contract and
+green; **seed drill exit 0.** Real browser on Localhost after the rebuild and the migration:
+`verify-role-requests` 85/85, `verify-registration` 45/45 + 12/12 DB, `verify-trash-restore` 6/6,
+`verify-teacher-scheduling` 14/14, `verify-approvals-sorting` 7/7, `verify-reorder` 30/30,
+`verify-dialog-states` 105/105, `verify-sorting` 39/39 (after the fix above).

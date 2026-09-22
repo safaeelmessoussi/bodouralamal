@@ -59,9 +59,44 @@ export async function collectAbandonedUploadPage(
   jobId: string,
   now = new Date(),
 ): Promise<UploadGcPageResult> {
-  const continuation = normalizeUploadGcPayload(payload, jobId, now);
-  const scope = UPLOAD_GC_SCOPES[continuation.scope_index!];
-  if (!scope) throw new Error('upload.gc scope is outside the fixed staging catalog');
+  return sweepPage(UPLOAD_GC_PROFILE, clients, payload, jobId, now);
+}
+
+/**
+ * **One paged, age-bounded sweep — two callers** (`upload.gc`, and since SRS
+ * Revision 170 §10 `content.quarantine-sweep`). What differs between them is
+ * data — which prefixes, how old, and whether an object may be owed to somebody
+ * — so it is a profile and not a second copy of the loop: the prefix check, the
+ * strict cutoff and the idempotent delete are the safety properties, and a twin
+ * that drifted on one of them would delete what it must not.
+ */
+interface SweepProfile {
+  label: string;
+  scopes: readonly { bucket: string; prefix: string }[];
+  minAgeMs: number;
+  tooYoung: string;
+  /** True when an object old enough to go is nevertheless still OWED to
+   *  something — it is then retained, never deleted. */
+  retain?: (key: string) => Promise<boolean>;
+}
+
+const UPLOAD_GC_PROFILE: SweepProfile = {
+  label: 'upload.gc',
+  scopes: UPLOAD_GC_SCOPES,
+  minAgeMs: UPLOAD_GC_MIN_AGE_MS,
+  tooYoung: 'upload.gc cutoff may never include staging younger than 48 hours',
+};
+
+async function sweepPage(
+  profile: SweepProfile,
+  clients: StorageClients,
+  payload: UploadGcPayload,
+  jobId: string,
+  now: Date,
+): Promise<UploadGcPageResult> {
+  const continuation = normalizeSweepPayload(profile, payload, jobId, now);
+  const scope = profile.scopes[continuation.scope_index!];
+  if (!scope) throw new Error(`${profile.label} scope is outside the fixed catalog`);
   const cutoff = new Date(continuation.cutoff!);
 
   const page = await listObjectsPage(clients, scope.bucket, scope.prefix, {
@@ -77,9 +112,13 @@ export async function collectAbandonedUploadPage(
     // A provider that returns a coordinate outside the requested prefix has
     // violated the boundary. Failing the job is safer than broadening deletion.
     if (!object.key.startsWith(scope.prefix)) {
-      throw new Error('storage returned an object outside the upload.gc prefix');
+      throw new Error(`storage returned an object outside the ${profile.label} prefix`);
     }
     if (object.lastModified === null || object.lastModified.getTime() >= cutoff.getTime()) {
+      retained += 1;
+      continue;
+    }
+    if (profile.retain && (await profile.retain(object.key))) {
       retained += 1;
       continue;
     }
@@ -96,7 +135,7 @@ export async function collectAbandonedUploadPage(
         scope_index: continuation.scope_index,
         continuation_token: page.nextContinuationToken,
       }
-    : continuation.scope_index! + 1 < UPLOAD_GC_SCOPES.length
+    : continuation.scope_index! + 1 < profile.scopes.length
       ? {
           run_id: continuation.run_id,
           cutoff: continuation.cutoff,
@@ -114,7 +153,71 @@ export async function collectAbandonedUploadPage(
   };
 }
 
-function normalizeUploadGcPayload(
+/* ── The 90-day quarantine sweep (SRS Revision 170 §10) ───────────────────── */
+
+/** BR-15's original ninety days — the Owner's answer, 2026-09-21. */
+export const QUARANTINE_SWEEP_MIN_AGE_MS = 90 * 24 * 60 * 60 * 1_000;
+
+const QUARANTINE_SCOPES = [
+  { bucket: BUCKETS.public, prefix: 'quarantine/' },
+  { bucket: BUCKETS.private, prefix: 'quarantine/' },
+] as const;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** `quarantine/<content id>/…` → the content id, or `null` for any other shape. */
+export function quarantinedContentId(key: string): string | null {
+  const id = key.split('/')[1] ?? '';
+  return key.startsWith('quarantine/') && UUID.test(id) ? id : null;
+}
+
+/** Same stable deduplication as `upload.gc`, in its own key space. */
+export function quarantineSweepContinuationSingletonKey(payload: UploadGcPayload): string {
+  return `quarantine-sweep:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
+}
+
+/**
+ * **Destroys what has waited in quarantine for more than ninety days and is owed
+ * to nobody** (SRS Revision 170 §10 — the Owner: *«destroy automatically»*).
+ *
+ * A file that is REPLACED leaves its old object in `quarantine/`, and nothing
+ * ever came for it: a deleted item's object is destroyed with its Trash entry
+ * (`trash.retention-purge`), but a replaced one has no Trash entry and no
+ * record that names a day. They accumulated for ever.
+ *
+ * **An old object is still RETAINED when something is owed it** — `isOwed`:
+ * a Trash entry for that content (its own purge, or a restore, owns the object)
+ * or an unfinished exact storage obligation. And a key that is not
+ * `quarantine/<uuid>/…` is never touched: an unknown shape is not evidence of
+ * abandonment.
+ */
+export async function collectExpiredQuarantinePage(
+  clients: StorageClients,
+  payload: UploadGcPayload,
+  jobId: string,
+  isOwed: (contentId: string) => Promise<boolean>,
+  now = new Date(),
+): Promise<UploadGcPageResult> {
+  return sweepPage(
+    {
+      label: 'content.quarantine-sweep',
+      scopes: QUARANTINE_SCOPES,
+      minAgeMs: QUARANTINE_SWEEP_MIN_AGE_MS,
+      tooYoung: 'content.quarantine-sweep cutoff may never include objects younger than 90 days',
+      retain: async (key) => {
+        const contentId = quarantinedContentId(key);
+        return contentId === null ? true : isOwed(contentId);
+      },
+    },
+    clients,
+    payload,
+    jobId,
+    now,
+  );
+}
+
+function normalizeSweepPayload(
+  profile: SweepProfile,
   payload: UploadGcPayload,
   jobId: string,
   now: Date,
@@ -124,7 +227,7 @@ function normalizeUploadGcPayload(
   const candidate = empty
     ? {
         run_id: jobId,
-        cutoff: new Date(now.getTime() - UPLOAD_GC_MIN_AGE_MS).toISOString(),
+        cutoff: new Date(now.getTime() - profile.minAgeMs).toISOString(),
         scope_index: 0,
       }
     : payload;
@@ -135,20 +238,20 @@ function normalizeUploadGcPayload(
     typeof candidate.cutoff !== 'string' ||
     !Number.isInteger(candidate.scope_index) ||
     candidate.scope_index! < 0 ||
-    candidate.scope_index! >= UPLOAD_GC_SCOPES.length ||
+    candidate.scope_index! >= profile.scopes.length ||
     (candidate.continuation_token !== undefined &&
       (typeof candidate.continuation_token !== 'string' ||
         candidate.continuation_token.length < 1 ||
         candidate.continuation_token.length > 4_096))
   ) {
-    throw new Error('upload.gc payload is invalid');
+    throw new Error(`${profile.label} payload is invalid`);
   }
   const cutoff = new Date(candidate.cutoff);
   if (
     Number.isNaN(cutoff.getTime()) ||
-    cutoff.getTime() > now.getTime() - UPLOAD_GC_MIN_AGE_MS
+    cutoff.getTime() > now.getTime() - profile.minAgeMs
   ) {
-    throw new Error('upload.gc cutoff may never include staging younger than 48 hours');
+    throw new Error(profile.tooYoung);
   }
   return {
     run_id: candidate.run_id,

@@ -1,3 +1,5 @@
+import type { CategoryRef } from '../../adapters/calendar.js';
+import { categoriesForChild, categoryOptionLabel } from '../../lib/category-audience.js';
 import type { ReactNode } from 'react';
 
 import { LIMITS, type ChildInput } from '../../adapters/registrations.js';
@@ -193,7 +195,8 @@ export function ChildFields({
   prefix: string;
   /** R67 — asked per child, so both lists reach every child's fieldset. */
   branches: { id: string; name: string }[];
-  categories: { id: string; name: string }[];
+  /** R170 §6 — the marker and age range travel with each Category. */
+  categories: CategoryRef[];
 }): ReactNode {
   const set = (patch: Partial<ChildForm>) => onChange({ ...value, ...patch });
 
@@ -266,7 +269,9 @@ export function ChildFields({
         value={value.categoryId}
         onChange={(next) => set({ categoryId: next })}
         placeholder={t('register.categoryEmpty')}
-        options={categories.map((c) => ({ value: c.id, label: c.name }))}
+        // R170 §6 — a child is registered BY a guardian: never a Category whose
+        // beneficiaries hold their own login; the age range beside the name.
+        options={categoriesForChild(categories).map((c) => ({ value: c.id, label: categoryOptionLabel(c) }))}
         required
         hint={t('register.categoryHint')}
         error={errors[`${prefix}.categoryId`] ?? null}
@@ -317,7 +322,8 @@ export function ChildrenFieldset({
   errors: Record<string, string>;
   touched: boolean;
   branches: { id: string; name: string }[];
-  categories: { id: string; name: string }[];
+  /** R170 §6 — the marker and age range travel with each Category. */
+  categories: CategoryRef[];
 }): ReactNode {
   return (
     <>

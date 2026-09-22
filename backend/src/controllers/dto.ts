@@ -1265,6 +1265,15 @@ export interface CategoryDto {
    * absence rather than inventing filler.
    */
   description: string | null;
+  /**
+   * R170 §6 — who holds the login. `true`: its beneficiaries sign in themselves
+   * (self-registration only); `false`: a guardian registers them (child
+   * applications only); **`null` is «not stated» and restricts nothing**.
+   */
+  holds_own_login: boolean | null;
+  /** R170 §6 — informational, in whole years; gates nothing. */
+  min_age: number | null;
+  max_age: number | null;
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible
    *  at all, without a request per row. */
@@ -1276,6 +1285,9 @@ export function categoryDto(row: {
   id: string;
   name: string;
   description: string | null;
+  holdsOwnLogin: boolean | null;
+  minAge: number | null;
+  maxAge: number | null;
   displayOrder: number | null;
   levelCount: number;
   version: number;
@@ -1284,6 +1296,9 @@ export function categoryDto(row: {
     id: row.id,
     name: row.name,
     description: row.description,
+    holds_own_login: row.holdsOwnLogin,
+    min_age: row.minAge,
+    max_age: row.maxAge,
     display_order: row.displayOrder,
     level_count: row.levelCount,
     version: row.version,
@@ -1791,6 +1806,8 @@ export interface UserDto {
    */
   birth_date: string | null;
   nickname: string | null;
+  /** R170 §7 — the spoken reference code: every beneficiary has one; staff, `null`. */
+  reference_code: string | null;
   public_display_name: string | null;
   phone: string | null;
   account_status: string;
@@ -1827,6 +1844,7 @@ export function userDto(row: {
   birthDate?: Date | null;
   birthDateIsPlaceholder?: boolean;
   nickname: string | null;
+  referenceCode: string | null;
   publicDisplayName: string | null;
   phone: string | null;
   accountStatus: string;
@@ -1867,6 +1885,7 @@ export function userDto(row: {
         ? row.birthDate.toISOString().slice(0, 10)
         : null,
     nickname: row.nickname,
+    reference_code: row.referenceCode,
     public_display_name: row.publicDisplayName,
     phone: row.phone,
     account_status: row.accountStatus,

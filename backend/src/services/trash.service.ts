@@ -503,12 +503,19 @@ const CONDITIONAL_PURGE: Record<
   string,
   { reason: string; purgeable: (db: PrismaClient, targetId: string) => Promise<boolean> }
 > = {
+  /**
+   * **R170 §8 (the Owner, 2026-09-21) supersedes R118 (1)**: a deleted class
+   * leaves the Trash after the same seven days as everything else, WITH its
+   * occurrences — they are destroyed with it (`purgeScheduleSessions`). What
+   * still keeps a class is an occurrence that carries a STUDENT'S RECORD —
+   * attendance, a recording, an exam sat in it — because R133 (3)/(4) destroys a
+   * person's history only with her own account and never because a class was
+   * deleted. And a LIVE occurrence (one protection spared) is never destroyed
+   * from under the calendar. Said as `SESSIONS_HAVE_RECORDS`.
+   */
   RecurringCourseSchedule: {
-    reason: 'MATERIALIZED_HISTORY',
-    // `deletedAt` is deliberately NOT filtered: a tombstoned occurrence is still
-    // a coordinate the institution recorded, and R59 keeps it.
-    purgeable: async (db, targetId) =>
-      (await db.session.count({ where: { scheduleId: targetId } })) === 0,
+    reason: 'SESSIONS_HAVE_RECORDS',
+    purgeable: async (db, targetId) => (await sessionsKeepingSchedule(db, targetId)) === 0,
   },
   /**
    * **R136 (Codex H2) — the same purgeable-only-if-empty shape, for an Exam's
@@ -886,6 +893,22 @@ async function restoreScheduleSessions(
     });
   }
   const removedIds = snapshotIds(snapshot, 'removed_session_ids', 'RecurringCourseSchedule');
+  // R170 §8 — the past occurrences that went with the class come straight
+  // back: nothing can have been booked in the past, so there is no conflict to
+  // ask about. Absent on a snapshot older than R170, which listed none.
+  const pastIds = hasValidSnapshotIds(snapshot, 'removed_past_session_ids')
+    ? snapshotIds(snapshot, 'removed_past_session_ids', 'RecurringCourseSchedule')
+    : [];
+  const pastRestored =
+    pastIds.length === 0
+      ? 0
+      : (
+          await tx.session.updateMany({
+            where: { id: { in: pastIds }, scheduleId, deletedAt: { not: null } },
+            data: { deletedAt: null, deletedById: null },
+          })
+        ).count;
+
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const ahead = await tx.session.findMany({
@@ -893,7 +916,9 @@ async function restoreScheduleSessions(
     select: { id: true, date: true },
     orderBy: { date: 'asc' },
   });
-  if (ahead.length === 0) return { sessions_restored: 0, sessions_not_restored: removedIds.length };
+  if (ahead.length === 0) {
+    return { sessions_restored: pastRestored, sessions_not_restored: removedIds.length };
+  }
 
   const staff = await tx.courseScheduleStaff.findMany({
     where: { scheduleId, deletedAt: null },
@@ -942,7 +967,10 @@ async function restoreScheduleSessions(
     where: { id: { in: ahead.map((session) => session.id) } },
     data: { deletedAt: null, deletedById: null },
   });
-  return { sessions_restored: ahead.length, sessions_not_restored: removedIds.length - ahead.length };
+  return {
+    sessions_restored: pastRestored + ahead.length,
+    sessions_not_restored: removedIds.length - ahead.length,
+  };
 }
 
 export async function restoreEntry(
@@ -1181,6 +1209,61 @@ export async function purgeEntry(
   return purgeTrashEntry(prisma, actor, id);
 }
 
+/** Owned rows of an occurrence — they exist as part of it (TD-4.6c). */
+const SESSION_OWNED = [
+  'sessionStaff',
+  'sessionContent',
+  'sessionSurah',
+  'sessionAudienceBranch',
+  'sessionAudienceCategory',
+  'sessionAudienceLevel',
+  'sessionAudienceAdministrativeGroup',
+  'sessionAudienceTeachingGroup',
+  'notification',
+] as const;
+
+/** A student's record ON an occurrence — what makes it evidence (R133). */
+function sessionRecordsWhere(): Prisma.SessionWhereInput {
+  return {
+    OR: [{ attendance: { some: {} } }, { recordings: { some: {} } }, { exams: { some: {} } }],
+  };
+}
+
+/**
+ * How many occurrences still keep a deleted class in the Trash (R170 §8): the
+ * live ones, and the tombstoned ones that carry a student's record.
+ */
+async function sessionsKeepingSchedule(
+  db: PrismaClient | Prisma.TransactionClient,
+  scheduleId: string,
+): Promise<number> {
+  return db.session.count({
+    where: { scheduleId, OR: [{ deletedAt: null }, sessionRecordsWhere()] },
+  });
+}
+
+/**
+ * **Destroys the deleted class's occurrences that carry no student's record**
+ * (R170 §8) — each with its owned rows — so the class itself can go. Runs
+ * inside the purge transaction, before the plan; an occurrence with a record is
+ * left exactly as it is, and `CONDITIONAL_PURGE` has already refused the purge
+ * if any such occurrence exists.
+ */
+async function purgeScheduleSessions(tx: Prisma.TransactionClient, scheduleId: string): Promise<number> {
+  const gone = await tx.session.findMany({
+    where: { scheduleId, deletedAt: { not: null }, NOT: sessionRecordsWhere() },
+    select: { id: true },
+  });
+  if (gone.length === 0) return 0;
+  const ids = gone.map((session) => session.id);
+  for (const model of SESSION_OWNED) {
+    const delegate = tx[model] as unknown as { deleteMany: (a: unknown) => Promise<{ count: number }> };
+    await delegate.deleteMany({ where: { sessionId: { in: ids } } });
+  }
+  await tx.session.deleteMany({ where: { id: { in: ids } } });
+  return ids.length;
+}
+
 /**
  * The purge itself, with **no authority check and no opinion about who asked**.
  *
@@ -1278,6 +1361,19 @@ async function purgeTrashEntry(
       if (entry.targetEntity === 'Exam') {
         await tx.examQuestionOption.deleteMany({ where: { question: { examId: entry.targetId } } });
       }
+      // R170 §8 — a class goes with its record-free occurrences.
+      let sessionsPurged = 0;
+      if (entry.targetEntity === 'RecurringCourseSchedule') {
+        sessionsPurged = await purgeScheduleSessions(tx, entry.targetId);
+        // Re-asserted INSIDE the transaction, after the sweep: what is left
+        // must be nothing, or the FK below refuses for the right reason.
+        if ((await sessionsKeepingSchedule(tx, entry.targetId)) > 0) {
+          throw new AppError('STATE_CONFLICT', 'this class has occurrences that carry students’ records', {
+            reason: 'SESSIONS_HAVE_RECORDS',
+            target_entity: entry.targetEntity,
+          });
+        }
+      }
 
       for (const child of plan.children ?? []) {
         const childDelegate = tx[child.model] as unknown as {
@@ -1312,6 +1408,9 @@ async function purgeTrashEntry(
           // The calendar did it, not a person — distinguishable in the trail
           // without needing to know that `actor_user_id` happened to be null.
           system: actor === null,
+          // R170 §8 — a class's record-free occurrences went with it (a count:
+          // an occurrence id is a coordinate, never a person).
+          ...(sessionsPurged > 0 ? { sessions_purged: sessionsPurged } : {}),
         },
       });
 

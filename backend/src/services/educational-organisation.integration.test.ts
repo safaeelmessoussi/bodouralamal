@@ -1192,6 +1192,14 @@ describe("R74 — the enrolment list is the LEVEL view of the same rows", () => 
     );
     expect(all).toContain(here);
     expect(all).toContain(there);
+
+    // «التسجيلات» forwards `sort_by=first_name|last_name` (bab75ed); a name
+    // outside the allow-list is 400 (R76.1), and it WAS outside until
+    // 2026-09-22 — the first header click blanked the table.
+    for (const sortBy of ["first_name", "last_name"]) {
+      const sorted = await listEnrollments(prisma, superAdmin(), { sortBy, sortDir: "asc" });
+      expect(sorted.map((r) => r.student_id)).toEqual(expect.arrayContaining([here, there]));
+    }
   });
 
   it("carries the Category, the Level and the Group for the screen to read", async () => {

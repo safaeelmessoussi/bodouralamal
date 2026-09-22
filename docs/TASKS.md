@@ -1528,7 +1528,7 @@ was hiding behind it: the run went green on the first attempt.
       the link row survives as evidence — derived from R62.9's own definition of
       a minor (*an account with no login identity*) rather than a second flag.
       28 focused tests; `docs/SRS-PROPOSAL-R132.md` is **APPLIED to `SRS.md`** (2026-09-03).
-- [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
+- [x] **[Decided 2026-09-21, built as R170 §6: `Category.holds_own_login`.]** **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
 ### R65 — the personal section is role-independent (2026-08-11)
 - [x] **Audit finding: §5.2 already places `/profile` under *Shared / Cross-Role*** and it had never been built — which is why R64 hung child registration off a role's dashboard
@@ -1692,7 +1692,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] One Arabic date formatter at every `<time>`; `DateField` gains a format hint and an Arabic echo. **The native control's placeholder is the user agent's and cannot be overridden** without abandoning the native picker — stated, not worked around
 - [x] Hero: association's own motto and mission wording; logo made transparent (border flood fill) and cropped to its artwork; `object-fit: contain`
 - [x] Mission section removed (strings kept — removed *for now*); footer city removed (key deleted); sticky-footer layout on `#root`
-- [ ] **OWNER DECISION — الفئة offers الكبار in child registration, and the model cannot honour it.** Traced end to end: approval creates a login-less account (no `UserIdentity`, no email), linked to the requester, with consent recorded as given by the requester — contradicting §2.1 (adults hold their own accounts), §4.3/R62.9 (an adult consents for themselves) and §4.1a. The Owner's future cases are already served by adult self-registration (§4.1b). **Removing the option requires R64.7's `Category.holds_own_login` marker** — R27 made the Categories renameable, so filtering by name would hardcode reference data
+- [x] **[Closed 2026-09-22 by R170 §6: a child application is refused an own-login Category (`CATEGORY_HOLDS_OWN_LOGIN`) and the form no longer offers it.]** **OWNER DECISION — الفئة offers الكبار in child registration, and the model cannot honour it.** Traced end to end: approval creates a login-less account (no `UserIdentity`, no email), linked to the requester, with consent recorded as given by the requester — contradicting §2.1 (adults hold their own accounts), §4.3/R62.9 (an adult consents for themselves) and §4.1a. The Owner's future cases are already served by adult self-registration (§4.1b). **Removing the option requires R64.7's `Category.holds_own_login` marker** — R27 made the Categories renameable, so filtering by name would hardcode reference data
 
 ### R62 — deferred by scope, not forgotten
 - [x] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them **[Closed 2026-09-21 ledger review — all built since: تقويمي, حفظي, اختباراتي (grades merged in R153), and شهاداتي (R167)]**
@@ -1742,7 +1742,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Structural guards: every soft-deleting service writes a snapshot; every read of a soft-deletable model filters `deletedAt` — folded into the guard that already existed rather than shipped beside it
 - [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
 - [x] ~~A branch created after Levels exist cannot be deleted~~ — **closed by R66**: TD-4.6d's backfill and `LAST_GROUP_IN_LEVEL` both retired, so a new branch gets no groups and deletes cleanly. Measured against the running stack with 20 Levels present
-- [~] **`content.quarantine-purge` exact-operation worker is built; automatic retention is not** (R59.4) — replacement/deletion quarantine and deliberate R59.1 storage retirement are durable and retryable, while nothing reads `purge_after`. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** switch on a tested 90-day record/object policy, or continue deliberate manual purging
+- [x] **[Decided 2026-09-21, built as R170 §10: `content.quarantine-sweep`, ninety days, daily.]** **`content.quarantine-purge` exact-operation worker is built; automatic retention is not** (R59.4) — replacement/deletion quarantine and deliberate R59.1 storage retirement are durable and retryable, while nothing reads `purge_after`. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** switch on a tested 90-day record/object policy, or continue deliberate manual purging
 - [x] `User` and `RecurringCourseSchedule` are not row-purgeable — `ACCOUNTABILITY_RECORD` and
   `CASCADE_CHILDREN`. R111 now supplies User de-identification without destroying the tombstone;
   the schedule remains blocked on its materialized history
@@ -1752,7 +1752,7 @@ was hiding behind it: the run went green on the first attempt.
   `QuranProgressLog`, unused `SchedulingType`, and `Partner` have explicit permanent-purge plans, and reviving
   a unique curriculum pair atomically removes its stale Trash entry. The UI filter now names every
   entity that can actually reach Trash. Real PostgreSQL FK/rollback regressions own the proof.
-- [ ] **OWNER DECISION REQUIRED — SCHEDULE HISTORY IN TRASH:** keep every deleted
+- [x] **[Decided 2026-09-21, built as R170 §8 — a deleted class leaves the Trash after the same seven days WITH its record-free occurrences; one with a student's record keeps it retained (R133). The Owner is asked whether attendance/recordings should go with it.]** **OWNER DECISION REQUIRED — SCHEDULE HISTORY IN TRASH:** keep every deleted
   `RecurringCourseSchedule` indefinitely as `CASCADE_CHILDREN`, or permit permanent purge only when
   it has never materialized a Session (and decide separately whether derived future Session
   tombstones may follow it). Historical/held Sessions and their venue coordinates remain retained.
@@ -1769,7 +1769,7 @@ was hiding behind it: the run went green on the first attempt.
   lifecycles for one entity is how a destructive verb reaches the wrong row. A generic Trash
   restore still cannot resurrect one into live authority (`CASCADE_RELATIONSHIPS`, proved by
   test). `docs/SRS-PROPOSAL-R128.md` is **APPLIED to `SRS.md`** (2026-09-03).
-- [ ] **OWNER DECISION REQUIRED — HISTORICAL REFERENCE RETENTION/PRESENTATION:** Branch/Room/
+- [x] **[Decided 2026-09-21 (R170 §9): kept for ever while referenced, presented as retained (R118 (2)); destroyed by the nightly purge once nothing points to it — already the behaviour, confirmed.]** **OWNER DECISION REQUIRED — HISTORICAL REFERENCE RETENTION/PRESENTATION:** Branch/Room/
   Level/Subject/Category/AdministrativeGroup rows still referenced by retained schedules or
   Sessions remain FK-protected. Decide whether those tombstones stay visibly non-purgeable in Trash
   or move to a separate archive presentation before changing the historical FK/snapshot model.
@@ -2934,11 +2934,16 @@ approved scope covers Partners only, so this is reported rather than taken.
       (`exam-section.tsx`'s `PaperPicker` takes a real `token` prop threaded
       from `scheduling.tsx`; `validationError()` skips the title check when
       `type === 'exam' && examSource.sourceId !== ''`).
-- [ ] **Deliberately deferred, named rather than dropped:** arrangement-editing
+- [x] **Deliberately deferred, named rather than dropped:** arrangement-editing
       UI for an already-scheduled remote occurrence (no backend capability
       exists to revise one short of scheduling again from a fresh copy —
       الجدولة's list hides Edit for it instead of opening a form that cannot
-      save).
+      save). **[Closed 2026-09-22 — STALE since 2026-09-15: SRS Revision 145 §1
+      built `PATCH /exams/{id}/schedule` and الجدولة's «تعديل» for an online
+      sitting (date, time, target, availability, type, visibility, Surah), and
+      R146 §2 its staff; 10 HTTP tests in
+      `exam-schedule-update.http.integration.test.ts`. The Owner asked for it
+      again on 2026-09-21 (R170 §4) because this box still said otherwise.]**
 
 ## R137 (Document Owner decision, ratified 2026-09-09) — see SRS Revision 137
 
@@ -5601,20 +5606,45 @@ The Owner's six replies to Revision 167's report. One migration so far
       request key changed. Five harnesses moved onto `role-chooser.mjs`.
 - [ ] **§3 — the consent gate becomes a WARNING** (nothing forced, default
       public, staff switch to private themselves). Reverses BR-2/BR-3.
-- [ ] §4 — editing an already-scheduled remote session's arrangements.
-- [ ] §5 — a مؤطِّرة's list shows her activities with her classes.
-- [ ] §6 — Category tick-box «its beneficiaries hold their own login» + an age
-      range, on «الفئات»; the enrolment picker then stops offering everybody.
-- [ ] §7 — a spoken reference code for EVERY beneficiary, adults included.
-- [ ] §8 — a deleted class keeps its past sessions visible in the Trash for the
-      same window as everything else.
-- [ ] §9 — a closed branch, room or subject still pointed to by old records is
-      kept for ever; deletable only once nothing points to it.
-- [ ] §10 — quarantined files destroyed automatically after 90 days.
-- [ ] §11 — a refused applicant MAY be told the real reason (optional, the
-      approver's choice each time).
-- [ ] §12 — recorded, nothing to build: no guardianship-document check; health,
-      family situation and home address are NOT collected for minors.
+- [x] §4 — editing an already-scheduled remote session's arrangements.
+      **[Closed 2026-09-22 — FOUND ALREADY BUILT by R145 §1/R146 §2 (`PATCH
+      /exams/{id}/schedule`, الجدولة's «تعديل», 10 HTTP tests); the ledger box
+      that still said «deferred» is closed with that evidence, not built twice.]**
+- [x] §5 — a مؤطِّرة's list shows her activities with her classes. **BUILT:**
+      `GET /events` uses the calendar's own teacher rule (`teacherEventVisibility`,
+      one policy for both reads — R169 §6's intersection, staffing, R109 hidden).
+- [x] §6 — Category tick-box «its beneficiaries hold their own login» + an age
+      range, on «الفئات». **BUILT** (`holds_own_login`, `min_age`, `max_age`;
+      `category-login.policy.ts` on the three request paths; the forms filter and
+      label; «الفئات» edits and shows). NOT done: the enrolment picker still
+      offers every active account — that picker is about PLACEMENT, which the
+      marker does not gate (R64.7, R39); say if it should.
+- [x] §7 — a spoken reference code for EVERY beneficiary, adults included.
+      **BUILT** as a row trigger + CHECK, back-filled (Localhost: 3 → 0 without
+      one); shown on «حسابي», «المستخدمون» and the people-picker; searchable
+      as said.
+- [x] §8 — a deleted class keeps its past sessions visible in the Trash for the
+      same window as everything else. **BUILT** — supersedes R118 (1): past
+      occurrences go to the Trash with the class and come back with it; after
+      seven days the class is destroyed WITH its record-free occurrences.
+      **One point back to the Owner:** an occurrence carrying attendance, a
+      recording or an exam keeps its class retained (`SESSIONS_HAVE_RECORDS`),
+      because R133 destroys a person's history only with her account — say if
+      a class's attendance and recordings should go with it after seven days.
+- [x] §9 — a closed branch, room or subject still pointed to by old records is
+      kept for ever; deletable only once nothing points to it. **CONFIRMED AS
+      BUILT (R118 (2)) — nothing changed**: retained while referenced; the nightly
+      purge destroys it on the first night nothing points to it.
+- [x] §10 — quarantined files destroyed automatically after 90 days. **BUILT:**
+      `content.quarantine-sweep` (daily; one profile of `upload.gc`'s loop;
+      retains what a Trash entry or an unfinished obligation still owns).
+      Closes R59.4's open decision.
+- [x] §11 — a refused applicant MAY be told the real reason (optional, the
+      approver's choice each time). **BUILT:** `share_reason` on both decline
+      paths, unticked each time; `shared_decline_reason` column; shown on
+      «حسابي» under the declined request; audit `reason_shared`.
+- [x] §12 — recorded, nothing to build: no guardianship-document check; health,
+      family situation and home address are NOT collected for minors. (SRS R170 §12.)
 - [ ] §13 — CNDP filing material and the Arabic privacy-notice TEXT, drafted for
       the Owner's review.
 - [ ] §15 — run the performance measurement (TD-11a).
@@ -5625,3 +5655,8 @@ The Owner's six replies to Revision 167's report. One migration so far
       vs a non-reversible id in the audit; free text vs fixed codes in the
       audit; and whether the automatic grading components are wanted BEFORE
       launch.
+- [x] **Additional defect found by `verify-sorting` (2026-09-22), fixed:**
+      «التسجيلات» forwarded `sort_by=first_name|last_name` to a read whose
+      allow-list did not know them → 400 → blank table on the first header
+      click, since `bab75ed` (2026-08-28). The two names are on the allow-list
+      now (TD-6a shadow columns, absent last), pinned by a test.

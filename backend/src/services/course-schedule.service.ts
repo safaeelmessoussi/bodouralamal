@@ -2354,6 +2354,22 @@ export async function deleteCourseSchedule(
     const reasons = await protectionReasons(tx, future);
     const removable = future.filter((s) => !reasons.has(s.id));
 
+    /**
+     * **R170 §8 (the Owner, 2026-09-21) — the class's PAST occurrences go to
+     * the Trash with it**, where they are visible for the same seven days as
+     * everything else and come back with a restore. They used to stay live
+     * under a tombstoned schedule: on no calendar, in no Trash — held nowhere
+     * anybody could see. Protection (R43.6) is about FUTURE occurrences someone
+     * edited; a held occurrence is history, and history follows its class.
+     * What it carries — attendance, a recording — is untouched by the tombstone
+     * and is what decides, seven days later, whether it can be destroyed at all
+     * (`trash.service.ts`, `SESSIONS_HAVE_RECORDS`).
+     */
+    const past = await tx.session.findMany({
+      where: { scheduleId: id, deletedAt: null, date: { lt: now } },
+      select: { id: true },
+    });
+
     const stamp = new Date();
     // Loaded before the tombstone so the snapshot is the row as it STOOD, not as
     // it is once deleted — the distinction the Trash's whole promise rests on.
@@ -2364,7 +2380,7 @@ export async function deleteCourseSchedule(
     });
 
     await tx.session.updateMany({
-      where: { id: { in: removable.map((s) => s.id) } },
+      where: { id: { in: [...removable.map((s) => s.id), ...past.map((s) => s.id)] } },
       data: { deletedAt: stamp, deletedById: actor.userId },
     });
     await tx.recurringCourseSchedule.update({
@@ -2385,6 +2401,9 @@ export async function deleteCourseSchedule(
         ...row,
         staff,
         removed_session_ids: removable.map((s) => s.id),
+        // R170 §8 — the past ones, listed apart: a restore gives them back
+        // without a conflict check (nothing can be booked in the past).
+        removed_past_session_ids: past.map((s) => s.id),
         retained_session_count: await tx.session.count({
           where: { scheduleId: id, deletedAt: null },
         }),
@@ -2404,6 +2423,7 @@ export async function deleteCourseSchedule(
       targetId: id,
       detail: {
         future_sessions_removed: removable.length,
+        past_sessions_removed: past.length,
         sessions_retained: retained,
       },
     });

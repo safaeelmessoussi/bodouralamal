@@ -1,3 +1,4 @@
+import { categoriesForSelf, categoryOptionLabel } from '../../lib/category-audience.js';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import type { PublicBranch } from '../../adapters/branches.js';
@@ -113,7 +114,9 @@ export function StudentSectionFields({
         required
         options={[
           { value: '', label: t('register.categoryEmpty') },
-          ...categories.map((c) => ({ value: c.id, label: c.name })),
+          // R170 §6 — she registers HERSELF: never a Category a guardian
+          // registers into; each named with its age range where one is stated.
+          ...categoriesForSelf(categories).map((c) => ({ value: c.id, label: categoryOptionLabel(c) })),
         ]}
         hint={t('register.categoryHint')}
         error={errors['category'] ?? null}

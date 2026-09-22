@@ -59,3 +59,21 @@ export async function allocateReferenceCode(
   // generator, not with luck. Failing loudly is better than looping forever.
   throw new Error('could not allocate a unique reference code');
 }
+
+/**
+ * A reference code as it is SAID, turned into the code as it is STORED (R170 §7):
+ * upper-cased, spaces dropped, and the «BA-» prefix supplied when the speaker
+ * left it out («7k4m2», «ba7k4m2», «BA-7K4M2» are one code). Anything that
+ * cannot be a code simply matches nothing — this normalises, it never validates,
+ * and **a match still authorises nothing** (R62.5).
+ */
+export function spokenReferenceCode(raw: string): string {
+  const compact = raw.replace(/\s+/g, '').toUpperCase();
+  if (compact.startsWith(`${REFERENCE_CODE_PREFIX}-`)) return compact;
+  // «BA7K4M2» — the prefix said without its dash. A bare five-character body
+  // that happens to begin with «BA» is NOT that: it is shorter.
+  if (compact.startsWith(REFERENCE_CODE_PREFIX) && compact.length === REFERENCE_CODE_PREFIX.length + BODY_LENGTH) {
+    return `${REFERENCE_CODE_PREFIX}-${compact.slice(REFERENCE_CODE_PREFIX.length)}`;
+  }
+  return `${REFERENCE_CODE_PREFIX}-${compact}`;
+}

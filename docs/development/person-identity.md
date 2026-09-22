@@ -13,7 +13,7 @@ restating them; where a rule below has an SRS home, the SRS wins.
 | Value | Shape | Who has one | What it is for |
 |---|---|---|---|
 | `User.id` | random UUIDv4 | everyone | **the row**. Referenced by every FK; never printed |
-| `User.referenceCode` (R62) | `BA-7K4M2` | children via child-application only | **spoken** — said down a telephone, written on paper |
+| `User.referenceCode` (R62; every beneficiary since R170 §7) | `BA-7K4M2` | **every live beneficiary**, adults included — minted by the row's own trigger on whichever write path makes her one; staff none | **spoken** — said down a telephone, written on paper; found by «المستخدمون»'s search as it is said |
 | `User.qrRef` (R96) | random UUID | **everyone**, `NOT NULL UNIQUE` | **scanned** — the QR payload |
 
 **None of the three authorises anything.** R62.5 established the rule for the
@@ -39,12 +39,18 @@ Right doctrine, wrong value. `referenceCode` is five characters from a
 and hand-copied** — 31⁵ ≈ 28.6 million, ample for that and small as a scannable
 payload. It is also, by R62, a students' code.
 
-> **Recorded defect, not fixed here.** `referenceCode` is documented as
-> *"Students only"* and is in fact narrower still: `allocateReferenceCode` has
-> exactly **one** call site, `child-application.service.ts`. Self-registered
-> adult beneficiaries, admin-created accounts, staff pre-provisioning, the Super
-> Admin bootstrap and every seed set none. R96 leaves R62 untouched; whether
-> every beneficiary should carry a spoken code is a separate Owner decision.
+> **Recorded defect — closed by SRS Revision 170 §7 (the Owner, 2026-09-21:
+> «every beneficiary gets one»).** `referenceCode` was *"Students only"* and in
+> fact narrower still: `allocateReferenceCode` had one call site,
+> `child-application.service.ts`, so a self-registered adult, an admin-created
+> account and every seed had none. The guarantee now lives on the row: trigger
+> `user_beneficiary_reference_code_fill` mints the same shape whenever a live
+> row becomes a beneficiary without one, CHECK
+> `user_beneficiary_reference_code_check` holds the rule (a de-identified row is
+> exempt — R133 clears its code on purpose), and the migration back-filled every
+> existing beneficiary. `lib/reference-code.ts` keeps the application-side
+> generator for the one path that still mints ahead of the insert, and
+> `spokenReferenceCode` turns «7k4m2» / «ba7k4m2» into the stored form for search.
 
 ## Every person, and the invariant that needs no thinking
 

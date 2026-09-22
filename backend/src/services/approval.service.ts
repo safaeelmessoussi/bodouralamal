@@ -723,6 +723,8 @@ interface Decision {
   approve: boolean;
   /** TD-9: max 500 chars. Mandatory on rejection (§5.6, §14.2). */
   reason?: string;
+  /** R170 §11 — tell the applicant this reason (the approver's choice). */
+  shareReason?: boolean;
   /**
    * Role and branch-scope assignments to grant **in the same transaction as the
    * activation** (Revision 49, proposed).
@@ -869,7 +871,13 @@ export async function decide(
           status: decision.approve ? 'approved' : 'declined',
           decidedAt: new Date(),
           decidedById: actor.userId,
-          ...(decision.approve ? {} : { declineReason: decision.reason!.trim().slice(0, 500) }),
+          ...(decision.approve
+            ? {}
+            : {
+                declineReason: decision.reason!.trim().slice(0, 500),
+                // R170 §11 — only what the approver chose to say reaches her.
+                sharedDeclineReason: decision.shareReason ? decision.reason!.trim().slice(0, 500) : null,
+              }),
         },
       });
 
@@ -1106,6 +1114,8 @@ export async function decide(
               : { level_id: e.placement.levelId, branch_id: e.placement.branchId }),
           })),
           ...(decision.reason ? { reason: decision.reason } : {}),
+          // R170 §11 — whether the applicant was told it.
+          ...(decision.approve ? {} : { reason_shared: decision.shareReason === true }),
         },
       });
 

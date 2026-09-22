@@ -52,6 +52,9 @@ export const JOB_QUEUES = {
   contentQuarantinePurge: 'content.quarantine-purge',
   /** TD-7's bounded abandoned browser/server-finalization staging collector. */
   uploadGc: 'upload.gc',
+  /** R170 §10 — the 90-day sweep of `quarantine/` (continuations only; the
+   *  daily run is a cron schedule). */
+  contentQuarantineSweep: 'content.quarantine-sweep',
 } as const;
 
 /** A pre-existing obligation must not hide missing execution infrastructure. */

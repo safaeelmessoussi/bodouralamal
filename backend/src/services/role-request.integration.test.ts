@@ -706,3 +706,157 @@ describe('an existing account asks for a further role — and again after a decl
     expect(await requestsOf(id)).toMatchObject({ guardian: 'approved' });
   });
 });
+
+/* ── A refused applicant may be told the real reason (R170 §11) ───────────── */
+
+describe('the reason reaches her only when the approver chose to share it (R170 §11)', () => {
+  async function teacherAsking(): Promise<string> {
+    const id = await submit(body({ roles: ['teaching'], teaching: { framing: { mode: 'online' } } }));
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'teaching', {
+      approve: true,
+      grant: { role: 'teacher', branchId: null },
+    });
+    await requestFurtherRole(prisma, await actorFor(prisma, id), {
+      kind: 'administration',
+      administration: { branch_id: null },
+    });
+    return id;
+  }
+
+  it('declined WITHOUT sharing: she is told that, and never the operator’s words', async () => {
+    const id = await teacherAsking();
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'administration', {
+      approve: false,
+      reason: 'لا حاجة حاليًا — كلام داخلي',
+    });
+    const mine = await myRoleRequests(prisma, await actorFor(prisma, id));
+    const row = mine.requests.find((request) => request.kind === 'administration')!;
+    expect(row.status).toBe('declined');
+    expect(row.shared_reason).toBeNull();
+    expect(JSON.stringify(mine)).not.toContain('كلام داخلي');
+    const stored = await prisma.roleRequest.findUniqueOrThrow({ where: { userId_kind: { userId: id, kind: 'administration' } } });
+    expect(stored).toMatchObject({ declineReason: 'لا حاجة حاليًا — كلام داخلي', sharedDeclineReason: null });
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'rolerequest.decline', targetId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(trail?.detail).toMatchObject({ reason_shared: false });
+  });
+
+  it('declined AND shared: the sentence is hers to read, and re-asking clears it', async () => {
+    const id = await teacherAsking();
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'administration', {
+      approve: false,
+      reason: 'الإدارة مكتملة هذا الموسم.',
+      shareReason: true,
+    });
+    let mine = await myRoleRequests(prisma, await actorFor(prisma, id));
+    expect(mine.requests.find((request) => request.kind === 'administration')?.shared_reason).toBe(
+      'الإدارة مكتملة هذا الموسم.',
+    );
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'rolerequest.decline', targetId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(trail?.detail).toMatchObject({ reason_shared: true });
+
+    await requestFurtherRole(prisma, await actorFor(prisma, id), { kind: 'administration', administration: { branch_id: null } });
+    mine = await myRoleRequests(prisma, await actorFor(prisma, id));
+    expect(mine.requests.find((request) => request.kind === 'administration')).toMatchObject({
+      status: 'pending',
+      shared_reason: null,
+    });
+  });
+
+  it('the whole-account rejection shares the same way', async () => {
+    const id = await submit(body({
+      roles: ['student'],
+      student: { branch_id: placement.branchId, category_id: placement.categoryId, first_time: false },
+    }));
+    await decide(prisma, await actorFor(prisma, superAdminId), id, {
+      approve: false,
+      reason: 'الفئة ممتلئة.',
+      shareReason: true,
+    });
+    const stored = await prisma.roleRequest.findUniqueOrThrow({ where: { userId_kind: { userId: id, kind: 'student' } } });
+    expect(stored.sharedDeclineReason).toBe('الفئة ممتلئة.');
+  });
+});
+
+/* ── A Category says who holds the login (R170 §6) ────────────────────────── */
+
+describe('a request must agree with its Category about who holds the login (R170 §6)', () => {
+  const mark = (holdsOwnLogin: boolean | null) =>
+    prisma.category.update({ where: { id: placement.categoryId }, data: { holdsOwnLogin } });
+  const failureOf = async (run: () => Promise<unknown>): Promise<unknown> => {
+    try {
+      await run();
+      return null;
+    } catch (error) {
+      return error;
+    }
+  };
+  const selfRegistration = () =>
+    body({
+      roles: ['student'],
+      student: { branch_id: placement.branchId, category_id: placement.categoryId, first_time: false },
+    });
+  const familyRegistration = () => body({ roles: ['guardian'], children: [child('ابنة')] });
+
+  it('«not stated» restricts nothing — a Category nobody answered for behaves as it always did', async () => {
+    await mark(null);
+    expect(await failureOf(() => submit(selfRegistration()))).toBeNull();
+    expect(await failureOf(() => submit(familyRegistration()))).toBeNull();
+  });
+
+  it('a guardian-managed Category refuses a woman registering HERSELF, and still takes a child', async () => {
+    await mark(false);
+    try {
+      expect(await failureOf(() => submit(selfRegistration()))).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { reason: 'CATEGORY_IS_GUARDIAN_MANAGED' },
+      });
+      expect(await failureOf(() => submit(familyRegistration()))).toBeNull();
+    } finally {
+      await mark(null);
+    }
+  });
+
+  it('an own-login Category refuses a CHILD application — on the form and from «حسابي» — and still takes her', async () => {
+    await mark(true);
+    try {
+      expect(await failureOf(() => submit(familyRegistration()))).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { reason: 'CATEGORY_HOLDS_OWN_LOGIN' },
+      });
+      expect(await failureOf(() => submit(selfRegistration()))).toBeNull();
+      // The refusal wrote nothing: no applicant was left behind by the failed family form.
+      expect(await prisma.childApplication.count({ where: { requestedCategoryId: placement.categoryId, firstNameArabic: { startsWith: TAG } } })).toBe(0);
+    } finally {
+      await mark(null);
+    }
+  });
+
+  it('…and the same rule meets an EXISTING account asking to become a مستفيدة', async () => {
+    const id = await submit(body({ roles: ['teaching'], teaching: { framing: { mode: 'online' } } }));
+    await decideRoleRequest(prisma, await actorFor(prisma, superAdminId), id, 'teaching', {
+      approve: true,
+      grant: { role: 'teacher', branchId: null },
+    });
+    await mark(false);
+    try {
+      const ask = furtherRoleRequestSchema.parse({
+        kind: 'student',
+        student: { branch_id: placement.branchId, category_id: placement.categoryId, first_time: false },
+        birth_date: '1991-07-09',
+        consents: { data_processing: true, consent_text_id: consentText!.id },
+      });
+      expect(await failureOf(async () => requestFurtherRole(prisma, await actorFor(prisma, id), ask))).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        details: { reason: 'CATEGORY_IS_GUARDIAN_MANAGED' },
+      });
+    } finally {
+      await mark(null);
+    }
+  });
+});

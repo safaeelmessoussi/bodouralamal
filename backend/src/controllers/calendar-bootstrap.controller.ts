@@ -77,6 +77,11 @@ export function read(prisma: PrismaClient) {
           id: c.id,
           name: c.name,
           display_order: c.displayOrder,
+          // R170 §6 — who holds the login (`null`: not stated, restricts
+          // nothing) and the informational age range.
+          holds_own_login: c.holdsOwnLogin,
+          min_age: c.minAge,
+          max_age: c.maxAge,
         })),
         levels: bootstrap.levels.map((l) => ({
           id: l.id,

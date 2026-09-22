@@ -828,6 +828,10 @@ export function explainFailure(error: unknown): string {
       // she ranked is no longer on offer. Said in those words; the list reloads
       // when she changes her branch or stage, or simply re-answers «أول مرة».
       if (error.details['reason'] === 'CIRCLE_NOT_OFFERED') return t('register.errCircleGone');
+      // R170 §6 — the Category and the applicant do not agree on who holds the
+      // login. The forms stop offering these; a stale page can still send one.
+      if (error.details['reason'] === 'CATEGORY_IS_GUARDIAN_MANAGED') return t('register.errCategoryGuardianManaged');
+      if (error.details['reason'] === 'CATEGORY_HOLDS_OWN_LOGIN') return t('register.errCategoryOwnLogin');
       return t('register.rejected');
     /**
      * **`DUPLICATE` is two different dead ends, and they had one message.**

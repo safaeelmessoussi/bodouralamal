@@ -112,12 +112,12 @@ It refuses, rather than cascading, when a live row still references the record
 (`DEPENDENTS_EXIST`, naming the constraint). **Clear the dependants first, deliberately** —
 the refusal is the safeguard, and there is no force flag by design.
 
-Two types have no destruction plan at all:
+One type has no destruction plan at all, and one is conditional:
 
 | Type | Reason | What to do instead |
 |---|---|---|
 | `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and institutional records, so destroying it takes their meaning and the record of who acted | Use R111 permanent de-identification. The non-identifying tombstone remains; its personal fields, credentials, planning data and recoverable snapshot do not |
-| `RecurringCourseSchedule` | `CASCADE_CHILDREN` — retained Sessions are the dated historical truth, including their venue snapshot; consequence Sessions have no independent Trash transition and must not be deleted by SQL | Keep it. Whether a schedule that never materialized a Session may be purged is an explicit Owner decision recorded in `TASKS.md` |
+| `RecurringCourseSchedule` | **Purged WITH its occurrences after the seven days (SRS Revision 170 §8, superseding R118 (1))** — each record-free occurrence and its owned rows go with the class. `SESSIONS_HAVE_RECORDS` refuses while any occurrence is LIVE or carries a student's record (attendance, a recording, an exam sat in it): R133 destroys a person's history only with her own account | Keep it; it is presented as retained. Never delete a Session by SQL. Whether attendance and recordings should go with a class is the one question R170 §8 left with the Owner |
 
 `QuranProgressLog` is different from account deletion: deleting an account retains every
 institutional progress row, but a teacher's deliberate correction already tombstones one exact

@@ -259,6 +259,62 @@ describe("R130 — completing a legacy date of birth (Owner, 2026-09-03)", () =>
     expect(erased.birthDate).toBeNull();
   });
 
+  it("13a-bis · R170 §7 — EVERY beneficiary carries a spoken reference code, whichever path made her one", async () => {
+    const SHAPE = /^BA-[2-9A-HJKMNP-Z]{5}$/;
+    // Created a beneficiary: minted at once, by the row itself.
+    const born = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} مستفيدة برمز`, accountStatus: "active", isBeneficiary: true },
+    });
+    expect(born.referenceCode).toMatch(SHAPE);
+
+    // Becoming one LATER — an adult approved as a مستفيدة — mints it then.
+    const adult = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} مؤطرة بلا رمز`, accountStatus: "active" },
+    });
+    expect(adult.referenceCode).toBeNull();
+    const admitted = await prisma.user.update({ where: { id: adult.id }, data: { isBeneficiary: true } });
+    expect(admitted.referenceCode).toMatch(SHAPE);
+    expect(admitted.referenceCode).not.toBe(born.referenceCode);
+
+    // A code she already has is NEVER replaced — it is printed and spoken.
+    const again = await prisma.user.update({ where: { id: adult.id }, data: { nickname: "أم يوسف" } });
+    expect(again.referenceCode).toBe(admitted.referenceCode);
+
+    // The database holds the rule: a live beneficiary cannot lose her code…
+    const stripped = await prisma.user.update({ where: { id: adult.id }, data: { referenceCode: null } });
+    expect(stripped.referenceCode).toMatch(SHAPE);
+    // …and an ERASED one keeps the NULL that R133 wrote on purpose.
+    const erased = await prisma.user.update({
+      where: { id: born.id },
+      data: { deletedAt: new Date(), referenceCode: null },
+    });
+    expect(erased.referenceCode).toBeNull();
+  });
+
+  it("13a-ter · R170 §7 — staff find her by the code AS IT IS SAID, and the picker shows it", async () => {
+    const superAdmin = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} مشرفة الرموز`, accountStatus: "active" },
+    });
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: "super_admin" } });
+    await prisma.userBranchRole.create({ data: { userId: superAdmin.id, roleId: role.id, branchId: null } });
+    const her = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} تُعرف برمزها`, accountStatus: "active", isBeneficiary: true },
+    });
+    const code = her.referenceCode!;
+    const actor = await actorFor(prisma, superAdmin.id);
+
+    for (const said of [code, code.toLowerCase(), code.slice(3), ` ${code.slice(0, 5)} ${code.slice(5)} `]) {
+      const found = await listDirectory(prisma, actor, { q: said });
+      expect(found.data.map((u) => u.id)).toEqual([her.id]);
+      expect(found.data[0]?.referenceCode).toBe(code);
+    }
+    // A code is matched WHOLE: half of one finds nobody (it is not a name).
+    expect((await listDirectory(prisma, actor, { q: code.slice(3, 6) })).data.map((u) => u.id)).not.toContain(her.id);
+    // Staff carry none, and the list says so with `null`.
+    const staffRow = (await listUsers(prisma, actor, { q: `${TAG} مشرفة الرموز` })).data[0];
+    expect(staffRow?.referenceCode).toBeNull();
+  });
+
   it("13b · REFUSES to rewrite a date that is already recorded", async () => {
     const admin = await makeStaff("super_admin");
     const legacy = await beneficiaryWithNoBirthDate();
@@ -1067,6 +1123,10 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
           "nickname",
           "phone",
           "publicDisplayName",
+          // R170 §7 — argued on: the spoken reference code is NON-personal by
+          // design (R62.5) and exists so staff can say WHICH beneficiary they
+          // mean without speaking a name; it identifies and never authorises.
+          "referenceCode",
           "roles",
           "version",
           /**

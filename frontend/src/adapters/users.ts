@@ -55,6 +55,8 @@ export interface UserSummary {
    */
   birth_date: string | null;
   nickname: string | null;
+  /** R170 §7 — the spoken reference code: every beneficiary has one; staff, `null`. */
+  reference_code: string | null;
   phone: string | null;
   /**
    * The bound Google address, or the pre-provisioned one for an account not yet
@@ -101,6 +103,9 @@ export interface DirectoryEntry {
   first_name_arabic: string | null;
   last_name_arabic: string | null;
   nickname: string | null;
+  /** R170 §7 — spoken, non-personal: how staff say WHICH beneficiary they mean.
+   *  Optional on the type: a caller built before it simply shows none. */
+  reference_code?: string | null;
   roles: RoleAssignment[];
 }
 

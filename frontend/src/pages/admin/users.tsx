@@ -183,6 +183,15 @@ export function UsersPage(): ReactNode {
       cell: (r) => r.nickname ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
+      // R170 §7 — every beneficiary has one, adults included; staff have none,
+      // and an empty cell there is the fact, not a gap. The search box finds a
+      // person by it, said with or without its «BA-».
+      key: 'reference_code',
+      header: t('admin.users.colReferenceCode'),
+      secondary: true,
+      cell: (r) => r.reference_code ?? <span className="muted">—</span>,
+    },
+    {
       key: 'roles',
       header: t('admin.users.colRoles'),
       cell: (r) =>

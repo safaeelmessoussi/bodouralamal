@@ -618,6 +618,12 @@ export function RoleRequestsSection({
                     >
                       {t(`admin.approvals.roleStatus.${request.status}`)}
                     </Badge>
+                    {/* R170 §11 — only the reason the approver CHOSE to tell her. */}
+                    {request.shared_reason ? (
+                      <p className="muted" data-shared-reason>
+                        {t('profile.requestRole.sharedReason')} {request.shared_reason}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>

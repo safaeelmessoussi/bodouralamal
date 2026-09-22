@@ -1,6 +1,7 @@
-import type { Prisma } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import * as scope from "./branch-scope.js";
 import type { RoleScope } from "./branch-scope.js";
+import { eventsStaffedBy, teacherEventScope } from "./roster-resolution.js";
 
 /**
  * **SRS Revision 109 — the three-tier visibility model, for all three kinds of
@@ -241,12 +242,68 @@ export function examTierWhere(actor: TierActor | null): Prisma.ExamWhereInput {
  * section.
  */
 export function eventResponsibleWhere(
-  actor: TierActor,
+  actor: Pick<TierActor, "userId">,
 ): Prisma.EventWhereInput {
   return {
     visibility: "hidden",
     staff: {
       some: { userId: actor.userId, position: "responsible", deletedAt: null },
     },
+  };
+}
+
+/**
+ * **Which activities REACH a مؤطِّرة — the one definition** (§4.4, R71.2,
+ * R109, R169 §6; lifted out of `calendar.service.ts` by R170 §5 so that her
+ * قائمة lists the same activities her calendar shows).
+ *
+ * * `public` — everyone's;
+ * * `private` — one she STAFFS (either position, R71.2), or one whose every
+ *   NAMED audience dimension intersects her teaching scope, a dimension left
+ *   empty being «الكل» (R169 §6: the dimensions intersect here as everywhere);
+ * * `hidden` — only where she is the responsible person (R109).
+ *
+ * Her teaching scope is derived from the courses she staffs (`teacherEventScope`,
+ * §4.4c), which is the single definition of her reach.
+ */
+export async function teacherEventVisibility(
+  prisma: PrismaClient,
+  actor: Pick<TierActor, "userId">,
+): Promise<Prisma.EventWhereInput> {
+  const {
+    branchIds,
+    levelIds,
+    categoryIds,
+    administrativeGroupIds: groupIds,
+  } = await teacherEventScope(prisma, actor.userId);
+  const staffed = [...(await eventsStaffedBy(prisma, actor.userId)).keys()];
+
+  const reaches = (
+    field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
+    idField: "branchId" | "categoryId" | "levelId" | "administrativeGroupId",
+    mine: string[],
+  ): Prisma.EventWhereInput => ({
+    OR: [{ [field]: { none: {} } }, { [field]: { some: { [idField]: { in: mine } } } }],
+  });
+  const intersects: Prisma.EventWhereInput = {
+    OR: [
+      { id: { in: staffed } },
+      {
+        AND: [
+          reaches("branchScopes", "branchId", branchIds),
+          reaches("categoryScopes", "categoryId", categoryIds),
+          reaches("levelScopes", "levelId", levelIds),
+          reaches("administrativeGroupScopes", "administrativeGroupId", groupIds),
+        ],
+      },
+    ],
+  };
+
+  return {
+    OR: [
+      { visibility: "public" },
+      { visibility: "private", ...intersects },
+      eventResponsibleWhere(actor),
+    ],
   };
 }

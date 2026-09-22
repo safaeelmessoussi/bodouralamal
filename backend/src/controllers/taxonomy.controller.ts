@@ -80,6 +80,9 @@ export function createCategoryHandler(prisma: PrismaClient) {
       // the service as itself. Collapsing the two would make clearing a
       // description indistinguishable from not mentioning it.
       ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.holds_own_login !== undefined ? { holdsOwnLogin: body.holds_own_login } : {}),
+      ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
+      ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
     });
     res.status(201).json({ data: categoryDto(created) });
@@ -97,6 +100,9 @@ export function updateCategoryHandler(prisma: PrismaClient) {
       {
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.holds_own_login !== undefined ? { holdsOwnLogin: body.holds_own_login } : {}),
+        ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
+        ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
         ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
       },
     );

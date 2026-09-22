@@ -184,6 +184,33 @@ it almost always needs *«is this beneficiary an adult»*, which is
 Category, that is a new attribute with its own name and its own meaning, and an
 Owner decision — not a reinterpretation of an existing column.
 
+### …and the marker that IS added, with its own name (SRS Revision 170 §6, 2026-09-21)
+
+The Owner decided the attribute the paragraph above reserved for her:
+**`Category.holds_own_login`** — *who holds the login*, which is §2.1's own
+structural definition of a minor and NOT adulthood. It is exactly the marker
+R64.7 recommended, it closes the gap R64.7 recorded (a woman could ask for
+«الطفل» for herself; a child application could ask for the adults' Category — a
+login-less «adult» consented for by somebody else), and everything in the section
+above still holds:
+
+* **It is not an age gate.** `birth_date` still answers *is this person an
+  adult*; `holds_own_login` answers *does a beneficiary of this Category sign in
+  herself*. A seventeen-year-old placed in المرأة holds her own login because
+  المرأة's beneficiaries do — the approver placed her there, and placement is
+  still the approver's (R39, R66.5). The marker binds the REQUEST only:
+  `policies/category-login.policy.ts` refuses a self-registration into a
+  guardian-managed Category (`CATEGORY_IS_GUARDIAN_MANAGED`) and a child
+  application into an own-login one (`CATEGORY_HOLDS_OWN_LOGIN`); the three
+  forms stop offering what would be refused (`lib/category-audience.ts`).
+* **`null` is «not stated» and restricts nothing** — a Category nobody answered
+  for behaves as before. The migration answered the existing rows from
+  `self_attendance_allowed`, the one structural fact already held, ONCE; the two
+  columns are separate from then on and the Owner edits either on «الفئات».
+* **The age range (`min_age`/`max_age`) is informational**: shown on «الفئات»
+  and beside the Category's name on the forms, 0–120 whole years, never
+  inverted (`AGE_RANGE_INVERTED`), and it refuses nothing.
+
 ## The minor who becomes an adult — BUILT (R132)
 
 **The blocker recorded on 2026-09-03 is closed, and the refusal that created it

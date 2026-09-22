@@ -2,6 +2,7 @@ import type { Event, Prisma, PrismaClient } from '../generated/prisma/client.js'
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import { isResponsibleForEvent, teacherEventScope } from '../policies/roster-resolution.js';
+import { teacherEventVisibility } from '../policies/scheduling-visibility.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import {
@@ -1007,24 +1008,21 @@ export async function listEvents(
   }
 
   const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
-  const teacherScope = !isAdmin(actor) ? await teacherEventScope(prisma, actor.userId) : null;
-
-  const authorization: Prisma.EventWhereInput = teacherScope === null
+  /**
+   * **R170 §5 (the Owner, 2026-09-21: «I want teachers' activities listed too
+   * with the classes») — a مؤطِّرة's list shows the SAME activities her
+   * calendar does.** This read used to keep a narrower rule of its own: what
+   * she staffs, or what is addressed to her groups and to NOTHING else — so an
+   * activity for her Level, her branch or her Category, which her calendar
+   * showed and her students were expected at, was missing from her قائمة.
+   * `teacherEventVisibility` is the one definition (§4.4c, R71.2, R109, R169 §6)
+   * and carries R109's hidden-tier rule with it.
+   */
+  const authorization: Prisma.EventWhereInput = isAdmin(actor)
     ? (reachable === null ? {} : {
         OR: [{ branchScopes: { none: {} } }, { branchScopes: { some: { branchId: { in: reachable } } } }],
       })
-    : {
-        OR: [
-          { staff: { some: { userId: actor.userId, deletedAt: null } } },
-          {
-            branchScopes: { none: {} }, categoryScopes: { none: {} }, levelScopes: { none: {} },
-            administrativeGroupScopes: {
-              some: { administrativeGroupId: { in: teacherScope.administrativeGroupIds } },
-              every: { administrativeGroupId: { in: teacherScope.administrativeGroupIds } },
-            },
-          },
-        ],
-      };
+    : await teacherEventVisibility(prisma, actor);
 
   const where: Prisma.EventWhereInput = {
     deletedAt: null,
@@ -1045,13 +1043,9 @@ export async function listEvents(
       : {}),
     // **Applied last so an explicit filter NARROWS a scoped caller's reach and
     // never widens it** — the same discipline `listCourseSchedules` uses.
-    // Global definitions remain in the Admin projection. Teacher definitions
-    // require their own group/responsibility boundary, and R109 excludes hidden
-    // items unless they are the responsible person (never merely an assistant).
-    AND: [authorization, ...(teacherScope === null ? [] : [{ OR: [
-      { visibility: { not: 'hidden' as const } },
-      { staff: { some: { userId: actor.userId, deletedAt: null, position: 'responsible' as const } } },
-    ] }])],
+    // Global definitions remain in the Admin projection; a teacher's boundary,
+    // hidden tier included (R109), is `teacherEventVisibility`'s.
+    AND: [authorization],
   };
 
   const window = pageWindow(filters);

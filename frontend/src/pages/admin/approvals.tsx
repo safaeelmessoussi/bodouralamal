@@ -389,6 +389,8 @@ export function ApprovalsPage(): ReactNode {
       assignments?: { role: string; branch_id: string | null }[];
       enrollments?: ({ user_id: string } & PlacementBody)[];
       row?: Approval;
+      /** R170 §11 — tell the applicant the reason. */
+      shareReason?: boolean;
     },
   ): Promise<void> {
     const target = options?.row ?? deciding?.row;
@@ -402,7 +404,7 @@ export function ApprovalsPage(): ReactNode {
             ...(options?.assignments ? { assignments: options.assignments } : {}),
             ...(options?.enrollments ? { enrollments: options.enrollments } : {}),
           })
-        : await rejectApproval(target.id, reason ?? '', accessToken);
+        : await rejectApproval(target.id, reason ?? '', accessToken, options?.shareReason === true);
       setDeciding(null);
       setStaffApproval(null);
       setPlacing(null);
@@ -669,15 +671,17 @@ export function ApprovalsPage(): ReactNode {
               reasonHint: t('admin.approvals.reasonHint'),
               reasonMin: 1,
               reasonMax: DECISION_REASON_MAX,
+              // R170 §11 — optional, unticked each time.
+              reasonOption: { label: t('admin.approvals.shareReason'), hint: t('admin.approvals.shareReasonHint') },
             }
           : {})}
         busy={busy}
-        onConfirm={(reason) => {
+        onConfirm={(reason, shareReason) => {
           if (!roleAct) return;
           void decideRole(
             roleAct.approve
               ? { approve: true, kind: 'guardian' }
-              : { approve: false, kind: roleAct.kind, reason: reason ?? '' },
+              : { approve: false, kind: roleAct.kind, reason: reason ?? '', share_reason: shareReason === true },
           );
         }}
         onCancel={() => setRoleAct(null)}
@@ -731,10 +735,12 @@ export function ApprovalsPage(): ReactNode {
               reasonHint: t('admin.approvals.reasonHint'),
               reasonMin: 1,
               reasonMax: DECISION_REASON_MAX,
+              // R170 §11 — optional, unticked each time.
+              reasonOption: { label: t('admin.approvals.shareReason'), hint: t('admin.approvals.shareReasonHint') },
             }
           : {})}
         busy={busy}
-        onConfirm={(reason) => void confirmDecision(reason)}
+        onConfirm={(reason, shareReason) => void confirmDecision(reason, { shareReason: shareReason === true })}
         onCancel={() => setDeciding(null)}
       />
     </AdminLayout>

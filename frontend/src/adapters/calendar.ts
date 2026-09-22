@@ -324,6 +324,15 @@ export interface CategoryRef {
   id: string;
   name: string;
   display_order: number | null;
+  /**
+   * R170 §6 — published by `/calendar/bootstrap` so the registration forms can
+   * offer the right Categories and say their age range. Optional on the type:
+   * other reads that answer a Category (`/me/calendar/options`) do not carry
+   * them, and absent means exactly what `null` means — not stated.
+   */
+  holds_own_login?: boolean | null;
+  min_age?: number | null;
+  max_age?: number | null;
 }
 
 export interface LevelRef {

@@ -1,3 +1,4 @@
+import { assertCategoryFitsApplicant } from '../policies/category-login.policy.js';
 import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
@@ -122,7 +123,7 @@ export async function submitChildApplications(
   // (`GUARDIAN_REQUEST_DECLINED`); the decision is still the approver's.
   await tx.roleRequest.updateMany({
     where: { userId: parentId, kind: 'guardian', status: 'declined' },
-    data: { status: 'pending', decidedAt: null, decidedById: null, declineReason: null },
+    data: { status: 'pending', decidedAt: null, decidedById: null, declineReason: null, sharedDeclineReason: null },
   });
 
   const requestId = randomUUID();
@@ -135,6 +136,10 @@ export async function submitChildApplications(
     if (!firstName || !lastName) {
       throw new AppError('VALIDATION_FAILED', 'each child needs a first and last name');
     }
+
+    // R170 §6 — a child is registered BY a guardian, so the Category asked for
+    // must not be one whose beneficiaries hold their own login.
+    await assertCategoryFitsApplicant(tx, child.requestedCategoryId, 'child');
 
     const row = await tx.childApplication.create({
       data: {

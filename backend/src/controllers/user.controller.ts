@@ -160,6 +160,8 @@ export function directory(prisma: PrismaClient) {
         first_name_arabic: u.firstNameArabic ?? splitComposedName(u.nameArabic).first,
         last_name_arabic: u.lastNameArabic ?? splitComposedName(u.nameArabic).last,
         nickname: u.nickname,
+        // R170 §7 — spoken, non-personal, and how staff say WHICH beneficiary.
+        reference_code: u.referenceCode,
         roles: u.roles.map((r) => ({
           role: r.role,
           branch_id: r.branchId,

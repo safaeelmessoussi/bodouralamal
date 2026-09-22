@@ -99,6 +99,8 @@ describe('job runner startup readiness', () => {
       QUEUES.contentBucketMigrate,
       QUEUES.contentQuarantinePurge,
       QUEUES.uploadGc,
+      // R170 §10 — the 90-day sweep of `quarantine/`.
+      QUEUES.contentQuarantineSweep,
       QUEUES.sessionMaterialize,
       QUEUES.sessionRecordingIngest,
       // R167 §5 — a recording is never left to a delivery that may not happen.
@@ -148,7 +150,8 @@ describe('job runner startup readiness', () => {
     const firstWorker = boss.work.mock.invocationCallOrder[0];
     expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
     expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
-    expect(boss.schedule).toHaveBeenCalledTimes(10);
+    // …and R170 §10 adds the daily quarantine sweep.
+    expect(boss.schedule).toHaveBeenCalledTimes(11);
     expect(boss.schedule).toHaveBeenCalledWith(
       QUEUES.sessionRecordingReconcile,
       '*/15 * * * *',
@@ -220,7 +223,7 @@ describe('job runner startup readiness', () => {
       // number is asserted rather than derived deliberately: readiness claiming
       // "all workers up" while counting a shorter catalogue is exactly the
       // failure this test exists for.
-      expected_workers: 13,
+      expected_workers: 14,
       registered_workers: 2,
       active_workers: 2,
     });

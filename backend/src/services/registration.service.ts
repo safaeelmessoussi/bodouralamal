@@ -1,3 +1,4 @@
+import { assertCategoryFitsApplicant } from '../policies/category-login.policy.js';
 import type { PrismaClient, User } from '../generated/prisma/client.js';
 import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
@@ -314,6 +315,10 @@ export async function register(
           throw new AppError('VALIDATION_FAILED', 'category_id does not name a live category (§4.1)');
         }
       }
+      // R170 §6 — she registers HERSELF, so the Category must be one whose
+      // beneficiaries hold their own login. (Each child's is checked where the
+      // child applications are written.)
+      if (request.student) await assertCategoryFitsApplicant(tx, request.student.categoryId, 'self');
 
       // Every new registration enters Pending (§4.1); no role is granted until
       // an Admin approves (TD-4.2).

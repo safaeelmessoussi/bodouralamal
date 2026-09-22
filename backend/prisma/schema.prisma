@@ -730,7 +730,11 @@ model User {
   /// same authorization as a lookup by id — otherwise the code becomes a bearer
   /// token by accident, and knowing a child's code would grant something.
   ///
-  /// Students only; nullable because staff have none and rows predate it.
+  /// Nullable because STAFF have none. **Every live beneficiary has one since
+  /// R170 §7**, adults included: the trigger `user_beneficiary_reference_code_fill`
+  /// mints it on whichever write path makes her a beneficiary,
+  /// and `user_beneficiary_reference_code_check` holds the rule (both in the
+  /// migration; a de-identified row is exempt — R133 clears its code).
   referenceCode String? @unique @map("reference_code") @db.VarChar(16)
 
   /// R62 — informs placement, gates nothing. See `SchoolingStage`.
@@ -1121,6 +1125,21 @@ model Category {
   /// `description` is — the population is what makes self-marking acceptable,
   /// not the class.
   selfAttendanceAllowed Boolean                     @default(false) @map("self_attendance_allowed")
+
+  /// **R170 §6 — who holds the login** (closes the gap R64.7 recorded).
+  ///
+  /// `true`: its beneficiaries sign in themselves — offered to a woman
+  /// registering HERSELF, never on a child application. `false`: a guardian
+  /// registers them — the reverse. **`null` is «not stated»** and restricts
+  /// nothing, so a Category that predates the question (or a fixture that never
+  /// asked it) behaves exactly as before. §2.1's rule made enforceable while the
+  /// names stay editable; **never an age gate** (R64.7).
+  holdsOwnLogin Boolean? @map("holds_own_login")
+  /// R170 §6 — INFORMATIONAL, shown on «الفئات» and beside the Category on the
+  /// registration forms. Gates nothing; placement stays the approver's. The
+  /// range CHECK (`category_age_range_check`) lives in the migration.
+  minAge        Int?     @map("min_age") @db.SmallInt
+  maxAge        Int?     @map("max_age") @db.SmallInt
 
   /// **NEW K — what this Category is, in the Owner's words** (2026-08-27).
   ///
@@ -4038,12 +4057,16 @@ model RoleRequest {
   /// back-filled by the migration: nobody was asked, and no answer is invented.
   firstTime Boolean? @map("first_time")
 
-  decidedById   String?   @map("decided_by") @db.Uuid
-  decidedBy     User?     @relation("RoleRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
-  decidedAt     DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedById         String?   @map("decided_by") @db.Uuid
+  decidedBy           User?     @relation("RoleRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt           DateTime? @map("decided_at") @db.Timestamptz(6)
   /// Operator-facing, never rendered raw to the applicant.
-  declineReason String?   @map("decline_reason") @db.VarChar(500)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  declineReason       String?   @map("decline_reason") @db.VarChar(500)
+  /// R170 §11 — the reason the approver CHOSE to tell her; `null` unless she
+  /// ticked «إبلاغ المتقدّمة». The operator-facing `declineReason` never leaves
+  /// the office.
+  sharedDeclineReason String?   @map("shared_decline_reason") @db.VarChar(500)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([userId, kind])
   @@map("role_request")

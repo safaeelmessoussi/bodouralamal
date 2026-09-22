@@ -26,7 +26,8 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { CheckboxField, TextArea, TextField } from '../../components/ui/field.js';
+import { CheckboxField, NumberField, TextArea, TextField } from '../../components/ui/field.js';
+import { ageRangeLabel } from '../../lib/category-audience.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -84,6 +85,8 @@ interface KindSpec {
   /** R73 — Subjects only; the same documented-variant pattern as
    *  `withDescription`, never a second form. */
   withQuranFlag?: boolean;
+  /** R170 §6 — Categories only: who holds the login, and the age range. */
+  withAudience?: boolean;
   list: (token: string | null, sort: SortState | null) => Promise<Row[]>;
   /** R76.4 — the sequence, submitted to this kind's own `/order` route. */
   reorder: (ids: readonly string[], token: string | null) => Promise<unknown>;
@@ -109,6 +112,7 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     blockedKey: 'admin.taxonomy.categoryBlocked',
     formHintKey: 'admin.taxonomy.categoryNameHint',
     withDescription: true,
+    withAudience: true,
     list: listCategories,
     reorder: reorderCategories,
     create: createCategory,
@@ -125,6 +129,26 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
           (r as { description: string | null }).description ?? (
             <span className="muted">{t('common.notSet')}</span>
           ),
+      },
+      {
+        // R170 §6 — who holds the login, in WORDS; «غير محدَّد» is a real state
+        // (it restricts nothing), never an empty cell.
+        key: 'holds_own_login',
+        header: 'admin.taxonomy.colLogin',
+        cell: (r) => {
+          const value = (r as Category).holds_own_login ?? null;
+          return value === null ? (
+            <span className="muted">{t('common.notSet')}</span>
+          ) : (
+            t(value ? 'admin.taxonomy.loginOwn' : 'admin.taxonomy.loginGuardian')
+          );
+        },
+      },
+      {
+        // R170 §6 — informational; shown so the office and the forms say the same.
+        key: 'age_range',
+        header: 'admin.taxonomy.colAge',
+        cell: (r) => ageRangeLabel(r as Category) ?? <span className="muted">{t('common.notSet')}</span>,
       },
       {
         key: 'levels',
@@ -417,6 +441,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
           {...(spec.formHintKey ? { hint: t(spec.formHintKey) } : {})}
           {...(spec.withDescription ? { withDescription: true } : {})}
           {...(spec.withQuranFlag ? { withQuranFlag: true } : {})}
+          {...(spec.withAudience ? { withAudience: true } : {})}
           initial={editing === 'new' ? null : editing}
           busy={busy}
           onCancel={() => setEditing(null)}
@@ -453,12 +478,31 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
  * NEW K gave a Category a description and a Subject has none, so the difference
  * is one declared flag rather than a copy of this file with an extra field.
  */
+/**
+ * R170 §6 — whole years between 0 and 120, and never an inverted pair. The
+ * server and the database hold the same rule; this is what says it beside the
+ * field. Exported for the test.
+ */
+export function ageRangeError(minAge: string, maxAge: string): string | null {
+  const parse = (raw: string): number | null | 'bad' => {
+    if (raw.trim() === '') return null;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 && n <= 120 ? n : 'bad';
+  };
+  const min = parse(minAge);
+  const max = parse(maxAge);
+  if (min === 'bad' || max === 'bad') return t('admin.taxonomy.ageInvalid');
+  if (min !== null && max !== null && min > max) return t('admin.taxonomy.ageInverted');
+  return null;
+}
+
 function TaxonomyFormDialog({
   title,
   hint,
   initial,
   withDescription = false,
   withQuranFlag = false,
+  withAudience = false,
   busy,
   onSave,
   onCancel,
@@ -471,9 +515,13 @@ function TaxonomyFormDialog({
     display_order: number | null;
     tracks_quran_progress?: boolean;
     requires_surahs?: boolean;
+    holds_own_login?: boolean | null;
+    min_age?: number | null;
+    max_age?: number | null;
   } | null;
   withDescription?: boolean;
   withQuranFlag?: boolean;
+  withAudience?: boolean;
   busy: boolean;
   onSave: (input: TaxonomyInput) => void;
   onCancel: () => void;
@@ -483,19 +531,32 @@ function TaxonomyFormDialog({
     description: initial?.description ?? '',
     tracksQuranProgress: initial?.tracks_quran_progress ?? false,
     requiresSurahs: initial?.requires_surahs ?? false,
+    // R170 §6 — a TICK-BOX, at the Owner's word: ticked is «حسابها الخاص»,
+    // unticked is «يسجّلها وليّ الأمر». A row nobody has answered («غير محدَّد»)
+    // opens unticked and is answered by the first save.
+    holdsOwnLogin: initial?.holds_own_login === true,
+    minAge: initial?.min_age == null ? '' : String(initial.min_age),
+    maxAge: initial?.max_age == null ? '' : String(initial.max_age),
   };
   const [name, setName] = useState(pristine.name);
+  const [holdsOwnLogin, setHoldsOwnLogin] = useState(pristine.holdsOwnLogin);
+  const [minAge, setMinAge] = useState(pristine.minAge);
+  const [maxAge, setMaxAge] = useState(pristine.maxAge);
   const [description, setDescription] = useState(pristine.description);
   const [tracksQuranProgress, setTracksQuranProgress] = useState(pristine.tracksQuranProgress);
   const [requiresSurahs, setRequiresSurahs] = useState(pristine.requiresSurahs);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
+  const ageError = withAudience ? ageRangeError(minAge, maxAge) : null;
   // Only user-modified data is dirty; a validation error is not a change.
-  const dirty = isDirty({ name, description, tracksQuranProgress, requiresSurahs }, pristine);
+  const dirty = isDirty(
+    { name, description, tracksQuranProgress, requiresSurahs, holdsOwnLogin, minAge, maxAge },
+    pristine,
+  );
 
   function submit(): void {
     setTouched(true);
-    if (error) return;
+    if (error || ageError) return;
     /* **`display_order` is not sent** (R76.8). The form no longer offers it, so
        sending anything would be inventing a value: an edit would overwrite a
        position the administrator set by dragging, and a create would claim a
@@ -516,6 +577,15 @@ function TaxonomyFormDialog({
       // CHECK), so the pair is sent consistent rather than left for the server
       // to refuse: ticking the first ticks the second.
       ...(withQuranFlag ? { requires_surahs: requiresSurahs || tracksQuranProgress } : {}),
+      // R170 §6 — sent only by the form that offers them. An empty age is
+      // «not stated» (`null`), never zero.
+      ...(withAudience
+        ? {
+            holds_own_login: holdsOwnLogin,
+            min_age: minAge.trim() === '' ? null : Number(minAge),
+            max_age: maxAge.trim() === '' ? null : Number(maxAge),
+          }
+        : {}),
     });
   }
 
@@ -543,6 +613,36 @@ function TaxonomyFormDialog({
           onChange={setDescription}
           rows={2}
           hint={t('admin.taxonomy.descriptionHint')}
+        />
+      ) : null}
+      {withAudience ? (
+        <CheckboxField
+          label={t('admin.taxonomy.holdsOwnLoginLabel')}
+          checked={holdsOwnLogin}
+          onChange={setHoldsOwnLogin}
+          hint={t('admin.taxonomy.holdsOwnLoginHint')}
+        />
+      ) : null}
+      {withAudience ? (
+        <NumberField
+          label={t('admin.taxonomy.minAgeLabel')}
+          value={minAge}
+          onChange={setMinAge}
+          min={0}
+          max={120}
+          step={1}
+          hint={t('admin.taxonomy.ageHint')}
+        />
+      ) : null}
+      {withAudience ? (
+        <NumberField
+          label={t('admin.taxonomy.maxAgeLabel')}
+          value={maxAge}
+          onChange={setMaxAge}
+          min={0}
+          max={120}
+          step={1}
+          error={touched ? ageError : null}
         />
       ) : null}
       {withQuranFlag ? (

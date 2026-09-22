@@ -158,11 +158,66 @@ describe("Categories (§5.6 الفئات والمواد)", () => {
     expect(Object.keys(row).sort()).toEqual([
       "description",
       "display_order",
+      // R170 §6 — who holds the login, and the informational age range.
+      "holds_own_login",
       "id",
       "level_count",
+      "max_age",
+      "min_age",
       "name",
       "version",
     ]);
+    // A Category nobody has answered the question for: NOT STATED, never `false`.
+    expect(row["holds_own_login"]).toBeNull();
+  });
+
+  it("R170 §6 — records who holds the login and the age range, and clears them again", async () => {
+    const before = (
+      (await call("GET", "/admin/categories", superAdmin)).body.data as unknown as Record<string, unknown>[]
+    ).find((r) => r["id"] === categoryId)!;
+    const saved = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
+      version: before["version"],
+      holds_own_login: false,
+      min_age: 6,
+      max_age: 12,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data).toMatchObject({ holds_own_login: false, min_age: 6, max_age: 12 });
+
+    // One end only is checked against the STORED other end.
+    const inverted = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
+      version: (saved.body.data as unknown as Record<string, unknown>)["version"],
+      min_age: 13,
+    });
+    expect(inverted.status).toBe(400);
+    expect(inverted.body.error?.details).toMatchObject({ reason: "AGE_RANGE_INVERTED" });
+
+    // Not a number of years: refused at the boundary.
+    for (const bad of [{ min_age: -1 }, { max_age: 121 }, { min_age: 6.5 }, { holds_own_login: "yes" }]) {
+      const res = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
+        version: (saved.body.data as unknown as Record<string, unknown>)["version"],
+        ...bad,
+      });
+      expect(res.status).toBe(400);
+    }
+
+    // `null` is an answer too: «not stated», which restricts nothing.
+    const cleared = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
+      version: (saved.body.data as unknown as Record<string, unknown>)["version"],
+      holds_own_login: null,
+      min_age: null,
+      max_age: null,
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data).toMatchObject({ holds_own_login: null, min_age: null, max_age: null });
+  });
+
+  it("R170 §6 — the public bootstrap carries the marker and the range, so the forms can offer the right Categories", async () => {
+    const res = await call("GET", "/calendar/bootstrap?from=2026-09-01&to=2026-09-30");
+    expect(res.status).toBe(200);
+    const categories = (res.body.data as unknown as { categories: Record<string, unknown>[] }).categories;
+    const row = categories.find((c) => c["id"] === categoryId)!;
+    expect(Object.keys(row).sort()).toEqual(["display_order", "holds_own_login", "id", "max_age", "min_age", "name"]);
   });
 
   it("refuses a stale version with 409 VERSION_CONFLICT rather than overwriting", async () => {

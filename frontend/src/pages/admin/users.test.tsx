@@ -35,6 +35,7 @@ const WIRE: UserSummary = {
   // legitimately carries, so the contract fixture states one.
   birth_date: null,
   last_name_french: null,
+  reference_code: null,
   nickname: null,
   phone: null,
   email: 'fatima@example.com',
@@ -98,6 +99,8 @@ describe('the adapter type matches the wire contract', () => {
       'name_arabic',
       'nickname',
       'phone',
+      // R170 §7 — the spoken reference code; every beneficiary has one.
+      'reference_code',
       'roles',
       'sex',
       'version',

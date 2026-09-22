@@ -3,6 +3,7 @@ import { ConsentMethod, ConsentType, RefreshRevokedReason } from '../generated/p
 import { knownBirthDate } from '../lib/birth-date.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
+import { assertCategoryFitsApplicant } from '../policies/category-login.policy.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
@@ -58,6 +59,12 @@ export interface RoleDecision {
   approve: boolean;
   /** Mandatory on a decline (§5.6); operator-facing, never shown raw. */
   reason?: string;
+  /**
+   * R170 §11 — tell her this reason. **The approver's choice, each time, and
+   * never the default**: what is shared is written to its own column, so what
+   * she reads is exactly what was chosen to be said.
+   */
+  shareReason?: boolean;
   /** `teaching` / `administration`: the role granted and its one branch scope
    *  (`null` — every branch). */
   grant?: { role: string; branchId: string | null };
@@ -181,7 +188,12 @@ export async function decideRoleRequest(
         status: decision.approve ? 'approved' : 'declined',
         decidedAt,
         decidedById: actor.userId,
-        ...(decision.approve ? {} : { declineReason: decision.reason!.trim().slice(0, 500) }),
+        ...(decision.approve
+          ? {}
+          : {
+              declineReason: decision.reason!.trim().slice(0, 500),
+              sharedDeclineReason: decision.shareReason ? decision.reason!.trim().slice(0, 500) : null,
+            }),
       },
     });
 
@@ -226,6 +238,8 @@ export async function decideRoleRequest(
         ...(enrolled ? { enrolled } : {}),
         ...(childrenRejected > 0 ? { child_applications_rejected: childrenRejected } : {}),
         ...(decision.approve ? {} : { reason: decision.reason!.trim().slice(0, 500) }),
+        // R170 §11 — whether the applicant was told it: a fact about the act.
+        ...(decision.approve ? {} : { reason_shared: decision.shareReason === true }),
       },
     });
 
@@ -252,7 +266,13 @@ const HELD_BY: Record<RoleRequestKindInput, readonly string[]> = {
 };
 
 export interface MyRoleRequests {
-  requests: { kind: RoleRequestKindInput; status: string; decided_at: Date | null }[];
+  requests: {
+    kind: RoleRequestKindInput;
+    status: string;
+    decided_at: Date | null;
+    /** R170 §11 — the reason the approver chose to tell her; `null` otherwise. */
+    shared_reason: string | null;
+  }[];
   /** The kinds she may ask for NOW: not held, and not already waiting. */
   askable: RoleRequestKindInput[];
   /** The kinds she HOLDS, from her live role rows — so the screen can say why
@@ -265,15 +285,16 @@ export interface MyRoleRequests {
  * what she may still ask for. `guardian` is never «askable» here: registering a
  * child IS that request (`POST /child-applications`).
  *
- * The decline reason is NOT returned. It is operator-facing (§5.6, TD-3.8's
- * discipline); she is told THAT it was declined, by the notification and here.
+ * The operator's decline reason is NOT returned (§5.6, TD-3.8's discipline);
+ * she is told THAT it was declined — and, since R170 §11, the reason the
+ * approver CHOSE to share, when one was.
  */
 export async function myRoleRequests(prisma: PrismaClient, caller: Actor): Promise<MyRoleRequests> {
   const [rows, held] = await Promise.all([
     prisma.roleRequest.findMany({
       where: { userId: caller.userId },
       orderBy: { createdAt: 'asc' },
-      select: { kind: true, status: true, decidedAt: true },
+      select: { kind: true, status: true, decidedAt: true, sharedDeclineReason: true },
     }),
     heldRoles(prisma, caller.userId),
   ]);
@@ -282,7 +303,12 @@ export async function myRoleRequests(prisma: PrismaClient, caller: Actor): Promi
     (kind) => !waiting.has(kind) && !HELD_BY[kind].some((role) => held.has(role)),
   );
   return {
-    requests: rows.map((row) => ({ kind: row.kind, status: row.status, decided_at: row.decidedAt })),
+    requests: rows.map((row) => ({
+      kind: row.kind,
+      status: row.status,
+      decided_at: row.decidedAt,
+      shared_reason: row.status === 'declined' ? row.sharedDeclineReason : null,
+    })),
     askable: [...askable],
     held: (['student', 'guardian', 'teaching', 'administration'] as const).filter((kind) =>
       HELD_BY[kind].some((role) => held.has(role)),
@@ -368,6 +394,8 @@ export async function requestFurtherRole(
       ]);
       if (!branch) throw new AppError('VALIDATION_FAILED', 'branch_id does not name a live branch (§4.1)');
       if (!category) throw new AppError('VALIDATION_FAILED', 'category_id does not name a live category (§4.1)');
+      // R170 §6 — she asks for HERSELF.
+      await assertCategoryFitsApplicant(tx, input.student.category_id, 'self');
 
       // R130 — a beneficiary carries a date of birth. COMPLETION, never
       // correction: a recorded date is not hers to replace from a form.
@@ -452,7 +480,14 @@ export async function requestFurtherRole(
     if (existing) {
       await tx.roleRequest.update({
         where: { id: existing.id },
-        data: { status: 'pending', decidedAt: null, decidedById: null, declineReason: null, firstTime },
+        data: {
+          status: 'pending',
+          decidedAt: null,
+          decidedById: null,
+          declineReason: null,
+          sharedDeclineReason: null,
+          firstTime,
+        },
       });
     } else {
       await tx.roleRequest.create({ data: { userId: me.id, kind: input.kind, firstTime } });
