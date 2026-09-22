@@ -11540,3 +11540,10 @@ portal menus — merged into اختباراتي (R153), moved to the header (R14
 **Verification.** Frontend 1,490/1,490; backend typecheck/lint/unit; Trash + schedule integration
 124/124 on a disposable stack; browser: platform-owner-framing 23/23, error-experience 7/7, portals
 25/25 (after the repair).
+
+**Hosted CI 8/8 on `142631c` (part four), first run. Deployed to `staging.bodouralamal.com` at
+`142631c17fca7ff3130534826033ffbd6091aebe`, upgrading from `5a5d036`. No Production action.**
+Recordings asked first; dump taken; two older release images removed (23 GiB free); preflight PASS;
+labels exact; no pending migration; both seeds clean; TLS active; `/healthz` 200, `/rtc/validate`
+401; zero error-level lines.
+

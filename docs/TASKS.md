@@ -5696,3 +5696,8 @@ The Owner's six replies to Revision 167's report. One migration so far
 - [x] `verify-portals` was stale (expected «نقاطي»/«حسابي»/«نقاط الامتحانات»
       in portal menus — merged, moved and renamed by R153/R146/R165) →
       expectations updated, 25/25.
+- [x] **Hosted CI 8/8 on `142631c` (part four), first run; deployed to Staging
+      at `142631c`** from `5a5d036` — recordings asked first; dump taken; no
+      pending migration; `seed:fixtures` ran clean this time; `/healthz` 200;
+      zero error lines.
+
