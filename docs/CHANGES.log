@@ -11493,3 +11493,24 @@ none forced, no pending consent obligation): `verify-content-visibility` 24/24,
 `verify-library-recorder` 16/16, `verify-consent-disclosure` 19/19, `verify-platform-owner-framing`
 23/23 + 8/8, `verify-livekit-ingest` 28/28, `verify-recorder` 22/22, `verify-occurrence-details`
 13/13 (after its repair).
+
+## 2026-09-22 — Staging deployment of part three: one failed step, the API down for minutes, and the drill that now catches it
+
+**Hosted CI 8/8 on `5a5d036` (part three), first run. Deployed to `staging.bodouralamal.com`
+at `5a5d0368992596bb6675fc2fbfa7f43f0c5e0238`, upgrading from `8b775f9`. No Production action.**
+Recordings asked first (`{"active":0}`); dump taken; two older release images removed (running +
+predecessor kept), 23 GiB free; preflight PASS; both labels exact; migration `20260925100000`
+applied (6 forced rows → 6 warned, none forced, no pending consent obligation); TLS active;
+`/healthz` 200, `/rtc/validate` 401; zero error-level lines.
+
+**The defect, mine.** The pipeline stopped at `seed:fixtures` — `Unique constraint failed on
+(storage_key)` — with the API container already stopped, and Staging stayed down until I brought
+the stack up by hand (a few minutes; nothing lost, the dump untouched). Cause: I had renamed the
+fixture recording's title in part three, and the title is that seed's idempotency key on an
+existing database — the second run found no row by the new title and tried to create one on the
+same storage key. The rename was cosmetic; the old title is restored. **Why nothing caught it:**
+the seed drill ran `seed:fixtures` once, on an empty database — never the deployment's own path.
+It now runs it twice on one database and asserts the second run added nothing (exit 0, 4 fixture
+content rows both times). Two lessons kept in memory: a rename in a seed is a data change; a
+deployment step that stops the API must be rehearsed exactly as it runs.
+

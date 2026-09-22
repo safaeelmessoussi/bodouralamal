@@ -113,6 +113,31 @@ if [[ "$kinds" != "4" ]]; then
 fi
 echo "OK: scheduling-type catalogue complete — six canonical rows, four structural kinds."
 
+# **The fixtures seed, run TWICE on one database — the deployment's own path.**
+#
+# Staging runs `seed:fixtures` on every upgrade against the rows the last
+# upgrade left. Its idempotency key is each fixture's TITLE, so renaming one
+# (2026-09-22, R170 part three) made the second run try to create a second row
+# on the same unique `storage_key` — and the upgrade stopped with the API down
+# until the stack was brought up by hand. The drill only ever ran the seed
+# once, on an empty database, so it could not see that. Now it runs it again
+# and asserts nothing was added.
+(
+  cd "$repo_root/backend"
+  npx tsx prisma/seed/fixtures.ts
+)
+fixture_rows_first="$(psql_seed "SELECT count(*) FROM educational_content WHERE title LIKE '[تجريبي]%';" | tr -d '[:space:]')"
+(
+  cd "$repo_root/backend"
+  npx tsx prisma/seed/fixtures.ts
+)
+fixture_rows_second="$(psql_seed "SELECT count(*) FROM educational_content WHERE title LIKE '[تجريبي]%';" | tr -d '[:space:]')"
+if [[ "$fixture_rows_first" != "$fixture_rows_second" || -z "$fixture_rows_first" ]]; then
+  echo "FAIL: seed:fixtures is not idempotent on an existing database ($fixture_rows_first → $fixture_rows_second content rows)." >&2
+  exit 1
+fi
+echo "OK: seed:fixtures ran twice on one database and added nothing the second time ($fixture_rows_first fixture content rows)."
+
 owner_profile="$(psql_seed "
   SELECT count(*)
     FROM platform_owner po

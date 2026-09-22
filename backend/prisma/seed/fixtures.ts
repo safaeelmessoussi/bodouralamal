@@ -625,7 +625,9 @@ async function main(): Promise<void> {
     { title: 'ملف عام', visibility: Visibility.public, forced: false },
     { title: 'ملف خاص', visibility: Visibility.private, forced: false },
     { title: 'ملف مخفي', visibility: Visibility.hidden, forced: false },
-    { title: 'تسجيل بلا موافقة نشر', visibility: Visibility.private, forced: true },
+    // The title is the idempotency key of this seed on an existing database; it
+    // keeps its R59-era wording so a deployed Staging finds its own row.
+    { title: 'تسجيل محمي بالموافقة', visibility: Visibility.private, forced: true },
   ];
   for (const [index, spec] of contentSpecs.entries()) {
     const title = `${FIXTURE_TAG} ${spec.title}`;

@@ -5658,9 +5658,21 @@ The Owner's six replies to Revision 167's report. One migration so far
       Arabic notice for `/privacy` reflecting R170 (§3 warning, §7 code, §11
       shared reason, §10 ninety days, §12 nothing sensitive for minors).
       Nothing filed, nothing activated — hers to recheck.
-- [ ] §15 — run the performance measurement (TD-11a).
+- [ ] §15 — run the performance measurement (TD-11a). **NOT started, and
+      what it needs is named:** a ceiling-scale fixture that does not exist yet
+      (§2.4: 5,000 users, 200k Quran logs, 100k grades, 10k content, ~5M audit
+      rows — bulk-inserted on a DISPOSABLE stack, never Localhost's own data),
+      and a runner that hits the three p95 endpoints (a dashboard/list read, a
+      Quran log write with its synchronous merge, a download-URL mint) N times
+      and prints p50/p95 with the sample size. Then the same runner against
+      Staging's real host. A number without the fixture would not be the
+      number TD-11a asks for.
 - [ ] §16 — start the §18 acceptance checklists and journeys J1–J8 on Staging;
       prepare for Production whatever needs neither its server nor a payment.
+      **NOT started.** Staging runs every R170 part as of this box; the
+      journeys need the Owner's own sign-in (Google) for the steps a minted
+      session cannot stand in for, so the next session begins by running the
+      §18 list against Staging and recording each row's evidence here.
 - [ ] **Still the Owner's, one sentence each:** the login audit — keep the
       e-mail, or the user id only? (her answer named both); exact storage keys
       vs a non-reversible id in the audit; free text vs fixed codes in the
@@ -5671,3 +5683,10 @@ The Owner's six replies to Revision 167's report. One migration so far
       allow-list did not know them → 400 → blank table on the first header
       click, since `bab75ed` (2026-08-28). The two names are on the allow-list
       now (TD-6a shadow columns, absent last), pinned by a test.
+- [x] **Hosted CI 8/8 on `4ddea8d` (part one), `8b775f9` (part two) and `5a5d036`
+      (part three), each first run; each deployed to Staging in turn** (running
+      `5a5d036`). Part three's deployment STOPPED at `seed:fixtures` with the
+      API down for minutes — a fixture title I had renamed is the seed's
+      idempotency key on an existing database; title restored, and the drill
+      now runs the fixtures seed twice on one database (`verify-production-seed.sh`).
+
