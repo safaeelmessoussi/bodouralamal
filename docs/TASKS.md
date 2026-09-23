@@ -5829,3 +5829,7 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
       drill; the Staging pipeline no longer seeds fixtures); §11 «حذف نهائي
       للحساب» closes its dialog; the content scope asks the Category first and
       always offers «كل مستويات الفئة» (the choice was being dropped by rule 2).
+- [x] **Staging fixtures withdrawn (2026-09-23):** `ops:remove-fixtures` at
+      `e6601e5` — 98 tombstones purged, zero live `[تجريبي]` rows; 8 tombstones
+      (4 classes + 4 groups) wait on the Owner's deleted test exams' seven days
+      and clear with the sweep. The Staging pipeline no longer seeds fixtures.
