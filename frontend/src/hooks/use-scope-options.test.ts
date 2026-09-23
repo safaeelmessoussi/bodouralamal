@@ -159,3 +159,39 @@ describe('the Subject filter does not require a Level', () => {
     expect(code(HOOK)).toContain('unscopedSubjectsRef');
   });
 });
+
+/**
+ * **SRS Revision 172 §1 — a Subject taught to a WHOLE Category, and a FORM's
+ * Subject with no Level in play.**
+ */
+describe('R172 §1 — whole-Category Subjects, and the Level-free Subject', () => {
+  it('«كل مستويات الفئة» travels in the Level slot as `category:<id>`, and only there', async () => {
+    const { wholeCategoryValue, wholeCategoryOf, defaultVisibilityForLevel } = await import(
+      './use-scope-options.js'
+    );
+    expect(wholeCategoryOf(wholeCategoryValue('c1'))).toBe('c1');
+    expect(wholeCategoryOf('a-real-level-id')).toBeNull();
+    // A whole Category defaults as any of its Levels does (§15.1).
+    const levels = [
+      { id: 'l1', category_id: 'c1', default_visibility: 'private' },
+      { id: 'l2', category_id: 'c2', default_visibility: 'public' },
+    ] as never;
+    expect(defaultVisibilityForLevel(levels, wholeCategoryValue('c1'))).toBe('private');
+    expect(defaultVisibilityForLevel(levels, wholeCategoryValue('c9'))).toBeNull();
+  });
+
+  it('the Subject choices follow the Category when the whole Category is chosen', () => {
+    const source = code(HOOK);
+    expect(source).toContain('const wholeOf = wholeCategoryOf(value.levelId);');
+    expect(source).toContain('categorySubjects.get(wholeOf)');
+    // …and the Level control is offered one whole-Category choice per Category
+    // some Subject is taught WHOLE, never for an empty one.
+    expect(source).toContain('.filter((c) => (categorySubjects.get(c.id) ?? []).length > 0)');
+  });
+
+  it('a FORM Subject the hook declares independent of the Level is not gated on one (the Owner met «اختاري المستوى أولًا» on a «الكل» class)', () => {
+    const source = code(SELECTORS);
+    expect(source).toContain("mode === 'filter' || (field === 'subjectId' && scope.subjectsIndependentOfLevel)");
+    expect(code(HOOK)).toContain('subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,');
+  });
+});

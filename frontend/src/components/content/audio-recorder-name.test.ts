@@ -31,7 +31,21 @@ describe('the recorder refuses an empty or over-long name before uploading', () 
   });
 
   it('marks the field required, with its own hint, when nothing is suggested', () => {
-    expect(source).toContain("required={suggestedName.trim() === ''}");
+    // R172 §4 — the suggestion is the session's (carried across pages), with
+    // the screen's own as the fallback.
+    expect(source).toContain("required={effectiveSuggested.trim() === ''}");
     expect(source).toContain("'recorder.nameHintNoSuggestion'");
+  });
+
+  it('R172 §4 — leaving the screen never stops the recording: the view unmounts, the session does not', () => {
+    // No microphone release and no stop on unmount: the component owns no
+    // MediaRecorder at all.
+    expect(source).not.toContain('new MediaRecorder(');
+    expect(source).not.toContain('getUserMedia(');
+    expect(source).not.toContain('releaseMicrophone');
+    // A failed save keeps the audio (in the session, and in the browser's storage).
+    expect(source).toContain('session.saveFailed()');
+    // A saved (or discarded) recording clears both.
+    expect(source).toContain('await session.clear();');
   });
 });

@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
-import { localDateIso, nextRecordingName } from '../lib/recording-name.js';
+import { nextRecordingName, sessionRecordingBaseName } from '../lib/recording-name.js';
+import { publicDisplayName } from '../lib/display-name.js';
 import * as scope from '../policies/branch-scope.js';
 
 /**
@@ -476,50 +477,61 @@ export async function listLibrary(
 
   return {
     ...page(rows, window, Number(counted[0]?.total ?? 0)),
-    suggestedRecordingName: await suggestLibraryRecordingName(prisma, filters, rows),
+    suggestedRecordingName: await suggestLibraryRecordingName(prisma, actor, filters, rows),
   };
 }
 
 /**
  * **What to call a recording made from the library screen** (R75.6, server-owned
- * since R99).
+ * since R99; **R172 §3 — the same composition as a class recording**).
  *
- * There is no occurrence here, so R75.6's *title · description · date* does not
- * apply — that rule is about a class, and this screen has none. What it does
- * have is the scope the recording lands in, so the **Subject in view and the
- * association's own date** are the two facts that identify it a year later.
+ * The Owner asked (2026-09-23) that a library audio be named automatically
+ * «following the same logic as a session recording». So this is
+ * `sessionRecordingBaseName` with the parts this screen has: the TYPE is
+ * «تسجيل صوتي» (there is no catalogue type here), the Subject is the one in
+ * view when there is one, no Surah, the LEAD is the person recording — her
+ * public display name, the server's to compose (§20 rule 12) — and the date
+ * and time are the association's clock now. A recording made with no Subject
+ * in view therefore still gets a name (before this it got `null`, and the
+ * Owner's phone asked her to type one after fifteen seconds of upload).
  *
- * **The suffix rule is the shared one**, from `lib/recording-name.ts`, and that
- * is the whole reason this lives on the server at all: it was a second copy of
- * the numbering algorithm in the browser, and a rule with two implementations is
- * a rule that will drift the first time either side changes.
- *
- * `null` when no Subject is in view — a name of nothing but a date identifies
- * nothing, and the field is editable anyway.
+ * **The suffix rule is the shared one**, from `lib/recording-name.ts`, numbered
+ * against what this page shows — the library namespace is a shelf a person is
+ * looking at, not a Session's link set.
  */
+const LIBRARY_RECORDING_TYPE = 'تسجيل صوتي';
+
 async function suggestLibraryRecordingName(
   prisma: PrismaClient,
+  actor: LibraryActor | null,
   filters: LibraryFilters,
   rows: readonly LibraryItem[],
 ): Promise<string | null> {
-  if (!filters.subjectId) return null;
-  // Usually free — the page's own rows already carry the name. The lookup is
-  // for the case that matters most: an empty shelf, where the first recording
-  // is the one about to be made.
-  const subjectName =
-    rows.find((r) => r.subjectId === filters.subjectId)?.subjectName ??
-    (
-      await prisma.subject.findFirst({
-        where: { id: filters.subjectId, deletedAt: null },
-        select: { name: true },
-      })
-    )?.name;
-  if (!subjectName) return null;
-
-  const base = [subjectName, localDateIso()].join(' — ');
-  // Numbered against what this page shows, which is what the browser numbered
-  // against before the rule moved: the library namespace is a shelf a person is
-  // looking at, not a Session's link set.
+  // Only staff record (the recorder is theirs): no name for an anonymous
+  // reader, a Pending account or a beneficiary — their page stays exactly the
+  // public tier's (TD-3.13, `pending-denial`).
+  if (actor === null || actor.accountStatus !== 'active' || !isStaff(actor)) return null;
+  const subjectName = filters.subjectId
+    ? (rows.find((r) => r.subjectId === filters.subjectId)?.subjectName ??
+      (
+        await prisma.subject.findFirst({
+          where: { id: filters.subjectId, deletedAt: null },
+          select: { name: true },
+        })
+      )?.name ??
+      '')
+    : '';
+  const recorder = await prisma.user.findUnique({
+    where: { id: actor.userId },
+    select: { publicDisplayName: true, nameArabic: true },
+  });
+  const base = sessionRecordingBaseName({
+    typeName: LIBRARY_RECORDING_TYPE,
+    subjectName,
+    surahNames: [],
+    teacherName: recorder ? publicDisplayName(recorder) : null,
+    at: new Date(),
+  });
   return nextRecordingName(base, rows.map((r) => r.title));
 }
 

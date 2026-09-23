@@ -324,6 +324,35 @@ export async function unassignSubject(
 }
 
 /**
+ * **`CategorySubject` — a Subject taught to a WHOLE Category** (SRS Revision
+ * 172 §1): every Level of the Category, present and future. The same three
+ * calls as `LevelSubject`, one hop up.
+ */
+export async function listCategorySubjects(
+  categoryId: string,
+  token: string | null,
+): Promise<SubjectRef[]> {
+  const body = await api<{ data: SubjectRef[] }>(`/admin/categories/${categoryId}/subjects`, { token });
+  return body.data;
+}
+
+export async function assignCategorySubject(
+  categoryId: string,
+  subjectId: string,
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/admin/categories/${categoryId}/subjects/${subjectId}`, { method: 'PUT', token });
+}
+
+export async function unassignCategorySubject(
+  categoryId: string,
+  subjectId: string,
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/admin/categories/${categoryId}/subjects/${subjectId}`, { method: 'DELETE', token });
+}
+
+/**
  * `LevelSurah` — the **Quran-side curriculum join** (§4.5, §7, BR-11; M4c).
  *
  * R43 keeps it that way while the Quran is a Subject *for scheduling only*, so

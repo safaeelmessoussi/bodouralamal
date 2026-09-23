@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { subjectsTaughtAt } from './curriculum.js';
 
 /**
  * **Level completion — BR-11, with its second clause finally defined** (Document
@@ -81,15 +82,19 @@ export async function levelsRequiringSurahExams(
   levelIds: readonly string[],
 ): Promise<Set<string>> {
   if (levelIds.length === 0) return new Set();
-  const rows = await prisma.levelSubject.findMany({
-    where: {
-      deletedAt: null,
-      levelId: { in: [...levelIds] },
-      subject: { deletedAt: null, requiresSurahs: true, tracksQuranProgress: false },
-    },
-    select: { levelId: true },
+  // R172 §1 — through the curriculum policy: a by-Surah Subject taught to the
+  // whole Category counts at every one of its Levels.
+  const taught = await subjectsTaughtAt(prisma, levelIds);
+  const subjectIds = [...new Set([...taught.values()].flatMap((set) => [...set]))];
+  if (subjectIds.length === 0) return new Set();
+  const examined = await prisma.subject.findMany({
+    where: { id: { in: subjectIds }, deletedAt: null, requiresSurahs: true, tracksQuranProgress: false },
+    select: { id: true },
   });
-  return new Set(rows.map((row) => row.levelId));
+  const examinedIds = new Set(examined.map((row) => row.id));
+  return new Set(
+    [...taught].filter(([, set]) => [...set].some((id) => examinedIds.has(id))).map(([levelId]) => levelId),
+  );
 }
 
 /**

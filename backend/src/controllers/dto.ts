@@ -2005,7 +2005,10 @@ export function scheduleSessionDto(row: {
 /* ── `/me/scope-options` — the caller's own filter vocabulary (NEW D) ────── */
 
 export interface ScopeOptionsDto {
-  categories: { id: string; name: string }[];
+  /** `subject_ids` — R172 §1: the Subjects taught to EVERY Level of the
+   *  Category (present and future); each Level's own `subject_ids` already
+   *  includes them, so a form narrowing by Level learns no second rule. */
+  categories: { id: string; name: string; subject_ids: string[] }[];
   levels: {
     id: string;
     name: string;
@@ -2042,7 +2045,7 @@ export interface ScopeOptionsDto {
 }
 
 export function scopeOptionsDto(row: {
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; subjectIds: string[] }[];
   levels: {
     id: string;
     name: string;
@@ -2059,7 +2062,7 @@ export function scopeOptionsDto(row: {
   branches: { id: string; name: string }[];
 }): ScopeOptionsDto {
   return {
-    categories: row.categories,
+    categories: row.categories.map((c) => ({ id: c.id, name: c.name, subject_ids: c.subjectIds })),
     levels: row.levels.map((l) => ({
       id: l.id,
       name: l.name,

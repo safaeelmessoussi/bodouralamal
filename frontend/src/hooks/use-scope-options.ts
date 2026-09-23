@@ -7,6 +7,7 @@ import type { Category, Level } from '../adapters/taxonomy.js';
 import { fetchCourseScheduleOptions, fetchScopeOptions } from '../adapters/scope-options.js';
 import type { SubjectRef } from '../adapters/reference-data.js';
 import { levelLabel } from '../components/scope/level-select.js';
+import { t } from '../i18n/index.js';
 
 /**
  * **The curriculum's dependency graph, in one place.**
@@ -99,6 +100,11 @@ export interface ScopeOptions {
   /** The chosen Level teaches no Subjects. A real curriculum state, and the one
    *  a screen must explain rather than present as an empty dropdown. */
   levelTeachesNothing: boolean;
+  /** R172 §1 — `category:<id>` choices for the Level control, one per Category
+   *  some Subject is taught WHOLE; empty where none is. */
+  wholeCategoryOptions: Option[];
+  /** True while the Subject control may be used with no Level in play. */
+  subjectsIndependentOfLevel: boolean;
   /**
    * **Level id → its Category id** (SRS Revision 163 §5). `options.levelId`
    * carries labels only, and a form whose Category filter holds SEVERAL values
@@ -247,6 +253,8 @@ export function useScopeOptions({
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
+  /** R172 §1 — the Subjects taught to a WHOLE Category, by Category id. */
+  const [categorySubjects, setCategorySubjects] = useState<Map<string, string[]>>(new Map());
   const [branches, setBranches] = useState<Branch[]>([]);
   const [years, setYears] = useState<AcademicYearRef[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
@@ -349,6 +357,7 @@ export function useScopeOptions({
       setLevelSubjects(
         new Map(payload.levels.map((l) => [l.id, l.subject_ids])),
       );
+      setCategorySubjects(new Map(payload.categories.map((c) => [c.id, c.subject_ids ?? []])));
       setAllSubjects(payload.subjects.map((x) => ({ id: x.id, name: x.name }) as SubjectRef));
       setSurahFacts({
         subjectsBySurah: new Set(
@@ -440,9 +449,16 @@ export function useScopeOptions({
       const somewhere = new Set([...levelSubjects.values()].flat());
       return allSubjects.filter((s) => somewhere.has(s.id));
     }
+    // R172 §1 — «كل مستويات الفئة» chosen where a Level would be: the Subjects
+    // the whole Category is taught, and nothing a single Level adds.
+    const wholeOf = wholeCategoryOf(value.levelId);
+    if (wholeOf !== null) {
+      const taught = new Set(categorySubjects.get(wholeOf) ?? []);
+      return allSubjects.filter((s) => taught.has(s.id));
+    }
     const taught = new Set(levelSubjects.get(value.levelId) ?? []);
     return allSubjects.filter((s) => taught.has(s.id));
-  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects]);
+  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects, categorySubjects]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
   useEffect(() => {
@@ -596,6 +612,16 @@ export function useScopeOptions({
     levelTeachesNothing:
       wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
     levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
+    /**
+     * R172 §1 — the whole-Category choices a Level control may offer beside
+     * its Levels (only Categories some Subject is taught WHOLE), and the
+     * Subjects each carries.
+     */
+    wholeCategoryOptions: categories
+      .filter((c) => (categorySubjects.get(c.id) ?? []).length > 0)
+      .map((c) => ({ value: wholeCategoryValue(c.id), label: `${c.name} — ${t('scope.wholeCategory')}` })),
+    /** True while the Subject control may be used with no Level in play. */
+    subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,
     ...surahFacts,
     /**
      * §4.9's default content visibility for the currently chosen Level, through
@@ -620,12 +646,29 @@ export function useScopeOptions({
  * have produced `null` on every screen that needs this and left the selector
  * inert — the same defect in a new place.
  */
+/**
+ * R172 §1 — «كل مستويات الفئة» travels in the LEVEL slot of a scope value, as
+ * `category:<id>`, so every dependent control (Subject, visibility) keeps one
+ * key to read. `wholeCategoryOf` recovers the Category; a real Level id never
+ * carries the prefix.
+ */
+const WHOLE_CATEGORY_PREFIX = 'category:';
+export function wholeCategoryValue(categoryId: string): string {
+  return `${WHOLE_CATEGORY_PREFIX}${categoryId}`;
+}
+export function wholeCategoryOf(levelId: string): string | null {
+  return levelId.startsWith(WHOLE_CATEGORY_PREFIX) ? levelId.slice(WHOLE_CATEGORY_PREFIX.length) : null;
+}
+
 export function defaultVisibilityForLevel(
   levels: readonly Level[],
   levelId: string,
 ): 'public' | 'private' | 'hidden' | null {
   if (levelId === '') return null;
-  const level = levels.find((row) => row.id === levelId);
+  // A whole Category defaults as any of its Levels does (§15.1: the default
+  // is the Category's; the Level is only how it is reached).
+  const wholeOf = wholeCategoryOf(levelId);
+  const level = levels.find((row) => (wholeOf === null ? row.id === levelId : row.category_id === wholeOf));
   // Absent is not `public`. A screen that guessed the open tier while the list
   // was still arriving would preselect it, and a distracted person would ship
   // content publicly because a request was slow.

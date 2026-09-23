@@ -151,17 +151,18 @@ describe("biweekly_alternating — the case §19.2 names explicitly", () => {
       weekdays: ["tuesday", "friday"],
       anchorDate: day("2026-06-05"),
     });
+    // (R172 §2 — the Tuesday BEFORE the Friday anchor is now before the series;
+    // the parity it proves is unchanged: the anchor's week is ON, the next OFF.)
     expect(
       iso(expandSchedule(r, day("2026-06-01"), day("2026-06-21"))),
     ).toEqual([
-      "2026-06-02", // Tue — same week as the anchor, so it is ON
       "2026-06-05", // Fri — the anchor itself
       "2026-06-16", // Tue, two weeks later
       "2026-06-19", // Fri
     ]);
   });
 
-  it("an anchor mid-week behaves as its Monday", () => {
+  it("an anchor mid-week counts its parity from its Monday — but the series still STARTS at the anchor (R55)", () => {
     const monday = rule({
       recurrence: "biweekly_alternating",
       weekdays: ["tuesday"],
@@ -172,11 +173,16 @@ describe("biweekly_alternating — the case §19.2 names explicitly", () => {
       weekdays: ["tuesday"],
       anchorDate: day("2026-06-04"),
     });
-    expect(
-      iso(expandSchedule(monday, day("2026-06-01"), day("2026-06-30"))),
-    ).toEqual(
-      iso(expandSchedule(thursday, day("2026-06-01"), day("2026-06-30"))),
-    );
+    expect(iso(expandSchedule(monday, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-02",
+      "2026-06-16",
+      "2026-06-30",
+    ]);
+    // Same weeks «on» — the Tuesday BEFORE a Thursday anchor is before the series.
+    expect(iso(expandSchedule(thursday, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-16",
+      "2026-06-30",
+    ]);
   });
 
   it("produces nothing without an anchor rather than guessing a parity", () => {
@@ -190,7 +196,7 @@ describe("biweekly_alternating — the case §19.2 names explicitly", () => {
     expect(expandSchedule(r, day("2026-06-01"), day("2026-06-30"))).toEqual([]);
   });
 
-  it("works for weeks BEFORE the anchor as well as after", () => {
+  it("R172 §2 — nothing BEFORE the anchor: it starts the series, whatever the pattern", () => {
     const r = rule({
       recurrence: "biweekly_alternating",
       weekdays: ["tuesday"],
@@ -198,7 +204,20 @@ describe("biweekly_alternating — the case §19.2 names explicitly", () => {
     });
     expect(
       iso(expandSchedule(r, day("2026-06-01"), day("2026-06-30"))),
-    ).toEqual(["2026-06-02", "2026-06-16", "2026-06-30"]);
+    ).toEqual(["2026-06-16", "2026-06-30"]);
+    // …and for daily and weekly too, which used to ignore it entirely.
+    const daily = rule({ recurrence: "daily", weekdays: [], anchorDate: day("2026-06-10"), effectiveUntil: day("2026-06-12") });
+    expect(iso(expandSchedule(daily, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-10",
+      "2026-06-11",
+      "2026-06-12",
+    ]);
+    const weekly = rule({ recurrence: "weekly", weekdays: ["tuesday"], anchorDate: day("2026-06-10") });
+    expect(iso(expandSchedule(weekly, day("2026-06-01"), day("2026-06-30")))).toEqual([
+      "2026-06-16",
+      "2026-06-23",
+      "2026-06-30",
+    ]);
   });
 });
 

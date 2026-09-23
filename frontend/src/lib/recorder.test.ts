@@ -104,11 +104,21 @@ describe('R75 — the copy keeps the phone-upload path visible', () => {
       'recorder.discard',
       'recorder.name',
       'recorder.nameHint',
-      'recorder.keepAwake',
+      // R172 §4 — what the recorder now promises and warns about.
+      'recorder.keepsGoing',
+      'recorder.captureGap',
       'recorder.wasBackgrounded',
+      'recorder.restored',
+      'recorder.restoredCutOff',
+      'recorder.elsewhere',
+      'recorder.returnTo',
+      'recorder.returnToSave',
+      'recorder.barLabel',
+      'recorder.barWhere',
       'recorder.state.idle',
       'recorder.state.recording',
       'recorder.state.paused',
+      'recorder.state.stopped',
       'recorder.state.saving',
     ]) {
       expect(t(key), key).not.toEqual(key);

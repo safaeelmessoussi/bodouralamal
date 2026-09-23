@@ -672,6 +672,17 @@ export function createApp(
   guarded.delete('/admin/levels/:levelId/surahs/:surahId', referenceData.unassignSurah(prisma));
   guarded.get('/admin/levels/:levelId/completion', quran.completion(prisma));
 
+  // R172 §1 — a Subject taught to a WHOLE Category.
+  guarded.get('/admin/categories/:categoryId/subjects', referenceData.categorySubjects(prisma));
+  guarded.put(
+    '/admin/categories/:categoryId/subjects/:subjectId',
+    referenceData.assignCategorySubject(prisma),
+  );
+  guarded.delete(
+    '/admin/categories/:categoryId/subjects/:subjectId',
+    referenceData.unassignCategorySubject(prisma),
+  );
+
   guarded.get('/admin/levels/:levelId/subjects', referenceData.levelSubjects(prisma));
   guarded.put('/admin/levels/:levelId/subjects/:subjectId', referenceData.assignSubject(prisma));
   guarded.delete(

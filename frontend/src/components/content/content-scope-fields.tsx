@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
-import { useScopeOptions, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
+import { useScopeOptions, wholeCategoryOf, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
 import { SelectField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
@@ -96,9 +96,12 @@ export function useContentScope({
     setVisibility(categoryDefault);
   }, [locked, levelId, categoryDefault, initialisedFor]);
 
+  // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
+  // whole Category, with no Level chosen: `category_id` travels instead.
+  const wholeOf = wholeCategoryOf(levelId);
   const meta = useMemo<UploadMeta>(
     () => ({
-      level_id: levelId,
+      ...(wholeOf === null ? { level_id: levelId } : { category_id: wholeOf }),
       subject_id: subjectId,
       academic_year_id: academicYearId,
       branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
@@ -106,7 +109,7 @@ export function useContentScope({
         ? {}
         : { visibility: visibility as 'public' | 'private' | 'hidden' }),
     }),
-    [levelId, subjectId, academicYearId, branchId, visibility, locked],
+    [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked],
   );
 
   const problem = scope.levelTeachesNothing
@@ -124,11 +127,13 @@ export function useContentScope({
         {...(locked ? { locked: SCOPE_FIELDS } : {})}
         // Offered only to those who may assign it (§4.9). The field stays
         // visible for everyone; only the value is withheld.
-        extraOptions={
-          mayAssignGlobal && !locked
+        extraOptions={{
+          ...(mayAssignGlobal && !locked
             ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] }
-            : {}
-        }
+            : {}),
+          // R172 §1 — one choice per Category some Subject is taught WHOLE.
+          ...(locked ? {} : { levelId: scope.wholeCategoryOptions }),
+        }}
       />
 
       <SelectField

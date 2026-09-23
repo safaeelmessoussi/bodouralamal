@@ -311,10 +311,19 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
       where: { subjectId: id, deletedAt: null },
       select: { id: true },
     });
+    // R172 §1 — the whole-Category link is owned the same way.
+    const ownedCategorySubjects = await tx.categorySubject.findMany({
+      where: { subjectId: id, deletedAt: null },
+      select: { id: true },
+    });
     const now = new Date();
     // The owned link follows the Subject. One timestamp is shared with the
     // parent so the deletion remains one identifiable lifecycle act.
     await tx.levelSubject.updateMany({
+      where: { subjectId: id, deletedAt: null },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await tx.categorySubject.updateMany({
       where: { subjectId: id, deletedAt: null },
       data: { deletedAt: now, deletedById: actor.userId },
     });
@@ -327,6 +336,7 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
         JSON.stringify({
           ...subject,
           cascaded_level_subject_ids: ownedLevelSubjects.map((link) => link.id),
+          cascaded_category_subject_ids: ownedCategorySubjects.map((link) => link.id),
         }),
       ) as object,
       deletedById: actor.userId,

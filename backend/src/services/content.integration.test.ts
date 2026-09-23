@@ -325,6 +325,8 @@ async function clear(): Promise<void> {
   });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.level.deleteMany({ where: { id: { in: levels } } });
+  // R172 §1 — a whole-Category link a test may have left behind.
+  await prisma.categorySubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
@@ -847,6 +849,33 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     });
     expect(untouched).toEqual({ levelId: third, subjectId });
     expect(await also()).toEqual([home.levelId]);
+  });
+
+  it("R172 §1 — an item may be filed for a WHOLE Category with no Level chosen: under the Category's first Level, whole_category, through a Subject the Category is taught", async () => {
+    const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
+    const fiqh = await prisma.subject.create({ data: { name: `${TAG} فقه للفئة كلها` } });
+    // Not taught to the Category yet: refused by the same curriculum rule.
+    await expect(
+      uploadPdf(admin(), "فقه بلا فئة", { levelId: undefined, categoryId: category.categoryId, subjectId: fiqh.id }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    await prisma.categorySubject.create({ data: { categoryId: category.categoryId, subjectId: fiqh.id } });
+
+    const { id } = await uploadPdf(admin(), "فقه للفئة كلها", {
+      levelId: undefined,
+      categoryId: category.categoryId,
+      subjectId: fiqh.id,
+    });
+    const first = await prisma.level.findFirstOrThrow({
+      where: { categoryId: category.categoryId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ displayOrder: { sort: "asc", nulls: "last" } }, { name: "asc" }],
+    });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { levelId: true, wholeCategory: true, subjectId: true },
+    });
+    expect(row).toEqual({ levelId: first.id, wholeCategory: true, subjectId: fiqh.id });
+    await prisma.categorySubject.deleteMany({ where: { subjectId: fiqh.id } });
   });
 
   it("changes title, Level and Subject without touching the stored object", async () => {

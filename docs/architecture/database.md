@@ -337,6 +337,22 @@ with the engine. Nothing reads the mark back into BR-11.
 * **No soft delete and no Trash entry.** Removing a mark made in error is a correction — nothing of
   hers is lost, the audit row records who — and it is refused while a certificate is showing.
 
+### `CategorySubject` — a Subject taught to a WHOLE Category, read beside `LevelSubject` (R172 §1)
+
+`LevelSubject` stays what a Level teaches on its own. `CategorySubject` (same shape: soft-deleted,
+unique per pair, RESTRICT both ways) says a Subject is taught to **every live Level of the
+Category, present and future** — الفقه to «المرأة». Nothing is copied down: the curriculum
+policy (`policies/curriculum.ts` — `subjectsTaughtAt`, `levelsTeaching`,
+`assertSubjectTaughtAtLevel`) reads both through the Level's `category_id` at the moment of the
+read, and every surface asks the policy — scheduling's «الكل» resolution (R169 §7), content
+initiation, the scope options (`levels[].subject_ids` include them; `categories[].subject_ids`
+list them), the public programme, the personal calendar's Subject filter, BR-11's «examined»
+Levels. A Subject's deletion tombstones its Category links with it
+(`cascaded_category_subject_ids`, **optional in a snapshot older than the link** — `legacyOptional`
+in the Trash plans — so a Subject deleted before R172 stays restorable). Routes:
+`GET|PUT|DELETE /admin/categories/{id}/subjects[/{subjectId}]`; the screen is «مواد المستوى»'s
+first table.
+
 ### `EducationalContent.whole_category` — a scope read through the Level, never copied (R167 §5)
 
 `level_id` stays `NOT NULL`: §4.9 groups the library by Level and every reader keeps a Level to
@@ -345,7 +361,10 @@ Category**. There is deliberately no `category_id` column beside it: the Categor
 `level_id` at the moment of the read (`tierPredicate`, the `?level_id=` filter), so a Level added
 to the Category later is included and the two can never disagree. `branch_id` keeps its meaning —
 `NULL` is every branch. A partial index (`WHERE whole_category AND deleted_at IS NULL`) serves the
-«كل مستويات الفئة» shelf.
+«كل مستويات الفئة» shelf. **R172 §1 — filed with no Level chosen:** `POST /uploads/initiate`
+takes `category_id` in place of `level_id`; the server files the item under the Category's first
+live Level (its own order — the rule the recording ingest already applies) with `whole_category`,
+decided at initiation and carried in the upload ticket like every other scope fact.
 
 ### `EducationalContentLevel` — an item's OTHER Levels; the home Level stays a column (R169 §10)
 
@@ -936,7 +955,7 @@ Cascade rules are per entity and mostly *prohibitive*:
 | Un-enrolment | Soft-deletes the enrolment row **only**. Never touches grades, submissions, or progress logs — a transferred student keeps their history |
 | Content | Soft delete moves the object to a quarantine prefix pending the 90-day window. A **purge** removes the quarantined object too — a destroyed row beside surviving bytes is an orphan, not a deletion |
 | Hijri month | **Only the last recorded month may be withdrawn** (R59.5). The months are a contiguous sequence §5.7's conversion walks, so a hole would reach a reader as *missing Ministry data* rather than as the deletion that caused it |
-| Exam | Soft delete cascades to `ExamStaff` only, which is why it is the first cascading type that **restore** reinstates (R59.3) |
+| Exam | Soft delete cascades to `ExamStaff` only, which is why it is the first cascading type that **restore** reinstates (R59.3). **R172 §6:** an exam holding a paper or a mark is refused (`STUDENT_EVIDENCE_EXISTS`, with the counts) until the administration acknowledges it (`?acknowledge_evidence=true`); the papers, answers, marks and attendance then stay attached to the tombstone — hidden, restored with it, and **destroyed with it** when the Trash lets it go (`purgeExamEvidence`, counts in the audit), the way a class's occurrences go with a class (R170 §8). The 2026-09-03 refusal-only rule is superseded |
 
 ### What gets a Trash entry, and what does not (R59.2)
 

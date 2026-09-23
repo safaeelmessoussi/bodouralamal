@@ -32,7 +32,15 @@ export const initiateUploadSchema = z
     mime: z.string().trim().min(1).max(120),
     content_meta: z
       .object({
-        level_id: uuid,
+        /**
+         * **R172 §1 — a Level, or a whole Category.** Exactly one of the two:
+         * `category_id` files the item for EVERY Level of that Category
+         * (R167 §5's `whole_category`) with no Level chosen — the server picks
+         * the Category's first Level as where it is filed, exactly as the
+         * recording ingest does for a class addressed to a whole Category.
+         */
+        level_id: uuid.optional(),
+        category_id: uuid.optional(),
         subject_id: uuid,
         academic_year_id: uuid,
         branch_id: uuid.nullable(),
@@ -56,7 +64,11 @@ export const initiateUploadSchema = z
         /** TD-9 replacement: a new key for an existing record, never an overwrite. */
         replaces_content_id: uuid.optional(),
       })
-      .strict(),
+      .strict()
+      .refine((meta) => (meta.level_id === undefined) !== (meta.category_id === undefined), {
+        message: 'name exactly one of level_id and category_id',
+        path: ['level_id'],
+      }),
   })
   .strict();
 

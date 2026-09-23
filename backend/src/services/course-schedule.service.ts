@@ -28,6 +28,7 @@ import {
 import * as scope from "../policies/branch-scope.js";
 import {
   assertSubjectTaughtAtLevel,
+  levelsTeaching,
   resolveSurahs,
   subjectRequiresSurahs,
 } from "../policies/curriculum.js";
@@ -657,17 +658,9 @@ async function resolveTarget(
             { reason: "MULTI_DIMENSION_NEEDS_A_LEVEL" },
           );
         }
-        const teaching = await tx.levelSubject.findMany({
-          where: {
-            subjectId,
-            deletedAt: null,
-            level: {
-              deletedAt: null,
-              ...(categoryIds.length > 0 ? { categoryId: { in: categoryIds } } : {}),
-            },
-          },
-          select: { levelId: true },
-        });
+        // R172 §1 — through the curriculum policy, so a Subject taught to a
+        // WHOLE Category (every Level of «المرأة») reaches every one of them.
+        const teaching = await levelsTeaching(tx, subjectId, categoryIds);
         if (teaching.length === 0) {
           throw new AppError(
             "VALIDATION_FAILED",
@@ -675,7 +668,7 @@ async function resolveTarget(
             { reason: "NO_LEVEL_TEACHES_SUBJECT" },
           );
         }
-        levelIds.push(...new Set(teaching.map((row) => row.levelId)));
+        levelIds.push(...teaching);
       }
 
       const [branches, categories, levels, groups, circles] = await Promise.all([

@@ -275,6 +275,9 @@ DELETE /admin/academic-years/{id}             # R137; TD-5 soft delete, refused 
 GET /admin/academic-periods                   # §7 R122; the enrolment form's source, carries derived is_current
 POST /admin/academic-periods                  # §7 R122; Super Admin only, audited
 PATCH /admin/academic-periods/{id}            # §7 R122; Super Admin only, TD-15, the year is not editable
+GET /admin/categories/{categoryId}/subjects   # SRS Revision 172 §1 — the Subjects taught to EVERY Level of the Category
+PUT /admin/categories/{categoryId}/subjects/{subjectId}     # R172 §1; Super Admin (R26, R43.3); idempotent
+DELETE /admin/categories/{categoryId}/subjects/{subjectId}  # R172 §1; TD-5; changes what is offered from now on, never what stands
 GET /admin/levels/{levelId}/subjects          # TD-3 extension 2026-08-05; §4.4b — which Subjects a Level teaches
 PUT /admin/levels/{levelId}/subjects/{subjectId}     # TD-3 extension; Super Admin (R26, R43.3); idempotent
 DELETE /admin/levels/{levelId}/subjects/{subjectId}  # TD-3 extension; TD-5; refused while Teaching Groups exist

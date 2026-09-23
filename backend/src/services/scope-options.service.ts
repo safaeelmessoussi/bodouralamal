@@ -70,7 +70,8 @@ function assertStaff(actor: Actor): void {
 }
 
 export interface ScopeOptions {
-  categories: { id: string; name: string }[];
+  /** `subjectIds` — R172 §1: the Subjects taught to the WHOLE Category. */
+  categories: { id: string; name: string; subjectIds: string[] }[];
   levels: {
     id: string;
     name: string;
@@ -145,7 +146,15 @@ export async function readScopeOptions(
   const [categories, levels, subjects, years, branches] = await Promise.all([
     prisma.category.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        // R172 §1 — taught to every Level of the Category.
+        subjects: {
+          where: { deletedAt: null, subject: { deletedAt: null } },
+          select: { subjectId: true },
+        },
+      },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
     prisma.level.findMany({
@@ -210,8 +219,12 @@ export async function readScopeOptions(
     settings.map((s) => [s.key.slice(DEFAULT_VISIBILITY_PREFIX.length), s.value]),
   );
 
+  // R172 §1 — a Level teaches its own Subjects AND its Category's: one answer,
+  // the curriculum policy's (`subjectsTaughtAt`), assembled here from the
+  // rows already loaded rather than re-queried.
+  const wholeCategory = new Map(categories.map((c) => [c.id, c.subjects.map((s) => s.subjectId)]));
   return {
-    categories,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, subjectIds: wholeCategory.get(c.id) ?? [] })),
     levels: levels.map((l) => ({
       id: l.id,
       name: l.name,
@@ -219,7 +232,7 @@ export async function readScopeOptions(
       categoryName: l.category.name,
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
       selfAttendanceAllowed: l.category.selfAttendanceAllowed,
-      subjectIds: l.subjects.map((s) => s.subjectId),
+      subjectIds: [...new Set([...l.subjects.map((s) => s.subjectId), ...(wholeCategory.get(l.categoryId) ?? [])])],
       surahIds: l.surahs.map((row) => row.surahId),
     })),
     subjects,
@@ -307,7 +320,15 @@ export async function readCourseScheduleOptions(
   const [categories, branches, levels, years] = await Promise.all([
     prisma.category.findMany({
       where: { deletedAt: null, id: { in: [...declaredCategoryIds] } },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        // R172 §1 — taught to every Level of the Category.
+        subjects: {
+          where: { deletedAt: null, subject: { deletedAt: null } },
+          select: { subjectId: true },
+        },
+      },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     }),
     prisma.branch.findMany({
@@ -374,11 +395,14 @@ export async function readCourseScheduleOptions(
     settings.map((s) => [s.key.slice(DEFAULT_VISIBILITY_PREFIX.length), s.value]),
   );
 
+  // R172 §1 — a Level teaches its own Subjects AND its Category's (the
+  // curriculum policy's answer, assembled from the rows already loaded).
+  const wholeCategory = new Map(categories.map((c) => [c.id, c.subjects.map((s) => s.subjectId)]));
   const narrowedLevels = levels.map((l) => {
     const categoryDeclared = declaredCategoryIds.has(l.categoryId);
-    const subjectIds = l.subjects
-      .map((s) => s.subjectId)
-      .filter((id) => categoryDeclared || declaredSubjectIds.has(id));
+    const subjectIds = [
+      ...new Set([...l.subjects.map((s) => s.subjectId), ...(wholeCategory.get(l.categoryId) ?? [])]),
+    ].filter((id) => categoryDeclared || declaredSubjectIds.has(id));
     return {
       id: l.id,
       name: l.name,
@@ -399,7 +423,7 @@ export async function readCourseScheduleOptions(
   });
 
   return {
-    categories,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, subjectIds: wholeCategory.get(c.id) ?? [] })),
     levels: narrowedLevels,
     subjects,
     surahs: await surahNames(prisma, narrowedLevels.flatMap((l) => l.surahIds)),

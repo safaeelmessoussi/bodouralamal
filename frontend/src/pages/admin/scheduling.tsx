@@ -249,6 +249,9 @@ function initialRecurrenceType(
 
 export function SchedulingPage(): ReactNode {
   const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  /** R172 §6 — the acknowledgement of an exam's evidence is the administration's. */
+  const isAdminish = activeRoles.includes('super_admin') || activeRoles.includes('admin');
   const [view, setView] = useState<View>(() =>
     new URLSearchParams(window.location.search).get('view') === 'calendar' ? 'calendar' : 'list',
   );
@@ -345,6 +348,9 @@ export function SchedulingPage(): ReactNode {
    *  open and explains why, rather than closing onto an unrelated notice — or,
    *  worse, sitting open with no explanation at all. */
   const [deleteBlocked, setDeleteBlocked] = useState<ReactNode | null>(null);
+  /** R172 §6 — the papers and marks the server said go with this exam; set,
+   *  the same dialog asks a second time with them in view. */
+  const [evidence, setEvidence] = useState<{ submissions: number; grades: number } | null>(null);
   /** The saved Event change awaiting the send-or-not decision (R82.5). */
   const [notifying, setNotifying] = useState<{
     id: string;
@@ -583,6 +589,7 @@ export function SchedulingPage(): ReactNode {
         // A stale block from a PREVIOUS item's refusal must not paint over
         // this one's fresh confirmation.
         setDeleteBlocked(null);
+        setEvidence(null);
         setDeleting(r);
       },
     },
@@ -593,8 +600,9 @@ export function SchedulingPage(): ReactNode {
     const deleted = deleting;
     setBusy(true);
     try {
-      await deleteSchedulingItem(deleted, accessToken);
+      await deleteSchedulingItem(deleted, accessToken, { acknowledgeEvidence: evidence !== null });
       setDeleting(null);
+      setEvidence(null);
       await load();
       setNotice(t('common.deleted'));
       // An Event cancellation is its soft deletion (R82). The delete is already
@@ -619,11 +627,26 @@ export function SchedulingPage(): ReactNode {
        */
       const details = error instanceof ApiError ? error.details : undefined;
       if (details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS') {
-        setDeleteBlocked(
-          t('scheduling.deleteBlockedEvidence')
-            .replace('{submissions}', String(details['submissions'] ?? 0))
-            .replace('{grades}', String(details['grades'] ?? 0)),
-        );
+        // **R172 §6 — no longer a wall, a second question** (the Owner,
+        // 2026-09-23, superseding 2026-09-03's refusal): the dialog stays
+        // open and now says what goes with the exam — N papers, M marks,
+        // restorable for seven days — and asks again. Confirming re-sends
+        // with the acknowledgement. A مؤطِّرة is refused the second time too
+        // (the acknowledgement is the administration's): for her it stays a
+        // wall, in the same words.
+        const counts = {
+          submissions: Number(details['submissions'] ?? 0),
+          grades: Number(details['grades'] ?? 0),
+        };
+        if (evidence === null && isAdminish) {
+          setEvidence(counts);
+        } else {
+          setDeleteBlocked(
+            t('scheduling.deleteBlockedEvidence')
+              .replace('{submissions}', String(counts.submissions))
+              .replace('{grades}', String(counts.grades)),
+          );
+        }
         setBusy(false);
         return;
       }
@@ -813,14 +836,22 @@ export function SchedulingPage(): ReactNode {
         open={deleting !== null}
         {...(deleteBlocked ? { blocked: deleteBlocked } : {})}
         title={t('scheduling.deleteTitle')}
-        body={t('scheduling.deleteBody').replace('{title}', deleting?.title ?? '')}
-        confirmLabel={t('common.delete')}
+        body={
+          evidence === null
+            ? t('scheduling.deleteBody').replace('{title}', deleting?.title ?? '')
+            : t('scheduling.deleteWithEvidenceBody')
+                .replace('{title}', deleting?.title ?? '')
+                .replace('{submissions}', String(evidence.submissions))
+                .replace('{grades}', String(evidence.grades))
+        }
+        confirmLabel={evidence === null ? t('common.delete') : t('scheduling.deleteWithEvidence')}
         danger
         busy={busy}
         onConfirm={() => void confirmDelete()}
         onCancel={() => {
           setDeleting(null);
           setDeleteBlocked(null);
+          setEvidence(null);
         }}
       />
     </AdminLayout>

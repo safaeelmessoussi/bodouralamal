@@ -1062,8 +1062,10 @@ export async function saveSchedulingItem(
 export async function deleteSchedulingItem(
   item: Pick<SchedulingItem, 'type' | 'id'>,
   token: string | null,
+  /** R172 §6 — an exam's papers and marks, seen and accepted (exams only). */
+  options: { acknowledgeEvidence?: boolean } = {},
 ): Promise<unknown> {
   if (item.type === 'class') return deleteCourseSchedule(item.id, token);
-  if (item.type === 'exam') return deleteExam(item.id, token);
+  if (item.type === 'exam') return deleteExam(item.id, token, options);
   return deleteEvent(item.id, token);
 }

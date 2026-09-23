@@ -11687,3 +11687,59 @@ exact; no pending migration; both seeds clean; `db`, `redis`, `livekit`, `liveki
 `/rtc/validate` 401; zero error-level lines. (The previous docs-only commit `65fefe0` had a red
 release job — GHCR answered «unknown blob» on one layer push, a transient registry error; its
 images were never needed, Staging ran `8f0feee` throughout.)
+
+## 2026-09-23 — SRS Revision 172: the Owner's fourth batch, eight items built
+
+**§1 — a Subject taught to a WHOLE Category.** New `category_subject` (mirror of `level_subject`),
+read beside it by one policy (`policies/curriculum.ts`: `subjectsTaughtAt`, `levelsTeaching`,
+`assertSubjectTaughtAtLevel`) that every surface now asks: R169 §7's «الكل» resolution
+(`course-schedule.service`), content initiation, scope options (both variants; DTO gains
+`categories[].subject_ids`), the public programme, the personal calendar's Subject filter,
+BR-11's examined Levels. `deleteSubject` cascades the links (`cascaded_category_subject_ids`;
+`legacyOptional` in the Trash plans so pre-R172 Subject tombstones stay restorable). Routes
+`GET|PUT|DELETE /admin/categories/{id}/subjects[/{subjectId}]` (reference-data service/controller,
+TD-3 list, OpenAPI 191 paths / 246 ops). Content: `content_meta.category_id` XOR `level_id`
+(validator `refine`), server files under the Category's first Level with `whole_category`
+(carried in the upload ticket). Frontend: `useScopeOptions` learns `category:<id>` in the Level
+slot (`wholeCategoryValue/Of`, `wholeCategoryOptions`, `subjectsIndependentOfLevel`);
+`ScopeSelectors` no longer gates a FORM's Subject on a Level when the hook says it is independent —
+the defect behind the Owner's screenshot; `content-scope-fields` sends `category_id`;
+«مواد المستوى» gains the whole-Category table and dialog; `UploadMeta.level_id` optional.
+
+**§2 — a series entered after the fact.** `expandSchedule`: `anchor_date` bounds every pattern
+(three recurrence unit tests restated: pre-anchor dates were asserted). `materializeSchedule`:
+`from = never materialised && anchor < today ? anchor : calendarDay(today)`. Staging's
+`1c0a065f` (daily 14–18 Sep, zero sessions) is the case; the nightly pass creates its five.
+
+**§3** `suggestLibraryRecordingName` → `sessionRecordingBaseName({ typeName: 'تسجيل صوتي', subjectName?,
+teacherName: publicDisplayName(actor), at: now })`; null only for anonymous. Library HTTP test restated;
+recorder hint copy updated.
+
+**§4 — the recording outlives the screen.** `lib/recording-session.ts` (`RecordingSession` over a
+`Platform` seam: `openRecorder`, `store`, `requestWakeLock`, `now`), `lib/recording-platform.ts`
+(MediaRecorder with `timeslice` 10 s, IndexedDB `bodour-recorder`, Wake Lock, track `mute` →
+capture gap), `components/content/recording-bar.tsx` mounted in `main.tsx`; `AudioRecorder`
+rewritten as a view bound by `origin.key` (hosts: `content-recorder-form` → `library`,
+`session-materials-dialog` → `session:<id>`, linking on save from the bar). i18n: `keepsGoing`,
+`captureGap`, `restored`, `restoredCutOff`, `elsewhere`, `returnTo`, `returnToSave`, `barLabel`,
+`barWhere`, `state.stopped`; CSS `.recording-bar`. Tests: `recording-session.test.ts` 10 (a late
+wake-lock grant after stop is released — found by the test), recorder pins restated.
+
+**§5** `lib/token-refresh.ts` (moved `refreshAccessToken` + role memory, `onAccessTokenRefreshed`,
+`accessTokenObtainedAt`); `api()` retries a 401-with-bearer once after a refresh; `SessionProvider`
+timer at TTL − 5 min and on `visibilitychange`. `api.test.ts` +3.
+
+**§6/§7** `deleteExam(…, { acknowledgeEvidence })` (admin-only acknowledgement), controller query
+`acknowledge_evidence`, audit `{ submissions, grades, evidence_acknowledged }`; Trash:
+`CONDITIONAL_PURGE.Exam` removed, `purgeExamEvidence` (options → answers → papers → marks →
+attendance) before the exam's children, counts in the audit. Frontend: `deleteExam` adapter option,
+الجدولة's dialog asks a second time (`deleteWithEvidenceBody`/`deleteWithEvidence`; a مؤطِّرة keeps
+the wall), «الاختبارات» gains «حذف» with the same flow (`assessments.delete*`). OpenAPI updated.
+
+**§8** `schedule-sessions.tsx`: staff row action + `OccurrenceStaffDialog` removed (keys retired);
+`useUnsavedGuard` applied to the edit and cancellation dialogs (they were bare `Dialog`s the file-level
+scan had let through).
+
+**Docs:** SRS R172; database (CategorySubject, whole-Category filing, exam evidence), frontend
+(dependent-selector graph), identity-and-access (token renewal), background-jobs (guarantee 3),
+ux-architecture AH (the session, the bar, the storage).

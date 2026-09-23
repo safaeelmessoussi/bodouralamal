@@ -472,6 +472,131 @@ export async function unassignSubjectFromLevel(
 }
 
 /**
+ * **`CategorySubject` — a Subject taught to a WHOLE Category** (SRS Revision
+ * 172 §1; the Owner, 2026-09-23: «some subjects are taught to the category
+ * women, including all levels of it, and even any woman can join»).
+ *
+ * The same shape, authorization and file as `LevelSubject` above — Super Admin
+ * writes, Admin reads — because it is the same kind of fact one hop up: every
+ * live Level of the Category teaches the Subject, present and future. Nothing
+ * is copied down to the Levels; the curriculum policy (`subjectsTaughtAt`,
+ * `levelsTeaching`) reads both sources, so a class for «كل المستويات» of the
+ * Category, a library item filed for the whole Category, and each Level's own
+ * Subject list all answer from one place.
+ */
+export async function listCategorySubjects(
+  prisma: PrismaClient,
+  actor: Actor,
+  categoryId: string,
+): Promise<SubjectRef[]> {
+  assertCanReadReferenceData(actor);
+  const rows = await prisma.categorySubject.findMany({
+    where: { categoryId, deletedAt: null, subject: { deletedAt: null } },
+    select: {
+      subject: { select: { id: true, name: true, displayOrder: true, version: true } },
+    },
+    orderBy: { subject: { name: 'asc' } },
+  });
+  return rows.map((r) => r.subject);
+}
+
+/** Idempotent, reviving a removed row rather than duplicating it — `assignSubjectToLevel`'s rule. */
+export async function assignSubjectToCategory(
+  prisma: PrismaClient,
+  actor: Actor,
+  categoryId: string,
+  subjectId: string,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const category = await tx.category.findFirst({ where: { id: categoryId, deletedAt: null }, select: { id: true } });
+    if (!category) throw new AppError('NOT_FOUND', 'no such category');
+    const subject = await tx.subject.findFirst({ where: { id: subjectId, deletedAt: null }, select: { id: true } });
+    if (!subject) throw new AppError('NOT_FOUND', 'no such subject');
+
+    const existing = await tx.categorySubject.findFirst({
+      where: { categoryId, subjectId },
+      select: { id: true, deletedAt: true },
+    });
+    if (existing && existing.deletedAt === null) {
+      throw new AppError('DUPLICATE', 'subject is already taught to this whole category');
+    }
+    const id = existing
+      ? (
+          await tx.categorySubject.update({
+            where: { id: existing.id },
+            data: { deletedAt: null, deletedById: null },
+            select: { id: true },
+          })
+        ).id
+      : (
+          await tx.categorySubject.create({
+            data: { categoryId, subjectId, createdById: actor.userId },
+            select: { id: true },
+          })
+        ).id;
+    if (existing?.deletedAt) await trash.removeForRevivedTarget(tx, 'CategorySubject', id);
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'categorysubject.assign',
+      targetEntity: 'CategorySubject',
+      targetId: id,
+      detail: { category_id: categoryId, subject_id: subjectId },
+    });
+  });
+}
+
+/**
+ * TD-5 soft delete. Not refused for existing classes or content: those rows
+ * name explicit Levels (R169 §7 resolves «الكل» at save), so removing the
+ * whole-Category link changes what is OFFERED from now on, never what stands.
+ */
+export async function unassignSubjectFromCategory(
+  prisma: PrismaClient,
+  actor: Actor,
+  categoryId: string,
+  subjectId: string,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.categorySubject.findFirst({ where: { categoryId, subjectId, deletedAt: null } });
+    if (!row) throw new AppError('NOT_FOUND', 'subject is not taught to this whole category');
+    const now = new Date();
+    await tx.categorySubject.update({
+      where: { id: row.id },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await trash.snapshot(
+      tx,
+      {
+        targetEntity: 'CategorySubject',
+        targetId: row.id,
+        snapshot: JSON.parse(
+          JSON.stringify({
+            ...row,
+            label: `${(await tx.category.findUnique({ where: { id: categoryId }, select: { name: true } }))?.name ?? '—'} — ${(await tx.subject.findUnique({ where: { id: subjectId }, select: { name: true } }))?.name ?? '—'}`,
+          }),
+        ) as object,
+        deletedById: actor.userId,
+      },
+      now,
+    );
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'categorysubject.unassign',
+      targetEntity: 'CategorySubject',
+      targetId: row.id,
+      detail: { category_id: categoryId, subject_id: subjectId },
+    });
+  });
+}
+
+/**
  * **`LevelSurah` — which Surahs a Level's حفظ القرآن memorisation curriculum
  * covers (§4.5, §7, BR-11; M4c, R107).**
  *

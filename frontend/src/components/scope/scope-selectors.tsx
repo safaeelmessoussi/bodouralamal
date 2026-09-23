@@ -108,7 +108,17 @@ export function ScopeSelectors({
          * dependency is real — a Level genuinely needs its Category before it
          * can be created — and that is the only place it now reads.
          */
-        const ignoreDependency = mode === 'filter';
+        /**
+         * **R172 §1 (found in passing) — a FORM's Subject with no Level in play.**
+         * R169 §7 let a filter-built class name its Subject with no Level chosen
+         * («الكل» reaches every Level that teaches it), and the hook offered
+         * the Subjects accordingly — but this gate still read the Level edge
+         * and disabled the control with «اختاري المستوى أولًا», which is what
+         * the Owner met on Staging. The hook says when the Subject is
+         * independent of the Level; the gate believes it.
+         */
+        const ignoreDependency =
+          mode === 'filter' || (field === 'subjectId' && scope.subjectsIndependentOfLevel);
         const unmetDependency = ignoreDependency
           ? undefined
           : (REQUIRES[field] ?? []).find((dep) => scope.value[dep.field] === '');

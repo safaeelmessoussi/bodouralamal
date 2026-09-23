@@ -22,7 +22,8 @@ import { api } from '../lib/api.js';
  * rather than relocating it.
  */
 export interface ScopeOptionsPayload {
-  categories: { id: string; name: string }[];
+  /** `subject_ids` — R172 §1: the Subjects taught to EVERY Level of the Category. */
+  categories: { id: string; name: string; subject_ids: string[] }[];
   levels: {
     id: string;
     name: string;

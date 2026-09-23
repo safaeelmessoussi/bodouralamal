@@ -5774,3 +5774,40 @@ No migration. Detail per item: [SRS Revision 171](SRS.md).
       asked first; dump taken; no pending migration; both seeds clean; the five
       pinned services recreated on their digests and healthy; `/healthz` 200;
       zero error lines.
+
+## SRS Revision 172 — the Owner's fourth batch: whole-Category Subjects, a series entered after the fact, a recording that outlives the screen — 2026-09-23
+
+Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172_subject_taught_to_a_whole_category`).
+
+- [x] **§1 — a Subject taught to a WHOLE Category.** `CategorySubject`; the
+      curriculum policy (`subjectsTaughtAt`, `levelsTeaching`) answers from both
+      sources; scheduling «الكل» + Category reaches every Level of it; the
+      form's Subject is no longer gated on a Level for a filter-built class
+      (the Owner's screenshot); an item may be filed for the whole Category with
+      no Level (`category_id` at initiation → first Level + `whole_category`);
+      scope options carry `categories[].subject_ids`; «مواد المستوى» gains the
+      table «مواد لكل مستويات الفئة». Routes in `td3-routes.txt`/OpenAPI.
+      Tests: course-schedule HTTP (whole-Category resolution, routes, scope
+      options), content (whole-Category upload), trash (older Subject
+      snapshots stay restorable), scope hook (4 unit).
+- [x] **§2 — a series entered after the fact gets its dates.** `expandSchedule`
+      applies `anchor_date` to every pattern; a never-materialised schedule
+      starts at its own first date, in Morocco's day. Tests: recurrence unit
+      (restated), course-schedule integration (2).
+- [x] **§3 — library recording named like a class recording.** `sessionRecordingBaseName`
+      with «تسجيل صوتي», the Subject, the recorder, date and time; never `null`
+      for a signed-in caller. Test: library HTTP (restated).
+- [x] **§4 — the recording outlives the screen.** `RecordingSession` +
+      `RecordingBar`; IndexedDB chunks every 10 s; Wake Lock; restore after a
+      dead page; one recording at a time. Tests: `recording-session.test.ts`
+      (10), recorder pins restated.
+- [x] **§5 — the access token is renewed.** `lib/token-refresh.ts`; `api()`
+      retries a 401 once; the session renews before expiry and on return.
+      Tests: `api.test.ts` (3).
+- [x] **§6 — an exam with recorded work is deletable, reversibly.**
+      `acknowledge_evidence`; the Trash purge destroys the papers, marks and
+      attendance with the exam; the screen asks a second time with the counts.
+      Tests: exam-deletion (2 new, 1 restated), scheduling-delete pin.
+- [x] **§7 — «الاختبارات» deletes a paper.**
+- [x] **§8 — «مؤطّرة هذه الحصة» removed from «حصص الجدول»;** the edit and
+      cancellation dialogs now carry the shared unsaved guard themselves.

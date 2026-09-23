@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { uploadFile, type UploadMeta } from '../../adapters/uploads.js';
 import { t } from '../../i18n/index.js';
-import {
-  elapsedSeconds,
-  extensionFor,
-  formatElapsed,
-  pickContainer,
-  RECORDER_OPTIONS,
-  shouldGuardUnload,
-  type RecordedSpan,
-} from '../../lib/recorder.js';
+import { extensionFor, formatElapsed, pickContainer } from '../../lib/recorder.js';
+import { recordingSession } from '../../lib/recording-platform.js';
+import type { RecordingOrigin, RecordingSession } from '../../lib/recording-session.js';
 import { Button } from '../ui/button.js';
 import { Feedback } from '../ui/feedback.js';
 import { TextField } from '../ui/field.js';
@@ -37,23 +31,22 @@ import { TextField } from '../ui/field.js';
  * button that fails on press would teach a person that the platform is broken
  * rather than that their browser is.
  *
- * ## Pause produces ONE file, and the clock is not the duration
+ * ## The recording is not this component's (SRS Revision 172 §4)
  *
- * `pause()`/`resume()` keep a single `MediaRecorder`, so a session interrupted
- * mid-way is one recording rather than three. Some containers then record a
- * duration that ignores the paused time, which is exactly why **the elapsed
- * reading is UI only** (R75.5): nothing writes it anywhere, and
- * `EducationalContent` has no duration column and gains none.
+ * It lives in `RecordingSession`, application-wide: this component is a VIEW
+ * of it, bound by the screen's `origin.key`. Leaving the screen unmounts the
+ * view and nothing else — the microphone stays open, the chunks keep landing
+ * in the browser's storage, and `RecordingBar` shows the same controls from
+ * wherever she went. A screen whose key is not the active recording's shows a
+ * notice instead of a second recorder (one recording at a time).
  *
- * ## Risk R-4, reinstated and mitigated where a guard can reach
- *
- * iOS suspends `MediaRecorder` when the screen locks or the tab is
- * backgrounded, and can truncate a long recording **without reporting an
- * error** — the accepted residual risk (R75.7). What a guard can remove is the
- * silent discard: a warning while recording, a `visibilitychange` warning, and a
- * `beforeunload` guard so navigating away asks first.
+ * Pause produces ONE file, and the clock is the spans actually recorded, never
+ * a tick count (R75.5 — a reading; `EducationalContent` has no duration
+ * column and gains none).
  */
 export interface AudioRecorderProps {
+  /** Which screen this is (`library`, `session:<id>`), and where it returns to. */
+  origin: RecordingOrigin;
   meta: UploadMeta;
   token: string | null;
   /**
@@ -82,41 +75,49 @@ export interface AudioRecorderProps {
   saveBlockedReason?: string | null;
   onSaved: (contentId: string) => void;
   onCancel: () => void;
+  /** The global bar's rendering: no heading, no cancel, a «العودة» link. */
+  compact?: boolean;
+  /** Test seam; the application's one session otherwise. */
+  session?: RecordingSession;
 }
-
-type RecorderState = 'idle' | 'recording' | 'paused' | 'saving';
 
 /** §7: `EducationalContent.title` is `VarChar(120)` (TD-9) — the same bound the
  *  completion schema holds; asked here first so no upload is spent on it. */
 export const RECORDING_NAME_MAX = 120;
 
+/** How many screens currently show the active recording — the bar hides while one does. */
+let mountedHosts = 0;
+const hostListeners = new Set<() => void>();
+function noteHosts(delta: number): void {
+  mountedHosts += delta;
+  for (const listener of hostListeners) listener();
+}
+export function subscribeHosts(listener: () => void): () => void {
+  hostListeners.add(listener);
+  return () => {
+    hostListeners.delete(listener);
+  };
+}
+export function hostsMounted(): number {
+  return mountedHosts;
+}
+
 export function AudioRecorder({
+  origin,
   meta,
   token,
   suggestedName,
   saveBlockedReason = null,
   onSaved,
   onCancel,
+  compact = false,
+  session = recordingSession(),
 }: AudioRecorderProps): ReactNode {
-  const [state, setState] = useState<RecorderState>('idle');
-  /**
-   * **The spans actually recorded**, not a tick count. `setInterval` is
-   * throttled in a background tab — the very case R75.7 warns about — so a
-   * counter understates a long recording by whatever the browser skipped.
-   */
-  const [spans, setSpans] = useState<RecordedSpan[]>([]);
+  const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
+  const mine = state.origin === null || state.origin.key === origin.key;
+  const bound = mine && state.status !== 'idle';
   const [now, setNow] = useState(() => Date.now());
-  const elapsed = elapsedSeconds(spans, now);
-  const [error, setError] = useState<string | null>(null);
-  const [percent, setPercent] = useState(0);
-  const [title, setTitle] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [backgrounded, setBackgrounded] = useState(false);
-
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
 
   // Resolved once, at render: the answer cannot change under the user, and
   // asking on every press would make the control's absence conditional on
@@ -126,100 +127,49 @@ export function AudioRecorder({
       ? null
       : pickContainer((type) => MediaRecorder.isTypeSupported(type));
 
-  /** Stops the microphone. A live track keeps the browser's recording indicator
-   *  on, which reads as *still listening* long after it has stopped. */
-  const releaseMicrophone = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  }, []);
+  // This screen is a host of the recording while it shows it (the bar stands
+  // down). Registered only while bound, so a screen showing the «elsewhere»
+  // notice does not hide the bar that is the way to the recording.
+  useEffect(() => {
+    if (!bound || compact) return undefined;
+    noteHosts(1);
+    return () => noteHosts(-1);
+  }, [bound, compact]);
 
-  useEffect(() => () => releaseMicrophone(), [releaseMicrophone]);
+  // The screen it is shown on may correct where it lands and what it is
+  // called: carried into the session so the bar can save without the page.
+  useEffect(() => {
+    if (bound && !compact) session.setMeta(meta, saveBlockedReason);
+  }, [bound, compact, meta, saveBlockedReason, session]);
+  useEffect(() => {
+    if (bound && !compact) session.setSuggestedName(suggestedName);
+  }, [bound, compact, suggestedName, session]);
 
   // The clock only asks *what time is it* — the reading itself is computed from
   // the spans, so a skipped tick costs nothing but a late repaint.
   useEffect(() => {
-    if (state !== 'recording') return undefined;
+    if (state.status !== 'recording') return undefined;
     const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
-  }, [state]);
-
-  // R75.7 — the two guards a browser will actually let us install.
-  useEffect(() => {
-    if (!shouldGuardUnload(state)) return undefined;
-    const warn = (event: BeforeUnloadEvent): void => {
-      event.preventDefault();
-      // Browsers show their own wording; assigning is what arms the dialog.
-      event.returnValue = '';
-    };
-    const visibility = (): void => {
-      if (document.visibilityState === 'hidden') setBackgrounded(true);
-    };
-    window.addEventListener('beforeunload', warn);
-    document.addEventListener('visibilitychange', visibility);
-    return () => {
-      window.removeEventListener('beforeunload', warn);
-      document.removeEventListener('visibilitychange', visibility);
-    };
-  }, [state]);
+  }, [state.status]);
 
   async function start(): Promise<void> {
     if (container === null) return;
-    setError(null);
-    setBackgrounded(false);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: RECORDER_OPTIONS.channelCount },
-      });
-      streamRef.current = stream;
-      const recorder = new MediaRecorder(stream, {
-        mimeType: container,
-        audioBitsPerSecond: RECORDER_OPTIONS.audioBitsPerSecond,
-      });
-      chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        // ONE blob from every chunk — pause/resume never produces several files.
-        setBlob(new Blob(chunksRef.current, { type: container }));
-        releaseMicrophone();
-      };
-      recorderRef.current = recorder;
-      recorder.start();
-      setSpans([{ start: Date.now(), end: null }]);
-      setNow(Date.now());
-      setState('recording');
-    } catch {
-      // Permission refused, or no microphone. Both are the person's to fix, and
-      // the phone-upload path is unaffected either way.
-      setError(t('recorder.micDenied'));
-      releaseMicrophone();
-    }
-  }
-
-  /** Closes the open span, whichever transition asked for it. */
-  function closeSpan(): void {
-    setSpans((current) =>
-      current.map((span) => (span.end === null ? { ...span, end: Date.now() } : span)),
-    );
-  }
-
-  function stop(): void {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    closeSpan();
-    setState('idle');
+    setNameError(null);
+    await session.start({ origin, meta, suggestedName, saveBlockedReason, container });
   }
 
   async function save(): Promise<void> {
+    const blob = session.blob();
     if (blob === null) return;
+    const effectiveMeta = state.meta ?? meta;
     // The typed name wins; the server's suggestion fills an untouched field.
-    // **Both CAN be empty**: «مكتبة المحتوى» offers the recorder with no
-    // Subject in view, and then suggests nothing (R75.6 — nothing to name
-    // after). The Owner met that on 2026-09-22: a fifteen-second upload, then
+    // **Both CAN be empty** (R75.6 — nothing to name after, before R172 §3).
+    // The Owner met that on 2026-09-22: a fifteen-second upload, then
     // «تعذّر الحفظ» from the completion's schema (`title` 1–120). So the rule is
     // asked HERE, before a byte is spent, in her words and on the field.
-    const name = title.trim() === '' ? suggestedName.trim() : title.trim();
+    const suggested = state.suggestedName || suggestedName;
+    const name = state.title.trim() === '' ? suggested.trim() : state.title.trim();
     if (name === '') {
       setNameError(t('recorder.nameRequired'));
       return;
@@ -229,14 +179,12 @@ export function AudioRecorder({
       return;
     }
     setNameError(null);
-    setState('saving');
-    setError(null);
+    session.saving(0);
     // The extension follows the MIME the browser agreed to: the server checks
     // the declared type AND the magic bytes (TD-9), so a mismatched name is
     // rejected at `complete`, after the whole upload has been spent.
-    const file = new File([blob], `${name}.${extensionFor(blob.type || (container ?? ''))}`, {
-      type: blob.type || (container ?? ''),
-    });
+    const type = blob.type || state.container || container || '';
+    const file = new File([blob], `${name}.${extensionFor(type)}`, { type });
     try {
       const contentId = await uploadFile(
         file,
@@ -244,20 +192,19 @@ export function AudioRecorder({
         // recording of a class (R75.1); the screen it was opened from decides
         // only which class, never whether it is one. Leaving it to the caller
         // would make the classification a prop two screens could disagree about.
-        { ...meta, origin: 'session_recording' },
+        { ...effectiveMeta, origin: 'session_recording' },
         { title: name, description: null },
         token,
-        setPercent,
+        (percent) => session.saving(percent),
         () => undefined,
       );
-      setBlob(null);
-      setState('idle');
+      await session.clear();
       onSaved(contentId);
     } catch {
-      // The blob is KEPT. A failed upload has no resume (Risk R-9), and
-      // discarding the recording would make one network failure cost the class.
-      setError(t('recorder.saveFailed'));
-      setState('idle');
+      // The audio is KEPT — on the page and in the browser's storage. A failed
+      // upload has no resume (Risk R-9), and discarding the recording would
+      // make one network failure cost the class.
+      session.saveFailed();
     }
   }
 
@@ -270,28 +217,70 @@ export function AudioRecorder({
     );
   }
 
+  if (!mine) {
+    // Another screen's recording is running: one at a time, and the bar is
+    // the way to it (rule AH — the reason, beside the control that is absent).
+    return (
+      <section className="recorder recorder--block" aria-labelledby="recorder-heading">
+        <h3 id="recorder-heading" className="recorder__heading">
+          <span aria-hidden="true" className="recorder__dot" />
+          {t('recorder.title')}
+        </h3>
+        <Feedback>{t('recorder.elsewhere').replace('{label}', state.origin?.label ?? '')}</Feedback>
+        <Button variant="secondary" onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+      </section>
+    );
+  }
+
+  const elapsed = session.elapsed(state.status === 'recording' ? now : Date.now());
+  const effectiveSuggested = state.suggestedName || suggestedName;
+  const blocked = state.saveBlockedReason ?? saveBlockedReason;
+  const live = state.status === 'recording' || state.status === 'paused';
+  const stopped = state.status === 'stopped' || state.status === 'saving';
+
   return (
-    <section className="recorder recorder--block" aria-labelledby="recorder-heading">
-      <h3 id="recorder-heading" className="recorder__heading">
-        <span aria-hidden="true" className="recorder__dot" />
-        {t('recorder.title')}
-      </h3>
+    <section
+      className={compact ? 'recorder recorder--bar' : 'recorder recorder--block'}
+      aria-labelledby={compact ? undefined : 'recorder-heading'}
+      aria-label={compact ? t('recorder.title') : undefined}
+    >
+      {compact ? null : (
+        <h3 id="recorder-heading" className="recorder__heading">
+          <span aria-hidden="true" className="recorder__dot" />
+          {t('recorder.title')}
+        </h3>
+      )}
 
-      {error ? (
+      {state.error === 'mic_denied' ? (
         <p className="field__error" role="alert">
-          {error}
+          {t('recorder.micDenied')}
+        </p>
+      ) : null}
+      {state.error === 'save_failed' ? (
+        <p className="field__error" role="alert">
+          {t('recorder.saveFailed')}
         </p>
       ) : null}
 
-      {/* R75.7 — the warning is permanent while recording, because the risk is
-          permanent while recording: it is not an error that has happened. */}
-      {state === 'recording' || state === 'paused' ? (
+      {/* R172 §4 — what a phone may do while recording, said plainly: the
+          screen is kept awake, and leaving this page does not stop it. */}
+      {live ? (
         <p className="recorder__warning" role="status">
-          {t('recorder.keepAwake')}
+          {t('recorder.keepsGoing')}
         </p>
       ) : null}
-      {backgrounded ? (
+      {state.captureGap ? (
         <p className="recorder__warning" role="alert">
+          {t(state.restored ? 'recorder.restoredCutOff' : 'recorder.captureGap')}
+        </p>
+      ) : state.restored ? (
+        <p className="recorder__warning" role="status">
+          {t('recorder.restored')}
+        </p>
+      ) : state.backgrounded && stopped ? (
+        <p className="recorder__warning" role="status">
           {t('recorder.wasBackgrounded')}
         </p>
       ) : null}
@@ -300,99 +289,100 @@ export function AudioRecorder({
         {/* `aria-live="off"` deliberately: a clock announced every second is a
             screen reader nobody can use. The STATE changes are announced. */}
         {formatElapsed(elapsed)}
-        <span className="visually-hidden"> {t(`recorder.state.${state}`)}</span>
+        <span className="visually-hidden"> {t(`recorder.state.${state.status}`)}</span>
       </p>
 
       <div className="form__actions">
-        {state === 'idle' && blob === null ? (
+        {state.status === 'idle' ? (
           <Button variant="primary" onClick={() => void start()}>
             {t('recorder.start')}
           </Button>
         ) : null}
-        {state === 'recording' ? (
+        {state.status === 'recording' ? (
           <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                recorderRef.current?.pause();
-                closeSpan();
-                setState('paused');
-              }}
-            >
+            <Button variant="secondary" onClick={() => session.pause()}>
               {t('recorder.pause')}
             </Button>
-            <Button variant="primary" onClick={stop}>
+            <Button variant="primary" onClick={() => void session.stop()}>
               {t('recorder.stop')}
             </Button>
           </>
         ) : null}
-        {state === 'paused' ? (
+        {state.status === 'paused' ? (
           <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                recorderRef.current?.resume();
-                // A NEW span: the gap between them is the pause, and excluding
-                // it is what makes the reading honest.
-                setSpans((current) => [...current, { start: Date.now(), end: null }]);
-                setState('recording');
-              }}
-            >
+            <Button variant="secondary" onClick={() => session.resume()}>
               {t('recorder.resume')}
             </Button>
-            <Button variant="primary" onClick={stop}>
+            <Button variant="primary" onClick={() => void session.stop()}>
               {t('recorder.stop')}
             </Button>
           </>
         ) : null}
       </div>
 
-      {blob !== null ? (
+      {stopped ? (
         <>
           <TextField
             label={t('recorder.name')}
-            value={title}
+            value={state.title}
             onChange={(next) => {
-              setTitle(next);
+              session.setTitle(next);
               setNameError(null);
             }}
-            placeholder={suggestedName}
-            required={suggestedName.trim() === ''}
-            hint={t(suggestedName.trim() === '' ? 'recorder.nameHintNoSuggestion' : 'recorder.nameHint')}
+            placeholder={effectiveSuggested}
+            required={effectiveSuggested.trim() === ''}
+            hint={t(effectiveSuggested.trim() === '' ? 'recorder.nameHintNoSuggestion' : 'recorder.nameHint')}
             error={nameError}
           />
-          {state === 'saving' ? (
-            <progress className="upload__progress" value={percent} max={100} />
+          {state.status === 'saving' ? (
+            <progress className="upload__progress" value={state.percent} max={100} />
           ) : null}
           <div className="form__actions">
             {/* Discarding is explicit and destructive-looking, because a
                 recording that cannot be made again is exactly what it destroys. */}
             <Button
               variant="danger"
-              disabled={state === 'saving'}
-              onClick={() => {
-                setBlob(null);
-                setSpans([]);
-              }}
+              disabled={state.status === 'saving'}
+              onClick={() => void session.clear()}
             >
               {t('recorder.discard')}
             </Button>
             <Button
               variant="primary"
-              disabled={state === 'saving' || saveBlockedReason !== null}
+              disabled={state.status === 'saving' || blocked !== null}
               onClick={() => void save()}
             >
               {t('recorder.save')}
             </Button>
           </div>
           {/* One message, beside the control it explains (rule AH). */}
-          {saveBlockedReason !== null ? <Feedback>{saveBlockedReason}</Feedback> : null}
+          {blocked !== null ? (
+            <Feedback>
+              {blocked}
+              {compact && state.origin ? (
+                <>
+                  {' '}
+                  <a href={state.origin.path}>{t('recorder.returnTo').replace('{label}', state.origin.label)}</a>
+                </>
+              ) : null}
+            </Feedback>
+          ) : null}
         </>
       ) : null}
 
-      <Button variant="secondary" disabled={state !== 'idle'} onClick={onCancel}>
-        {t('common.cancel')}
-      </Button>
+      {compact ? (
+        state.origin ? (
+          <a className="recorder__return" href={state.origin.path}>
+            {t('recorder.returnTo').replace('{label}', state.origin.label)}
+          </a>
+        ) : null
+      ) : (
+        // Leaving the screen never stops the recording (R172 §4): «إلغاء»
+        // closes the recorder here; the bar keeps showing it while it runs.
+        <Button variant="secondary" disabled={state.status === 'saving'} onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+      )}
     </section>
   );
 }

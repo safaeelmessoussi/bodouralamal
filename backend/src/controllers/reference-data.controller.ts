@@ -4,11 +4,14 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
+  assignSubjectToCategory,
   assignSubjectToLevel,
   createAcademicYear,
   deleteAcademicYear,
   listAcademicYears,
+  listCategorySubjects,
   listLevelSubjects,
+  unassignSubjectFromCategory,
   unassignSubjectFromLevel,
   assignSurahToLevel,
   listLevelSurahs,
@@ -114,6 +117,39 @@ export function updateAcademicYearHandler(prisma: PrismaClient) {
 export function deleteAcademicYearHandler(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await deleteAcademicYear(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(204).end();
+  };
+}
+
+/* ── Category ↔ Subject assignment (R172 §1) ────────────────────────────── */
+
+export function categorySubjects(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rows = await listCategorySubjects(prisma, requireActor(req), idParam(req, 'categoryId'));
+    res.json({ data: rows.map(subjectRefDto) });
+  };
+}
+
+export function assignCategorySubject(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await assignSubjectToCategory(
+      prisma,
+      requireActor(req),
+      idParam(req, 'categoryId'),
+      idParam(req, 'subjectId'),
+    );
+    res.status(204).end();
+  };
+}
+
+export function unassignCategorySubject(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unassignSubjectFromCategory(
+      prisma,
+      requireActor(req),
+      idParam(req, 'categoryId'),
+      idParam(req, 'subjectId'),
+    );
     res.status(204).end();
   };
 }

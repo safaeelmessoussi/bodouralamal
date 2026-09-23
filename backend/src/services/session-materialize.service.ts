@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { calendarDay } from "../policies/effective-staffing.js";
 import {
   atMidnightUtc,
   expandSchedule,
@@ -30,9 +31,14 @@ import {
  *    session, or one with a note, a recording, a content link or a grade, is
  *    left exactly as it is **and reported**. The platform never silently
  *    discards a human decision or orphans attached work (§4.4, §20 rule 24).
- * 3. **Never regenerates the past.** Materialization starts at today, so a
- *    schedule edited in November does not resurrect September's classes or
- *    rewrite what already happened.
+ * 3. **Never regenerates the past — once there is one.** Materialization
+ *    starts at today (Morocco's day), so a schedule edited in November does
+ *    not resurrect September's classes or rewrite what already happened.
+ *    **A schedule that has never produced an occurrence has no past to
+ *    protect and starts at its own first date** (R172 §2): a week-long
+ *    conference entered after it was held, or a class said to begin next
+ *    month, materialises exactly the dates it names — before this, the first
+ *    silently produced nothing and the second began today.
  *
  * **Horizon: through the end of the current `AcademicYear`**, extended by the
  * nightly cron. Bounded deliberately — an unbounded horizon would generate rows
@@ -209,7 +215,12 @@ export async function materializeSchedule(
    */
   reservedDates?: ReadonlySet<string>,
 ): Promise<MaterializeResult> {
-  const from = atMidnightUtc(today);
+  const todayMorocco = calendarDay(today);
+  // R172 §2 — see guarantee 3: the past is protected only once it exists.
+  const everMaterialized = (await tx.session.count({ where: { scheduleId: schedule.id } })) > 0;
+  const firstDate = schedule.anchorDate ? atMidnightUtc(schedule.anchorDate) : null;
+  const from =
+    !everMaterialized && firstDate !== null && firstDate < todayMorocco ? firstDate : todayMorocco;
   const dates = expandSchedule(schedule, from, horizon);
 
   const existingRows = await tx.session.findMany({

@@ -916,9 +916,20 @@ not contain, and then reporting them as the user's mistake.
 
 ```
 Category ──< Level ──< LevelSubject >── Subject
-                │
-                └──< AdministrativeGroup >── Branch
+    │           │
+    │           └──< AdministrativeGroup >── Branch
+    └──< CategorySubject >── Subject          (R172 §1 — taught to the WHOLE Category)
 ```
+
+**R172 §1.** The scope options carry a Subject taught to a whole Category under every Level of
+that Category (`levels[].subject_ids`) and beside the Category (`categories[].subject_ids`), so
+the Level → Subject narrowing learns no second rule. Two additions to the hook: a Level control may
+offer «{Category} — كل مستويات الفئة» (`wholeCategoryOptions`, only for a Category some Subject is
+taught whole; the value travels in the Level slot as `category:<id>` and `wholeCategoryOf()`
+recovers it — the content scope then sends `category_id` instead of `level_id`), and
+`subjectsIndependentOfLevel` tells `ScopeSelectors` when a FORM's Subject may be chosen with no
+Level in play (a filter-built class addressed to «الكل», R169 §7 — the gate used to disable it
+with «اختاري المستوى أولًا» regardless).
 
 Two rules a screen must never re-implement:
 

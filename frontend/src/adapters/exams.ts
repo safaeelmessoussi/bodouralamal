@@ -198,8 +198,16 @@ export async function updateExam(
 }
 
 /** TD-5 soft delete plus a Trash snapshot; the staff rows go with it. */
-export async function deleteExam(id: string, token: string | null): Promise<void> {
-  await api<void>(`/exams/${id}`, { method: 'DELETE', token });
+export async function deleteExam(
+  id: string,
+  token: string | null,
+  options: { acknowledgeEvidence?: boolean } = {},
+): Promise<void> {
+  // R172 §6 — «I have seen the papers and marks that go with it»: the server
+  // refuses without it (`STUDENT_EVIDENCE_EXISTS`, with the counts) so the
+  // screen can ask a second time with them in view.
+  const query = options.acknowledgeEvidence ? '?acknowledge_evidence=true' : '';
+  await api<void>(`/exams/${id}${query}`, { method: 'DELETE', token });
 }
 
 /**

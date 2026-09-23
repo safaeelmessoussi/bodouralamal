@@ -50,6 +50,23 @@ describe('the delete confirmation dialog never hangs open unexplained', () => {
   it('clears a stale blocked reason before a DIFFERENT item is confirmed', () => {
     // Reopening the dialog on a new row must not paint over it with the
     // previous row's refusal.
-    expect(source).toMatch(/setDeleteBlocked\(null\);\s*setDeleting\(r\);/);
+    // (R172 §6 — and the previous row's evidence counts, for the same reason.)
+    expect(source).toMatch(/setDeleteBlocked\(null\);\s*setEvidence\(null\);\s*setDeleting\(r\);/);
+  });
+
+  /**
+   * **R172 §6 — student evidence is a second question, not a wall** (the
+   * Owner, 2026-09-23, superseding 2026-09-03). The first refusal sets the
+   * counts; the dialog stays open and asks again with them in view; the
+   * confirmation re-sends with the acknowledgement. Only the administration
+   * gets the second question — a مؤطِّرة still meets the explanation.
+   */
+  it('asks a second time with the counts in view, and re-sends with the acknowledgement', () => {
+    expect(source).toContain("if (details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS')");
+    expect(source).toContain('if (evidence === null && isAdminish) {');
+    expect(source).toContain('setEvidence(counts);');
+    expect(source).toContain('{ acknowledgeEvidence: evidence !== null }');
+    expect(source).toContain("t('scheduling.deleteWithEvidenceBody')");
+    expect(source).toContain("t('scheduling.deleteWithEvidence')");
   });
 });

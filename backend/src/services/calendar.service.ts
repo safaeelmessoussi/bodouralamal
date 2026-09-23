@@ -4,6 +4,7 @@ import type {
   PrismaClient,
 } from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
+import { subjectsTaughtAt } from "../policies/curriculum.js";
 import {
   nextRecordingName,
   recordingBaseName,
@@ -1081,11 +1082,15 @@ export async function personalCalendarOptions(
   // offers exactly what she is actually taught, not the association's whole
   // catalogue.
   if (enrolments.length > 0) {
-    const levelSubjects = await prisma.levelSubject.findMany({
-      where: { levelId: { in: [...levelIds] }, deletedAt: null },
-      select: { subject: { select: { id: true, name: true } } },
+    // R172 §1 — her Levels' own Subjects AND their Categories' (the curriculum
+    // policy's answer), named for the filter.
+    const taught = await subjectsTaughtAt(prisma, [...levelIds]);
+    const taughtIds = [...new Set([...taught.values()].flatMap((set) => [...set]))];
+    const rows = await prisma.subject.findMany({
+      where: { id: { in: taughtIds } },
+      select: { id: true, name: true },
     });
-    for (const ls of levelSubjects) subjects.set(ls.subject.id, ls.subject.name);
+    for (const row of rows) subjects.set(row.id, row.name);
   }
 
   const categoryNames = new Map<string, string>();

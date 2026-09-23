@@ -59,11 +59,20 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
   if (levels.length === 0) return categories.map((c) => ({ ...c, levels: [] }));
   const levelIds = levels.map((l) => l.id);
 
-  const [levelSubjects, levelSurahs] = await Promise.all([
+  const [levelSubjects, categorySubjects, levelSurahs] = await Promise.all([
     prisma.levelSubject.findMany({
       where: { deletedAt: null, levelId: { in: levelIds }, subject: { deletedAt: null } },
       select: {
         levelId: true,
+        subject: { select: { id: true, name: true, displayOrder: true } },
+      },
+    }),
+    // R172 §1 — a Subject taught to the WHOLE Category shows under every one
+    // of its Levels, exactly as the curriculum policy answers.
+    prisma.categorySubject.findMany({
+      where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) }, subject: { deletedAt: null } },
+      select: {
+        categoryId: true,
         subject: { select: { id: true, name: true, displayOrder: true } },
       },
     }),
@@ -78,6 +87,14 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
   const subjectRowsByLevel = new Map<string, typeof levelSubjects>();
   for (const row of levelSubjects) {
     subjectRowsByLevel.set(row.levelId, [...(subjectRowsByLevel.get(row.levelId) ?? []), row]);
+  }
+  for (const level of levels) {
+    for (const row of categorySubjects) {
+      if (row.categoryId !== level.categoryId) continue;
+      const rows = subjectRowsByLevel.get(level.id) ?? [];
+      if (rows.some((existing) => existing.subject.id === row.subject.id)) continue;
+      subjectRowsByLevel.set(level.id, [...rows, { levelId: level.id, subject: row.subject }]);
+    }
   }
   const subjectsByLevel = new Map<string, PublicSubjectRef[]>(
     [...subjectRowsByLevel].map(([levelId, rows]) => [

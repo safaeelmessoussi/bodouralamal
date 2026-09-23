@@ -20,7 +20,10 @@ import { api } from '../lib/api.js';
 export type UploadStage = 'idle' | 'preparing' | 'uploading' | 'finalising' | 'done' | 'failed';
 
 export interface UploadMeta {
-  level_id: string;
+  /** R172 §1 — a Level, or (`category_id`) a whole Category with no Level:
+   *  exactly one of the two travels to `/uploads/initiate`. */
+  level_id?: string;
+  category_id?: string;
   subject_id: string;
   academic_year_id: string;
   /** `null` is the Global / بدون فرع scope (§4.9) — a real value only an Admin

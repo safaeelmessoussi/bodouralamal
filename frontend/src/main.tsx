@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { RecordingBar } from './components/content/recording-bar.js';
 import { PendingGuard } from './components/pending-guard.js';
 import { ActiveChildProvider } from './contexts/active-child.js';
 import { ActiveRoleProvider } from './contexts/active-role.js';
@@ -216,6 +217,9 @@ registerServiceWorker();
               header renders the switcher on every page. */}
           <ActiveChildProvider>
             <App />
+            {/* R172 §4: the recording, wherever she is — one bar at the root,
+                shown only while a recording is active and no screen shows it. */}
+            <RecordingBar />
           </ActiveChildProvider>
         </ActiveRoleProvider>
       </SessionProvider>

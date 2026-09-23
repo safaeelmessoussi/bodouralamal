@@ -1164,6 +1164,8 @@ model Category {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   levels               Level[]
+  /// R172 §1 — the Subjects taught to EVERY Level of this Category.
+  subjects             CategorySubject[]
   /// R62 — the stage a parent applied to for a child. The administrator may
   /// change it: placement is an administrative decision, never a rule.
   childApplications    ChildApplication[]
@@ -1278,6 +1280,8 @@ model Subject {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   levels LevelSubject[]
+  /// R172 §1 — the Categories this Subject is taught to WHOLE.
+  categories CategorySubject[]
 
   // Revision 43 (expand phase) — see the educational-model block below.
   teachingGroups     TeachingGroup[]
@@ -1310,6 +1314,30 @@ model LevelSubject {
 
   @@unique([levelId, subjectId])
   @@map("level_subject")
+}
+
+/// **R172 §1 — a Subject taught to a WHOLE Category** (the Owner, 2026-09-23):
+/// الفقه or السيرة النبوية are taught to every Level of «المرأة», present and
+/// future, and any woman may join. One row here means every live Level of the
+/// Category teaches the Subject — read through the Level's `category_id` at
+/// the moment of the read, never copied — so `LevelSubject` stays what a
+/// Level teaches ON ITS OWN, and the curriculum policy (`assertSubjectTaught
+/// AtLevel`, `levelsTeaching`) answers from both. Same shape as `LevelSubject`:
+/// soft-deleted, unique per pair, Super Admin curriculum (R26, R43.3).
+model CategorySubject {
+  id         String   @id @default(uuid()) @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  subjectId  String   @map("subject_id") @db.Uuid
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by") @db.Uuid
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([categoryId, subjectId])
+  @@map("category_subject")
 }
 
 /// The Surahs selected per Level for حفظ القرآن memorisation (R107); the

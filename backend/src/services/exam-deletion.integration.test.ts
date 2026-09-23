@@ -4,7 +4,7 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { actorFor } from '../test-support/actor.js';
 import { deleteExam } from './exam.service.js';
-import { purgeEntry } from './trash.service.js';
+import { purgeEntry, restoreEntry } from './trash.service.js';
 
 /**
  * **What an assessment's deletion may and may not destroy** (Owner decision,
@@ -341,6 +341,39 @@ describe('exam deletion — publication does not block, student evidence does', 
     await prisma.grade.create({ data: { examId, studentId, score: 12, status: 'draft' } });
     await expectRefusedAndUnchanged(examId, adminAId, { submissions: 1, grades: 1 });
   });
+
+  /**
+   * **R172 §6 — acknowledged, the deletion goes through**, R170 §8's shape
+   * for exams: the papers and marks stay attached to the tombstone (hidden,
+   * restorable for the seven days) and the audit says what went with it.
+   */
+  it('R172 §6 — deletes a sat and graded exam once the caller acknowledges what goes with it, restorably', async () => {
+    const examId = await makeExam('اختبار تجريبي مُصحَّح');
+    await prisma.studentExamSubmission.create({
+      data: { examId, studentId, state: 'submitted', submittedAt: new Date() },
+    });
+    await prisma.grade.create({ data: { examId, studentId, score: 15, status: 'published' } });
+
+    await deleteExam(prisma, await actorFor(prisma, adminAId), examId, { acknowledgeEvidence: true });
+    await expectDeleted(examId);
+    // Nothing destroyed yet: the evidence waits under the tombstone.
+    expect(await prisma.studentExamSubmission.count({ where: { examId } })).toBe(1);
+    expect(await prisma.grade.count({ where: { examId } })).toBe(1);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'exam.delete', targetId: examId },
+      select: { detail: true },
+    });
+    expect(audit.detail).toMatchObject({ submissions: 1, grades: 1, evidence_acknowledged: true });
+
+    // Restored, everything is back exactly as it was.
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: 'Exam', targetId: examId },
+      select: { id: true },
+    });
+    await restoreEntry(prisma, await actorFor(prisma, superAdminId), entry.id);
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: examId } })).deletedAt).toBeNull();
+    expect(await prisma.grade.count({ where: { examId } })).toBe(1);
+  });
 });
 
 describe('exam deletion — authorization is unchanged by the evidence guard', () => {
@@ -399,37 +432,39 @@ describe('exam deletion — the permanent purge remains FK-safe (R136 Codex H2)'
     expect(await prisma.examQuestion.count({ where: { examId } })).toBe(0);
   });
 
-  it('refuses to purge an exam a student actually sat — recorded evidence outlives the tombstone', async () => {
-    const examId = await makeExam('حذف نهائي أمام دليل');
-    await prisma.studentExamSubmission.create({
+  it('R172 §6 — purges an exam a student actually sat, WITH its paper, its answers, its mark and its attendance, and says so', async () => {
+    const examId = await makeExam('حذف نهائي مع الدليل');
+    const submission = await prisma.studentExamSubmission.create({
       data: { examId, studentId, state: 'submitted', submittedAt: new Date() },
+      select: { id: true },
     });
-    // `deleteExam` itself refuses an exam WITH live evidence (R136 §21 tests
-    // this direction already), so the tombstone this purge test needs can
-    // only be reached with the guard bypassed — exactly the historical row
-    // R133 exists to protect: soft-deleted before the evidence guard existed,
-    // or restored and re-deleted by an operator with a reason of their own.
-    await prisma.exam.update({ where: { id: examId }, data: { deletedAt: new Date() } });
-    const entry = await prisma.trash.create({
-      data: {
-        targetEntity: 'Exam',
-        targetId: examId,
-        deletedById: adminAId,
-        snapshot: {},
-        purgeAfter: new Date(),
-      },
+    const question = await prisma.examQuestion.create({
+      data: { examId, displayOrder: 1, kind: 'short_text', prompt: 'س' },
+      select: { id: true },
+    });
+    await prisma.studentExamAnswer.create({
+      data: { submissionId: submission.id, questionId: question.id, text: 'ج' },
+    });
+    await prisma.grade.create({ data: { examId, studentId, score: 11, status: 'published' } });
+    await prisma.attendance.create({
+      data: { examId, studentId, occurrenceDate: new Date('2026-06-01T00:00:00.000Z'), markedById: adminAId },
+    });
+    await deleteExam(prisma, await actorFor(prisma, adminAId), examId, { acknowledgeEvidence: true });
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: 'Exam', targetId: examId },
       select: { id: true },
     });
 
-    await expect(
-      purgeEntry(prisma, await actorFor(prisma, superAdminId), entry.id),
-    ).rejects.toMatchObject({
-      code: 'STATE_CONFLICT',
-      details: { reason: 'EXAM_HAS_RECORDED_EVIDENCE' },
+    await purgeEntry(prisma, await actorFor(prisma, superAdminId), entry.id);
+    expect(await prisma.exam.count({ where: { id: examId } })).toBe(0);
+    expect(await prisma.studentExamSubmission.count({ where: { examId } })).toBe(0);
+    expect(await prisma.studentExamAnswer.count({ where: { submissionId: submission.id } })).toBe(0);
+    expect(await prisma.grade.count({ where: { examId } })).toBe(0);
+    expect(await prisma.attendance.count({ where: { examId } })).toBe(0);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'trash.permanent_delete', targetId: examId },
+      select: { detail: true },
     });
-    // Refused, and provenance-safe: neither the exam nor the submission it
-    // guards was touched by the attempt.
-    expect(await prisma.exam.count({ where: { id: examId } })).toBe(1);
-    expect(await prisma.studentExamSubmission.count({ where: { examId } })).toBe(1);
+    expect(audit.detail).toMatchObject({ submissions_purged: 1, grades_purged: 1, attendance_purged: 1 });
   });
 });

@@ -14,6 +14,8 @@
  *     of anything that logs a payload — the server reads identity from its
  *     signed payload alone and rejects a body that carries `email` at all.
  */
+import { refreshAccessToken } from './token-refresh.js';
+
 export interface ApiOptions {
   token?: string | null;
   activeChildId?: string | null;
@@ -27,6 +29,8 @@ export interface ApiOptions {
   refreshCookieAuth?: boolean;
   method?: string;
   body?: unknown;
+  /** Internal — set on the one retry `api()` makes after renewing the token. */
+  retried?: boolean;
 }
 
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
@@ -37,6 +41,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     refreshCookieAuth = false,
     method = 'GET',
     body,
+    retried = false,
   } = options;
 
   const response = await fetch(`/api/v1${path}`, {
@@ -52,6 +57,15 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     credentials: 'same-origin',
   });
 
+  if (response.status === 401 && token && !retried) {
+    // **R172 §5 — an expired token is renewed and the request made once more.**
+    // The bearer was ours and the server no longer accepts it: the one-hour
+    // access token (TD-12) has most likely run out under an open tab. The
+    // refresh cookie decides — a session that is genuinely over yields no
+    // token, and the 401 stands. Never twice: a second 401 is an answer.
+    const fresh = await refreshAccessToken();
+    if (fresh && fresh !== token) return api<T>(path, { ...options, token: fresh, retried: true });
+  }
   if (!response.ok) {
     // The envelope is READ here but not interpreted (TD-3.8). Every non-2xx
     // response carries one, and a screen that cannot see `code` or `details`

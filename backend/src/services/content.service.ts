@@ -232,8 +232,7 @@ export interface InitiateInput {
   filename: string;
   size: number;
   mime: string;
-  meta: {
-    levelId: string;
+  meta: ({ levelId: string; categoryId?: undefined } | { categoryId: string; levelId?: undefined }) & {
     subjectId: string;
     academicYearId: string;
     branchId: string | null;
@@ -302,12 +301,34 @@ export async function initiateUpload(
 
   await assertUploadScope(prisma, actor, input.meta.branchId);
 
+  /**
+   * **R172 §1 — a whole Category, with no Level chosen.** The item is filed
+   * under the Category's FIRST live Level (its own order) with `whole_category`
+   * — the rule the recording ingest already applies to a class addressed to
+   * a whole Category (R167 §5) — so every reader keeps reading `level_id`.
+   */
+  const wholeCategory = input.meta.levelId === undefined;
+  const levelId = wholeCategory
+    ? (
+        await prisma.level.findFirst({
+          where: { categoryId: input.meta.categoryId ?? '', deletedAt: null, category: { deletedAt: null } },
+          select: { id: true },
+          orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+        })
+      )?.id
+    : input.meta.levelId;
+  if (levelId === undefined) {
+    throw new AppError('VALIDATION_FAILED', 'this category has no level to file the item under', {
+      reason: 'CATEGORY_HAS_NO_LEVEL',
+    });
+  }
+
   // **The Subject must actually be taught at this Level.** §4.9 stores both
   // because a Subject spans several Levels and the derivation is many-valued;
   // the pair still has to be one that exists, or the library would group an item
-  // under a heading no Level ever offers. `LevelSubject` is where that lives
-  // (Revision 43) and is not restated here.
-  await assertSubjectTaughtAtLevel(prisma, input.meta.levelId, input.meta.subjectId);
+  // under a heading no Level ever offers. The curriculum policy answers from
+  // `LevelSubject` and, since R172 §1, `CategorySubject` (not restated here).
+  await assertSubjectTaughtAtLevel(prisma, levelId, input.meta.subjectId);
 
   const year = await prisma.academicYear.findFirst({
     where: { id: input.meta.academicYearId, deletedAt: null },
@@ -330,8 +351,7 @@ export async function initiateUpload(
     visibility = existing.visibility;
     replacesVersion = existing.version;
   } else {
-    visibility =
-      input.meta.visibility ?? (await categoryDefaultVisibility(prisma, input.meta.levelId));
+    visibility = input.meta.visibility ?? (await categoryDefaultVisibility(prisma, levelId));
   }
 
   // The browser receives a capability for this disposable key only. The
@@ -359,12 +379,13 @@ export async function initiateUpload(
       filename: input.filename,
       mime,
       size: input.size,
-      level_id: input.meta.levelId,
+      level_id: levelId,
       subject_id: input.meta.subjectId,
       academic_year_id: input.meta.academicYearId,
       branch_id: input.meta.branchId,
       visibility,
       origin: input.meta.origin ?? 'uploaded',
+      ...(wholeCategory ? { whole_category: true } : {}),
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
     },
@@ -744,6 +765,8 @@ async function createContentFromFinalization(
         description: input.description,
         visibility: claims.visibility as 'public' | 'private' | 'hidden',
         levelId: claims.level_id,
+        // R172 §1 — decided at initiation, like every other scope fact here.
+        wholeCategory: claims.whole_category === true,
         subjectId: claims.subject_id,
         academicYearId: claims.academic_year_id,
         branchId: claims.branch_id,

@@ -43,12 +43,12 @@ import {
   type OnlineMediaMode,
 } from '../../components/scheduling/delivery.js';
 import { StaffPicker } from '../../components/scheduling/staff-picker.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import {
   ManualEditsDialog,
   sessionsEligibleForOverwrite,
 } from '../../components/scheduling/manual-edits-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
-import { FormDialog } from '../../components/ui/form-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { DateField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -208,7 +208,6 @@ export function ScheduleSessionsPage({
   const [editing, setEditing] = useState<ScheduleSession | null>(null);
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
   /** R91 §11 — the occurrence whose own staffing is being set. */
-  const [staffingFor, setStaffingFor] = useState<ScheduleSession | null>(null);
   const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /** R92 — the occurrence whose audience branches are being set. */
   const [audienceFor, setAudienceFor] = useState<ScheduleSession | null>(null);
@@ -434,20 +433,12 @@ export function ScheduleSessionsPage({
   }, [scope?.branchId, accessToken]);
 
   const actions: RowAction<ScheduleSession>[] = [
+    // (R172 §8 — the «مؤطّرة هذه الحصة» row action is gone at the Owner's word:
+    // «تعديل الحصة» has carried «من يؤطِّر هذه الحصة» since R166 §2, and two
+    // doors to one fact only made her ask which was the real one. R91 §11's
+    // one-off cover is unchanged in substance: it is saved from the edit
+    // dialog, for this occurrence only.)
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
-    {
-      // **R91 §11 — a one-off cover.** The schedule answers *who is assigned
-      // for this period*; this answers *who took this lesson*, which is a fact
-      // about one date and lives on the occurrence (R43.4).
-      //
-      // **Administrative** — deciding who else answers for a lesson is not
-      // among TD-2's four teacher session verbs, and R71.4's reasoning applies
-      // unchanged: being answerable for something is not authority to decide
-      // who else is.
-      label: t('admin.sessions.staffAction'),
-      onSelect: (r) => setStaffingFor(r),
-      available: () => !isTeacherPortal,
-    },
     {
       label: t('session.materialsAction'),
       onSelect: (r) => setMaterialsFor(r.id),
@@ -814,25 +805,6 @@ export function ScheduleSessionsPage({
         />
       ) : null}
 
-      {staffingFor ? (
-        // **The flat picker is exactly right here** (R91 §11): an occurrence IS
-        // a date, so a staffing period on it would be a field with one possible
-        // value. The dated editor belongs to the recurring schedule.
-        <OccurrenceStaffDialog
-          key={staffingFor.id}
-          session={staffingFor}
-          teachers={teachers}
-          onClose={() => setStaffingFor(null)}
-          onSave={async (staff) => {
-            await run(
-              () => updateSession(staffingFor.id, staffingFor.version, { staff }, accessToken),
-              'admin.sessions.staffSaved',
-            );
-            setStaffingFor(null);
-          }}
-        />
-      ) : null}
-
       {scope ? (
         <SessionMaterialsDialog
           sessionId={materialsFor}
@@ -1114,6 +1086,41 @@ function ScopeDialog({
     const offered = new Set(offeredSurahKey.split(',').map(Number));
     if (surahIds.some((id) => !offered.has(id))) setSurahIds(surahIds.filter((id) => offered.has(id)));
   }, [subjectScope.ready, offeredSurahKey, surahIds]);
+  /**
+   * **Unsaved changes are protected here too** (R172 §8, found in passing):
+   * this dialog was a bare `Dialog`, and the file only passed the shared
+   * unsaved-guard scan because the staff dialog beside it was a `FormDialog`.
+   * Dirty is computed against the occurrence as it stands (never a snapshot,
+   * per `useUnsavedGuard`'s own rule), so a change typed and undone is
+   * pristine again.
+   */
+  // The Surahs' pristine value is what the scope effect below seeds: the
+  // occurrence's own for «this session», else the class's (a scope change is
+  // not a change of content, and the offered-set trim below is not either).
+  const surahSeed =
+    scope === 'this_session' && (session.surah_ids ?? []).length > 0
+      ? (session.surah_ids ?? [])
+      : classSurahIds;
+  const offeredSurahs = surahsOnOffer ? new Set(offeredSurahKey.split(',').map(Number)) : null;
+  const sortedKey = (ids: readonly number[]): string =>
+    [...ids]
+      .filter((id) => offeredSurahs === null || offeredSurahs.has(id))
+      .sort((a, b) => a - b)
+      .join(',');
+  const dirty =
+    date !== session.date ||
+    startTime !== session.start_time ||
+    endTime !== session.end_time ||
+    delivery !== (session.delivery_mode === 'online' ? 'online' : 'in_person') ||
+    mediaMode !== initialMediaMode(session.online_media_mode) ||
+    roomId !== (session.room_id ?? '') ||
+    visibility !== session.visibility ||
+    description !== (session.description ?? '') ||
+    subjectId !== (session.subject_id ?? scheduleSubjectId ?? '') ||
+    sortedKey(surahIds) !== sortedKey(surahSeed) ||
+    staffDirty ||
+    audience.dirty;
+  const guard = useUnsavedGuard({ open: true, dirty, busy, onCancel });
   /** Derived, never asked (SRS Revision 165 §6) — and it stays the branch the
    *  class already belongs to for as long as the filter still includes it. */
   const identityBranchId = homeBranchOf(audienceSelection, {
@@ -1122,7 +1129,14 @@ function ScopeDialog({
   });
 
   return (
-    <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
+    <Dialog
+      open
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
+      title={t('admin.sessions.editTitle')}
+      wide
+    >
+      {guard.confirmation}
       <div className="form">
         <fieldset>
           <legend>{t('admin.sessions.scopeLegend')}</legend>
@@ -1439,12 +1453,17 @@ function CancelDialog({
   onCancel: () => void;
 }): ReactNode {
   const [reason, setReason] = useState('');
+  // A reason typed and not sent is worth one question (the shared rule); a
+  // blank one is not.
+  const guard = useUnsavedGuard({ open: true, dirty: reason.trim() !== '', busy, onCancel });
   return (
     <Dialog
       open
-      onClose={onCancel}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
       title={t('admin.sessions.cancelTitle').replace('{date}', session.date)}
     >
+      {guard.confirmation}
       <div className="form">
         <p>{t('admin.sessions.cancelBody')}</p>
         {/* **R83.2 — optional.** R77 required it, on the reasoning that a
@@ -1471,73 +1490,5 @@ function CancelDialog({
         </div>
       </div>
     </Dialog>
-  );
-}
-
-/**
- * **Who takes THIS lesson** (R43.4, surfaced by R91 §11).
- *
- * A cover for one occurrence: the schedule's own assignments are untouched, the
- * next occurrence resolves to the normal مؤطِّرة, and a past occurrence keeps
- * whoever actually took it whatever the schedule later says.
- *
- * The sentence on the dialog says so, because *this occurrence only* is exactly
- * the thing an administrator would otherwise have to infer from what did not
- * change.
- */
-function OccurrenceStaffDialog({
-  session,
-  teachers,
-  onClose,
-  onSave,
-}: {
-  session: ScheduleSession;
-  teachers: DirectoryEntry[];
-  onClose: () => void;
-  onSave: (staff: { user_id: string; position: 'teacher' | 'assistant' }[]) => Promise<void>;
-}): ReactNode {
-  const initialLead = session.staff.find((x) => x.position === 'teacher')?.user_id ?? '';
-  const initialAssistants = session.staff
-    .filter((x) => x.position === 'assistant')
-    .map((x) => x.user_id);
-  const [leadId, setLeadId] = useState(initialLead);
-  const [assistantIds, setAssistantIds] = useState<string[]>(initialAssistants);
-  const [busy, setBusy] = useState(false);
-
-  const dirty =
-    leadId !== initialLead ||
-    [...assistantIds].sort().join(',') !== [...initialAssistants].sort().join(',');
-
-  return (
-    <FormDialog
-      open
-      title={t('admin.sessions.staffTitle').replace('{date}', formatDate(session.date))}
-      onCancel={onClose}
-      dirty={dirty}
-      busy={busy}
-      onSubmit={async () => {
-        setBusy(true);
-        try {
-          await onSave([
-            ...(leadId ? [{ user_id: leadId, position: 'teacher' as const }] : []),
-            ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
-          ]);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <p className="field__hint">{t('admin.sessions.staffHint')}</p>
-      <StaffPicker
-        staff={teachers}
-        leadLabel={t('admin.schedules.teacher')}
-        leadId={leadId}
-        onLead={setLeadId}
-        assistantsLabel={t('admin.schedules.assistants')}
-        assistantsHint={t('admin.schedules.assistantsHint')}
-        assistantIds={assistantIds}
-        onAssistants={setAssistantIds}
-      />
-    </FormDialog>
   );
 }

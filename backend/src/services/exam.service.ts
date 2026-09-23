@@ -683,7 +683,12 @@ export async function updatePhysicalExam(
   });
 }
 
-export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string): Promise<void> {
+export async function deleteExam(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+  options: { acknowledgeEvidence?: boolean } = {},
+): Promise<void> {
   /**
    * **Owner decision, 2026-09-16 — deletion joins the ratified grant,
    * reversing R70.4's "deletion stays Admin and above."** `Exam` still
@@ -723,8 +728,21 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
     );
 
     /**
-     * **Student educational evidence forbids deletion** (Owner decision,
-     * 2026-09-03).
+     * **Student educational evidence forbids deletion — unless the Owner's
+     * administration says it has seen it** (Owner decision 2026-09-03,
+     * amended by SRS Revision 172 §6, 2026-09-23).
+     *
+     * The 2026-09-03 rule made an exam with a paper or a mark undeletable,
+     * full stop. The Owner met it on three test exams and asked whether the
+     * administration should be able to delete a sat and graded exam at all;
+     * the answer built here is R170 §8's own shape, applied to exams: the
+     * deletion is REFUSED until the caller acknowledges what goes with it
+     * (`acknowledge_evidence`, carrying the counts back), then it is a soft
+     * delete like any other — the papers and marks stay attached to the
+     * tombstone, hidden from every reader, RESTORABLE for the seven days, and
+     * destroyed with the exam when the Trash lets it go. R133's concern (a
+     * person's record) is met the way it is for a class: reversibly, audited,
+     * and never silently.
      *
      * `deleteExam` is a soft delete, so none of the six `Restrict` foreign keys
      * pointing at `exam` ever fires: the row is updated, not removed. Every
@@ -761,7 +779,11 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
       tx.studentExamSubmission.count({ where: { examId: id } }),
       tx.grade.count({ where: { examId: id } }),
     ]);
-    if (submissions > 0 || grades > 0) {
+    const evidence = submissions > 0 || grades > 0;
+    // The acknowledgement is the ADMINISTRATION's (the Owner's words): a
+    // مؤطِّرة may delete a sitting nobody sat, never one with a paper or mark.
+    const acknowledged = options.acknowledgeEvidence === true && isAdminish(actor);
+    if (evidence && !acknowledged) {
       // Counts only. TD-14: no student name, id or answer reaches an error the
       // Admin sees — the number is what makes the refusal actionable.
       throw new AppError('STATE_CONFLICT', 'the assessment holds student work (R59, R124)', {
@@ -814,7 +836,8 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
       actionType: 'exam.delete',
       targetEntity: 'Exam',
       targetId: id,
-      detail: {},
+      // R172 §6 — what went into the Trash with it, and that she was told.
+      detail: evidence ? { submissions, grades, evidence_acknowledged: true } : {},
     });
   });
 }

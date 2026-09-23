@@ -362,8 +362,16 @@ answer, so the rows exist.
    Overwriting a protected session is possible only by **naming it explicitly**.
    There is no blanket "regenerate all" option and no flag on the edit: an option
    that can be defaulted true is not a confirmation.
-3. **Never regenerates the past.** Generation starts at today, so a schedule
-   edited in November does not resurrect September.
+3. **Never regenerates the past — once there is one.** Generation starts at
+   today (Morocco's day), so a schedule edited in November does not resurrect
+   September. **A schedule that has never produced an occurrence has no past
+   to protect and starts at its own first date** (R172 §2): a week-long
+   conference entered after it was held gets its five days; a class said to
+   begin next month gets nothing before it. Both were silent defects before:
+   the first materialised nothing and showed on no calendar, the second began
+   today — because `anchor_date` (R55: «starts the series») bounded only
+   `none` and the biweekly parity, never a daily or weekly series
+   (`expandSchedule` now applies it to every pattern).
 4. **Snapshots the teaching assignment** (Revision 43.4). Room and staff are
    written onto each occurrence rather than re-derived at read time, so a class
    that has already been taught keeps the people who actually taught it when the

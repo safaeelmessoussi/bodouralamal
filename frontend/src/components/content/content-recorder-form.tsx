@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { ScopeValue } from '../../hooks/use-scope-options.js';
+import { t } from '../../i18n/index.js';
 import { AudioRecorder } from './audio-recorder.js';
 import { useContentScope } from './content-scope-fields.js';
 
@@ -70,6 +71,12 @@ export function ContentRecorderForm({
       {fields}
 
       <AudioRecorder
+        origin={{
+          key: 'library',
+          sessionId: null,
+          label: t('admin.nav.content'),
+          path: `${window.location.pathname}${window.location.search}`,
+        }}
         meta={meta}
         token={token}
         suggestedName={suggestedName}

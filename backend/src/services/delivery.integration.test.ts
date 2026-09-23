@@ -671,15 +671,13 @@ describe("changing the default rewrites the FUTURE only (R97.4)", () => {
       baseInput({ roomId: roomA, anchorDate: day("2026-01-06") }),
       NOW,
     );
-    // A past occurrence, written directly: materialization deliberately starts
-    // at today, so this is the only way to have one — and editing a past
-    // session through the UI is forbidden, which is why the proof is here.
-    const past = await prisma.session.create({
+    // A past occurrence: since R172 §2 a class said to start in January
+    // materialises its January-to-May Tuesdays too (it had never produced an
+    // occurrence), so the row exists — and editing a past session through the
+    // UI is forbidden, which is why the proof writes its state directly.
+    const past = await prisma.session.update({
+      where: { scheduleId_date: { scheduleId: id, date: day("2026-03-10") } },
       data: {
-        scheduleId: id,
-        date: day("2026-03-10"),
-        startTime: at(15),
-        endTime: at(17),
         // **No room, because R97.5 makes that state unrepresentable.** The
         // first draft of this fixture wrote `roomId: roomA` here and the CHECK
         // refused it — which is the constraint proving itself against a real

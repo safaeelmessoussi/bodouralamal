@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { listSubjects, type SubjectRef } from '../../adapters/reference-data.js';
 import {
+  assignCategorySubject,
   assignSubject,
   listCategories,
+  listCategorySubjects,
   listLevelSubjects,
   listLevels,
+  unassignCategorySubject,
   unassignSubject,
   type Category,
   type Level,
@@ -72,6 +75,12 @@ interface Row {
   subjects: SubjectRef[];
 }
 
+/** R172 §1 — a Category and the Subjects taught to EVERY Level of it. */
+interface CategoryRow {
+  category: Category;
+  subjects: SubjectRef[];
+}
+
 export function LevelSubjectsPage({ levelId }: { levelId: string | null }): ReactNode {
   const { accessToken } = useSession();
   const { activeRoles } = useActiveRole();
@@ -80,6 +89,8 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
   const canWrite = activeRoles.includes('super_admin');
 
   const [rows, setRows] = useState<Row[]>([]);
+  const [categoryRows, setCategoryRows] = useState<CategoryRow[]>([]);
+  const [editingCategory, setEditingCategory] = useState<CategoryRow | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [all, setAll] = useState<SubjectRef[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -105,7 +116,16 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
           subjects: await listLevelSubjects(level.id, accessToken).catch(() => [] as SubjectRef[]),
         })),
       );
+      // R172 §1 — and one `CategorySubject` read per Category, for the table
+      // above the Levels: what the whole Category is taught.
+      const wholeCategory = await Promise.all(
+        categoryList.map(async (category) => ({
+          category,
+          subjects: await listCategorySubjects(category.id, accessToken).catch(() => [] as SubjectRef[]),
+        })),
+      );
       setRows(withSubjects);
+      setCategoryRows(wholeCategory);
       setAll(every);
       setCategories(categoryList);
       setStatus('ready');
@@ -143,6 +163,23 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
           r.subjects.some((s) => s.name.toLowerCase().includes(needle))),
     );
   }, [rows, query, categoryFilter]);
+
+  const categoryColumns: Column<CategoryRow>[] = [
+    { key: 'category', header: t('scope.category'), cell: (r) => r.category.name },
+    {
+      key: 'subjects',
+      header: t('admin.levelSubjects.colWholeCategorySubjects'),
+      cell: (r) =>
+        r.subjects.length === 0 ? (
+          <span className="muted">{t('admin.levelSubjects.noneYet')}</span>
+        ) : (
+          r.subjects.map((s) => s.name).join(' · ')
+        ),
+    },
+  ];
+  const categoryActions: RowAction<CategoryRow>[] = canWrite
+    ? [{ label: t('admin.levelSubjects.manage'), onSelect: (r: CategoryRow) => setEditingCategory(r) }]
+    : [];
 
   const columns: Column<Row>[] = [
     { key: 'level', header: t('admin.levelSubjects.colLevel'), cell: (r) => levelLabel(r.level) },
@@ -216,6 +253,21 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
         </Feedback>
       ) : null}
 
+      {/* R172 §1 — «مواد لكل مستويات الفئة»: الفقه or السيرة النبوية taught to
+          every Level of «المرأة», present and future, in one act. Above the
+          Levels because it is the wider fact; each Level's own row below still
+          lists only what it teaches on its own. */}
+      <DataTable
+        caption={t('admin.levelSubjects.wholeCategoryCaption')}
+        columns={categoryColumns}
+        rows={categoryRows}
+        rowKey={(r) => r.category.id}
+        status={status}
+        actions={categoryActions}
+        onRetry={() => void load()}
+      />
+      <p className="field__hint">{t('admin.levelSubjects.wholeCategoryHint')}</p>
+
       <DataTable
           caption={t('admin.levelSubjects.caption')}
           columns={columns}
@@ -255,6 +307,19 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
           onCancel={() => setEditing(null)}
           onDone={(message) => {
             setEditing(null);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : null}
+      {editingCategory ? (
+        <CategorySubjectsDialog
+          row={editingCategory}
+          all={all}
+          token={accessToken}
+          onCancel={() => setEditingCategory(null)}
+          onDone={(message) => {
+            setEditingCategory(null);
             setNotice(message);
             void load();
           }}
@@ -387,6 +452,78 @@ function SubjectsDialog({
           </a>
         </p>
       ) : null}
+    </FormDialog>
+  );
+}
+
+/**
+ * **Which Subjects a whole Category is taught, as a set** (R172 §1) — the same
+ * shape as `SubjectsDialog` above, one hop up: only the difference is written,
+ * and a refusal is reported by name. Removal is never refused by the server
+ * (what stands keeps its explicit Levels), so the only refusal is authority.
+ */
+function CategorySubjectsDialog({
+  row,
+  all,
+  token,
+  onCancel,
+  onDone,
+}: {
+  row: CategoryRow;
+  all: SubjectRef[];
+  token: string | null;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}): ReactNode {
+  const pristine = row.subjects.map((s) => s.id);
+  const [selected, setSelected] = useState<string[]>(pristine);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const dirty = isDirty([...selected].sort(), [...pristine].sort());
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    const before = new Set(pristine);
+    const after = new Set(selected);
+    try {
+      for (const id of after) {
+        if (!before.has(id)) await assignCategorySubject(row.category.id, id, token);
+      }
+      for (const id of before) {
+        if (!after.has(id)) await unassignCategorySubject(row.category.id, id, token);
+      }
+      onDone(t('admin.levelSubjects.saved'));
+    } catch (error) {
+      setNotice(
+        error instanceof ApiError && error.status === 403
+          ? t('admin.levelSubjects.superAdminOnly')
+          : t('common.saveFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FormDialog
+      open
+      title={t('admin.levelSubjects.manageWholeCategoryTitle')}
+      notice={notice}
+      busy={busy}
+      dirty={dirty}
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      <p className="lede">{row.category.name}</p>
+      <MultiSelectField
+        label={t('admin.levelSubjects.colWholeCategorySubjects')}
+        options={all.map((s) => ({ value: s.id, label: s.name }))}
+        selected={selected}
+        onChange={setSelected}
+        hint={t('admin.levelSubjects.wholeCategoryAddHint')}
+        emptyLabel={t('admin.levelSubjects.noneYet')}
+      />
     </FormDialog>
   );
 }

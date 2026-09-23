@@ -76,6 +76,7 @@ export function SessionMaterialsDialog({
    * right.
    */
   const [suggestedName, setSuggestedName] = useState('');
+  const [occurrenceTitle, setOccurrenceTitle] = useState('');
   /** R170 §3 — a warning, read before recording; never a lock. */
   const [consentWarning, setConsentWarning] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -91,6 +92,7 @@ export function SessionMaterialsDialog({
     setLinked(page.linked_content);
     setRecordings(page.recordings);
     setSuggestedName(page.suggested_recording_name);
+    setOccurrenceTitle(page.occurrence.title);
     setConsentWarning(page.audience_media_consent_missing === true);
     // The candidates are the library items in this session's own Level and
     // Subject — the ones a teacher would plausibly attach. A full library list
@@ -251,6 +253,14 @@ export function SessionMaterialsDialog({
       ) : null}
       {!canRecord ? null : recording ? (
         <AudioRecorder
+          // R172 §4 — the recording belongs to THIS occurrence wherever she
+          // goes: the bar names it, and links the saved item to it.
+          origin={{
+            key: `session:${sessionId ?? ''}`,
+            sessionId,
+            label: occurrenceTitle || t('session.materialsTitle'),
+            path: `${window.location.pathname}${window.location.search}`,
+          }}
           meta={{
             level_id: scope.levelId,
             subject_id: scope.subjectId,

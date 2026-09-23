@@ -214,6 +214,14 @@ async function clear(): Promise<void> {
     where: { levelId: { in: levelIds } },
   });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
+  // R172 §1 — the whole-Category curriculum link, and its Trash snapshots.
+  const categoryLinks = await prisma.categorySubject.findMany({
+    where: { category: { name: { startsWith: TAG } } },
+    select: { id: true },
+  });
+  await prisma.trash.deleteMany({ where: { targetEntity: 'CategorySubject', targetId: { in: categoryLinks.map((l) => l.id) } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'CategorySubject', targetId: { in: categoryLinks.map((l) => l.id) } } });
+  await prisma.categorySubject.deleteMany({ where: { id: { in: categoryLinks.map((l) => l.id) } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({
@@ -1199,6 +1207,59 @@ describe("Revision 155 — a multi_dimension schedule", () => {
     expect(
       await prisma.courseScheduleLevel.count({ where: { scheduleId: made.id } }),
     ).toBe(1);
+  });
+
+  it("R172 §1 — a Subject taught to a WHOLE Category reaches every one of its Levels, present and future, and is offered beside the Category", async () => {
+    // A Subject no Level lists on its own — الفقه, taught to «المرأة» as a whole.
+    const fiqh = await prisma.subject.create({ data: { name: `${TAG} فقه الفئة` } });
+    const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
+    const second = await prisma.level.create({
+      data: { name: `${TAG} مستوى ثانٍ للفئة`, categoryId: category.categoryId, genderRestriction: 'any' },
+    });
+
+    // Before the link: nobody teaches it — refused in words (R169 §7).
+    const before = await call("POST", "/admin/course-schedules", superAdmin, scheduleBody({
+      teaching_mode: "multi_dimension", target_id: undefined, subject_id: fiqh.id,
+      dimensions: { branch_ids: [branchA], category_ids: [category.categoryId] }, staff: [],
+      weekdays: ["friday"], start_time: "23:00", end_time: "23:10",
+    }));
+    expect({ status: before.status, error: before.body.error }).toMatchObject({
+      status: 400,
+      error: { details: { reason: "NO_LEVEL_TEACHES_SUBJECT" } },
+    });
+
+    // The link is Super Admin curriculum, idempotent, audited.
+    const assign = await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin);
+    expect(assign.status).toBe(204);
+    expect((await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin)).status).toBe(409);
+    expect((await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, scopedAdmin)).status).toBe(403);
+    const listed = await call("GET", `/admin/categories/${category.categoryId}/subjects`, scopedAdmin);
+    expect((listed.body.data as { id: string }[]).map((s) => s.id)).toEqual([fiqh.id]);
+
+    // The scope options say so — beside the Category, and under EVERY Level of it.
+    const options = (await call("GET", "/me/scope-options", superAdmin)).body as unknown as {
+      data: { categories: { id: string; subject_ids: string[] }[]; levels: { id: string; subject_ids: string[] }[] };
+    };
+    const cat = options.data.categories.find((c) => c.id === category.categoryId);
+    expect(cat?.subject_ids).toContain(fiqh.id);
+    const lvls = options.data.levels;
+    expect(lvls.find((l) => l.id === levelId)?.subject_ids).toContain(fiqh.id);
+    expect(lvls.find((l) => l.id === second.id)?.subject_ids).toContain(fiqh.id);
+
+    // «الكل» on Level for that Category now reaches BOTH Levels — stored as rows.
+    const res = await call("POST", "/admin/course-schedules", superAdmin, scheduleBody({
+      teaching_mode: "multi_dimension", target_id: undefined, subject_id: fiqh.id,
+      dimensions: { branch_ids: [branchA], category_ids: [category.categoryId] }, staff: [],
+      weekdays: ["friday"], start_time: "23:00", end_time: "23:10",
+    }));
+    expect({ status: res.status, error: res.body.error }).toEqual({ status: 201, error: undefined });
+    const made = (res.body as unknown as { schedule: { id: string; dimensions: Record<string, string[]> } }).schedule;
+    expect([...made.dimensions["level_ids"]!].sort()).toEqual([levelId, second.id].sort());
+
+    // Removing the link changes what is offered from now on, never what stands.
+    expect((await call("DELETE", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin)).status).toBe(204);
+    expect(await prisma.courseScheduleLevel.count({ where: { scheduleId: made.id } })).toBe(2);
+    expect(await prisma.trash.count({ where: { targetEntity: 'CategorySubject' } })).toBeGreaterThan(0);
   });
 
   it("R169 §7 — a Subject NO Level teaches has nobody to reach, and is refused in words", async () => {

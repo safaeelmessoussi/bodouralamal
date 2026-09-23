@@ -365,9 +365,29 @@ leave nothing to say when one occurs.
 re-uploads from zero — but discarding the blob would make one network failure
 cost the class.
 
+**The recording is the application's, not the screen's (SRS Revision 172 §4).**
+The Owner records on a phone and asked that a dark screen or a left page never
+stop it. So the `MediaRecorder` lives in one module-level `RecordingSession`
+(`lib/recording-session.ts`, the browser behind a `Platform` seam in
+`lib/recording-platform.ts`): the recorder component is a VIEW bound by its
+screen's `origin.key`, and `RecordingBar` — mounted once at the root — shows the
+same controls at the bottom of every page while a recording is active and no
+screen shows it, with «العودة» to where it began. Three consequences: leaving the
+page unmounts a view and nothing else; every ten seconds the captured chunk is
+written to the phone's own IndexedDB (never leaving the device, cleared on save
+or discard), so a reload or a crash leaves a recording the next visit offers
+back with «حفظ»/«حذف» (`restore()`); and the screen is kept awake by the Wake
+Lock API while recording. What a guard still cannot reach is said honestly:
+iOS suspends capture on lock, and the track's own `mute` event raises the
+capture-gap notice. The name is the server's suggestion carried in the session
+(and for a library recording it is now composed exactly as a class recording's,
+R172 §3: «تسجيل صوتي — المادة — من سجّلت — التاريخ الوقت»).
+
 > [`SRS R75`] · `lib/recorder.ts` holds the rules as pure functions, for the same
 > reason [AF](#af--ordering-a-list-sort-is-a-question-drag-is-a-decision) does:
-> the component tests have no `MediaRecorder` and no layout engine.
+> the component tests have no `MediaRecorder` and no layout engine —
+> `lib/recording-session.test.ts` drives the whole lifecycle with a fake
+> microphone and an in-memory store.
 
 ## AI · A selector dependency follows the business question, not the field order
 

@@ -84,6 +84,7 @@ type PurgeModel =
   | 'enrollment'
   | 'studentTeachingGroup'
   | 'levelSubject'
+  | 'categorySubject'
   | 'sessionContent'
   | 'familyLink'
   | 'examStaff'
@@ -110,6 +111,8 @@ interface ChildWhereByModel {
   eventLevel: Prisma.EventLevelWhereInput;
   eventAdministrativeGroup: Prisma.EventAdministrativeGroupWhereInput;
   levelSubject: Prisma.LevelSubjectWhereInput;
+  // R172 §1 — the whole-Category curriculum link, owned like `levelSubject`.
+  categorySubject: Prisma.CategorySubjectWhereInput;
   levelSurah: Prisma.LevelSurahWhereInput;
   studentTeachingGroup: Prisma.StudentTeachingGroupWhereInput;
   sessionStaff: Prisma.SessionStaffWhereInput;
@@ -140,6 +143,13 @@ type DeclaredChild = {
      * on the FK rather than guessing ownership.
      */
     snapshotIdsKey?: string;
+    /**
+     * The key was introduced AFTER snapshots of this entity already existed
+     * (R172 §1's `cascaded_category_subject_ids`): absent means «none
+     * followed this deletion», never «the snapshot is incomplete». A key that
+     * has existed since the entity became restorable stays required.
+     */
+    legacyOptional?: boolean;
   };
 }[keyof ChildWhereByModel];
 
@@ -181,6 +191,14 @@ const RESTORABLE: Record<
         model: 'levelSubject',
         fk: 'id',
         snapshotIdsKey: 'cascaded_level_subject_ids',
+      },
+      // R172 §1 — the whole-Category link, owned the same way. Optional in a
+      // snapshot older than the link itself.
+      {
+        model: 'categorySubject',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_category_subject_ids',
+        legacyOptional: true,
       },
     ],
   },
@@ -330,6 +348,14 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
         fk: 'id',
         snapshotIdsKey: 'cascaded_level_subject_ids',
       },
+      // R172 §1 — the whole-Category link, owned the same way. Optional in a
+      // snapshot older than the link itself.
+      {
+        model: 'categorySubject',
+        fk: 'id',
+        snapshotIdsKey: 'cascaded_category_subject_ids',
+        legacyOptional: true,
+      },
     ],
   },
   Room: { model: 'room' },
@@ -422,9 +448,9 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
    * options are removed first, above — a grandchild the flat mechanism here
    * cannot reach) and its notifications belong to the sitting/source and are
    * never evidence on their own. A `Grade`, a `StudentExamSubmission` or an
-   * `Attendance` row against the exam IS academic record and blocks the
-   * purge — enforced by `CONDITIONAL_PURGE.Exam` above with a named reason,
-   * not by an unhandled FK violation.
+   * `Attendance` row against the exam IS academic record: since R172 §6 it
+   * goes with the exam (`purgeExamEvidence`, before these children), having
+   * been acknowledged at deletion and restorable for the seven days.
    */
   Exam: {
     model: 'exam',
@@ -457,6 +483,7 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   Enrollment: { model: 'enrollment' },
   StudentTeachingGroup: { model: 'studentTeachingGroup' },
   LevelSubject: { model: 'levelSubject' },
+  CategorySubject: { model: 'categorySubject' },
   LevelSurah: { model: 'levelSurah' },
   SessionContent: { model: 'sessionContent' },
   FamilyLink: { model: 'familyLink' },
@@ -520,30 +547,10 @@ const CONDITIONAL_PURGE: Record<
     reason: 'SESSIONS_HAVE_EXAMS',
     purgeable: async (db, targetId) => (await sessionsKeepingSchedule(db, targetId)) === 0,
   },
-  /**
-   * **R136 (Codex H2) — the same purgeable-only-if-empty shape, for an Exam's
-   * recorded evidence.** `ExamQuestion`, `ExamStaff` and `Notification` are
-   * declared children below (owned, no evidence, safe to cascade);
-   * `StudentExamSubmission`, `Grade` and `Attendance` are deliberately NOT —
-   * they are the record of what a student actually did, which R133's
-   * evidence safeguards keep. Before this, the `Exam` purge plan declared
-   * only `examStaff`, so any exam that had ever had a question added (every
-   * real online one) hit an unhandled FK RESTRICT violation from
-   * `ExamQuestion` — this names the refusal instead of crashing on it, and a
-   * reusable source or a never-engaged occurrence (neither has any of the
-   * three) purges cleanly.
-   */
-  Exam: {
-    reason: 'EXAM_HAS_RECORDED_EVIDENCE',
-    purgeable: async (db, targetId) => {
-      const [submissions, grades, attendance] = await Promise.all([
-        db.studentExamSubmission.count({ where: { examId: targetId } }),
-        db.grade.count({ where: { examId: targetId } }),
-        db.attendance.count({ where: { examId: targetId } }),
-      ]);
-      return submissions === 0 && grades === 0 && attendance === 0;
-    },
-  },
+  // (R172 §6 — `Exam` is no longer here. Its papers, marks and attendance go
+  // WITH it when the Trash lets it go, exactly as a class's occurrences do
+  // under R170 §8: `purgeExamEvidence` below. The deletion that put it in the
+  // Trash was acknowledged with those counts in view — `deleteExam`.)
 };
 
 /** Why a type cannot be purged. Stable codes: a screen renders them. */
@@ -695,6 +702,7 @@ export async function listTrash(
       restorePlan?.children?.every(
         (child) =>
           child.snapshotIdsKey === undefined ||
+          (child.legacyOptional === true && snapshotLacks(row.snapshot, child.snapshotIdsKey)) ||
           hasValidSnapshotIds(row.snapshot, child.snapshotIdsKey),
       ) ?? true;
     const restorable = restorePlan !== undefined && completeRestoreSnapshot;
@@ -1038,6 +1046,7 @@ export async function restoreEntry(
       plan.children?.some(
         (child) =>
           child.snapshotIdsKey !== undefined &&
+          !(child.legacyOptional === true && snapshotLacks(entry.snapshot, child.snapshotIdsKey)) &&
           !hasValidSnapshotIds(entry.snapshot, child.snapshotIdsKey),
       )
     ) {
@@ -1255,6 +1264,24 @@ async function sessionsKeepingSchedule(
  * library. Runs inside the purge transaction; `CONDITIONAL_PURGE` has already
  * refused if an exam was sat in any occurrence.
  */
+/**
+ * **R172 §6 — an exam's evidence goes with it.** Answers (and their chosen
+ * options), papers, marks (their per-question scores cascade) and attendance
+ * recorded against the exam. Restrict FKs everywhere, so the order matters:
+ * options → answers → papers, then marks, then attendance.
+ */
+async function purgeExamEvidence(
+  tx: Prisma.TransactionClient,
+  examId: string,
+): Promise<{ submissions: number; grades: number; attendance: number }> {
+  await tx.studentExamAnswerOption.deleteMany({ where: { answer: { submission: { examId } } } });
+  await tx.studentExamAnswer.deleteMany({ where: { submission: { examId } } });
+  const submissions = await tx.studentExamSubmission.deleteMany({ where: { examId } });
+  const grades = await tx.grade.deleteMany({ where: { examId } });
+  const attendance = await tx.attendance.deleteMany({ where: { examId } });
+  return { submissions: submissions.count, grades: grades.count, attendance: attendance.count };
+}
+
 async function purgeScheduleSessions(
   tx: Prisma.TransactionClient,
   scheduleId: string,
@@ -1397,7 +1424,11 @@ async function purgeTrashEntry(
        * first is exactly what makes `ExamQuestion.deleteMany` below succeed
        * rather than hit the same RESTRICT this fix exists to stop hitting.
        */
+      let purgedWithExam = { submissions: 0, grades: 0, attendance: 0 };
       if (entry.targetEntity === 'Exam') {
+        // R172 §6 — the papers, marks and attendance recorded against it go
+        // with it (acknowledged at deletion; restorable until now).
+        purgedWithExam = await purgeExamEvidence(tx, entry.targetId);
         await tx.examQuestionOption.deleteMany({ where: { question: { examId: entry.targetId } } });
       }
       // R170 §8 — a class goes with its occurrences, their attendance and
@@ -1449,6 +1480,14 @@ async function purgeTrashEntry(
           system: actor === null,
           // R170 §8 — what went with the class (counts: an occurrence id is a
           // coordinate, never a person).
+          // R172 §6 — what went with the exam, in counts.
+          ...(purgedWithExam.submissions + purgedWithExam.grades + purgedWithExam.attendance > 0
+            ? {
+                submissions_purged: purgedWithExam.submissions,
+                grades_purged: purgedWithExam.grades,
+                attendance_purged: purgedWithExam.attendance,
+              }
+            : {}),
           ...(purgedWithClass.sessions > 0
             ? {
                 sessions_purged: purgedWithClass.sessions,
@@ -1616,6 +1655,12 @@ function snapshotIds(snapshot: unknown, key: string, targetEntity: string): stri
     throw new Error(`${targetEntity} Trash snapshot has malformed ${key}`);
   }
   return value as string[];
+}
+
+/** The key is simply not there — a snapshot from before it was written. */
+function snapshotLacks(snapshot: unknown, key: string): boolean {
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return false;
+  return (snapshot as Record<string, unknown>)[key] === undefined;
 }
 
 function hasValidSnapshotIds(snapshot: unknown, key: string): boolean {

@@ -120,6 +120,15 @@ read answers `held[]` — the kinds she HOLDS, from live role rows — because �
 always on «حسابي» (R170 §1): a person holding every role has nothing askable and no request, and a
 section that then rendered nothing is how the Owner could not find it.
 
+**The access token is renewed, not merely obtained (R172 §5).** It lives one hour (TD-12), and
+until Revision 172 the client fetched it once and never again: a tab open for an hour then failed
+every call with 401 until reloaded — the Owner met it as a failed save after a 65-minute recording.
+`lib/token-refresh.ts` now renews it two ways: `api()` retries a 401 to a bearer request ONCE with
+a freshly refreshed token (a session that is genuinely over yields none, and the 401 stands; an
+anonymous request never triggers it), and `SessionProvider` renews on a timer five minutes before
+expiry and when a hidden tab becomes visible again. Single-flight, as before; the refreshed token
+is announced to the session context so every later request carries it (`api.test.ts`).
+
 **A granted role is hers at her next page, not at her next sign-in (R169 §2).** The access token
 lives in memory only; every page load calls `POST /auth/refresh`, which reads the live
 `UserBranchRole` rows and re-resolves the active role. Nothing is revoked when a role is ADDED —

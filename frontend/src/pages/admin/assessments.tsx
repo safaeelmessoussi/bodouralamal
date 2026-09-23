@@ -19,6 +19,7 @@ import {
   type QuestionKind,
   type SubmissionRow,
 } from '../../adapters/assessments.js';
+import { deleteExam } from '../../adapters/exams.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { TARGET_LABELS } from '../../components/scheduling/target-picker.js';
@@ -95,11 +96,13 @@ export function AssessmentsView({
   const { accessToken } = useSession();
   const { activeRoles } = useActiveRole();
   const canWrite = activeRoles.some((r) => ['admin', 'super_admin', 'teacher'].includes(r));
+  /** R172 §6 — deleting a paper that was sat is the administration's to acknowledge. */
+  const isAdminish = activeRoles.some((r) => ['admin', 'super_admin'].includes(r));
 
   if (examId !== null) {
     return <OnePaper examId={examId} token={accessToken} canWrite={canWrite} layout={layout} />;
   }
-  return <Library token={accessToken} canWrite={canWrite} layout={layout} />;
+  return <Library token={accessToken} canWrite={canWrite} isAdminish={isAdminish} layout={layout} />;
 }
 
 /** `/admin/assessments` — the builder in the back-office chrome. */
@@ -146,10 +149,12 @@ type PortalLayout = (props: {
 function Library({
   token,
   canWrite,
+  isAdminish,
   layout,
 }: {
   token: string | null;
   canWrite: boolean;
+  isAdminish: boolean;
   layout: PortalLayout;
 }): ReactNode {
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, mode: 'form' });
@@ -174,6 +179,50 @@ function Library({
    * left to confirm.
    */
   const [copying, setCopying] = useState<AssessmentSummary | null>(null);
+  /**
+   * **R172 §7 — a paper can be deleted from here.** «الاختبارات» could build,
+   * copy and reuse a paper and never remove one; the Owner's three test papers
+   * had to be deleted from الجدولة. The same `DELETE /exams/{id}`, the same
+   * Trash, and the same second question when it holds student work (§6).
+   */
+  const [deleting, setDeleting] = useState<AssessmentSummary | null>(null);
+  const [deleteEvidence, setDeleteEvidence] = useState<{ submissions: number; grades: number } | null>(null);
+  const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function confirmDelete(): Promise<void> {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      await deleteExam(deleting.id, token, { acknowledgeEvidence: deleteEvidence !== null });
+      setDeleting(null);
+      setDeleteEvidence(null);
+      setNotice(t('common.deleted'));
+      await load();
+    } catch (error) {
+      const details = error instanceof ApiError ? error.details : undefined;
+      if (details?.['reason'] === 'STUDENT_EVIDENCE_EXISTS') {
+        const counts = {
+          submissions: Number(details['submissions'] ?? 0),
+          grades: Number(details['grades'] ?? 0),
+        };
+        if (deleteEvidence === null && isAdminish) setDeleteEvidence(counts);
+        else {
+          setDeleteBlocked(
+            t('scheduling.deleteBlockedEvidence')
+              .replace('{submissions}', String(counts.submissions))
+              .replace('{grades}', String(counts.grades)),
+          );
+        }
+      } else {
+        setDeleting(null);
+        setDeleteEvidence(null);
+        setNotice(t('assessments.deleteFailed'));
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   const filtered = query.trim() !== '' || modeFilter !== '' || levelFilter !== '';
 
@@ -347,9 +396,40 @@ function Library({
                     label: t('assessments.copyPaper'),
                     onSelect: (row) => setCopying(row),
                   },
+                  {
+                    label: t('common.delete'),
+                    danger: true,
+                    onSelect: (row) => {
+                      setDeleteBlocked(null);
+                      setDeleteEvidence(null);
+                      setDeleting(row);
+                    },
+                  },
                 ]
               : []
           }
+        />
+        <ConfirmDialog
+          open={deleting !== null}
+          {...(deleteBlocked ? { blocked: deleteBlocked } : {})}
+          title={t('assessments.deleteTitle')}
+          body={
+            deleteEvidence === null
+              ? t('assessments.deleteBody').replace('{title}', deleting?.title ?? '')
+              : t('scheduling.deleteWithEvidenceBody')
+                  .replace('{title}', deleting?.title ?? '')
+                  .replace('{submissions}', String(deleteEvidence.submissions))
+                  .replace('{grades}', String(deleteEvidence.grades))
+          }
+          confirmLabel={deleteEvidence === null ? t('common.delete') : t('scheduling.deleteWithEvidence')}
+          danger
+          busy={deleteBusy}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => {
+            setDeleting(null);
+            setDeleteEvidence(null);
+            setDeleteBlocked(null);
+          }}
         />
         {copying ? (
           <ConfirmDialog

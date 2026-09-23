@@ -543,21 +543,32 @@ describe("the filter set is identical for everyone (§5.2)", () => {
    * rule moved to one place both producers can reach. The library screen has no
    * occurrence — R75.6's *title · description · date* is about a class — so it is
    * named after the Subject in view and the association's own date, numbered by
-   * the same shared rule.
+   * the same shared rule. **R172 §3 — composed exactly as a class recording's
+   * name**: «تسجيل صوتي — الـمادة — من سجّلت — التاريخ الوقت», and still a name
+   * when no Subject is in view (it used to be `null`, and the Owner's phone
+   * then asked her to type one).
    */
-  it("suggests a recording name for the Subject in view, and null without one", async () => {
+  it("suggests a recording name composed like a class recording's — with the Subject in view, and without", async () => {
     const withSubject = await call(
       `${scoped}${academicYearId}&subject_id=${subjectId}`,
+      teacherToken,
     );
-    expect(typeof withSubject.body["suggested_recording_name"]).toBe("string");
-    expect(String(withSubject.body["suggested_recording_name"])).toContain(
-      `${TAG} مادة`,
-    );
+    const named = String(withSubject.body["suggested_recording_name"]);
+    expect(named.startsWith("تسجيل صوتي — ")).toBe(true);
+    expect(named).toContain(`${TAG} مادة`);
+    // …the person recording, by her display name (§20 rule 12)…
+    expect(named).toContain(`${TAG} أستاذة`);
+    // …and the association's date and time close it (TD-11), like a class recording.
+    expect(named).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 
-    // No Subject in view: a name of nothing but a date identifies nothing, and
-    // `null` says *there is nothing to suggest* rather than suggesting badly.
-    const withoutSubject = await call(`${scoped}${academicYearId}`);
-    expect(withoutSubject.body["suggested_recording_name"]).toBeNull();
+    const withoutSubject = await call(`${scoped}${academicYearId}`, teacherToken);
+    const bare = String(withoutSubject.body["suggested_recording_name"]);
+    expect(bare.startsWith("تسجيل صوتي — ")).toBe(true);
+    expect(bare).not.toContain(`${TAG} مادة`);
+
+    // Nobody signed in records nothing: no name for nobody.
+    const anonymous = await call(`${scoped}${academicYearId}&subject_id=${subjectId}`);
+    expect(anonymous.body["suggested_recording_name"]).toBeNull();
   });
 
   it("a malformed filter is a 400, not an empty list", async () => {

@@ -171,7 +171,15 @@ export interface ScheduleRecurrence {
  * date, the same column `biweekly_alternating` anchors its parity on).
  */
 export function expandSchedule(rule: ScheduleRecurrence, from: Date, to: Date): Date[] {
-  const start = atMidnightUtc(from);
+  // **R55: `anchor_date` STARTS the series** — for every pattern, not only as
+  // `none`'s single date or `biweekly_alternating`'s parity week. The form
+  // promises «أول تاريخ تبدأ منه الحصص», and until Revision 172 §2 a daily or
+  // weekly series ignored it: a class said to start on the 1st of next month
+  // materialised from today, and one whose dates lay wholly before today
+  // (a week-long conference recorded afterwards) materialised nothing.
+  const anchor = rule.anchorDate ? atMidnightUtc(rule.anchorDate) : null;
+  const requestedStart = atMidnightUtc(from);
+  const start = anchor !== null && anchor > requestedStart ? anchor : requestedStart;
   // **R50: `effective_until` is a SECOND upper bound and the earlier one wins.**
   // The caller's horizon is the academic year's end (`horizonFor`); this is
   // where the series itself stops. Applying it HERE and nowhere else is the

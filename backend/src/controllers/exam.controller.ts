@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { pageParamsFrom } from '../lib/pagination.js';
@@ -103,9 +104,19 @@ export function update(prisma: PrismaClient) {
   };
 }
 
+const removeQuerySchema = z
+  .object({
+    /** R172 §6 — «I have seen the papers and marks that go with it». */
+    acknowledge_evidence: z.enum(['true', 'false']).optional(),
+  })
+  .strict();
+
 export function remove(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    await deleteExam(prisma, requireActor(req), idParam(req, 'id'));
+    const q = parse(removeQuerySchema, req.query);
+    await deleteExam(prisma, requireActor(req), idParam(req, 'id'), {
+      acknowledgeEvidence: q.acknowledge_evidence === 'true',
+    });
     res.status(204).end();
   };
 }

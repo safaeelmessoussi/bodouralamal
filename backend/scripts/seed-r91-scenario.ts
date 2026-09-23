@@ -160,14 +160,17 @@ const created = await createCourseSchedule(prisma, actor, {
 const schedule = { id: created.id };
 
 /**
- * **A past occurrence, so history has something to preserve.** The horizon only
- * materializes forward, and the rule R91 must never break is about what already
- * happened.
+ * **A past occurrence, so history has something to preserve.** Since R172 §2 a
+ * class anchored sixty days back materialises its past Thursdays itself, so
+ * the row is there and is only marked held; before that the horizon began
+ * today and the row had to be written by hand (kept as the fallback).
  */
 const pastDate = day(-7);
 pastDate.setUTCDate(pastDate.getUTCDate() - ((pastDate.getUTCDay() + 3) % 7));
-const pastSession = await prisma.session.create({
-  data: {
+const pastSession = await prisma.session.upsert({
+  where: { scheduleId_date: { scheduleId: created.id, date: pastDate } },
+  update: { status: 'held' },
+  create: {
     scheduleId: created.id,
     date: pastDate,
     startTime: new Date('1970-01-01T15:00:00Z'),
@@ -176,8 +179,12 @@ const pastSession = await prisma.session.create({
   },
   select: { id: true },
 });
-await prisma.sessionStaff.create({
-  data: { sessionId: pastSession.id, userId: safa, position: 'teacher' },
+// The materialiser already snapshotted Safa onto it (R43.4); written only when
+// the row was the hand-made fallback.
+await prisma.sessionStaff.upsert({
+  where: { sessionId_userId: { sessionId: pastSession.id, userId: safa } },
+  update: {},
+  create: { sessionId: pastSession.id, userId: safa, position: 'teacher' },
 });
 
 console.log(

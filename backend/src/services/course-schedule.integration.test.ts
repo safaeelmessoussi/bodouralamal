@@ -276,6 +276,41 @@ describe("materialization (TD-7, §20 rule 24)", () => {
   });
 });
 
+describe("R172 §2 — the start date starts the series, and a series entered after the fact still gets its dates", () => {
+  it("a week-long daily محاضرة entered AFTER it was held materialises every one of its days", async () => {
+    // Held 18–22 May; entered on 1 June (NOW). Before R172 §2 this created
+    // NOTHING — materialisation began today — and the calendar showed no trace.
+    const { id, materialized } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({
+        recurrence: "daily",
+        weekdays: [],
+        anchorDate: day("2026-05-18"),
+        effectiveUntil: day("2026-05-22"),
+      }),
+      NOW,
+    );
+    expect(materialized.created).toBe(5);
+    expect(await datesOf(id)).toEqual(["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22"]);
+    // Its past is now a past: a later run neither adds nor rewrites.
+    const [again] = await runMaterialization(prisma, { schedule_id: id }, new Date("2026-07-01T08:00:00.000Z"));
+    expect(again?.created).toBe(0);
+  });
+
+  it("a weekly class said to start next month has no session before that date", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ anchorDate: day("2026-07-07") }),
+      NOW,
+    );
+    const dates = await datesOf(id);
+    expect(dates[0]).toBe("2026-07-07");
+    expect(dates.filter((d) => d < "2026-07-07")).toEqual([]);
+  });
+});
+
 describe("R137 — a genuine one-time حصة دراسية/محاضرة (`recurrence: 'none'`)", () => {
   it("materializes exactly one session, on its own anchor date", async () => {
     const { id, materialized } = await createCourseSchedule(

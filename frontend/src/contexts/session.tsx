@@ -1,4 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  ACCESS_TTL_MS,
+  RENEW_AHEAD_MS,
+  accessTokenObtainedAt,
+  noteAccessTokenObtained,
+  onAccessTokenRefreshed,
+  refreshAccessToken,
+} from '../lib/token-refresh.js';
 
 /**
  * Session context (SRS TD-12, §14.4).
@@ -62,77 +70,12 @@ interface SessionState {
  *  `SessionProvider` / `useSession`, never this directly. */
 export const SessionContext = createContext<SessionState | null>(null);
 
-/** Single-flight refresh (TD-12): rotation makes concurrent refreshes from
- *  multiple tabs a logout race, so one in-flight refresh is shared and
- *  concurrent callers await its result. */
-let inFlightRefresh: Promise<string | null> | null = null;
-
 /**
- * The role this tab is working as (R60), kept where a full page load survives.
- *
- * The access token lives in memory and the role switch navigates, so without
- * this the narrowing would be destroyed by the navigation that caused it. It is
- * a *request*, never an authority: the server validates it against live rows and
- * answers with the role it actually granted.
+ * R172 §5 — the refresh itself, the role memory and the renewal timing live
+ * in `lib/token-refresh.ts`, where `api()` can reach them without importing a
+ * React context. Re-exported so the existing callers keep their import.
  */
-const ACTIVE_ROLE_KEY = 'bodour.activeRole';
-
-export function storedActiveRole(): string | null {
-  try {
-    return window.sessionStorage.getItem(ACTIVE_ROLE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function storeActiveRole(role: string | null): void {
-  try {
-    if (role === null) window.sessionStorage.removeItem(ACTIVE_ROLE_KEY);
-    else window.sessionStorage.setItem(ACTIVE_ROLE_KEY, role);
-  } catch {
-    // Storage disabled: the tab still works, it simply forgets on navigation.
-  }
-}
-
-export async function refreshAccessToken(): Promise<string | null> {
-  inFlightRefresh ??= (async () => {
-    try {
-      const requested = storedActiveRole();
-      const response = await fetch('/api/v1/auth/refresh', {
-        method: 'POST',
-        // R101: refresh and logout are the only refresh-cookie consumers. Both
-        // require this custom header, which a cross-site form cannot set.
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-        // R60.4 — re-asserted on every refresh. Omitting it would silently widen
-        // the session back to every role held, which is the one failure mode the
-        // fail-safe rule exists to prevent.
-        body: JSON.stringify(requested === null ? {} : { active_role: requested }),
-      });
-      if (!response.ok) return null;
-      const body = (await response.json()) as {
-        access_token: string;
-        active_role: string | null;
-      };
-      // **The server's answer wins.** When the requested role has been revoked it
-      // falls back to another assignment and says which — storing what we asked
-      // for would leave the tab claiming a role it no longer has.
-      storeActiveRole(body.active_role);
-      return body.access_token;
-    } catch {
-      return null;
-    } finally {
-      // Released only after the awaiting callers have observed the result.
-      setTimeout(() => {
-        inFlightRefresh = null;
-      }, 0);
-    }
-  })();
-  return inFlightRefresh;
-}
+export { refreshAccessToken, storedActiveRole, storeActiveRole } from '../lib/token-refresh.js';
 
 export function SessionProvider({ children }: { children: ReactNode }): ReactNode {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -146,6 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const fromCallback = hash.get('access_token');
     if (fromCallback) {
+      noteAccessTokenObtained();
       setAccessToken(fromCallback);
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
@@ -177,6 +121,35 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
       cancelled = true;
     };
   }, [accessToken]);
+
+  /**
+   * **R172 §5 — the token is renewed before it dies.** A refresh from any
+   * source (the timer here, a 401 retry inside `api()`, a fresh tab) lands in
+   * this state, so every later request carries it. The timer fires a few
+   * minutes before expiry; a tab that was hidden longer than that renews the
+   * moment it is looked at again, because timers are throttled in the
+   * background and a stale token is exactly what an idle tab used to hold.
+   */
+  useEffect(() => {
+    if (status !== 'authenticated') return undefined;
+    const unsubscribe = onAccessTokenRefreshed((token) => setAccessToken(token));
+    const dueIn = (): number =>
+      Math.max(0, accessTokenObtainedAt() + ACCESS_TTL_MS - RENEW_AHEAD_MS - Date.now());
+    let timer = window.setTimeout(function renew() {
+      void refreshAccessToken().then(() => {
+        timer = window.setTimeout(renew, dueIn());
+      });
+    }, dueIn());
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible' && dueIn() === 0) void refreshAccessToken();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [status]);
 
   const value = useMemo<SessionState>(
     () => ({ status, me, accessToken, setAccessToken }),

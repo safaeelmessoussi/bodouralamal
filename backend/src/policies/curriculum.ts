@@ -31,28 +31,113 @@ import { AppError } from '../lib/errors.js';
  * marginally better.
  */
 
+/**
+ * ## Two sources, one answer (SRS Revision 172 §1)
+ *
+ * A Subject reaches a Level through `LevelSubject` (what the Level teaches on
+ * its own) OR through `CategorySubject` (a Subject taught to the Level's WHOLE
+ * Category — الفقه to every Level of «المرأة», present and future). Every
+ * reader that asks «what does this Level teach» or «which Levels teach this
+ * Subject» asks HERE — `subjectsTaughtAt`, `levelsTeaching` — so the second
+ * source cannot be forgotten by one surface and remembered by another.
+ */
+
 /** Accepts a transaction client so the check joins the caller's transaction —
  *  a pairing verified outside it could be revoked before the write lands. */
-type Db = Pick<Prisma.TransactionClient, 'levelSubject' | 'level' | 'subject'>;
+type Db = Pick<Prisma.TransactionClient, 'levelSubject' | 'categorySubject' | 'level' | 'subject'>;
+
+/** Every Subject each of these Levels teaches — on its own or through its
+ *  Category. Live rows only: a deleted Level, Subject or Category teaches nothing. */
+export async function subjectsTaughtAt(
+  db: Pick<Prisma.TransactionClient, 'levelSubject' | 'categorySubject' | 'level'>,
+  levelIds: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  if (levelIds.length === 0) return out;
+  const ids = [...new Set(levelIds)];
+  const [own, levels] = await Promise.all([
+    db.levelSubject.findMany({
+      where: { levelId: { in: ids }, deletedAt: null, level: { deletedAt: null }, subject: { deletedAt: null } },
+      select: { levelId: true, subjectId: true },
+    }),
+    db.level.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, categoryId: true },
+    }),
+  ]);
+  const categoryIds = [...new Set(levels.map((level) => level.categoryId))];
+  const whole =
+    categoryIds.length === 0
+      ? []
+      : await db.categorySubject.findMany({
+          where: {
+            categoryId: { in: categoryIds },
+            deletedAt: null,
+            category: { deletedAt: null },
+            subject: { deletedAt: null },
+          },
+          select: { categoryId: true, subjectId: true },
+        });
+  const byCategory = new Map<string, string[]>();
+  for (const row of whole) byCategory.set(row.categoryId, [...(byCategory.get(row.categoryId) ?? []), row.subjectId]);
+  for (const level of levels) {
+    out.set(level.id, new Set(byCategory.get(level.categoryId) ?? []));
+  }
+  for (const row of own) {
+    const set = out.get(row.levelId) ?? new Set<string>();
+    set.add(row.subjectId);
+    out.set(row.levelId, set);
+  }
+  return out;
+}
+
+/** Every live Level that teaches this Subject — on its own or through its
+ *  Category — narrowed to these Categories when any are named. */
+export async function levelsTeaching(
+  db: Pick<Prisma.TransactionClient, 'levelSubject' | 'categorySubject' | 'level'>,
+  subjectId: string,
+  categoryIds: readonly string[] = [],
+): Promise<string[]> {
+  const narrowed = categoryIds.length > 0;
+  const [own, whole] = await Promise.all([
+    db.levelSubject.findMany({
+      where: {
+        subjectId,
+        deletedAt: null,
+        subject: { deletedAt: null },
+        level: { deletedAt: null, ...(narrowed ? { categoryId: { in: [...categoryIds] } } : {}) },
+      },
+      select: { levelId: true },
+    }),
+    db.categorySubject.findMany({
+      where: {
+        subjectId,
+        deletedAt: null,
+        subject: { deletedAt: null },
+        ...(narrowed ? { categoryId: { in: [...categoryIds] } } : {}),
+        category: { deletedAt: null },
+      },
+      select: { categoryId: true },
+    }),
+  ]);
+  const ids = new Set(own.map((row) => row.levelId));
+  if (whole.length > 0) {
+    const levels = await db.level.findMany({
+      where: { deletedAt: null, categoryId: { in: whole.map((row) => row.categoryId) } },
+      select: { id: true },
+    });
+    for (const level of levels) ids.add(level.id);
+  }
+  return [...ids];
+}
 
 export async function assertSubjectTaughtAtLevel(
   db: Db,
   levelId: string,
   subjectId: string,
 ): Promise<void> {
-  const assigned = await db.levelSubject.findFirst({
-    where: {
-      levelId,
-      subjectId,
-      deletedAt: null,
-      // A Level or Subject that is itself deleted teaches nothing: the join row
-      // can outlive either, and treating a dangling assignment as valid is how
-      // a deleted Subject keeps appearing on a form.
-      level: { deletedAt: null },
-      subject: { deletedAt: null },
-    },
-    select: { id: true },
-  });
+  const taught = await subjectsTaughtAt(db, [levelId]);
+  const assigned = taught.get(levelId)?.has(subjectId) === true;
 
   if (!assigned) {
     // Named, so the screen can say WHICH Level (the Owner met this as the

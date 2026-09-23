@@ -39,7 +39,9 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
         size: body.size,
         mime: body.mime,
         meta: {
-          levelId: body.content_meta.level_id,
+          ...(body.content_meta.level_id !== undefined
+            ? { levelId: body.content_meta.level_id }
+            : { categoryId: body.content_meta.category_id ?? '' }),
           subjectId: body.content_meta.subject_id,
           academicYearId: body.content_meta.academic_year_id,
           branchId: body.content_meta.branch_id,
