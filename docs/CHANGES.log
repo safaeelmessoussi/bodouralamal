@@ -11663,3 +11663,18 @@ key + recorder takes the row back), course-schedule (override conflict, restore 
 times, regenerate resets all), scheduling-surahs (inheritance normalised, فقه wears no Surah),
 quran (concurrent issues draw one number), attendance (tombstone gone), content (Subject change vs
 retained Levels). Backup drill: two refusal cases.
+
+## 2026-09-22 — patch-level dependency update (§3.1a Phase 1; CVE remediation, Revision 171 §13)
+
+**Reason:** the `npm audit` taken with the codex review. **Its own commit, nothing else in it.**
+Backend transitive: `qs` 6.15.3 → 6.16.0 (array-limit bypass, attacker-controlled `isBuffer` DoS —
+reachable: Express parses every query string with it), `fast-uri` 3.1.4 → 3.1.8 (host confusion),
+`brace-expansion` 5.0.8 → 5.0.12, `nanoid` 3.3.16 → 3.3.19, `postcss` 8.5.22 → 8.5.28. Both packages
+direct: `vitest` 4.1.10 → 4.1.11 (`@vitest/mocker` path traversal in redirect mocks; dev-only).
+Frontend now audits clean (0). Backend keeps seven findings, all under the `prisma` CLI
+(`@prisma/config`, `@prisma/dev`, `deepmerge-ts`, `find-my-way`, `mysql2`, `valibot`, `prisma`):
+every 7.x is in the advisory ranges and the only fix is a major upgrade §3.1a forbids without an
+Owner-approved task — accepted with the reason on the
+[readiness page](operations/deployment-readiness.md) (nothing in that chain runs here).
+Version table: [system overview](architecture/system-overview.md). Verified: backend unit 312/312,
+frontend 1493/1493 on the new runner; hosted CI re-runs everything on the push.
