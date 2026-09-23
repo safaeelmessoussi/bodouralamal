@@ -11795,3 +11795,12 @@ with the Owner's account standing. `deployment.md`: Staging no longer seeds fixt
 `categoryId` first and `useScopeOptions({ offerWholeCategory })` puts «كل مستويات الفئة» IN the
 Level list (rule 2 was clearing it as an outside option — the cause of «I still can't register a
 recording for a category»); `wholeCategoryTeachesNothing` → `scope.assignWholeCategorySubjectsHint`.
+
+**Hosted CI 8/8 on `71a07e8` (part two), first run; deployed to Staging at `71a07e8`** from
+`ad759e4` — recordings asked first; dump taken; no pending migration; the production seed only
+(fixtures no longer seeded); `/healthz` 200; zero error lines. `ops:remove-fixtures` then ran:
+16 fixture library items purged; the fixture people, branches, rooms and groups were already
+gone (the Owner had deleted them in her tests); what remained were 62 fixture TOMBSTONES in the
+Trash (4 exams, 25 events, 33 class schedules, from a seed on every upgrade and a deletion in
+between) — the command now purges Trash-listed fixtures of every type it handles (the seed drill
+leaves some behind to prove it), and the follow-up run below cleared them.

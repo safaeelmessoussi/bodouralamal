@@ -111,14 +111,29 @@ for (const row of await prisma.educationalContent.findMany({ where: { ...taggedT
     prisma.educationalContent.update({ where: { id: row.id }, data: { title } }),
   );
 }
-// …and any already in the Trash.
-for (const entry of await prisma.trash.findMany({ where: { targetEntity: 'EducationalContent' }, select: { id: true, targetId: true } })) {
-  const row = await prisma.educationalContent.findUnique({ where: { id: entry.targetId }, select: { title: true } });
-  if (row?.title.startsWith(FIXTURE_TAG)) {
-    await purgeEntry(prisma, actor, entry.id);
-    outcomes.push({ entity: 'EducationalContent', id: entry.targetId, name: row.title, result: 'purged' });
+/**
+ * …and whatever is already in the Trash: on Staging the fixtures were seeded on
+ * every upgrade and deleted by the Owner in between, so tombstones outnumber
+ * live rows. A purge refused by name (an exam sat in a class's occurrence,
+ * `SESSIONS_HAVE_EXAMS`) is reported and left for the ordering below to clear.
+ */
+async function purgeTagged(
+  entity: string,
+  titleOf: (id: string) => Promise<string | null>,
+): Promise<void> {
+  for (const entry of await prisma.trash.findMany({ where: { targetEntity: entity }, select: { id: true, targetId: true } })) {
+    const title = await titleOf(entry.targetId);
+    if (title === null || !title.startsWith(FIXTURE_TAG)) continue;
+    try {
+      await purgeEntry(prisma, actor, entry.id);
+      outcomes.push({ entity, id: entry.targetId, name: title, result: 'purged' });
+    } catch (error) {
+      if (!isRefusal(error)) throw error;
+      outcomes.push({ entity, id: entry.targetId, name: title, result: 'left', reason: (error.details?.['reason'] as string | undefined) ?? error.code });
+    }
   }
 }
+await purgeTagged('EducationalContent', async (id) => (await prisma.educationalContent.findUnique({ where: { id }, select: { title: true } }))?.title ?? null);
 
 // 2 · Exams (evidence acknowledged — it is synthetic).
 for (const row of await prisma.exam.findMany({ where: { ...taggedTitle, deletedAt: null }, select: { id: true, title: true } })) {
@@ -127,6 +142,8 @@ for (const row of await prisma.exam.findMany({ where: { ...taggedTitle, deletedA
   );
 }
 
+await purgeTagged('Exam', async (id) => (await prisma.exam.findUnique({ where: { id }, select: { title: true } }))?.title ?? null);
+
 // 3 · Events.
 for (const row of await prisma.event.findMany({ where: { ...taggedTitle, deletedAt: null }, select: { id: true, title: true } })) {
   await remove('Event', { id: row.id, name: row.title }, () => deleteEvent(prisma, actor, row.id), (title) =>
@@ -134,12 +151,16 @@ for (const row of await prisma.event.findMany({ where: { ...taggedTitle, deleted
   );
 }
 
+await purgeTagged('Event', async (id) => (await prisma.event.findUnique({ where: { id }, select: { title: true } }))?.title ?? null);
+
 // 4 · Class schedules, with their occurrences (R170 §8).
 for (const row of await prisma.recurringCourseSchedule.findMany({ where: { ...taggedTitle, deletedAt: null }, select: { id: true, title: true } })) {
   await remove('RecurringCourseSchedule', { id: row.id, name: row.title ?? FIXTURE_TAG }, () => deleteCourseSchedule(prisma, actor, row.id), (title) =>
     prisma.recurringCourseSchedule.update({ where: { id: row.id }, data: { title } }),
   );
 }
+
+await purgeTagged('RecurringCourseSchedule', async (id) => (await prisma.recurringCourseSchedule.findUnique({ where: { id }, select: { title: true } }))?.title ?? null);
 
 // 5 · Fixture PEOPLE first among the reference rows: their enrolments, family
 // links and consents are synthetic and would otherwise keep a group.
@@ -183,6 +204,14 @@ for (const row of await prisma.branch.findMany({ where: { ...tagged, deletedAt: 
   await remove('Branch', row, () => deleteBranch(prisma, actor, row.id), (name) =>
     prisma.branch.update({ where: { id: row.id }, data: { name } }),
   );
+}
+
+for (const [entity, titleOf] of [
+  ['AdministrativeGroup', async (id: string) => (await prisma.administrativeGroup.findUnique({ where: { id }, select: { name: true } }))?.name ?? null],
+  ['Room', async (id: string) => (await prisma.room.findUnique({ where: { id }, select: { name: true } }))?.name ?? null],
+  ['Branch', async (id: string) => (await prisma.branch.findUnique({ where: { id }, select: { name: true } }))?.name ?? null],
+] as const) {
+  await purgeTagged(entity, titleOf);
 }
 
 const summary = outcomes.reduce<Record<string, number>>((acc, o) => {

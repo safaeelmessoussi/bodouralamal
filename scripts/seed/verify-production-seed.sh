@@ -243,6 +243,11 @@ fi
 # doors and the Trash purge; on this fresh database nothing else references
 # them, so every tagged row must be gone — and the Owner's own account, which
 # the command acts as, must not have been touched.
+# A fixture already IN the Trash (the Staging case: seeded on every upgrade and
+# deleted between them) must go too, not only the live rows.
+psql_seed "UPDATE event SET deleted_at = now() WHERE title LIKE '[تجريبي]%' AND deleted_at IS NULL;
+  INSERT INTO trash (id, target_entity, target_id, snapshot, deleted_at, purge_after)
+  SELECT gen_random_uuid(), 'Event', id, '{}'::jsonb, now(), now() + interval '7 days' FROM event WHERE title LIKE '[تجريبي]%';" >/dev/null
 (
   cd "$repo_root/backend"
   npx tsx src/ops/remove-fixtures.ts >/dev/null
