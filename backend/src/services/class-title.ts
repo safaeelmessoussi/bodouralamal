@@ -87,7 +87,7 @@ export async function sessionTitles(
       id: true,
       date: true,
       startTime: true,
-      subject: { select: { name: true } },
+      subject: { select: { name: true, requiresSurahs: true } },
       surahs: SURAH_NAMES,
       staff: {
         where: { deletedAt: null, position: 'teacher' },
@@ -98,7 +98,7 @@ export async function sessionTitles(
       schedule: {
         select: {
           schedulingType: { select: { name: true } },
-          subject: { select: { name: true } },
+          subject: { select: { name: true, requiresSurahs: true } },
           surahs: SURAH_NAMES,
         },
       },
@@ -112,9 +112,15 @@ export async function sessionTitles(
         composeItemTitle({
           typeName: row.schedule.schedulingType?.name ?? null,
           subjectName: (row.subject ?? row.schedule.subject).name,
-          surahNames: (row.surahs.length > 0 ? row.surahs : row.schedule.surahs).map(
-            (s) => s.surah.nameArabic,
-          ),
+          // Codex review, 2026-09-22 — inherited only while the Subject taught
+          // works by Surah (the same rule as `calendar.service.ts`).
+          surahNames: (
+            row.surahs.length > 0
+              ? row.surahs
+              : (row.subject ?? row.schedule.subject).requiresSurahs
+                ? row.schedule.surahs
+                : []
+          ).map((s) => s.surah.nameArabic),
           leadName: lead === null ? null : publicDisplayName(lead),
           date: calendarDateIso(row.date),
           time: wallClockHHMM(row.startTime),

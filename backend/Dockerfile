@@ -7,7 +7,7 @@
 # openssl is required by Prisma's query engine; without it the CLI warns and
 # engine resolution can fail (§19.1 step 5 runs migrations inside this image).
 
-FROM node:24.11.0-slim AS deps
+FROM node:24.11.0-slim@sha256:76d0ed0ed93bed4f4376211e9d8fddac4d8b3fbdb54cc45955696001a3c91152 AS deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
       tzdata ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/*
@@ -36,7 +36,7 @@ RUN npx prisma generate && npm run build && npm prune --omit=dev
 # release shares, so it is stored and pulled once, not per deployment.
 FROM mwader/static-ffmpeg:7.1@sha256:a8090df5f5608daef387e1b2e93b98aaacb4d92153ad904e7d715c725724fca4 AS ffmpeg
 
-FROM node:24.11.0-slim AS runtime
+FROM node:24.11.0-slim@sha256:76d0ed0ed93bed4f4376211e9d8fddac4d8b3fbdb54cc45955696001a3c91152 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       tzdata ca-certificates openssl curl \
   && rm -rf /var/lib/apt/lists/*

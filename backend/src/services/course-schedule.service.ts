@@ -880,7 +880,7 @@ export async function findConflicts(
 }
 
 /** TD-3.8: conflicts are a coded 409 naming what clashed, never a 500. */
-function assertNoConflicts(conflicts: ScheduleConflict[]): void {
+export function assertNoConflicts(conflicts: ScheduleConflict[]): void {
   if (conflicts.length === 0) return;
   throw new AppError(
     "SCHEDULE_CONFLICT",
@@ -2894,4 +2894,52 @@ export async function resolveScheduleRoster(
     { ...schedule, ...(dimensions ? { dimensions } : {}), on: null },
     { id: true, nameArabic: true },
   ) as Promise<{ id: string; nameArabic: string | null }[]>;
+}
+
+/**
+ * **One occurrence, checked as the schedule is** (codex review, 2026-09-22).
+ * `overrideSession` moved an occurrence into another's room or a مؤطِّرة's
+ * hour, and `restoreSession` put a cancelled occurrence back into a slot that
+ * had since been booked — neither asked `findConflicts`, so two occurrences
+ * could hold one room at one time. The same resolver, with a one-off
+ * candidate on that date and the occurrence itself excluded; the room's rows
+ * on the date are locked by it, which serialises competing edits.
+ */
+export async function assertOccurrenceFree(
+  tx: Prisma.TransactionClient,
+  occurrence: {
+    id: string;
+    branchId: string;
+    roomId: string | null;
+    date: Date;
+    startTime: Date;
+    endTime: Date;
+    staff: { userId: string; position: string }[];
+  },
+): Promise<void> {
+  const conflicts = await findConflicts(
+    tx,
+    {
+      branchId: occurrence.branchId,
+      roomId: occurrence.roomId,
+      startTime: occurrence.startTime,
+      endTime: occurrence.endTime,
+      recurrence: "none",
+      weekdays: [],
+      dayOfMonth: null,
+      monthOfYear: null,
+      anchorDate: occurrence.date,
+      staff: occurrence.staff.map((person) => ({
+        userId: person.userId,
+        position: person.position as ScheduleStaffInput["position"],
+        effectiveFrom: null,
+        effectiveUntil: null,
+      })),
+    },
+    occurrence.date,
+    occurrence.date,
+    undefined,
+    [occurrence.id],
+  );
+  assertNoConflicts(conflicts);
 }

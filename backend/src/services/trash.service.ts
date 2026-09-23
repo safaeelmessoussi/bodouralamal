@@ -1,3 +1,4 @@
+import { calendarDay } from '../policies/effective-staffing.js';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
@@ -911,8 +912,8 @@ async function restoreScheduleSessions(
           })
         ).count;
 
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Morocco's date, not UTC's (codex review, 2026-09-22; R167 §2).
+  const today = calendarDay();
   const ahead = await tx.session.findMany({
     where: { id: { in: removedIds }, scheduleId, deletedAt: { not: null }, date: { gte: today } },
     select: { id: true, date: true },
@@ -1107,8 +1108,8 @@ export async function restoreEntry(
      */
     if (entry.targetEntity === 'Exam') {
       const examDate = row['date'];
-      const today = new Date();
-      today.setUTCHours(0, 0, 0, 0);
+      // Morocco's date, not UTC's (codex review, 2026-09-22; R167 §2).
+      const today = calendarDay();
       if (examDate instanceof Date && examDate >= today) {
         const staff = await tx.examStaff.findMany({
           where: { examId: entry.targetId, deletedAt: { gte: deletedAt } },

@@ -491,11 +491,40 @@ export async function applyProviderReport(
 ): Promise<{ applied: boolean; recordingId: string | null; enqueued: boolean }> {
   const existing = await prisma.sessionRecording.findFirst({
     where: { providerEgressId: report.providerEgressId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, status: true, recoveredFromSegments: true, educationalContentId: true, outputKey: true },
   });
   // Not ours. Silently ignored — answering differently would tell an unverified
   // caller which job ids exist.
   if (!existing) return { applied: false, recordingId: null, enqueued: false };
+
+  /**
+   * **The recorder's file wins over an assembly** (codex review, 2026-09-22).
+   * Segment recovery may have completed this row from its safety segments —
+   * repointing `outputKey` to the assembly — while the recorder was still
+   * finishing. Its completion arriving now, with a complete file at the key
+   * it names, takes the row back before the import runs: the assembly is at
+   * best a prefix of what the recorder wrote. Once imported, the assembly
+   * stands (an item exists), and the recorder's file is left where it is.
+   */
+  if (
+    report.state === "completed" &&
+    existing.status === "completed" &&
+    existing.recoveredFromSegments &&
+    existing.educationalContentId === null &&
+    report.outputKey &&
+    report.outputKey !== existing.outputKey
+  ) {
+    const reclaimed = await prisma.sessionRecording.updateMany({
+      where: { id: existing.id, recoveredFromSegments: true, educationalContentId: null },
+      data: {
+        recoveredFromSegments: false,
+        outputKey: report.outputKey,
+        ...(report.sizeBytes ? { sizeBytes: BigInt(report.sizeBytes) } : {}),
+        ...(report.durationMs ? { durationMs: Math.round(report.durationMs) } : {}),
+      },
+    });
+    return { applied: reclaimed.count > 0, recordingId: existing.id, enqueued: false };
+  }
 
   const data = {
     ...(report.outputKey ? { outputKey: report.outputKey } : {}),
@@ -610,7 +639,7 @@ export async function retireSilentRecording(
 export async function markRecoveredFromSegments(
   prisma: PrismaClient,
   recordingId: string,
-  facts: { sizeBytes: number; segments: number; stoppedAt?: Date | null },
+  facts: { sizeBytes: number; segments: number; stoppedAt?: Date | null; recoveredKey?: string },
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     const current = await tx.sessionRecording.findFirst({
@@ -625,6 +654,9 @@ export async function markRecoveredFromSegments(
         status: "completed",
         recoveredFromSegments: true,
         sizeBytes: BigInt(facts.sizeBytes),
+        // The assembly lives at ITS key (codex review, 2026-09-22): the row is
+        // repointed to it, and the recorder's key stays the recorder's.
+        ...(facts.recoveredKey ? { outputKey: facts.recoveredKey } : {}),
         // When it really stopped: the recorder's last sign of life.
         ...(current.stoppedAt === null && facts.stoppedAt ? { stoppedAt: facts.stoppedAt } : {}),
       },

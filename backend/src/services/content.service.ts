@@ -1287,6 +1287,16 @@ export async function updateContentMetadata(
     select: { levelId: true, subjectId: true, additionalLevels: { select: { levelId: true } } },
   });
   const homeLevelId = patch.levelId ?? placed.levelId;
+  const subjectId = patch.subjectId ?? placed.subjectId;
+  // Codex review, 2026-09-22 — the pairing initiation checks (`SUBJECT_NOT_AT_LEVEL`)
+  // is re-checked whenever an edit moves either half of it: a Subject change
+  // must still be taught at the home Level AND at every additional Level the
+  // item KEEPS, not only at the ones this very request names. Without this a
+  // Level change and a Subject change sent separately could leave an item
+  // placed where the curriculum says that Subject is not taught at all.
+  if (patch.levelId !== undefined || patch.subjectId !== undefined) {
+    await assertSubjectTaughtAtLevel(prisma, homeLevelId, subjectId);
+  }
   let additionalLevelIds: string[] | null = null;
   if (patch.additionalLevelIds !== undefined) {
     if (patch.additionalLevelIds.includes(homeLevelId)) {
@@ -1301,11 +1311,21 @@ export async function updateContentMetadata(
       throw new AppError('VALIDATION_FAILED', 'no such level', { reason: 'UNKNOWN_LEVEL' });
     }
     for (const levelId of patch.additionalLevelIds) {
-      await assertSubjectTaughtAtLevel(prisma, levelId, patch.subjectId ?? placed.subjectId);
+      await assertSubjectTaughtAtLevel(prisma, levelId, subjectId);
     }
     additionalLevelIds = patch.additionalLevelIds;
-  } else if (patch.levelId !== undefined && placed.additionalLevels.some((row) => row.levelId === patch.levelId)) {
-    additionalLevelIds = placed.additionalLevels.map((row) => row.levelId).filter((id) => id !== patch.levelId);
+  } else {
+    const retained = placed.additionalLevels
+      .map((row) => row.levelId)
+      .filter((id) => id !== homeLevelId);
+    if (patch.subjectId !== undefined) {
+      for (const levelId of retained) await assertSubjectTaughtAtLevel(prisma, levelId, subjectId);
+    }
+    if (patch.levelId !== undefined && retained.length !== placed.additionalLevels.length) {
+      // Moving the HOME onto a Level that was an additional one simply stops
+      // naming it twice.
+      additionalLevelIds = retained;
+    }
   }
   // In TWO steps around the row's own update, because the trigger compares each
   // additional row with the home Level as it stands: cleared BEFORE the home

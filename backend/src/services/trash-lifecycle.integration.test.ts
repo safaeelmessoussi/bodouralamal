@@ -150,6 +150,9 @@ async function cleanup(): Promise<void> {
     where: { OR: [{ levelId: { in: levelIds } }, { subjectId: { in: subjectIds } }] },
   });
   await prisma.levelSurah.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.levelCompletionMark.deleteMany({
+    where: { OR: [{ levelId: { in: levelIds } }, { studentId: { in: userIds } }, { completedById: { in: userIds } }] },
+  });
   await prisma.administrativeGroup.deleteMany({ where: { id: { in: groupIds } } });
   await prisma.trash.deleteMany({ where: { deletedById: { in: userIds } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
@@ -1034,8 +1037,25 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
 
     it('an expired User Trash entry is de-identified AND its own Trash row is purged — the exact gap Codex reproduced', async () => {
       const { trashId, userId } = await expiredUserTrash();
+      // Codex review (2026-09-22): a completion mark with a certificate number
+      // is her educational archive too (R167 §3) and must go with her (R133 (3)).
+      const { levelId } = await curriculum();
+      const branch = await prisma.branch.create({ data: { name: `${TAG} مقر الشهادة`, updatedAt: new Date() } });
+      const mark = await prisma.levelCompletionMark.create({
+        data: {
+          studentId: userId,
+          levelId,
+          branchId: branch.id,
+          requirementsMet: true,
+          completedById: actorUserId,
+          certificateNumber: 900001,
+          certificateIssuedAt: new Date(),
+          certificateIssuedById: actorUserId,
+        },
+      });
 
       const counts = await purgeExpiredEntries(prisma, LATER);
+      expect(await prisma.levelCompletionMark.count({ where: { id: mark.id } })).toBe(0);
 
       expect(counts.purged).toBeGreaterThanOrEqual(1);
       expect(counts.unsupported).toBe(0);

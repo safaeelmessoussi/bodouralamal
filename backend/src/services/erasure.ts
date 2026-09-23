@@ -35,7 +35,7 @@ export async function destroyEducationalRecord(
   subjectId: string,
 ): Promise<void> {
   const byStudent = { studentId: subjectId } as const;
-  const [submissions, grades, attendance, quranLogs, surahProgress, groupLinks, enrolments] =
+  const [submissions, grades, attendance, quranLogs, surahProgress, groupLinks, enrolments, completions] =
     await Promise.all([
       tx.studentExamSubmission.findMany({ where: byStudent, select: { id: true } }),
       tx.grade.findMany({ where: byStudent, select: { id: true } }),
@@ -44,6 +44,11 @@ export async function destroyEducationalRecord(
       tx.studentSurahProgress.findMany({ where: byStudent, select: { id: true } }),
       tx.studentTeachingGroup.findMany({ where: byStudent, select: { id: true } }),
       tx.enrollment.findMany({ where: byStudent, select: { id: true } }),
+      // R167 §3's completion marks and certificates (codex review, 2026-09-22):
+      // her achievement, branch, dates and certificate number — the archive
+      // R133 (3) removes. A certificate number already spent is never reused
+      // (the sequence only advances), so nothing here reissues one.
+      tx.levelCompletionMark.findMany({ where: byStudent, select: { id: true } }),
     ]);
   const educationalIds = [
     ...submissions,
@@ -53,6 +58,7 @@ export async function destroyEducationalRecord(
     ...surahProgress,
     ...groupLinks,
     ...enrolments,
+    ...completions,
   ].map((r) => r.id);
 
   const submissionIds = submissions.map((r) => r.id);
@@ -68,6 +74,7 @@ export async function destroyEducationalRecord(
   await tx.studentSurahProgress.deleteMany({ where: byStudent });
   await tx.studentTeachingGroup.deleteMany({ where: byStudent });
   await tx.enrollment.deleteMany({ where: byStudent });
+  await tx.levelCompletionMark.deleteMany({ where: byStudent });
 
   /**
    * **The application that carries her copied identity.**

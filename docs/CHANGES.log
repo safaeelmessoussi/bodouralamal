@@ -11616,3 +11616,50 @@ repaired by migration `20260925110000`). Recordings asked first; dump taken; two
 removed (23 GiB free); preflight PASS; labels exact; TLS active; `/healthz` 200, `/rtc/validate` 401;
 zero error-level lines.
 
+
+## 2026-09-22 — SRS Revision 171: independent codex review of the whole project, fixed
+
+The Owner handed over a codex review taken at `8f0feee`. Each item was checked against the code
+before anything was changed: two were already closed (the audit's free-text policy — R170 §18; the
+OpenAPI document — regenerated as part of every commit), the other fourteen were valid. No
+migration; no product decision taken here — the two places a decision was needed are recorded
+for the Owner (§14 d, and the alarm halves in §14 a). The section numbers are the SRS entry's.
+
+**§1** `destroyEducationalRecord` now collects `LevelCompletionMark` (R167 §3 added the table after
+the erasure list was written). **§2** `calendarDay()` truncates through `moroccoDateIso`; between
+00:00 and 01:00 Morocco time «today» was yesterday for staffing, the Trash's past-session line and
+the teaching-candidate window. **§3** the segment assembly is written to `<key>.recovered.mp4`
+and adopted by repointing `output_key`; a recorder's own late `completed` report clears
+`recovered_from_segments` and restores its key — its complete file always wins, which R168 §2(c)
+promised and the shared key could not keep. **§4** reconcile gains `start_lost` (a `starting` row
+with no provider handle past the grace window → `failed`), `stop_retried` (a `stopping` row the
+provider still records is asked to stop again), and a failed scan that re-examines any row with a
+reason however old, marking «no segments to recover» once so the scan stays bounded. **§5** the
+assembler races drain/close/exit and stops writing on the child's exit. **§6** `overrideSession`
+and `restoreSession` call `assertOccurrenceFree` (one-off candidate through `findConflicts`,
+`excludeSessionIds: [id]`) → `SCHEDULE_CONFLICT`; merged reversed times → `END_NOT_AFTER_START`.
+**§7** `regenerateOne` resets delivery, media mode, visibility, Subject and Surahs beside room and
+times. **§8** an explicit Surah choice equal to the class's set (same Subject) is stored as `[]`;
+readers inherit the class's Surahs only while the effective Subject `requiresSurahs`
+(`calendar.service`, `class-title`). **§9** `lockMark` (`SELECT … FOR UPDATE`) in issue, withdraw
+and unmark; `markCompleted`'s P2002 answers like a repeat; `markPresent` calls
+`trash.removeForRevivedTarget` on revival; `updateContentMetadata` runs
+`assertSubjectTaughtAtLevel` on the home Level and every retained additional Level whenever the
+Subject or home Level changes. **§10** `create-recovery-point.sh` runs `ops:active-recordings`
+inside the writer before any stop (exit 3 → postponed, other non-zero → refused,
+`--skip-recording-check` fixture-only, `--recording-check` overridable); guard line in
+`check-backup-tooling.sh`; the drill proves both refusals leave every container as it was.
+**§11** `EGRESS_LIMIT_REACHED` → `failed`. **§12** digests: postgres, livekit-server, egress,
+redis, certbot (compose) and node, nginx (Dockerfiles) — the index digests Staging runs, resolved
+with `docker buildx imagetools inspect`; guard in `check-compose-operations.sh`;
+`environments.md` says how to re-resolve. **§13** the audit's disposition is on the readiness page;
+the patch-level fixes land in the next commit, alone. **§14** readiness rows rewritten (operational
+alert: R169 §11 shipped, backup/TLS halves host-only; audit identity: decided by R170 §18; recovery:
+same-VPS only, no remote target; release hygiene); `td3-routes.txt` gains the `GET /jobs/{id}`
+evidence block. **§15** the three absent §19.2 gates are named on the readiness page and in TASKS.
+
+**Tests added:** effective-staffing (3), trash-lifecycle (mark erased), recording-ingest (recovered
+key + recorder takes the row back), course-schedule (override conflict, restore conflict, reversed
+times, regenerate resets all), scheduling-surahs (inheritance normalised, فقه wears no Surah),
+quran (concurrent issues draw one number), attendance (tombstone gone), content (Subject change vs
+retained Levels). Backup drill: two refusal cases.

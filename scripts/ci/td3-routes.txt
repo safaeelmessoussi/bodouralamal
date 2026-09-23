@@ -448,7 +448,20 @@ PATCH /quran-logs/{id}                        # TD-3.6, §4.5
 DELETE /quran-logs/{id}                       # TD-3.6, §4.5
 
 # ── Background jobs (TD-3.7)
-GET /jobs/{id}                                # TD-3.7
+#
+# THE EIGHTH PENDING ENTRY (Codex review, 2026-09-22 — recorded here with the
+# seven above so the strict gate's whole list is decidable in one place).
+# TD-3.7 says «any endpoint that enqueues a job returns 202 with { job_id }» and
+# this route reads that job back. **No endpoint returns a `job_id`.** Every
+# 202 the API answers (`POST /sessions/{id}/recording/start|stop`) carries the
+# recording's own state, which the classroom polls; visibility moves, consent
+# re-evaluation, ingestion and the sweeps are pg-boss jobs the person never
+# addresses, and their failures reach the Super Admin as COUNTS through
+# `GET /admin/operations/status` (R169 §11). So the id this route is keyed by
+# is one no client ever receives — UNREACHABLE as written, like `/grades/{id}`.
+# RECOMMENDATION (Document Owner's call): retire TD-3.7's read in favour of the
+# §11 counts, or name the one act that should hand a job id to a person.
+GET /jobs/{id}                                # TD-3.7; no endpoint issues a job_id (see above)
 
 # ── Observability (TD-14)
 GET /healthz                                  # TD-14, §19.1 step 8

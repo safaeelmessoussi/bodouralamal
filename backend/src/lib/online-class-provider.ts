@@ -362,6 +362,12 @@ const TRANSLATE: Partial<Record<EgressStatus, RecordingReport["state"]>> = {
   [EgressStatus.EGRESS_COMPLETE]: "completed",
   [EgressStatus.EGRESS_FAILED]: "failed",
   [EgressStatus.EGRESS_ABORTED]: "aborted",
+  // The recorder's own limit (LiveKit's `EGRESS_LIMIT_REACHED`, e.g. a maximum
+  // duration): terminal, and a failure of this recording — not «no report»,
+  // which left such a recording open for ever (codex review, 2026-09-22). What
+  // it delivered before the limit is recovered from its segments like any
+  // other failed recording.
+  [EgressStatus.EGRESS_LIMIT_REACHED]: "failed",
 };
 
 /** The credentials the recording facility needs to write its staging object.

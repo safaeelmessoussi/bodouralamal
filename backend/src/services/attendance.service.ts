@@ -600,6 +600,13 @@ async function markPresentTx(
     });
     if (existing && existing.deletedAt === null) return { id: existing.id, created: false };
 
+    // Codex review, 2026-09-22 — a revived row's tombstone goes with it, in the
+    // same transaction (the LevelSubject/LevelSurah rule, applied here too):
+    // otherwise the Trash keeps advertising a live mark as removed, its
+    // «استرجاع» would re-write stale fields over the new mark, and the sweep
+    // would later report a purge of a row it never touched.
+    if (existing) await trash.removeForRevivedTarget(tx, 'Attendance', existing.id);
+
     const row = existing
       ? await tx.attendance.update({
           where: { id: existing.id },

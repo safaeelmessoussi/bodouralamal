@@ -73,8 +73,12 @@ services:
     logging: *bounded-local-logging
     restart: unless-stopped
 
+  # §3.1a Phase 2 (Codex review, 2026-09-22) — every third-party image is
+  # pinned to the index digest the tag resolved to on Staging when it was
+  # verified there, so a re-pushed tag can never change what Production runs.
+  # `scripts/ci/check-compose-operations.sh` refuses an unpinned image.
   db:
-    image: postgres:18.4
+    image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
     # TD-13 pinned pool/memory budget — never left at defaults.
     command: >
       postgres -c max_connections=30
@@ -219,7 +223,7 @@ services:
   # The API does not `depends_on` any of them — the platform serves everything
   # else while the media server is down, and says so on «دخول الحصة» (R98).
   livekit:
-    image: livekit/livekit-server:v1.9.1
+    image: livekit/livekit-server:v1.9.1@sha256:c039a1bfa154c8479ac369c380665638e92a7e9531e69664549c0c0d3eb65e63
     environment:
       # The whole configuration, with NO secret in it: the key pair arrives
       # separately through LIVEKIT_KEYS, so nothing in Git or in
@@ -281,7 +285,7 @@ services:
   # Ephemeral by design: it persists nothing and a restart loses no recording —
   # the recording's own lifecycle lives in PostgreSQL.
   redis:
-    image: redis:8.2-alpine
+    image: redis:8.2-alpine@sha256:5517128c78ca95f28f7dc6a90e2f808f35f01a4a01c2c20e514571b4d9706275
     command: redis-server --save "" --appendonly no --maxmemory 48mb --maxmemory-policy noeviction
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
@@ -294,7 +298,7 @@ services:
   # The recorder. It joins a room as a hidden participant, composites it in a
   # headless browser and uploads the finished file to the object store.
   livekit-egress:
-    image: livekit/egress:v1.9.1
+    image: livekit/egress:v1.9.1@sha256:99f6a19cd93a6336c518845bae22a151ad63497329b62f1b1b8c4125c52d57c8
     # A shell in front of the image's own entrypoint, for one reason: the CPU
     # costs below differ per tier and Compose can only merge them as container
     # environment, which Egress does not read — so they are written into its
@@ -357,7 +361,7 @@ services:
 
   # Production only (§19.1): activate through the exact-commit release overlay.
   certbot:
-    image: certbot/certbot
+    image: certbot/certbot:latest@sha256:f70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20
     profiles: ["production"]
     volumes:
       - certbot-www:/var/www/certbot

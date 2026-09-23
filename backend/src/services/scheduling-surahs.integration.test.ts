@@ -5,6 +5,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 import { readCalendar } from "./calendar.service.js";
+import { sessionTitles } from "./class-title.js";
 import {
   createCourseSchedule,
   listCourseSchedules,
@@ -353,6 +354,35 @@ describe("§5 — one occurrence may name its own Surahs", () => {
     });
     const after = await calendarOn(FIRST);
     expect(after.find((o) => o.id === session.id)?.surahNames).toEqual(["الفاتحة"]);
+  });
+
+  it("Codex review 2026-09-22 — naming exactly the class's own Surahs is inheritance, and a Quran class retaught as فقه wears no Surah", async () => {
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      classInput({ surahIds: [FATIHA] }),
+      NOW,
+    );
+    const session = await firstSession(id);
+    // The editor sends the inherited set back unchanged: stored as NONE, so a
+    // later edit of the class still reaches this date.
+    await overrideSession(prisma, superAdmin(), session.id, {
+      version: session.version,
+      surahIds: [FATIHA],
+    });
+    expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(0);
+    expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.surahNames).toEqual(["الفاتحة"]);
+
+    // Retaught as a Subject that does not work by Surah: the class's Surahs
+    // are NOT inherited on that date — the title and the calendar say none.
+    await overrideSession(prisma, superAdmin(), session.id, {
+      version: session.version + 1,
+      subjectId: fiqhId,
+    });
+    expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.surahNames).toEqual([]);
+    const titles = await sessionTitles(prisma, [session.id]);
+    expect(titles.get(session.id)).toBeDefined();
+    expect(titles.get(session.id)).not.toContain("الفاتحة");
   });
 
   it("is held to the same «مقرر الحفظ»", async () => {

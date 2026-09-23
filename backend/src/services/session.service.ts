@@ -18,6 +18,7 @@ import {
 } from "../policies/curriculum.js";
 import { resolveDelivery } from "../policies/delivery.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
+import { assertOccurrenceFree } from "./course-schedule.service.js";
 import {
   audienceForSession,
   audienceSize,
@@ -351,7 +352,18 @@ export async function overrideSession(
         levelIds: await scheduleLevelIds(prisma, session.scheduleId, session.schedule),
         surahIds: named,
       });
-      if (data.surahIds !== undefined) surahPlan = resolved;
+      if (data.surahIds !== undefined) {
+        // Codex review, 2026-09-22 — naming exactly the class's own Surahs is
+        // INHERITANCE, not an override: stored as none, so a later edit of the
+        // class reaches this occurrence too instead of leaving a stale copy.
+        const classSurahs = inherited.map((row) => row.surahId).sort((a, b) => a - b);
+        const chosen = [...resolved].sort((a, b) => a - b);
+        const sameAsClass =
+          taughtAfter === session.schedule.subjectId &&
+          chosen.length === classSurahs.length &&
+          chosen.every((id, index) => id === classSurahs[index]);
+        surahPlan = sameAsClass ? [] : resolved;
+      }
     } else if (inherited.length === 0) {
       throw new AppError("VALIDATION_FAILED", "this subject needs at least one surah", {
         reason: "SURAHS_REQUIRED",
@@ -411,6 +423,18 @@ export async function overrideSession(
     track("surah_ids", surahsBefore.join(",") || null, surahPlan.join(",") || null);
   }
 
+  // Codex review, 2026-09-22 — the EFFECTIVE pair is checked, not each half:
+  // `{ start_time: "12:00", end_time: "11:00" }` passed the schema (two valid
+  // clocks) and reached PostgreSQL's CHECK as an internal error. A refusal in
+  // words, before any write.
+  const effectiveStart = data.startTime ?? session.startTime;
+  const effectiveEnd = data.endTime ?? session.endTime;
+  if (effectiveEnd <= effectiveStart) {
+    throw new AppError("VALIDATION_FAILED", "an occurrence must end after it starts", {
+      reason: "END_NOT_AFTER_START",
+    });
+  }
+
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
       delegate: tx.session,
@@ -458,18 +482,47 @@ export async function overrideSession(
       await writeAudienceOverrides(tx, actor, sessionId, audience);
     }
 
+    // Who staffed it BEFORE this edit — read before the replacement below, for
+    // the notification's diff.
+    const staffBefore = await tx.sessionStaff.findMany({
+      where: { sessionId, deletedAt: null },
+      select: { userId: true, position: true },
+    });
+    if (data.staff !== undefined) {
+      await replaceSessionStaff(tx, sessionId, data.staff, actor.userId);
+    }
+    // Codex review, 2026-09-22 — an occurrence moved into an occupied room or
+    // hour is refused exactly as a schedule would be (`SCHEDULE_CONFLICT`),
+    // asked AFTER the writes so the effective room, times and staff are the
+    // ones checked; the transaction rolls every write back on refusal.
+    if (
+      data.date !== undefined ||
+      data.startTime !== undefined ||
+      data.endTime !== undefined ||
+      data.roomId !== undefined ||
+      data.staff !== undefined
+    ) {
+      const staffNow = await tx.sessionStaff.findMany({
+        where: { sessionId, deletedAt: null },
+        select: { userId: true, position: true },
+      });
+      await assertOccurrenceFree(tx, {
+        id: sessionId,
+        branchId: session.schedule.branchId,
+        roomId: updated.roomId,
+        date: updated.date,
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+        staff: staffNow,
+      });
+    }
+
     if (
       data.staff !== undefined ||
       (data.visibility !== undefined && data.visibility !== session.visibility)
     ) {
-      const before = await tx.sessionStaff.findMany({
-        where: { sessionId, deletedAt: null },
-        select: { userId: true, position: true },
-      });
+      const before = staffBefore;
       const after = data.staff ?? before;
-      if (data.staff !== undefined) {
-        await replaceSessionStaff(tx, sessionId, data.staff, actor.userId);
-      }
       await notifySessionStaffChanged(
         tx,
         sessionId,
@@ -665,6 +718,21 @@ export async function restoreSession(
   }
 
   return prisma.$transaction(async (tx) => {
+    // Codex review, 2026-09-22 — the slot may have been booked since the
+    // cancellation: the occurrence comes back only if its room and its staff
+    // are still free on that date (`SCHEDULE_CONFLICT` otherwise).
+    await assertOccurrenceFree(tx, {
+      id: sessionId,
+      branchId: session.schedule.branchId,
+      roomId: session.roomId,
+      date: session.date,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      staff: await tx.sessionStaff.findMany({
+        where: { sessionId, deletedAt: null },
+        select: { userId: true, position: true },
+      }),
+    });
     const updated = await updateWithVersion<Session>({
       delegate: tx.session,
       id: sessionId,
@@ -963,6 +1031,11 @@ async function regenerateOne(
       startTime: true,
       endTime: true,
       roomId: true,
+      // Codex review, 2026-09-22 — the WHOLE template, so regeneration resets
+      // every override, not three of seven (below).
+      deliveryMode: true,
+      onlineMediaMode: true,
+      visibility: true,
       staff: {
         // R91 — regeneration restores the staffing in force for THIS dated
         // occurrence. Loading every historical/future assignment would both
@@ -994,19 +1067,33 @@ async function regenerateOne(
       tx,
       schedule.staff.map((person) => person.userId),
     );
+    /**
+     * **Every override goes, not three of them** (codex review, 2026-09-22).
+     * Regeneration reset times, room and staffing and cleared `overridden`,
+     * but left the Subject, delivery/media mode, visibility and Surah
+     * overrides — so an occurrence once made online, regenerated from an
+     * in-person schedule, got a room while keeping `delivery_mode = online`,
+     * which the database CHECK refuses. «Re-aligned with its schedule» now
+     * means the whole template: the Subject and Surahs inherit again (NULL /
+     * no rows), delivery, media mode and visibility are the schedule's.
+     * Content links and the audience overrides (R92/R166) are NOT touched:
+     * regeneration re-points the occurrence, it does not discard the work
+     * attached to it nor who it is for.
+     */
     const updated = await tx.session.update({
       where: { id: sessionId },
       data: {
         startTime: schedule.startTime,
         endTime: schedule.endTime,
-        roomId: schedule.roomId,
-        // Re-aligned with its schedule, so it is no longer a human's individual
-        // decision — clearing the flag is what makes that true rather than
-        // merely stated. Content links are NOT removed: regeneration re-points
-        // the occurrence, it does not discard the work attached to it.
+        roomId: schedule.deliveryMode === "online" ? null : schedule.roomId,
+        deliveryMode: schedule.deliveryMode,
+        onlineMediaMode: schedule.deliveryMode === "online" ? schedule.onlineMediaMode : null,
+        visibility: schedule.visibility,
+        subjectId: null,
         overridden: false,
       },
     });
+    await tx.sessionSurah.deleteMany({ where: { sessionId } });
     await replaceSessionStaff(
       tx,
       sessionId,

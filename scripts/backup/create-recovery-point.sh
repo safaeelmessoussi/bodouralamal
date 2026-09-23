@@ -21,6 +21,8 @@ required_services=()
 writer_services=()
 minimum_free_gib=''
 monthly=false
+recording_check='npm run --silent ops:active-recordings'
+skip_recording_check=false
 
 usage() {
   cat <<'USAGE'
@@ -42,6 +44,10 @@ Options:
   --minimum-free-gib <GiB>          Required reserve after estimated working space
   --monthly                        Skip only a still-present verified success this UTC month
   --allow-fixtures                   Local disposable drills only; forbids SFTP
+  --recording-check <command>       Run inside the first writer service before it stops;
+                                    exit 3 = a class is being recorded, postpone.
+                                    Default: npm run --silent ops:active-recordings
+  --skip-recording-check            Fixture drills whose writer is not the platform API
 USAGE
 }
 
@@ -63,6 +69,8 @@ while (($#)); do
     --minimum-free-gib) minimum_free_gib="${2:-}"; shift 2 ;;
     --monthly) monthly=true; shift ;;
     --allow-fixtures) allow_fixtures=true; shift ;;
+    --recording-check) recording_check="${2:-}"; shift 2 ;;
+    --skip-recording-check) skip_recording_check=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; backup_die "unknown argument: $1" ;;
   esac
@@ -84,7 +92,9 @@ if $allow_fixtures; then
   minimum_free_gib="${minimum_free_gib:-1}"
 else
   backup_assert_production_repository "$repository"
+  $skip_recording_check && backup_die '--skip-recording-check is for fixture drills only'
 fi
+[[ -n "$recording_check" ]] || backup_die '--recording-check must name a command'
 [[ "$minimum_free_gib" =~ ^[1-9][0-9]{0,5}$ ]] || backup_die '--minimum-free-gib is required'
 backup_lock_repository "$repository"
 status_file="${repository}.${project}.status"
@@ -193,6 +203,29 @@ if $monthly && [[ "$previous_state" == ok && "$last_success" =~ ^[0-9]+$ ]] && \
   backup_write_status "$status_file" ok 0 "$last_success" "$last_snapshot" complete
   printf 'backup: this UTC month already has a verified recovery point; no new snapshot\n'
   exit 0
+fi
+
+# SRS Revision 167 §5 (Codex review, 2026-09-22) — the recorder holds a
+# class's file locally until the class ends; stopping the API mid-class loses
+# it, and no recovery point can bring that back. Ask the platform first,
+# exactly as a deployment does: `ops:active-recordings` answers exit 0 (go) or
+# exit 3 (names the recordings still open). A check that cannot answer is a
+# refusal too — silence must never be read as «nothing is recording». The
+# daily timer retries tomorrow; nothing has been stopped yet.
+phase='recording-check'
+if ! $skip_recording_check; then
+  set +e
+  recording_report="$(timeout --foreground 120s "${compose[@]}" exec -T "${writer_services[0]}" \
+    sh -c "$recording_check" </dev/null 2>&1)"
+  recording_rc=$?
+  set -e
+  case "$recording_rc" in
+    0) ;;
+    3) printf 'backup: RECORDING_ACTIVE — a class is being recorded; the recovery point is postponed: %s\n' \
+         "$recording_report" >&2
+       backup_die 'a class is being recorded; retry after it ends' ;;
+    *) backup_die "the active-recording check did not answer (exit $recording_rc)" ;;
+  esac
 fi
 
 umask 077

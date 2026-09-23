@@ -5722,3 +5722,50 @@ The Owner's six replies to Revision 167's report. One migration so far
       (fixture keys repaired: 4 → 0 non-canonical); both seeds clean;
       `/healthz` 200; zero error lines.
 
+
+## SRS Revision 171 — independent codex review of the whole project, fixed — 2026-09-22
+
+The review was taken at `8f0feee` (Revision 170 part five). Every item was checked
+against the code first: two were already closed (the audit's free-text policy by
+R170 §18; OpenAPI currency, regenerated), the rest were valid and are fixed here.
+No migration. Detail per item: [SRS Revision 171](SRS.md).
+
+- [x] **§1** erasure destroys `LevelCompletionMark` too (`erasure.ts`; lifecycle test).
+- [x] **§2** `calendarDay()` truncates to Morocco's midnight (`effective-staffing.ts`,
+      used by `trash.service`, `teaching-candidates.service`; 3 unit tests).
+- [x] **§3** a segment recovery writes `<key>.recovered.mp4`, never the recorder's
+      key; the recorder's own late `completed` report takes the row back
+      (`session-recording-recover/.service.ts`; 2 integration tests).
+- [x] **§4** reconcile: `start_lost` after the grace window, `stop_retried` while
+      the provider still records, the failed scan re-examines any row with a
+      reason and marks «no segments to recover» once (`…-reconcile.service.ts`).
+- [x] **§5** the assembler races drain/close/exit and stops on the child's exit.
+- [x] **§6** `overrideSession` and `restoreSession` call `assertOccurrenceFree`
+      (`SCHEDULE_CONFLICT`); merged reversed times are `END_NOT_AFTER_START`
+      (4 tests in `course-schedule.integration.test.ts`).
+- [x] **§7** `regenerateOne` resets room, times, delivery, media mode, visibility,
+      Subject and Surahs.
+- [x] **§8** Surah inheritance: a choice equal to the class's is stored as
+      inheritance; inherited only while the Subject taught works by Surah
+      (`session.service.ts`, `calendar.service.ts`, `class-title.ts`; 1 test).
+- [x] **§9** certificate/mark transitions lock the row, a double-tapped mark
+      answers like a repeat (`quran.integration.test.ts`); attendance revival
+      drops its tombstone (`attendance.integration.test.ts`); a content Subject
+      or home-Level change re-validates the retained Levels
+      (`content.integration.test.ts`).
+- [x] **§10** `create-recovery-point.sh` asks `ops:active-recordings` before any
+      service stops; `--skip-recording-check` is fixture-only; guard line in
+      `check-backup-tooling.sh`; two refusal cases in the backup drill.
+- [x] **§11** `EGRESS_LIMIT_REACHED` → `failed`.
+- [x] **§12** seven images digest-pinned (`docker-compose.yml`, both Dockerfiles);
+      `check-compose-operations.sh` refuses an unpinned image;
+      [environments](operations/environments.md#version-and-image-pinning).
+- [x] **§13** `npm audit` patch-level fixes in their own commit; the `prisma`
+      CLI chain accepted with its reason on the readiness page.
+- [x] **§14** readiness page: operational-alert row (R169 §11 shipped), audit
+      row (R170 §18 decided), no remote backup claimed, release-hygiene rows;
+      `td3-routes.txt`: the eighth strict entry (`GET /jobs/{id}`) recorded
+      with its evidence and a recommendation.
+- [ ] **§15 — still owed:** a generated permission-matrix test; J1–J8 as
+      automation on Staging; the ≥80 % coverage threshold in CI. Each bounded;
+      none needs a Production host.

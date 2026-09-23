@@ -35,6 +35,11 @@ repository_probe="$(grep -nF 'snapshots --no-lock' "$create" | cut -d: -f1)"
   fail 'application writers must drain before storage is stopped'
 [[ -n "$repository_probe" && "$repository_probe" -lt "$writer_stop" ]] ||
   fail 'the encrypted repository must be reachable before application writers stop'
+recording_check="$(grep -nF 'sh -c "$recording_check"' "$create" | cut -d: -f1)"
+[[ -n "$recording_check" && "$recording_check" -lt "$writer_stop" ]] ||
+  fail 'the active-recording check (R167 §5) must run before application writers stop'
+grep -Fq "backup_die '--skip-recording-check is for fixture drills only'" "$create" ||
+  fail 'a Production recovery point must never skip the active-recording check'
 grep -Fq '"${compose[@]}" start "${running_services[@]}"' "$create" ||
   fail 'backup cleanup must restart the exact existing containers'
 if grep -Fq '"${compose[@]}" up -d "${running_services[@]}"' "$create"; then

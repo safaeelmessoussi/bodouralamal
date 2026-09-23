@@ -74,8 +74,12 @@ not promise nightly RPO. Manual exceptional recovery points also rotate to the s
 One repository-wide host lock prevents backup/restore overlap; never forcibly break it.
 
 Each run checks credentials/disk before outage, records a private atomic status file beside
-the repository, stops writers, dumps/checks PostgreSQL, snapshots all stopped stores, then
-restarts the **same** container IDs. It runs `restic check --read-data` over **all** packs,
+the repository, **asks the platform whether a class is being recorded** (SRS Revision 167 §5 and
+171 §10 — `ops:active-recordings` inside the API container, the same question
+[a deployment asks](deployment.md#the-pipeline); exit 3 postpones the run to tomorrow's timer with
+`phase=recording-check`, and a check that cannot answer is a refusal too), stops writers,
+dumps/checks PostgreSQL, snapshots all stopped stores, then restarts the **same** container IDs.
+Only a fixture drill may pass `--skip-recording-check`; Production refuses it. It runs `restic check --read-data` over **all** packs,
 including older snapshots, before `forget --host <project> --tag bodour --group-by host
 --keep-last 2 --prune`. Grouping by host avoids keeping extra generations for each historical
 path set; other projects are untouched. An error never intentionally prunes previous points.

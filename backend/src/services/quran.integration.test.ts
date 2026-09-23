@@ -643,6 +643,53 @@ describe("SRS Revision 167 §3 — «إتمام المستوى»: the administra
     expect((await row()).mark).toBeNull();
   });
 
+  it("Codex review 2026-09-22 — concurrent issues draw ONE number, and a double-tapped mark answers like a repeat", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    // Two identical marks at once: one row, no 409 for the loser.
+    await Promise.all([
+      marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true }),
+      marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true }),
+    ]);
+    expect(await prisma.levelCompletionMark.count({ where: { studentId: student, levelId } })).toBe(1);
+
+    // Two issues at once: the row lock serialises them, so the second reads
+    // «already issued» and draws nothing — one number, one audit row.
+    const before = Number(
+      (await prisma.$queryRaw<{ n: bigint }[]>`SELECT last_value AS n FROM level_certificate_number_seq`)[0]!.n,
+    );
+    await Promise.all([
+      marks.issueCertificate(prisma, admin(), student, levelId),
+      marks.issueCertificate(prisma, admin(), student, levelId),
+      marks.issueCertificate(prisma, admin(), student, levelId),
+    ]);
+    const after = Number(
+      (await prisma.$queryRaw<{ n: bigint }[]>`SELECT last_value AS n FROM level_certificate_number_seq`)[0]!.n,
+    );
+    expect(after - before).toBe(1);
+    const [certificate] = await marks.certificatesOf(prisma, student);
+    expect(certificate!.certificate_number).toBe(after);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          actionType: "level_completion.certificate_issue",
+          targetId: (await prisma.levelCompletionMark.findUniqueOrThrow({
+            where: { studentId_levelId: { studentId: student, levelId } },
+            select: { id: true },
+          })).id,
+        },
+      }),
+    ).toBe(1);
+
+    // An unmark racing a withdraw waits for it instead of deleting the row
+    // from under it (or being refused for a certificate that is being taken back).
+    await Promise.all([
+      marks.withdrawCertificate(prisma, admin(), student, levelId),
+      marks.withdrawCertificate(prisma, admin(), student, levelId),
+    ]);
+    await marks.unmarkCompleted(prisma, admin(), student, levelId);
+    expect((await row()).mark).toBeNull();
+  });
+
   it("is an Admin's act within her branches: a مؤطرة is refused, another branch's Admin finds nothing (404, never 403)", async () => {
     expect(
       await failure(() =>

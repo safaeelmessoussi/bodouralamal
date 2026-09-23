@@ -197,7 +197,14 @@ The one coupling to remember: **the password in `infra.env` must match the one e
 | Node | `24.11.0`, pinned in `.nvmrc` and the base image |
 | PostgreSQL | `postgres:18.4` — the Debian variant, because **ICU is required** for Arabic collation |
 | Object storage (Localhost, Staging, Production) | SeaweedFS `4.46`, digest-pinned in `docker-compose.yml`, identical for every tier (Owner decision, 2026-09-20); [selection and compatibility](../architecture/storage.md#b1-candidate-verification-checkpoint) |
+| LiveKit server / Egress / Redis / certbot | `v1.9.1` / `v1.9.1` / `8.2-alpine` / `latest`, each digest-pinned in `docker-compose.yml` |
 | Nginx | `stable-alpine` |
+
+**Every third-party image in `docker-compose.yml` carries an index digest** (SRS §3.1a Phase 2,
+pinned 2026-09-22 to what Staging had verified); `scripts/ci/check-compose-operations.sh` refuses
+an unpinned one. A tag that is re-pushed upstream therefore changes nothing until a dedicated,
+Owner-approved upgrade task moves the digest. To re-resolve a tag when that task comes:
+`docker buildx imagetools inspect <image:tag> --format '{{.Manifest.Digest}}'`.
 
 One PostgreSQL detail that will waste an afternoon if unknown: **PG 18+ images require the
 volume mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.** Data lands in a

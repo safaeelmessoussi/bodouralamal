@@ -147,3 +147,28 @@ describe("calendarDay anchors to UTC midnight, like every @db.Date column", () =
     expect(at.toISOString()).toBe("2026-11-05T13:00:00.000Z");
   });
 });
+
+/**
+ * **`calendarDay` answers Morocco's date** (codex review, 2026-09-22; R167 §2).
+ * At 23:30 UTC on 19 January it is 00:30 on 20 January in Casablanca, and an
+ * assignment ending on the 19th must have ended.
+ */
+describe('calendarDay is Morocco’s calendar date, as a UTC-midnight value', () => {
+  it('rolls over at Morocco’s midnight, not UTC’s', () => {
+    expect(calendarDay(new Date('2026-01-19T23:30:00.000Z')).toISOString()).toBe('2026-01-20T00:00:00.000Z');
+    expect(calendarDay(new Date('2026-01-19T22:30:00.000Z')).toISOString()).toBe('2026-01-19T00:00:00.000Z');
+  });
+
+  it('leaves a value that is already a calendar date exactly where it is', () => {
+    for (const iso of ['2026-01-19', '2026-03-15', '2026-09-22']) {
+      expect(calendarDay(new Date(`${iso}T00:00:00.000Z`)).toISOString()).toBe(`${iso}T00:00:00.000Z`);
+    }
+  });
+
+  it('an assignment ending today is no longer in force in Morocco’s first hour of tomorrow', () => {
+    const endsOn19 = new Date('2026-01-19T00:00:00.000Z');
+    // The comparison every caller makes: `effective_until < calendarDay(now)`.
+    expect(endsOn19 < calendarDay(new Date('2026-01-19T22:59:00.000Z'))).toBe(false);
+    expect(endsOn19 < calendarDay(new Date('2026-01-19T23:30:00.000Z'))).toBe(true);
+  });
+});

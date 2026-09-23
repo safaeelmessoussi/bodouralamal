@@ -7,6 +7,7 @@ import type { Readable } from "node:stream";
 
 import type { PrismaClient } from "../generated/prisma/client.js";
 import {
+  deleteObject,
   openObjectRead,
   putObjectStream,
   statObjectStrict,
@@ -82,13 +83,32 @@ export const ffmpegAssemble: Assembler = async (segments, outputPath) => {
   // code is the cause, so the write error is swallowed and the code reported.
   child.stdin.on("error", () => undefined);
 
+  /**
+   * **A backpressured write waits for `drain` OR for the child to be gone**
+   * (codex review, 2026-09-22). Waiting on `drain` alone hung for ever once
+   * ffmpeg had exited under backpressure — no drain ever comes from a closed
+   * pipe — so a failed assembly never became the recorded, retryable failure
+   * the reconciler expects. `exited` settles either way; a settled child makes
+   * the wait resolve at once and the exit code below say what happened.
+   */
+  const drainedOrGone = () =>
+    new Promise<void>((resolve) => {
+      const onDrain = () => {
+        child.stdin.off("close", onDrain);
+        resolve();
+      };
+      child.stdin.once("drain", onDrain);
+      child.stdin.once("close", onDrain);
+      void exited.then(onDrain, onDrain);
+    });
+
   try {
     for await (const segment of segments) {
       for await (const chunk of segment) {
-        if (!child.stdin.write(chunk)) {
-          await new Promise<void>((resolve) => child.stdin.once("drain", resolve));
-        }
+        if (child.exitCode !== null || child.stdin.destroyed) break;
+        if (!child.stdin.write(chunk)) await drainedOrGone();
       }
+      if (child.exitCode !== null || child.stdin.destroyed) break;
     }
   } finally {
     child.stdin.end();
@@ -96,6 +116,11 @@ export const ffmpegAssemble: Assembler = async (segments, outputPath) => {
   const code = await exited;
   if (code !== 0) throw new Error(`ffmpeg exited ${String(code)}: ${stderr.trim().slice(0, 500)}`);
 };
+
+/** The assembly's own key, beside the recorder's — never the recorder's. */
+export function recoveredKeyFor(key: string): string {
+  return `${key}.recovered.mp4`;
+}
 
 export type RecoveryOutcome =
   | { recovered: true; segments: number; sizeBytes: number }
@@ -151,16 +176,33 @@ export async function recoverFromSegments(
 
     const { size } = await stat(assembled);
     if (size === 0) throw new Error("the assembled recording is empty");
-    await putObjectStream(clients, { bucket, key }, createReadStream(assembled), {
+    /**
+     * **Written to a key of its own, never the recorder's** (codex review,
+     * 2026-09-22). The PUT used to target `key`: a recorder that finished its
+     * complete file between the `stat` above and this write was overwritten
+     * by a shorter assembly, and «the recorder's file always wins» was a
+     * comment, not a rule. Now the assembly lands beside the recorder's key;
+     * the row is repointed to it under the row's own transition guard, and a
+     * recorder completion that arrives later repoints it back
+     * (`applyProviderReport`) — the recorder's file wins by construction.
+     */
+    const recoveredKey = recoveredKeyFor(key);
+    await putObjectStream(clients, { bucket, key: recoveredKey }, createReadStream(assembled), {
       contentLength: size,
       contentType: mimeType,
     });
 
-    await markRecoveredFromSegments(prisma, recordingId, {
+    const adopted = await markRecoveredFromSegments(prisma, recordingId, {
       sizeBytes: size,
       segments: inventory.keys.length,
       stoppedAt: inventory.newestAt,
+      recoveredKey,
     });
+    if (!adopted) {
+      // The recorder completed in the meantime: its file stands, ours goes.
+      await deleteObject(clients, bucket, recoveredKey).catch(() => undefined);
+      return { recovered: false, reason: "final_file_exists" };
+    }
     return { recovered: true, segments: inventory.keys.length, sizeBytes: size };
   } finally {
     await rm(workdir, { recursive: true, force: true });

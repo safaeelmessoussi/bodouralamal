@@ -300,7 +300,9 @@ The backup drill is not a source-text assertion. It writes a PostgreSQL row and 
 creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
 restores them into empty replacements, reads both values back, then executes the portable dump
 into a second clean PostgreSQL database. It also pins the running container IDs across recovery
-creation and proves a wrong repository credential fails visibly before any service stops.
+creation and proves a wrong repository credential fails visibly before any service stops — and,
+since Revision 171 §10, that an active class recording (the writer answering exit 3) and an
+unanswered recording check each postpone the run with every container untouched.
 Fixture mode structurally refuses SFTP so the drill cannot send local data to an external target.
 The original under-one-minute MinIO proof is historical. The expanded B8 SeaweedFS proof
 below verifies the current recovery mechanism; realistic Production volume still requires

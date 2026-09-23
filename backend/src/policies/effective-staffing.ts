@@ -1,3 +1,4 @@
+import { moroccoDateIso } from '../lib/morocco-clock.js';
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 
 /**
@@ -44,12 +45,22 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
  * for this period"; SessionStaff answers "who took this class".**
  */
 
-/** The platform's calendar day for staffing arithmetic — UTC-midnight-anchored,
- *  matching how every `@db.Date` column in this schema is written and read. */
+/**
+ * **The platform's calendar day for staffing arithmetic: Morocco's date at the
+ * instant, as a UTC-midnight `Date`** — the form every `@db.Date` column in
+ * this schema is written and read in.
+ *
+ * It used to truncate the instant to UTC midnight (codex review, 2026-09-22):
+ * at 23:30 UTC on 19 January it is already 20 January in Morocco (R167 §2),
+ * so an assignment ending on the 19th kept granting day-scoped access for the
+ * first Moroccan hour of the 20th, and one starting on the 20th began an hour
+ * late. Morocco's offset is never negative, so a value that is ALREADY a
+ * UTC-midnight date (a column value, a parsed `YYYY-MM-DD`) maps to the same
+ * date — the two kinds of input this takes agree, which is what keeps this
+ * one function safe for both.
+ */
 export function calendarDay(at: Date = new Date()): Date {
-  const d = new Date(at);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+  return new Date(`${moroccoDateIso(at)}T00:00:00.000Z`);
 }
 
 /**

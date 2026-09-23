@@ -37,7 +37,7 @@ import {
   RECONCILE_DEAD_AFTER_MS,
   reconcileRecordings,
 } from "./session-recording-reconcile.service.js";
-import { FFMPEG_PATH, type Assembler } from "./session-recording-recover.service.js";
+import { FFMPEG_PATH, recoveredKeyFor, type Assembler } from "./session-recording-recover.service.js";
 import { listSegments } from "./session-recording-segments.js";
 import { applyProviderReport } from "./session-recording.service.js";
 
@@ -1040,8 +1040,13 @@ describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing 
     expect(recovered.status).toBe("completed");
     expect(recovered.recoveredFromSegments).toBe(true);
     expect(recovered.stoppedAt).not.toBeNull();
-    // The file the recording always named now exists — and nothing else moved it.
-    expect(await statObject(clients, STAGING, dead.key)).not.toBeNull();
+    // The assembly lives at ITS OWN key, beside the recorder's — never at the
+    // recorder's (codex review, 2026-09-22): a recorder finishing late must
+    // never be overwritten. The row now names the assembly.
+    const recoveredKey = recoveredKeyFor(dead.key);
+    expect(await statObject(clients, STAGING, recoveredKey)).not.toBeNull();
+    expect(await statObject(clients, STAGING, dead.key)).toBeNull();
+    expect((await prisma.sessionRecording.findUniqueOrThrow({ where: { id: dead.id }, select: { outputKey: true } })).outputKey).toBe(recoveredKey);
 
     const imported = await ingestRecording(prisma, clients, dead.id);
     const content = await prisma.educationalContent.findUniqueOrThrow({
@@ -1050,9 +1055,47 @@ describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing 
     });
     expect(content).toEqual({ description: RECOVERED_NOTE, origin: "session_recording", mimeType: "audio/mp4" });
     // Swept: the file, every segment and the playlist.
-    expect(await statObject(clients, STAGING, dead.key)).toBeNull();
+    expect(await statObject(clients, STAGING, recoveredKey)).toBeNull();
     expect((await listSegments(clients, STAGING, dead.key)).keys).toEqual([]);
     expect(await statObject(clients, STAGING, `${segmentsPrefixFor(dead.key)}playlist.m3u8`)).toBeNull();
+  });
+
+  it("the recorder's OWN completion, arriving after recovery and before the import, takes the row back (codex, 2026-09-22)", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const dead = await diedMidClass(sessionId, "recording", 2);
+    await reconcileRecordings(
+      prisma,
+      clients,
+      provider({ [dead.egressId]: { providerEgressId: dead.egressId, state: "failed", failureReason: "egress crashed" } }),
+      LATER(),
+      fakeAssemble,
+    );
+    expect((await row(dead.id)).recoveredFromSegments).toBe(true);
+
+    // The recorder was only slow: its complete file lands at the key it always
+    // named, and its completion report follows.
+    await putStaging(dead.key, mp4Bytes(4_096));
+    const applied = await applyProviderReport(prisma, {
+      providerEgressId: dead.egressId,
+      state: "completed",
+      outputKey: dead.key,
+      sizeBytes: 4_096,
+    });
+    expect(applied.applied).toBe(true);
+    const reclaimed = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: dead.id },
+      select: { outputKey: true, recoveredFromSegments: true, status: true },
+    });
+    expect(reclaimed).toEqual({ outputKey: dead.key, recoveredFromSegments: false, status: "completed" });
+
+    // The import that was queued reads the row at run time: the recorder's bytes.
+    const imported = await ingestRecording(prisma, clients, dead.id);
+    const content = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: imported.contentId! },
+      select: { description: true, sizeBytes: true },
+    });
+    expect(content.description).toBeNull();
+    expect(Number(content.sizeBytes)).toBe(4_096);
   });
 
   it("a recording a CALLBACK already declared failed is recovered too — the one way out of a terminal failure is that the file now exists", async () => {
@@ -1121,6 +1164,65 @@ describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing 
     );
     expect(outcome.retired).toBe(0);
     expect((await row(old.id)).status).toBe("recording");
+  });
+
+  it("Codex review 2026-09-22 — a start that never recorded its handle fails after the grace; a lost stop is asked again; «no segments» is written once and the row leaves the scan", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    // One LIVE recording per session (the partial unique index), so each case
+    // takes its own occurrence of the series.
+    const [, second, third] = await prisma.session.findMany({
+      where: { schedule: { sessions: { some: { id: sessionId } } }, date: { gte: day(CLASS_DATE) } },
+      orderBy: { date: "asc" },
+      take: 3,
+      select: { id: true },
+    });
+    // (a) `starting`, no provider handle, older than the grace window.
+    const lost = await prisma.sessionRecording.create({
+      data: {
+        sessionId,
+        startedById: adminId,
+        status: "starting",
+        outputBucket: STAGING,
+        outputKey: "placeholder",
+        mimeType: "audio/mp4",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+      },
+      select: { id: true },
+    });
+    // (b) `stopping`, and the provider still says it is recording.
+    const stuck = await diedMidClass(second!.id, "recording", 1);
+    await prisma.sessionRecording.update({ where: { id: stuck.id }, data: { status: "stopping" } });
+    const stopped: string[] = [];
+    const saysRecording: OnlineClassProvider = {
+      ...provider({ [stuck.egressId]: { providerEgressId: stuck.egressId, state: "recording" } }),
+      stopRecording: (egressId: string) => {
+        stopped.push(egressId);
+        return Promise.resolve();
+      },
+    };
+    // (c) `failed` with nothing delivered at all.
+    const empty = await diedMidClass(third!.id, "failed", 0);
+
+    const outcome = await reconcileRecordings(prisma, clients, saysRecording, new Date(), fakeAssemble);
+    expect(outcome.start_lost).toBe(1);
+    expect(outcome.stop_retried).toBe(1);
+    expect(stopped).toEqual([stuck.egressId]);
+    const lostRow = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: lost.id },
+      select: { status: true, failureReason: true },
+    });
+    expect(lostRow.status).toBe("failed");
+    expect(lostRow.failureReason).toContain("start lost");
+    const emptyRow = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: empty.id },
+      select: { status: true, ingestionFailureReason: true },
+    });
+    expect(emptyRow).toEqual({ status: "failed", ingestionFailureReason: "no segments to recover" });
+
+    // The next pass does not look at it again — and does not count the start twice.
+    const again = await reconcileRecordings(prisma, clients, saysRecording, new Date(), fakeAssemble);
+    expect(again.start_lost).toBe(0);
+    expect(again.recovery_failed).toBe(0);
   });
 
   it("an assembly that fails is said, keeps every segment, and is tried again", async () => {

@@ -1,3 +1,4 @@
+import { calendarDay } from '../policies/effective-staffing.js';
 import { scheduleTitles } from "./class-title.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { Actor } from "../policies/actor.js";
@@ -168,8 +169,8 @@ export async function listTeachingCandidates(
    * `effective_until` are the ONLY time bounds available**, and they belong to
    * the *schedule*, not to the staffing: see the limitation recorded below.
    */
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Morocco's date, not UTC's (codex review, 2026-09-22; R167 §2).
+  const today = calendarDay();
   /**
    * **R91 — the clean-up this appraisal was designed for.**
    *

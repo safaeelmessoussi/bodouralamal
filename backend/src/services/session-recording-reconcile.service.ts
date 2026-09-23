@@ -77,6 +77,8 @@ export const SEGMENTS_QUIET_MS = 10 * 60_000;
 
 /** How far back an already-failed recording is still looked at for segments. */
 export const RECOVERY_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
+/** Written once on a failed recording with nothing to assemble: settled. */
+export const NO_SEGMENTS = "no segments to recover";
 
 const OPEN = ["starting", "recording", "stopping", "processing"] as const;
 
@@ -93,6 +95,10 @@ export interface ReconcileOutcome {
   recovery_failed: number;
   stranded: number;
   queued: number;
+  /** Rows created `starting` whose handle was never written (an API death). */
+  start_lost: number;
+  /** `stopping` rows whose provider still answered «running»: the stop asked again. */
+  stop_retried: number;
 }
 
 export async function reconcileRecordings(
@@ -120,8 +126,32 @@ export async function reconcileRecordings(
     orderBy: { startedAt: "asc" },
   });
 
+  /**
+   * **A start that never recorded its handle** (codex review, 2026-09-22). The
+   * row is created `starting` BEFORE the provider is asked, and its
+   * `provider_egress_id` and staging coordinates are written after the
+   * provider answers; an API that died in that interval left a row no
+   * reconciliation could reach (the query above needs the id) and no new
+   * start could get past (it is «live»). After the grace it is `failed` with
+   * a reason that says so — the class can be recorded again. Whether the
+   * provider actually started something we cannot name is beyond this pass;
+   * a recorder that did will deliver segments to a prefix the next start's
+   * row does not share, and its object is swept by `upload.gc`'s siblings.
+   */
+  const startLost = await prisma.sessionRecording.updateMany({
+    where: {
+      status: "starting",
+      providerEgressId: null,
+      deletedAt: null,
+      startedAt: { lt: new Date(now.getTime() - RECONCILE_GRACE_MS) },
+    },
+    data: { status: "failed", failureReason: "start lost before the provider handle was recorded" },
+  });
+
   const outcome: ReconcileOutcome = {
     open: open.length,
+    start_lost: startLost.count,
+    stop_retried: 0,
     advanced: 0,
     recovered_from_staging: 0,
     marked_failed: 0,
@@ -196,6 +226,28 @@ export async function reconcileRecordings(
       continue;
     }
 
+    /**
+     * **A stop the provider never received is asked again** (codex review,
+     * 2026-09-22). `stopRecording` swallows the provider's refusal — the
+     * callback is the authority — so a row could sit in `stopping` while the
+     * recorder went on capturing and delivering. The provider still saying
+     * «running» for a row we asked to stop is the one signal that the stop
+     * was lost, and asking again is idempotent on the provider's side.
+     */
+    if (
+      recording.status === "stopping" &&
+      provider !== null &&
+      report !== null &&
+      report.state === "recording"
+    ) {
+      try {
+        await provider.stopRecording(egressId);
+        outcome.stop_retried += 1;
+      } catch {
+        // Counted as unreachable on the next pass; nothing is concluded now.
+      }
+    }
+
     // From here the provider says the job is running, has no answer, or could
     // not be asked — and none of the three is evidence. Storage is.
     const staged =
@@ -259,18 +311,47 @@ export async function reconcileRecordings(
   // A recording a callback ALREADY declared failed — the webhook usually beats
   // this job to it. The provider has said the recorder is finished, so a minute
   // of quiet is enough.
+  //
+  // **Not forgotten by age** (codex review, 2026-09-22): the seven-day window
+  // used to drop a recording whose segments were still there. A failed row is
+  // now scanned until it is SETTLED — recovered, or found to have no segments
+  // at all, which is written once (`NO_SEGMENTS`) and excludes it from the next
+  // pass. The window bounds only how far back a row that has never been looked
+  // at is picked up; a row already looked at keeps its obligation.
   const failed = await prisma.sessionRecording.findMany({
     where: {
       status: { in: ["failed", "aborted"] },
       deletedAt: null,
       educationalContentId: null,
       outputKey: { not: null },
-      startedAt: { gt: new Date(now.getTime() - RECOVERY_LOOKBACK_MS) },
+      AND: [
+        {
+          OR: [
+            { startedAt: { gt: new Date(now.getTime() - RECOVERY_LOOKBACK_MS) } },
+            { ingestionFailureReason: { not: null } },
+          ],
+        },
+        // Spelled with the NULL arm: SQL's `NOT (col = x)` is UNKNOWN for a
+        // NULL reason and would silently drop every row never looked at.
+        { OR: [{ ingestionFailureReason: null }, { ingestionFailureReason: { not: NO_SEGMENTS } }] },
+      ],
     },
     select: { id: true, outputBucket: true, outputKey: true },
     orderBy: { startedAt: "asc" },
+    take: 500,
   });
-  for (const recording of failed) await tryRecover(recording, 60_000);
+  for (const recording of failed) {
+    if (!recording.outputBucket || !recording.outputKey) continue;
+    const inventory = await listSegments(clients, recording.outputBucket, recording.outputKey).catch(() => null);
+    if (inventory !== null && inventory.keys.length === 0) {
+      await prisma.sessionRecording.update({
+        where: { id: recording.id },
+        data: { ingestionFailureReason: NO_SEGMENTS },
+      });
+      continue;
+    }
+    await tryRecover(recording, 60_000);
+  }
 
   const requeued = await requeueStrandedRecordings(prisma, { dryRun: false });
   outcome.stranded = requeued.stranded;

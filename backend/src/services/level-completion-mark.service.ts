@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { moroccoDateIso } from '../lib/morocco-clock.js';
 import type { Actor } from '../policies/actor.js';
@@ -196,6 +196,28 @@ export async function listForStudent(
     .map((row) => row.view);
 }
 
+/**
+ * **Codex review, 2026-09-22 — the mark's transitions are check-then-write.**
+ * Issue reads «no number yet» and draws one; withdraw reads «issued» and
+ * clears it; unmark reads «not issued» and deletes. Two of them racing on one
+ * row under READ COMMITTED each saw the state before the other committed: two
+ * issues drew TWO sequence numbers and the later write won (a printed copy
+ * naming a number the row no longer carries), and an unmark racing an issue
+ * deleted the row from under the update (a P2025 → 500). §16.2 sanctioned
+ * raw-SQL exception (a): the row lock serialises them (TD-15.2), and every
+ * statement after it reads the state the winner committed.
+ */
+async function lockMark(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  levelId: string,
+): Promise<void> {
+  await tx.$queryRaw`
+    SELECT id FROM "level_completion_mark"
+    WHERE student_id = ${studentId}::uuid AND level_id = ${levelId}::uuid
+    FOR UPDATE`;
+}
+
 /** `PUT …/level-completions/{levelId}` — record that she completed the Level. */
 export async function markCompleted(
   prisma: PrismaClient,
@@ -217,6 +239,26 @@ export async function markCompleted(
     });
   }
 
+  try {
+    await markCompletedTx(prisma, actor, studentId, levelId, enrolment.branchId, met, verdict);
+  } catch (error) {
+    // The losing side of a double-tap lost a race against an identical mark,
+    // not sent a bad request: the unique index kept the DATA to one row, and
+    // this keeps the ANSWER idempotent too (the attendance rule).
+    if ((error as { code?: unknown } | null)?.code === 'P2002') return;
+    throw error;
+  }
+}
+
+async function markCompletedTx(
+  prisma: PrismaClient,
+  actor: Actor,
+  studentId: string,
+  levelId: string,
+  branchId: string,
+  met: boolean,
+  verdict: Awaited<ReturnType<typeof completionVerdictFor>>,
+): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const existing = await tx.levelCompletionMark.findUnique({
       where: { studentId_levelId: { studentId, levelId } },
@@ -228,7 +270,7 @@ export async function markCompleted(
       data: {
         studentId,
         levelId,
-        branchId: enrolment.branchId,
+        branchId,
         requirementsMet: met,
         completedById: actor.userId,
       },
@@ -261,6 +303,7 @@ export async function unmarkCompleted(
   assertCanManage(actor);
   await reachableEnrolment(prisma, actor, studentId, levelId);
   await prisma.$transaction(async (tx) => {
+    await lockMark(tx, studentId, levelId);
     const mark = await tx.levelCompletionMark.findUnique({
       where: { studentId_levelId: { studentId, levelId } },
       select: { id: true, certificateIssuedAt: true, certificateNumber: true },
@@ -298,6 +341,7 @@ export async function issueCertificate(
   assertCanManage(actor);
   await reachableEnrolment(prisma, actor, studentId, levelId);
   await prisma.$transaction(async (tx) => {
+    await lockMark(tx, studentId, levelId);
     const mark = await tx.levelCompletionMark.findUnique({
       where: { studentId_levelId: { studentId, levelId } },
       select: { id: true, certificateIssuedAt: true, certificateNumber: true },
@@ -347,6 +391,7 @@ export async function withdrawCertificate(
   assertCanManage(actor);
   await reachableEnrolment(prisma, actor, studentId, levelId);
   await prisma.$transaction(async (tx) => {
+    await lockMark(tx, studentId, levelId);
     const mark = await tx.levelCompletionMark.findUnique({
       where: { studentId_levelId: { studentId, levelId } },
       select: { id: true, certificateIssuedAt: true, certificateNumber: true },

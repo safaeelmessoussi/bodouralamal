@@ -451,7 +451,7 @@ const SESSION_OCCURRENCE_INCLUDE = {
   // below can prefer it. Without this the calendar showed and filtered by
   // the SCHEDULE's Subject unconditionally, silently ignoring an override
   // meant to change exactly what a reader sees this class as teaching.
-  subject: { select: { id: true, name: true } },
+  subject: { select: { id: true, name: true, requiresSurahs: true } },
   // R165 §2/§5 — this occurrence's own Surahs; none means the class's.
   surahs: {
     select: { surah: { select: { surahId: true, nameArabic: true } } },
@@ -477,7 +477,7 @@ const SESSION_OCCURRENCE_INCLUDE = {
       attendanceMarking: true,
 
       branch: { select: { name: true } },
-      subject: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, requiresSurahs: true } },
       // R165 §2 — the Surahs the class is about.
       surahs: {
         select: { surah: { select: { surahId: true, nameArabic: true } } },
@@ -540,9 +540,12 @@ function sessionOccurrence(
   // session with no override carries `subject: null` and falls back to the
   // schedule's, unchanged.
   const subject = session.subject ?? sch.subject;
-  const surahNames = (session.surahs.length > 0 ? session.surahs : sch.surahs).map(
-    (row) => row.surah.nameArabic,
-  );
+  // Codex review, 2026-09-22 — the class's Surahs are inherited ONLY while
+  // the Subject taught works by Surah: an occurrence retaught as فقه must not
+  // wear the class's Quran Surahs. Its own rows, when it has any, still win.
+  const surahNames = (
+    session.surahs.length > 0 ? session.surahs : subject.requiresSurahs ? sch.surahs : []
+  ).map((row) => row.surah.nameArabic);
   const lead = session.staff.find((person) => person.position === "teacher");
   return {
     kind: "session",

@@ -680,7 +680,7 @@ describe('5–8 · marking, and what is NOT recorded', () => {
       }),
     ).toBeGreaterThan(0);
 
-    await markPresent(prisma, teacher(), session(lectureSessionId), womanId);
+    const revived = await markPresent(prisma, teacher(), session(lectureSessionId), womanId);
     // One row, revived — not a second beside a tombstone the sheet must forever
     // remember to ignore.
     expect(
@@ -688,6 +688,11 @@ describe('5–8 · marking, and what is NOT recorded', () => {
         where: { sessionId: lectureSessionId, studentId: womanId },
       }),
     ).toBe(1);
+    // Codex review, 2026-09-22 — and its tombstone went with it: the Trash no
+    // longer advertises the live mark as removed.
+    expect(
+      await prisma.trash.count({ where: { targetEntity: 'Attendance', targetId: revived.id } }),
+    ).toBe(0);
   });
 });
 

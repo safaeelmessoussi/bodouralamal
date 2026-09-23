@@ -27,6 +27,17 @@ grep -Fq 'max-size: "10m"' "$compose" ||
 grep -Fq 'max-file: "5"' "$compose" ||
   fail 'the rotated-file ceiling is missing'
 
+# §3.1a Phase 2 — every third-party image in the base file carries an index
+# digest; the platform's own images are named by exact commit in the release
+# overlay (`docker-compose.release.yml`), and `:dev` only outside a release.
+while IFS= read -r image; do
+  case "$image" in
+    bodour-api:dev|bodour-web:dev|'${BODOUR_STORAGE_INIT_IMAGE:-bodour-api:dev}') ;;
+    *@sha256:[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
+    *) fail "third-party image is not pinned to a digest: $image" ;;
+  esac
+done < <(sed -nE 's/^    image: (.*)$/\1/p' "$compose")
+
 service_count="$({
   awk '
     /^services:$/ { in_services = 1; next }

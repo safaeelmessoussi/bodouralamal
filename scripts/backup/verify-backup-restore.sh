@@ -66,8 +66,29 @@ create_args=(--allow-fixtures --project "$project" --compose-file "$compose_file
   --config-file "$fixture_config")
 create_point() { bash "$repo_root/scripts/backup/create-recovery-point.sh" "${create_args[@]}" "$@"; }
 
+# R167 §5 — a class being recorded postpones the recovery point BEFORE any
+# service stops: the fixture's writer answers as the platform would (exit 3),
+# every container stays exactly as it was, and the status says why.
+if create_point --recording-check 'exit 3' >"$workdir/recording-refusal.log" 2>&1; then
+  backup_die 'an active recording unexpectedly did not postpone the recovery point'
+fi
+grep -q 'RECORDING_ACTIVE' "$workdir/recording-refusal.log"
+[[ "$(backup_status_value "${repository}.${project}.status" state)" == failed ]]
+[[ "$(backup_status_value "${repository}.${project}.status" phase)" == recording-check ]]
+[[ "$(container_ids)" == "$before_ids" ]]
+# …and a check that cannot answer is a refusal too, never read as «nothing is recording».
+if create_point --recording-check 'exit 7' >"$workdir/recording-silence.log" 2>&1; then
+  backup_die 'an unanswered recording check unexpectedly passed'
+fi
+grep -q 'did not answer' "$workdir/recording-silence.log"
+[[ "$(container_ids)" == "$before_ids" ]]
+
+# The fixture's writer is not the platform API: the real check cannot run
+# there, and the drill says so explicitly (Production refuses this flag).
+create_args+=(--skip-recording-check)
 "$repo_root/scripts/backup/create-recovery-point.sh" \
   --allow-fixtures \
+  --skip-recording-check \
   --project "$project" \
   --compose-file "$compose_file" \
   --repository "$repository" \
@@ -106,6 +127,7 @@ grep -q 'DISK_LOW' "$workdir/disk-failure.log"
 # encrypted repository must leave every exact container running and unchanged.
 if "$repo_root/scripts/backup/create-recovery-point.sh" \
   --allow-fixtures \
+  --skip-recording-check \
   --project "$project" \
   --compose-file "$compose_file" \
   --repository "$repository" \

@@ -844,6 +844,82 @@ describe("session lifecycle (TD-1)", () => {
     );
     expect(stale.code).toBe("VERSION_CONFLICT");
   });
+
+  /**
+   * Codex review, 2026-09-22 — the one-occurrence writes are held to the same
+   * §4.4 conflict rule as the series: an override moved INTO a busy room, a
+   * restore back INTO a slot taken since the cancellation, and reversed times
+   * were a 500 or a silent double-booking.
+   */
+  it("an override into a room already taken at that time is SCHEDULE_CONFLICT, not a double-booking", async () => {
+    // Room B is busy on the same Tuesday at 15–17 (a second class).
+    await createCourseSchedule(prisma, superAdmin(), baseInput({ roomId: roomB }), NOW);
+    const s = await oneSession();
+    const err = await failure(() =>
+      overrideSession(prisma, superAdmin(), s.id, { roomId: roomB, version: s.version }),
+    );
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+    expect((err.details?.["conflicts"] as { kind: string }[])[0]?.kind).toBe("room");
+    // …and moving it to a free hour in that room is fine.
+    const moved = await overrideSession(prisma, superAdmin(), s.id, {
+      roomId: roomB,
+      startTime: at(9),
+      endTime: at(10),
+      version: s.version,
+    });
+    expect(moved.roomId).toBe(roomB);
+  });
+
+  it("a restore into a slot taken since the cancellation is refused the same way", async () => {
+    const s = await oneSession();
+    const cancelled = await cancelSession(prisma, superAdmin(), s.id, "عطلة", s.version);
+    // The room was given away for THAT date while this one was cancelled (a
+    // one-off class; the rest of the series still holds its other Tuesdays).
+    await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: "none", weekdays: [], anchorDate: day("2026-06-16") }),
+      NOW,
+    );
+    const err = await failure(() =>
+      restoreSession(prisma, superAdmin(), s.id, cancelled.version, NOW),
+    );
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+    expect(
+      (await prisma.session.findUniqueOrThrow({ where: { id: s.id }, select: { status: true } })).status,
+    ).toBe("cancelled");
+  });
+
+  it("an end at or before the start — merged with what the row already holds — is a coded 400", async () => {
+    const s = await oneSession();
+    // Only the end is sent, and it lands before the row's own 15:00 start.
+    const err = await failure(() =>
+      overrideSession(prisma, superAdmin(), s.id, { endTime: at(14), version: s.version }),
+    );
+    expect(err.code).toBe("VALIDATION_FAILED");
+    expect(err.details?.["reason"]).toBe("END_NOT_AFTER_START");
+  });
+
+  it("regenerating returns EVERY per-occurrence override to the class's own values", async () => {
+    const s = await oneSession();
+    const moved = await overrideSession(prisma, superAdmin(), s.id, {
+      roomId: roomB,
+      startTime: at(9),
+      endTime: at(10),
+      visibility: "private",
+      version: s.version,
+    });
+    expect(moved.overridden).toBe(true);
+    await regenerateSessions(prisma, superAdmin(), [s.id]);
+    const after = await prisma.session.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { roomId: true, startTime: true, endTime: true, visibility: true, overridden: true, subjectId: true },
+    });
+    expect(after).toMatchObject({ roomId: roomA, overridden: false, subjectId: null });
+    expect(after.startTime.toISOString()).toBe(at(15).toISOString());
+    expect(after.endTime.toISOString()).toBe(at(17).toISOString());
+    expect(after.visibility).not.toBe("private");
+  });
 });
 
 describe("SessionContent — referenced, never owned (§4.9)", () => {

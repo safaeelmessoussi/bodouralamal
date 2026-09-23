@@ -828,6 +828,25 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     // …and the Level it moved AWAY from may then be named as an additional one.
     await updateContentMetadata(prisma, clients, admin(), id, { additionalLevelIds: [home.levelId] });
     expect(await also()).toEqual([home.levelId]);
+
+    // Codex review, 2026-09-22 — a Subject change is checked against the Levels
+    // the item KEEPS, not only the ones this request names: the new Subject is
+    // taught at the home Level but not at the retained additional one.
+    const narrow = await prisma.subject.create({ data: { name: `${TAG} مادة المستوى الثالث فقط` } });
+    await prisma.levelSubject.create({ data: { levelId: third, subjectId: narrow.id } });
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, { subjectId: narrow.id }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    // …and a home-Level move onto a Level that does not teach the Subject.
+    await expect(
+      updateContentMetadata(prisma, clients, admin(), id, { levelId: untaught }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    const untouched = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { levelId: true, subjectId: true },
+    });
+    expect(untouched).toEqual({ levelId: third, subjectId });
+    expect(await also()).toEqual([home.levelId]);
   });
 
   it("changes title, Level and Subject without touching the stored object", async () => {
@@ -1061,10 +1080,14 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
       where: { id },
       data: { consentForcedPrivate: true },
     });
-    const otherLevel = await prisma.level.findFirstOrThrow({
-      where: { deletedAt: null, id: { not: (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { levelId: true } })).levelId } },
+    // «Otherwise valid» includes, since Revision 171 §9, that the new home
+    // Level TEACHES the item's Subject — so the other Level is one that does.
+    const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
+    const otherLevel = await prisma.level.create({
+      data: { name: `${TAG} مستوى آخر يدرّس المادة`, categoryId: category.categoryId, genderRestriction: "any" },
       select: { id: true },
     });
+    await prisma.levelSubject.create({ data: { levelId: otherLevel.id, subjectId } });
 
     await updateContentMetadata(prisma, clients, admin(), id, { levelId: otherLevel.id });
 
