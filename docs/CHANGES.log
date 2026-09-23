@@ -11882,3 +11882,9 @@ Localhost rebuilt + migrated; harnesses `verify-circle-branch` 10/10,
 `personalFilters` enrolment read (`calendar.service.ts`): it reads the call site, and the
 `deletedAt: null` lived inside `inProgressEnrolmentWhere`. Restated literally at the read (the
 predicate keeps its own); `trash-coverage` + `calendar` 36/36 on the disposable stack.
+
+**Hosted CI 8/8 on `6dca765` (first run); deployed to Staging at `6dca765`:** `/healthz` 200,
+zero error lines, both migrations applied; the Owner's circles 1 · 2 · 3 of «وميض الأمل» were
+back-filled to «مقر تاركة» from their own classes, so «حلقات المواد» shows the branch on arrival.
+The items 1 + 4 proposal (the first-year memorisation circle and the registration form) is
+published for the Owner's decision and nothing of it is applied.
