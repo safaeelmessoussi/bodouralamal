@@ -109,15 +109,22 @@ describe('SRS Revision 165 §1 — what the platform’s own capture of a class 
   const at = moroccoWallClockToInstant(2026, 9, 20, 18, 5, 0);
 
   it('type, Subject, Surah, main teacher, then the date and time she stopped it', () => {
+    // The bare public name is passed; the composer adds the word (R172 §12).
     expect(
       sessionRecordingBaseName({
         typeName: 'حصة',
         subjectName: 'تفسير القرآن',
         surahNames: ['البقرة', 'آل عمران'],
-        teacherName: 'الأستاذة صفاء',
+        teacherName: 'صفاء',
         at,
       }),
     ).toBe('حصة — تفسير القرآن — البقرة، آل عمران — الأستاذة صفاء — 2026-09-20 18:05');
+  });
+
+  it('R172 §12 — a library recording: no type word, «المادة — الأستاذة من سجّلت — التاريخ الوقت»', () => {
+    expect(
+      sessionRecordingBaseName({ typeName: null, subjectName: 'الفقه', surahNames: [], teacherName: 'فاطمة', at }),
+    ).toBe('الفقه — الأستاذة فاطمة — 2026-09-20 18:05');
   });
 
   it('omits what a class does not have rather than leaving empty separators', () => {

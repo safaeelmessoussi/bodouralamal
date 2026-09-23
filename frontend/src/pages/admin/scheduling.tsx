@@ -1782,6 +1782,8 @@ export function SchedulingDialog({
           leadName:
             teachers.find((x) => x.id === (canAssignStaff ? leadId : (me?.id ?? leadId)))
               ?.name_arabic ?? null,
+          // R172 §12 — the server's word, never a copy in the browser.
+          teacherHonorific: scope.teacherHonorific,
           date:
             type === 'class' && recurrence.type !== 'none' ? null : recurrence.startDate || null,
           time: allDay ? null : startTime || null,

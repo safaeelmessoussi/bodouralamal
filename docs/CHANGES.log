@@ -11814,3 +11814,14 @@ Trash, all hanging on one thing:** 4 fixture classes are kept by `SESSIONS_HAVE_
 Owner's own test exams, deleted this morning, were sat in their occurrences and wait out their
 seven days), and 4 fixture groups are kept by those classes. The nightly sweep clears the exams
 by 2026-09-30 and the eight follow on the next passes — nothing to do by hand.
+
+## 2026-09-23 — SRS Revision 172 §12: «الأستاذة» before every teacher's name, defined once
+
+`TEACHER_HONORIFIC` + `honoured()` in `lib/item-title.ts`; `composeItemTitle` applies it to
+`leadName`, so class, occurrence, bare-exam, platform-recording and library-suggestion titles all
+carry it. The library suggestion drops the «تسجيل صوتي» type word («المادة — الأستاذة من
+سجّلت — التاريخ الوقت»). `/me/scope-options` (both variants) and its DTO carry
+`teacher_honorific`; the browser's `composeTitlePreview` takes `teacherHonorific` from the hook
+and the scheduling page passes `scope.teacherHonorific` — the word appears nowhere in the
+frontend source (pinned). Pins restated: item-title, recording-name (+1), title-preview (+1),
+course-schedule integration (3 titles), library HTTP; recorder hint copy updated.

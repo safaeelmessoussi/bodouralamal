@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
+import { TEACHER_HONORIFIC } from "../lib/item-title.js";
 import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
@@ -543,10 +544,10 @@ describe("the filter set is identical for everyone (§5.2)", () => {
    * rule moved to one place both producers can reach. The library screen has no
    * occurrence — R75.6's *title · description · date* is about a class — so it is
    * named after the Subject in view and the association's own date, numbered by
-   * the same shared rule. **R172 §3 — composed exactly as a class recording's
-   * name**: «تسجيل صوتي — الـمادة — من سجّلت — التاريخ الوقت», and still a name
-   * when no Subject is in view (it used to be `null`, and the Owner's phone
-   * then asked her to type one).
+   * the same shared rule. **R172 §3/§12 — composed exactly as a class
+   * recording's name, with no type word**: «الـمادة — الأستاذة من سجّلت —
+   * التاريخ الوقت», and still a name when no Subject is in view (it used to be
+   * `null`, and the Owner's phone then asked her to type one).
    */
   it("suggests a recording name composed like a class recording's — with the Subject in view, and without", async () => {
     const withSubject = await call(
@@ -554,16 +555,16 @@ describe("the filter set is identical for everyone (§5.2)", () => {
       teacherToken,
     );
     const named = String(withSubject.body["suggested_recording_name"]);
-    expect(named.startsWith("تسجيل صوتي — ")).toBe(true);
-    expect(named).toContain(`${TAG} مادة`);
-    // …the person recording, by her display name (§20 rule 12)…
-    expect(named).toContain(`${TAG} أستاذة`);
+    // The Subject opens it (no «تسجيل صوتي» type word, R172 §12)…
+    expect(named.startsWith(`${TAG} مادة`)).toBe(true);
+    // …the person recording, honoured, by her display name (§20 rule 12)…
+    expect(named).toContain(`${TEACHER_HONORIFIC} ${TAG} أستاذة`);
     // …and the association's date and time close it (TD-11), like a class recording.
     expect(named).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 
     const withoutSubject = await call(`${scoped}${academicYearId}`, teacherToken);
     const bare = String(withoutSubject.body["suggested_recording_name"]);
-    expect(bare.startsWith("تسجيل صوتي — ")).toBe(true);
+    expect(bare.startsWith(`${TEACHER_HONORIFIC} ${TAG} أستاذة`)).toBe(true);
     expect(bare).not.toContain(`${TAG} مادة`);
 
     // Nobody signed in records nothing: no name for nobody.

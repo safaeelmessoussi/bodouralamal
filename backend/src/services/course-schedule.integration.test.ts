@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
+import { TEACHER_HONORIFIC } from "../lib/item-title.js";
 import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { RoleScope } from "../policies/branch-scope.js";
@@ -2522,12 +2523,13 @@ describe("a schedule carries its own note — and is CALLED what it is (R57, R16
     const row = listed.data.find((r) => r.id === id)!;
     // Subject — main teacher — time. No catalogue type and no Surah on this
     // fixture, and a repeating class's own row carries no date.
-    expect(row.title).toBe(`${subject.name} — ${TAG} المؤطِّرة الأولى — 15:00`);
+    // R172 §12 — the honorific before the name, from the composer's one constant.
+    expect(row.title).toBe(`${subject.name} — ${TEACHER_HONORIFIC} ${TAG} المؤطِّرة الأولى — 15:00`);
 
     const sessions = await listScheduleSessions(prisma, superAdmin(), id, {});
     const first = sessions.data[0]!;
     const date = first.date.toISOString().slice(0, 10);
-    expect(first.title).toBe(`${subject.name} — ${TAG} المؤطِّرة الأولى — ${date} 15:00`);
+    expect(first.title).toBe(`${subject.name} — ${TEACHER_HONORIFIC} ${TAG} المؤطِّرة الأولى — ${date} 15:00`);
 
     // A cover teacher takes ONE date: that occurrence's title says so at once,
     // and nothing had to be kept in step to make it true.
@@ -2537,7 +2539,7 @@ describe("a schedule carries its own note — and is CALLED what it is (R57, R16
     });
     const again = await listScheduleSessions(prisma, superAdmin(), id, {});
     expect(again.data.find((r) => r.id === first.id)!.title).toBe(
-      `${subject.name} — ${TAG} المُغطِّية — ${date} 15:00`,
+      `${subject.name} — ${TEACHER_HONORIFIC} ${TAG} المُغطِّية — ${date} 15:00`,
     );
     expect(again.data.find((r) => r.id !== first.id)!.title).toContain("المؤطِّرة الأولى");
   });

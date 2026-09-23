@@ -14,15 +14,20 @@ export function composeTitlePreview(parts: {
   subjectName: string | null;
   surahNames: readonly string[];
   leadName: string | null;
+  /** R172 §12 — the server's word before the teacher's name (`teacher_honorific`
+   *  on `/me/scope-options`); `''` until it arrives, so the preview never
+   *  guesses a word the server defines. */
+  teacherHonorific: string;
   date: string | null;
   time: string | null;
 }): string {
   const when = [parts.date ?? '', parts.time ?? ''].filter((x) => x !== '').join(' ');
+  const lead = (parts.leadName ?? '').trim();
   return [
     parts.typeName ?? '',
     parts.subjectName ?? '',
     parts.surahNames.join('، '),
-    parts.leadName ?? '',
+    lead === '' ? '' : [parts.teacherHonorific.trim(), lead].filter((x) => x !== '').join(' '),
     when,
   ]
     .map((part) => part.trim())

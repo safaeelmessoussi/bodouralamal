@@ -483,15 +483,16 @@ export async function listLibrary(
 
 /**
  * **What to call a recording made from the library screen** (R75.6, server-owned
- * since R99; **R172 §3 — the same composition as a class recording**).
+ * since R99; **R172 §3/§12 — the same composition as a class recording**).
  *
  * The Owner asked (2026-09-23) that a library audio be named automatically
- * «following the same logic as a session recording». So this is
- * `sessionRecordingBaseName` with the parts this screen has: the TYPE is
- * «تسجيل صوتي» (there is no catalogue type here), the Subject is the one in
- * view when there is one, no Surah, the LEAD is the person recording — her
- * public display name, the server's to compose (§20 rule 12) — and the date
- * and time are the association's clock now. A recording made with no Subject
+ * «following the same logic as a session recording», and then (the same day)
+ * without a type word: «المادة — الأستاذة من سجّلت — التاريخ الوقت». So this
+ * is `sessionRecordingBaseName` with the parts this screen has: no type, the
+ * Subject in view when there is one, no Surah, the LEAD is the person
+ * recording — her public display name, the server's to compose (§20 rule 12),
+ * honoured by the composer — and the date and time are the association's
+ * clock now. A recording made with no Subject
  * in view therefore still gets a name (before this it got `null`, and the
  * Owner's phone asked her to type one after fifteen seconds of upload).
  *
@@ -499,7 +500,6 @@ export async function listLibrary(
  * against what this page shows — the library namespace is a shelf a person is
  * looking at, not a Session's link set.
  */
-const LIBRARY_RECORDING_TYPE = 'تسجيل صوتي';
 
 async function suggestLibraryRecordingName(
   prisma: PrismaClient,
@@ -525,8 +525,9 @@ async function suggestLibraryRecordingName(
     where: { id: actor.userId },
     select: { publicDisplayName: true, nameArabic: true },
   });
+  // R172 §12 (the Owner): no type word — «المادة — الأستاذة من سجّلت — التاريخ الوقت».
   const base = sessionRecordingBaseName({
-    typeName: LIBRARY_RECORDING_TYPE,
+    typeName: null,
     subjectName,
     surahNames: [],
     teacherName: recorder ? publicDisplayName(recorder) : null,

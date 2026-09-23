@@ -2,6 +2,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import type { Actor } from '../policies/actor.js';
+import { TEACHER_HONORIFIC } from '../lib/item-title.js';
 import {
   DEFAULT_VISIBILITY_PREFIX,
   readDefaultVisibility,
@@ -118,6 +119,10 @@ export interface ScopeOptions {
   surahs: { id: number; name: string }[];
   academicYears: { id: string; label: string; isCurrent: boolean }[];
   branches: { id: string; name: string }[];
+  /** R172 §12 — the word before a teacher's name in every composed title,
+   *  defined once on the server (`TEACHER_HONORIFIC`); the live preview reads
+   *  it here rather than keeping a copy. */
+  teacherHonorific: string;
 }
 
 /** R165 §2 — names for the Surahs some offered Level's syllabus holds: the
@@ -243,6 +248,7 @@ export async function readScopeOptions(
       isCurrent: y.isCurrent,
     })),
     branches,
+    teacherHonorific: TEACHER_HONORIFIC,
   };
 }
 
@@ -433,5 +439,6 @@ export async function readCourseScheduleOptions(
       isCurrent: y.isCurrent,
     })),
     branches,
+    teacherHonorific: TEACHER_HONORIFIC,
   };
 }

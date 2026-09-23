@@ -107,6 +107,8 @@ export interface ScopeOptions {
   wholeCategoryTeachesNothing: boolean;
   /** True while the Subject control may be used with no Level in play. */
   subjectsIndependentOfLevel: boolean;
+  /** R172 §12 — the server's word before a teacher's name in a composed title. */
+  teacherHonorific: string;
   /**
    * **Level id → its Category id** (SRS Revision 163 §5). `options.levelId`
    * carries labels only, and a form whose Category filter holds SEVERAL values
@@ -266,6 +268,7 @@ export function useScopeOptions({
   const [levels, setLevels] = useState<Level[]>([]);
   /** R172 §1 — the Subjects taught to a WHOLE Category, by Category id. */
   const [categorySubjects, setCategorySubjects] = useState<Map<string, string[]>>(new Map());
+  const [teacherHonorific, setTeacherHonorific] = useState('');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [years, setYears] = useState<AcademicYearRef[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
@@ -371,6 +374,7 @@ export function useScopeOptions({
         new Map(payload.levels.map((l) => [l.id, l.subject_ids])),
       );
       setCategorySubjects(new Map(payload.categories.map((c) => [c.id, c.subject_ids ?? []])));
+      setTeacherHonorific(payload.teacher_honorific ?? '');
       setAllSubjects(payload.subjects.map((x) => ({ id: x.id, name: x.name }) as SubjectRef));
       setSurahFacts({
         subjectsBySurah: new Set(
@@ -649,6 +653,7 @@ export function useScopeOptions({
       subjects.length === 0,
     /** True while the Subject control may be used with no Level in play. */
     subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,
+    teacherHonorific,
     ...surahFacts,
     /**
      * §4.9's default content visibility for the currently chosen Level, through

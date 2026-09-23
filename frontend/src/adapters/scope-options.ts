@@ -24,6 +24,9 @@ import { api } from '../lib/api.js';
 export interface ScopeOptionsPayload {
   /** `subject_ids` — R172 §1: the Subjects taught to EVERY Level of the Category. */
   categories: { id: string; name: string; subject_ids: string[] }[];
+  /** R172 §12 — the word before a teacher's name in every composed title,
+   *  defined once on the server; the live preview reads it, never a copy. */
+  teacher_honorific?: string;
   levels: {
     id: string;
     name: string;

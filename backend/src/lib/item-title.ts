@@ -21,7 +21,9 @@ export interface ItemTitleParts {
   subjectName: string | null;
   /** In Mushaf order; empty wherever the Subject is not taught by Surah. */
   surahNames: readonly string[];
-  /** A PUBLIC display name (§20 rule 12) — this text reaches public calendars. */
+  /** A PUBLIC display name (§20 rule 12) — this text reaches public calendars.
+   *  Composed as «{TEACHER_HONORIFIC} {name}» (R172 §12); the bare name is
+   *  what the caller passes. */
   leadName: string | null;
   /** `YYYY-MM-DD`; `null` for a repeating class's own row, which spans dates. */
   date: string | null;
@@ -32,7 +34,23 @@ export interface ItemTitleParts {
 const SEPARATOR = ' — ';
 const ELLIPSIS = '…';
 
+/**
+ * **The word before a teacher's name, everywhere a title carries one** (the
+ * Owner, 2026-09-23 — SRS Revision 172 §12): «محاضرة — دورة علوم القرآن —
+ * الأستاذة فاطمة بوخبزى — 2026-09-22 15:00». Defined ONCE, here, on the
+ * composer every title and recording name flows through; the browser's live
+ * preview receives it from `/me/scope-options` (`teacher_honorific`) rather
+ * than keeping a copy. To change the word, change this constant.
+ */
+export const TEACHER_HONORIFIC = 'الأستاذة';
+
 const clean = (value: string | null | undefined): string => (value ?? '').trim();
+
+/** `الأستاذة فاطمة` — the honorific before a (public, §20 rule 12) name; nothing for nobody. */
+export function honoured(name: string | null | undefined): string {
+  const bare = clean(name);
+  return bare === '' ? '' : `${TEACHER_HONORIFIC} ${bare}`;
+}
 
 function join(parts: readonly string[]): string {
   return parts.filter((part) => part !== '').join(SEPARATOR);
@@ -55,7 +73,7 @@ export function composeItemTitle(parts: ItemTitleParts, maxLength?: number): str
   );
   const head = [clean(parts.typeName), clean(parts.subjectName)];
   const surahs = parts.surahNames.map(clean).filter((name) => name !== '');
-  const lead = clean(parts.leadName);
+  const lead = honoured(parts.leadName);
 
   const build = (surahCount: number, withLead: boolean): string =>
     join([

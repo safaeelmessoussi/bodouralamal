@@ -5833,3 +5833,7 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
       `e6601e5` — 98 tombstones purged, zero live `[تجريبي]` rows; 8 tombstones
       (4 classes + 4 groups) wait on the Owner's deleted test exams' seven days
       and clear with the sweep. The Staging pipeline no longer seeds fixtures.
+- [x] **R172 §12 (Owner, 2026-09-23): «الأستاذة» before every teacher's name**
+      in composed titles and recording names; a library recording carries no
+      type word. One constant (`TEACHER_HONORIFIC`, `lib/item-title.ts`);
+      the preview reads `teacher_honorific` from `/me/scope-options`.

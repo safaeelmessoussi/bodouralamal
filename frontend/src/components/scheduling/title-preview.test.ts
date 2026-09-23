@@ -14,34 +14,45 @@ const parts = {
   subjectName: 'تفسير القرآن',
   surahNames: ['الفاتحة', 'البقرة'],
   leadName: 'صفاء',
+  // R172 §12 — the server's word, handed to the preview; never a copy here.
+  teacherHonorific: 'الأستاذة',
   date: '2026-09-22',
   time: '15:00',
 };
 
 describe('the previewed title is the server’s wording', () => {
-  it('type — Subject — Surah(s) — main teacher — when', () => {
+  it('type — Subject — Surah(s) — الأستاذة + main teacher — when', () => {
     expect(composeTitlePreview(parts)).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 2026-09-22 15:00',
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 2026-09-22 15:00',
     );
   });
 
   it('a repeating class’s own row carries its time alone', () => {
     expect(composeTitlePreview({ ...parts, date: null })).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 15:00',
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 15:00',
     );
   });
 
-  it('omits what the item does not have', () => {
+  it('omits what the item does not have — and the honorific with no name', () => {
     expect(
       composeTitlePreview({
         typeName: null,
         subjectName: 'فقه',
         surahNames: [],
         leadName: null,
+        teacherHonorific: 'الأستاذة',
         date: '2026-09-22',
         time: null,
       }),
     ).toBe('فقه — 2026-09-22');
+  });
+
+  it('R172 §12 — the word is not in this file: the page hands it over from `/me/scope-options`', () => {
+    const own = form + page;
+    expect(own).not.toContain('الأستاذة');
+    expect(page).toContain('teacherHonorific: scope.teacherHonorific,');
+    // Until it arrives the preview shows the bare name rather than a guessed word.
+    expect(composeTitlePreview({ ...parts, teacherHonorific: '' })).toContain(' — صفاء — ');
   });
 });
 

@@ -2050,6 +2050,8 @@ export interface ScopeOptionsDto {
   surahs: { id: number; name: string }[];
   academic_years: { id: string; label: string; is_current: boolean }[];
   branches: { id: string; name: string }[];
+  /** R172 §12 — the word before a teacher's name in every composed title. */
+  teacher_honorific: string;
 }
 
 export function scopeOptionsDto(row: {
@@ -2068,6 +2070,7 @@ export function scopeOptionsDto(row: {
   surahs: { id: number; name: string }[];
   academicYears: { id: string; label: string; isCurrent: boolean }[];
   branches: { id: string; name: string }[];
+  teacherHonorific: string;
 }): ScopeOptionsDto {
   return {
     categories: row.categories.map((c) => ({ id: c.id, name: c.name, subject_ids: c.subjectIds })),
@@ -2093,6 +2096,7 @@ export function scopeOptionsDto(row: {
       is_current: y.isCurrent,
     })),
     branches: row.branches,
+    teacher_honorific: row.teacherHonorific,
   };
 }
 

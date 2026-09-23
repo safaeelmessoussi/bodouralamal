@@ -56,6 +56,7 @@ const EMPTY_SCOPE: ScopeOptions = {
   wholeCategoryOptions: [],
   wholeCategoryTeachesNothing: false,
   subjectsIndependentOfLevel: false,
+  teacherHonorific: '',
   levelCategoryIds: {},
   subjectsBySurah: new Set<string>(),
   levelSurahIds: {},

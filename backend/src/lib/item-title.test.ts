@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeItemTitle } from './item-title.js';
+import { composeItemTitle, TEACHER_HONORIFIC } from './item-title.js';
 import { moroccoWallClockToInstant } from './morocco-clock.js';
 import { RECORDING_TITLE_LIMIT, sessionRecordingBaseName } from './recording-name.js';
 
@@ -19,14 +19,17 @@ const parts = {
 
 describe('what an item is called', () => {
   it('type — Subject — Surah(s) — main teacher — when', () => {
+    // R172 §12 (the Owner) — the word before the teacher's name, defined once
+    // (`TEACHER_HONORIFIC`) on this composer: every title carries it.
     expect(composeItemTitle(parts)).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 2026-09-22 15:00',
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 2026-09-22 15:00',
     );
+    expect(composeItemTitle(parts)).toContain(`${TEACHER_HONORIFIC} صفاء`);
   });
 
   it('a repeating class’s own row spans dates, so it carries its time alone', () => {
     expect(composeItemTitle({ ...parts, date: null })).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — صفاء — 15:00',
+      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 15:00',
     );
   });
 
