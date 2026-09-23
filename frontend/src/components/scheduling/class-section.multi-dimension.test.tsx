@@ -54,6 +54,7 @@ const EMPTY_SCOPE: ScopeOptions = {
   ready: true,
   levelTeachesNothing: false,
   wholeCategoryOptions: [],
+  wholeCategoryTeachesNothing: false,
   subjectsIndependentOfLevel: false,
   levelCategoryIds: {},
   subjectsBySurah: new Set<string>(),

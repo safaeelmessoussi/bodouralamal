@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SelectField } from '../ui/field.js';
+import { wholeCategoryOf } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
 import type { Option, ScopeField, ScopeOptions } from '../../hooks/use-scope-options.js';
 
@@ -128,7 +129,9 @@ export function ScopeSelectors({
         const placeholder = unmetDependency
           ? t('scope.chooseFirst').replace('{field}', t(unmetDependency.labelKey))
           : isEmpty
-            ? t(`scope.empty.${field}`)
+            ? field === 'subjectId' && wholeCategoryOf(scope.value.levelId) !== null
+              ? t('scope.empty.wholeCategorySubject')
+              : t(`scope.empty.${field}`)
             : mode === 'filter'
               ? t(`scope.all.${field}`)
               : t('scope.choose');

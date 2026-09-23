@@ -7839,6 +7839,75 @@
             }
           }
         }
+      },
+      "delete": {
+        "summary": "Delete one occurrence",
+        "description": "**SRS Revision 172 §9** (the Owner, 2026-09-23: «in حصص الجدول, allow deleting a session»). `?version=` is TD-15's coordinate. A cancellation says *this class did not happen*; this says *this occurrence should not exist* — a stray one, a duplicate, one entered by mistake. **Soft, with a Trash snapshot and an audit row** (`session.delete`), restorable for the seven days (R133; a future occurrence restored into a slot given away since is `SCHEDULE_CONFLICT`, R171 §6's rule); what it carries — attendance, a recording — goes with it when the Trash lets it go, exactly as a class's occurrences do (R170 §8). **An exam sat in it keeps it** (`409 STATE_CONFLICT` / `SESSION_HAS_EXAM`): the sitting is deleted through its own door (R172 §6). Administrative — not among TD-2's four teacher session verbs; an Admin is bound by branch. The materialiser never re-creates a tombstoned occurrence.",
+        "responses": {
+          "204": {
+            "description": "Deleted; the Trash carries the snapshot."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown occurrence or one out of the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT (TD-15), or STATE_CONFLICT / SESSION_HAS_EXAM.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/sessions/{id}/cancel": {

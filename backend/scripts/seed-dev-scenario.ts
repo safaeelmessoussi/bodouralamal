@@ -100,6 +100,15 @@ async function clean(): Promise<void> {
   // R165 — the scenario Level's «مقرر الحفظ».
   await prisma.levelSurah.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
+  // R172 §1 — a whole-Category link a browser harness may have made (and
+  // soft-deleted; the row is still there and RESTRICTs the Subject).
+  const links = await prisma.categorySubject.findMany({
+    where: { OR: [{ subject: { name: { startsWith: TAG } } }, { category: { name: { startsWith: TAG } } }] },
+    select: { id: true },
+  });
+  await prisma.trash.deleteMany({ where: { targetEntity: 'CategorySubject', targetId: { in: links.map((l) => l.id) } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'CategorySubject', targetId: { in: links.map((l) => l.id) } } });
+  await prisma.categorySubject.deleteMany({ where: { id: { in: links.map((l) => l.id) } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({ where: { branch: { name: { startsWith: TAG } } } });

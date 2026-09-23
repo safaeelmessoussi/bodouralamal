@@ -359,6 +359,7 @@ GET /admin/course-schedules/{id}/sessions     # §4.4 R50 — the occurrences th
 PATCH /sessions/{id}                          # TD-3.12, §4.4; sets `overridden`; TD-2 limits a Teacher to sessions they staff
 POST /sessions/{id}/cancel                    # TD-3.12; TD-1 scheduled → cancelled; reason mandatory
 POST /sessions/{id}/restore                   # TD-3.12; TD-1 cancelled → scheduled, only before the date
+DELETE /sessions/{id}                         # SRS Revision 172 §9; one occurrence to the Trash (TD-5), restorable; SESSION_HAS_EXAM keeps it
 POST /sessions/{id}/content                   # TD-3.12, §4.9 SessionContent link
 DELETE /sessions/{id}/content/{contentId}     # TD-3.12; unlinks, NEVER deletes the file
 

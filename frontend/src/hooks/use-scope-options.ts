@@ -103,6 +103,8 @@ export interface ScopeOptions {
   /** R172 §1 — `category:<id>` choices for the Level control, one per Category
    *  some Subject is taught WHOLE; empty where none is. */
   wholeCategoryOptions: Option[];
+  /** «كل مستويات الفئة» is chosen and the Category is taught no Subject whole. */
+  wholeCategoryTeachesNothing: boolean;
   /** True while the Subject control may be used with no Level in play. */
   subjectsIndependentOfLevel: boolean;
   /**
@@ -157,6 +159,14 @@ export interface UseScopeOptionsInput {
    * form still holds no Subject without a Level.
    */
   subjectsTaughtAnywhere?: boolean;
+  /**
+   * R172 §1 — offer «{الفئة} — كل مستويات الفئة» IN the Level list (as
+   * `category:<id>`), every Category when none is chosen and the chosen one
+   * alone when one is. In the list itself, not beside it: rule 2 clears a
+   * Level value the list does not hold, so a choice offered from outside was
+   * dropped the moment it was made. Off by default; the content scope asks.
+   */
+  offerWholeCategory?: boolean;
   /**
    * **Whether these selectors narrow a list or fill a form** (2026-08-18).
    *
@@ -218,6 +228,7 @@ export function useScopeOptions({
   mode = 'form',
   restrictToOwnCapability = false,
   subjectsTaughtAnywhere = false,
+  offerWholeCategory = false,
 }: UseScopeOptionsInput): ScopeOptions {
   const subjectsUnscoped = mode === 'filter';
   /**
@@ -494,19 +505,24 @@ export function useScopeOptions({
     const levelPool =
       value.categoryId === '' ? levels : levels.filter((l) => l.category_id === value.categoryId);
 
+    const wholeCategory = offerWholeCategory
+      ? categories
+          .filter((c) => value.categoryId === '' || c.id === value.categoryId)
+          .map((c) => ({ value: wholeCategoryValue(c.id), label: `${c.name} — ${t('scope.wholeCategory')}` }))
+      : [];
     return {
       categoryId: categories.map((c) => ({ value: c.id, label: c.name })),
       // One label for a Level everywhere (`{Category} — {Level}`): a Level name
       // is not unique across Categories and not numbered uniformly (§4.4b), so
       // the bare name genuinely fails to identify one. Shared with the atomic
       // selector rather than spelled out again here.
-      levelId: levelPool.map((l) => ({ value: l.id, label: levelLabel(l) })),
+      levelId: [...wholeCategory, ...levelPool.map((l) => ({ value: l.id, label: levelLabel(l) }))],
       subjectId: subjects.map((s) => ({ value: s.id, label: s.name })),
       branchId: branches.map((b) => ({ value: b.id, label: b.name })),
       academicYearId: years.map((y) => ({ value: y.id, label: y.label })),
       groupId: groups.map((g) => ({ value: g.id, label: g.name })),
     };
-  }, [categories, levels, subjects, branches, years, groups, value.categoryId]);
+  }, [categories, levels, subjects, branches, years, groups, value.categoryId, offerWholeCategory]);
 
   /* ── Rule 2: a selection no longer offered is CLEARED ─────────────────── */
   //
@@ -619,9 +635,18 @@ export function useScopeOptions({
      * its Levels (only Categories some Subject is taught WHOLE), and the
      * Subjects each carries.
      */
-    wholeCategoryOptions: categories
-      .filter((c) => (categorySubjects.get(c.id) ?? []).length > 0)
-      .map((c) => ({ value: wholeCategoryValue(c.id), label: `${c.name} — ${t('scope.wholeCategory')}` })),
+    // The whole-Category choices the Level list holds when asked for
+    // (`offerWholeCategory`): every Category when none is chosen, the chosen
+    // one alone when one is — ALWAYS offered (the Owner, 2026-09-23: she
+    // could not find the choice at all while no Subject was assigned to the
+    // Category whole; the choice now leads to the hint that says so).
+    wholeCategoryOptions: options.levelId.filter((o) => wholeCategoryOf(o.value) !== null),
+    /** True while «كل مستويات الفئة» is chosen and that Category is taught no Subject whole. */
+    wholeCategoryTeachesNothing:
+      wants('subjectId') &&
+      wholeCategoryOf(value.levelId) !== null &&
+      !loadingSubjects &&
+      subjects.length === 0,
     /** True while the Subject control may be used with no Level in play. */
     subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,
     ...surahFacts,

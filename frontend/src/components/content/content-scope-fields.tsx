@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { useScopeOptions, wholeCategoryOf, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
+import { Feedback } from '../ui/feedback.js';
 import { SelectField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
@@ -26,6 +27,9 @@ import type { UploadMeta } from '../../adapters/uploads.js';
  * > leaving the previous Level's behind.
  */
 export const SCOPE_FIELDS: readonly ScopeField[] = [
+  // R172 §1 (the Owner, 2026-09-23) — the Category first, so «كل مستويات
+  // الفئة» is one choice away: المرأة → كل مستويات الفئة → الفقه.
+  'categoryId',
   'levelId',
   'subjectId',
   'academicYearId',
@@ -70,6 +74,9 @@ export function useContentScope({
     fields: SCOPE_FIELDS,
     // Seeded from the page's filters, then owned by this form.
     initial,
+    // R172 §1 — «كل مستويات الفئة» in the Level list, unless the scope is
+    // locked (a replacement keeps the record's own Level).
+    offerWholeCategory: !locked,
     // A write belongs to the live year; a filter bar deliberately defaults to
     // none, because defaulting a filter silently hides rows.
     defaultCurrentYear: !locked,
@@ -112,11 +119,13 @@ export function useContentScope({
     [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked],
   );
 
-  const problem = scope.levelTeachesNothing
-    ? t('scope.assignSubjectsHint')
-    : levelId === '' || subjectId === '' || academicYearId === ''
-      ? t('content.upload.chooseScope')
-      : null;
+  const problem = scope.wholeCategoryTeachesNothing
+    ? t('scope.assignWholeCategorySubjectsHint')
+    : scope.levelTeachesNothing
+      ? t('scope.assignSubjectsHint')
+      : levelId === '' || subjectId === '' || academicYearId === ''
+        ? t('content.upload.chooseScope')
+        : null;
 
   const fields = (
     <>
@@ -127,14 +136,17 @@ export function useContentScope({
         {...(locked ? { locked: SCOPE_FIELDS } : {})}
         // Offered only to those who may assign it (§4.9). The field stays
         // visible for everyone; only the value is withheld.
-        extraOptions={{
-          ...(mayAssignGlobal && !locked
+        extraOptions={
+          mayAssignGlobal && !locked
             ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] }
-            : {}),
-          // R172 §1 — one choice per Category some Subject is taught WHOLE.
-          ...(locked ? {} : { levelId: scope.wholeCategoryOptions }),
-        }}
+            : {}
+        }
       />
+
+      {/* R172 §11 — said HERE, under the selectors, the moment «كل مستويات
+          الفئة» is chosen for a Category taught nothing whole: the person is
+          choosing the scope now, not saving later. */}
+      {scope.wholeCategoryTeachesNothing ? <Feedback>{t('scope.assignWholeCategorySubjectsHint')}</Feedback> : null}
 
       <SelectField
         label={t('content.col.visibility')}

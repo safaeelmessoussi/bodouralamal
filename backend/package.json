@@ -20,6 +20,7 @@
     "seed:fixtures": "node dist/prisma/seed/fixtures.js",
     "ops:requeue-recordings": "node dist/src/ops/requeue-recording-ingest.js",
     "ops:active-recordings": "node dist/src/ops/active-recordings.js",
+    "ops:remove-fixtures": "node dist/src/ops/remove-fixtures.js",
     "ops:reconcile-recordings": "node dist/src/ops/reconcile-recordings.js",
     "ops:recording-segments": "node dist/src/ops/recording-segments.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"

@@ -238,4 +238,30 @@ fi
   done
 )
 
-printf 'production seed drill: R107 fresh seed, idempotency, authorization, HTTP fixtures and scenario seeds passed\n'
+# **The fixtures can be taken back out (SRS Revision 172 §10).** At the Owner's
+# word the Staging fixtures are removed through the platform's own deletion
+# doors and the Trash purge; on this fresh database nothing else references
+# them, so every tagged row must be gone — and the Owner's own account, which
+# the command acts as, must not have been touched.
+(
+  cd "$repo_root/backend"
+  npx tsx src/ops/remove-fixtures.ts >/dev/null
+)
+leftover="$(psql_seed "
+  SELECT (SELECT count(*) FROM \"user\" WHERE deleted_at IS NULL AND name_arabic LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM user_identity ui JOIN \"user\" u ON u.id = ui.user_id WHERE u.deleted_at IS NULL AND ui.email LIKE '%@example.com')
+       + (SELECT count(*) FROM branch WHERE deleted_at IS NULL AND name LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM room WHERE deleted_at IS NULL AND name LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM administrative_group WHERE deleted_at IS NULL AND name LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM educational_content WHERE title LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM exam WHERE title LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM event WHERE title LIKE '[تجريبي]%')
+       + (SELECT count(*) FROM recurring_course_schedule WHERE title LIKE '[تجريبي]%');" | tr -d '[:space:]')"
+owner_live="$(psql_seed "SELECT count(*) FROM platform_owner po JOIN \"user\" u ON u.id = po.owner_user_id WHERE u.deleted_at IS NULL;" | tr -d '[:space:]')"
+if [[ "$leftover" != "0" || "$owner_live" != "1" ]]; then
+  echo "FAIL: ops:remove-fixtures left $leftover tagged rows (owner live: $owner_live)." >&2
+  exit 1
+fi
+echo "OK: ops:remove-fixtures removed every [تجريبي] row through the platform's own doors; the Owner's account stands."
+
+printf 'production seed drill: R107 fresh seed, idempotency, authorization, HTTP fixtures, scenario seeds and fixture removal passed\n'

@@ -7,6 +7,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { clearOwnedEmailLocks } from '../test-support/email-locks.js';
 import type { Actor } from '../policies/actor.js';
 import { deleteCourseSchedule } from './course-schedule.service.js';
+import { deleteSession } from './session.service.js';
 import { deleteLevel } from './level.service.js';
 import { deleteTeachingGroup } from './teaching-group.service.js';
 import { deletePartner } from './partner.service.js';
@@ -595,6 +596,85 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     });
     return { scheduleId: schedule.id, entryId: entry.id };
   }
+
+  /**
+   * **R172 §9 — one occurrence deleted on its own** («حصص الجدول» → «حذف»):
+   * a tombstone the Trash restores by un-deleting the row, and destroys with
+   * what it carries; an exam sat in it keeps it.
+   */
+  it('R172 §9 — one occurrence goes to the Trash, comes back, or is destroyed with its attendance; an exam keeps it', async () => {
+    const { levelId, subjectId } = await curriculum();
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع الحصة` } });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const schedule = await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة تُحذف`,
+        levelId,
+        subjectId,
+        branchId: branch.id,
+        academicYearId: year.id,
+        teachingMode: 'entire_level',
+        recurrence: 'weekly',
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T10:00:00.000Z'),
+      },
+    });
+    const occurrence = async (date: string) =>
+      prisma.session.create({
+        data: {
+          scheduleId: schedule.id,
+          date: new Date(date),
+          startTime: new Date('1970-01-01T09:00:00.000Z'),
+          endTime: new Date('1970-01-01T10:00:00.000Z'),
+        },
+        select: { id: true, version: true },
+      });
+    const student = await prisma.user.create({
+      data: { nameArabic: `${TAG} حاضرة الحصة`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
+    });
+
+    // (a) Deleted, listed, restored — the row and nothing else.
+    const first = await occurrence('2026-09-07');
+    await deleteSession(prisma, superAdmin(), first.id, first.version);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: first.id } })).deletedAt).not.toBeNull();
+    const listed = (await listTrash(prisma, superAdmin(), { entity: 'Session' })).data.find((r) => r.targetId === first.id)!;
+    expect(listed.restorable).toBe(true);
+    await restoreEntry(prisma, superAdmin(), listed.id);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: first.id } })).deletedAt).toBeNull();
+
+    // (b) Deleted with attendance, then destroyed WITH it.
+    const second = await occurrence('2026-09-14');
+    await prisma.attendance.create({
+      data: { sessionId: second.id, occurrenceDate: new Date('2026-09-14'), studentId: student.id, markedById: actorUserId },
+    });
+    await deleteSession(prisma, superAdmin(), second.id, second.version);
+    const entry = (await listTrash(prisma, superAdmin(), { entity: 'Session' })).data.find((r) => r.targetId === second.id)!;
+    await purgeEntry(prisma, superAdmin(), entry.id);
+    expect(await prisma.session.count({ where: { id: second.id } })).toBe(0);
+    expect(await prisma.attendance.count({ where: { sessionId: second.id } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: entry.id } })).toBe(0);
+
+    // (c) An exam sat in it keeps it — at deletion, in words.
+    const third = await occurrence('2026-09-21');
+    await prisma.exam.create({
+      data: {
+        title: `${TAG} اختبار في الحصة المحذوفة`,
+        levelId,
+        subjectId,
+        date: new Date('2026-09-21'),
+        maxGrade: 20,
+        targetKind: 'session',
+        sessionId: third.id,
+        status: 'published',
+      },
+    });
+    await expect(deleteSession(prisma, superAdmin(), third.id, third.version)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      details: { reason: 'SESSION_HAS_EXAM' },
+    });
+    // A stale version is TD-15's answer, not a silent delete.
+    await expect(deleteSession(prisma, superAdmin(), first.id, 99)).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
 
   it('purges a deleted schedule that never materialized a Session', async () => {
     const { scheduleId, entryId } = await deletedSchedule(false);

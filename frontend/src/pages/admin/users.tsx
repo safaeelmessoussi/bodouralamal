@@ -496,6 +496,10 @@ export function UsersPage(): ReactNode {
             setBlocked(null);
             try {
               await deleteUserAccount(deleting!.id, accessToken, permanent);
+              // The account is gone: the dialog goes with it (the Owner,
+              // 2026-09-23 — it stayed open over «حذف نهائي للحساب»).
+              setDeleting(null);
+              setPermanent(false);
             } catch (error) {
               // A 409 naming what holds the deletion is not a generic failure —
               // it is the list of things to reassign, so it is shown in place.

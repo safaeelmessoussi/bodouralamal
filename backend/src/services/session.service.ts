@@ -967,6 +967,96 @@ async function replaceSessionStaff(
 }
 
 /**
+ * **`DELETE /sessions/{id}` — one occurrence goes to the Trash** (SRS Revision
+ * 172 §9; the Owner, 2026-09-23: «in حصص الجدول, allow deleting a session»).
+ *
+ * A cancellation (TD-1) says «this class did not happen»; a deletion says «this
+ * occurrence should not exist» — a stray one, a duplicate, one entered by
+ * mistake. Soft, with a Trash snapshot and an audit row, restorable for the
+ * seven days (R133); what it carries — attendance, a recording — goes with it
+ * when the Trash lets it go, exactly as a class's occurrences do (R170 §8).
+ * **An exam sat in it keeps it** (`SESSION_HAS_EXAM`): the sitting's papers and
+ * marks are the exam's, and the exam is deleted through its own door (R172 §6).
+ *
+ * Administrative (R71.4's reasoning): deciding an occurrence should not exist
+ * is not among TD-2's four teacher session verbs. TD-15: the caller's
+ * `version` must match. The materialiser never re-creates it — a tombstone
+ * still occupies its `(schedule_id, date)`.
+ */
+export async function deleteSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  version: number,
+): Promise<void> {
+  if (!isAdmin(actor)) {
+    throw new AppError("FORBIDDEN", "deleting an occurrence is an Admin action");
+  }
+  await prisma.$transaction(async (tx) => {
+    const session = await tx.session.findFirst({
+      where: { id: sessionId, deletedAt: null },
+      include: {
+        schedule: { select: { branchId: true, deletedAt: true } },
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        _count: { select: { exams: true, attendance: { where: { deletedAt: null } }, recordings: true } },
+      },
+    });
+    if (!session) throw new AppError("NOT_FOUND", "no such session");
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      session.schedule.branchId,
+      "no such session",
+    );
+    if (session.version !== version) {
+      throw new AppError("VERSION_CONFLICT", "the session changed since it was read");
+    }
+    if (session._count.exams > 0) {
+      throw new AppError("STATE_CONFLICT", "an exam was sat in this occurrence", {
+        reason: "SESSION_HAS_EXAM",
+        exams: session._count.exams,
+      });
+    }
+    const stamp = new Date();
+    await tx.session.update({
+      where: { id: sessionId },
+      data: { deletedAt: stamp, deletedById: actor.userId },
+    });
+    const { schedule: _schedule, staff, _count, ...row } = session;
+    await trash.snapshot(
+      tx,
+      {
+        targetEntity: "Session",
+        targetId: sessionId,
+        snapshot: JSON.parse(
+          JSON.stringify({
+            ...row,
+            staff,
+            attendance_count: _count.attendance,
+            recording_count: _count.recordings,
+          }),
+        ) as object,
+        deletedById: actor.userId,
+      },
+      stamp,
+    );
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: "session.delete",
+      targetEntity: "Session",
+      targetId: sessionId,
+      detail: {
+        schedule_id: session.scheduleId,
+        date: session.date.toISOString().slice(0, 10),
+        attendance: _count.attendance,
+        recordings: _count.recordings,
+      },
+    });
+  });
+}
+
+/**
  * **The one sanctioned path by which a PROTECTED Session is brought back into
  * line with its schedule (§4.4, Revisions 43.4 / 43.5).**
  *

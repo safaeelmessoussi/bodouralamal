@@ -200,6 +200,11 @@ export async function restoreSession(
   return api(`/sessions/${id}/restore`, { method: 'POST', token, body: { version } });
 }
 
+/** R172 §9 — one occurrence to the Trash (restorable for seven days). */
+export async function deleteSession(id: string, version: number, token: string | null): Promise<void> {
+  await api<void>(`/sessions/${id}?version=${encodeURIComponent(String(version))}`, { method: 'DELETE', token });
+}
+
 /**
  * `POST /sessions/{id}/content` — links an existing library item (TD-3.12, §4.9).
  *

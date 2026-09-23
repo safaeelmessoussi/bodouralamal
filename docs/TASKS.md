@@ -5821,3 +5821,11 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
 - [x] **«مواد المستوى» RATE_LIMITED → DUPLICATE (Owner, 2026-09-23):** the
       per-Level/per-Category fan-out replaced by `subject_ids` on the two list
       reads; a standing pair is a `204`; harness `verify-level-subjects.sh` 7/7.
+- [x] **R172 part two (Owner, 2026-09-23):** §9 `DELETE /sessions/{id}` — one
+      occurrence to the Trash (restorable; destroyed with its attendance and
+      recordings; `SESSION_HAS_EXAM` keeps it), «حذف» on «حصص الجدول»
+      (trash-lifecycle test); §10 `ops:remove-fixtures` (through the platform's
+      own doors; renames what the Owner still references; proven in the seed
+      drill; the Staging pipeline no longer seeds fixtures); §11 «حذف نهائي
+      للحساب» closes its dialog; the content scope asks the Category first and
+      always offers «كل مستويات الفئة» (the choice was being dropped by rule 2).

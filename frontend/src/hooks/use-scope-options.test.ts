@@ -184,9 +184,14 @@ describe('R172 §1 — whole-Category Subjects, and the Level-free Subject', () 
     const source = code(HOOK);
     expect(source).toContain('const wholeOf = wholeCategoryOf(value.levelId);');
     expect(source).toContain('categorySubjects.get(wholeOf)');
-    // …and the Level control is offered one whole-Category choice per Category
-    // some Subject is taught WHOLE, never for an empty one.
-    expect(source).toContain('.filter((c) => (categorySubjects.get(c.id) ?? []).length > 0)');
+    // …and the Level list itself holds one whole-Category choice per Category
+    // (the chosen one alone when one is chosen), ALWAYS — the Owner could not
+    // find the choice while no Subject was assigned to the Category whole; it
+    // now leads to the hint that says so. IN the list, not beside it: rule 2
+    // clears a Level value the list does not hold.
+    expect(source).toContain(".filter((c) => value.categoryId === '' || c.id === value.categoryId)");
+    expect(source).toContain('levelId: [...wholeCategory, ...levelPool.map(');
+    expect(source).toContain('wholeCategoryTeachesNothing:');
   });
 
   it('a FORM Subject the hook declares independent of the Level is not gated on one (the Owner met «اختاري المستوى أولًا» on a «الكل» class)', () => {

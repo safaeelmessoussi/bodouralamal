@@ -11776,3 +11776,22 @@ new harness `verify-level-subjects.sh` 7/7 on Localhost.
 **Hosted CI 8/8 on `ad759e4`, first run; deployed to Staging at `ad759e4`** from `75e0c67` —
 recordings asked first; dump taken; no pending migration; both seeds clean; `/healthz` 200; zero
 error lines. «مواد المستوى» on Staging now loads from the three list reads.
+
+## 2026-09-23 — SRS Revision 172 part two: one occurrence deleted, the Staging fixtures withdrawn, two smaller items
+
+**§9** `deleteSession` (`session.service`): Admin, branch-bound, TD-15 version, `SESSION_HAS_EXAM`
+refusal, soft delete + Trash snapshot (`Session`) + `session.delete` audit. Trash: `Session` joins
+`RESTORABLE` (parent = its schedule; a future occurrence is checked with `assertOccurrenceFree`
+on restore) and its purge runs `purgeSessions` (generalised from `purgeScheduleSessions`) —
+attendance and recordings go with it. Route + TD-3 list + OpenAPI (247 ops). Frontend: «حذف»
+row action, confirm dialog, `deleteSession` adapter, `deleteBlockedExam` in place.
+**§10** `src/ops/remove-fixtures.ts` (`npm run ops:remove-fixtures`; refuses `NODE_ENV=production`;
+acts as the platform owner): content → exam (acknowledged) → event → schedule → people
+(`purgeUserAccount` after their synthetic enrolments/links/consents) → groups → rooms → branches,
+each through its service then `purgeEntry`; a refusal naming dependents becomes a rename (tag
+stripped, `ops.fixture_untagged`). The seed drill now runs it last and asserts zero tagged rows
+with the Owner's account standing. `deployment.md`: Staging no longer seeds fixtures.
+**§11** `users.tsx` closes the delete dialog on success; `content-scope-fields` asks
+`categoryId` first and `useScopeOptions({ offerWholeCategory })` puts «كل مستويات الفئة» IN the
+Level list (rule 2 was clearing it as an outside option — the cause of «I still can't register a
+recording for a category»); `wholeCategoryTeachesNothing` → `scope.assignWholeCategorySubjectsHint`.

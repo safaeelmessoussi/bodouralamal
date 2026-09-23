@@ -749,6 +749,8 @@ export function createApp(
   guarded.patch('/sessions/:id', sessionsCtl.override(prisma));
   guarded.post('/sessions/:id/cancel', sessionsCtl.cancel(prisma));
   guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
+  // R172 §9 — one occurrence to the Trash.
+  guarded.delete('/sessions/:id', sessionsCtl.remove(prisma));
   // R92 — one occurrence's audience, when it draws from more than the
   // schedule's own along any of five dimensions (Owner-reported 2026-09-17,
   // generalised from branches alone). The roster reports the venue and the

@@ -13,7 +13,7 @@ import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import { enqueueConsentReevaluationForStudent } from './consent-reevaluation.service.js';
 import { deIdentifyAccountSystem } from './account-deletion.service.js';
-import { findConflicts } from './course-schedule.service.js';
+import { assertOccurrenceFree, findConflicts } from './course-schedule.service.js';
 
 /**
  * The Trash — **soft-deleted records, browsable; restorable where restoration is
@@ -66,7 +66,9 @@ type ModelName =
   | 'level'
   | 'recurringCourseSchedule'
   | 'academicYear'
-  | 'administrativeGroup';
+  | 'administrativeGroup'
+  // R172 §9 — one occurrence deleted on its own.
+  | 'session';
 
 /** Delegates a purge plan may destroy. Separate from `ModelName` because the
  *  restorable set and the purgeable set are different questions. */
@@ -206,6 +208,14 @@ const RESTORABLE: Record<
   // produce a room nobody can reach — see `restoreEntry`.
   Room: { model: 'room', parent: { field: 'branchId', model: 'branch' } },
   /**
+   * R172 §9 — one occurrence deleted on its own (`deleteSession`). Its staff,
+   * content links and audience rows were never touched, so the row alone comes
+   * back; it needs its class to be live, and a future one is checked against
+   * the room and staff it would re-occupy (`restoreEntry`, as R171 §6 does
+   * for a cancellation's restore).
+   */
+  Session: { model: 'session', parent: { field: 'scheduleId', model: 'recurringCourseSchedule' } },
+  /**
    * **R59.3 — the first CASCADING type to join the set**, and it qualifies for
    * the reason the standard has always named: its reinstatement is *written and
    * tested*, not assumed. Deleting an exam soft-deletes exactly one child table,
@@ -293,7 +303,9 @@ const RESTORABLE: Record<
  */
 const BLOCKED_REASON: Record<string, string> = {
   AdministrativeGroup: 'CASCADE_CHILDREN',
-  Session: 'CASCADE_CHILDREN',
+  // (R172 §9 — `Session` is restorable: one occurrence deleted from
+  // «حصص الجدول» comes back by un-deleting its row; nothing of it was
+  // tombstoned with it.)
   // An Event's scope joins are HARD deleted, so restoring the row alone would
   // produce an event with no audience — visible to nobody, which is worse than
   // absent because it looks restored.
@@ -1089,6 +1101,33 @@ export async function restoreEntry(
       }
     }
 
+    // R172 §9 — a future occurrence returns into a slot that may have been
+    // given away since (R171 §6's rule for a cancellation's restore): the
+    // room and the staff it would re-occupy are checked, `SCHEDULE_CONFLICT`.
+    if (entry.targetEntity === 'Session' && (row['date'] as Date) >= calendarDay()) {
+      const occurrence = await tx.session.findUniqueOrThrow({
+        where: { id: entry.targetId },
+        select: {
+          id: true,
+          roomId: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          schedule: { select: { branchId: true } },
+          staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        },
+      });
+      await assertOccurrenceFree(tx, {
+        id: occurrence.id,
+        branchId: occurrence.schedule.branchId,
+        roomId: occurrence.roomId,
+        date: occurrence.date,
+        startTime: occurrence.startTime,
+        endTime: occurrence.endTime,
+        staff: occurrence.staff,
+      });
+    }
+
     await delegate.update({
       where: { id: entry.targetId },
       data: { deletedAt: null, deletedById: null },
@@ -1291,8 +1330,17 @@ async function purgeScheduleSessions(
     where: { scheduleId, deletedAt: { not: null }, NOT: sessionKeepersWhere() },
     select: { id: true },
   });
-  if (gone.length === 0) return { sessions: 0, attendance: 0, recordings: 0 };
-  const ids = gone.map((session) => session.id);
+  return purgeSessions(tx, gone.map((session) => session.id), deletedById);
+}
+
+/** The destruction itself, for a class's occurrences (above) or one deleted
+ *  on its own (R172 §9). The caller has already excluded the keepers. */
+async function purgeSessions(
+  tx: Prisma.TransactionClient,
+  ids: string[],
+  deletedById: string | null,
+): Promise<{ sessions: number; attendance: number; recordings: number }> {
+  if (ids.length === 0) return { sessions: 0, attendance: 0, recordings: 0 };
 
   // The recordings these occurrences produced (R99): each becomes an ordinary
   // deleted library item, with the obligation that moves its object.
@@ -1434,6 +1482,36 @@ async function purgeTrashEntry(
       // R170 §8 — a class goes with its occurrences, their attendance and
       // their recordings; only an exam sat in one keeps it.
       let purgedWithClass = { sessions: 0, attendance: 0, recordings: 0 };
+      if (entry.targetEntity === 'Session') {
+        // R172 §9 — what one occurrence carries goes with it (R170 §8's rule);
+        // an exam sat in it keeps it.
+        if ((await tx.session.count({ where: { id: entry.targetId, ...sessionKeepersWhere() } })) > 0) {
+          throw new AppError('STATE_CONFLICT', 'an exam was sat in this occurrence', {
+            reason: 'SESSION_HAS_EXAM',
+            target_entity: entry.targetEntity,
+          });
+        }
+        purgedWithClass = await purgeSessions(tx, [entry.targetId], actor?.userId ?? null);
+        // The row itself is gone with them; the generic delete below would
+        // find nothing, so the entry is closed here.
+        await tx.trash.delete({ where: { id } });
+        await audit.write(tx, {
+          actorUserId: actor?.userId ?? null,
+          activeRole: actor?.activeRole,
+          actionType: 'trash.permanent_delete',
+          targetEntity: entry.targetEntity,
+          targetId: entry.targetId,
+          detail: {
+            already_purged: false,
+            deleted_at: entry.deletedAt.toISOString(),
+            deleted_by: entry.deletedById,
+            system: actor === null,
+            attendance_purged: purgedWithClass.attendance,
+            recordings_deleted: purgedWithClass.recordings,
+          },
+        });
+        return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: false };
+      }
       if (entry.targetEntity === 'RecurringCourseSchedule') {
         // Re-asserted INSIDE the transaction, before anything is destroyed.
         if ((await sessionsKeepingSchedule(tx, entry.targetId)) > 0) {

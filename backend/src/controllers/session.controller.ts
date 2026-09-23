@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { requireActor } from "../middleware/authenticate.js";
@@ -122,6 +123,17 @@ export function cancel(prisma: PrismaClient) {
       body.version,
     );
     res.json(sessionDto(await titled(prisma, session)));
+  };
+}
+
+/** R172 §9 — one occurrence to the Trash. `?version=` is TD-15's coordinate. */
+const removeQuerySchema = z.object({ version: z.coerce.number().int().min(0) }).strict();
+
+export function remove(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse(removeQuerySchema, req.query);
+    await sessions.deleteSession(prisma, requireActor(req), idParam(req, "id"), q.version);
+    res.status(204).end();
   };
 }
 

@@ -516,8 +516,12 @@ For every Compose command in the pipeline, replace `-f docker-compose.production
 `NODE_ENV` and the memory ceilings; never combine tier overlays. Object storage needs no
 substitution at all any more: `docker-compose.yml` already defines the one SeaweedFS model
 both tiers share (Owner decision, 2026-09-20) — there is no longer a separate storage overlay
-for Staging to omit or for Production to remember to include. Step 6 is then followed
-by `npm run seed:fixtures`, which is the only added operation.
+for Staging to omit or for Production to remember to include. Step 6 **was** followed by
+`npm run seed:fixtures` until 2026-09-23 (SRS Revision 172 §10): the Owner withdrew the
+fixtures from Staging — `npm run ops:remove-fixtures` took them out through the platform's own
+deletion doors (renaming the two fixture branches and their rooms her own classes use) — and
+the Staging upgrade no longer seeds them. A fixture-populated Staging is re-created only on an
+empty database, deliberately.
 
 **Never copy a development database or its storage objects into Staging.** A developer's
 database is not fixture data. The exact Owner staff identity is pre-provisioned by the

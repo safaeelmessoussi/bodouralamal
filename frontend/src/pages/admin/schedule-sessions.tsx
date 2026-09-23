@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { listCourseSchedules, updateCourseSchedule } from '../../adapters/course-schedules.js';
 import {
   cancelSession,
+  deleteSession,
   listScheduleSessions,
   restoreSession,
   updateSession,
@@ -207,6 +208,9 @@ export function ScheduleSessionsPage({
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<ScheduleSession | null>(null);
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
+  /** R172 §9 — one occurrence to the Trash; `deleteBlocked` names an exam sat in it. */
+  const [deleting, setDeleting] = useState<ScheduleSession | null>(null);
+  const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
   /** R91 §11 — the occurrence whose own staffing is being set. */
   const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /** R92 — the occurrence whose audience branches are being set. */
@@ -466,6 +470,17 @@ export function ScheduleSessionsPage({
       available: (r) => r.status === 'scheduled',
     },
     {
+      // R172 §9 — «حذف»: this occurrence should not exist (a stray one, a
+      // duplicate), as distinct from «إلغاء» (it did not happen). Administrative.
+      label: t('common.delete'),
+      danger: true,
+      onSelect: (r) => {
+        setDeleteBlocked(null);
+        setDeleting(r);
+      },
+      available: () => !isTeacherPortal,
+    },
+    {
       label: t('admin.sessions.restore'),
       onSelect: (r) => void run(() => restoreSession(r.id, r.version, accessToken), 'admin.sessions.restored'),
       // TD-1 allows this only from `cancelled`, and the server additionally
@@ -493,12 +508,18 @@ export function ScheduleSessionsPage({
       await action();
       setEditing(null);
       setCancelling(null);
+      setDeleting(null);
       await load();
       setNotice(t(okKey));
       if (announce) setNotifying(announce);
     } catch (error) {
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+      if (reason === 'SESSION_HAS_EXAM') {
+        // R172 §9 — stays open and explains, the rule every blocked deletion follows.
+        setDeleteBlocked(t('admin.sessions.deleteBlockedExam'));
+        return;
+      }
       setNotice(
         t(
           reason === 'SESSION_IN_PAST'
@@ -774,6 +795,29 @@ export function ScheduleSessionsPage({
         }}
       />
 
+      <ConfirmDialog
+        open={deleting !== null}
+        {...(deleteBlocked ? { blocked: deleteBlocked } : {})}
+        title={t('admin.sessions.deleteTitle').replace('{date}', deleting ? formatDate(deleting.date) : '')}
+        body={t('admin.sessions.deleteBody')}
+        confirmLabel={t('common.delete')}
+        danger
+        busy={busy}
+        onConfirm={() =>
+          void (async () => {
+            if (!deleting) return;
+            try {
+              await run(() => deleteSession(deleting.id, deleting.version, accessToken), 'admin.sessions.deleted');
+            } finally {
+              // `run` reports the failure; an exam sat in it is named in place.
+            }
+          })()
+        }
+        onCancel={() => {
+          setDeleting(null);
+          setDeleteBlocked(null);
+        }}
+      />
       {cancelling ? (
         <CancelDialog
           session={cancelling}
