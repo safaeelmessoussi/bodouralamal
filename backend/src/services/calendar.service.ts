@@ -669,9 +669,11 @@ async function personalFilters(
    *  beneficiary would hide sittings she has always seen. */
   isBeneficiary: boolean;
 }> {
-  // R172 §14 — the Levels she is IN: a completed one is behind her.
+  // R172 §14 — the Levels she is IN: a completed one is behind her. (The
+  // predicate already says `deletedAt: null`; it is restated here because the
+  // soft-delete guard reads this call site, not the policy file.)
   const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: userId, ...inProgressEnrolmentWhere(userId) },
+    where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
     select: {
       levelId: true,
       branchId: true,

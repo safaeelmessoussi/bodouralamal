@@ -11877,3 +11877,8 @@ HTTP 68/68, plus educational-organisation, quran, calendar, library HTTP, role-r
 trash-lifecycle, roster-resolution (289 + 68); seed drill green (incl. `ops:remove-fixtures`);
 Localhost rebuilt + migrated; harnesses `verify-circle-branch` 10/10,
 `verify-weekly-follows-start` 4/4, `verify-circles-reorder` 9/9, `verify-class-filters` 21/21.
+
+**Hosted CI on `030b0eb`: 6/8 — `trash-coverage`'s soft-delete guard flagged the new
+`personalFilters` enrolment read (`calendar.service.ts`): it reads the call site, and the
+`deletedAt: null` lived inside `inProgressEnrolmentWhere`. Restated literally at the read (the
+predicate keeps its own); `trash-coverage` + `calendar` 36/36 on the disposable stack.
