@@ -33,15 +33,19 @@ export const listTeachingGroupsQuerySchema = z.object({
   level_id: uuid.optional(),
   subject_id: uuid.optional(),
   category_id: uuid.optional(),
+  /** R172 §15 — each branch has its list of circles. */
+  branch_id: uuid.optional(),
   /** Free text over the circle, its Level and its Subject — the three things
    *  visible in the row. Bounded so a query cannot be an unbounded scan term. */
   q: z.string().trim().min(1).max(120).optional(),
 });
 
-/** Path-derived Level and Subject; the body carries only what a group *is*. */
+/** Path-derived Level and Subject; the body carries what a group *is* — its
+ *  name, and (R172 §15) the branch it is created in. */
 export const createTeachingGroupSchema = z
   .object({
     name: entityName,
+    branch_id: uuid,
     display_order: displayOrder.optional(),
   })
   .strict();
@@ -58,6 +62,8 @@ export const updateTeachingGroupSchema = z
     version,
     name: entityName.optional(),
     display_order: displayOrder.optional(),
+    /** R172 §15 — places a circle from before the column, or corrects one. */
+    branch_id: uuid.optional(),
   })
   .strict();
 

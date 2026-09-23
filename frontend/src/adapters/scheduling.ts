@@ -685,7 +685,17 @@ export interface SchedulingInput {
  * chose the days and their choice is the rule.
  */
 export function weekdaysForClass(recurrence: string, weekdays: string[], startDate: string): string[] {
-  if (weekdays.length > 0) return weekdays;
+  /**
+   * **`weekly` IS «every week on the same day as the start date»** — the one
+   * editor's own meaning (`recurrence-editor.tsx`: `weekly` never uses a
+   * weekday set; `multiple_weekdays` does). So its weekday is DERIVED from the
+   * start date on every save, never carried: on «تعديل» the form is opened with
+   * the row's stored `[monday]`, and keeping it made moving the start date to a
+   * Tuesday leave the class on Mondays (the Owner, 2026-09-23 — R172 §13).
+   * A chosen set (`multiple_weekdays`, a `biweekly_alternating` with days) is
+   * the person's and is kept.
+   */
+  if (weekdays.length > 0 && !(recurrence === 'weekly' && startDate !== '')) return weekdays;
   // R137 — a one-time class has no weekday at all; `anchor_date` alone names
   // its single occurrence, and a filled-in weekday here would claim a
   // recurring pattern the row does not have.

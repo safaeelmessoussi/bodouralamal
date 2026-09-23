@@ -206,6 +206,7 @@ for (const [i, name] of ['ج الحلقة', 'أ الحلقة', 'ب الحلقة'
           name: `${TAG} ${name}`,
           levelId: level.id,
           subjectId: subject.id,
+          branchId: branch.id,
           displayOrder: i + 1,
         },
       })

@@ -139,7 +139,7 @@ const circles: { name: string; weekday: 'tuesday' | 'thursday' | 'saturday'; fro
 ];
 for (const [index, circle] of circles.entries()) {
   const group = await prisma.teachingGroup.create({
-    data: { name: circle.name, levelId: first.id, subjectId: tracker.id, displayOrder: index + 1 },
+    data: { name: circle.name, levelId: first.id, subjectId: tracker.id, branchId: branch.id, displayOrder: index + 1 },
   });
   await prisma.recurringCourseSchedule.create({
     data: {
@@ -159,7 +159,7 @@ for (const [index, circle] of circles.entries()) {
 // R169 §8 — a circle with NO class, so it can be deleted (a scheduled one is
 // refused) and then restored from the Trash on the real screen.
 const spare = await prisma.teachingGroup.create({
-  data: { name: `${TAG} حلقة للحذف`, levelId: first.id, subjectId: tracker.id, displayOrder: 9 },
+  data: { name: `${TAG} حلقة للحذف`, levelId: first.id, subjectId: tracker.id, branchId: branch.id, displayOrder: 9 },
 });
 
 if (other) {

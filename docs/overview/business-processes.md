@@ -198,9 +198,10 @@ timetable and (later) attendance. A student belongs to one or more Levels and to
 one Administrative Group in each**. That group is also the answer to *which branch is this
 person at* — the branch chosen at registration is a request, not a placement.
 
-**Teaching Group** — a subject-specific split, belonging to a Subject and a Level. It
-exists **only** when a subject needs students divided differently from the administrative
-roster. تفسير القرآن may be taught to the whole level while حفظ القرآن runs in three
+**Teaching Group** — a subject-specific split, belonging to a Subject and a Level, created in
+a Branch (R172 §15 — where the circle lives, as a group is; its authority stays the Level's,
+R43.3). It exists **only** when a subject needs students divided differently from the
+administrative roster. تفسير القرآن may be taught to the whole level while حفظ القرآن runs in three
 parallel groups, and the splits are **independent between subjects**: one student may be in
 Administrative Group 1, حفظ القرآن Group 2 and ترتيل وتجويد القرآن Group 1 at once.
 

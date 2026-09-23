@@ -64,6 +64,15 @@ describe('"weekly" means the same thing for a class as for an activity', () => {
 
   it('never overrides days the person actually chose', () => {
     expect(weekdaysForClass('multiple_weekdays', ['friday'], '2026-09-01')).toEqual(['friday']);
+    expect(weekdaysForClass('biweekly_alternating', ['friday'], '2026-09-01')).toEqual(['friday']);
+  });
+
+  it('R172 §13 — a plain weekly class FOLLOWS its start date on edit, whatever weekday the row stored', () => {
+    // «تعديل» opens the form with the row's [monday]; moving the start date to
+    // Tuesday 2026-10-06 must move the class, not keep it on Mondays (the Owner).
+    expect(weekdaysForClass('weekly', ['monday'], '2026-10-06')).toEqual(['tuesday']);
+    // With no start date there is nothing to derive from: the stored day stands.
+    expect(weekdaysForClass('weekly', ['monday'], '')).toEqual(['monday']);
   });
 
   it('leaves patterns that are not weekday-based alone', () => {

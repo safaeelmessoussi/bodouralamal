@@ -52,6 +52,12 @@ answer `500`. Now a predecessor left with nothing is **retired** (soft-deleted,
 re-materialize the series on top of its own successor), and one that still owns protected
 history stays alive to own it, closed on its anchor date.
 
+**A plain weekly class meets on its start date's weekday, on every save** (R172 §13). «أسبوعيًا»
+has no weekday control; the browser derives the weekday from `تاريخ البداية` on create AND on
+edit (`weekdaysForClass`, `frontend/src/adapters/scheduling.ts`) — it used to resend the stored
+weekday on edit, so moving the start from a Monday to a Tuesday kept Mondays. The R87 «أيام
+محددة» patterns keep their own weekday control.
+
 **Subjects that work by Surah say which Surah** (Revision 165 §2/§5). Whether a Subject works
 by Surah is its `requires_surahs` column — حفظ القرآن and تفسير القرآن carry it; no code reads
 a Subject's name. One rule, `resolveSurahs` in `policies/curriculum.ts`, is asked wherever

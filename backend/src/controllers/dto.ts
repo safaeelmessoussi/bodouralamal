@@ -271,6 +271,8 @@ export interface TeachingGroupDto {
   /** The pair that identifies *which split of which subject*. Not editable. */
   level_id: string;
   subject_id: string;
+  /** R172 §15 — the branch the circle lives in; `null` for one from before. */
+  branch_id: string | null;
   display_order: number | null;
   /**
    * Live members. Present because the §5.6 screen's only question about a split
@@ -283,18 +285,21 @@ export interface TeachingGroupDto {
 }
 
 /**
- * Deliberately **absent**: `branch_id`. A Teaching Group has none — it belongs
- * to a Subject and a Level, and a Level spans branches (§4.4b). That absence is
+ * `branch_id` was deliberately **absent** until SRS Revision 172 §15: a
+ * Teaching Group belonged to a Subject and a Level only, and that absence was
  * the structural reason Revision 43.3 split the authority over these groups
  * (Super Admin) from the authority over their membership (Admin, scoped by the
- * branch the *student* is enrolled at). A `branch_id` here would invite exactly
- * the scope check that has no referent.
+ * branch the *student* is enrolled at). The Owner decided (2026-09-23) that a
+ * circle is CREATED in a branch, as a group is, and each branch has its list —
+ * so the row now says where the circle lives. **The authority split is
+ * unchanged**: the branch is a fact and a filter, not a scope check.
  */
 export function teachingGroupDto(row: {
   id: string;
   name: string;
   levelId: string;
   subjectId: string;
+  branchId: string | null;
   displayOrder: number | null;
   memberCount: number;
   version: number;
@@ -304,6 +309,7 @@ export function teachingGroupDto(row: {
     name: row.name,
     level_id: row.levelId,
     subject_id: row.subjectId,
+    branch_id: row.branchId,
     display_order: row.displayOrder,
     member_count: row.memberCount,
     version: row.version,
@@ -359,6 +365,7 @@ export interface TeachingGroupRowDto extends TeachingGroupDto {
   level_name: string;
   category_name: string;
   subject_name: string;
+  branch_name: string | null;
 }
 
 export function teachingGroupRowDto(row: {
@@ -369,6 +376,8 @@ export function teachingGroupRowDto(row: {
   categoryName: string;
   subjectId: string;
   subjectName: string;
+  branchId: string | null;
+  branchName: string | null;
   displayOrder: number | null;
   memberCount: number;
   version: number;
@@ -384,12 +393,14 @@ export function teachingGroupRowDto(row: {
     name: row.name,
     level_id: row.levelId,
     subject_id: row.subjectId,
+    branch_id: row.branchId,
     display_order: row.displayOrder,
     member_count: row.memberCount,
     version: row.version,
     level_name: row.levelName,
     category_name: row.categoryName,
     subject_name: row.subjectName,
+    branch_name: row.branchName,
   };
 }
 

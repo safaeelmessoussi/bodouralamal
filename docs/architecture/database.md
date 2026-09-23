@@ -29,6 +29,7 @@ erDiagram
     Category ||--o{ Level : ""
     Level ||--o{ AdministrativeGroup : ""
     Level ||--o{ TeachingGroup : ""
+    Branch ||--o{ TeachingGroup : "created in (R172 §15)"
     Level ||--o{ LevelSubject : ""
     Level ||--o{ LevelSurah : ""
     Subject ||--o{ LevelSubject : ""
@@ -323,7 +324,10 @@ BR-11 — *has she completed this Level* — is **derived on read and never stor
 Super Admin **recorded** she completed it, which the Owner allows while BR-11 is unmet provided
 the caller was told (`409 REQUIREMENTS_NOT_MET` until `acknowledge_unmet`). `requirements_met`
 keeps what BR-11 read at that moment, so the record says for ever whether the attestation agreed
-with the engine. Nothing reads the mark back into BR-11.
+with the engine. Nothing reads the mark back into BR-11 — but **the mark is what takes a Level out of what she is
+studying** (R172 §14): `inProgressEnrolmentWhere` (same policy file) is the enrolment predicate
+«تقويمي», the library's private tier and `GET /students/me` read through — live, at a Level with no
+mark for her. The enrolment row is untouched; lifting the mark restores the Level to both pages.
 
 * **One row per `(student_id, level_id)`** — a UNIQUE index, not per enrolment: completion is about
   her and the Level, and R122 lets her hold several enrolments at one Level.

@@ -39,6 +39,8 @@ const TAG = "[http-teaching-group-test]";
 
 /** The whole contract, sorted (§16.2 allow-list projection). */
 const GROUP_KEYS = [
+  // R172 §15 — the branch the circle was created in.
+  "branch_id",
   "display_order",
   "id",
   "level_id",
@@ -291,6 +293,7 @@ describe("the response is an explicit contract DTO (§16.2)", () => {
     const created = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج ١`,
       display_order: 1,
+      branch_id: branchA,
     });
     expect(created.status).toBe(201);
     expect(Object.keys(created.body).sort()).toEqual(GROUP_KEYS);
@@ -310,7 +313,7 @@ describe("the response is an explicit contract DTO (§16.2)", () => {
     expect(Object.keys(row).sort()).toEqual(GROUP_KEYS);
   });
 
-  it("exposes no internal column, no camelCase original, and no branch_id", async () => {
+  it("exposes no internal column and no camelCase original", async () => {
     const list = await call("GET", collection(subjectSplit), superAdmin);
     for (const row of list.body.groups!) {
       for (const internal of [
@@ -330,16 +333,17 @@ describe("the response is an explicit contract DTO (§16.2)", () => {
       ]) {
         expect(row).not.toHaveProperty(camel);
       }
-      // A Teaching Group HAS no branch — a Level spans branches (§4.4b), and that
-      // absence is the structural reason R43.3 split the authority. A branch_id
-      // here would invite exactly the scope check that has no referent.
-      expect(row).not.toHaveProperty("branch_id");
+      // R172 §15 — the branch the circle was created in, in the API's own
+      // spelling; its authority is still the Level's (R43.3), not the branch's.
+      expect(row).toHaveProperty("branch_id");
+      expect(row).not.toHaveProperty("branchId");
     }
   });
 
   it("member_count tracks live membership, so the screen needs no request per group", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج العدّ`,
+      branch_id: branchA,
     });
     expect(group.body.member_count).toBe(0);
 
@@ -372,6 +376,7 @@ describe("the unassigned list is BR-22 made visible", () => {
   it("names an enrolled student holding no seat in a split subject", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج غير مكتمل`,
+      branch_id: branchA,
     });
     expect(group.status).toBe(201);
 
@@ -389,6 +394,7 @@ describe("the unassigned list is BR-22 made visible", () => {
   it("drops a student from the list once they hold a seat, and returns them when it is removed", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج التنقّل`,
+      branch_id: branchA,
     });
     await call(
       "POST",
@@ -433,6 +439,7 @@ describe("the unassigned list is BR-22 made visible", () => {
     // the students they are responsible for, so a partial list is the honest one.
     await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج النطاق`,
+      branch_id: branchA,
     });
 
     const res = await call("GET", collection(subjectSplit), scopedAdmin);
@@ -450,6 +457,7 @@ describe("Revision 43.3 splits the authority (group vs membership)", () => {
     // authority over everyone, visibility of some.
     const res = await call("POST", collection(subjectSplit), scopedAdmin, {
       name: `${TAG} ممنوع`,
+      branch_id: branchA,
     });
     expect(res.status).toBe(403);
     expect(res.body.error?.code).toBe("FORBIDDEN");
@@ -461,6 +469,7 @@ describe("Revision 43.3 splits the authority (group vs membership)", () => {
   it("refuses PATCH and DELETE to the same Admin", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج محمي`,
+      branch_id: branchA,
     });
     const patched = await call(
       "PATCH",
@@ -483,6 +492,7 @@ describe("Revision 43.3 splits the authority (group vs membership)", () => {
   it("ALLOWS that same Admin to place a student enrolled in their branch", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج العضوية`,
+      branch_id: branchA,
     });
     const res = await call(
       "POST",
@@ -509,6 +519,7 @@ describe("Revision 43.3 splits the authority (group vs membership)", () => {
     // would confirm the student exists outside the caller's reach (§20 rule 17).
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج خارج النطاق`,
+      branch_id: branchA,
     });
     const res = await call(
       "POST",
@@ -542,7 +553,8 @@ describe("the write boundary refuses what the URL already says", () => {
       const res = await call("POST", collection(subjectSplit), superAdmin, {
         name: `${TAG} مرفوض`,
         ...extra,
-      });
+      branch_id: branchA,
+    });
       expect(res.status).toBe(400);
       expect(res.body.error?.code).toBe("VALIDATION_FAILED");
     }
@@ -554,6 +566,7 @@ describe("the write boundary refuses what the URL already says", () => {
   it("refuses to move a group between Subjects or Levels on PATCH", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج ثابت`,
+      branch_id: branchA,
     });
     for (const move of [{ subject_id: subjectWhole }, { level_id: levelId }]) {
       const res = await call(
@@ -577,6 +590,7 @@ describe("the write boundary refuses what the URL already says", () => {
   it("TD-15: a stale version is a 409, not a silent overwrite", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج التعارض`,
+      branch_id: branchA,
     });
     // A real prior edit is what makes the version stale. `version - 1` on a fresh
     // row is -1, which the validator refuses as malformed before optimistic
@@ -617,6 +631,7 @@ describe("the write boundary refuses what the URL already says", () => {
     // ever schedule, sitting in the taxonomy looking legitimate.
     const res = await call("POST", collection(subjectElsewhere), superAdmin, {
       name: `${TAG} فوج بلا مادة`,
+      branch_id: branchA,
     });
     expect(res.status).toBe(409);
     expect(res.body.error?.code).toBe("STATE_CONFLICT");
@@ -638,9 +653,11 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
   it("refuses the same group twice, and a different split of the same Subject by name", async () => {
     const first = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج أ`,
+      branch_id: branchA,
     });
     const second = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج ب`,
+      branch_id: branchA,
     });
 
     expect(
@@ -696,6 +713,7 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
     // BR-22 read from the other direction: enrolment precedes placement.
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج غير مسجّلة`,
+      branch_id: branchA,
     });
     const stranger = await makeUser("غريبة", "female");
     const res = await call(
@@ -719,6 +737,7 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
     });
     const inHifz = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج حفظ القرآن`,
+      branch_id: branchA,
     });
     const inOther = await call(
       "POST",
@@ -726,6 +745,7 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
       superAdmin,
       {
         name: `${TAG} فوج آخر`,
+        branch_id: branchA,
       },
     );
 
@@ -774,6 +794,7 @@ describe("deletion reports what it released (BR-22, TD-5)", () => {
   it("answers 200 with released_students rather than a silent 204", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج للحذف`,
+      branch_id: branchA,
     });
     await call(
       "POST",
@@ -843,39 +864,42 @@ describe("the flat circles read (2026-08-17)", () => {
     return call("GET", "/admin/teaching-groups", superAdmin).then((res) => {
       const row = res.body.data![0]!;
       expect(Object.keys(row).sort()).toEqual(
-        [...GROUP_KEYS, "category_name", "level_name", "subject_name"].sort(),
+        [...GROUP_KEYS, "branch_name", "category_name", "level_name", "subject_name"].sort(),
       );
       expect(typeof row["category_name"]).toBe("string");
       expect(typeof row["level_name"]).toBe("string");
     });
   });
 
-  it("carries no branch and no مؤطرة, because a circle has neither", async () => {
-    // R43.3: a circle belongs to a Subject and a Level, and a Level spans
-    // branches — that absence is WHY its authority is split. Staffing lives on a
-    // `CourseSchedule` (§4.4c). §20 rule 22 forbids conflating the organisational
-    // unit with its delivery, and either column would be that conflation.
+  it("carries its branch and no مؤطرة — a circle is created in a branch (R172 §15), staffed by none", async () => {
+    // R43.3 kept the branch off the circle; R172 §15 puts it back: «a circle is
+    // created in a branch, each branch has its list of circles, same as for
+    // groups». Its authority is still split (a Level spans branches, so the
+    // Level's Super Admin owns the circle's existence) and staffing still lives
+    // on a `CourseSchedule` (§4.4c) — `teacher_id` stays absent.
     const res = await call("GET", "/admin/teaching-groups", superAdmin);
     const row = res.body.data![0]!;
-    expect(row).not.toHaveProperty("branch_id");
-    expect(row).not.toHaveProperty("branch_name");
+    expect(row["branch_id"]).toBe(branchA);
+    expect(typeof row["branch_name"]).toBe("string");
     expect(row).not.toHaveProperty("teacher_id");
   });
 
-  it("rejects a branch filter, since there is no branch to filter on", async () => {
-    // Offering one would silently answer a DIFFERENT question — "circles at least
-    // one of whose members is enrolled at Marrakesh". The schema is not
-    // `.strict()` (TD-10's page params share the query object), so an unknown
-    // parameter is ignored rather than refused: what is asserted is that it does
-    // not NARROW anything, which is the property that matters.
+  it("narrows by branch — each branch has its own list of circles", async () => {
     const all = await call("GET", "/admin/teaching-groups", superAdmin);
-    const filtered = await call(
+    const atA = await call(
+      `GET`,
+      `/admin/teaching-groups?branch_id=${branchA}`,
+      superAdmin,
+    );
+    expect(atA.status).toBe(200);
+    expect(atA.body.meta!.total).toBe(all.body.meta!.total);
+    const atB = await call(
       `GET`,
       `/admin/teaching-groups?branch_id=${branchB}`,
       superAdmin,
     );
-    expect(filtered.status).toBe(200);
-    expect(filtered.body.meta!.total).toBe(all.body.meta!.total);
+    expect(atB.status).toBe(200);
+    expect(atB.body.meta!.total).toBe(0);
   });
 
   it("every filter narrows, and none is required", async () => {
@@ -958,6 +982,7 @@ describe("the flat circles read (2026-08-17)", () => {
   it("excludes soft-deleted circles", async () => {
     const created = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج مؤقت`,
+      branch_id: branchA,
     });
     const id = created.body.id as string;
     expect(
@@ -1002,6 +1027,7 @@ describe("one circle’s roster", () => {
   it("lists who is in the circle, and nobody else", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج للقائمة`,
+      branch_id: branchA,
     });
     const id = group.body.id as string;
 
@@ -1051,6 +1077,7 @@ describe("one circle’s roster", () => {
     // allows her only one in this Subject, so leaving it would refuse the next.
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج للحقول`,
+      branch_id: branchA,
     });
     expect(
       (
@@ -1086,6 +1113,7 @@ describe("one circle’s roster", () => {
   it("drops a released seat rather than tombstoning it into the list", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج للإخراج`,
+      branch_id: branchA,
     });
     const id = group.body.id as string;
     expect(
@@ -1118,6 +1146,7 @@ describe("one circle’s roster", () => {
   it("is Admin and above, and refused to a مؤطرة (R43.3)", async () => {
     const group = await call("POST", collection(subjectSplit), superAdmin, {
       name: `${TAG} فوج للصلاحيات`,
+      branch_id: branchA,
     });
     const id = group.body.id as string;
     expect(

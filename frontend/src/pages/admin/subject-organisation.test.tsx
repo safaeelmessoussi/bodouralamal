@@ -12,6 +12,7 @@ const GROUP: TeachingGroup = {
   level_id: '00000000-0000-4000-8000-000000000002',
   subject_id: '00000000-0000-4000-8000-000000000003',
   display_order: 1,
+  branch_id: '00000000-0000-4000-8000-000000000007',
   member_count: 4,
   version: 0,
 };
@@ -26,6 +27,9 @@ const UNASSIGNED: UnassignedStudent = {
 describe('the adapter types match the wire contract', () => {
   it('a teaching group carries exactly the documented keys', () => {
     expect(Object.keys(GROUP).sort()).toEqual([
+      // R172 §15 — the branch the circle was created in; `null` for one from
+      // before the column.
+      'branch_id',
       'display_order',
       'id',
       'level_id',
@@ -36,11 +40,12 @@ describe('the adapter types match the wire contract', () => {
     ]);
   });
 
-  it('has no branch_id — a Teaching Group belongs to a Subject and a Level', () => {
-    // §4.4b: a Level spans branches, so the group has no branch to scope by.
-    // That absence is the structural reason R43.3 split the authority, and a
-    // branch_id here would invite exactly the scope check that has no referent.
-    expect(GROUP).not.toHaveProperty('branch_id');
+  it('the branch places the circle and does not own it (R43.3 stands)', () => {
+    // §4.4b: a Level spans branches, so the circle's AUTHORITY is the Level's —
+    // R43.3 split structure (Super Admin) from membership (Admin, scoped by the
+    // branch the student is enrolled at). R172 §15 records where the circle was
+    // created, as a group's `branch_id` does; nothing here scopes by it.
+    expect(typeof GROUP.branch_id).toBe('string');
   });
 
   it('an unassigned student carries what placing them requires', () => {

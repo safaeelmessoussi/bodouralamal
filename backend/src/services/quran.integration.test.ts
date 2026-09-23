@@ -4,6 +4,8 @@ import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
+import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
+import { getStudentIdentity } from "./student.service.js";
 import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 import * as marks from "./level-completion-mark.service.js";
 import {
@@ -641,6 +643,24 @@ describe("SRS Revision 167 §3 — «إتمام المستوى»: the administra
     await marks.withdrawCertificate(prisma, admin(), student, levelId);
     await marks.unmarkCompleted(prisma, admin(), student, levelId);
     expect((await row()).mark).toBeNull();
+  });
+
+  it("R172 §14 — a completed Level is behind her: gone from «her Levels» (the library's tree, the calendar's filters), the enrolment kept", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    const before = await getStudentIdentity(prisma, student);
+    expect(before.enrollments.map((e) => e.level.id)).toContain(levelId);
+
+    await marks.markCompleted(prisma, admin(), student, levelId, { acknowledgeUnmet: true });
+    const after = await getStudentIdentity(prisma, student);
+    expect(after.enrollments.map((e) => e.level.id)).not.toContain(levelId);
+    // History stands: the enrolment row is untouched.
+    expect(await prisma.enrollment.count({ where: { studentId: student, levelId, deletedAt: null } })).toBe(1);
+    // The one predicate every reader asks.
+    expect(await prisma.enrollment.count({ where: { studentId: student, ...inProgressEnrolmentWhere(student) } })).toBe(0);
+
+    // Un-marked (a mistake), she is in it again.
+    await marks.unmarkCompleted(prisma, admin(), student, levelId);
+    expect((await getStudentIdentity(prisma, student)).enrollments.map((e) => e.level.id)).toContain(levelId);
   });
 
   it("Codex review 2026-09-22 — concurrent issues draw ONE number, and a double-tapped mark answers like a repeat", async () => {

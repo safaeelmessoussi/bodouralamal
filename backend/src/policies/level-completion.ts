@@ -75,6 +75,20 @@ export function decideCompletion(input: {
   };
 }
 
+/**
+ * **A Level she has completed is finished, not in progress** (SRS Revision 172
+ * §14; the Owner, 2026-09-23). Once the administration has recorded «إتمام
+ * المستوى» (R167 §3) for a student, that Level is behind her: her calendar and
+ * her library show what helps her study the Levels she is still in — the
+ * enrolment row stays (history), the certificate stays, and nothing about the
+ * Level itself changes. One predicate, spelled once, for every reader that
+ * asks «which Levels is she in»: an enrolment whose Level carries no
+ * completion mark for HER.
+ */
+export function inProgressEnrolmentWhere(studentId: string): Prisma.EnrollmentWhereInput {
+  return { deletedAt: null, level: { completionMarks: { none: { studentId } } } };
+}
+
 /** Whether clause 2 applies: does this Level teach a by-Surah Subject other
  *  than the memorisation tracker? Keyed by Level. */
 export async function levelsRequiringSurahExams(

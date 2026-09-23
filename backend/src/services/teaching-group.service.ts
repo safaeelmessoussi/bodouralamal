@@ -33,15 +33,17 @@ import type { Actor } from '../policies/actor.js';
  *
  * **Authority is SPLIT, and the reason is structural (Revision 43.3).**
  *
- * A Teaching Group carries no branch — it belongs to a Subject and a Level, and
- * a Level spans branches (§4.4b). So *"within your branch scope"* has **no
- * referent** for the group itself, and the scope check every other operational
- * service performs cannot be written.
+ * A Teaching Group belongs to a Subject and a Level, and a Level spans branches
+ * (§4.4b). Since R172 §15 it also records the branch it was **created in** —
+ * «each branch has its list of circles, same as for groups» — but that column
+ * is where the circle meets, not who owns it: the circle's existence is
+ * curriculum structure, decided with the Level, and the scope check every
+ * other operational service performs is deliberately NOT written from it.
  *
  * | Action | Who | Why |
  * |---|---|---|
  * | Create / rename / reorder / delete a group | **Super Admin only** | Curriculum *structure*, alongside the Levels and Subjects it organises (Revision 26) |
- * | Place a student into a group | **Admin**, scoped by the branch the student is **enrolled at** | Placement is operational, and `Enrollment → AdministrativeGroup.branch_id` is a referent that exists |
+ * | Place a student into a group | **Admin**, scoped by the branch the student is **enrolled at** | Placement is operational, and `Enrollment → AdministrativeGroup.branch_id` is the referent — not the circle's own branch, which would let a circle at Marrakesh seat a Targa student unseen by Targa's Admin |
  *
  * Without the split a Marrakesh Admin could delete the Quran split that Targa's
  * students depend on, while the unassigned list showed them only Marrakesh
@@ -137,18 +139,18 @@ export async function listTeachingGroups(
  * new: `assertCanManageMembership` is the identical check the nested read
  * performs, and every parameter here narrows rather than widens.
  *
- * ## A circle has no branch, and this read does not invent one
+ * ## The branch is the one the circle was created in (R172 §15)
  *
- * R43.3's structural point — *"a Teaching Group carries no branch … so 'within
- * your branch scope' has no referent"* — is why there is **no `branchId`
- * filter and no branch column**. A branch reaches a circle only through the
- * enrolments of its members, and offering *"circles at Marrakesh"* would mean
- * *"circles at least one of whose members is enrolled at Marrakesh"* — a
- * different question, silently answered. §20 rule 22 forbids conflating the
- * organisational unit with its delivery, and a branch on a circle is that
- * conflation.
+ * R43.3 kept the branch off the circle because a branch then reached it only
+ * through its members' enrolments, and *"circles at Marrakesh"* would have
+ * meant *"circles at least one of whose members is enrolled at Marrakesh"* — a
+ * different question, silently answered. R172 §15 gives the circle its own
+ * branch — the one it was created in, as an administrative group has — so the
+ * `branchId` filter answers exactly that and nothing derived. A circle from
+ * before the column (`null`) appears only in the unfiltered list, until an
+ * edit places it.
  *
- * For the same reason there is **no مؤطرة column**: staffing lives on
+ * There is still **no مؤطرة column**: staffing lives on
  * `CourseSchedule` (§4.4c), which is what resolves *who teaches* — a circle is
  * an audience, not a class.
  *
@@ -166,6 +168,9 @@ export interface TeachingGroupRow {
   categoryName: string;
   subjectId: string;
   subjectName: string;
+  /** R172 §15 — the branch the circle lives in; `null` for one from before. */
+  branchId: string | null;
+  branchName: string | null;
   memberCount: number;
   version: number;
 }
@@ -208,6 +213,7 @@ export async function listAllTeachingGroups(
     subjectId?: string;
     categoryId?: string;
     q?: string;
+    branchId?: string;
   } & PageParams &
     SortParams,
 ): Promise<Page<TeachingGroupRow>> {
@@ -222,6 +228,8 @@ export async function listAllTeachingGroups(
     ...(filters.levelId ? { levelId: filters.levelId } : {}),
     ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
     ...(filters.categoryId ? { level: { categoryId: filters.categoryId } } : {}),
+    // R172 §15 — each branch has its list of circles.
+    ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(q === ''
       ? {}
       : {
@@ -246,6 +254,7 @@ export async function listAllTeachingGroups(
       include: {
         level: { select: { id: true, name: true, category: { select: { name: true } } } },
         subject: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
         _count: { select: { members: { where: { deletedAt: null } } } },
       },
     }),
@@ -262,6 +271,8 @@ export async function listAllTeachingGroups(
       categoryName: g.level.category.name,
       subjectId: g.subject.id,
       subjectName: g.subject.name,
+      branchId: g.branch?.id ?? null,
+      branchName: g.branch?.name ?? null,
       memberCount: g._count.members,
       version: g.version,
     })),
@@ -273,7 +284,7 @@ export async function listAllTeachingGroups(
 export async function createTeachingGroup(
   prisma: PrismaClient,
   actor: Actor,
-  input: { levelId: string; subjectId: string; name: string; displayOrder?: number | null },
+  input: { levelId: string; subjectId: string; name: string; displayOrder?: number | null; branchId: string },
 ): Promise<TeachingGroup> {
   assertCanManageGroups(actor);
 
@@ -283,6 +294,9 @@ export async function createTeachingGroup(
       select: { id: true },
     });
     if (!level) throw new AppError('NOT_FOUND', 'no such level');
+    // R172 §15 — a circle is created IN a branch, as a group is.
+    const branch = await tx.branch.findFirst({ where: { id: input.branchId, deletedAt: null }, select: { id: true } });
+    if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
 
     const subject = await tx.subject.findFirst({
       where: { id: input.subjectId, deletedAt: null },
@@ -302,6 +316,7 @@ export async function createTeachingGroup(
         name: input.name,
         levelId: input.levelId,
         subjectId: input.subjectId,
+        branchId: input.branchId,
         displayOrder: input.displayOrder ?? null,
         createdById: actor.userId,
       },
@@ -313,7 +328,7 @@ export async function createTeachingGroup(
       actionType: 'teachinggroup.create',
       targetEntity: 'TeachingGroup',
       targetId: group.id,
-      detail: { level_id: group.levelId, subject_id: group.subjectId },
+      detail: { level_id: group.levelId, subject_id: group.subjectId, branch_id: group.branchId },
     });
     return group;
   });
@@ -323,7 +338,7 @@ export async function updateTeachingGroup(
   prisma: PrismaClient,
   actor: Actor,
   id: string,
-  data: { name?: string; displayOrder?: number | null; version: number },
+  data: { name?: string; displayOrder?: number | null; branchId?: string; version: number },
 ): Promise<TeachingGroup> {
   assertCanManageGroups(actor);
 
@@ -335,8 +350,13 @@ export async function updateTeachingGroup(
 
   // Subject and Level are not editable: either would break the composite FK
   // that keeps every member row's (subject, level) honest, and would silently
-  // re-file a whole cohort under a different curriculum item.
+  // re-file a whole cohort under a different curriculum item. The branch is
+  // (R172 §15): it places a circle from before the column, or corrects one.
   return prisma.$transaction(async (tx) => {
+    if (data.branchId !== undefined) {
+      const branch = await tx.branch.findFirst({ where: { id: data.branchId, deletedAt: null }, select: { id: true } });
+      if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
+    }
     const updated = await updateWithVersion<TeachingGroup>({
       delegate: tx.teachingGroup,
       id,
@@ -345,6 +365,7 @@ export async function updateTeachingGroup(
       data: {
         ...(data.name === undefined ? {} : { name: data.name }),
         ...(data.displayOrder === undefined ? {} : { displayOrder: data.displayOrder }),
+        ...(data.branchId === undefined ? {} : { branchId: data.branchId }),
       },
     });
     await audit.write(tx, {
@@ -353,7 +374,9 @@ export async function updateTeachingGroup(
       actionType: 'teachinggroup.update',
       targetEntity: 'TeachingGroup',
       targetId: id,
-      detail: { fields: ['name'] },
+      detail: {
+        fields: (['name', 'displayOrder', 'branchId'] as const).filter((f) => data[f] !== undefined),
+      },
     });
     return updated;
   });

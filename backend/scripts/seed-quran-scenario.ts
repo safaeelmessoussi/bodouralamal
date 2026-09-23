@@ -158,7 +158,7 @@ const group = await prisma.administrativeGroup.create({
   data: { name: `${TAG} مجموعة أ`, levelId: levelOne.id, branchId: branchA.id },
 });
 const circle = await prisma.teachingGroup.create({
-  data: { name: `${TAG} حلقة الحفظ`, levelId: levelOne.id, subjectId: quran.id },
+  data: { name: `${TAG} حلقة الحفظ`, levelId: levelOne.id, subjectId: quran.id, branchId: branchA.id },
 });
 
 const year = await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } });

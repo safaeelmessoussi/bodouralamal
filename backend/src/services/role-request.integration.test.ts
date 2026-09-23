@@ -335,6 +335,15 @@ describe('the memorisation circles a first-time مستفيدة may order', () =>
     // Another branch has scheduled nothing: no choice is offered there.
     const elsewhere = await prisma.branch.create({ data: { name: `${PLACE} فرع آخر` } });
     expect((await offeredCircleSlots(prisma, placement.categoryId, elsewhere.id)).circles).toEqual([]);
+
+    // R172 §15 — a circle placed at ANOTHER branch is not this branch's, even
+    // though its class meets here; one placed here, or from before the column
+    // (`null`), stays on offer.
+    await prisma.teachingGroup.update({ where: { id: made.tuesday }, data: { branchId: elsewhere.id } });
+    await prisma.teachingGroup.update({ where: { id: made.thursday }, data: { branchId: placement.branchId } });
+    expect(
+      (await offeredCircleSlots(prisma, placement.categoryId, placement.branchId)).circles.map((c) => c.teaching_group_id),
+    ).toEqual([made.thursday]);
   });
 
   it('her order is kept as she gave it — and a circle that is not on offer is refused, whole', async () => {

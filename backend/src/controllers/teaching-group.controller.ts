@@ -92,6 +92,8 @@ export function listAll(prisma: PrismaClient) {
       ...(filters.level_id !== undefined ? { levelId: filters.level_id } : {}),
       ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
       ...(filters.category_id !== undefined ? { categoryId: filters.category_id } : {}),
+      // R172 §15 — the branch the circle was created in.
+      ...(filters.branch_id !== undefined ? { branchId: filters.branch_id } : {}),
       ...(filters.q !== undefined ? { q: filters.q } : {}),
       ...pageParamsFrom(req.query),
       ...sortParamsFrom(req.query),
@@ -135,6 +137,7 @@ export function create(prisma: PrismaClient) {
       levelId: idParam(req, 'levelId'),
       subjectId: idParam(req, 'subjectId'),
       name: input.name,
+      branchId: input.branch_id,
       ...(input.display_order !== undefined ? { displayOrder: input.display_order } : {}),
     });
     // A freshly created split has no members; the count is stated rather than
@@ -154,6 +157,7 @@ export function update(prisma: PrismaClient) {
         version: input.version,
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.display_order !== undefined ? { displayOrder: input.display_order } : {}),
+        ...(input.branch_id !== undefined ? { branchId: input.branch_id } : {}),
       },
     );
     const memberCount = await prisma.studentTeachingGroup.count({

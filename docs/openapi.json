@@ -5515,7 +5515,7 @@
     "/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups": {
       "get": {
         "summary": "List a subject split for a level",
-        "description": "TD-3.12 (Revision 43), §4.4c, **BR-22**. Returns `{ groups, split, unassigned }` — **the whole split in one read**, because the unassigned list is unreadable without the groups beside it: the screen's question is *who is not placed, and where could they go*, and two round trips would let a client render half the answer. **`split` is not redundant with `groups.length`:** a Subject with no Teaching Groups is taught to the entire Level (§4.4c), so an empty `unassigned` there means *the question does not apply*, whereas an empty `unassigned` on a **split** Subject means *everyone is placed*. The two render identically without the flag and one of them is an alarm. **`unassigned` is BR-22 made visible** — students enrolled in the Level holding no seat for this split Subject have **no sessions for it at all**, and nothing else in the platform would say so. **Not paginated:** a page boundary drawn through that list would let a beneficiary receiving no teaching fall onto page two. **Branch-scoped for an Admin, unscoped for a Super Admin** (Revision 43.3), so a branch Admin correctly sees a *partial* unassigned list — their own students, the only ones they may place. Each group carries `member_count`, so answering *how many are in this split* costs no request per group. **No `branch_id` on a group** (§4.4c): it belongs to a Subject and a Level, and a Level spans branches (§4.4b).",
+        "description": "TD-3.12 (Revision 43), §4.4c, **BR-22**. Returns `{ groups, split, unassigned }` — **the whole split in one read**, because the unassigned list is unreadable without the groups beside it: the screen's question is *who is not placed, and where could they go*, and two round trips would let a client render half the answer. **`split` is not redundant with `groups.length`:** a Subject with no Teaching Groups is taught to the entire Level (§4.4c), so an empty `unassigned` there means *the question does not apply*, whereas an empty `unassigned` on a **split** Subject means *everyone is placed*. The two render identically without the flag and one of them is an alarm. **`unassigned` is BR-22 made visible** — students enrolled in the Level holding no seat for this split Subject have **no sessions for it at all**, and nothing else in the platform would say so. **Not paginated:** a page boundary drawn through that list would let a beneficiary receiving no teaching fall onto page two. **Branch-scoped for an Admin, unscoped for a Super Admin** (Revision 43.3), so a branch Admin correctly sees a *partial* unassigned list — their own students, the only ones they may place. Each group carries `member_count`, so answering *how many are in this split* costs no request per group. Each carries `branch_id` — the branch it was created in (R172 §15; `null` for one from before) — which places the circle without owning it: a Level spans branches (§4.4b) and the circle's authority stays the Level's.",
         "responses": {
           "200": {
             "description": "The split: groups, the `split` flag, and the unassigned students."
@@ -5564,13 +5564,13 @@
       },
       "post": {
         "summary": "Create a teaching group",
-        "description": "TD-3.12, §4.4c. **Super Admin only (Revision 43.3)** — a Teaching Group is curriculum *structure*, alongside the Levels and Subjects it organises (Revision 26), and it carries **no branch**, so the *\"within your branch scope\"* check every other operational service performs has no referent to apply. Without that split a Marrakesh Admin could delete the Quran split that Targa's students depend on while seeing only Marrakesh students in the unassigned list: authority over everyone, visibility of some. Body: `{ name, display_order? }` — **strictly** those keys. `level_id` and `subject_id` are **path segments and are refused in the body**: `StudentTeachingGroup` carries the same pair denormalized under a composite FK (Revision 43.2), and taking them from a caller would leave that FK as the only thing between a typo and a seat filed under the wrong curriculum item. **The Subject must actually be assigned to the Level** (`409 STATE_CONFLICT`, `reason: SUBJECT_NOT_IN_LEVEL`) — splitting a Subject a Level does not offer would create groups nothing can ever schedule, sitting in the taxonomy looking legitimate. Creating these is **not** a prerequisite for teaching: a Subject with no rows here is taught to the entire Level.",
+        "description": "TD-3.12, §4.4c. **Super Admin only (Revision 43.3)** — a Teaching Group is curriculum *structure*, alongside the Levels and Subjects it organises (Revision 26), and although since R172 §15 it records the branch it is **created in** («each branch has its list of circles, same as for groups»), that branch places it and does not own it — the *\"within your branch scope\"* check every other operational service performs is deliberately not applied. Without that split a Marrakesh Admin could delete the Quran split that Targa's students depend on while seeing only Marrakesh students in the unassigned list: authority over everyone, visibility of some. Body: `{ name, branch_id, display_order? }` — **strictly** those keys; `branch_id` is a live branch (`404 NOT_FOUND` otherwise). `level_id` and `subject_id` are **path segments and are refused in the body**: `StudentTeachingGroup` carries the same pair denormalized under a composite FK (Revision 43.2), and taking them from a caller would leave that FK as the only thing between a typo and a seat filed under the wrong curriculum item. **The Subject must actually be assigned to the Level** (`409 STATE_CONFLICT`, `reason: SUBJECT_NOT_IN_LEVEL`) — splitting a Subject a Level does not offer would create groups nothing can ever schedule, sitting in the taxonomy looking legitimate. Creating these is **not** a prerequisite for teaching: a Subject with no rows here is taught to the entire Level.",
         "responses": {
           "201": {
             "description": "Created, with `member_count: 0`."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing name or an unknown key such as level_id.",
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing name or branch_id, or an unknown key such as level_id.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5600,7 +5600,7 @@
             }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or Subject.",
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level, Subject or branch.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5634,8 +5634,8 @@
     },
     "/admin/teaching-groups/{id}": {
       "patch": {
-        "summary": "Rename or reorder a teaching group",
-        "description": "TD-3.12, **Super Admin only (Revision 43.3)**. **Only `name` and `display_order` are editable**; `subject_id` and `level_id` are **rejected** rather than ignored. Either would break the composite FK that keeps every member row's `(subject, level)` agreeing with its group's, and would silently re-file a whole cohort under a different curriculum item — a re-creation, not an edit. **TD-15 optimistic locking:** send the `version` you loaded; a stale one is `409 VERSION_CONFLICT`, never a silent overwrite.",
+        "summary": "Rename, reorder or place a teaching group",
+        "description": "TD-3.12, **Super Admin only (Revision 43.3)**. **Only `name`, `display_order` and (R172 §15) `branch_id` are editable** — the last places a circle from before the column, or corrects one, and must name a live branch (`404`); `subject_id` and `level_id` are **rejected** rather than ignored. Either would break the composite FK that keeps every member row's `(subject, level)` agreeing with its group's, and would silently re-file a whole cohort under a different curriculum item — a re-creation, not an edit. **TD-15 optimistic locking:** send the `version` you loaded; a stale one is `409 VERSION_CONFLICT`, never a silent overwrite.",
         "responses": {
           "200": {
             "description": "Updated."
@@ -8688,7 +8688,7 @@
     "/admin/teaching-groups": {
       "get": {
         "summary": "List teaching groups across Levels",
-        "description": "TD-3.12, §4.4c — the flat read behind the الحلقات screen, as opposed to the per-(Level, Subject) read that answers *how is this pairing split*. Staff only (TD-2), scoped in the service. ?level_id= ?subject_id= ?category_id= and ?q= narrow within that scope, each optional; **absent stays absent**, since *not filtering by Level* and *filtering by no Level* are different queries. **Paginated (TD-10).** Unlisted in TD-3's seed and shipping under TD-3.12's existing clause, by the same precedent as GET /students/me/quran under TD-3.3.",
+        "description": "TD-3.12, §4.4c — the flat read behind the الحلقات screen, as opposed to the per-(Level, Subject) read that answers *how is this pairing split*. Staff only (TD-2), scoped in the service. ?level_id= ?subject_id= ?category_id= ?branch_id= (R172 §15 — the branch the circle was created in; a circle from before the column answers no branch filter) and ?q= narrow within that scope, each optional; **absent stays absent**, since *not filtering by Level* and *filtering by no Level* are different queries. **Paginated (TD-10).** Unlisted in TD-3's seed and shipping under TD-3.12's existing clause, by the same precedent as GET /students/me/quran under TD-3.3.",
         "responses": {
           "200": {
             "description": "A page of teaching groups in the TD-10 envelope."

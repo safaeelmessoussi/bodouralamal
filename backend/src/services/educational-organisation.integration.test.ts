@@ -547,6 +547,7 @@ describe("moving a student is one action (§5.6)", () => {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -587,6 +588,7 @@ describe("un-enrolment (TD-5)", () => {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -756,7 +758,8 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
         levelId,
         subjectId: hifz,
         name: `${TAG} حفظ القرآن 1`,
-      }),
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
+    }),
     );
     // A Teaching Group has no branch, so "within your scope" has no referent —
     // a Marrakesh admin would otherwise be deleting Targa's splits.
@@ -770,6 +773,7 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -786,6 +790,7 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -804,6 +809,7 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const stranger = await student("غريبة");
     const err = await failure(() =>
@@ -822,7 +828,8 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
         levelId,
         subjectId: orphan.id,
         name: `${TAG} مجموعة`,
-      }),
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
+    }),
     );
     expect(err.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
     // 2026-09-22 — NAMED, so a screen can say which Level and which Subject
@@ -841,11 +848,13 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const t1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
       subjectId: tartil,
       name: `${TAG} ترتيل وتجويد القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -865,11 +874,13 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const q2 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 2`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -888,6 +899,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const placed = await student("هدى");
     const unplaced = await student("سارة");
@@ -937,11 +949,13 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     await createTeachingGroup(prisma, superAdmin(), {
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 2`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -973,6 +987,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s, academicPeriodId);
@@ -999,6 +1014,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       subjectId: hifz,
       name: `${TAG} حفظ القرآن 1`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const here = await student("هدى");
     const there = await student("ليلى");
@@ -1352,6 +1368,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       levelId,
       subjectId: subject.id,
       name: `${TAG} حلقة`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const pupil = await student("مستفيدة بحلقة");
     const row = await enrolAtLevel(prisma, superAdmin(), {
@@ -1418,6 +1435,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       levelId,
       subjectId: subject.id,
       name: `${TAG} حلقة الصباح`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const pupil = await student("مستفيدة معروضة الحلقات");
     await enrolAtLevel(prisma, superAdmin(), {
@@ -1460,6 +1478,7 @@ describe("R66 — a GROUP-LESS student can be placed in a circle", () => {
       levelId: created.level.id,
       subjectId: subject.id,
       name: `${TAG} حلقة`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
 
     const pupil = await student("مستفيدة بلا مجموعة");
@@ -1496,6 +1515,7 @@ describe("R66 — a GROUP-LESS student can be placed in a circle", () => {
       levelId: created.level.id,
       subjectId: subject.id,
       name: `${TAG} حلقة معزولة`,
+      branchId: amerchich, // R172 §15 — a circle is created in a branch
     });
     const stranger = await student("مستفيدة غير مسجلة");
 

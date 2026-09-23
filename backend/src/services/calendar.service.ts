@@ -5,6 +5,7 @@ import type {
 } from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
 import { subjectsTaughtAt } from "../policies/curriculum.js";
+import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
 import {
   nextRecordingName,
   recordingBaseName,
@@ -668,8 +669,9 @@ async function personalFilters(
    *  beneficiary would hide sittings she has always seen. */
   isBeneficiary: boolean;
 }> {
+  // R172 §14 — the Levels she is IN: a completed one is behind her.
   const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: userId, deletedAt: null },
+    where: { studentId: userId, ...inProgressEnrolmentWhere(userId) },
     select: {
       levelId: true,
       branchId: true,

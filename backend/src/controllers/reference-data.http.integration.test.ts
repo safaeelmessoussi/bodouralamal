@@ -41,6 +41,7 @@ let teacher: string;
 let subjectId: string;
 let levelId: string;
 let categoryId: string;
+let branchA: string;
 
 async function makeUser(label: string): Promise<string> {
   const u = await prisma.user.create({
@@ -74,6 +75,7 @@ async function clear(): Promise<void> {
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -104,6 +106,9 @@ beforeAll(async () => {
     })
   ).id;
   await prisma.academicYear.create({ data: { label: YEAR_LABEL } });
+  // R172 §15 — a circle is created in a branch; through Prisma, not the branch
+  // API, so the TD-4.6d backfill does not run over the rest of the database.
+  branchA = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
   categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } }))
     .id;
   levelId = (
@@ -627,7 +632,7 @@ describe("assigning a Subject to a Level", () => {
       BASE,
       "POST",
       `/admin/levels/${levelId}/subjects/${subjectId}/teaching-groups`,
-      { token: superAdmin, body: { name: `${TAG} فوج` } },
+      { token: superAdmin, body: { name: `${TAG} فوج`, branch_id: branchA } },
     );
     expect(created.status).toBe(201);
   });

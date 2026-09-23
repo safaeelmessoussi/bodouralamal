@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
+import { fetchCalendarBootstrap, type BranchRef } from '../../adapters/calendar.js';
 import { listSubjects, type SubjectRef } from '../../adapters/reference-data.js';
 import { listCategories, listLevelSubjects, listLevels, type Category, type Level } from '../../adapters/taxonomy.js';
 import {
@@ -69,16 +70,18 @@ import { Feedback } from '../../components/ui/feedback.js';
  * which showed its data but never as a list, so *what circles exist* was still
  * a question you answered by opening Levels one at a time.
  *
- * ## What the row deliberately does not show
+ * ## The branch, and what the row still does not show
  *
- * **No branch**, because a circle has none: it belongs to a Subject and a Level,
- * and a Level spans branches (§4.4b) — that absence is the structural reason
- * R43.3 split authority over circle *structure* from authority over its
- * *membership*. **No مؤطِّرة**, because staffing is a property of a
- * `CourseSchedule` and not of the audience it teaches (§4.4c). §20 rule 22
- * forbids conflating the organisational unit with its delivery, and a branch or
- * a teacher column on a circle is exactly that conflation. The screen says so in
- * words rather than leaving the absence to be read as an oversight.
+ * **The branch is the one the circle was created in** (R172 §15 — «a circle is
+ * created in a branch, each branch has its list of circles, same as for
+ * groups»). R43.3 had kept it off because a Level spans branches (§4.4b) and
+ * the circle's authority is the Level's; that split stands — the branch places
+ * the circle, it does not own it, and membership is still scoped by the branch
+ * the STUDENT is enrolled at. The list reads its branches from the public
+ * calendar bootstrap, as «المجموعات» does. **No مؤطِّرة**, because staffing is
+ * a property of a `CourseSchedule` and not of the audience it teaches (§4.4c,
+ * §20 rule 22). The screen says so in words rather than leaving the absence to
+ * be read as an oversight.
  *
  * ## Authorization is unchanged and still the server's
  *
@@ -112,6 +115,7 @@ export function TeachingStructurePage({
   const [levels, setLevels] = useState<Level[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subjects, setSubjects] = useState<SubjectRef[]>([]);
+  const [branches, setBranches] = useState<BranchRef[]>([]);
 
   // ── The list ────────────────────────────────────────────────────────────
   const [rows, setRows] = useState<TeachingGroupRow[]>([]);
@@ -123,6 +127,7 @@ export function TeachingStructurePage({
   const [sort, setSort] = useState<SortState | null>(null);
   const [levelFilter, setLevelFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
 
   // ── The Level view, opened by `?level=` (R69.3's deep link) ─────────────
   const [detail, setDetail] = useState<Record<string, LevelDetail>>({});
@@ -141,14 +146,18 @@ export function TeachingStructurePage({
     void (async () => {
       // Each independently recoverable: a reference list that failed to load
       // must not take the table down with it.
-      const [levelList, categoryList, subjectList] = await Promise.all([
+      const today = new Date().toISOString().slice(0, 10);
+      const [levelList, categoryList, subjectList, bootstrap] = await Promise.all([
         listLevels(accessToken).catch(() => [] as Level[]),
         listCategories(accessToken).catch(() => [] as Category[]),
         listSubjects(accessToken).catch(() => [] as SubjectRef[]),
+        // The branch list, from the same reference read «المجموعات» uses.
+        fetchCalendarBootstrap({ from: today, to: today }).catch(() => null),
       ]);
       setLevels(levelList);
       setCategories(categoryList);
       setSubjects(subjectList);
+      setBranches(bootstrap?.branches ?? []);
     })();
   }, [accessToken]);
 
@@ -163,6 +172,7 @@ export function TeachingStructurePage({
           ...(categoryFilter ? { category_id: categoryFilter } : {}),
           ...(levelFilter ? { level_id: levelFilter } : {}),
           ...(subjectFilter ? { subject_id: subjectFilter } : {}),
+          ...(branchFilter ? { branch_id: branchFilter } : {}),
         },
         sort,
       );
@@ -172,7 +182,7 @@ export function TeachingStructurePage({
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page, query, categoryFilter, levelFilter, subjectFilter, sort]);
+  }, [accessToken, page, query, categoryFilter, levelFilter, subjectFilter, branchFilter, sort]);
 
   useEffect(() => {
     void load();
@@ -214,15 +224,22 @@ export function TeachingStructurePage({
     if (levelId && detail[levelId] === undefined) void loadLevel(levelId);
   }, [levelId, detail, loadLevel]);
 
-  async function save(name: string): Promise<void> {
+  async function save(name: string, branchId: string): Promise<void> {
     if (!editing) return;
     setBusy(true);
     setNotice(null);
     try {
       if (editing.group) {
-        await updateTeachingGroup(editing.group.id, editing.group.version, { name }, accessToken);
+        // The branch travels only when it changed — a circle from before R172
+        // §15 is placed here, and a placed one is otherwise left as it is.
+        await updateTeachingGroup(
+          editing.group.id,
+          editing.group.version,
+          { name, ...(branchId !== (editing.group.branch_id ?? '') ? { branch_id: branchId } : {}) },
+          accessToken,
+        );
       } else {
-        await createTeachingGroup(editing.levelId, editing.subjectId, { name }, accessToken);
+        await createTeachingGroup(editing.levelId, editing.subjectId, { name, branch_id: branchId }, accessToken);
       }
       const level = editing.levelId;
       setEditing(null);
@@ -294,6 +311,13 @@ export function TeachingStructurePage({
       header: t('admin.subjectOrg.colSubject'),
       sortKey: 'subject',
       cell: (r) => r.subject_name,
+    },
+    {
+      key: 'branch',
+      header: t('admin.groups.colBranch'),
+      // R172 §15 — `null` for a circle from before the column, until an edit
+      // places it; the em dash is the platform's «not stated».
+      cell: (r) => r.branch_name ?? '—',
     },
     {
       key: 'members',
@@ -421,13 +445,15 @@ export function TeachingStructurePage({
               query.trim() !== '' ||
               categoryFilter !== '' ||
               levelFilter !== '' ||
-              subjectFilter !== ''
+              subjectFilter !== '' ||
+              branchFilter !== ''
             }
             onClearFilters={() => {
               setQuery('');
               setCategoryFilter('');
               setLevelFilter('');
               setSubjectFilter('');
+              setBranchFilter('');
               setPage(1);
             }}
             toolbar={
@@ -472,13 +498,24 @@ export function TeachingStructurePage({
                   placeholder={t('admin.subjectOrg.allSubjects')}
                   options={subjects.map((s) => ({ value: s.id, label: s.name }))}
                 />
+                {/* R172 §15 — each branch has its list of circles. */}
+                <SelectField
+                  label={t('admin.subjectOrg.filterBranch')}
+                  value={branchFilter}
+                  onChange={(v) => {
+                    setBranchFilter(v);
+                    setPage(1);
+                  }}
+                  placeholder={t('admin.subjectOrg.allBranches')}
+                  options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                />
               </>
             }
             pagination={{ page, pageSize: 25, total, onPage: setPage }}
           />
-          {/* Two absent columns, explained where the reader would look for them.
-              An unexplained absence reads as an oversight; a stated one is the
-              model. */}
+          {/* The absent مؤطِّرة column and the branch's meaning, explained where
+              the reader would look for them. An unexplained absence reads as an
+              oversight; a stated one is the model. */}
           <p className="field__hint">{t('admin.subjectOrg.columnsNote')}</p>
         </>
       )}
@@ -489,11 +526,12 @@ export function TeachingStructurePage({
         levelId={editing?.levelId ?? ''}
         subjectId={editing?.subjectId ?? ''}
         levels={levels}
+        branches={branches}
         token={accessToken}
         notice={editing === null ? null : notice}
         busy={busy}
         onPair={(l, s) => setEditing((e) => (e ? { ...e, levelId: l, subjectId: s } : e))}
-        onSave={(name) => void save(name)}
+        onSave={(name, branchId) => void save(name, branchId)}
         onCancel={() => setEditing(null)}
       />
 
@@ -534,6 +572,7 @@ function rowAsGroup(row: TeachingGroupRow): TeachingGroup {
     level_id: row.level_id,
     subject_id: row.subject_id,
     display_order: row.display_order,
+    branch_id: row.branch_id,
     member_count: row.member_count,
     version: row.version,
   };
@@ -643,7 +682,11 @@ function LevelView({
 }
 
 /**
- * Creating or renaming a circle.
+ * Creating, renaming or placing a circle.
+ *
+ * **The branch is asked for on create and offered on edit** (R172 §15): a circle
+ * is created in a branch, as a group is, and an edit is where a circle from
+ * before the column is placed — the only reason the select is editable at all.
  *
  * **The `(Level, Subject)` pair is asked for when it is not already known.**
  * Opened from a Subject block it is; opened from the page's own add button it is
@@ -662,6 +705,7 @@ function CircleDialog({
   levelId,
   subjectId,
   levels,
+  branches,
   token,
   notice,
   busy,
@@ -674,18 +718,21 @@ function CircleDialog({
   levelId: string;
   subjectId: string;
   levels: Level[];
+  branches: BranchRef[];
   token: string | null;
   notice: string | null;
   busy: boolean;
   onPair: (levelId: string, subjectId: string) => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, branchId: string) => void;
   onCancel: () => void;
 }): ReactNode {
   const [name, setName] = useState('');
+  const [branchId, setBranchId] = useState('');
   const [levelSubjects, setLevelSubjects] = useState<SubjectRef[]>([]);
 
   useEffect(() => {
     setName(group?.name ?? '');
+    setBranchId(group?.branch_id ?? '');
   }, [group, open]);
 
   useEffect(() => {
@@ -702,15 +749,21 @@ function CircleDialog({
     })();
   }, [open, levelId, token]);
 
-  // Renaming needs only a name; creating needs the pair as well.
+  // Renaming needs a name and a branch; creating needs the pair as well.
   const needsPair = group === null;
-  const complete = name.trim() !== '' && (!needsPair || (levelId !== '' && subjectId !== ''));
+  const complete =
+    name.trim() !== '' && branchId !== '' && (!needsPair || (levelId !== '' && subjectId !== ''));
 
   // Creating opens with everything blank, so any answer is a change; editing
-  // opens with the circle's own name.
+  // opens with the circle's own name and branch.
   const dirty = isDirty(
-    { name, levelId, subjectId },
-    { name: group?.name ?? '', levelId: group ? levelId : '', subjectId: group ? subjectId : '' },
+    { name, branchId, levelId, subjectId },
+    {
+      name: group?.name ?? '',
+      branchId: group?.branch_id ?? '',
+      levelId: group ? levelId : '',
+      subjectId: group ? subjectId : '',
+    },
   );
 
   return (
@@ -721,7 +774,7 @@ function CircleDialog({
       busy={busy}
       disabled={!complete}
       dirty={dirty}
-      onSubmit={() => onSave(name)}
+      onSubmit={() => onSave(name, branchId)}
       onCancel={onCancel}
     >
       {needsPair ? (
@@ -750,6 +803,14 @@ function CircleDialog({
         </>
       ) : null}
       <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
+      <SelectField
+        label={t('admin.groups.colBranch')}
+        value={branchId}
+        onChange={setBranchId}
+        placeholder={t('common.choose')}
+        required
+        options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
+      />
     </FormDialog>
   );
 }

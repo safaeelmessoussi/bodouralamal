@@ -5777,7 +5777,7 @@ No migration. Detail per item: [SRS Revision 171](SRS.md).
 
 ## SRS Revision 172 — the Owner's fourth batch: whole-Category Subjects, a series entered after the fact, a recording that outlives the screen — 2026-09-23
 
-Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172_subject_taught_to_a_whole_category`).
+Detail per item: [SRS Revision 172](SRS.md). Two migrations (`20260926090000_r172_subject_taught_to_a_whole_category`, `20260926100000_r172_teaching_group_branch`).
 
 - [x] **§1 — a Subject taught to a WHOLE Category.** `CategorySubject`; the
       curriculum policy (`subjectsTaughtAt`, `levelsTeaching`) answers from both
@@ -5837,5 +5837,23 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
       in composed titles and recording names; a library recording carries no
       type word. One constant (`TEACHER_HONORIFIC`, `lib/item-title.ts`);
       the preview reads `teacher_honorific` from `/me/scope-options`.
+- [x] **R172 part three (Owner, 2026-09-23) — §13 a weekly class follows its
+      start date on edit** (`weekdaysForClass` derives the weekday for the plain
+      weekly pattern on every save; unit test). **§14 a completed Level leaves
+      «تقويمي», «مكتبة المحتوى» and `GET /students/me`** (`inProgressEnrolmentWhere`,
+      `policies/level-completion.ts`; enrolment untouched; tests: quran
+      integration, library HTTP). **§15 a circle is created in a branch**
+      (`teaching_group.branch_id`, migration `20260926100000_r172_teaching_group_branch`
+      back-filled from the circle's own classes; «إضافة حلقة»/«تعديل الحلقة» ask
+      for الفرع, «حلقات المواد» shows and filters by it, `?branch_id=` on the flat
+      read, `branch_id` on POST/PATCH; registration offers no circle placed at
+      another branch; tests: teaching-group HTTP, reference-data HTTP,
+      role-request integration, frontend pins).
+- [ ] **OWNER DECISION — the women's first-year «حفظ القرآن» circle and the
+      registration form (the Owner's items 1 and 4 of 2026-09-23).** Proposed
+      in the hand-off, NOT applied: the form offers only circles of the Subject
+      that tracks memorisation (R168 §1), and the Owner's three circles are
+      «أحكام التجويد»; a memorisation class with no Surah is refused (R165 §2).
+      Options written up for her; apply on her word.
 - [ ] **`verify-public-reader.mjs` (inside `content.integration`) flaked twice
       on the hosted runner (2026-09-23)** — a Chrome timing; harden its waits.

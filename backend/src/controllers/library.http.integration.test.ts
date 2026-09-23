@@ -183,6 +183,7 @@ async function clear(): Promise<void> {
   });
   const levelIds = levels.map((l) => l.id);
   await clearTestContentRetirements(prisma, { levelId: { in: levelIds } });
+  await prisma.levelCompletionMark.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.educationalContent.deleteMany({
     where: { levelId: { in: levelIds } },
   });
@@ -471,6 +472,33 @@ describe("§4.9 tiers filter every result set", () => {
     // shared reading surface (§5.2) — a parent who had to switch context could
     // not compare two children's materials at all.
     expect(await titlesFor(parentToken)).toContain(ids.privateOwn);
+  });
+
+  it("R172 §14 — a Level she has COMPLETED is off her shelf, for her and for her parent, until the mark is lifted", async () => {
+    // «a student who finished a level … should stop seeing that level in
+    // تقويمي and in مكتبة المحتوى»: the enrolment row stays (her record), the
+    // completion mark is what takes the Level out of what she is studying.
+    const enrolment = await prisma.enrollment.findFirstOrThrow({
+      where: { levelId, deletedAt: null, student: { nameArabic: `${TAG} طالبة` } },
+      select: { studentId: true, branchId: true },
+    });
+    const mark = await prisma.levelCompletionMark.create({
+      data: {
+        studentId: enrolment.studentId,
+        levelId,
+        branchId: enrolment.branchId,
+        requirementsMet: true,
+        completedById: enrolment.studentId,
+      },
+      select: { id: true },
+    });
+    try {
+      expect(await titlesFor(studentToken)).not.toContain(ids.privateOwn);
+      expect(await titlesFor(parentToken)).not.toContain(ids.privateOwn);
+    } finally {
+      await prisma.levelCompletionMark.delete({ where: { id: mark.id } });
+    }
+    expect(await titlesFor(studentToken)).toContain(ids.privateOwn);
   });
 
   it("a signed-in stranger enrolled nowhere sees the public tier only", async () => {

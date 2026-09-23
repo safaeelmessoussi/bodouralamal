@@ -1050,6 +1050,7 @@ model Branch {
 
   rooms Room[]
 
+  teachingGroups TeachingGroup[]
   // Revision 43 (expand phase) — see the educational-model block below.
   administrativeGroups AdministrativeGroup[]
   courseSchedules      RecurringCourseSchedule[]
@@ -1454,6 +1455,13 @@ model TeachingGroup {
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   levelId   String  @map("level_id") @db.Uuid
   level     Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  /// R172 §15 (the Owner, 2026-09-23) — the branch a circle is created in,
+  /// as an administrative group is. NULLABLE: circles from before this revision
+  /// were back-filled from their own classes' branch where that was one branch,
+  /// and stay «بلا فرع» otherwise; a new circle names one. The branch a CLASS
+  /// is held at is still the class's own (§4.4c); this is where the circle LIVES.
+  branchId String? @map("branch_id") @db.Uuid
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   displayOrder Int? @map("display_order")
 
@@ -1486,6 +1494,7 @@ model TeachingGroup {
 
   @@unique([id, subjectId, levelId], map: "teaching_group_id_subject_id_level_id_key")
   @@index([subjectId, levelId, deletedAt])
+  @@index([branchId])
   @@map("teaching_group")
 }
 

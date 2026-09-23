@@ -11832,3 +11832,48 @@ reconciliation recorded in SRS §12. **CI 8/8 on `aa83fa5` (one re-run: `content
 headless-browser step `verify-public-reader.mjs` flaked a second time today — a hardening item);
 deployed to Staging at `aa83fa5`**: `/healthz` 200, zero error lines; the conference now reads
 «محاضرة — تثبيت حجية السنة — الأستاذة منى حريكي — 2026-09-14 16:00» on the public calendar.
+
+## 2026-09-23 — SRS Revision 172 §13–§15: a weekly class follows its start date, a completed Level leaves her pages, a circle is created in a branch
+
+**§13** — `weekdaysForClass` (frontend adapter) derives the weekday from the start date for
+the plain `weekly` pattern on EVERY save; it used to keep the row's stored `[monday]` on edit, so
+moving the start to a Tuesday left the class on Mondays (the Owner's 5→6 October). Unit test
+added; `verify-weekly-follows-start.sh` (new, 4/4) proves it through «تعديل» and the real date
+picker: the server's `weekdays` and the next occurrences say Tuesday.
+
+**§14** — `inProgressEnrolmentWhere` (`policies/level-completion.ts`): live enrolment at a Level
+with no `LevelCompletionMark` for her. `calendar.service` (`personalFilters`), `library.service`
+(`privateLevelIds`, her and her parent's) and `student.service` (`getStudentIdentity`, only
+`/students/me` calls it) read through it. The enrolment row is untouched. Tests: quran integration
+(identity block, predicate, unmark restores), library HTTP (off her and her parent's shelf; back
+once the mark is lifted).
+
+**§15** — migration `20260926100000_r172_teaching_group_branch`: `teaching_group.branch_id`
+(nullable, FK RESTRICT, indexed), back-filled from the circle's own live classes when they all
+meet at one branch (`MIN(branch_id::text)::uuid` under `HAVING COUNT(DISTINCT) = 1` — PostgreSQL
+has no `MIN(uuid)`; the first draft failed on the disposable stack). Service: `TeachingGroupRow`
+gains `branchId`/`branchName`; list filter `branchId`; create requires a live `branchId`; update
+accepts one (places a pre-existing circle). Validators, DTOs (`branch_id`, `branch_name`),
+controller, OpenAPI text regenerated (191/247 unchanged counts). Registration circle slots
+(`registration-circle-slots.service`) exclude a circle placed at ANOTHER branch. Frontend:
+adapter types/filters, `teaching-structure.tsx` (branch list from the calendar bootstrap as
+«المجموعات» does; الفرع column, «تصفية بالفرع», the dialog's required الفرع select seeded on edit;
+`branch_id` sent on update only when it changed), i18n (`filterBranch`, `allBranches`,
+`columnsNote` reworded), pins (`subject-organisation.test`). Tests: teaching-group HTTP (24
+payloads; the R43.3 «no branch» tests rewritten as «the branch places, does not own»; the flat
+read carries `branch_name`; `?branch_id=` narrows), reference-data HTTP (branch fixture),
+role-request integration (placed elsewhere → not offered), seeds (`seed-dev-scenario`,
+`seed-quran-scenario`, `seed-role-requests-scenario` give their circles a branch).
+`verify-circle-branch.sh` (new, 10/10) on the real «حلقات المواد» page.
+
+**Docs:** SRS R172 head + §13–§15, §4.4c pointer, R43.3's «option to revisit» closed;
+database handbook (ER edge, `LevelCompletionMark` paragraph), calendar handbook (§13),
+business-processes, api-endpoints, testing + qa-inventory (two harnesses), TASKS (part three
+ticked; the items 1+4 Owner decision left open, proposed in the hand-off, NOT applied).
+
+**Verification:** backend typecheck/lint/unit 375/375; frontend tsc/lint/1513/1513; every
+`check-*.sh` guard; integration on the disposable stack — teaching-group HTTP + reference-data
+HTTP 68/68, plus educational-organisation, quran, calendar, library HTTP, role-request,
+trash-lifecycle, roster-resolution (289 + 68); seed drill green (incl. `ops:remove-fixtures`);
+Localhost rebuilt + migrated; harnesses `verify-circle-branch` 10/10,
+`verify-weekly-follows-start` 4/4, `verify-circles-reorder` 9/9, `verify-class-filters` 21/21.

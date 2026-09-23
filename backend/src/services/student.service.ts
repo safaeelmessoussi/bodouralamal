@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { inProgressEnrolmentWhere } from '../policies/level-completion.js';
 import { qrMatrixFor, type QrMatrix } from '../lib/qr-identity.js';
 
 /**
@@ -58,7 +59,9 @@ export async function getStudentIdentity(
       // The relation is `levelEnrollments` on `User` (R43) — one row per
       // Level, not per group.
       levelEnrollments: {
-        where: { deletedAt: null },
+        // R172 §14 — the Levels she is IN; a completed one is behind her and
+        // is not listed here (her certificate says she finished it).
+        where: inProgressEnrolmentWhere(studentId),
         select: {
           // R43's chain, walked in one query: the Level carries the Category,
           // and the Administrative Group carries the branch. Neither is copied

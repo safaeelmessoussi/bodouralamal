@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { nextRecordingName, sessionRecordingBaseName } from '../lib/recording-name.js';
 import { publicDisplayName } from '../lib/display-name.js';
+import { inProgressEnrolmentWhere } from '../policies/level-completion.js';
 import * as scope from '../policies/branch-scope.js';
 
 /**
@@ -222,7 +223,8 @@ async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promi
     const own = await prisma.enrollment.findMany({
       where: {
         studentId: actor.actingStudentId,
-        deletedAt: null,
+        // R172 §14 — a completed Level is behind her (its enrolment stays).
+        ...inProgressEnrolmentWhere(actor.actingStudentId),
         // R66 — a group-less enrolment is a valid enrolment; a relation filter
         // never matches a NULL relation, so this hid her own Level's private
         // content from her.
@@ -240,18 +242,24 @@ async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promi
   });
   const studentIds = [actor.userId, ...links.map((l) => l.studentId)];
 
-  const enrolments = await prisma.enrollment.findMany({
-    where: {
-      studentId: { in: studentIds },
-      deletedAt: null,
-      // R66 — same rule for a parent's children: a group-less child's Level
-      // must reach their parent's library exactly as a grouped child's does.
-      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
-    },
-    select: { levelId: true },
-    distinct: ['levelId'],
-  });
-  return enrolments.map((e) => e.levelId);
+  // R172 §14 — each person's completed Levels are behind THEM: the predicate
+  // is per student, so it is asked per student.
+  const perStudent = await Promise.all(
+    studentIds.map((studentId) =>
+      prisma.enrollment.findMany({
+        where: {
+          studentId,
+          ...inProgressEnrolmentWhere(studentId),
+          // R66 — same rule for a parent's children: a group-less child's Level
+          // must reach their parent's library exactly as a grouped child's does.
+          OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
+        },
+        select: { levelId: true },
+        distinct: ['levelId'],
+      }),
+    ),
+  );
+  return [...new Set(perStudent.flat().map((e) => e.levelId))];
 }
 
 /**

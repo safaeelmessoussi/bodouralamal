@@ -516,8 +516,8 @@ student sits in Administrative Group 1, Quran Group 2 and Tajweed Group 1 at onc
 
 | | Path | Notes |
 |---|---|---|
-| `GET` `POST` | `/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` | `GET` returns `{groups, split, unassigned}` — the whole split in one read, **unpaginated**. `POST` is 👤; the Subject must actually be assigned to the Level |
-| `PATCH` `DELETE` | `/admin/teaching-groups/{id}` | 👤. Only `name` and `display_order`. `DELETE` answers **`200 {released_students}`**, not `204`, and is blocked by a schedule targeting the group |
+| `GET` `POST` | `/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` | `GET` returns `{groups, split, unassigned}` — the whole split in one read, **unpaginated**. `POST` is 👤; the Subject must actually be assigned to the Level; the body names the `branch_id` the circle is created in (R172 §15) |
+| `PATCH` `DELETE` | `/admin/teaching-groups/{id}` | 👤. Only `name`, `display_order` and `branch_id` (R172 §15 — places a circle from before the column). `DELETE` answers **`200 {released_students}`**, not `204`, and is blocked by a schedule targeting the group |
 | `POST` | `/admin/teaching-groups/{id}/members` | 🔒 scoped by the **student's** enrolment branch. At most one seat per (student, Subject, Level) |
 | `DELETE` | `/admin/teaching-groups/{id}/members/{studentId}` | The student returns to `unassigned` |
 

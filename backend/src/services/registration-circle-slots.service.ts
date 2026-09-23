@@ -24,7 +24,10 @@ import { moroccoDateIso } from '../lib/morocco-clock.js';
  * of exceptions — a Level/branch with no such classes simply offers nothing, and
  * starts offering them the day they are scheduled.
  *
- * A حلقة has no branch of its own (§4.4c, R43.3); the branch is the CLASS's.
+ * The branch is the CLASS's; since R172 §15 a حلقة also records the branch it
+ * was created in, and one placed at ANOTHER branch is not offered here even if
+ * a class of it meets at this one — «each branch has its list of circles». A
+ * حلقة from before the column (`null`) is placed by its classes alone.
  *
  * ## What is published
  *
@@ -72,7 +75,12 @@ export async function offeredCircleSlots(
   };
 
   const circles = await prisma.teachingGroup.findMany({
-    where: { levelId: level.id, deletedAt: null, subject: { tracksQuranProgress: true, deletedAt: null } },
+    where: {
+      levelId: level.id,
+      deletedAt: null,
+      subject: { tracksQuranProgress: true, deletedAt: null },
+      OR: [{ branchId: null }, { branchId }],
+    },
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     select: { id: true, name: true },
   });

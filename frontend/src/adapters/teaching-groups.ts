@@ -19,6 +19,8 @@ export interface TeachingGroup {
   level_id: string;
   subject_id: string;
   display_order: number | null;
+  /** R172 §15 — the branch the circle was created in; `null` for one from before. */
+  branch_id: string | null;
   /** Live members — so a screen answers *how many* without a request per group. */
   member_count: number;
   /** TD-15: sent back on edit; a stale one is a `409`. */
@@ -67,7 +69,7 @@ export async function readSubjectSplit(
 export async function createTeachingGroup(
   levelId: string,
   subjectId: string,
-  input: { name: string; display_order?: number | null },
+  input: { name: string; branch_id: string; display_order?: number | null },
   token: string | null,
 ): Promise<TeachingGroup> {
   return api<TeachingGroup>(`/admin/levels/${levelId}/subjects/${subjectId}/teaching-groups`, {
@@ -80,7 +82,7 @@ export async function createTeachingGroup(
 export async function updateTeachingGroup(
   id: string,
   version: number,
-  input: { name?: string; display_order?: number | null },
+  input: { name?: string; display_order?: number | null; branch_id?: string },
   token: string | null,
 ): Promise<TeachingGroup> {
   return api<TeachingGroup>(`/admin/teaching-groups/${id}`, {
@@ -138,21 +140,25 @@ export async function removeMember(
  * because `levelLabel` owns the `{Category} — {Level}` format and a
  * pre-joined string from the server would be a second implementation of it.
  *
- * **No branch and no مؤطرة, and neither is an omission.** A circle carries no
- * branch (R43.3 — that absence is *why* its authority is split), and staffing is
- * a property of a `CourseSchedule` rather than of the audience it teaches
- * (§4.4c, §20 rule 22).
+ * **The branch is the one the circle was created in (R172 §15), and there is
+ * no مؤطرة.** R43.3 had kept the branch off the circle; the Owner's «each
+ * branch has its list of circles, same as for groups» put it back as a place,
+ * not an authority. Staffing stays a property of a `CourseSchedule` rather
+ * than of the audience it teaches (§4.4c, §20 rule 22).
  */
 export interface TeachingGroupRow extends TeachingGroup {
   level_name: string;
   category_name: string;
   subject_name: string;
+  branch_name: string | null;
 }
 
 export interface CircleFilters {
   level_id?: string;
   subject_id?: string;
   category_id?: string;
+  /** R172 §15 — a circle from before the column answers no branch filter. */
+  branch_id?: string;
   q?: string;
 }
 
