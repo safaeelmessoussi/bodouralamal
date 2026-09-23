@@ -11678,3 +11678,12 @@ Owner-approved task — accepted with the reason on the
 [readiness page](operations/deployment-readiness.md) (nothing in that chain runs here).
 Version table: [system overview](architecture/system-overview.md). Verified: backend unit 312/312,
 frontend 1493/1493 on the new runner; hosted CI re-runs everything on the push.
+
+**Hosted CI 8/8 on `d025409` (Revision 171 + the dependency patch), first run — 35841308913.
+Deployed to Staging at `d025409`** from `8f0feee`: recordings asked first (0 active); pre-deploy dump
+taken (902,647 bytes); two stale release images removed (23 GiB free); host preflight PASS; labels
+exact; no pending migration; both seeds clean; `db`, `redis`, `livekit`, `livekit-egress` and
+`certbot` recreated on their pinned digests and healthy; TLS active; `/healthz` 200,
+`/rtc/validate` 401; zero error-level lines. (The previous docs-only commit `65fefe0` had a red
+release job — GHCR answered «unknown blob» on one layer push, a transient registry error; its
+images were never needed, Staging ran `8f0feee` throughout.)

@@ -5769,3 +5769,8 @@ No migration. Detail per item: [SRS Revision 171](SRS.md).
 - [ ] **§15 — still owed:** a generated permission-matrix test; J1–J8 as
       automation on Staging; the ≥80 % coverage threshold in CI. Each bounded;
       none needs a Production host.
+- [x] **Hosted CI 8/8 on `d025409` (Revision 171 + the §13 dependency patch),
+      first run; deployed to Staging at `d025409`** from `8f0feee` — recordings
+      asked first; dump taken; no pending migration; both seeds clean; the five
+      pinned services recreated on their digests and healthy; `/healthz` 200;
+      zero error lines.
