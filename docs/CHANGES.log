@@ -11772,3 +11772,7 @@ a row; and `PUT …/subjects/{subjectId}` on a pair that already stands answers 
 written (a set-membership write has nothing to refuse) — for Levels and for Categories. Pins:
 reference-data HTTP (restated), course-schedule HTTP, taxonomy HTTP and frontend key sets;
 new harness `verify-level-subjects.sh` 7/7 on Localhost.
+
+**Hosted CI 8/8 on `ad759e4`, first run; deployed to Staging at `ad759e4`** from `75e0c67` —
+recordings asked first; dump taken; no pending migration; both seeds clean; `/healthz` 200; zero
+error lines. «مواد المستوى» on Staging now loads from the three list reads.
