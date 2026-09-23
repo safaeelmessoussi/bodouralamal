@@ -11825,3 +11825,10 @@ carry it. The library suggestion drops the «تسجيل صوتي» type word («
 and the scheduling page passes `scope.teacherHonorific` — the word appears nowhere in the
 frontend source (pinned). Pins restated: item-title, recording-name (+1), title-preview (+1),
 course-schedule integration (3 titles), library HTTP; recorder hint copy updated.
+
+**Hosted CI on `fe78199` red on the R71 terminology guard** («أستاذة» in `ar.ts`, from the
+recorder hint) — the honorific belongs to the server constant, never the catalogue; hint reworded,
+reconciliation recorded in SRS §12. **CI 8/8 on `aa83fa5` (one re-run: `content.integration`'s
+headless-browser step `verify-public-reader.mjs` flaked a second time today — a hardening item);
+deployed to Staging at `aa83fa5`**: `/healthz` 200, zero error lines; the conference now reads
+«محاضرة — تثبيت حجية السنة — الأستاذة منى حريكي — 2026-09-14 16:00» on the public calendar.

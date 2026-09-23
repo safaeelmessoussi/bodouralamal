@@ -5837,3 +5837,5 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
       in composed titles and recording names; a library recording carries no
       type word. One constant (`TEACHER_HONORIFIC`, `lib/item-title.ts`);
       the preview reads `teacher_honorific` from `/me/scope-options`.
+- [ ] **`verify-public-reader.mjs` (inside `content.integration`) flaked twice
+      on the hosted runner (2026-09-23)** — a Chrome timing; harden its waits.
