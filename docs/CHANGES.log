@@ -11758,3 +11758,17 @@ five sessions, now on the public calendar.
 **Found in passing, not fixed here:** `scripts/dev/browser/verify-assessment-library.sh` is stale
 since R136 (24/31): it expects the journey's paper to appear published with its answers in
 «الاختبارات», which lists only reusable drafts since R136 §2. Its own repair item.
+
+## 2026-09-23 — «مواد المستوى» on Staging: RATE_LIMITED, then DUPLICATE (one cause)
+
+The page read `/admin/levels/{id}/subjects` once PER LEVEL and, since R172 §1,
+`/admin/categories/{id}/subjects` once per Category — two dozen parallel requests on one load,
+which the edge rate limit (`api_zone`, burst 20) refused. Each refused read was caught and shown
+as «no subjects», so the editor's diff re-sent every pair that already stood, and the server
+refused each as `DUPLICATE`. Fixed at both ends: `GET /admin/levels` rows carry `subject_ids`
+(the Level's own) and `GET /admin/categories` rows carry `subject_ids` (the whole-Category ones),
+so the page is three reads whatever the curriculum's size and a failed read fails the page, never
+a row; and `PUT …/subjects/{subjectId}` on a pair that already stands answers `204` with nothing
+written (a set-membership write has nothing to refuse) — for Levels and for Categories. Pins:
+reference-data HTTP (restated), course-schedule HTTP, taxonomy HTTP and frontend key sets;
+new harness `verify-level-subjects.sh` 7/7 on Localhost.

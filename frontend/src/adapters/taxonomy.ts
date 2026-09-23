@@ -40,6 +40,9 @@ export interface Category {
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible. */
   level_count: number;
+  /** R172 §1 — the Subjects taught to every Level of the Category; one read
+   *  for «مواد المستوى» (its per-Category reads were rate-limited). */
+  subject_ids: string[];
   /**
    * §4.9's default content visibility for this Category (§15.1).
    *
@@ -186,6 +189,8 @@ export interface Level {
   display_order: number | null;
   group_count: number;
   subject_count: number;
+  /** The Subjects the Level teaches on its own — one read for «مواد المستوى». */
+  subject_ids: string[];
   /** Live enrolments. Non-zero means deletion will be refused, and the screen
    *  can say so before the administrator tries. */
   enrollment_count: number;

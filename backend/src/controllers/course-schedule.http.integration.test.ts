@@ -1231,7 +1231,8 @@ describe("Revision 155 — a multi_dimension schedule", () => {
     // The link is Super Admin curriculum, idempotent, audited.
     const assign = await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin);
     expect(assign.status).toBe(204);
-    expect((await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin)).status).toBe(409);
+    expect((await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, superAdmin)).status).toBe(204);
+    expect(await prisma.categorySubject.count({ where: { categoryId: category.categoryId, subjectId: fiqh.id } })).toBe(1);
     expect((await call("PUT", `/admin/categories/${category.categoryId}/subjects/${fiqh.id}`, scopedAdmin)).status).toBe(403);
     const listed = await call("GET", `/admin/categories/${category.categoryId}/subjects`, scopedAdmin);
     expect((listed.body.data as { id: string }[]).map((s) => s.id)).toEqual([fiqh.id]);

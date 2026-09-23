@@ -1286,6 +1286,8 @@ export interface CategoryDto {
   /** Live Levels in this Category — what says whether deleting it is possible
    *  at all, without a request per row. */
   level_count: number;
+  /** R172 §1 — the Subjects taught to every Level of the Category. */
+  subject_ids: string[];
   version: number;
 }
 
@@ -1298,6 +1300,7 @@ export function categoryDto(row: {
   maxAge: number | null;
   displayOrder: number | null;
   levelCount: number;
+  subjectIds: string[];
   version: number;
 }): CategoryDto {
   return {
@@ -1309,6 +1312,7 @@ export function categoryDto(row: {
     max_age: row.maxAge,
     display_order: row.displayOrder,
     level_count: row.levelCount,
+    subject_ids: row.subjectIds,
     version: row.version,
   };
 }
@@ -1364,6 +1368,8 @@ export interface LevelDto extends LevelCoreDto {
   category_name: string;
   group_count: number;
   subject_count: number;
+  /** The Subjects this Level teaches on its own (`LevelSubject`); one read for «مواد المستوى». */
+  subject_ids: string[];
   enrollment_count: number;
   /** §4.9's default content visibility for this Level, through its Category
    *  (§15.1). §14.1's upload screen preselects it. */
@@ -1387,6 +1393,7 @@ export function levelDto(row: {
   displayOrder: number | null;
   groupCount: number;
   subjectCount: number;
+  subjectIds: string[];
   enrollmentCount: number;
   defaultVisibility: string;
   version: number;
@@ -1401,6 +1408,7 @@ export function levelDto(row: {
     display_order: row.displayOrder,
     group_count: row.groupCount,
     subject_count: row.subjectCount,
+    subject_ids: row.subjectIds,
     enrollment_count: row.enrollmentCount,
     default_visibility: row.defaultVisibility,
     version: row.version,

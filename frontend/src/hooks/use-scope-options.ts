@@ -328,6 +328,7 @@ export function useScopeOptions({
         max_age: null,
         display_order: null,
         level_count: 0,
+        subject_ids: c.subject_ids ?? [],
         version: 0,
       }));
       const lvls: Level[] = payload.levels.map((l) => ({
@@ -341,6 +342,7 @@ export function useScopeOptions({
         display_order: null,
         group_count: 0,
         subject_count: l.subject_ids.length,
+        subject_ids: l.subject_ids,
         enrollment_count: 0,
         version: 0,
       }));

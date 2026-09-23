@@ -368,6 +368,9 @@ export interface CategoryRef {
   /** How many live Levels sit in it — the one number that says whether deleting
    *  it is even possible, without a request per row. */
   levelCount: number;
+  /** R172 §1 — the Subjects taught to EVERY Level of the Category (own read
+   *  per Category retired: the page fans out no more, see `LevelSummary`). */
+  subjectIds: string[];
   version: number;
 }
 
@@ -400,6 +403,8 @@ export async function listCategories(
       displayOrder: true,
       version: true,
       _count: { select: { levels: { where: { deletedAt: null } } } },
+      // R172 §1 — taught to every Level of the Category; one read for the page.
+      subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
     },
   });
   return rows.map((row) => ({
@@ -411,6 +416,7 @@ export async function listCategories(
     maxAge: row.maxAge,
     displayOrder: row.displayOrder,
     levelCount: row._count.levels,
+    subjectIds: row.subjects.map((link) => link.subjectId),
     version: row.version,
   }));
 }
@@ -453,6 +459,7 @@ export async function createCategory(
       maxAge: category.maxAge,
       displayOrder: category.displayOrder,
       levelCount: 0,
+      subjectIds: [],
       version: category.version,
     };
   });
@@ -504,10 +511,17 @@ export async function updateCategory(
     requireNotDeleted: true,
     data: { ...data },
   });
-  const levelCount = await prisma.level.count({ where: { categoryId: id, deletedAt: null } });
+  const [levelCount, links] = await Promise.all([
+    prisma.level.count({ where: { categoryId: id, deletedAt: null } }),
+    prisma.categorySubject.findMany({
+      where: { categoryId: id, deletedAt: null, subject: { deletedAt: null } },
+      select: { subjectId: true },
+    }),
+  ]);
   return {
     id: category.id,
     name: category.name,
+    subjectIds: links.map((link) => link.subjectId),
     description: category.description,
     holdsOwnLogin: category.holdsOwnLogin,
     minAge: category.minAge,

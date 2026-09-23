@@ -93,6 +93,15 @@ export interface LevelSummary {
   displayOrder: number | null;
   groupCount: number;
   subjectCount: number;
+  /**
+   * The Subjects this Level teaches ON ITS OWN (`LevelSubject`, not the
+   * Category's) — carried so «مواد المستوى» reads the whole page in one
+   * request. It used to read `/admin/levels/{id}/subjects` once PER LEVEL, in
+   * parallel: two dozen requests on load, which the edge rate limit refused
+   * (RATE_LIMITED on Staging, 2026-09-23) and the page then showed as «no
+   * subjects», so the editor re-sent pairs that existed (DUPLICATE).
+   */
+  subjectIds: string[];
   enrollmentCount: number;
   /**
    * §4.9's default content visibility for this Level, resolved through its
@@ -222,6 +231,7 @@ export async function listLevels(
       displayOrder: true,
       version: true,
       category: { select: { name: true } },
+      subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
       _count: {
         select: {
           administrativeGroups: { where: { deletedAt: null } },
@@ -253,6 +263,7 @@ export async function listLevels(
     displayOrder: row.displayOrder,
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
+    subjectIds: row.subjects.map((link) => link.subjectId),
     enrollmentCount: row._count.enrollments,
     defaultVisibility: readDefaultVisibility(byCategory.get(row.categoryId)),
     version: row.version,

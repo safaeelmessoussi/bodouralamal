@@ -24,6 +24,7 @@ const CATEGORY: Category = {
   max_age: 12,
   display_order: 1,
   level_count: 3,
+      subject_ids: [],
   version: 0,
 };
 
@@ -44,6 +45,7 @@ const LEVEL: Level = {
   display_order: 1,
   group_count: 1,
   subject_count: 2,
+      subject_ids: [],
   enrollment_count: 12,
   version: 0,
 };
@@ -61,6 +63,9 @@ describe('the adapter types match the wire contract', () => {
       'max_age',
       'min_age',
       'name',
+      // R172 §1 — taught to every Level of the Category; carried so
+      // «مواد المستوى» reads the page in one request.
+      'subject_ids',
       'version',
     ]);
   });
@@ -87,6 +92,9 @@ describe('the adapter types match the wire contract', () => {
       'id',
       'name',
       'subject_count',
+      // 2026-09-23 — the Level's own Subjects, so «مواد المستوى» reads the
+      // page in one request instead of one per Level (rate-limited on Staging).
+      'subject_ids',
       'version',
     ]);
   });

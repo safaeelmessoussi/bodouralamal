@@ -165,8 +165,12 @@ describe("Categories (§5.6 الفئات والمواد)", () => {
       "max_age",
       "min_age",
       "name",
+      // R172 §1 — the Subjects taught to every Level of the Category (one read
+      // for «مواد المستوى», whose per-Category reads were rate-limited).
+      "subject_ids",
       "version",
     ]);
+    expect(row["subject_ids"]).toEqual([]);
     // A Category nobody has answered the question for: NOT STATED, never `false`.
     expect(row["holds_own_login"]).toBeNull();
   });

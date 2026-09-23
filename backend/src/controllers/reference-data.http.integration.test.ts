@@ -604,14 +604,15 @@ describe("assigning a Subject to a Level", () => {
     expect(after.body.data!.map((r) => r.id)).toContain(subjectId);
   });
 
-  it("is idempotent in effect — a second assignment is DUPLICATE, never a second row", async () => {
+  it("is idempotent — a second assignment is a 204 that changes nothing, never a second row", async () => {
+    // (Staging, 2026-09-23 — it used to answer DUPLICATE, which turned one
+    // rate-limited read on «مواد المستوى» into a refused save.)
     const again = await call2(
       "PUT",
       `/admin/levels/${levelId}/subjects/${subjectId}`,
       superAdmin,
     );
-    expect(again.status).toBe(409);
-    expect(again.body.error?.code).toBe("DUPLICATE");
+    expect(again.status).toBe(204);
     // One row, not two: "is this Subject taught here" must not have two answers.
     expect(
       await prisma.levelSubject.count({

@@ -5,8 +5,6 @@ import {
   assignCategorySubject,
   assignSubject,
   listCategories,
-  listCategorySubjects,
-  listLevelSubjects,
   listLevels,
   unassignCategorySubject,
   unassignSubject,
@@ -102,28 +100,30 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
   const load = useCallback(async () => {
     setStatus('loading');
     try {
+      /**
+       * **Three reads, whatever the curriculum's size** (Staging, 2026-09-23).
+       * This used to read `/admin/levels/{id}/subjects` once PER LEVEL and,
+       * since R172 §1, `/admin/categories/{id}/subjects` once per Category —
+       * all in parallel, two dozen requests on one load, which the edge rate
+       * limit refused (`RATE_LIMITED`). Worse, each refused read was caught
+       * and shown as «no subjects», so the editor's diff re-sent every pair
+       * that already stood and was refused again (`DUPLICATE`). The Level
+       * and Category lists now carry `subject_ids`; the names come from the
+       * one Subjects read; and a failed read fails the page, never a row.
+       */
       const [levels, every, categoryList] = await Promise.all([
         listLevels(accessToken),
         listSubjects(accessToken),
-        listCategories(accessToken).catch(() => [] as Category[]),
+        listCategories(accessToken),
       ]);
-      // One `LevelSubject` read per Level, in parallel — a small join each, and
-      // the whole point is that the answer is on the page rather than one
-      // dropdown selection away.
-      const withSubjects = await Promise.all(
-        levels.map(async (level) => ({
-          level,
-          subjects: await listLevelSubjects(level.id, accessToken).catch(() => [] as SubjectRef[]),
-        })),
-      );
-      // R172 §1 — and one `CategorySubject` read per Category, for the table
-      // above the Levels: what the whole Category is taught.
-      const wholeCategory = await Promise.all(
-        categoryList.map(async (category) => ({
-          category,
-          subjects: await listCategorySubjects(category.id, accessToken).catch(() => [] as SubjectRef[]),
-        })),
-      );
+      const byId = new Map(every.map((subject) => [subject.id, subject]));
+      const named = (ids: readonly string[]): SubjectRef[] =>
+        ids.map((id) => byId.get(id)).filter((subject): subject is SubjectRef => subject !== undefined);
+      const withSubjects = levels.map((level) => ({ level, subjects: named(level.subject_ids) }));
+      const wholeCategory = categoryList.map((category) => ({
+        category,
+        subjects: named(category.subject_ids),
+      }));
       setRows(withSubjects);
       setCategoryRows(wholeCategory);
       setAll(every);

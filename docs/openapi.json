@@ -6207,7 +6207,7 @@
     "/admin/categories": {
       "get": {
         "summary": "List categories",
-        "description": "§5.6 *\"Categories & Subjects\"*, §14.1. **Not the same read as `/calendar/bootstrap`**, which also returns categories: that contract is the *public calendar screen's* reference data, cached, carrying neither `version` nor counts. Widening it to serve an editor would let an unrelated screen shape a public, cached payload — the reasoning already recorded for `/admin/subjects`. Admin+ read (TD-2 R26); Teachers excluded (R30). Unpaginated — the set is bounded by the curriculum, and a taxonomy screen with a hidden second page cannot answer *\"does this already exist\"*, which is the question it is opened to answer. Each row carries `level_count`, which is what says whether deleting it is possible at all without a request per row. Each row also carries **`description`** (NEW K, 2026-08-27) — a short sentence saying what the Category is, **nullable and ordinarily so**: a row without one is the common case, and a client renders the absence rather than inventing filler. It is a column on `Category`, not a `system_setting` row like §4.9's default visibility, because it is an attribute *of* the Category rather than a policy attached to it, and it is read on every list. **Categories are generic educational stages and must never encode sex** (Revision 27); who a Level admits lives on `Level.gender_restriction`, where a query can read it. **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`.",
+        "description": "§5.6 *\"Categories & Subjects\"*, §14.1. **Not the same read as `/calendar/bootstrap`**, which also returns categories: that contract is the *public calendar screen's* reference data, cached, carrying neither `version` nor counts. Widening it to serve an editor would let an unrelated screen shape a public, cached payload — the reasoning already recorded for `/admin/subjects`. Admin+ read (TD-2 R26); Teachers excluded (R30). Unpaginated — the set is bounded by the curriculum, and a taxonomy screen with a hidden second page cannot answer *\"does this already exist\"*, which is the question it is opened to answer. Each row carries `level_count`, which is what says whether deleting it is possible at all without a request per row, and **`subject_ids`** (R172 §1, 2026-09-23) — the Subjects taught to EVERY Level of the Category — so «مواد المستوى» reads the page in one request rather than one per Category. Each row also carries **`description`** (NEW K, 2026-08-27) — a short sentence saying what the Category is, **nullable and ordinarily so**: a row without one is the common case, and a client renders the absence rather than inventing filler. It is a column on `Category`, not a `system_setting` row like §4.9's default visibility, because it is an attribute *of* the Category rather than a policy attached to it, and it is read on every list. **Categories are generic educational stages and must never encode sex** (Revision 27); who a Level admits lives on `Level.gender_restriction`, where a query can read it. **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`.",
         "responses": {
           "200": {
             "description": "Every live category."
@@ -6427,7 +6427,7 @@
     "/admin/levels": {
       "get": {
         "summary": "List levels",
-        "description": "§5.6 *\"Levels\"*, §14.1 مستويات, §4.4b. Admin+ read (TD-2 R26); Teachers excluded (R30). **Ordered by Category first**, because §7 scopes a Level's `display_order` *within* its Category and a flat ordering would interleave two curricula. `?category_id=` narrows **server-side**, so the client never filters a list the server owns; a malformed value is `400`, not a silently unfiltered list. Each row carries **`default_visibility`** — §4.9's default content tier for that Level, resolved through its Category (`content.default_visibility.category.{id}`, §15.1). It rides the Level because §14.1's upload screen must *honour* the default and that screen loads Levels, not Categories; a default the screen cannot read is one it cannot honour. **Unpaginated** — a Levels screen that hides its second page cannot answer *\"does this Level already exist\"*. Each row carries `group_count`, `subject_count` and `enrollment_count`: without them the delete control is a guess and the only way to find out is to press it. Each row also carries **`description`** (NEW L, 2026-08-27) — a short sentence saying what the Level is, **nullable and ordinarily so**. It is editable on the Level, and the launch baseline reads `المستوى N - برنامج X`; that text is **seeded data, not a format the API imposes**, so a Super Admin may write anything. `category_name` travels as a **label** for grouping, never as an identifier — `category_id` is that. **No `branch_id`**: a Level is Category-scoped and branch-independent and may hold groups at several branches (§4.4b). **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`, `category`. **`?eligible_for_student=` (R27 + BR-21, 2026-08-18)** narrows to the Levels THAT BENEFICIARY may enter. The dependency runs beneficiary → Levels because that is the business question — *where may she be enrolled* — rather than *whom does this Level permit*; the reverse was tried and reversed, because a woman already enrolled in one Level is still a beneficiary. Two rules narrow: a Level whose restriction she cannot satisfy is withheld (a NULL `sex` cannot PROVE eligibility, and the placement would be refused anyway), and the one Level she already holds a live enrolment in is excluded — **only that exact pair**, since one beneficiary may hold many enrolments, one per Level. An unknown beneficiary narrows to nothing rather than back to everything. **`sex` is not published and is not added by this filter**: the eligible SET travels and the fact behind it never leaves the service (§4.10, BR-16).",
+        "description": "§5.6 *\"Levels\"*, §14.1 مستويات, §4.4b. Admin+ read (TD-2 R26); Teachers excluded (R30). **Ordered by Category first**, because §7 scopes a Level's `display_order` *within* its Category and a flat ordering would interleave two curricula. `?category_id=` narrows **server-side**, so the client never filters a list the server owns; a malformed value is `400`, not a silently unfiltered list. Each row carries **`default_visibility`** — §4.9's default content tier for that Level, resolved through its Category (`content.default_visibility.category.{id}`, §15.1). It rides the Level because §14.1's upload screen must *honour* the default and that screen loads Levels, not Categories; a default the screen cannot read is one it cannot honour. **Unpaginated** — a Levels screen that hides its second page cannot answer *\"does this Level already exist\"*. Each row carries `group_count`, `subject_count` and `enrollment_count`: without them the delete control is a guess and the only way to find out is to press it — and **`subject_ids`** (2026-09-23), the Subjects the Level teaches on its own, so «مواد المستوى» reads the page in one request: it used to read `/admin/levels/{id}/subjects` once per Level in parallel, two dozen at once, which the edge rate limit refused. Each row also carries **`description`** (NEW L, 2026-08-27) — a short sentence saying what the Level is, **nullable and ordinarily so**. It is editable on the Level, and the launch baseline reads `المستوى N - برنامج X`; that text is **seeded data, not a format the API imposes**, so a Super Admin may write anything. `category_name` travels as a **label** for grouping, never as an identifier — `category_id` is that. **No `branch_id`**: a Level is Category-scoped and branch-independent and may hold groups at several branches (§4.4b). **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`, `category`. **`?eligible_for_student=` (R27 + BR-21, 2026-08-18)** narrows to the Levels THAT BENEFICIARY may enter. The dependency runs beneficiary → Levels because that is the business question — *where may she be enrolled* — rather than *whom does this Level permit*; the reverse was tried and reversed, because a woman already enrolled in one Level is still a beneficiary. Two rules narrow: a Level whose restriction she cannot satisfy is withheld (a NULL `sex` cannot PROVE eligibility, and the placement would be refused anyway), and the one Level she already holds a live enrolment in is excluded — **only that exact pair**, since one beneficiary may hold many enrolments, one per Level. An unknown beneficiary narrows to nothing rather than back to everything. **`sex` is not published and is not added by this filter**: the eligible SET travels and the fact behind it never leaves the service (§4.10, BR-16).",
         "responses": {
           "200": {
             "description": "Every live level, ordered by category then display order."
@@ -7119,10 +7119,10 @@
     "/admin/categories/{categoryId}/subjects/{subjectId}": {
       "put": {
         "summary": "Teach a Subject to a whole Category",
-        "description": "**Super Admin only** (R26, R43.3 — curriculum structure), audited as `categorysubject.assign`. **Idempotent:** a removed row is revived rather than duplicated (the key is `(category_id, subject_id)`).",
+        "description": "**Super Admin only** (R26, R43.3 — curriculum structure), audited as `categorysubject.assign`. **Idempotent:** a removed row is revived rather than duplicated, and a pair that already stands answers `204` with nothing written (the key is `(category_id, subject_id)`).",
         "responses": {
           "204": {
-            "description": "Assigned (or revived)."
+            "description": "Assigned, revived, or already standing."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -7146,16 +7146,6 @@
           },
           "404": {
             "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Category or Subject.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE — already taught to this whole Category.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7280,10 +7270,10 @@
     "/admin/levels/{levelId}/subjects/{subjectId}": {
       "put": {
         "summary": "Assign a Subject to a Level",
-        "description": "**Super Admin only** — which Subjects a Level teaches is curriculum *structure*, alongside the Levels and Subjects themselves (R26) and alongside the Teaching Groups this join gates (R43.3). **Idempotent:** a previously removed assignment is revived rather than duplicated, because the key is `(level_id, subject_id)` and a second row would make *is this Subject taught here* a question with two answers. `PUT` rather than `POST` for the same reason — the operation names a pair, not a new entity.",
+        "description": "**Super Admin only** — which Subjects a Level teaches is curriculum *structure*, alongside the Levels and Subjects themselves (R26) and alongside the Teaching Groups this join gates (R43.3). **Idempotent:** a previously removed assignment is revived rather than duplicated, because the key is `(level_id, subject_id)` and a second row would make *is this Subject taught here* a question with two answers. `PUT` rather than `POST` for the same reason — the operation names a pair, not a new entity — and, since 2026-09-23, **a pair that already stands answers `204` with nothing written** (it answered `DUPLICATE`, which turned one rate-limited read on «مواد المستوى» into a refused save).",
         "responses": {
           "204": {
-            "description": "Assigned."
+            "description": "Assigned, revived, or already standing."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -7307,16 +7297,6 @@
           },
           "404": {
             "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or Subject.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE — already assigned.",
             "content": {
               "application/json": {
                 "schema": {

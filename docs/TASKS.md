@@ -5818,3 +5818,6 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
 - [ ] **`verify-assessment-library.sh` is stale since R136 (24/31)** — expects
       published papers and answers in «الاختبارات», which lists reusable drafts
       only. Restate it against R136's source/occurrence split.
+- [x] **«مواد المستوى» RATE_LIMITED → DUPLICATE (Owner, 2026-09-23):** the
+      per-Level/per-Category fan-out replaced by `subject_ids` on the two list
+      reads; a standing pair is a `204`; harness `verify-level-subjects.sh` 7/7.

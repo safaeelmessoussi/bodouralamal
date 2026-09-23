@@ -374,9 +374,15 @@ export async function assignSubjectToLevel(
       where: { levelId, subjectId },
       select: { id: true, deletedAt: true },
     });
-    if (existing && existing.deletedAt === null) {
-      throw new AppError('DUPLICATE', 'subject is already assigned to this level');
-    }
+    /**
+     * **A pair that already stands is a 204, not a 409** (Staging, 2026-09-23).
+     * `PUT` names membership in a set; asserting it twice changes nothing and
+     * has nothing to refuse. It used to answer `DUPLICATE`, and «مواد المستوى»
+     * — having read a Level's list as empty when the edge rate limit refused
+     * one of its two dozen parallel reads — then re-sent every pair and was
+     * refused for each. Nothing is written and nothing audited: no change.
+     */
+    if (existing && existing.deletedAt === null) return;
     // TD-8's `target_id` is a UUID column, so the audit row points at the JOIN
     // ROW's own id — not a composite `level:subject` string, which is what the
     // first attempt used and what the database rejected outright. The join row
@@ -500,7 +506,7 @@ export async function listCategorySubjects(
   return rows.map((r) => r.subject);
 }
 
-/** Idempotent, reviving a removed row rather than duplicating it — `assignSubjectToLevel`'s rule. */
+/** Idempotent — `assignSubjectToLevel`'s rule: a removed row is revived, a standing one is left alone. */
 export async function assignSubjectToCategory(
   prisma: PrismaClient,
   actor: Actor,
@@ -519,9 +525,8 @@ export async function assignSubjectToCategory(
       where: { categoryId, subjectId },
       select: { id: true, deletedAt: true },
     });
-    if (existing && existing.deletedAt === null) {
-      throw new AppError('DUPLICATE', 'subject is already taught to this whole category');
-    }
+    // A pair that already stands is a 204 — `assignSubjectToLevel`'s rule.
+    if (existing && existing.deletedAt === null) return;
     const id = existing
       ? (
           await tx.categorySubject.update({
