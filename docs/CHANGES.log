@@ -11743,3 +11743,18 @@ scan had let through).
 **Docs:** SRS R172; database (CategorySubject, whole-Category filing, exam evidence), frontend
 (dependent-selector graph), identity-and-access (token renewal), background-jobs (guarantee 3),
 ux-architecture AH (the session, the bar, the storage).
+
+**Hosted CI 8/8 on `75e0c67` (Revision 172), first run — 35857932747. Deployed to Staging at
+`75e0c67`** from `d025409`: recordings asked first (0 active); dump taken (919,170 bytes); two stale
+release images removed; preflight PASS; labels exact; migration `20260926090000` applied; both seeds
+clean; `/healthz` 200, `/rtc/validate` 401; zero error-level lines. **Two Owner-requested acts then
+ran through the platform's own service code inside the api container (one-off script, removed
+after):** her four test exams («اختبار تفسير», «اختبار تفسير سورة الفاتحة», «الاختبار 1» ×2) deleted
+through `deleteExam` with the evidence acknowledged — four Trash entries, `exam.delete` audit rows
+carrying the counts (`submissions: 1, grades: 2, evidence_acknowledged: true` on the closed one);
+and the conference schedule `1c0a065f` (daily 14–18 Sep, zero occurrences) materialised under §2:
+five sessions, now on the public calendar.
+
+**Found in passing, not fixed here:** `scripts/dev/browser/verify-assessment-library.sh` is stale
+since R136 (24/31): it expects the journey's paper to appear published with its answers in
+«الاختبارات», which lists only reusable drafts since R136 §2. Its own repair item.

@@ -5811,3 +5811,10 @@ Detail per item: [SRS Revision 172](SRS.md). One migration (`20260926090000_r172
 - [x] **§7 — «الاختبارات» deletes a paper.**
 - [x] **§8 — «مؤطّرة هذه الحصة» removed from «حصص الجدول»;** the edit and
       cancellation dialogs now carry the shared unsaved guard themselves.
+- [x] **Hosted CI 8/8 on `75e0c67` (Revision 172), first run; deployed to
+      Staging at `75e0c67`** — migration `20260926090000` applied; the Owner's
+      four test exams deleted through `deleteExam` (acknowledged, audited); the
+      conference schedule materialised (5 occurrences, on the public calendar).
+- [ ] **`verify-assessment-library.sh` is stale since R136 (24/31)** — expects
+      published papers and answers in «الاختبارات», which lists reusable drafts
+      only. Restate it against R136's source/occurrence split.
