@@ -11936,3 +11936,11 @@ tsc + lint + 1513/1513; build (fonts emitted as hashed assets); `shoot-pages` 13
 no sideways scroll; harnesses circles-reorder 9/9, circle-branch 10/10, class-filters 21/21,
 weekly-follows-start 4/4. **Not changed:** the Arabic catalogue (the Owner's copy; no
 placeholder text exists to replace); no dark theme.
+
+**Hosted CI on `ac356e7`/`08fb840`: 5/8 — not the redesign.** `effective-staffing.http`
+«§2 — a staffing change never rewrites a past occurrence» hand-created a «past» occurrence at
+`day(-14)` on a weekly-Thursday schedule anchored `day(-30)`; since R172 §2 the materialiser
+owns that date, and on a Wednesday (2026-09-24) `day(-14)` IS a Thursday — `(schedule_id,
+date)` unique. The fixture is now the upsert the R172 §2 rule prescribes (session and its
+staff row); 25/25 on the disposable stack. The certificate keeps brass (`--color-paper-accent`)
+— a printed document is not a screen.

@@ -1,6 +1,10 @@
 /*
  * شهادة إتمام مستوى (SRS Revision 167 §3).
  *
+ * R173 — the certificate keeps BRASS (`--color-paper-accent`) while the screens
+ * moved to saffron: a printed document is not a screen, and this one was
+ * designed on brass.
+ *
  * One drawing at every size: the certificate is an A4-landscape box and every
  * length inside it is in `cqw` — a fraction of ITS OWN width — so the preview
  * in her dashboard, a phone and the printed page differ only in scale.

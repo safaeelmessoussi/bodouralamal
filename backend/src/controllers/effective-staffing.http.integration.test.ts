@@ -455,19 +455,27 @@ describe("§2 — a staffing change never rewrites a past occurrence", () => {
 
   beforeAll(async () => {
     // An occurrence that already happened, staffed by whoever delivered it.
-    const past = await prisma.session.create({
-      data: {
+    // UPSERT, not create (R172 §2): the schedule is weekly on Thursdays from
+    // `day(-30)`, and since the materialiser starts at the anchor it may
+    // already own `day(-14)` — it does on any Wednesday, which is when this
+    // fixture first collided with `(schedule_id, date)` (2026-09-24).
+    const past = await prisma.session.upsert({
+      where: { scheduleId_date: { scheduleId, date: day(-14) } },
+      create: {
         scheduleId,
         date: day(-14),
         startTime: new Date("1970-01-01T15:00:00Z"),
         endTime: new Date("1970-01-01T18:00:00Z"),
         status: "held",
       },
+      update: { status: "held" },
       select: { id: true },
     });
     pastSessionId = past.id;
-    await prisma.sessionStaff.create({
-      data: { sessionId: past.id, userId: safa, position: "teacher" },
+    await prisma.sessionStaff.upsert({
+      where: { sessionId_userId: { sessionId: past.id, userId: safa } },
+      create: { sessionId: past.id, userId: safa, position: "teacher" },
+      update: { position: "teacher" },
     });
   });
 
