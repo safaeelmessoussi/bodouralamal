@@ -20,7 +20,7 @@
   overflow: hidden;
   border-radius: var(--radius-md);
   background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 9%, transparent) 0, transparent 55%),
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-paper-accent) 9%, transparent) 0, transparent 55%),
     radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--color-primary-emphasis) 8%, transparent) 0, transparent 55%),
     var(--color-paper);
   color: var(--color-primary-strong);
@@ -39,7 +39,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 3.4cqw 6cqw 2.6cqw;
-  border: 0.32cqw solid var(--color-accent);
+  border: 0.32cqw solid var(--color-paper-accent);
   outline: 0.12cqw solid var(--color-primary);
   outline-offset: 0.7cqw;
   text-align: center;
@@ -59,13 +59,13 @@
    right edge, so the mirrors above are written for RTL, the platform's only
    direction at launch (§6). */
 .certificate__corner-line {
-  stroke: var(--color-accent);
+  stroke: var(--color-paper-accent);
   stroke-width: 1.6;
   stroke-linecap: round;
 }
 .certificate__corner-star rect {
-  fill: color-mix(in srgb, var(--color-accent) 22%, var(--color-paper));
-  stroke: var(--color-accent);
+  fill: color-mix(in srgb, var(--color-paper-accent) 22%, var(--color-paper));
+  stroke: var(--color-paper-accent);
   stroke-width: 1.4;
 }
 .certificate__corner-dot {
@@ -92,7 +92,7 @@
 .certificate__basmala {
   margin: 0;
   font-size: 1.7cqw;
-  color: var(--color-accent);
+  color: var(--color-paper-accent);
 }
 .certificate__title {
   margin: 0;
@@ -104,8 +104,8 @@
 .certificate__divider {
   width: 30cqw;
   height: 2cqw;
-  fill: var(--color-accent);
-  stroke: var(--color-accent);
+  fill: var(--color-paper-accent);
+  stroke: var(--color-paper-accent);
   stroke-width: 1.2;
 }
 .certificate__line {
@@ -119,11 +119,11 @@
 .certificate__name {
   margin: 0;
   padding: 0 4cqw 0.5cqw;
-  border-block-end: 0.16cqw solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  border-block-end: 0.16cqw solid color-mix(in srgb, var(--color-paper-accent) 70%, transparent);
   font-size: 4.3cqw;
   font-weight: 800;
   line-height: 1.35;
-  color: var(--color-accent);
+  color: var(--color-paper-accent);
 }
 .certificate__level {
   margin: 0;
