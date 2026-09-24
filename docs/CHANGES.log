@@ -11888,3 +11888,51 @@ zero error lines, both migrations applied; the Owner's circles 1 · 2 · 3 of «
 back-filled to «مقر تاركة» from their own classes, so «حلقات المواد» shows the branch on arrival.
 The items 1 + 4 proposal (the first-year memorisation circle and the registration form) is
 published for the Owner's decision and nothing of it is applied.
+
+## 2026-09-24 — SRS Revision 173: the interface redesigned for the women who use it on their phones
+
+**The redesign is the stylesheet.** No markup, adapter, hook, route or state variable changed
+(the Owner's rule); every page composes the shared components, so the token and component
+sheets carry the new identity everywhere and the 1513 frontend tests pass unchanged.
+
+- **`design.mmd`** (repository root) — the visual rulebook: identity (deep emerald + one saffron
+  act), colour roles with measured contrast, Readex Pro + El Messiri and the 17 px scale, tap
+  floors, motion (three durations, one settling curve, CSS only), frames, page anatomy, states,
+  copy, the AI-tells audit, verification.
+- **Tokens:** `primitives.css` (emerald ramp 950–50, saffron ramp, mint neutrals, red-700),
+  `semantic.css` (`-deep/-faint/-line`, `accent-fill/-soft`, `surface-sunken`,
+  `border-subtle/-strong`, `focus-ring/-halo`, `selection`, on-primary set retuned),
+  `radius.css` (softer + `pill`), `elevation.css` (emerald-tinted + `shadow-focus`),
+  `motion.css` (`ease-out/in-out`, `fast/base/slow`), `layout.css` (`--tap-min`,
+  `--tap-comfortable`, `--gutter`), `typography.css` (four `@font-face` subsets, the scale,
+  `--font-family-display`, `--font-mono`).
+- **Fonts:** `frontend/src/styles/fonts/` — Readex Pro and El Messiri, Arabic + Latin subset
+  WOFF2 (45 KB + 55 KB), SIL OFL texts beside them; hashed by Vite into `/assets/`
+  (immutable), `font-display: swap`. CSP unchanged (`default-src 'self'` admits them).
+- **Base:** headings in the display face, `touch-action: manipulation`, controls inherit the
+  face, 20 px checkboxes with the accent, one emerald focus ring.
+- **Components:** button (tap floor, settle on press, primary lifts), header (the dark bar,
+  the lit current-page pill, saffron sign-in, the sheet unfolding in the bar's ground, light
+  popovers), hero + entry tiles, card/callout/footer, forms (labels body-sized, fields 48 px
+  with a focus ring, register steps/sections, `.datatable__toolbar > .field` share the row),
+  dialog (rises, `radius-xl`, bottom-sheet on a phone), admin shell (17 rem sidebar, filled
+  current entry, emerald page title, tables as one surface with hover tint, pill badges,
+  notices), calendar (sunken segmented track, filters, hairline cells, edged chips), content
+  library, date picker (filled selected day), progress, programmes, status/auth (the sign-in
+  sheet).
+- **Fixed in passing:** RTL table overflow reached the document on a phone (page pannable
+  190 px onto nothing; pre-existing) — `.datatable__scroll { position: relative }`; the
+  sign-in `<main>` stretched to the viewport — `#root > main.auth-page { flex: 0 0 auto }`.
+- **Harness:** `scripts/dev/browser/shoot-pages.sh` renders 13 surfaces at 390/1366 px and
+  reports the document width beside each (`scratch/` git-ignored).
+
+**Docs:** SRS R173, TASKS, design-system page (rulebook pointer; the font section rewritten
+as «two faces, self-hosted — and why that is not the web font that was refused»; the third
+verification tool), testing inventory.
+
+**Verification:** `check-design-tokens`, `check-header-nav-exclusive`,
+`check-dialog-hidden-when-closed`, `check-shared-layout`, `check-progress-css`; frontend
+tsc + lint + 1513/1513; build (fonts emitted as hashed assets); `shoot-pages` 13/13 with
+no sideways scroll; harnesses circles-reorder 9/9, circle-branch 10/10, class-filters 21/21,
+weekly-follows-start 4/4. **Not changed:** the Arabic catalogue (the Owner's copy; no
+placeholder text exists to replace); no dark theme.

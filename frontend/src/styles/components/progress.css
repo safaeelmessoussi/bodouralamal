@@ -38,17 +38,16 @@
 .progress__track {
   block-size: 0.75rem;
   inline-size: 100%;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   background: var(--color-primary-soft);
-  /* Clips the fill, so a full bar keeps the track's rounded ends. */
   overflow: hidden;
 }
 
 .progress__fill {
   block-size: 100%;
-  background: var(--color-primary);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-emphasis));
   border-radius: inherit;
-  transition: inline-size 200ms ease;
+  transition: inline-size var(--transition-slow);
 }
 
 /* Done reads differently from merely far along, without relying on colour

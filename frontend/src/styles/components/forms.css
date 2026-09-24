@@ -13,13 +13,16 @@
 
 .field {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
   min-width: 0;
 }
+/* The label is read BEFORE the box, so it is body-sized and dark — a small
+   grey caption above a field is the first thing a tired eye skips. */
 .field__label {
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
 }
 /* Marked visually AND programmatically — the asterisk is aria-hidden and the
    control carries `required`, so neither channel is the only one. */
@@ -27,17 +30,34 @@
   margin-inline-start: 0.15rem;
   color: var(--color-danger);
 }
+/* The box: tall enough for a thumb, a firm edge, and a ring — not a colour
+   change alone — when it is the one being typed in. */
 .field__control {
   width: 100%;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  min-block-size: var(--tap-comfortable);
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+.field__control:hover:not(:disabled) {
+  border-color: var(--color-primary-emphasis);
+}
+.field__control:focus-visible {
+  outline: none;
+  border-color: var(--color-primary-emphasis);
+  box-shadow: var(--shadow-focus);
+}
+.field__control::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
 }
 .field__control:disabled {
-  background: var(--color-background);
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border);
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
@@ -60,9 +80,13 @@
 .field--invalid .field__control {
   border-color: var(--color-danger);
 }
+.field--invalid .field__control:focus-visible {
+  box-shadow: 0 0 0 4px var(--color-danger-soft);
+}
 .field__hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+  line-height: 1.5;
   max-width: 52ch;
 }
 /* The Arabic echo of a chosen date: the native control shows it in the
@@ -95,7 +119,8 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  min-block-size: var(--tap-min);
   cursor: pointer;
 }
 .field--choice input {
@@ -141,7 +166,7 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   justify-content: end;
-  padding-block-start: var(--space-2);
+  padding-block-start: var(--space-3);
 }
 .confirm {
   display: grid;
@@ -160,18 +185,23 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  /* **`start`, not `end`.** Bottom-aligning the boxes lines up whatever each
-     field happens to end with — and a field carrying a hint (the search box
-     does, for TD-10's two-character floor) is taller than one that does not, so
-     its INPUT sat higher than the selects beside it. Every field is
-     label-then-control, so aligning the tops aligns the controls; a hint then
-     hangs below its own field instead of shoving it upward. */
   align-items: start;
 }
 /* Wide tables scroll in their own container, so the page body never scrolls
    sideways. */
 .datatable__scroll {
+  /* The table scrolls INSIDE this box (design.mmd §6). Two floors keep it
+     there: a grid child's min-width is `auto`, so without `min-inline-size: 0`
+     a wide table pushed the whole page sideways; and in RTL a scroller that is
+     not its content's containing block lets the table's start-side overflow
+     reach the DOCUMENT — the page could be panned 190 px to the left on a
+     phone with nothing there (found on «حلقات المواد», 2026-09-24; it
+     pre-dated the redesign). `position: relative` is what makes the clip hold. */
+  position: relative;
   overflow-x: auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 /* **The zero-row message spans the table rather than replacing it.** The state
    components inside are block-level and carry their own spacing, so the cell
@@ -179,7 +209,8 @@
    text under the columns it describes. */
 .admin-table__empty-row > td {
   text-align: center;
-  padding-block: var(--space-4);
+  padding-block: var(--space-8);
+  color: var(--color-text-muted);
 }
 .datatable__skeleton {
   display: grid;
@@ -202,6 +233,9 @@
 
 /* Destructive row actions read apart without shouting — the confirmation is
    where the weight belongs, not the trigger. */
+.btn--ghost.is-danger {
+  color: var(--color-danger);
+}
 .btn--ghost.is-danger:hover,
 .btn--danger {
   background: var(--color-danger-soft);
@@ -209,6 +243,7 @@
 }
 .btn--danger:hover {
   background: var(--color-danger);
+  border-color: var(--color-danger);
   color: var(--color-text-inverse);
 }
 
@@ -224,9 +259,9 @@
 .pagination__status {
   min-width: 9rem;
   text-align: center;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -296,13 +331,14 @@
   content: counter(register-step);
   display: inline-grid;
   place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
   border-radius: var(--radius-full);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-primary);
+  border: 0;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .register-form {
@@ -333,6 +369,12 @@
   margin: 0;
   counter-increment: register-section;
 }
+/* The section a person is filling in lifts a little, so a long form always
+   says where she is. */
+.register-form__group:focus-within {
+  border-color: var(--color-primary-line);
+  box-shadow: var(--shadow-md);
+}
 /* **The legend is the card's heading, INSIDE the card.** A rendered legend sits
    astride the fieldset's border, which is what made every section read as a
    captioned hairline box. Floating it takes it out of that special layout (it
@@ -349,7 +391,8 @@
   padding: 0;
   margin: 0 0 var(--space-2);
   padding-block-end: var(--space-3);
-  border-block-end: 1px solid var(--color-border);
+  border-block-end: 1px solid var(--color-border-subtle);
+  font-family: var(--font-family-display);
   font-weight: 700;
   font-size: var(--font-size-md);
   color: var(--color-primary-strong);
@@ -359,12 +402,14 @@
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  inline-size: 2rem;
-  block-size: 2rem;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
   border-radius: var(--radius-full);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-family: var(--font-family-base);
   font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
 }
 /* A child's card sits INSIDE the children section: it is a part of step N, not
    a step of its own, so it neither counts nor wears a number. */
@@ -438,9 +483,10 @@
 }
 .register-form > .register-form__actions .btn {
   min-inline-size: 14rem;
+  min-block-size: 3.25rem;
   justify-content: center;
   padding-block: var(--space-4);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 @media (max-width: 43.99rem) {
   .register-form > .register-form__actions .btn {
@@ -452,7 +498,7 @@
 .check {
   display: flex;
   align-items: start;
-  gap: var(--space-2);
+  gap: var(--space-3);
   cursor: pointer;
 }
 .check input {
@@ -467,8 +513,10 @@
   border: 0;
   background: none;
   font: inherit;
+  font-weight: 600;
   color: var(--color-primary);
   text-decoration: underline;
+  text-underline-offset: 0.15em;
   cursor: pointer;
 }
 .link-button:hover {
@@ -532,10 +580,12 @@
   display: grid;
   gap: var(--space-2);
   margin-block-start: var(--space-2);
-  padding: var(--space-2);
+  padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  animation: menu-panel-in var(--transition-base);
 }
 
 /* The atomic multi-select (2026-08-13; collapsed behind a trigger, R137) and
@@ -565,7 +615,11 @@
   padding-block: var(--space-2);
 }
 .multi-select__options .field--choice {
-  padding-block: 0.35rem;
+  padding: 0.35rem var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.multi-select__options .field--choice:hover {
+  background: var(--color-primary-faint);
 }
 
 /**
@@ -637,9 +691,10 @@
    inside legal text, which must not push the form wider on a phone. */
 .consent-notice__text {
   max-width: 100%;
-  padding: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
   white-space: pre-line;
   overflow-wrap: anywhere;
   line-height: 1.8;
@@ -662,8 +717,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
@@ -671,11 +726,11 @@
 .circle-ranking__rank {
   display: inline-grid;
   place-items: center;
-  min-width: 1.75rem;
-  height: 1.75rem;
+  min-width: 2rem;
+  height: 2rem;
   border-radius: var(--radius-full);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -685,4 +740,10 @@
 .circle-ranking__moves {
   display: inline-flex;
   gap: var(--space-1);
+}
+
+.datatable__toolbar > .field {
+  /* Filters share the row evenly; the search box may grow but never alone. */
+  flex: 1 1 13rem;
+  min-inline-size: 0;
 }

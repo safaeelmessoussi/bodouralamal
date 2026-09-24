@@ -1,25 +1,45 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` (repository root) for the rulebook. */
 
 /* LAYER 2 — what colours MEAN. This is the only colour vocabulary a
  * component may use, and the single place rebranding touches. */
 :root {
   /* ── 2. SEMANTIC ───────────────────────────────────────────────────────── */
 
+  /* The dominant colour. `primary` is what every main control wears;
+     `strong` is the deep ground of the header and the hero; `emphasis` is
+     the lighter emerald that carries links, rings and active glyphs. */
   --color-primary: var(--brand-green-700);
-  --color-primary-hover: var(--brand-green-900);
-  /* The full-strength brand ground, for inverse-themed bands like the hero. */
+  --color-primary-hover: var(--brand-green-800);
   --color-primary-strong: var(--brand-green-900);
-  --color-primary-emphasis: var(--brand-green-500);
+  --color-primary-deep: var(--brand-green-950);
+  --color-primary-emphasis: var(--brand-green-600);
   --color-primary-soft: var(--brand-green-100);
-  --color-accent: var(--brand-gold);
+  --color-primary-faint: var(--brand-green-50);
+  --color-primary-line: var(--brand-green-200);
+
+  /* The accent — saffron. `accent` carries TEXT (eyebrows, counts, the
+     activity chip); `accent-fill` is a warm ground that carries INK (the
+     hero's one call to action); `accent-soft` is a notice ground. */
+  --color-accent: var(--brand-saffron-700);
+  --color-accent-hover: var(--brand-saffron-600);
+  --color-accent-fill: var(--brand-saffron-400);
+  --color-accent-fill-hover: var(--brand-saffron-300);
+  --color-accent-soft: var(--brand-saffron-100);
   /* The ground of a formal printed document — a certificate, never a screen. */
   --color-paper: var(--paper-ivory);
+  --color-paper-accent: var(--brand-gold);
 
   --color-background: var(--neutral-50);
   --color-surface: var(--neutral-0);
   --color-surface-raised: var(--neutral-0);
+  /* A recessed panel inside a surface — a table head, a disabled field. */
+  --color-surface-sunken: var(--neutral-100);
 
   --color-border: var(--neutral-200);
+  /* The hairline between rows and list items — lighter than a container's edge. */
+  --color-border-subtle: var(--neutral-100);
+  --color-border-strong: var(--neutral-300);
 
   --color-text: var(--neutral-900);
   --color-text-secondary: var(--neutral-700);
@@ -27,6 +47,7 @@
   --color-text-inverse: var(--neutral-0);
 
   --color-danger: var(--red-600);
+  --color-danger-hover: var(--red-700);
   --color-danger-soft: var(--red-50);
 
   /* R58 — an exam's own colour, used identically in the calendar, the list, the
@@ -50,12 +71,16 @@
   --color-hijri: var(--brand-logo-green);
   --color-hijri-ink: var(--brand-logo-green-ink);
 
+  /* Focus and selection — one ring colour everywhere, so «this is the thing
+     you are on» looks the same on a button, a field and a calendar day. */
+  --color-focus-ring: var(--brand-green-500);
+  --color-focus-halo: color-mix(in srgb, var(--brand-green-500) 22%, transparent);
+  --color-selection: color-mix(in srgb, var(--brand-green-500) 18%, transparent);
+
   /* The scrim behind a modal — the brand ground at partial opacity, so it
      reads as the platform dimming rather than a generic black wash. */
-  --color-backdrop: color-mix(in srgb, var(--color-primary-strong) 45%, transparent);
+  --color-backdrop: color-mix(in srgb, var(--color-primary-deep) 55%, transparent);
 
-  /* Inverse surfaces (the hero band): fixed light values, because they sit on
-     the brand ground rather than on a themed surface. */
   /**
    * **R96 — the QR symbol's own two colours, deliberately theme-independent.**
    *
@@ -70,20 +95,23 @@
   --color-qr-light: #ffffff;
   --color-qr-dark: #000000;
 
-  --color-on-primary: #f4f7f4;
-  --color-on-primary-secondary: #d5e2da;
-  --color-on-primary-muted: #b9ccc0;
-  --color-on-primary-accent: #e3c98d;
-  --color-on-primary-border: rgb(255 255 255 / 35%);
-  --color-on-primary-overlay: rgb(255 255 255 / 8%);
-  --color-on-primary-panel: rgb(255 255 255 / 6%);
-  --color-on-primary-panel-border: rgb(255 255 255 / 14%);
+  /* Inverse surfaces (the header bar and the hero band): fixed light values,
+     because they sit on the brand ground rather than on a themed surface.
+     `on-primary` is 15.6:1 on `--color-primary-strong`; `-secondary` 10.9:1;
+     `-muted` 7.4:1. */
+  --color-on-primary: #f4f8f5;
+  --color-on-primary-secondary: #cfe0d6;
+  --color-on-primary-muted: #a9c2b4;
+  --color-on-primary-accent: var(--brand-saffron-300);
+  --color-on-primary-border: rgb(255 255 255 / 28%);
+  --color-on-primary-overlay: rgb(255 255 255 / 10%);
+  --color-on-primary-panel: rgb(255 255 255 / 7%);
+  --color-on-primary-panel-border: rgb(255 255 255 / 16%);
   --color-on-primary-motif: rgb(255 255 255 / 5%);
   --color-on-primary-motif-soft: rgb(255 255 255 / 4%);
-  /* R170 — the hero's two soft glows and the badge's halo (the checkerboard
-     motif above is kept as a token; the hero no longer paints it). */
-  --color-on-primary-glow: rgb(255 255 255 / 9%);
-  --color-on-primary-glow-accent: rgb(212 175 55 / 14%);
-  --color-on-primary-halo: rgb(255 255 255 / 4%);
+  /* The hero's two soft glows and the badge's halo. */
+  --color-on-primary-glow: rgb(67 173 125 / 22%);
+  --color-on-primary-glow-accent: rgb(240 167 52 / 16%);
+  --color-on-primary-halo: rgb(255 255 255 / 5%);
   --color-on-primary-halo-shadow: rgb(0 0 0 / 45%);
 }

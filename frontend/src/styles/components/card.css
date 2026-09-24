@@ -29,6 +29,7 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -61,6 +62,7 @@
 /* `.card__title` stays: `BranchCard` (`branch-card.tsx`) uses it directly,
  * unrelated to the `Card` component this file used to also define. */
 .card__title {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-md);
 }
 
@@ -73,8 +75,8 @@
 .callout {
   padding: clamp(1.5rem, 4vw, 2.5rem);
   background: var(--color-primary-soft);
-  border: 1px solid color-mix(in srgb, var(--color-primary-emphasis) 25%, transparent);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-primary-line);
+  border-radius: var(--radius-xl);
   text-align: center;
   display: grid;
   gap: var(--space-4);

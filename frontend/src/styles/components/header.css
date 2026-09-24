@@ -8,8 +8,9 @@
   inset-block-start: -4rem;
   z-index: 100;
   padding: 0.6rem var(--space-4);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
+  background: var(--color-accent-fill);
+  color: var(--color-text);
+  font-weight: 700;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   text-decoration: none;
   transition: inset-block-start var(--transition-fast);
@@ -18,13 +19,18 @@
   inset-block-start: 0;
 }
 
+/* **The bar is the brand's deep emerald** (design.mmd §2): one dark band at
+   the top of every screen is what makes the platform recognisable at a glance
+   on a phone — «the green app» — and what lets the page below it stay light
+   and quiet. Everything inside it wears the `on-primary` set. */
 .app-header {
   position: sticky;
   inset-block-start: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-block-end: 1px solid var(--color-border);
+  background: linear-gradient(180deg, var(--color-primary-strong), var(--color-primary-deep));
+  color: var(--color-on-primary);
+  border-block-end: 1px solid var(--color-on-primary-panel-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .app-header__bar {
@@ -45,7 +51,11 @@
 .logo-link__mark {
   display: block;
   width: auto;
-  height: 2.4rem;
+  height: 2.6rem;
+  /* The mark sits in a small light disc so its green arch reads on the green bar. */
+  padding: 0.2rem;
+  border-radius: var(--radius-full);
+  background: var(--color-on-primary);
 }
 .logo-link__text {
   display: flex;
@@ -53,8 +63,9 @@
   line-height: 1.15;
 }
 .logo-link__name {
+  font-family: var(--font-family-display);
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
 }
 
 .app-header__nav {
@@ -69,6 +80,31 @@
   /* Pushed to the inline END — the far LEFT of the bar in RTL. */
   margin-inline-start: auto;
 }
+/* On the dark bar the filled action is SAFFRON — the one warm thing on the
+   band — and the outlined ones take the on-primary set. An emerald button on
+   the emerald bar would vanish. */
+.app-header__actions .btn--primary {
+  background: var(--color-accent-fill);
+  border-color: var(--color-accent-fill);
+  color: var(--color-text);
+  box-shadow: none;
+}
+.app-header__actions .btn--primary:hover {
+  background: var(--color-accent-fill-hover);
+  border-color: var(--color-accent-fill-hover);
+}
+.app-header__actions .btn--secondary,
+.app-header__actions .btn--ghost {
+  background: var(--color-on-primary-panel);
+  border-color: var(--color-on-primary-border);
+  color: var(--color-on-primary);
+}
+.app-header__actions .btn--secondary:hover,
+.app-header__actions .btn--ghost:hover {
+  background: var(--color-on-primary-overlay);
+  border-color: var(--color-on-primary);
+  color: var(--color-on-primary);
+}
 
 .nav-menu {
   display: flex;
@@ -80,21 +116,26 @@
 }
 
 .nav-item {
-  display: block;
-  padding: var(--space-2) 0.85rem;
+  display: flex;
+  align-items: center;
+  min-block-size: var(--tap-min);
+  padding: var(--space-2) 0.9rem;
   border-radius: var(--radius-md);
   text-decoration: none;
-  color: var(--color-text-secondary);
+  color: var(--color-on-primary-secondary);
   font-weight: 600;
   white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 .nav-item:hover {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-on-primary);
 }
+/* The current page is a lit pill — the one thing in the bar that is not
+   translucent, so «where am I» is answered without reading. */
 .nav-item[aria-current='page'] {
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
+  color: var(--color-primary-deep);
+  background: var(--color-on-primary);
 }
 
 /*
@@ -116,13 +157,19 @@
   margin-inline-start: auto;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid var(--color-border);
+  width: var(--tap-comfortable);
+  height: var(--tap-comfortable);
+  border: 1.5px solid var(--color-on-primary-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
+  background: var(--color-on-primary-panel);
+  color: var(--color-on-primary);
   cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.app-header__burger:hover,
+.app-header__burger[aria-expanded='true'] {
+  background: var(--color-on-primary-overlay);
+  border-color: var(--color-on-primary);
 }
 
 /* Narrow: burger only. */
@@ -160,10 +207,24 @@
 
 /* ── Mobile menu ─────────────────────────────────────────────────────────── */
 
+/* The sheet under the bar keeps the bar's ground, so opening it reads as the
+   bar unfolding rather than a second surface arriving. */
 .mobile-menu {
-  border-block-start: 1px solid var(--color-border);
-  background: var(--color-surface);
-  padding-block: var(--space-4);
+  border-block-start: 1px solid var(--color-on-primary-panel-border);
+  background: var(--color-primary-deep);
+  color: var(--color-on-primary);
+  padding-block: var(--space-4) var(--space-5);
+  animation: mobile-menu-in var(--transition-base);
+}
+@keyframes mobile-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .mobile-menu__list {
   list-style: none;
@@ -173,14 +234,60 @@
   gap: 0.15rem;
 }
 .mobile-menu .nav-item {
-  padding: 0.8rem 0.85rem;
-  font-size: 1.05rem;
+  min-block-size: var(--tap-comfortable);
+  padding: 0.8rem 1rem;
+  font-size: var(--font-size-md);
 }
 .mobile-menu__actions {
   display: grid;
   gap: 0.6rem;
   padding-block-start: var(--space-4);
-  border-block-start: 1px solid var(--color-border);
+  border-block-start: 1px solid var(--color-on-primary-panel-border);
+}
+/* Inside the dark sheet the outlined controls take the on-primary set. */
+.mobile-menu .btn--secondary,
+.mobile-menu .menu__trigger {
+  background: var(--color-on-primary-panel);
+  border-color: var(--color-on-primary-border);
+  color: var(--color-on-primary);
+}
+.mobile-menu .btn--secondary:hover,
+.mobile-menu .menu__trigger:hover {
+  background: var(--color-on-primary-overlay);
+  border-color: var(--color-on-primary);
+  color: var(--color-on-primary);
+}
+.mobile-menu .btn--primary {
+  background: var(--color-accent-fill);
+  border-color: var(--color-accent-fill);
+  color: var(--color-text);
+}
+.mobile-menu .btn--primary:hover {
+  background: var(--color-accent-fill-hover);
+  border-color: var(--color-accent-fill-hover);
+}
+.mobile-menu .menu__option,
+.mobile-menu .menu__group-label {
+  color: var(--color-on-primary);
+}
+.mobile-menu .menu__group-label {
+  color: var(--color-on-primary-muted);
+}
+.mobile-menu .menu__option:hover {
+  background: var(--color-on-primary-overlay);
+  color: var(--color-on-primary);
+}
+.mobile-menu .menu__option[aria-checked='true'] {
+  color: var(--color-on-primary-accent);
+}
+.mobile-menu .menu__check {
+  color: var(--color-on-primary-accent);
+}
+.mobile-menu .menu__sep {
+  background: var(--color-on-primary-panel-border);
+}
+.mobile-menu .install-steps {
+  color: var(--color-on-primary-secondary);
 }
 /* R167 §4 — «تثبيت التطبيق» renders nothing where there is nothing to offer
    (already installed, or a desktop that cannot); its row then takes no room. */
@@ -203,35 +310,53 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--color-border);
+  min-block-size: var(--tap-min);
+  padding: 0.45rem 0.8rem;
+  border: 1.5px solid var(--color-on-primary-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
+  background: var(--color-on-primary-panel);
+  color: var(--color-on-primary);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   max-width: 14rem;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
-.menu__trigger:hover {
-  border-color: var(--color-primary-emphasis);
+.menu__trigger:hover,
+.menu__trigger[aria-expanded='true'] {
+  background: var(--color-on-primary-overlay);
+  border-color: var(--color-on-primary);
 }
 .menu__label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The popover is a light sheet again: it floats over the PAGE, not the bar. */
 .menu__panel {
   position: absolute;
-  inset-block-start: calc(100% + 0.4rem);
+  inset-block-start: calc(100% + 0.5rem);
   inset-inline-end: 0;
-  min-width: 14rem;
+  min-width: 15rem;
   padding: 0.4rem;
   background: var(--color-surface-raised);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   z-index: 60;
+  animation: menu-panel-in var(--transition-base);
+  transform-origin: top;
+}
+@keyframes menu-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .menu__group-label {
   padding: 0.4rem 0.6rem;
@@ -244,14 +369,16 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: 0.55rem 0.6rem;
+  min-block-size: var(--tap-min);
+  padding: 0.55rem 0.7rem;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text);
   font: inherit;
   text-align: start;
   cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 .menu__option:hover {
   background: var(--color-primary-soft);
@@ -302,16 +429,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-inline-size: var(--tap-min);
+  min-block-size: var(--tap-min);
   padding: var(--space-2);
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   border-radius: var(--radius-md);
   background: none;
-  color: var(--color-text-secondary);
+  color: var(--color-on-primary-secondary);
   cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 .bell__trigger:hover {
-  background: var(--color-surface);
-  color: var(--color-primary);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-on-primary);
 }
 /* The count rides the icon's corner. `pointer-events: none` so it can never
    swallow the click that opens the panel. */
@@ -321,10 +451,11 @@
   inset-inline-end: 0;
   min-inline-size: 1.1rem;
   padding-inline: 0.25rem;
-  border-radius: var(--radius-full);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-fill);
+  color: var(--color-text);
   font-size: var(--font-size-xs);
+  font-weight: 700;
   line-height: 1.1rem;
   text-align: center;
   pointer-events: none;
@@ -344,5 +475,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
+  color: var(--color-text);
   box-shadow: var(--shadow-md);
+  animation: menu-panel-in var(--transition-base);
 }

@@ -1,4 +1,5 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` (repository root) for the rulebook every value below answers to. */
 
 /* LAYER 1 — the association's actual colours. Only `semantic.css` reads
  * these; a component that names one has hardcoded a branding decision. */
@@ -7,14 +8,32 @@
 
   /* ── 1. PRIMITIVES ─────────────────────────────────────────────────────── */
 
-  /* Moroccan zellij green — the association's identity. */
+  /* Moroccan zellij emerald — the association's identity, now a full ramp so
+     the dominant colour can be DEEP (the header, the hero), CONFIDENT (every
+     primary control) and SOFT (a selected row) without three ad-hoc greens.
+     Contrast on white, measured (design.mmd §3): 950 16.2 · 900 13.1 ·
+     800 10.3 · 700 7.9 · 600 5.6 · 500 3.9 (graphics only) · 400 2.8 (fills
+     that carry ink, never text). */
+  --brand-green-950: #04261a;
   --brand-green-900: #073826;
-  --brand-green-700: #0b4a33;
-  --brand-green-500: #146b4a;
-  --brand-green-100: #e6f0ea;
+  --brand-green-800: #0a4a33;
+  --brand-green-700: #0f5d41;
+  --brand-green-600: #15764f;
+  --brand-green-500: #1f9260;
+  --brand-green-400: #43ad7d;
+  --brand-green-200: #c5e3d2;
+  --brand-green-100: #e3f1e8;
+  --brand-green-50: #f0f7f3;
 
-  /* Brass, the single accent. Dark enough to carry text at 4.5:1 on both the
-     surface and the background — it is used for eyebrows and step numbers. */
+  /* Saffron — the warmth of the association's orange, ramped: 700 carries
+     TEXT (6.6:1 on white), 400 is a FILL under ink (8.3:1) — the one warm
+     call to action on the emerald hero — and 100 is a notice ground. */
+  --brand-saffron-700: #8a4f06;
+  --brand-saffron-600: #a35f08;
+  --brand-saffron-400: #f0a734;
+  --brand-saffron-300: #f7c46a;
+  --brand-saffron-100: #fdf0d8;
+  /* Brass — kept as the printed certificate's accent (R167 §3). */
   --brand-gold: #8f6720;
   /* The warm paper a printed document sits on (R167 §3 — شهادة إتمام مستوى). */
   --paper-ivory: #fffdf7;
@@ -48,22 +67,26 @@
   --brand-logo-orange-ink: #a86206;
   --brand-logo-green-ink: #64791a;
 
-  /* Neutrals, biased warm-green so nothing reads as unconsidered grey. */
+  /* Neutrals, biased mint so nothing reads as unconsidered grey. Measured on
+     white: 900 16.9 · 700 10.1 · 600 5.7 (the floor for small text). */
   --neutral-0: #ffffff;
-  --neutral-50: #f5f7f5;
-  --neutral-200: #e3e8e4;
-  --neutral-600: #52605a;
-  --neutral-700: #35433d;
-  --neutral-900: #14201b;
+  --neutral-50: #f3f7f4;
+  --neutral-100: #e9efeb;
+  --neutral-200: #d6e0da;
+  --neutral-300: #bfcdc5;
+  --neutral-600: #5b6a62;
+  --neutral-700: #35453d;
+  --neutral-900: #11201a;
 
   --red-50: #fdeeed;
-  --red-600: #a81f18;
+  --red-600: #b3261e;
+  --red-700: #9c1f18;
 
   /* R58 — the exam hue. A THIRD colour, deliberately: zellij green already
-     means "class" and brass means "activity", so an exam that borrowed either
+     means "class" and saffron means "activity", so an exam that borrowed either
      would be the one thing on a timetable a reader must not misread. Violet is
      far from both on the wheel and from the red that means danger — an exam is
-     significant, not an error. Measured 8.6:1 on `--neutral-0`, so it carries
+     significant, not an error. Measured 9.1:1 on `--neutral-0`, so it carries
      as TEXT and not only as a fill. */
   --violet-50: #f6eefb;
   --violet-700: #6b2496;

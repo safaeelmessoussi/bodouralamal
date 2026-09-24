@@ -7,7 +7,8 @@
   overflow: hidden;
   background: var(--color-primary-strong);
   color: var(--color-on-primary);
-  padding-block: clamp(3.5rem, 11vw, 7.5rem);
+  /* Room below for the three doors that overlap its lower edge. */
+  padding-block: clamp(3rem, 9vw, 6.5rem) clamp(5rem, 12vw, 8.5rem);
 }
 
 /*
@@ -23,9 +24,9 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(38rem 24rem at 18% 50%, var(--color-on-primary-glow), transparent 70%),
-    radial-gradient(30rem 22rem at 82% 40%, var(--color-on-primary-glow-accent), transparent 70%),
-    linear-gradient(160deg, var(--color-primary-strong), var(--color-primary-emphasis));
+    radial-gradient(40rem 26rem at 15% 45%, var(--color-on-primary-glow), transparent 70%),
+    radial-gradient(28rem 20rem at 85% 30%, var(--color-on-primary-glow-accent), transparent 70%),
+    linear-gradient(165deg, var(--color-primary-deep) 0%, var(--color-primary-strong) 55%, var(--color-primary-hover) 100%);
   pointer-events: none;
 }
 .hero::after {
@@ -58,15 +59,16 @@
 }
 .hero__title {
   font-size: var(--font-size-2xl);
-  line-height: 1.2;
+  line-height: 1.18;
   margin-block-end: var(--space-4);
   text-wrap: balance;
+  color: var(--color-on-primary);
 }
 .hero__lede {
   color: var(--color-on-primary-secondary);
   font-size: var(--font-size-md);
-  line-height: 1.75;
-  max-width: 46ch;
+  line-height: 1.7;
+  max-width: 44ch;
 }
 .hero__actions {
   display: flex;
@@ -74,15 +76,37 @@
   gap: var(--space-3);
   margin-block-start: var(--space-8);
 }
+/* The hero's primary action is the saffron one: the warm door on the green
+   ground, big enough for a thumb. */
+.hero .btn--primary {
+  min-block-size: var(--tap-comfortable);
+  padding-inline: 1.6rem;
+  background: var(--color-accent-fill);
+  border-color: var(--color-accent-fill);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  box-shadow: 0 12px 28px -12px var(--color-on-primary-halo-shadow);
+}
+.hero .btn--primary:hover {
+  background: var(--color-accent-fill-hover);
+  border-color: var(--color-accent-fill-hover);
+}
 .hero .btn--secondary {
-  background: transparent;
+  min-block-size: var(--tap-comfortable);
+  background: var(--color-on-primary-panel);
   border-color: var(--color-on-primary-border);
-  color: var(--color-text-inverse);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-md);
 }
 .hero .btn--secondary:hover {
-  border-color: var(--color-text-inverse);
+  border-color: var(--color-on-primary);
   background: var(--color-on-primary-overlay);
-  color: var(--color-text-inverse);
+  color: var(--color-on-primary);
+}
+@media (max-width: 43.99rem) {
+  .hero__actions .btn {
+    flex: 1 1 100%;
+  }
 }
 .hero__note {
   margin-block-start: var(--space-5);
@@ -157,24 +181,30 @@
   box-shadow: var(--shadow-md);
   color: var(--color-text);
   text-decoration: none;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-fast);
 }
 .entry__tile:hover,
 .entry__tile:focus-visible {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: var(--color-primary-emphasis);
   box-shadow: var(--shadow-lg);
 }
 .entry__icon {
   display: inline-grid;
   place-items: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
+  inline-size: 3rem;
+  block-size: 3rem;
   border-radius: var(--radius-md);
   background: var(--color-primary-soft);
   color: var(--color-primary);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.entry__tile:hover .entry__icon {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
 }
 .entry__title {
+  font-family: var(--font-family-display);
   font-weight: 700;
   font-size: var(--font-size-md);
 }

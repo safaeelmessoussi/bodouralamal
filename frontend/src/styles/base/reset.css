@@ -1,3 +1,136 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` for the rulebook. */
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
+html {
+  scroll-behavior: smooth;
+  /* Arabic line-breaking and the body size decided once, here. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* A tap answers at once — no 300 ms wait, no double-tap zoom on controls. */
+  touch-action: manipulation;
+}
+
+::selection {
+  background: var(--color-selection);
+}
+
+/* Headings wear the display face. Weight carries them, not tracking:
+   Arabic letters connect, and a negative track breaks the joins. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-family-display);
+  font-weight: var(--font-weight-display);
+  line-height: var(--line-height-tight);
+  text-wrap: balance;
+  margin: 0;
+  letter-spacing: 0;
+}
+h4,
+h5,
+h6 {
+  margin: 0;
+  line-height: var(--line-height-tight);
+  font-weight: 700;
+}
+
+/* **A reading measure for prose — and the reason the exception below exists.**
+ *
+ * 64ch is right for a paragraph somebody reads. It is wrong for the short
+ * explanation under a table, which belongs to the table's width: the reorder
+ * hint on المستويات wrapped its last word onto a line of its own with half the
+ * row still empty beside it.
+ *
+ * The cap is on the ELEMENT, so it reaches every `<p>` in the application
+ * whether or not that paragraph is prose — and the evidence that this bites
+ * repeatedly is that **six components had already patched it locally** with
+ * `max-width: none` (the dual title, the day dialog's date, the action message,
+ * the confirm body, the preview description, the mobile trigger). Each was a
+ * correct local fix for a defect that was never local.
+ */
+p {
+  margin: 0;
+  max-width: var(--measure);
+}
+
+/**
+ * **UI text is not prose, and does not take the prose measure.**
+ *
+ * Text bound to a control, a table or a state uses the width of the thing it
+ * belongs to. Listing the families here — rather than adding a class each
+ * component must remember — is deliberate: a behaviour every caller has to opt
+ * into is a behaviour that will be missing from the next component somebody
+ * writes (rule AE). A new component gets this by using the shared classes it was
+ * going to use anyway.
+ *
+ * This is NOT a licence to un-cap long copy: a paragraph a person reads keeps
+ * `--measure`, and `--measure-lede` remains the page description's wider one.
+ */
+.table-note,
+.datatable__reorder,
+.state p,
+.admin-notice,
+.admin-panel__hint,
+.field__hint,
+.cal-title,
+.confirm__body,
+.preview__description {
+  max-width: none;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.15em;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Every control inherits the face and answers a finger: nothing on the
+   platform is smaller than the tap floor, whatever the component. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button,
+select,
+input[type='checkbox'],
+input[type='radio'] {
+  cursor: pointer;
+}
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--color-primary);
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+/* One focus ring everywhere — the emerald ring, offset so it never hides
+   the edge of what it marks. */
+:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}

@@ -1,42 +1,82 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` §6 for the control rules. */
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
+/* Every button clears the tap floor (`--tap-min`), sits on a soft radius and
+   answers a press by settling a hair — never by growing. The label is what a
+   person reads, so it is weight 600 in the body face, never uppercase, never
+   tracked. */
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
-  padding: 0.7rem 1.35rem;
-  border: 1px solid transparent;
+  min-block-size: var(--tap-min);
+  padding: 0.6rem 1.25rem;
+  border: 1.5px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text);
   font: inherit;
   font-weight: 600;
+  line-height: 1.3;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* The one filled control on a screen: emerald, with a lift on hover. */
 .btn--primary {
   background: var(--color-primary);
+  border-color: var(--color-primary);
   color: var(--color-text-inverse);
+  box-shadow: var(--shadow-sm);
 }
 .btn--primary:hover {
   background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  box-shadow: var(--shadow-md);
 }
+.btn--primary:active {
+  box-shadow: var(--shadow-sm);
+}
+
+/* The quiet companion: an outlined surface that colours on hover. */
 .btn--secondary {
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-text);
 }
 .btn--secondary:hover {
   border-color: var(--color-primary-emphasis);
+  background: var(--color-primary-faint);
+  color: var(--color-primary);
+}
+
+/* A row action, a link-like control: nothing until pointed at. */
+.btn--ghost {
   color: var(--color-primary);
 }
 .btn--ghost:hover {
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-hover);
 }
+
 /* The add/create marker (2026-08-17). `add` IS `primary` — same emphasis, same
    palette — and this modifier only sets the glyph apart from the label it
    precedes, so «＋ إضافة حلقة» does not read as one run-together word. The
@@ -68,15 +108,17 @@
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--color-border);
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .icon-button:hover {
   border-color: var(--color-primary-emphasis);
+  background: var(--color-primary-faint);
   color: var(--color-primary);
 }

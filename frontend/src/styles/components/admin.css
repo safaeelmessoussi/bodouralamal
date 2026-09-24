@@ -12,15 +12,16 @@
 .admin {
   display: grid;
   gap: var(--space-8);
-  width: min(100% - var(--space-8), 96rem);
+  width: min(100% - 2 * var(--gutter), 96rem);
   margin-inline: auto;
-  padding-block: var(--space-8);
+  padding-block: var(--space-6) var(--space-10);
   align-items: start;
 }
 @media (width >= 60rem) {
   .admin {
     /* The sidebar is a fixed reading width; the module takes the rest. */
-    grid-template-columns: 16rem 1fr;
+    grid-template-columns: 17rem 1fr;
+    padding-block: var(--space-8) var(--space-12);
   }
   /* **R138 correction #3** — a portal whose final, permission-filtered
      module list is empty (`PortalShell`'s `sidebar` prop is `null`) reclaims
@@ -323,9 +324,10 @@
 .admin-nav__group-title {
   font-size: var(--font-size-xs);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
   color: var(--color-text-muted);
   margin-block-end: var(--space-2);
+  padding-inline: var(--space-3);
 }
 .admin-nav__list {
   list-style: none;
@@ -339,11 +341,13 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  min-block-size: var(--tap-min);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font-weight: 600;
   text-decoration: none;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 .admin-nav__item:hover {
   background: var(--color-primary-soft);
@@ -352,19 +356,23 @@
 /* The current page, marked by the same attribute the header navigation uses —
    one convention for "you are here" across the platform. */
 .admin-nav__item[aria-current='page'] {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  /* FILLED, so a glance at the sidebar answers «where am I» the way the
+     header's lit pill does (design.mmd §8). */
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-sm);
 }
 /* Marked in the MENU as well as on the page: a reader deciding where to click
    deserves to know before the click, not after. */
 .admin-nav__badge {
   flex: none;
   padding: 0.1rem var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--color-background);
-  color: var(--color-text-muted);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Module surface ──────────────────────────────────────────────────────── */
@@ -449,10 +457,9 @@
   min-inline-size: 0;
 }
 .admin__title {
-  font-size: var(--font-size-lg);
-  /* A two-line title breaks at a sensible point rather than leaving one word
-     stranded — the same problem as the description, one element up. */
+  font-size: var(--font-size-xl);
   text-wrap: balance;
+  color: var(--color-primary-strong);
 }
 /* The description, scoped to the header so the generic `.lede` used on public
    pages keeps its own narrower measure. */
@@ -536,14 +543,16 @@
 .admin-notice {
   padding: var(--space-3) var(--space-4);
   margin-block-end: var(--space-4);
-  border-inline-start: 3px solid var(--color-primary-emphasis);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
+  border: 1px solid var(--color-primary-line);
+  border-inline-start: 4px solid var(--color-primary-emphasis);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-faint);
   color: var(--color-text);
 }
 .admin-notice--warn {
+  border-color: var(--color-accent-fill-hover);
   border-inline-start-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  background: var(--color-accent-soft);
 }
 
 /* ── Tables (§14.2's list/management standard) ───────────────────────────── */
@@ -556,21 +565,25 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  /* A step under the body size: a table is scanned, not read, and the step
+     buys a column on a laptop before the container has to scroll. */
+  font-size: 1rem;
 }
 .admin-table th,
 .admin-table td {
   padding: var(--space-3) var(--space-4);
   text-align: start;
   vertical-align: middle;
-  /* Ruled rows rather than boxed cells — the same choice the calendar grid made,
-     and what lets the eye scan a column. */
-  border-block-end: 1px solid var(--color-border);
+  border-block-end: 1px solid var(--color-border-subtle);
 }
 .admin-table thead th {
   font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-text-muted);
-  background: var(--color-background);
+  background: var(--color-surface-sunken);
+  border-block-end-color: var(--color-border);
+  white-space: nowrap;
 }
 .admin-table tbody tr:last-child th,
 .admin-table tbody tr:last-child td {
@@ -614,6 +627,7 @@
  * `white-space: nowrap` because an action label broken across two lines makes the
  * row taller than the text in it, which is worse than a slightly wider column. */
 .row-action {
+  min-block-size: 2.25rem;
   padding: 0.3rem var(--space-3);
   font-size: var(--font-size-sm);
   white-space: nowrap;
@@ -621,12 +635,15 @@
 
 /* State in WORDS, not colour alone — it has to survive a monochrome screen. */
 .badge {
-  padding: 0.1rem var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--color-background);
-  color: var(--color-text-muted);
+  /* A pill: the state in words, in its colour, never colour alone. */
+  display: inline-block;
+  padding: 0.15rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 700;
+  line-height: 1.5;
   white-space: nowrap;
 }
 .badge--ok {
@@ -634,7 +651,7 @@
   color: var(--color-primary);
 }
 .badge--warn {
-  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  background: var(--color-accent-soft);
   color: var(--color-accent);
 }
 
@@ -658,7 +675,7 @@
   color: var(--color-primary);
 }
 .badge--activity {
-  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  background: var(--color-accent-soft);
   color: var(--color-accent);
 }
 /* The exam is the loud one on purpose: it carries a ring as well as a wash, so
@@ -671,7 +688,6 @@
 
 @media (max-width: 44rem) {
   .admin {
-    width: min(100% - var(--space-4), 96rem);
     gap: var(--space-6);
   }
   .admin-table th,
@@ -718,7 +734,9 @@
   gap: var(--space-3);
   padding: var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
 }
 .settings-item__meta {
   margin: 0;
@@ -798,10 +816,10 @@
   padding: 0;
 }
 .chip {
-  padding: 0.1rem var(--space-2);
+  padding: 0.15rem var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-background);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   white-space: nowrap;
@@ -907,6 +925,7 @@
 }
 .admin-table__grip-btn {
   display: block;
+  min-block-size: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
@@ -966,15 +985,16 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3);
-  border-inline-start: 3px solid var(--color-border);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-inline-start: 4px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: transparent;
+  background: var(--color-surface);
   transition: background-color var(--transition-fast);
 }
 .notifications__item.is-unread {
   border-inline-start-color: var(--color-primary);
-  background: var(--color-primary-soft);
+  background: var(--color-primary-faint);
 }
 .notifications__icon {
   display: inline-flex;
@@ -1017,10 +1037,12 @@
   display: inline-block;
   margin-inline-start: var(--space-2);
   padding: 0 var(--space-2);
-  border-radius: var(--radius-lg);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-  font-size: var(--font-size-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-fill);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* **The in-app recorder** (§4.9 as amended by R75, 2026-08-18).
@@ -1269,4 +1291,18 @@
     inline-size: min(48rem, calc(100% - 2 * var(--space-4)));
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
+}
+
+.admin-nav__item[aria-current='page'] .admin-nav__badge {
+  background: var(--color-on-primary-overlay);
+  color: var(--color-text-inverse);
+}
+
+.admin-table tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+.admin-table tbody tr:hover {
+  /* A pointed-at row tints, so a finger knows which line it is on. */
+  background: var(--color-primary-faint);
 }

@@ -1,0 +1,260 @@
+# بذور الأمل — design rulebook (`design.mmd`)
+
+> Markdown with Mermaid diagrams. **This is the visual rulebook every screen answers to**
+> (SRS Revision 173). It sits below [docs/SRS.md](docs/SRS.md) and the behavioural
+> [UX rules](docs/development/ux-architecture.md) and above taste: the SRS says *what* a
+> screen does, the UX rules say *how it behaves*, this file says *what it looks like*.
+> The tokens it names live in `frontend/src/styles/tokens/`; the architecture of the
+> stylesheet (three layers, import order) is on the
+> [design-system page](docs/architecture/design-system.md) and is not repeated here.
+
+## 0 · Who this is for, in one line
+
+Grown women — many of them not at ease with a phone — who today keep the association's
+lessons, marks and memorisation on paper. Every rule below is a bet that **she opens the
+app on her phone, finds the one thing she came for without reading, and comes back.**
+Three words to check any screen against: **clear · warm · calm.**
+
+## 1 · Precedence
+
+```mermaid
+flowchart TD
+  SRS["docs/SRS.md — what a screen does (immutable to agents)"]
+  UX["docs/development/ux-architecture.md — how it behaves (rules A–BG)"]
+  RULE["design.mmd — what it looks like (this file)"]
+  TOK["frontend/src/styles/tokens/* — the values"]
+  CMP["frontend/src/styles/components/* — one file per component"]
+  SRS --> UX --> RULE --> TOK --> CMP
+```
+
+A component file never invents a colour, a radius or a duration: it consumes a semantic
+token (`--color-*`, `--radius-*`, `--transition-*`). `scripts/ci/check-design-tokens.sh`
+refuses anything else.
+
+## 2 · Identity — one dominant colour, one warm act
+
+The platform is **deep emerald** with **saffron** as its only warmth. The emerald is the
+Moroccan zellij green of the association's own arch; the saffron is its orange, taken
+down to a value that carries text.
+
+| Role | Token | Where it is allowed |
+|---|---|---|
+| The **frame** | `--color-primary-strong` → `--color-primary-deep` | The header bar and the hero, and nothing else. One dark band at the top of every screen is what makes «the green app» recognisable from across a room. |
+| The **one filled control** | `--color-primary` | The single primary action of a view (`btn--primary`), the selected day, the current sidebar entry, the register-form step numbers. |
+| **Links, rings, active glyphs** | `--color-primary-emphasis` | Text links, the focus ring's base, a hovered outline, the sort glyph when active. |
+| **Selection and tint** | `--color-primary-soft` / `-faint` / `-line` | A selected row, a class chip, a notice ground, a hovered tile. |
+| The **warm act** | `--color-accent-fill` (ink on it) | The hero's «سجّلي الآن», the sign-in button on the dark bar, the unread count. **At most one saffron fill per screen.** |
+| **Warm text** | `--color-accent` | Eyebrows, the activity chip, a warning notice's edge. |
+| **Danger** | `--color-danger` | Destructive actions, errors — and never anything else, so red keeps its meaning. |
+| **Exam** | `--color-exam` | R58: a third hue so an exam is never misread as a class or an activity. |
+| **Gregorian / Hijri** | `--color-gregorian` / `--color-hijri` | The calendar's day numbers and dual title ONLY (Owner decision, contrast accepted and recorded in `primitives.css`). |
+
+Neutrals are mint-biased, never grey: the ground `--color-background` is a breath of green
+under white surfaces, so a card reads as *lifted paper* rather than a box drawn on grey.
+
+**The platform is light only** (Owner decision, unchanged): `color-scheme: light` keeps
+native controls light on a dark OS; no `prefers-color-scheme` branch exists.
+
+## 3 · Contrast — measured, not assumed
+
+Every text colour clears WCAG AA on the ground it is used on. The numbers are the reason
+the values are what they are; changing a value means re-measuring.
+
+| Pair | Ratio |
+|---|---|
+| `--color-text` on white / on ground | 16.9 / 15.6 |
+| `--color-text-secondary` on white | 10.1 |
+| `--color-text-muted` on white / on ground | 5.7 / 5.3 — the floor for small text; never lighter |
+| white on `--color-primary` | 7.9 |
+| `--color-primary-emphasis` on white | 5.6 |
+| `--color-accent` on white | 6.6 |
+| ink on `--color-accent-fill` | 8.3 |
+| `--color-on-primary` / `-secondary` / `-muted` on the bar | 15.6 / 10.9 / 7.4 |
+| `--color-danger` on white | 6.5 |
+| `--color-exam` on white | 9.1 |
+| Brand orange / brand green on white (calendar numerals only) | 2.35 / 2.02 — accepted by the Owner; every day cell also carries the full date as its accessible name |
+
+**Colour is never the only signal.** A state is also a word (a badge says «مقبول»), a
+shape (the exam chip has a full edge) or a position (the current page is a lit pill).
+
+## 4 · Typography — two faces, self-hosted
+
+| Role | Face | Why |
+|---|---|---|
+| Everything read or pressed | **Readex Pro** (300–700, variable) | Drawn for legibility in extended reading: open counters, generous Arabic forms, holds at 16 px on a phone. |
+| What a page is called (h1–h3, card and tile titles, the calendar title) | **El Messiri** (400–700, variable) | A Kufi–Naskh hybrid with the weight to head a screen and the warmth of the association's own lettering. |
+| Codes and identifiers | `--font-mono` (system) | A request id or a reference code is read letter by letter. |
+
+Both are **subset WOFF2 files served from our own origin** (`frontend/src/styles/fonts/`,
+SIL OFL): the two Arabic files are 45 KB together — less than `logo.png` — the two Latin
+files (digits, e-mail addresses) 55 KB, each fetched only when its range is used, hashed
+into the immutable `/assets/` path, and `font-display: swap` keeps text readable in the
+system face for the fraction of a second before they land. **No third-party font host,
+ever** — §3.1's CSP is `default-src 'self'` and the files must stay under 120 KB in total.
+
+**The scale** (`typography.css`): a minor third on a **17 px body**. The body is one
+step above the web's default on purpose — the difference between 16 and 17 px is the
+difference between squinting and not for the readers above.
+
+| Token | Use |
+|---|---|
+| `--font-size-2xl` | The hero title only |
+| `--font-size-xl` | A page title (`admin__title`, `content-page__title`, the calendar title) |
+| `--font-size-lg` | A section title, a dialog title |
+| `--font-size-md` | A card title, a lede, a hero button |
+| `--font-size-sm` | Body, labels, controls |
+| `--font-size-xs` | Hints, badges, table heads, eyebrows — **never a value a reader depends on** |
+
+Rules: **weight carries a heading, not tracking** — Arabic letters connect and a negative
+track breaks the joins (`letter-spacing: 0` on headings; only the eyebrow may track).
+No uppercase (Arabic has none; Latin labels stay as typed). Digits that line up take
+`font-variant-numeric: tabular-nums`. Prose keeps `--measure` (64ch); a page description
+`--measure-lede`; UI text takes the width of the thing it belongs to (rule AK).
+
+## 5 · Space, radius, elevation
+
+- **Rhythm** is the 0.25 rem scale (`--space-1` … `--space-16`). Layout does the spacing:
+  flex/grid with `gap`, never per-element margins that collapse or double.
+- **Gutter**: one side gutter at every width, `--gutter` (16 px on a phone, 32 px wide),
+  set once on `.container`, `.admin` and `.cal-page__inner`.
+- **Radius says what a thing is**: `--radius-sm` (8) on things you type in · `--radius-md`
+  (12) on things you press · `--radius-lg` (18) on things that contain · `--radius-xl`
+  (26) on the one sheet that floats (a dialog) · `--radius-pill` on badges and counts ·
+  `--radius-full` on circles.
+- **Elevation is emerald-tinted, never grey**: `--shadow-sm` rests (a card, a table),
+  `--shadow-md` floats (a menu, a pressed primary, a hovered tile), `--shadow-lg` is the
+  modal sheet. `--shadow-focus` is the ring a focused field wears.
+- **Not everything is a card.** A table is one surface with hairline rows; a list of
+  notifications is rows with a coloured edge; a form group is a card because it is a
+  step. Border, fill and shadow each say «separate object» — spend them by role.
+
+## 6 · Controls and touch
+
+```mermaid
+flowchart LR
+  subgraph one_primary["One view"]
+    P["btn--primary — exactly one"]
+    S["btn--secondary — the quiet companions"]
+    G["btn--ghost / row-action — nothing until pointed at"]
+    D["btn--danger — destructive, red, always confirmed"]
+  end
+```
+
+- **Tap floors**: nothing pressable is under `--tap-min` (44 px); a phone's primary
+  actions and every field are `--tap-comfortable` (48 px). Checkboxes and radios are
+  20 px and take the platform accent.
+- **Buttons** settle a hair on press (`translateY(1px)`), never grow; the primary lifts on
+  hover. A button's label is weight 600 in the body face.
+- **Fields**: the label is body-sized and dark, read *before* the box; the box has a firm
+  1.5 px edge and answers focus with a ring (`--shadow-focus`), not a colour change
+  alone; an invalid field's ring is red; a disabled one sinks (`--color-surface-sunken`).
+- **Tables** are one rounded surface; the head is a sunken band; a pointed-at row tints.
+  A wide table scrolls **inside `.datatable__scroll`** — which is `position: relative`
+  because in RTL a scroller that is not its content's containing block lets the table's
+  start-side overflow reach the document, and the whole page could be panned sideways on
+  a phone (found 2026-09-24; it pre-dated the redesign). The page body never scrolls
+  sideways.
+- **Filters** share a toolbar row evenly (`flex: 1 1 13rem`); on a phone they stack.
+- **Segmented controls** (calendar/list) are a sunken track with a raised white tab.
+- **Dialogs** rise into place, carry the largest radius and the deepest shadow, scroll
+  their body only, and on a phone read as a bottom sheet — full width, actions at the
+  foot, each action full width.
+
+## 7 · Motion — everything settles, nothing winds up
+
+| Token | Value | For |
+|---|---|---|
+| `--transition-fast` | 150 ms ease-out | A colour, a border, a shadow answering a pointer |
+| `--transition-base` | 240 ms ease-out | A surface moving: a tile lifting, a menu opening, a dialog rising, the mobile sheet unfolding |
+| `--transition-slow` | 400 ms ease-out | A whole region arriving; the progress fill |
+
+CSS only — no motion library. Every entrance starts from a *visible* resting state (a
+page never parks content at `opacity: 0`). Distances are small (≤ 12 px) and the curve is
+`cubic-bezier(0.22, 1, 0.36, 1)`: it answers at once and comes to rest.
+`prefers-reduced-motion` collapses all of it (kept at its established cascade position in
+`base/utilities.css`). Nothing loops except the loading skeleton's shimmer.
+
+## 8 · Navigation and frames
+
+```mermaid
+flowchart TD
+  H["Header bar — deep emerald, sticky, 68 px"]
+  H --> L["Logo mark in a light disc + the name in El Messiri"]
+  H --> N["Nav — wide: pills in the bar · current page is the LIT pill"]
+  H --> A["Actions — saffron sign-in / outlined on-primary controls / bell"]
+  H --> B["Narrow: burger → the sheet unfolds from the bar in the bar's own ground"]
+  P["Portal shells (admin · teacher · student)"] --> SB["Sidebar 17 rem, sticky, scrolls alone (rule W) · current entry FILLED emerald"]
+  P --> M["Main — page head grid: title + lede | actions (rule T) → toolbar → table → pagination"]
+```
+
+«Where am I» is answered without reading: the lit pill in the bar, the filled entry in
+the sidebar, the page title in emerald El Messiri. On a phone the sidebar is a drawer
+under the bar; the burger is 48 px.
+
+## 9 · Page anatomy
+
+**Public landing** — hero (title, one lede, saffron «تسجيل الدخول» + outlined
+«اكتشفي برامجنا», the logo badge with its soft halo) → the three doors overlapping the
+hero's foot (programmes · calendar · library) → programmes by Category → branches with
+map links → partners → footer. No image placeholders: the association's own mark is the
+only image; where an illustration would go later, a plain `--color-surface-sunken` box
+with a one-line label is the placeholder.
+
+**Sign-in and status screens** — one raised sheet (`.auth-page`): the mark, the title,
+one line, one full-width button. A stale link, a pending account and the door look like
+the same house.
+
+**Registration** — a numbered path (`.register-steps`) over numbered card sections; the
+section being filled in lifts (`focus-within`); the one save button is 52 px and full
+width on a phone.
+
+**Back office / teacher / student pages** — the shell in §8; every list page renders its
+data on arrival and filters narrow it (rule A); an empty table keeps its columns (rule BD).
+
+**Calendar** — the dual title in El Messiri (Gregorian in orange, Hijri in green), the
+segmented view switch, filters, then the month as one rounded surface with hairline
+cells; a chip is a coloured-edged pill (class emerald · activity saffron · exam violet);
+on a phone the chip keeps only its edge and its title, and the list view is the reading
+view.
+
+**Dialogs** — see §6.
+
+## 10 · States (SRS §14.4, not restated)
+
+Loading is a skeleton in the surface's own shape; empty says what is missing and offers
+the one action; error is the shared `ErrorPanel` with the request id in mono; no
+permission is `NoPermissionState`, never a blank page. All four keep the page's frame.
+
+## 11 · Copy
+
+The interface addresses the reader in the feminine (§2.1); the Arabic catalogue
+(`frontend/src/i18n/ar.ts`) is the Owner's and is governed by the terminology guard —
+a visual pass changes no string. UI text is a label, not prose (rule AK): short, in the
+platform's own words, no marketing voice on a working screen. The only place for a
+persuasive line is the hero.
+
+## 12 · The audit — what an unconsidered screen looks like, and the fix
+
+| Tell | Rule here |
+|---|---|
+| Grey everything | Neutrals are mint-biased; the frame is emerald; one saffron act |
+| A row of identical cards | Cards only where each is a step or a door; lists are rows; tables are one surface |
+| Gradient text, glowing borders | None. The only gradients are the bar's depth and the hero's two soft glows |
+| Inter/Arial, tracked uppercase labels | Readex Pro + El Messiri; no tracking on Arabic; no uppercase |
+| 14 px body, light grey captions | 17 px body; muted text never below 5.3:1 |
+| Buttons that grow on hover | Buttons settle; the primary lifts by shadow only |
+| Spacing by margin | Spacing by `gap` on the `--space-*` scale |
+| Colour as the only meaning | A word, a shape or a position always accompanies it |
+| Page scrolls sideways on a phone | Never; wide content scrolls in its own positioned box |
+
+## 13 · Verifying a styling change
+
+1. The five CSS guards: `check-design-tokens.sh`, `check-header-nav-exclusive.sh`,
+   `check-dialog-hidden-when-closed.sh`, `check-shared-layout.sh`, `check-progress-css.sh`.
+2. `scripts/dev/css-resolve.py` for changed **values**, a diff of `dist/assets/*.css` for
+   changed **order** (the design-system page explains why both).
+3. The frontend suite (`npx vitest run`) — markup is pinned there, and a redesign changes
+   no markup.
+4. Look at it: `scripts/dev/browser/shoot-pages.sh` renders the landing, the calendar,
+   the sign-in sheet, a back-office list, its dialog and the phone menu at 390 px and
+   1366 px into `scratch/shots/`, so a change is seen before it is shipped.

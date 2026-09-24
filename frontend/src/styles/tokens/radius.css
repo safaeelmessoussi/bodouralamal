@@ -1,10 +1,15 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` §5 for when each step is used. */
 
-/* LAYER 3 — corner radii. */
+/* LAYER 3 — corner radii. Softer than a spreadsheet, firmer than a toy:
+ * `sm` on things you type in, `md` on things you press, `lg` on things that
+ * contain, `xl` on the one sheet that floats (a dialog). */
 :root {
-  --radius-xs: 3px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
   --radius-full: 50%;
 }

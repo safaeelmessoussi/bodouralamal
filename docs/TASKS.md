@@ -5775,6 +5775,34 @@ No migration. Detail per item: [SRS Revision 171](SRS.md).
       pinned services recreated on their digests and healthy; `/healthz` 200;
       zero error lines.
 
+## SRS Revision 173 — the interface redesigned for the women who use it on their phones — 2026-09-24
+
+Detail: [SRS Revision 173](SRS.md); the rulebook: [`design.mmd`](../design.mmd). No schema, route, adapter, hook or state change.
+
+- [x] **§1 — `design.mmd`** at the repository root; the design-system page points
+      to it and keeps only the stylesheet's architecture.
+- [x] **§2 — tokens:** the emerald ramp, the saffron ramp, mint neutrals; new
+      semantic roles (`-deep`, `-faint`, `-line`, `accent-fill`, `accent-soft`,
+      `surface-sunken`, `border-subtle/strong`, `focus-ring/halo`, `selection`);
+      softer radii + `pill`; emerald-tinted shadows + `shadow-focus`; three
+      durations + two curves; `--tap-min/-comfortable`, `--gutter`.
+- [x] **§3 — fonts:** Readex Pro + El Messiri, subset WOFF2 self-hosted under
+      `frontend/src/styles/fonts/` (OFL texts beside), `@font-face` in
+      `tokens/typography.css`, 17 px body, display face on headings.
+- [x] **§4 — components:** button, header (the dark bar, the lit pill, the
+      sheet), hero + doors, cards, forms/fields/register form/table chrome,
+      dialog, back-office shell (sidebar, page head, tables, badges, notices),
+      calendar (segmented, filters, cells, chips), content library, date picker,
+      progress, programmes, status/auth pages.
+- [x] **§5 — fixed in passing:** RTL table overflow reaching the document on a
+      phone (`.datatable__scroll` positioned); the sign-in sheet no longer
+      stretches to the viewport.
+- [x] **Verification:** the five CSS guards; frontend tsc/lint/1513 tests
+      unchanged; `shoot-pages.sh` (new) — 13 surfaces at 390/1366 px, none
+      scrolls sideways; circles-reorder, circle-branch, class-filters harnesses.
+- [ ] **Owner look:** the Staging screens on her own phone — the hero, the
+      sign-in sheet, «حلقات المواد» and its dialog, the calendar's list view.
+
 ## SRS Revision 172 — the Owner's fourth batch: whole-Category Subjects, a series entered after the fact, a recording that outlives the screen — 2026-09-23
 
 Detail per item: [SRS Revision 172](SRS.md). Two migrations (`20260926090000_r172_subject_taught_to_a_whole_category`, `20260926100000_r172_teaching_group_branch`).

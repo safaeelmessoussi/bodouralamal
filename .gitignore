@@ -27,3 +27,4 @@ backend/src/generated/
 
 # Generated on a deployed host by scripts/deploy/enable-tls.sh (never committed).
 nginx/conf.d/tls.conf
+scratch/

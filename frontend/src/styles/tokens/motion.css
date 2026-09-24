@@ -1,8 +1,18 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering and
+ * `design.mmd` §7 for the motion rules. */
 
-/* LAYER 3 — motion. */
+/* LAYER 3 — motion. Two curves and three durations, so nothing in the
+ * interface moves at a rate nobody chose. Everything settles (ease-out): a
+ * control answers a touch at once and comes to rest, it never winds up.
+ * `prefers-reduced-motion` collapses all of it at the foot of
+ * `base/utilities.css`. */
 :root {
-  /* Motion. One duration, so nothing in the interface moves at a rate nobody
-     chose; `prefers-reduced-motion` collapses it at the foot of this file. */
-  --transition-fast: 0.15s ease;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* A colour or border answering a pointer. */
+  --transition-fast: 0.15s var(--ease-out);
+  /* A surface moving — a lift, a panel, a sheet. */
+  --transition-base: 0.24s var(--ease-out);
+  /* A whole region arriving. */
+  --transition-slow: 0.4s var(--ease-out);
 }

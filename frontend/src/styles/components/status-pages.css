@@ -5,9 +5,9 @@
 .auth-page,
 .status-screen {
   text-align: center;
-  width: min(100% - 2rem, 36rem);
+  width: min(100% - 2 * var(--gutter), 36rem);
   margin-inline: auto;
-  padding-block: clamp(3rem, 10vw, 6rem);
+  padding-block: clamp(2rem, 8vw, 5rem);
 }
 .status-screen {
   min-height: 60vh;
@@ -24,6 +24,7 @@
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   text-align: start;
+  font-weight: 500;
 }
 .state {
   padding: var(--space-4) 0;
@@ -70,8 +71,9 @@
   border: 1px solid var(--color-border);
   border-inline-start: 5px solid var(--color-danger);
   background: var(--color-surface);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
   text-align: start;
   display: flex;
   flex-direction: column;
@@ -81,7 +83,7 @@
    measure and centres — an inline one sits in the flow of the form it belongs
    to and must not reflow the controls around it. */
 .error-panel--page {
-  width: min(100% - 2rem, var(--measure));
+  width: min(100% - 2 * var(--gutter), var(--measure));
   margin-inline: auto;
   margin-block: clamp(2rem, 8vw, 4rem);
 }
@@ -90,8 +92,9 @@
   margin-block: var(--space-3);
 }
 .error-panel__title {
-  font-weight: 600;
-  font-size: 1.125rem;
+  font-family: var(--font-family-display);
+  font-weight: 700;
+  font-size: var(--font-size-md);
   color: var(--color-text);
   margin: 0;
 }
@@ -143,4 +146,53 @@
 
 .confirm__blocked-list li {
   margin-block: var(--space-1);
+}
+
+@media (max-width: 43.99rem) {
+  /* On a phone the two doors stack, full width, thumb-sized. */
+  .auth-page__links .btn {
+    flex: 1 1 100%;
+    min-block-size: var(--tap-comfortable);
+  }
+}
+
+/* The sign-in door is a single raised sheet with the mark on top: one thing
+   to read, one thing to press (design.mmd §9). The status screens share the
+   frame, so a stale link and a pending account look like the same house. */
+.auth-page {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--space-4);
+  max-width: 28rem;
+  margin-block: clamp(2rem, 8vw, 5rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 5vw, 2rem);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+.auth-page > h1 {
+  font-size: var(--font-size-lg);
+  color: var(--color-primary-strong);
+}
+.auth-page > p {
+  color: var(--color-text-secondary);
+}
+.auth-page .logo-link__mark {
+  height: 5rem;
+  padding: 0;
+  background: transparent;
+}
+.auth-page > .btn {
+  inline-size: 100%;
+  min-block-size: var(--tap-comfortable);
+  font-size: var(--font-size-md);
+}
+/* The sheet is `<main>` itself, so it must not take the page frame's slack
+   (`#root > main { flex: 1 0 auto }`) — a door stretched to the height of the
+   phone is a wall. The footer follows the sheet; the sheet's block margin is
+   what keeps that from looking like a short page. */
+#root > main.auth-page {
+  flex: 0 0 auto;
 }

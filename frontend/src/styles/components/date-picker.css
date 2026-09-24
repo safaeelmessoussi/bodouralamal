@@ -32,10 +32,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  /* Bounded to the field's own width, never wider — the one thing that keeps
-     this safe inside a narrow dialog column without any positioning logic at
-     all (see the component's own docstring on why it is inline, not floating). */
+  box-shadow: var(--shadow-md);
   max-width: 100%;
+  animation: menu-panel-in var(--transition-base);
 }
 
 .date-picker__head {
@@ -82,8 +81,9 @@
   justify-content: center;
   width: 100%;
   aspect-ratio: 1;
-  min-width: 2.25rem;
+  min-width: 2.5rem;
   padding: 0;
+  border-radius: var(--radius-full);
   font-variant-numeric: tabular-nums;
 }
 /* Same cascade-order rule `.cal-day` states, and for the same reason: these
@@ -91,14 +91,18 @@
    which wins, weakest to strongest. Reordering changes behaviour with no
    declaration touched. */
 .date-picker__day.is-today {
-  background: color-mix(in srgb, var(--color-primary-soft) 30%, transparent);
+  background: var(--color-primary-faint);
+  box-shadow: inset 0 0 0 2px var(--color-primary-line);
 }
 .date-picker__day:hover {
-  background: color-mix(in srgb, var(--color-primary-soft) 55%, transparent);
+  background: var(--color-primary-soft);
 }
 .date-picker__day.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-primary-emphasis);
-  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
+  /* The chosen day is FILLED: on a phone the ring alone was too fine to
+     find again once the eye left it. */
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  box-shadow: none;
 }
 .date-picker__day:disabled {
   color: var(--color-text-muted);
@@ -132,8 +136,9 @@
 }
 .date-picker__months .btn.is-selected,
 .date-picker__years .btn.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-primary-emphasis);
-  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  box-shadow: none;
 }
 .date-picker__months .btn:disabled,
 .date-picker__years .btn:disabled {

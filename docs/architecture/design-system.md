@@ -4,14 +4,23 @@
 
 Plain CSS, three layers, no framework. RTL-first, mobile-first, **light theme only**.
 
+**The visual rulebook is [`design.mmd`](../../design.mmd) at the repository root**
+(SRS Revision 173): the identity, the colour roles and their measured contrast, the two
+faces and the type scale, the tap floors, the motion tokens, the page anatomy and the
+audit checklist. This page keeps the *architecture* of the stylesheet — the layers, the
+import order, the guards — and does not restate the rulebook.
+
 ## The palette comes from the association's own world
 
-Not a template: the **deep green of Moroccan zellij**, brass as the single accent, and
-neutrals biased warm-green so nothing reads as unconsidered grey.
+Not a template: the **deep emerald of Moroccan zellij** as the one dominant colour (the
+header bar, the hero, every primary control), **saffron** — the association's orange
+taken down to a value that carries text — as the one warmth, and neutrals biased mint so
+nothing reads as unconsidered grey. The roles and where each is allowed:
+[`design.mmd` §2](../../design.mmd).
 
 A pure mid-grey reads as unchosen. The neutrals here have a slight hue bias toward the
-accent, which is the difference between a palette that was picked and one that was
-inherited.
+dominant colour, which is the difference between a palette that was picked and one that
+was inherited.
 
 ### The brand colours, and a contrast decision recorded rather than hidden
 
@@ -81,15 +90,25 @@ all four surfaces (`event-chip--exam`, `badge--exam`, the dialog, the indicator)
 which is what stops the list and the grid from disagreeing about what an exam
 looks like.
 
-## No web font, and that is the right answer
+## Two faces, self-hosted — and why that is not the web font that was refused
 
-The content security policy is `default-src 'self'` with no font host, so a linked face
-would be **blocked and silently fall back**. Inlining an Arabic face costs 200 KB–1 MB,
-which the connectivity constraint rules out.
+Until Revision 173 the platform used the system Arabic stack: the content security policy
+is `default-src 'self'` with no font host, so a *linked* face would be **blocked and
+silently fall back**, and *inlining* an Arabic face costs 200 KB–1 MB, which the
+connectivity constraint (§2.2) rules out. Both reasons stand.
 
-So the system Arabic stack is used — and the typographic character comes from **scale,
-weight, spacing, and rhythm** instead. This is a constraint that turned out to be correct on
-its own merits, not a concession.
+What ships now is neither: **Readex Pro** (the interface) and **El Messiri** (headings) as
+**subset WOFF2 files from our own origin** — `frontend/src/styles/fonts/`, SIL OFL, the
+licence texts beside them. Same-origin, so the CSP admits them; subset, so the two Arabic
+files are 45 KB together (less than `logo.png`) and the two Latin files 55 KB, each loaded
+only when its `unicode-range` is used; hashed by Vite into the immutable `/assets/` path,
+so a returning visitor never fetches them twice; `font-display: swap`, so text is readable
+in the system face for the fraction of a second before they land. The budget is written
+into the rulebook: **no third-party host, ever, and under 120 KB in total.**
+
+The `@font-face` rules live in `tokens/typography.css` — definitions, like every token —
+and the families are consumed only through `--font-family-base` and
+`--font-family-display`.
 
 ## Light only
 
@@ -190,12 +209,13 @@ separately verified commit.
 
 ## Verifying a styling change
 
-Two checks, and **neither is sufficient alone**:
+Three checks, and **none is sufficient alone**:
 
 | Tool | Catches |
 |---|---|
 | `scripts/dev/css-resolve.py` | Changed **values** — resolves every `var()` to literals, follows imports, normalises hex shorthand, reports one line per declaration |
 | Diffing built `dist/assets/*.css` | Changed **order** — which the resolver cannot see |
+| `scripts/dev/browser/shoot-pages.sh` | What it **looks like** — the key surfaces at 390 px and 1366 px as PNGs, each shot reporting whether the document scrolls sideways (`design.mmd` §13) |
 
 ## RTL
 

@@ -4,10 +4,15 @@
 
 .site-footer {
   background: var(--color-surface);
-  border-block-start: 1px solid var(--color-border);
+  border-block-start: 1px solid var(--color-border-subtle);
   padding-block: var(--space-10);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+.site-footer a {
+  min-block-size: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
 }
 .site-footer__row {
   display: flex;

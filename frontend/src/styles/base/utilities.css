@@ -19,10 +19,10 @@
 .skeleton {
   height: 1.1rem;
   margin-bottom: 0.6rem;
-  border-radius: var(--radius-xs);
-  background: linear-gradient(90deg, var(--color-border), var(--color-background), var(--color-border));
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-surface-sunken), var(--color-background), var(--color-surface-sunken));
   background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
 }
 @keyframes shimmer {
   from {
