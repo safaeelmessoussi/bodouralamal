@@ -98,6 +98,10 @@ jobs:
       # is therefore mechanically checked; accuracy is what review is for.
       - name: Documentation link integrity
         run: bash scripts/ci/check-doc-links.sh
+      # The backup scripts' own unit tests (recovery metadata, operational
+      # summary) — never wired before 2026-09-25.
+      - name: Backup script unit tests
+        run: python3 -m unittest discover -s scripts/backup -p 'test_*.py'
 
   contract:
     name: API contract — regenerate and verify no drift

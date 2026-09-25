@@ -138,10 +138,4 @@ export function studentModuleForPath(pathname: string): StudentModule | null {
 }
 
 /** Whether this session may open the module (UX layer; the server decides). */
-export function canAccess(
-  module: StudentModule,
-  roles: readonly string[],
-  context: { actingForChild?: boolean } = {},
-): boolean {
-  return canAccessModule(module, roles, context);
-}
+export const canAccess = canAccessModule;

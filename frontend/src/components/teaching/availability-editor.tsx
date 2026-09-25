@@ -4,6 +4,7 @@ import { Button } from '../ui/button.js';
 import { SelectField, TextField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import type { AvailabilityRange } from '../../adapters/teaching-profile.js';
+import { WEEKDAYS } from '../../lib/weekdays.js';
 
 /**
  * **One weekly availability editor, used by both people who may edit one.**
@@ -35,15 +36,7 @@ import type { AvailabilityRange } from '../../adapters/teaching-profile.js';
  * the ranges alone (R88.2, R106.2, R106.5). A shared save would have to know
  * which, which is the caller's fact and not this component's.
  */
-export const WEEKDAYS = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-] as const;
+export { WEEKDAYS };
 
 /** The range a reader gets when they ask for one. A morning, because that is
  *  the commonest and an empty row would make her type four values to say

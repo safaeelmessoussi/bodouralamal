@@ -31,6 +31,7 @@ import { applySort } from '../adapters/reorder.js';
 import { api, ApiError } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
 import { Badge } from '../components/ui/badge.js';
+import { GLOBAL } from '../components/content/content-scope-fields.js';
 
 /**
  * The content library management screen — `/admin/content` (§5.6) and
@@ -262,7 +263,6 @@ const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId', 'branchId'] as c
 
 /** `branch_id = null` — a real scope (§4.9), and the one value a branch list can
  *  never contain. `''` already means *no filter*, so the two cannot share it. */
-const GLOBAL = '__global__';
 
 export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactNode {
   const { accessToken } = useSession();

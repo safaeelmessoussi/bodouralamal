@@ -181,50 +181,9 @@ place. Two of them — the application's copied identity and the restorable
 snapshot — would each have made a "complete" deletion a lie, and neither is on
 the `User` row.
 
-### R59.4 — the window, measured before it was enforced (2026-09-04)
+### R59.4 — the ninety-day window is enforced
 
-**A third read-only clock, beside the ten-year and twelve-month ones.**
-`Trash.purge_after` records the end of BR-15's ninety-day window, and the job
-named as its enforcement — `content.quarantine-purge` — **was never built**;
-`startJobRunner` deliberately does not schedule it, with the reason in the code.
-That is R59.4, and it remains an open Owner question. Nothing here changes it.
-
-`trash-purge-report.service.ts` answers *«what would it actually delete»* and
-nothing else. Two properties are worth knowing before that question is answered:
-
-* **The storage half is the consequential one, and it is reported separately.**
-  Purging a `Trash` row removes a tombstone whose live record is already gone.
-  Purging the **object** a content snapshot points at destroys the only copy
-  outside backups — MinIO has no undelete. These are two authorisations, not one
-  total, and the Owner may reasonably grant one without the other.
-* **`target_entity` is the classifier, and the snapshot JSON is not read.** A
-  snapshot's shape follows whatever the row looked like when it was deleted, so
-  digging storage keys out of it would make the report depend on the historical
-  shape of every model. The entity name is written at delete time and is stable.
-
-**R59.4 is now answered** (Owner, 2026-09-04): expired entries are purged
-automatically, without a Super Admin approving each one. Enforcement is
-`purgeExpiredEntries` in `trash.service.ts`, scheduled daily —
-**not** in this module, which stayed read-only and is now the diagnostic beside
-the executor. It reuses the manual purge's own body, so what an expiry destroys
-and what a Super Admin destroys cannot drift apart, and it **fails closed per
-entry**: a record something still references, an entity with no purge plan, or a
-tombstone whose record was restored is left alone and counted, never destroyed by
-improvisation and never allowed to abort the sweep.
-
-**`content.quarantine-purge` is still not scheduled, and that is correct.** R59.4
-authorised expiring the Trash *entry*; the entry's purge enqueues the object
-retirement with an **exact coordinate**, read from the authoritative row rather
-than dug out of snapshot JSON. A schedule on that queue would give it no
-coordinate to act on. The object deletion is therefore durable and retrying, and
-an already-missing object is a successful DELETE under S3 semantics — so the
-failure the Owner named, *«DB says gone, object silently remains forever»*, has
-no path.
-
-**The report is still guarded against growing an executor.** A test asserts it
-exports no destructive verb, proved by adding one and watching it fail. That
-matters more now, not less: with a real destructive path in existence, a second
-unaudited one is the thing somebody would call by mistake.
+`Trash.purge_after` records the end of BR-15's ninety-day window. Expired tombstones are destroyed by `purgeExpiredEntries` in `trash.service.ts` (daily job, authorised by the Owner 2026-09-04); the storage half is the consequential one — purging a content snapshot's object destroys the only copy. The «what would it delete» report module that preceded enforcement was removed 2026-09-25 (unused).
 
 ## Option B is withdrawn — SUPERSEDED (Revision 133)
 

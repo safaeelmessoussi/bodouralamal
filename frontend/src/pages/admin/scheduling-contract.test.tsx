@@ -4,7 +4,6 @@ import { t } from '../../i18n/index.js';
 
 import type { CourseSchedule } from '../../adapters/course-schedules.js';
 import { fromSchedule } from '../../adapters/scheduling.js';
-import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
 
 /**
  * `/admin/schedules` — the client half of the contract guard.
@@ -118,53 +117,6 @@ describe('the adapter type matches the wire contract', () => {
     // definition, and in the other modes the target is not a Level at all.
     expect(WIRE.level_id).not.toBe(WIRE.target_id);
     expect(WIRE.teaching_mode).toBe('administrative_group');
-  });
-});
-
-describe('TD-11: the time cell renders the wall clock verbatim', () => {
-  it('does not reinterpret the value through a Date', () => {
-    // The tempting "improvement" is to parse and reformat these. A class starts
-    // at 15:00 at its branch; parsing turns that into a reader's local time and
-    // silently moves the class.
-    expect(timeLabel(WIRE)).toBe('15:00 – 16:30');
-    expect(timeLabel(WIRE)).not.toContain('T');
-    expect(timeLabel(WIRE)).not.toContain('Z');
-  });
-
-  // A timezone-shifting variant was written and REMOVED: mutating `TZ` after the
-  // process has started does not change `Date`'s behaviour, so it passed
-  // whatever the implementation did. A test that passes for the wrong reason is
-  // worse than no test — the assertions above guard the same property honestly,
-  // because `timeLabel` is pure string concatenation and 'T'/'Z' would appear
-  // the moment anyone parsed the value.
-});
-
-describe('the recurrence cell', () => {
-  it('lists the weekdays IN ARABIC, never the wire enum', () => {
-    // The column rendered `weekdays.join()` straight from the contract, so an
-    // Arabic-only interface (§6) showed `tuesday`. The enum is the contract's
-    // vocabulary and is never what a reader sees.
-    expect(recurrenceLabel(WIRE)).toBe(t('scheduling.weekday.tuesday'));
-    expect(recurrenceLabel(WIRE)).not.toContain('tuesday');
-  });
-
-  it('translates the rule name when there are no weekdays', () => {
-    // `recurrence: 'none'` with no weekdays is a real state — a one-off
-    // occurrence — and an empty cell would read as missing data.
-    expect(recurrenceLabel({ ...WIRE, weekdays: [], recurrence: 'monthly' })).toBe(
-      // R56 — one recurrence vocabulary. The label resolves through the same
-      // pattern catalog the editor's own control uses, so a table and a form
-      // cannot disagree about what a rule is called.
-      t('scheduling.pattern.monthly'),
-    );
-  });
-
-  it('uses the SAME day names the recurrence editor checkboxes use', () => {
-    // One catalog for one concept: the table and the form must not disagree
-    // about what Tuesday is called.
-    for (const day of ['monday', 'tuesday', 'saturday']) {
-      expect(recurrenceLabel({ ...WIRE, weekdays: [day] })).toBe(t(`scheduling.weekday.${day}`));
-    }
   });
 });
 

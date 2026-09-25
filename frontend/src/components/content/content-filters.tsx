@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { ContentKind, LevelContent } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
+import { GLOBAL } from './content-scope-fields.js';
 
 /**
  * Filters for one level's library: academic year, branch, type, and title search.
@@ -156,9 +157,7 @@ export function ContentFilters({
   );
 }
 
-/** The sentinel for the Global / بدون فرع scope in a `<select>`, whose values are
- *  strings and cannot carry `null`. */
-export const GLOBAL = '__global__';
+export { GLOBAL };
 
 /**
  * Applies the filters, returning the same year→branch shape so the page's

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { CheckboxField, DateField, SelectField, TextField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
+import { WEEKDAYS } from '../../lib/weekdays.js';
 
 /**
  * **The single source of truth for recurrence across the platform** (§4.4,
@@ -76,15 +77,7 @@ const ORDER: readonly RecurrencePattern[] = [
   'yearly',
 ];
 
-export const WEEKDAYS = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-] as const;
+export { WEEKDAYS };
 
 /** One shape, for every schedulable item. */
 export interface RecurrenceValue {
