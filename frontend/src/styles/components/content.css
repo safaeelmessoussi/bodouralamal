@@ -498,3 +498,20 @@
   font-weight: 700;
   color: var(--color-accent);
 }
+/* On a phone seven stacked filters pushed the shelves below the fold (Staging,
+   2026-09-25): two per row, the search across both, and the content is one
+   thumb-scroll away. */
+@media (max-width: 44rem) {
+  .content-page .cal-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-block-end: var(--space-6);
+  }
+  .content-page .cal-filter--search {
+    grid-column: 1 / -1;
+  }
+  .content-page .cal-filter__label {
+    font-size: var(--font-size-xs);
+  }
+}

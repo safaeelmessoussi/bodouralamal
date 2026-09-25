@@ -23,3 +23,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Hosted CI 6/8 on `3e0f5b0e`: `verify-public-reader.mjs` (inside `content.integration`) still looked for a Level CARD link on the library; it now asserts the fixture Level's shelf with items and that every filter's «all» reads «الكل». content integration 74/74 on the disposable stack.
 - Hosted CI 8/8 on `8ed904de`. **Staging deploy blocked at the host preflight: «host has a pending required reboot»** (OS updates on bodour-staging); Staging stays healthy on `7090f31` until the Owner reboots the host and the deploy of `8ed904de` is re-run.
 - Owner rebooted bodour-staging (2026-09-25 18:04 UTC); preflight PASS; **deployed to Staging at `8ed904de`**: `/healthz` 200, zero error lines, both container labels `8ed904de`.
+- Library filters two-per-row on phones (the shelves were below the fold on Staging); `check-design-tokens` OK, build OK.
