@@ -21,3 +21,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Verification: backend typecheck/lint; integration quran + calendar + personal-calendar + trash-coverage 87/87 on the disposable stack; frontend tsc/lint/1509; all guards; build; harnesses circle-branch 10/10, class-filters 21/21; `shoot-pages` 13 surfaces, none scrolls sideways.
 
 - Hosted CI 6/8 on `3e0f5b0e`: `verify-public-reader.mjs` (inside `content.integration`) still looked for a Level CARD link on the library; it now asserts the fixture Level's shelf with items and that every filter's «all» reads «الكل». content integration 74/74 on the disposable stack.
+- Hosted CI 8/8 on `8ed904de`. **Staging deploy blocked at the host preflight: «host has a pending required reboot»** (OS updates on bodour-staging); Staging stays healthy on `7090f31` until the Owner reboots the host and the deploy of `8ed904de` is re-run.
