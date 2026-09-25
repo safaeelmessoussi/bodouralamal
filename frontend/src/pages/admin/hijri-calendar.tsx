@@ -284,14 +284,16 @@ export function MonthRow({
         />
       </td>
       <td className="admin-table__actions">
-        <StatusBadge month={month} isLastRecorded={isLastRecorded} />
-        <Button
-          variant="secondary"
-          disabled={!dirty || value === '' || busy}
-          onClick={() => onRecord(value)}
-        >
-          {t('admin.hijri.record')}
-        </Button>
+        <span className="admin-table__actions-group">
+          <StatusBadge month={month} isLastRecorded={isLastRecorded} />
+          <Button
+            variant="secondary"
+            disabled={!dirty || value === '' || busy}
+            onClick={() => onRecord(value)}
+          >
+            {t('admin.hijri.record')}
+          </Button>
+        </span>
       </td>
     </tr>
   );

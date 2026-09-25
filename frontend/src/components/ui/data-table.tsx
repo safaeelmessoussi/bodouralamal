@@ -331,16 +331,21 @@ export function DataTable<T>({
                        * automatically.
                        */
                       <td className="admin-table__actions">
-                        {available.map((action) => (
-                          <Button
-                            key={action.label}
-                            variant={action.danger ? 'danger' : 'secondary'}
-                            className="row-action"
-                            onClick={() => action.onSelect(row)}
-                          >
-                            {action.label}
-                          </Button>
-                        ))}
+                        {/* The cell stays a table cell so its height and
+                            border follow the row; the flex layout is the
+                            group's (2026-09-25). */}
+                        <span className="admin-table__actions-group">
+                          {available.map((action) => (
+                            <Button
+                              key={action.label}
+                              variant={action.danger ? 'danger' : 'secondary'}
+                              className="row-action"
+                              onClick={() => action.onSelect(row)}
+                            >
+                              {action.label}
+                            </Button>
+                          ))}
+                        </span>
                       </td>
                     ) : null}
                   </tr>

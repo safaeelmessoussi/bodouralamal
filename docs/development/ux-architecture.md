@@ -39,6 +39,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - A typed-search workflow is only for a dataset genuinely too large to send; say so.
 
 ## F · Filters
+- The «no filter» option of every dropdown is the one word **«الكل»** (the Owner, 2026-09-25) — never «كل المستويات», «كل الفروع» or a per-field phrase; the field's label already says what «all» is of.
 - Filters narrow visible data, never gate it; every API filter parameter is optional (`GET /admin/teaching-groups`: `level_id`, `subject_id`, `category_id`, `q`); no matches under a filter is `NoResultsState`, not `EmptyState` (§14.4).
 
 ## G · Add buttons
@@ -186,8 +187,9 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 ## V · A row action looks like an action
 - Row actions are bordered buttons sized for a row (not `ghost`), destructive ones `danger`; `DataTable`'s `actions` renders the shared `Button` with `.row-action` for sizing only; focus ring is the global `:focus-visible`; never styled per page.
 
-## W · The sidebar and the page scroll independently
-- Three declarations, no JavaScript: `max-block-size` (viewport minus header), `overflow-y: auto`, `overscroll-behavior: contain` on `.admin-nav` in `admin.css`, inside the two-column media query only.
+## W · The sidebar scrolls with the page on a wide screen; on a phone it is a drawer
+- Since 2026-09-25 (the Owner — reverses 2026-08-17's sticky-with-its-own-scroll rule): at ≥ 60rem `.admin-nav` is `position: static`, compact (2.5 rem rows) and never has its own scrollbar; one page scroll reaches every entry. The «إخفاء/إظهار أقسام» toggle is hidden at that width — the sidebar is simply there.
+- Below 60rem the toggle opens the drawer (`.admin-nav-panel`), unchanged.
 
 ### And it keeps its place across a navigation
 - Every portal navigation is a full document load (no client router); afterwards the position is preserved and the active entry revealed only when needed, by the least movement; the page never moves (`scrollTop` on the container, not `scrollIntoView`).

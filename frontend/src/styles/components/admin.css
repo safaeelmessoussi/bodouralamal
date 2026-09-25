@@ -77,38 +77,23 @@
   align-content: start;
 }
 @media (width >= 60rem) {
+  /* **The sidebar scrolls WITH the page** (the Owner, 2026-09-25 — reverses
+     the 2026-08-17 sticky-with-its-own-scroll rule, UX rule W): a menu that
+     stays put while the page moves needed a second scroll to reach its last
+     entries. Static and compact (2.5 rem rows), the whole menu fits a laptop
+     screen and one scroll reaches everything. */
   .admin-nav {
-    position: sticky;
-    /* Clears the sticky application header. */
-    inset-block-start: calc(var(--header-height) + var(--space-4));
-
-    /* **The sidebar scrolls itself when it outgrows the viewport** (2026-08-17).
-       A sticky element taller than the screen is a menu whose last entries
-       cannot be reached at all — الإدارة's five nodes put the back office over
-       that line — and the page's own scroll does not help, because a sticky box
-       does not move with it.
-
-       `max-block-size` is the viewport minus the header it clears and a little
-       breathing room, so the box ends where the screen does. `overflow-y: auto`
-       then gives it its own scrollbar, and the browser's default scroll chaining
-       does the rest of what was asked: a wheel over the sidebar scrolls the
-       sidebar, and a wheel over the page scrolls the page, because they are two
-       independent scroll containers.
-
-       `overscroll-behavior: contain` is the part that stops the surprise — once
-       the sidebar reaches its end, further scrolling does NOT hand off to the
-       page underneath. Without it, reaching the bottom of the menu silently
-       starts scrolling the article behind it, which is exactly the
-       "unexpectedly scrolled the page" complaint.
-
-       **No JavaScript.** A wheel handler would have to re-derive what the
-       browser already knows, and would break keyboard scrolling and momentum
-       scrolling on the way. */
-    max-block-size: calc(100vh - var(--header-height) - var(--space-8));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    /* Room for the scrollbar, so it does not sit on top of the labels. */
-    padding-inline-end: var(--space-2);
+    position: static;
+    gap: var(--space-5);
+  }
+  .admin-nav__item {
+    min-block-size: 2.5rem;
+    padding-block: var(--space-1);
+  }
+  /* The «إخفاء/إظهار أقسام» toggle is a phone control: on a wide screen the
+     sidebar is simply there (the Owner, 2026-09-25). */
+  .admin-nav-toggle {
+    display: none;
   }
 }
 /* Below the two-column breakpoint the sidebar is not sticky, so it must not be
@@ -603,11 +588,13 @@
   font-variant-numeric: tabular-nums;
 }
 .admin-table__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-  justify-content: end;
+  /* A `<td>` that is `display: flex` leaves the table's cell model: its
+     height no longer follows the row, so its border sat at a different
+     height from the rest of the line (the Owner's Trash screenshot,
+     2026-09-25). The cell stays a cell; the flex lives on the buttons' own
+     wrapper below. */
+  text-align: end;
+  white-space: nowrap;
 }
 
 /* **A row action is a button, and now looks like one** (2026-08-17).
@@ -695,6 +682,9 @@
     padding: var(--space-2) var(--space-3);
   }
   .admin-table__actions {
+    text-align: start;
+  }
+  .admin-table__actions-group {
     justify-content: start;
   }
 }
@@ -1305,4 +1295,14 @@
 .admin-table tbody tr:hover {
   /* A pointed-at row tints, so a finger knows which line it is on. */
   background: var(--color-primary-faint);
+}
+
+.admin-table__actions-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: end;
+  vertical-align: middle;
+  white-space: normal;
 }

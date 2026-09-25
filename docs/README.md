@@ -1,6 +1,6 @@
 # Documentation — منصة بذور الأمل
 
-Two kinds of document: the **contract** ([`SRS.md`](SRS.md) — normative, immutable to agents; its dated decisions in [`archive/SRS-revisions-R1-R173.md`](archive/SRS-revisions-R1-R173.md)) and the **handbook** (everything below — current facts, rewritten in place, no history). Open work: [`TASKS.md`](TASKS.md). Ledger: [`CHANGES.log`](CHANGES.log). Visual rulebook: [`../design.mmd`](../design.mmd). Agent entry: [`../CLAUDE.md`](../CLAUDE.md).
+Two kinds of document: the **contract** ([`SRS.md`](SRS.md) — normative, immutable to agents; its dated decisions in [`archive/SRS-revisions.md`](archive/SRS-revisions.md)) and the **handbook** (everything below — current facts, rewritten in place, no history). Open work: [`TASKS.md`](TASKS.md). Ledger: [`CHANGES.log`](CHANGES.log). Visual rulebook: [`../design.mmd`](../design.mmd). Agent entry: [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Reading path
 

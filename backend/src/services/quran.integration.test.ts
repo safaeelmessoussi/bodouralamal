@@ -6,6 +6,7 @@ import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
 import { getStudentIdentity } from "./student.service.js";
+import { personalCalendarOptions } from "./calendar.service.js";
 import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 import * as marks from "./level-completion-mark.service.js";
 import {
@@ -657,6 +658,9 @@ describe("SRS Revision 167 §3 — «إتمام المستوى»: the administra
     expect(await prisma.enrollment.count({ where: { studentId: student, levelId, deletedAt: null } })).toBe(1);
     // The one predicate every reader asks.
     expect(await prisma.enrollment.count({ where: { studentId: student, ...inProgressEnrolmentWhere(student) } })).toBe(0);
+    // 2026-09-25 (the Owner: «تقويمي is still showing the levels») — the
+    // calendar's FILTER OPTIONS read the same predicate, not only its rows.
+    expect((await personalCalendarOptions(prisma, student)).levels.map((l) => l.id)).not.toContain(levelId);
 
     // Un-marked (a mistake), she is in it again.
     await marks.unmarkCompleted(prisma, admin(), student, levelId);

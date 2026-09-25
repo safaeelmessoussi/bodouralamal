@@ -229,5 +229,12 @@ function logColumns(surahs: SurahCoverage[], levels: LevelCoverage[]): Column<Qu
  * and the teaching portal, so the three cannot drift.
  */
 function Frame({ children }: { children: ReactNode }): ReactNode {
-  return <StudentLayout title={t('student.quran.title')}>{children}</StudentLayout>;
+  return (
+    <StudentLayout title={t('student.quran.title')}>
+      {/* `.quran-page` is the page's vertical rhythm (progress.css): its
+          sections, headings and the completion summary used to sit flush
+          against one another (the Owner, 2026-09-25). */}
+      <div className="quran-page">{children}</div>
+    </StudentLayout>
+  );
 }

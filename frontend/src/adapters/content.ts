@@ -129,6 +129,75 @@ export interface LevelContent {
   years: YearGroup[];
 }
 
+/* ── The whole library at once (the Owner, 2026-09-25) ──────────────────── */
+
+/** One item's place on every axis a reader may filter by. */
+export interface LibraryEntry {
+  item: ContentItem;
+  category_id: string;
+  category_name: string;
+  /** `category:<id>` for «كل مستويات الفئة», else the Level id. */
+  shelf_key: string;
+  shelf_kind: 'level' | 'whole_category';
+  level_id: string;
+  level_name: string;
+  academic_year_id: string;
+  academic_year_label: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  subject_id: string;
+  subject_name: string | null;
+}
+
+/**
+ * Every visible row, one entry per shelf it belongs to (an item filed for
+ * several Levels appears under each — R169 §10). The page groups and filters
+ * these itself: the rows are already all fetched for the index, so a second
+ * request per Level bought nothing.
+ */
+export async function fetchLibraryEntries(token: string | null = null): Promise<LibraryEntry[]> {
+  const rows = await fetchAllLibraryRows(token);
+  const entries: LibraryEntry[] = [];
+  for (const row of rows) {
+    const item: ContentItem = {
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      kind: kindOf(row.mime_type),
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      published_on: row.created_at.slice(0, 10),
+      teacher_display_name: null,
+      subject_name: row.subject_name,
+      whole_category: row.whole_category,
+    };
+    const shelves = row.whole_category
+      ? [{ key: `category:${row.category_id}`, kind: 'whole_category' as const, id: row.category_id, name: '' }]
+      : [
+          { key: row.level_id, kind: 'level' as const, id: row.level_id, name: row.level_name },
+          ...(row.additional_levels ?? []).map((l) => ({ key: l.id, kind: 'level' as const, id: l.id, name: l.name })),
+        ];
+    for (const shelf of shelves) {
+      entries.push({
+        item,
+        category_id: row.category_id,
+        category_name: row.category_name,
+        shelf_key: shelf.key,
+        shelf_kind: shelf.kind,
+        level_id: shelf.id,
+        level_name: shelf.name,
+        academic_year_id: row.academic_year_id,
+        academic_year_label: row.academic_year_label,
+        branch_id: row.branch_id,
+        branch_name: row.branch_name,
+        subject_id: row.subject_id,
+        subject_name: row.subject_name,
+      });
+    }
+  }
+  return entries;
+}
+
 /* ── The two calls the pages make ────────────────────────────────────────── */
 
 /**

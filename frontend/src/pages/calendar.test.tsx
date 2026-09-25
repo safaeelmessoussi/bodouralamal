@@ -366,7 +366,7 @@ describe('the category and level filters', () => {
     expect(html).toContain('الكبار');
     expect(html).toContain('اليافعون');
     expect(html).toContain('الطفل');
-    expect(html).toContain('كل الفئات');
+    expect(html).toContain('الكل');
   });
 
   it('disables the level select while the narrowed list is in flight', () => {

@@ -365,7 +365,7 @@ describe('BranchSelector — one component, two modes (§14.3)', () => {
     const html = renderToStaticMarkup(
       <BranchSelector branches={branches} value={null} onChange={() => undefined} />,
     );
-    expect(html).toContain('كل الفروع');
+    expect(html).toContain('الكل');
     expect(html).not.toContain('required');
   });
 
@@ -381,7 +381,7 @@ describe('BranchSelector — one component, two modes (§14.3)', () => {
         required
       />,
     );
-    expect(html).not.toContain('كل الفروع');
+    expect(html).not.toContain('الكل');
     expect(html).toContain('required');
   });
 

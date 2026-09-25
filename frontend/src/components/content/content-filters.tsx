@@ -202,7 +202,7 @@ export function applyFilters(content: LevelContent, f: ContentFilterState): Leve
 /** Fold the variant classes that actually collide in Moroccan Arabic input
  *  (TD-10's normalisation rules, minus the Latin and phone cases this page has
  *  no use for). */
-function normalizeArabic(value: string): string {
+export function normalizeArabic(value: string): string {
   return value
     .toLowerCase()
     .replace(/[ً-ْٰـ]/g, '') // tashkeel + tatweel

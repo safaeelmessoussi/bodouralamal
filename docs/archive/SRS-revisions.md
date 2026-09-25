@@ -1,9 +1,19 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–173 (2026-07-27 → 2026-09-24)
+# SRS revision ledger — Revisions 1–174 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 174 (Document Owner decisions of 2026-09-25 — eight items on the redesigned interface):** **BUILT AND VERIFIED; NO SCHEMA OR ROUTE CHANGE.**
+
+**§1 — «الكل» IS THE ONE WORD FOR «NO FILTER».** Every dropdown's «all» option reads «الكل» («use only الكل in تقويمي, الجدول الزمني and any page having a drop down having an element all in it»); the field's label says what it is all of. Twenty-seven catalogue values changed; scope VALUES that mean «every branch» («كل المقرات الحالية والمستقبلية», the teaching scope) are not filters and keep their wording.
+
+**§2 — THE SIDEBAR SCROLLS WITH THE PAGE.** On a wide screen the portal sidebar is static and compact and the «إخفاء/إظهار أقسام الإدارة» toggle is gone («not practical … having to scroll both»); reverses the 2026-08-17 sticky-with-its-own-scroll rule (UX rule W). On a phone the drawer and its opener stay.
+
+**§3 — «المحتوى التعليمي» SHOWS EVERYTHING AT ONCE.** No Category page first: the library renders every visible item grouped Category → Level (the Category's own «كل مستويات الفئة» shelf first) → academic year → branch («بدون فرع» first) → Subject, with filters on each of those axes plus type and search. `?level=`/`?category=` preselect the Level filter; a deep link to one item (`?content=`) still opens on its shelf. **Not possible, said:** grouping «per Surah» — an `EducationalContent` row carries no Surah (§4.9; a Surah belongs to a class, an occurrence or an exam, R165 §2); adding one is an Owner decision on the model, not a page change.
+
+**§4 — DEFECTS FOUND BY THE OWNER, FIXED.** (a) «تقويمي» still listed a completed Level in «المستوى»: R172 §14's predicate reached the calendar's rows but not its filter OPTIONS (`personalCalendarOptions`) — it does now, pinned. (b) «تسجيل الخروج» in the account menu and «مراجعة الطلب» in the notifications panel were near-white on white: R173's on-primary button rule for the dark bar reached into the light popovers — scoped to the bar's direct children; the sign-out ghost on the dark phone sheet made visible. (c) No notification bell on a phone — it now rides beside the burger. (d) «حفظي»'s sections, headings and completion badges sat flush against one another — the page has a rhythm now. (e) Table rows whose height followed the action buttons rather than the line: the actions `<td>` was `display: flex` and left the table's cell model; the cell is a cell again and the flex lives on an inner group (`DataTable` and the Hijri table). (f) Found in passing: a Trash row of R172 §1's `CategorySubject` read as a raw key — labelled.
 
 **Revision 173 (Document Owner decision of 2026-09-24 — the interface redesigned for the women who will use it on their phones):** **BUILT AND VERIFIED; NO SCHEMA, ROUTE, ADAPTER, HOOK OR STATE CHANGE.** The Owner: *«completely redesign the UI/UX … modern, clean, professional, elegant … a lot of grown up women who are not good with technology will be using it mostly using their phones … intuitive, simple, easy to see and to scan … to make them want to come back to use it instead of going back to physical papers»*, under three strict rules — no API call, function, endpoint or state variable changed; the same data binding and flows; typography, spacing, colour hierarchy and responsive layout — and with a rulebook at the repository root. **The redesign is the stylesheet** (`frontend/src/styles/`): every page composes the shared components (§14.3), so the tokens and the component sheets carry it to every surface, and the 1 513 frontend tests, which pin the markup, pass unchanged.
 

@@ -82,28 +82,39 @@
 }
 /* On the dark bar the filled action is SAFFRON — the one warm thing on the
    band — and the outlined ones take the on-primary set. An emerald button on
-   the emerald bar would vanish. */
-.app-header__actions .btn--primary {
+   the emerald bar would vanish. DIRECT CHILDREN ONLY: a button inside a
+   light popover (the account menu's «تسجيل الخروج», the bell's «مراجعة
+   الطلب») is on white and keeps the ordinary palette — the Owner found both
+   invisible when this rule reached them (2026-09-25). */
+.app-header__actions > .btn--primary {
   background: var(--color-accent-fill);
   border-color: var(--color-accent-fill);
   color: var(--color-text);
   box-shadow: none;
 }
-.app-header__actions .btn--primary:hover {
+.app-header__actions > .btn--primary:hover {
   background: var(--color-accent-fill-hover);
   border-color: var(--color-accent-fill-hover);
 }
-.app-header__actions .btn--secondary,
-.app-header__actions .btn--ghost {
+.app-header__actions > .btn--secondary,
+.app-header__actions > .btn--ghost {
   background: var(--color-on-primary-panel);
   border-color: var(--color-on-primary-border);
   color: var(--color-on-primary);
 }
-.app-header__actions .btn--secondary:hover,
-.app-header__actions .btn--ghost:hover {
+.app-header__actions > .btn--secondary:hover,
+.app-header__actions > .btn--ghost:hover {
   background: var(--color-on-primary-overlay);
   border-color: var(--color-on-primary);
   color: var(--color-on-primary);
+}
+/* The phone slot: the bell beside the burger, nothing else. */
+.app-header__actions--mobile {
+  margin-inline-start: auto;
+  margin-inline-end: var(--space-2);
+}
+.app-header__actions--mobile + .app-header__burger {
+  margin-inline-start: 0;
 }
 
 .nav-menu {
@@ -200,7 +211,8 @@
   .app-header__actions--desktop {
     display: flex;
   }
-  .app-header__burger {
+  .app-header__burger,
+  .app-header__actions--mobile {
     display: none;
   }
 }
@@ -255,6 +267,15 @@
 .mobile-menu .menu__trigger:hover {
   background: var(--color-on-primary-overlay);
   border-color: var(--color-on-primary);
+  color: var(--color-on-primary);
+}
+/* A ghost button on the dark sheet («تسجيل الخروج») would be emerald on
+   emerald. */
+.mobile-menu .btn--ghost {
+  color: var(--color-on-primary);
+}
+.mobile-menu .btn--ghost:hover {
+  background: var(--color-on-primary-overlay);
   color: var(--color-on-primary);
 }
 .mobile-menu .btn--primary {

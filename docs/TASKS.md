@@ -15,6 +15,7 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D5 | Honorific «الأستاذة» as an editable setting vs the constant | `lib/item-title.ts` (R172 §12) |
 | D6 | Codex questions still open: exact storage-key wording; R111 3-day purge job (audit identity e-mail closed by R170 §18) | personal-data-audit A.4 |
 | D8 | `business-rules.md` has two `### BR-20` headings (Global reach · Seeded-not-immutable) — which number is which? | reference/business-rules.md |
+| D9 | «المحتوى التعليمي» grouped «per Surah» (item 8, 2026-09-25): content carries no Surah in the model (§4.9); add `EducationalContent ↔ Surah`? | R174 §3 |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
 
 ## Owner tasks — data and legal (not code)
@@ -35,7 +36,7 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | U3 | «إدارة التسجيلات» → mark a Level → certificate; as the مستفيدة «شهاداتي» → PDF; «تثبيت التطبيق» from a phone |
 | U4 | Register with a second Google account ticking several roles → «البتّ في الصفات المطلوبة»; «طلب صفة إضافية» from «حسابي» |
 | U5 | «القاعات» capacity → schedule in that room; class with Level/group/circle all «الكل»; delete + restore a حلقة from «سلة المحذوفات»; «مستويات أخرى ينتمي إليها» |
-| U6 | R173 redesign on her phone: hero, sign-in sheet, «حلقات المواد» + dialog, calendar list view |
+| U6 | R173/R174 on her phone: hero, sign-in sheet, the bell beside the burger, «حلقات المواد» + dialog, «حفظي», «المحتوى التعليمي» with its filters |
 | U7 | QA with a real dual-role (parent + staff) account: §4.3 follows the active role |
 
 ## Engineering owed (no Production host needed)

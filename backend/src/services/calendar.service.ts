@@ -1039,8 +1039,10 @@ export async function personalCalendarOptions(
   prisma: PrismaClient,
   userId: string,
 ): Promise<PersonalCalendarOptions> {
+  // R172 §14 — a completed Level is behind her: its filter options go with it
+  // (`deletedAt: null` restated for the soft-delete guard).
   const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: userId, deletedAt: null },
+    where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
     select: {
       levelId: true,
       administrativeGroupId: true,

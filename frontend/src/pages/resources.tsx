@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
-  fetchContentLevels,
+  fetchLibraryEntries,
   fetchCategoryWideContent,
   fetchLevelContent,
   type ContentItem,
   type LevelContent,
-  type LevelSummary,
 } from '../adapters/content.js';
+import type { LibraryEntry } from '../adapters/content.js';
+import { normalizeArabic } from '../components/content/content-filters.js';
 import { ContentCard } from '../components/content/content-card.js';
 import {
   applyFilters,
@@ -19,12 +20,12 @@ import {
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
-import { LevelCard } from '../components/content/level-card.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { EmptyState, ErrorState, NoResultsState } from '../components/states.js';
 import { Container } from '../components/ui/container.js';
 import { Icon } from '../components/ui/icon.js';
+import { levelLabel } from '../components/scope/level-select.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -72,9 +73,15 @@ export function ResourcesPage(): ReactNode {
     () => new URLSearchParams(window.location.search).get('category'),
     [],
   );
-  if (levelId) return <LevelView shelf={{ kind: 'level', id: levelId }} />;
-  if (categoryId) return <LevelView shelf={{ kind: 'whole_category', id: categoryId }} />;
-  return <LibraryView />;
+  const contentId = useMemo(
+    () => new URLSearchParams(window.location.search).get('content'),
+    [],
+  );
+  // A deep link to an item still opens on its own shelf (rule AB); a deep link
+  // to a Level or a Category preselects the filter on the whole library.
+  if (contentId && levelId) return <LevelView shelf={{ kind: 'level', id: levelId }} />;
+  if (contentId && categoryId) return <LevelView shelf={{ kind: 'whole_category', id: categoryId }} />;
+  return <LibraryView initialLevel={levelId} initialCategory={categoryId} />;
 }
 
 /* ── Page 1 — the library index ──────────────────────────────────────────── */
@@ -100,15 +107,41 @@ function categoryRank(name: string): number {
   return index === -1 ? CATEGORY_ORDER.length : index;
 }
 
-function LibraryView(): ReactNode {
-  const { accessToken } = useSession();
-  const [load, setLoad] = useState<Load<LevelSummary[]>>({ kind: 'loading' });
+/** The whole library, filtered on every axis (the Owner, 2026-09-25). */
+interface LibraryFilter {
+  categoryId: string;
+  shelfKey: string;
+  yearId: string;
+  branchId: string;
+  subjectId: string;
+  kind: string;
+  query: string;
+}
+const NO_FILTER: LibraryFilter = { categoryId: '', shelfKey: '', yearId: '', branchId: '', subjectId: '', kind: '', query: '' };
+const GLOBAL_BRANCH = '__global__';
+const NO_SUBJECT = '__none__';
 
+function LibraryView({
+  initialLevel,
+  initialCategory,
+}: {
+  initialLevel: string | null;
+  initialCategory: string | null;
+}): ReactNode {
+  const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
+  const [load, setLoad] = useState<Load<LibraryEntry[]>>({ kind: 'loading' });
+  const [filter, setFilter] = useState<LibraryFilter>({
+    ...NO_FILTER,
+    ...(initialLevel ? { shelfKey: initialLevel } : {}),
+    ...(initialCategory ? { shelfKey: `category:${initialCategory}` } : {}),
+  });
+  const [open, setOpen] = useState<ContentItem | null>(null);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const rows = await fetchContentLevels(accessToken);
+        const rows = await fetchLibraryEntries(accessToken);
         if (!cancelled) setLoad({ kind: 'ready', data: rows });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -118,53 +151,200 @@ function LibraryView(): ReactNode {
       cancelled = true;
     };
   }, [accessToken]);
+  const entries = load.kind === 'ready' ? load.data : [];
 
-  /** Grouped by category, categories in the fixed order, levels in the order the
-   *  server returned them (it owns `display_order`). */
-  const groups = useMemo(() => {
-    if (load.kind !== 'ready') return [];
-    const byCategory = new Map<string, { name: string; levels: LevelSummary[] }>();
-    for (const level of load.data) {
-      const group = byCategory.get(level.category_id);
-      if (group) group.levels.push(level);
-      else byCategory.set(level.category_id, { name: level.category_name, levels: [level] });
+  // The options are what EXISTS, so no filter offers an empty answer.
+  const options = useMemo(() => {
+    const cats = new Map<string, string>();
+    const shelves = new Map<string, { label: string; categoryId: string }>();
+    const years = new Map<string, string>();
+    const branches = new Map<string, string>();
+    const subjects = new Map<string, string>();
+    for (const e of entries) {
+      cats.set(e.category_id, e.category_name);
+      shelves.set(e.shelf_key, {
+        // The shared label owns the «{Category} — {Level}» format (rule D).
+        label: levelLabel({
+          id: e.shelf_key,
+          name: e.shelf_kind === 'whole_category' ? t('content.wholeCategory.title') : e.level_name,
+          category_name: e.category_name,
+        }),
+        categoryId: e.category_id,
+      });
+      years.set(e.academic_year_id, e.academic_year_label);
+      branches.set(e.branch_id ?? GLOBAL_BRANCH, e.branch_name ?? t('content.globalScope'));
+      subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('content.noSubject'));
     }
-    // R167 §5 — «كل مستويات الفئة» opens each Category: it is for all of them.
-    for (const group of byCategory.values()) {
-      group.levels.sort(
-        (a, b) => Number(b.kind === 'whole_category') - Number(a.kind === 'whole_category'),
-      );
+    const byName = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'ar');
+    return {
+      categories: [...cats].sort((a, b) => categoryRank(a[1]) - categoryRank(b[1])),
+      shelves: [...shelves].filter(([, v]) => filter.categoryId === '' || v.categoryId === filter.categoryId),
+      years: [...years].sort((a, b) => b[1].localeCompare(a[1])),
+      branches: [...branches].sort(byName),
+      subjects: [...subjects].sort(byName),
+    };
+  }, [entries, filter.categoryId]);
+
+  const filtered = useMemo(() => {
+    const q = normalizeArabic(filter.query.trim());
+    return entries.filter(
+      (e) =>
+        (filter.categoryId === '' || e.category_id === filter.categoryId) &&
+        (filter.shelfKey === '' || e.shelf_key === filter.shelfKey) &&
+        (filter.yearId === '' || e.academic_year_id === filter.yearId) &&
+        (filter.branchId === '' || (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId) &&
+        (filter.subjectId === '' || (e.subject_id || NO_SUBJECT) === filter.subjectId) &&
+        (filter.kind === '' || e.item.kind === filter.kind) &&
+        (q === '' || normalizeArabic(e.item.title).includes(q) || normalizeArabic(e.item.description ?? '').includes(q)),
+    );
+  }, [entries, filter]);
+
+  // Category → shelf (the Category's own shelf first) → year (newest first)
+  // → branch (بدون فرع first) → subject → items.
+  const tree = useMemo(() => {
+    type SubjectG = { key: string; name: string; items: ContentItem[] };
+    type BranchG = { key: string; name: string; subjects: SubjectG[] };
+    type YearG = { id: string; label: string; branches: BranchG[] };
+    type ShelfG = { key: string; kind: 'level' | 'whole_category'; name: string; years: YearG[]; count: number };
+    type CatG = { id: string; name: string; shelves: ShelfG[] };
+    const cats = new Map<string, CatG>();
+    const seen = new Set<string>();
+    for (const e of filtered) {
+      const dedupe = `${e.shelf_key}|${e.item.id}`;
+      if (seen.has(dedupe)) continue;
+      seen.add(dedupe);
+      let cat = cats.get(e.category_id);
+      if (!cat) cats.set(e.category_id, (cat = { id: e.category_id, name: e.category_name, shelves: [] }));
+      let shelf = cat.shelves.find((x) => x.key === e.shelf_key);
+      if (!shelf) cat.shelves.push((shelf = { key: e.shelf_key, kind: e.shelf_kind, name: e.level_name, years: [], count: 0 }));
+      shelf.count += 1;
+      let year = shelf.years.find((y) => y.id === e.academic_year_id);
+      if (!year) shelf.years.push((year = { id: e.academic_year_id, label: e.academic_year_label, branches: [] }));
+      const bkey = e.branch_id ?? GLOBAL_BRANCH;
+      let branch = year.branches.find((b) => b.key === bkey);
+      if (!branch) year.branches.push((branch = { key: bkey, name: e.branch_name ?? t('content.globalScope'), subjects: [] }));
+      const skey = e.subject_id || NO_SUBJECT;
+      let subject = branch.subjects.find((x) => x.key === skey);
+      if (!subject) branch.subjects.push((subject = { key: skey, name: e.subject_name ?? t('content.noSubject'), items: [] }));
+      subject.items.push(e.item);
     }
-    return [...byCategory.values()].sort((a, b) => categoryRank(a.name) - categoryRank(b.name));
-  }, [load]);
+    const out = [...cats.values()].sort((a, b) => categoryRank(a.name) - categoryRank(b.name));
+    for (const cat of out) {
+      cat.shelves.sort((a, b) => Number(b.kind === 'whole_category') - Number(a.kind === 'whole_category') || a.name.localeCompare(b.name, 'ar'));
+      for (const shelf of cat.shelves) {
+        shelf.years.sort((a, b) => b.label.localeCompare(a.label));
+        for (const year of shelf.years) {
+          year.branches.sort((a, b) => Number(b.key === GLOBAL_BRANCH) - Number(a.key === GLOBAL_BRANCH) || a.name.localeCompare(b.name, 'ar'));
+          for (const branch of year.branches) branch.subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+        }
+      }
+    }
+    return out;
+  }, [filtered]);
+
+  const active = Object.entries(filter).some(([k, v]) => (k === 'query' ? v.trim() !== '' : v !== ''));
+  const select = (id: keyof LibraryFilter, label: string, opts: [string, string][], allLabel = t('content.all')) => (
+    <div className="cal-filter">
+      <label className="cal-filter__label" htmlFor={`lib-${id}`}>
+        {label}
+      </label>
+      <select
+        id={`lib-${id}`}
+        className="cal-filter__control"
+        value={filter[id]}
+        onChange={(e) => setFilter((f) => ({ ...f, [id]: e.target.value, ...(id === 'categoryId' ? { shelfKey: '' } : {}) }))}
+      >
+        <option value="">{allLabel}</option>
+        {opts.map(([value, name]) => (
+          <option key={value} value={value}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
     <Shell title={t('content.title')} lede={t('content.lede')}>
-      {load.kind === 'loading' ? <LevelSkeletons /> : null}
+      <div className="cal-toolbar" role="group" aria-label={t('content.filtersLabel')}>
+        <div className="cal-filter cal-filter--search">
+          <label className="cal-filter__label" htmlFor="lib-query">
+            {t('content.searchLabel')}
+          </label>
+          <input
+            id="lib-query"
+            type="search"
+            className="cal-filter__control"
+            value={filter.query}
+            placeholder={t('content.searchPlaceholder')}
+            onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
+          />
+        </div>
+        {select('categoryId', t('content.categoryLabel'), options.categories)}
+        {select('shelfKey', t('content.levelFilterLabel'), options.shelves.map(([k, v]) => [k, v.label] as [string, string]))}
+        {select('yearId', t('content.yearLabel'), options.years)}
+        {select('branchId', t('content.branchLabel'), options.branches)}
+        {select('subjectId', t('content.subjectLabel'), options.subjects)}
+        {select(
+          'kind',
+          t('content.typeLabel'),
+          (['pdf', 'video', 'audio', 'image', 'document'] as const).map((k) => [k, t(`content.kind.${k}`)] as [string, string]),
+        )}
+      </div>
+      {load.kind === 'loading' ? <YearSkeletons /> : null}
       {load.kind === 'error' ? <ErrorState /> : null}
-
-      {load.kind === 'ready' && groups.length === 0 ? (
-        // A library with nothing in it yet — informative, never a blank page
-        // (§14.4).
-        <EmptyState />
+      {load.kind === 'ready' && entries.length === 0 ? <EmptyState /> : null}
+      {load.kind === 'ready' && entries.length > 0 && tree.length === 0 ? (
+        <NoResultsState onClear={() => setFilter(NO_FILTER)} />
       ) : null}
-
-      {groups.map((group) => (
-        <section
-          key={group.name}
-          className="content-group"
-          aria-labelledby={`cat-${group.name}`}
-        >
-          <h2 id={`cat-${group.name}`} className="content-group__title">
-            {group.name}
+      {tree.map((cat) => (
+        <section key={cat.id} className="content-group" aria-labelledby={`cat-${cat.id}`}>
+          <h2 id={`cat-${cat.id}`} className="content-group__title">
+            {cat.name}
           </h2>
-          <ul className="level-grid">
-            {group.levels.map((level) => (
-              <LevelCard key={`${level.kind}:${level.level_id}`} level={level} />
-            ))}
-          </ul>
+          {cat.shelves.map((shelf) => (
+            <section key={shelf.key} className="content-shelf" aria-labelledby={`shelf-${shelf.key}`}>
+              <h3 id={`shelf-${shelf.key}`} className="content-shelf__title">
+                {shelf.kind === 'whole_category' ? t('content.wholeCategory.title') : shelf.name}
+                <span className="content-year__badge">{t('content.itemCount').replace('{n}', String(shelf.count))}</span>
+              </h3>
+              {shelf.years.map((year) => (
+                <section key={year.id} className="content-year" aria-labelledby={`year-${shelf.key}-${year.id}`}>
+                  <h4 id={`year-${shelf.key}-${year.id}`} className="content-year__title">
+                    {year.label}
+                  </h4>
+                  {year.branches.map((branch) => (
+                    <section key={branch.key} className="content-branch">
+                      <h5 className="content-branch__title">
+                        <Icon name={branch.key === GLOBAL_BRANCH ? 'shield' : 'book'} size={16} />
+                        {branch.name}
+                      </h5>
+                      {branch.subjects.map((subject) => (
+                        <div key={subject.key} className="content-subject">
+                          <p className="content-subject__title">{t('content.subjectGroupLabel').replace('{subject}', subject.name)}</p>
+                          <ul className="content-list">
+                            {subject.items.map((item) => (
+                              <ContentCard key={item.id} item={item} onOpen={setOpen} />
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </section>
+                  ))}
+                </section>
+              ))}
+            </section>
+          ))}
         </section>
       ))}
+      {active && tree.length > 0 ? (
+        <p className="field__hint">
+          <button type="button" className="link-button" onClick={() => setFilter(NO_FILTER)}>
+            {t('states.clearFilters')}
+          </button>
+        </p>
+      ) : null}
+      <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />
     </Shell>
   );
 }
@@ -399,20 +579,6 @@ function Shell({
 
 /** Skeletons shaped like the cards they replace, so the page does not reflow when
  *  the data lands (§14.4 — a skeleton, not a spinner). */
-function LevelSkeletons(): ReactNode {
-  return (
-    <div className="level-grid" role="status" aria-live="polite">
-      {[0, 1, 2, 3].map((n) => (
-        <div key={n} className="level-card level-card--skeleton">
-          <span className="skeleton skeleton--title" />
-          <span className="skeleton skeleton--wide" />
-          <span className="skeleton skeleton--narrow" />
-        </div>
-      ))}
-      <span className="visually-hidden">{t('states.loading')}</span>
-    </div>
-  );
-}
 
 function YearSkeletons(): ReactNode {
   return (

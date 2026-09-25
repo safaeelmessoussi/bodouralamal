@@ -102,6 +102,14 @@ export function ApplicationHeader(): ReactNode {
               )}
             </div>
 
+            {/* The bell rides beside the burger on a phone (the Owner,
+                2026-09-25): a notice she cannot see on the device she uses
+                is one that was not delivered. One component, two slots. */}
+            {navigation.isAuthenticated ? (
+              <div className="app-header__actions app-header__actions--mobile">
+                <NotificationBell token={accessToken} />
+              </div>
+            ) : null}
             <button
               type="button"
               className="app-header__burger"
