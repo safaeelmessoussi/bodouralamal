@@ -24,3 +24,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Hosted CI 8/8 on `8ed904de`. **Staging deploy blocked at the host preflight: «host has a pending required reboot»** (OS updates on bodour-staging); Staging stays healthy on `7090f31` until the Owner reboots the host and the deploy of `8ed904de` is re-run.
 - Owner rebooted bodour-staging (2026-09-25 18:04 UTC); preflight PASS; **deployed to Staging at `8ed904de`**: `/healthz` 200, zero error lines, both container labels `8ed904de`.
 - Library filters two-per-row on phones (the shelves were below the fold on Staging); `check-design-tokens` OK, build OK.
+- Hosted CI 8/8 on `fb3a06eb`; deployed to Staging at `fb3a06eb` (`/healthz` 200, zero error lines).
