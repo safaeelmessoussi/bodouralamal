@@ -323,7 +323,7 @@ from "out of scope" · never log PII or commit secrets · never move real data o
 · never resolve a public display identity in a client.
 
 > Full text: SRS §20 · Nine of these are enforced by
-> [CI guards](../development/ci-cd.md#the-guards).
+> [CI guards](../development/ci-cd.md#guards-scriptscicheck-sh--each-proven-by-reintroducing-its-bug).
 
 ---
 

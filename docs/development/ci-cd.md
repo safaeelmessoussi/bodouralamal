@@ -2,327 +2,43 @@
 
 # CI/CD
 
-GitHub Actions runs seven parallel verification jobs on every push to `develop`/`main` and on
-every pull request. An eighth release job runs only after all seven succeed on a push to
-`develop`.
+`.github/workflows/ci.yml` on every push to `develop`: **guards · contract · backend · integration · frontend · seed-drill · production-smoke · release-images** (8 jobs; release waits for every gate). A red gate stops promotion.
 
-```
-guards      twenty-eight dependency-free guard scripts — mechanically checkable repository rules
-contract    regenerate the OpenAPI document, fail on drift, check conformance
-backend     syntax-aware no-PII guard · lint · exact typecheck (src · seeds · scripts) · default tests · production build
-frontend    lint · exact typecheck · tests · production build
-integration fresh PostgreSQL · SeaweedFS · pg-boss · Nginx · all integration/API tests · isolation
-seed-drill  fresh-install Production seed · seed-owned suites · every backend/scripts/seed-* scenario fixture
-production  Production seed · TLS edge · anonymous browser · dependency/restart/recreation recovery
-release     exact-commit API + web images → GHCR (develop push only, after all seven pass)
-```
-
-The contract job runs the two OpenAPI-backed scripts and the backend job runs the remaining
-syntax-aware no-PII script, so **all thirty-one committed `scripts/ci/check-*.sh` checks execute in
-CI**. `check-no-pii-logs.sh` deliberately uses the TypeScript compiler API to distinguish
-executable direct `AuditLog` writes from comments and examples; it therefore runs after the
-backend's locked `npm ci`, never in the dependency-free guard job. The portability guard pins
-that placement so a warm Local `node_modules` cannot hide clean-checkout failure again.
-
-Hosted run `33246930840` is the first complete proof of the preceding five-verification-job
-topology: all five jobs passed from a clean checkout and the release job published both exact-commit images for
-`9e0b303c27e77ec731e3afee936dcb31cd165504`. After GitHub reported that the v4 checkout and
-setup-node actions targeted deprecated Node 20, the Document Owner approved the dedicated
-major upgrade on 2026-08-30. Every invocation now pins the maintained v7 line, whose official
-metadata declares `node24`. The existing node-version and explicit npm-cache inputs are
-unchanged, and the portability guard rejects any checkout/setup-node invocation outside the
-approved v7 lines rather than relying on GitHub's temporary compatibility override.
-Hosted run `33287083470` then passed all six verification jobs with the v7 actions and
-published both exact-commit images for `09ecd09b83d52b2159ab21c3b022d22577167b22`.
-
-## The guards
-
-Each exists because something went wrong, or would plausibly go wrong silently. Each was
-**proven by reintroducing the bug it catches.**
-
+## Guards (`scripts/ci/check-*.sh`) — each proven by reintroducing its bug
 | Guard | Fails on |
 |---|---|
-| `check-env-not-committed.sh` | An `.env` file committed, or the tracked template dropping a `NODE_ENV` value / falsely claiming environment-dependent error detail |
-| `check-no-db-push.sh` | `prisma db push` appearing anywhere — it bypasses the migration history and **silently drops hand-written SQL** |
-| `check-migrations.sh` | Hand-written migration SQL missing from the history |
-| `check-migration-drop-rename.sh` | A `DROP`/`RENAME` without a contract-phase justification, flagged for human review |
-| `check-prisma-mass-write.sh` | A mass-write Prisma call that skips soft-delete filtering |
-| `check-header-nav-exclusive.sh` | The burger and horizontal navigation both visible at one width |
-| `check-no-local-clock.sh` | Backend code reading the process's LOCAL clock (`getHours`, `new Date(y, m, d…)`, `toLocale…String`) — those convert through the zone data frozen in the image, which is how the platform ran an hour off Morocco's time after the 2026-09-20 change (SRS Revision 167 §2). Morocco's time comes from `lib/morocco-clock.ts` |
-| `check-design-tokens.sh` | A raw colour, a reach past the semantic token layer, or a stylesheet nobody imports |
-| `check-dialog-hidden-when-closed.sh` | A mounted native dialog whose author CSS defeats the browser rule hiding it while closed |
-| `check-progress-css.sh` | A progress fill using physical/direction-blind sizing, missing clipping or reduced-motion support, or an unloaded stylesheet |
-| `check-shared-layout.sh` | The shared page header redefined per page, a second button system in CSS, or the header losing its two-column grid |
-| `check-logo-alpha.sh` | A hero logo matted on white — semi-transparent edges near-white, so it halos on the tinted hero panel — or with too little anti-aliasing to avoid jagged edges at hero size |
-| `check-security-headers.sh` | An Nginx location declaring its own header set but dropping HSTS — `add_header` does not inherit, so the header is silently absent on the wire while the configuration still reads as if it were set |
-| `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
-| `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
-| `check-release-artifacts.sh` | Release publication that can precede a green gate (including the seed drill), lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
-| `check-host-preflight.sh` | Loss of the executable clean-host gate, its pure version/domain/public-IP parser rules, root-authoritative effective-SSH-policy inspection, the exact pipeline invocation, or the explicit Owner disk-capacity input |
-| `check-compose-operations.sh` | Any base-Compose service falling back to unbounded logs; drift in the shared ceilings; or loss of whole-application Docker/deployment health probes |
-| `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
-| `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |
-| `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
-| `check-active-role-presentation.sh` | Presentation reading the account's full role list instead of the currently active role |
-| `check-provider-seam.sh` | Online-class provider details escaping the one provider-integration seam |
-| `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
-| `check-openapi-current.sh` | `docs/openapi.json` describing an API that is no longer the one served — a served endpoint with no generator mapping, a mapping the router does not serve, or a document that reconciles but was never regenerated |
-| `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
-| `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a). **Restated per-table in R109**, after a false positive proved it had been reading column names in one flat set and had never recognised an enum-typed declaration at all |
-| `check-migration-order.selftest.sh` | The guard above, aimed at the R36.1 defect it exists for: it must fail on a CHECK that precedes its `ADD COLUMN`, pass on the same pair correctly ordered, and not flag a column name reused on another table. **A guard that has never failed is indistinguishable from no guard** — this project has shipped three of those |
-| `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
+| `check-env-not-committed` | an `.env` committed; the template dropping `NODE_ENV` |
+| `check-no-db-push` | `prisma db push` anywhere (drops hand-written SQL) |
+| `check-migrations` · `check-migration-order` (+ selftest) · `check-migration-drop-rename` | hand-written SQL missing; a migration using a column a later one adds; DROP/RENAME without justification |
+| `check-prisma-mass-write` | a mass write skipping soft-delete filtering |
+| `check-contract-dto` | a service result handed to `res.json`; a spread in `dto.ts` |
+| `check-openapi-td3` · `check-openapi-current` | an endpoint contradicting/absent from TD-3; `openapi.json` not describing the served API |
+| `check-no-local-clock` | backend reading the process's local clock |
+| `check-display-identity` · `check-active-role-presentation` · `check-association-terminology` · `check-western-digits` | raw names in the frontend; UI reading the full role list; superseded Arabic vocabulary; Arabic-Indic digits |
+| `check-design-tokens` · `check-header-nav-exclusive` · `check-dialog-hidden-when-closed` · `check-progress-css` · `check-shared-layout` · `check-logo-alpha` | raw CSS values / primitive tokens / unimported sheet; burger + nav both visible; closed dialog rendering; direction-blind progress; page-header or button system redefined; matted logo |
+| `check-security-headers` · `check-storage-edge` · `check-provider-seam` | an Nginx location dropping HSTS; MinIO reached outside the proxy policy; provider details escaping the seam |
+| `check-backup-tooling` · `check-release-artifacts` · `check-host-preflight` · `check-compose-operations` | floating restic image / unsafe restore; release able to precede a green gate or lacking the exact commit tag; loss of the host preflight; unbounded logs or missing health probes |
+| `check-doc-links` | broken relative link or missing anchor (§16.4, §19.2) |
+| `scripts/backup/test_*.py` | the backup scripts' own unit tests (12) |
 
-Run them all locally:
+Locally: `for g in scripts/ci/check-*.sh; do bash "$g" || echo "FAILED: $g"; done`.
 
-```bash
-for g in scripts/ci/check-*.sh; do bash "$g" || echo "FAILED: $g"; done
-```
+## Contract job (order matters)
+1 `npm run openapi:generate` (from the live Express router — fails on documented-but-unmounted or served-but-undocumented) → 2 `git diff --exit-code docs/openapi.json` → 3 `check-openapi-current.sh` (same question, runnable locally — added after the file went stale a week with 24 unmapped endpoints while every guard was green) → 4 `check-openapi-td3.sh`. Lesson: a guard on the committed artifact is not a guard that the artifact is current.
 
-## The contract job
+## Integration job
+`scripts/ci/test-integration.sh` builds a uniquely named disposable Compose project (base graph + `scripts/ci/fixtures/docker-compose.integration.yml`; loopback ports; fixture-only credentials; all migrations; production + fixture seeds; waits for the real health contract), runs `scripts/test/run-integration-suite.sh` — which digests every table before/after and fails on residue — and always tears the project down. Never a shared database.
 
-Four steps, and the **order** is what makes it work:
+## Not yet in CI (each a dedicated task — `TASKS.md` E3/E6)
+Generated permission-matrix tests · authenticated E2E journeys · ≥80 % coverage gate on services/policies · `TD3_REQUIRE_COMPLETE=1` · `verify-backup-restore.sh`.
 
-```yaml
-1. npm run openapi:generate                   # regenerate FROM THE IMPLEMENTATION
-2. git diff --exit-code docs/openapi.json     # fail if the committed copy differs
-3. bash scripts/ci/check-openapi-current.sh   # the same question, runnable locally
-4. bash scripts/ci/check-openapi-td3.sh       # conformance against the specification
-```
-
-**Step 1 is not redundant.** Without regenerating, step 4 would be validating a file a human
-could hand-edit — exactly what the specification forbids. Regenerating first is what makes
-`openapi.json` a generated artifact *in fact*, not merely by intention.
-
-Generation walks the **live Express router**, so it fails on any operation documented but not
-served, or served but not documented.
-
-> **Rule 4 exists because it was needed.** A route was once added to both the registry and
-> the contract while never being mounted — every gate passed while the endpoint returned
-> `404`.
-
-### Why step 3 was added, and what it is NOT a duplicate of
-
-`docs/openapi.json` **went stale for a week** — from `ed7212b` (2026-08-11) to `4842def`
-(2026-08-18) — while **24 served endpoints** had no generator mapping: enrolments, the whole
-Quran surface, grade entry, the teaching-group reads, `PUT /events/{id}/staff`. Every local
-guard was green throughout.
-
-Three things had to be true at once, and each is worth stating because each is a general trap:
-
-1. **Step 4 cannot see it.** It compares the **committed** document against the TD-3 registry
-   — *does this file describe endpoints the SRS documents* — and a stale file can satisfy that
-   forever. *Does this file describe the API we serve* is a different question, and nothing
-   was asking it outside CI.
-2. **The generator's failure looked like a build error.** Step 1 does fail on this, but under
-   a step named *"Regenerate docs/openapi.json"* — which reads as tooling breaking, not as a
-   contract gap, and reads that way to whoever glances at the job.
-3. **Nothing local ran the generator.** It is not part of `npm test`, not part of any hook,
-   and not in `scripts/ci/`. The one sweep a developer actually runs —
-   `for g in scripts/ci/check-*.sh` — could not reach it.
-
-Step 3 fixes the third, which is the one that matters: **the guard now lives where the sweep
-looks.** It fails on all three staleness modes, including the one neither other step catches —
-a document that reconciles against the router but was never regenerated after a description,
-a response code or a path changed.
-
-> **The general lesson, worth more than the fix:** *a guard that checks the committed artifact
-> is not a guard that the artifact is current.* Ask which of the two questions each gate is
-> really asking, because a gate answering the wrong one stays green while the thing it exists
-> to protect rots.
-
-**Documented-but-unimplemented endpoints report `PENDING`** and do not fail the build. A gate
-that is red from M1 to M6 is a gate nobody reads. `TD3_REQUIRE_COMPLETE=1` is deliberately not
-enabled in this workflow: the remaining registry gaps first need Owner/SRS reconciliation,
-including entries superseded by Revisions 58 and 81. Ordinary conformance remains enforced.
-
-## Stories behind three guards
-
-### The burger that was always visible
-
-`.app-header__burger { display: inline-flex }` was declared **after** the media query hiding
-it, at equal specificity. In a stylesheet where every rule has single-class specificity,
-**order is the cascade** — so the burger showed at every width.
-
-Now `check-header-nav-exclusive.sh` asserts the two are mutually exclusive.
-
-### The token guard that caught its own author
-
-`check-design-tokens.sh` was added, and **two commits later it failed on a hardcoded
-`rgb(7 56 38 / 45%)` dialog backdrop** written by the same person. Fixed with a proper
-`--color-backdrop` token.
-
-A guard that only ever catches other people's mistakes is not being tested.
-
-### Rate limits are a classification problem, not a number problem
-
-`RATE_LIMITED` fired during ordinary manual testing. The instinct is to raise a
-limit; the cause was that **`/auth/refresh` sat in the login bucket**.
-
-The SPA calls refresh on every fresh page load — no in-memory token, so it tries
-the cookie. At the auth zone's 10 r/m with burst 5 that is **six page loads**
-before a 429, measured rather than assumed: six succeeded, the seventh was
-refused.
-
-**Neither TD-13 number changed.** `/auth/refresh` and `/auth/logout` were
-reclassified under the general-API limit TD-13 already states (120 r/m); the
-OAuth entry and callback keep 10 r/m. TD-13's tighter limit protects *credential
-guessing*, and neither of those two can be guessed — refresh presents a cookie
-the server issued and rotates, and TD-12's reuse detection revokes the whole
-session on replay, which is a far stronger control than a counter.
-
-Ruled out while diagnosing, each checked rather than assumed: React StrictMode's
-double effect invocation (the client's single-flight promise collapses it to one
-network call), duplicate submissions (the form disables its button in flight),
-and IP grouping (nginx is the edge, so `$binary_remote_addr` is the real client).
-
-### The display-identity guard
-
-Proven by **planting an inline `?? nameArabic`** in the calendar service. Rejected with file
-and line; passing again once reverted.
-
-It enforces a rule where the failure is invisible to the person it harms: the wrong branch
-publishes a legal name where someone asked for a kunya.
-
-## The integration job
-
-`scripts/ci/test-integration.sh` creates a uniquely named disposable Compose project from the
-base service graph in `docker-compose.yml` (which already defines the one SeaweedFS model
-every tier shares, Owner decision 2026-09-20) and
-`scripts/ci/fixtures/docker-compose.integration.yml`. Database,
-S3 and Nginx ports bind to loopback only; the overlay removes inherited env files, supplies
-fixture-only credentials, runs all migrations and the actual Production and development seeds,
-and waits for the real whole-application health contract before Vitest starts. The trap always
-removes the project's containers, networks, volumes and its uniquely tagged images.
-
-Production-mode bootstrap/restart/restore and the focused storage-lifecycle drill use the
-same store definition and explicit S3 initializer. See
-[B1 evidence](testing.md#b1-seaweedfs-compatibility-and-recovery).
-
-Both Local Development and CI execute the same `scripts/test/run-integration-suite.sh`. It
-digests every application table before and after the serial suite and fails on residue,
-deletion, replacement or changed logical fields even when all assertions pass. CI therefore
-gates release publication on both the complete integration/API suite and exact all-table
-isolation; it never points at a shared developer database.
-
-## What CI does not yet run
-
-The workflow is explicit that later milestones extend it, as **dedicated tasks recorded in
-the ledger** rather than drive-by additions:
-
-- Permission-matrix API tests generated from the matrix
-- Authenticated Playwright end-to-end journeys (the anonymous Production browser smoke is gated)
-- The ≥ 80 % coverage gate on services and policies
-- Fatal `TD3_REQUIRE_COMPLETE=1` release completeness, pending Owner/SRS reconciliation
-
-## The release flow (binding — Document Owner, 2026-08-25)
-
-**One commit travels the whole way, and nothing overtakes it.**
-
-```
-feature branch
-  → local implementation + local tests + local browser verification
-  → merge to develop
-  → CI on a CLEAN CHECKOUT
-  → deploy that exact develop commit to Staging
-  → automated Staging E2E / acceptance
-  → Staging approval
-```
-
-Once Production exists it extends by one step, and only one:
-
-```
-  → deploy that exact Staging-approved commit to Production
-  → production smoke verification
-```
-
-> **No change reaches Production without passing Local, CI and Staging on the same commit.**
-
-Each gate exists because the one before it cannot see what it sees:
-
-| Gate | Catches what the previous gate structurally cannot |
-|---|---|
-| Local | Everything a developer can reproduce at will |
-| **CI on a clean checkout** | Anything an existing `node_modules`, a generated Prisma client or a stale container hides. Both defects that broke this build were exactly this shape — invisible locally, fatal on a clean tree |
-| **Staging** | TLS, real headers on the wire, container memory ceilings, worker registration, the storage boundary as the internet sees it. HSTS was configured and never sent, and only a `curl -I` against real TLS could have found it |
-| Production smoke | That this deployment, of this commit, on this host, is actually serving |
-
-**Commit-to-Staging traceability is part of the flow, not an extra.** The host checks out the
-approved commit detached by its full id and both runtime images carry that same id in their
-revision label. A newer `develop` commit therefore cannot overtake the approved version, and
-*what is running* is answerable from the checkout and images without an untracked marker.
-
-**A red gate stops promotion.** It is not a signal to be read later and worked around.
+## Release flow (Owner, 2026-08-25)
+`develop` → CI on a clean checkout → deploy **that exact commit** to Staging → Staging acceptance → (when Production exists) deploy the same commit → smoke. Each gate sees what the previous cannot: clean checkout (stale `node_modules`/Prisma client/containers), Staging (real TLS, headers on the wire, memory ceilings, worker registration, the storage edge). The host checks out the commit detached; both images carry it in their revision label — nothing overtakes it.
 
 ## Deployment
-
-There is **no automatic deployment to Staging or Production.** The pipeline is
-[deliberate and manual](../operations/deployment.md), ten steps, run by a human on the VPS.
-
-On a green `develop` push, the release job authenticates to GHCR with GitHub's ephemeral
-workflow token, builds the backend and the environment-independent web artifact from that
-clean checkout, and publishes each under the exact 40-character `GITHUB_SHA`. It creates no
-mutable `latest` tag and holds no VPS, DNS, TLS, OAuth, database, or deployment credential.
-The target host must pull that exact tag through `docker-compose.release.yml`, select exactly
-one of the Production/Staging tier overlays, and use `--no-build`; the frontend build's ~2 GB
-peak remains the reason host compilation is prohibited.
-
-The Vercel-based frontend Preview build that ran here in the project's early development is
-retired (Owner decision, 2026-09-13) — see
-[Vercel retirement](../operations/environments.md#vercel-retirement--owner-action-required)
-for the exact external action still needed to stop it triggering. Nothing in this pipeline
-depends on it; the GHCR publish above is the sole automated consequence of a `develop` push.
+No automatic deploys. A green push publishes the backend and web images to GHCR under the 40-char SHA (no `latest`; the workflow holds no host/DNS/TLS/OAuth/DB credential). The host pulls that tag via `docker-compose.release.yml` + exactly one tier overlay, `--no-build` (the ~2 GB frontend build never runs on a host). → [deployment](../operations/deployment.md).
 
 ## Adding a guard
+Script in `scripts/ci/` → reintroduce the bug, see red → revert, see green → wire it with a name that says the rule → row here. Shell traps already met: `grep -q` inside a pipeline under `pipefail` reports «not found» on found (capture first, then match); `printf '%s'` without `\n` concatenates a loop's output. When a guard reports «everything» or «nothing», suspect the harness first.
 
-1. Write the check as a shell script in `scripts/ci/`.
-2. **Prove it: reintroduce the bug and confirm the build goes red.** This step is not
-   optional — an untested guard is a guard that may be testing nothing.
-3. Revert the bug; confirm it passes.
-4. Wire it into the workflow with a name that says which rule it enforces.
-5. Document it here and in [Conventions](conventions.md).
-
-### Two shell traps that have already produced false results here
-
-Both were found while proving `check-doc-links.sh`, and both make a guard report confidently
-wrong answers rather than failing loudly. Worth knowing before you write the next one.
-
-**`grep -q` inside a pipeline under `set -o pipefail` reports failure on success.**
-
-```bash
-set -uo pipefail
-if ! produce_list | grep -qxF "$needle"; then   # ✗ broken
-```
-
-`grep -q` exits **as soon as it matches**, which closes the pipe; the upstream producer then
-takes `SIGPIPE` (141), and `pipefail` propagates that as the pipeline's status. So a **found**
-needle reports **not found**. Capture first, then match:
-
-```bash
-haystack=$(produce_list)
-if ! grep -qxF "$needle" <<<"$haystack"; then   # ✓
-```
-
-This one made the link guard report **every anchor in the repository as broken**.
-
-**`printf '%s'` without `\n` silently concatenates a loop's output.**
-
-A helper emitting one value per call with no trailing newline turns 40 lines into one, after
-which `grep -x` matches nothing. Same guard, same debugging session, same symptom — which is
-why the trace-then-isolate order matters: `bash -x` located the first, and testing the helper
-in isolation located the second.
-
-**The general lesson:** when a guard reports something implausible — *everything* is broken,
-or *nothing* is — suspect the harness before the content. Three of this project's
-mutation-testing false negatives had the same shape
-([Testing](testing.md#mutation-testing)).
-
-## Why guards rather than review notes
-
-A review note is followed until the reviewer is on holiday. Many of the binding
-guardrails are mechanically checkable, so they are mechanically checked — and the reviewer's
-attention goes to the ones that are not.
-
----
-
-**Related:** [Testing](testing.md), [Conventions](conventions.md),
-[Deployment](../operations/deployment.md)
+**Related:** [testing](testing.md) · [deployment](../operations/deployment.md) · [environments](../operations/environments.md)

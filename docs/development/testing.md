@@ -211,102 +211,22 @@ legitimate SigV4 traffic cannot pass.
 
 ## Running them
 
-Run these from the repository root. Select focused tests while editing; run the full
-established gates once the section is coherent. Use bounded timeouts appropriate to
-the command; diagnose a stalled SQL/health check promptly instead of retrying blindly.
+Focused tests while editing; the full established gates once at the coherent boundary; bounded timeouts; diagnose a stall, never retry blindly. Repository root unless stated.
 
-```bash
-# Focused default tests — no stack required; paths relative to the package
-npm --prefix frontend test -- src/pages/calendar.test.tsx
-npm --prefix backend test -- src/lib/health.test.ts
+| Purpose | Command |
+|---|---|
+| Focused unit | `npm --prefix frontend test -- src/pages/calendar.test.tsx` · `npm --prefix backend test -- src/lib/health.test.ts` |
+| Package gates | `cd backend && npm run lint && npm run typecheck && npm test && npm run build` · `cd frontend && npm run lint && npx tsc --noEmit -p . && npx vitest run && npm run build` |
+| Guards | `for g in scripts/ci/check-*.sh; do bash "$g" \|\| exit; done` (incl. `check-doc-links.sh`) |
+| Integration, disposable stack | `FFMPEG_PATH=/usr/bin/ffmpeg bash scripts/ci/test-integration.sh src/controllers/calendar.http.integration.test.ts` (focused) · same with no path (full, incl. the public-reader browser gate) |
+| Seed drill | `PRODUCTION_SEED_DESTRUCTIVE_FIXTURE=1 bash scripts/seed/verify-production-seed.sh` — seeds twice, runs every scenario seed and `ops:remove-fixtures` |
+| Browser acceptance (own stack) | `bash scripts/dev/browser/verify-platform-owner-framing.sh` |
+| Production-mode bootstrap drill | `bash scripts/deploy/verify-production-bootstrap.sh` — real images, Production overlay with synthetic secrets, seed twice + row diff, synthetic TLS + `nginx -T`/HSTS/CSP, headless Chrome on the built RTL routes, worker drain across SIGTERM, restart of every container over stateful volumes, encrypted recovery point → destroy volumes → restore → `/healthz`. Repository-side evidence only (no GHCR, no public cert, no VPS budget) |
+| Host preflight (read-only) | `BODOUR_RELEASE_TAG=<40-char-sha> bash scripts/deploy/preflight-host.sh production bodouralamal.com <public-ipv4> <min-free-GiB>` |
+| Backup drill | `bash scripts/backup/verify-backup-restore.sh` (disposable volumes + local encrypted repository) |
+| Screenshots | `bash scripts/dev/browser/shoot-pages.sh` |
 
-# Final package gates — no database/storage writes
-npm --prefix backend run lint && npm --prefix backend run typecheck && npm --prefix backend test && npm --prefix backend run build
-npm --prefix frontend run lint && npm --prefix frontend run typecheck && npm --prefix frontend test && npm --prefix frontend run build
-
-# Repository and contract guards — every scripts/ci/check-*.sh guard is represented in CI
-for g in scripts/ci/check-*.sh; do bash "$g" || exit; done
-bash scripts/ci/check-doc-links.sh
-
-# Focused integration, then full at final boundary — owns a disposable stack
-bash scripts/ci/test-integration.sh src/controllers/calendar.http.integration.test.ts
-bash scripts/ci/test-integration.sh
-
-# R115 authenticated browser acceptance — also owns and destroys its whole stack
-bash scripts/dev/browser/verify-platform-owner-framing.sh
-
-# Production-mode bootstrap/readiness — synthetic TLS, no fixtures, isolated volumes
-bash scripts/deploy/verify-production-bootstrap.sh
-
-# Actual release host — read-only; requires installed secrets, DNS, GHCR, approved disk floor,
-# and non-interactive root authority for the root-only effective-SSH-policy inspection
-BODOUR_RELEASE_TAG=<40-char-commit> bash scripts/deploy/preflight-host.sh \
-  production bodouralamal.com <expected-public-ipv4> <minimum-free-GiB>
-
-# Destructive only to uniquely named disposable volumes and a local encrypted repository
-bash scripts/backup/verify-backup-restore.sh
-```
-
-The full disposable integration command includes the real public-reader browser
-gate (calendar auth transitions, month geometry, canonical dialog and media bytes).
-For other journeys, select the harness from the browser inventory below and inspect
-its fixture/teardown first. `scripts/dev/test-integration.sh` and many operator
-browser harnesses write to the configured development stack: they are **not** the
-safe default on an Owner-populated localhost. Use disposable infrastructure unless
-that environment's fixture writes are explicitly authorized. No command here
-authorizes a deployment or live-data cleanup.
-
-The Production bootstrap drill fills the gap the fixture-tier integration suite intentionally
-cannot cover. It builds the actual API/web images, resolves the Production Compose overlay with
-synthetic secrets, applies all migrations, executes the real Production seed twice, and compares
-every seeded row including ids and timestamps. It proves the exact reference counts, the single
-unbound Super Admin, absence of branches/rooms/groups/rosters/schedules/content and fixture/dev
-accounts, all three MinIO policies, and no host binding for PostgreSQL or MinIO. A generated
-one-day certificate activates the real TLS Nginx configuration on loopback; `nginx -T`, HSTS,
-CSP, public-bucket-root denial, the anonymous API boundary and the complete worker health payload
-are asserted. A real headless Chrome then loads the built Arabic RTL login, calendar, library and
-not-found routes through that exact TLS hostname. It proves the Google-only login surface,
-anonymous refresh/API refusal, no browser credential residue, CSP/runtime cleanliness, successful
-public reads, and the live Production auth rate-limit envelope. The probe never mints a development
-session or loads fixture users; authenticated journeys remain a same-origin Staging acceptance
-gate. The resolved API service must also carry the two-minute stop grace that outlives
-pg-boss's bounded 105-second drain. The recovery half stops only its disposable object store and proves
-fail-closed health plus recovery; leaves a real job pending while the worker is stopped and proves
-it drains on return; holds a real handler active across API SIGTERM and proves the graceful drain;
-then restarts PostgreSQL, Nginx, and the full stack. Finally it force-recreates every long-running
-container over the same stateful volumes and rechecks the exact seed rows, migration history,
-private object bytes, job terminal states, and non-migrating/non-seeding API command. The same
-drill labels both candidate images with the exact repository HEAD and pins the running API/Nginx
-containers to those image IDs. Its final phase creates an encrypted recovery point from this
-Production-mode graph, writes newer PostgreSQL and object state, destroys both data volumes,
-restores into empty replacements, and requires the exact images and whole-platform `/healthz` to
-return with the pre-change values, unchanged migrations and unchanged Production seed. The same
-drill is a dedicated hosted verification job, and exact-image publication waits for it. Cleanup
-destroys the unique containers, volumes, encrypted repository, network, images, generated key,
-and Chrome profile.
-
-This is repository-side deployment evidence, not Staging or Production acceptance. It does not
-pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget or reboot,
-exercise resource/disk pressure, use the selected Moroccan backup target/object store, or prove
-realistic-volume RTO; those remain separate host/external checks.
-
-The host preflight is the target-side complement. It is deliberately read-only and prints no
-configuration values. Its source guard directly tests the Compose-version, domain and public-IP
-parsers and pins every host/configuration invariant, while the actual VPS invocation checks the
-daemon, filesystem, DNS, secret modes, resolved release graph and exact GHCR manifests. Passing
-it still means only *ready to deploy*: no container, migration, certificate or backup has run.
-
-The backup drill is not a source-text assertion. It writes a PostgreSQL row and SeaweedFS object,
-creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
-restores them into empty replacements, reads both values back, then executes the portable dump
-into a second clean PostgreSQL database. It also pins the running container IDs across recovery
-creation and proves a wrong repository credential fails visibly before any service stops — and,
-since Revision 171 §10, that an active class recording (the writer answering exit 3) and an
-unanswered recording check each postpone the run with every container untouched.
-Fixture mode structurally refuses SFTP so the drill cannot send local data to an external target.
-The original under-one-minute MinIO proof is historical. The expanded B8 SeaweedFS proof
-below verifies the current recovery mechanism; realistic Production volume still requires
-the launch drill. Tiny fixtures do not prove Production RTO.
+`scripts/dev/test-integration.sh` and most operator harnesses write to the **configured dev stack** — not safe on an Owner-populated Localhost without authorization. Nothing here deploys or cleans live data.
 
 ### B8 same-VPS backup and recovery
 
@@ -447,7 +367,7 @@ endpoint had no HTTP-level test at all. Nothing in the suite could have noticed,
 nothing in the suite was looking at the response as a *shape*.
 
 So: an endpoint whose contract matters gets a test that would fail if the contract grew. The
-counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#the-guards) — the guard makes the
+counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#guards-scriptscicheck-sh--each-proven-by-reintroducing-its-bug) — the guard makes the
 projection exist, the test makes it *correct*.
 
 ### The client half of the same guard

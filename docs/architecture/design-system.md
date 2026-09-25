@@ -239,4 +239,4 @@ a future LTR locale is a `dir` change rather than a stylesheet fork.
 ---
 
 **Next:** [Internationalization](internationalization.md) · **Related:**
-[Frontend](frontend.md), [CI/CD](../development/ci-cd.md#the-guards)
+[Frontend](frontend.md), [CI/CD](../development/ci-cd.md#guards-scriptscicheck-sh--each-proven-by-reintroducing-its-bug)

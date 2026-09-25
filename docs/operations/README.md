@@ -19,34 +19,4 @@ do when something breaks.
 | [Runbooks](runbooks.md) | Step-by-step procedures for the things that actually happen |
 | [Same-VPS recovery](recovery.md) | Temporary B8 encrypted backup, host scheduling, operator signals and safe recovery |
 
-## The operational picture in one paragraph
-
-Everything runs as **one `docker-compose` stack on a single Moroccan VPS**: Nginx, the Node
-API (with job workers in-process), PostgreSQL, S3 storage, and Certbot. Nginx is the only
-container publishing host ports. Exact-commit API and web images are built in CI after the
-existing gates pass and pulled through the release overlay; the server never compiles them.
-Configuration is environment variables that the application validates at boot,
-failing fast and by name. R133 backups are monthly, with at most two generations after
-verified rotation. The Owner temporarily permits an encrypted **same-VPS** repository;
-this cannot recover total VPS/provider/disk loss. The host schedule and operator checks
-must be installed explicitly, and realistic-size restore is drilled before launch.
-
-## Three things that will bite you if you skip them
-
-**Never build images on the VPS.** The frontend build peaks near 2 GB and will exhaust a 4 GB
-box already running PostgreSQL, object storage, and Node. A missing exact-commit registry
-image stops deployment; it is never permission to build a substitute on the host
-([why](deployment.md#where-the-images-come-from)).
-
-**Take a `pg_dump` immediately before applying migrations** on any existing deployment.
-Migrations are forward-only in production — the dump *is* the rollback point, and it must
-match the pre-migration state exactly.
-
-**Never weaken cookie attributes to make an environment work.** `HttpOnly; Secure;
-SameSite=Lax` is identical in every tier ([why](environments.md#cookie-attributes-are-identical-in-every-environment)).
-**Staging** is same-origin like Production, so the cookie flows there normally.
-
----
-
-**Related:** [System overview](../architecture/system-overview.md),
-[CI/CD](../development/ci-cd.md)
+One `docker-compose` stack on one Moroccan VPS (Nginx the only published port; API with in-process workers; PostgreSQL; S3; Certbot). Exact-commit images are built in CI and pulled — **never built on the host** (the frontend build peaks ~2 GB). Config is validated at boot, failing by name. Backups: R133 monthly, ≤2 generations, encrypted same-VPS repository (Owner-permitted, temporary; cannot survive total host loss). Never `prisma db push`; never a mutable image tag.

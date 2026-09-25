@@ -117,7 +117,7 @@ columns speculatively is prohibited.**
 
 Version majors and minors are **locked**. During active development only patch-level
 updates are permitted, each in its own commit with a stated reason and a full CI run
-([version policy](../development/conventions.md#version-policy)).
+([version policy](../development/conventions.md#versions)).
 
 ## Repository layout
 
