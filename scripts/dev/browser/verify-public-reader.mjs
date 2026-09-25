@@ -77,7 +77,10 @@ try {
   await send('Network.clearBrowserCookies');
   await width(390);
   await open('/resources');
-  check('fresh anonymous public library has real fixture level', await waitFor(`!!document.querySelector('a[href*="${fixture.levelId}"]')`));
+  // R174 §3 — the library shows everything at once: the fixture Level is a
+  // SHELF heading with its items beneath it, not a card that links away.
+  check('fresh anonymous public library has real fixture level', await waitFor(`!!document.querySelector('#shelf-${fixture.levelId}') && document.querySelectorAll('#shelf-${fixture.levelId} ~ .content-year .content-card, section[aria-labelledby="shelf-${fixture.levelId}"] .content-card').length > 0`));
+  check('the library filters read «الكل»', await evaluate(`[...document.querySelectorAll('.cal-toolbar select option[value=""]')].every((o) => o.textContent.trim() === 'الكل')`));
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));
