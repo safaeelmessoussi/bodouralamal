@@ -1,0 +1,10 @@
+# CHANGES — append-only ledger (rotated 2026-09-25)
+
+Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 lines: what changed · defects found · verification (exit-0 evidence) · CI/Staging outcome. No narrative, no restating docs. Earlier history: `archive/CHANGES-2026-07-27-to-09-25.log`.
+
+## 2026-09-25 — repository cleanup (docs token pass, dead code, ledger rotation)
+- Deleted: 51 `SRS-PROPOSAL-*.md` (44 ratified into the SRS, 7 never ratified); `trash-purge-report.service` + test; `scheduling/labels.ts` + 4 tests (contract pins kept); `trumpet-12.wav`, `claude_install.sh`, `claude-resume.sh` (personal, moved to `~/`).
+- Archived (`docs/archive/`): SRS revision ledger R1–R173 (631 KB out of `SRS.md`), `TASKS` and `CHANGES` ledgers, six dated audit pages.
+- Rewritten compact: `CLAUDE.md`, `AGENTS.md`, `README.md`, `IMPLEMENTATION_PLAN.md`, `docs/README.md`, `TASKS.md` (open items only, 59 boxes → 32 rows), tier-1 handbook pages.
+- De-duplicated: one `WEEKDAYS` (`lib/weekdays.ts`), one `GLOBAL` sentinel, student `canAccess` aliased; `scripts/backup/test_*.py` (12) wired into the CI guards job; stale «never built» purge paragraph in `personal-data-map.md` corrected.
+- Verification: frontend tsc/lint/1509 tests; backend typecheck/lint/unit; all `check-*.sh` guards; `check-doc-links.sh`; build.
