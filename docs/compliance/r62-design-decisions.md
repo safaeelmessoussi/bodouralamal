@@ -518,7 +518,7 @@ changes the data model:
   stays either way.
 
 **Scope approved 2026-08-11. R62 is drafted at
-[`docs/SRS-PROPOSAL-R62.md`](../SRS-PROPOSAL-R62.md) and audited against the
+SRS Revision 62 (ledger: `docs/archive/SRS-revisions-R1-R173.md`) and audited against the
 live architecture in its §62.13 — not applied.**
 
 **The audit changed the draft once:** deferring the child's `User` to approval

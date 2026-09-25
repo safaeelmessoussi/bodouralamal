@@ -484,7 +484,7 @@ TeachingGroup       = an INDEPENDENT placement under (Subject, Level)
 
 A Level need not have a group; a Subject need not have a circle. **A group-less
 enrolment is a placement, not a gap** — and it must be able to hold a circle seat,
-which is the [R66 NULL-relation bug class](../SRS-PROPOSAL-R66.md) guarded by
+which is the R66 NULL-relation bug class guarded by
 `group-less-enrollment.test.ts`.
 
 ### An enrolment belongs to a semester, and «جارٍ» is read from its dates
@@ -2609,7 +2609,7 @@ and says nothing false about place.
   neighbours.
 * **Two reads are unlisted in TD-3** — `GET /admin/teaching-groups` and
   `GET /students/me/grades`. See
-  [the audit](audit-2026-08-17-ux-architecture.md) §Z for both, with the
+  [the audit](../archive/audits/audit-2026-08-17-ux-architecture.md) §Z for both, with the
   precedent (`GET /students/me/quran` ships under TD-3.3's existing clause and is
   unlisted too).
 * **A مؤطرة's Quran list shows names only.** `/quran-students` returns

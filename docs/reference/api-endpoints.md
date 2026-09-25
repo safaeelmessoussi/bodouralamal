@@ -318,7 +318,7 @@ declared Subjects cannot silently rewrite what the staff request recorded.
 **The grant runs through the same function `PUT /admin/users/{id}/roles` uses**, so approval
 cannot become a weaker path to authority: administrator roles stay Super-Admin-only, and a
 refused grant takes the activation with it. Rejection grants nothing whatever the caller sends.
-Drafted in [SRS-PROPOSAL-R49](../SRS-PROPOSAL-R49.md).
+
 
 **Suspension is a verb, not a field**, because TD-4.15 binds the transition to revoking every
 live `RefreshToken` in the same transaction — a client that set `account_status` on the edit and
@@ -337,7 +337,7 @@ their own account (`SELF_SUSPENSION`). Revision 22 documents that lockout as a r
 Revision 22 requires administrator changes to happen *exclusively through the application*;
 pre-provisioning an unclaimed account straight into the highest role is a different risk from
 promoting one that already exists and has been approved. Drafted in
-[SRS-PROPOSAL-R48](../SRS-PROPOSAL-R48.md).
+the R48 draft (superseded; see SRS R55+).
 
 **A role change deliberately does not revoke sessions** — Revision 10 accepts the ≤1-hour
 stateless window for everything that is not safeguarding-sensitive, and those operations
@@ -377,7 +377,7 @@ A room carries **`capacity`** (`number | null` — *not stated*; R169 §3) on ev
 
 Documented by the §5.6 screens and the §14.2 screen standard, exactly as Branches and Rooms
 are (the Revision 21 pattern). SRS wording is drafted in
-[SRS-PROPOSAL-R47](../SRS-PROPOSAL-R47.md).
+the R47 draft (superseded; see SRS R55+).
 
 | | Path | Audience |
 |---|---|---|

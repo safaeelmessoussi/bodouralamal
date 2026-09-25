@@ -2,7 +2,7 @@
 
 # Personal data map — what a deletion request reaches
 
-**This page extends `SRS-PROPOSAL-R111.md` §3; it does not replace or restate
+**This page extends SRS Revision 111 §3; it does not replace or restate
 it.** R111 classified all the relationships a `User` carried when it was written,
 **enumerated from the live database**, and that classification is the base.
 

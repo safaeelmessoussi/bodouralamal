@@ -8,7 +8,7 @@ repository and may one day have to rebuild it.
 Each page explains **why** as well as **what** — the alternatives that were rejected, the
 constraints that forced a choice, and the failure the design is guarding against. Where a
 rule is normative it is cited rather than restated
-([why](../README.md#the-two-kinds-of-document-in-this-repository)).
+([why](../README.md)).
 
 ## The one-hour tour
 

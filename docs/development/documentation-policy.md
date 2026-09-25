@@ -138,7 +138,7 @@ The two tiers, and which wins, are defined normatively in **§16.4**.
 The handbook (everything else in `docs/`) is **mutable by anyone**, in the same commit as
 the change it describes.
 
-> [The two kinds of document](../README.md#the-two-kinds-of-document-in-this-repository)
+> [The two kinds of document](../README.md)
 
 ## Write the system, not the code
 

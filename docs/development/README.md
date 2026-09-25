@@ -17,17 +17,6 @@ Contributing to the platform.
 | [QA inventory](qa-inventory.md) | What exists, how each part is verified, and where the browser gaps are |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
-| [SRS proposal — Revision 73](../SRS-PROPOSAL-R73.md) | Quran progress: a reachable node, `quranlog.create`, and Quran-specific scope. **Drafted, NOT applied** — §73.4 needs an Owner decision |
-| [M4 Quran Progress — historical audit](audit-2026-08-12-quran.md) | Historical R73 audit. Its broad Quran-as-Subject conclusion is superseded by R107–R108: القرآن الكريم is the domain, only حفظ القرآن carries the memorisation marker, and the current implementation is documented in [Quran progress](quran-progress.md). |
-| [SRS proposal — Revision 71](../SRS-PROPOSAL-R71.md) | An event has somebody responsible for it. **Applied** — `EventStaff`, and event scope as a union |
-| [مؤطرات, responsibilities and scope — audit](audit-2026-08-12-roles.md) | The model already separates person · capability · scope. **One real gap: an Event has an audience but nobody responsible for it** — plus two terminology defects. Awaiting Owner approval |
-| [SRS proposal — Revision 70](../SRS-PROPOSAL-R70.md) | Grade entry gets a home, an audience and an audit row. **Applied** — the M5a revision |
-| [Exams & assessment — audit and proposal](audit-2026-08-12-exams.md) | The model already exists and the exam half is built; **grade entry is the whole gap**. Retroactive recording needs nothing. Three small SRS clauses required — **awaiting Owner review** |
-| [Audit — 2026-08-11](audit-2026-08-11.md) | Level creation's branch coupling · per-child placement · the deletion model · deployment readiness. **Four questions audited to a decision, none implemented** |
-| [SRS proposal — Revision 76](../SRS-PROPOSAL-R76.md) | List sorting (`sort_by`/`sort_dir`, allow-listed per endpoint) and manual reordering (`PATCH /admin/{resource}/order`, taking the **sequence**). **Applied 2026-08-18** — both contracts are in force |
-| [SRS proposal — Revision 75](../SRS-PROPOSAL-R75.md) | The in-app audio recorder, brought forward for **class sessions only**. **Drafted, NOT applied** — it reinstates risk R-4, which is the Owner's to accept |
-| [Platform-wide UX & IA correction — audit](audit-2026-08-17-ux-architecture.md) | The atomic foundation already existed; the defects were **drift at the edges**. Five dropdown-gated pages, a second button system, three copies of the Level label. **Applied** — two unlisted TD-3 reads reported in §Z |
-| [Trash lifecycle audit — 2026-09-01](audit-2026-09-01-trash-lifecycle.md) | Remaining schedule/history/reference/link cases classified against the FK graph; implemented exact-child and leaf closures separated from Owner decisions |
 | [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
 **Constitution, conventions, or UX architecture?** [The constitution](engineering-constitution.md)
