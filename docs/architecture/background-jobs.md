@@ -2,495 +2,129 @@
 
 # Background jobs
 
-**pg-boss** — a Postgres-backed job queue running inside the API container.
+**pg-boss**, a Postgres-backed job queue running inside the API container.
 
 ## Why not Redis
 
-Two reasons, and the second is the interesting one.
-
-**Container budget.** On a 4 GB VPS already running PostgreSQL, MinIO, Node, and Nginx, a
-Redis container is a real cost in memory and in operational surface — another thing to
-back up, monitor, and secure.
-
-**Transactional enqueue.** Because the queue *is* a Postgres table, a job can be enqueued
-**inside the same transaction as the mutation that triggers it**. With an external broker
-that is impossible: you either commit the mutation and hope the enqueue lands, or enqueue
-first and hope the commit does. Both are broken states, and both are common bugs.
+- Container budget: a 4 GB VPS already runs PostgreSQL, MinIO, Node and Nginx.
+- Transactional enqueue: the queue is a Postgres table, so a job joins the mutation's transaction; an external broker cannot.
 
 ## Transactional enqueue
 
-> Wherever a mutation triggers a job, the enqueue is **a database insert through the same
-> transaction client**. A committed mutation with a lost job, and a job for an uncommitted
-> mutation, are **both prohibited states**.
-
-Which means:
-
-```ts
-// ✅  the insert joins the transaction
-await prisma.$transaction(async (tx) => {
-  await rosterRepo.enrol(tx, …);
-  await jobsRepo.enqueue(tx, 'consent.reevaluate', { session_id });
-});
-
-// ❌  boss.send() uses its own connection and sits OUTSIDE the transaction
-await prisma.$transaction(async (tx) => {
-  await rosterRepo.enrol(tx, …);
-});
-await boss.send('consent.reevaluate', { session_id });   // prohibited here
-```
-
-Job rows are inserted through a dedicated `JobsRepository` using pg-boss's documented job
-table format. The repository copies retry, expiry, retention and policy values from the
-registered queue row; inserting only `name` and `data` would silently bypass TD-7's retry
-contract. A singleton key deduplicates pending `created`/`retry` work while permitting one
-follow-up to be committed behind an active full recompute. This is **one of only two places
-raw SQL is permitted** in application code — the other being `SELECT … FOR UPDATE` row locks.
-
-`boss.send()` is not banned outright; it is banned **for job-triggering mutations**, which
-is where the atomicity matters.
+- A job-triggering mutation enqueues through the same transaction client (`jobsRepo.enqueue(tx, name, data)`); a committed mutation with a lost job and a job for an uncommitted mutation are both prohibited states.
+- `boss.send()` uses its own connection, outside the transaction: banned for job-triggering mutations, not outright.
+- `JobsRepository` inserts pg-boss's documented job-table format, copying retry, expiry, retention and policy from the registered queue row (only `name` + `data` would bypass TD-7's retry contract); a singleton key deduplicates pending `created`/`retry` work while permitting one follow-up behind an active full recompute.
+- One of only two places raw SQL is permitted in application code; the other is `SELECT … FOR UPDATE`.
 
 ## The catalog
 
-Every job gets five attempts total — the initial execution plus at most four retries with
-exponential backoff — then dead-letters with an Admin-visible failure. Singleton keys prevent
-duplicate concurrent runs.
+Five attempts (initial + four retries, exponential backoff), then dead-letter with an Admin-visible failure; singleton keys prevent duplicate concurrent runs.
 
-| Job | Trigger | Idempotency |
-|---|---|---|
-| `consent.reevaluate` | Roster/Teaching-Group change · consent change · recording import/replacement · Session-content link · R92 occurrence-audience change | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
-| `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
-| `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
-| `backup.replicate` | TD-7 legacy catalog reference, **not registered** | Current approved B8 execution is the [monthly same-VPS host procedure](../operations/recovery.md); Document Owner must reconcile TD-7 execution/dashboard wording. No phantom healthy worker or nightly/offsite claim |
-| `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge; daily reconciliation | Moves one immutable old key to quarantine or retires exact leftovers. Its daily trigger retries existing `StorageRetirement` records only; Trash retention authorization remains with `trash.retention-purge` |
-| `upload.gc` | Daily cron | Deletes browser/server-finalization staging **strictly older than 48 h** in bounded durable pages — never younger, and never provider recording staging |
-| `content.quarantine-sweep` | Daily cron (R170 §10) | Deletes `quarantine/<content id>/…` objects in both buckets **strictly older than 90 days and owed to nobody** — one profile of `upload.gc`'s loop. Retained: an object whose content has a Trash entry (its own purge or restore owns it) or an unfinished storage obligation, and any key of another shape |
-| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
-| `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
-| `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
-| `session-recording-ingest` | A **verified** provider completion callback (R99) | Singleton per recording. Turns a provider staging object into an `EducationalContent` + `SessionContent`. See below |
-| `session-recording-reconcile` | Cron, **every fifteen minutes** (R167 §5) | Idempotent; deletes nothing. Asks the provider about recordings whose callback never came, believes a staged file where the provider has no answer, and re-queues every import that has not succeeded — indefinitely. See below |
+| Job | Trigger | Schedule | Idempotency |
+|---|---|---|---|
+| `consent.reevaluate` | roster/Teaching-Group change · consent change · recording import/replacement · Session-content link · R92 occurrence-audience change · recording metadata correction | on demand | singleton per session (R43; the gate's subject is a session's resolved audience, BR-2); full recompute |
+| `session.materialize` | course-schedule create/edit | nightly cron | singleton per schedule; unique `(schedule, date)` |
+| `content.bucket-migrate` | visibility change · consent forcing (pre-R170 only) · exact old-public-key retirement after replacement/deletion · recording metadata correction (public read safeguard, even with no bucket move) | on demand | consent arm pins the source key; copy–verify–delete and exact retirement idempotent; missing source is success |
+| `backup.replicate` | TD-7 legacy reference, **not registered** | none | B8 execution is the [monthly same-VPS host procedure](../operations/recovery.md); Document Owner must reconcile TD-7 wording; no phantom worker or nightly/offsite claim |
+| `content.quarantine-purge` | exact replacement/deletion obligation · deliberate R59.1 purge | daily reconciliation | executes one `StorageRetirement`; the daily run retries existing records only; Trash retention stays with `trash.retention-purge` |
+| `upload.gc` | — | daily cron | deletes browser/server-finalization staging strictly older than 48 h in bounded pages; never provider recording staging |
+| `content.quarantine-sweep` | — | daily cron (R170 §10) | deletes `quarantine/<content id>/…` in both buckets strictly older than 90 days and owed to nobody |
+| `token.purge` | — | daily cron | consumed onboarding tokens past horizon and expired refresh tokens; bounded batches, one transaction per `RefreshSession` under the row lock refresh/logout use; an empty anchor goes with its last token |
+| `ratelimit.purge` | — | daily cron | counters for elapsed windows; housekeeping only, the quota decision is synchronous |
+| `audit.purge` | — | daily cron | the single sanctioned audit-row deletion path |
+| `trash.retention-purge` | — | daily cron | `purgeExpiredEntries` + exact-generation User de-identification (R133/B2); restore refuses an expired User window before the sweep; not an account-purge queue |
+| application / rejected-registration retention | — | daily cron | in `jobs/runner.ts` |
+| `session-recording-ingest` | verified provider completion callback (R99, ratified R100) | on demand | singleton per recording; `session_recording.educational_content_id` UNIQUE |
+| `session-recording-reconcile` | — | every 15 minutes (R167 §5), no zone | deletes nothing; re-queues indefinitely |
 
-Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
-features.
-
-R133/B2 supersedes the older R111 catalog-gap note: `trash.retention-purge` invokes
-`purgeExpiredEntries` and the exact-generation User de-identification lifecycle;
-restore refuses an expired User window even before that sweep runs. It is not a
-new account-purge queue. Application/rejected-registration retention handlers are
-also part of the current runtime catalog in `jobs/runner.ts`.
-
-All nine daily application cron registrations (and the quarter-hourly reconciler, for which a zone means nothing) explicitly pass `tz: config.TZ`
-(`Africa/Casablanca`); pg-boss otherwise defaults to UTC even in a correctly
-configured container. This differs from B8's deliberately UTC host backup timer.
-Recording metadata corrections join consent reevaluation and commit the public
-read safeguard/exact migration obligation even when no bucket move is requested.
+- Post-MVP (`import.csv`, `export.csv`, `grade.recalculate`) join with their features.
+- All nine daily crons pass `tz: config.TZ` (`Africa/Casablanca`); pg-boss otherwise defaults to UTC. B8's host backup timer is deliberately UTC.
 
 ## Runtime worker health
 
-`GET /healthz` keeps **queue infrastructure** and **application workers** as two
-different components. The `pgboss` schema proves that durable enqueue storage exists; it
-does not prove that this API process started a runner. The worker component is ready only
-after runner initialization completed and every handler in the implementation's worker
-catalog registered successfully.
-
-The readiness expectation is derived from the same catalog the runner loops over — there is
-no second list of queue names in the health controller. pg-boss's live worker registry then
-provides the ongoing signal: every expected handler must remain active and must either have
-polled within 15 seconds or be processing a job. The bounded startup grace uses the same
-window, so an initial empty fetch does not make an ordinary deployment flap; a long recording
-ingestion is not called stale merely because its handler is busy.
-
-Before any worker registers or readiness can become green, startup reconciles the TD-7 retry
-policy on every implemented queue and scans live recording-linked Sessions in bounded UUID
-batches. Each batch inserts the ordinary singleton reevaluation obligations transactionally.
-The scan is repeatable and does not rewrite content or guess consent; it closes rollout and
-backlog gaps left by older trigger coverage. Queue policy updates change retry/backoff only,
-so pg-boss retention, expiry and deletion horizons—and historical jobs—remain intact.
-
-This runtime catalog is deliberately not the same thing as TD-7 release completeness.
-`consent.reevaluate`, the consent-forced arm of `content.bucket-migrate`, bounded `upload.gc`,
-and the exact-operation arm of `content.quarantine-purge` have real handlers and are therefore
-part of readiness. Readiness for the last queue means committed replacement/deletion/manual
-purge obligations can drain; it does **not** claim that automatic age-based destruction is
-enabled. Other TD-7 jobs whose implementations have not landed remain release-readiness gaps;
-health neither implements them nor invents running handlers for them.
+- `GET /healthz` separates queue infrastructure (`pgboss` schema exists) from application workers (runner initialised, every handler in the runner's catalog registered; no second list in the health controller); pg-boss's live worker registry then requires every handler active and polled within 15 s or processing; startup grace uses the same window.
+- Before readiness, startup reconciles the TD-7 retry policy on every queue (retry/backoff only; retention, expiry, deletion horizons and history intact) and scans live recording-linked Sessions in bounded UUID batches, inserting singleton reevaluation obligations transactionally; repeatable, guesses no consent.
+- Readiness ≠ TD-7 completeness: `consent.reevaluate`, the consent arm of `content.bucket-migrate`, `upload.gc` and the exact arm of `content.quarantine-purge` have handlers; the last means committed obligations can drain, not that age-based destruction is enabled; unimplemented TD-7 jobs stay release gaps, health invents no handlers.
+- Shutdown: SIGTERM closes the HTTP listener and stops pg-boss polling concurrently; handlers get 105 s, then pg-boss returns unfinished work to retry; Compose grants 120 s before SIGKILL (15 s for HTTP close, pool disconnect, exit), not Docker's 10 s default.
+- `backup.replicate` stays a gap: the [backup/restore tooling](../operations/runbooks.md#creating-and-restoring-a-full-recovery-point) is host-scoped (needs drained workers and stopped volumes); Docker-socket authority for the API would be root-equivalent; queue, nightly automation and critical alert remain release blockers.
 
 ### Storage lifecycle jobs — bounded sweep versus exact obligation
 
-**B5:** `StorageRetirement` is the authoritative PostgreSQL record for exact work;
-pg-boss is only execution/wakeup. Domain mutations create both transactionally,
-before losing a content/Trash locator. The table deliberately has no FK to a
-purgeable Content row. Job payloads carry structural IDs, never the raw key.
-Completion clears the operational locator while preserving the coordinate digest,
-operation and timestamps. An error retains the locator, increments attempts and
-records a fixed error code; it does not retain the object-store error message.
-An unconfirmed placement with no visible object remains pending with
-`COPY_OUTCOME_UNKNOWN`; that observation may complete its execution job but not
-the domain obligation. Reconciliation keeps revisiting it. Positive copy
-settlement is persisted before deletion, as described in the
-[storage lifecycle](storage.md#exact-retirement-authority-b4b5); a timer never
-stands in for evidence that an in-flight remote operation has stopped.
-
-Startup imports extant legacy exact-key jobs in UUID pages, then re-enqueues due
-unresolved records before readiness. The existing `content.quarantine-purge`
-daily cron performs **only reconciliation of those already-authorized records**,
-not a Trash/object age scan. Five ordinary execution attempts still exhaust the
-pg-boss job; the domain record survives indefinitely unresolved and is eligible
-for later reconciliation. Operators inspect pending records, attempts and fixed
-failure codes and may rerun the same reconciliation handler after recovery.
-Deleting failed pg-boss history does not resolve or erase the obligation. Stop old
-writers and workers for rollout: already-expired pre-upgrade jobs cannot be
-reconstructed from hashed audit coordinates, and any historical orphan inventory
-requires a separately authorized investigation rather than inferred deletion.
-
-Each retirement wakeup locks its authoritative row before inspecting execution
-history, so concurrent reconcilers cannot both insert the same wakeup. Active
-exact-operation work is not duplicated. Page entries use separate transactions;
-they never accumulate retirement locks across unrelated content. Ordinary
-`consent.reevaluate` full-recompute followups keep their existing queue semantics.
-
-`upload.gc` is the age-based collector. Each execution lists at most 250 objects under one of
-the fixed staging scopes, deletes only `LastModified < cutoff`, and enqueues the next opaque
-continuation transactionally. Retrying a page is safe because delete is idempotent. A provider
-recording never enters these prefixes and retains its R100 exact job instead.
-
-`content.quarantine-sweep` (SRS Revision 170 §10 — the Owner's «destroy automatically», closing
-R59.4) is the SAME loop with another profile (`sweepPage` in `storage-lifecycle.service.ts`):
-`quarantine/` in both buckets, ninety days instead of forty-eight hours, and one question the
-staging sweep never asks — `quarantinedObjectIsOwed`: an object of a content that still has a
-Trash entry, or an unfinished `StorageRetirement`, is retained however old, because its own purge
-or restore owns it. A key that is not `quarantine/<uuid>/…` is never touched. This is what finally
-destroys a REPLACED file's old object, which had no Trash entry and no day named for it; a deleted
-item's object still goes with its Trash entry through `trash.retention-purge`. The seven-day Trash
-window (R133) is untouched — ninety days is the object store's own number.
-
-The quarantine worker executes the persisted operation. A replacement or
-soft deletion transaction records `quarantine_retired_object` with its old bucket/key before
-the row can point elsewhere, and enqueues only its retirement ID. A deliberate Super Admin permanent deletion records
-`manual_permanent_delete` before the record and Trash locator disappear. Both validate the
-canonical `content/{content_id}/…` coordinate; the first copies to its deterministic
-quarantine key before deleting the old canonical object, while the second idempotently deletes
-both possible leftovers. The worker holds the Content lock before the retirement-row lock,
-rechecks the current canonical coordinate and skips deletion of live canonical bytes. If
-permanent purge already committed, it retires both old coordinates so a late stale quarantine
-job cannot recreate retained bytes. Storage
-exceptions escape the handler and consume the ordinary TD-7 retry budget. No storage
-handler selects `Trash.purge_after`; the separate ratified Trash lifecycle does.
-
-Container shutdown is part of the same durability boundary. SIGTERM closes the HTTP listener and
-stops pg-boss polling concurrently, so no new handler starts while requests drain. Active handlers
-receive 105 seconds to finish; after that pg-boss durably returns unfinished work to retry. Compose
-grants the API 120 seconds before SIGKILL, preserving 15 seconds for HTTP close, pool disconnect
-and process exit. Docker's ten-second default is deliberately not used: it would kill the process
-before either outcome was recorded.
-
-`backup.replicate` is still one of those gaps. The executable
-[backup/restore tooling](../operations/runbooks.md#creating-and-restoring-a-full-recovery-point)
-now produces a coherent encrypted recovery point and has passed a destructive disposable
-restore, but it is host-scoped because coherence requires draining the in-process workers and
-cleanly stopping data volumes. Giving the API Docker-socket authority merely to make the TD-7
-row look implemented would be a root-equivalent privilege escalation. The queue, nightly
-automation and critical alert remain release blockers; runtime readiness does not count them.
-
-> **`session-recording-ingest` was implemented before it was specified, and that sequence is
-> worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
-> specified the TD-2, TD-3, TD-8 and TD-13 additions it needed, but **named no queue** — while
-> §20 rule 1 forbids every in-memory substitute for durable work, so there was no compliant way
-> to build R99.13 *without* one. C2 built it and **reported the omission instead of inventing a
-> normative row for itself**; the Document Owner ratified it as **SRS Revision 100**
-> (2026-08-21), which adds the row and nothing else.
->
-> It is therefore normative now, and this page **cites** TD-7 rather than standing in for it.
-> The reason the history is recorded rather than tidied away: a specification that appears never
-> to have been incomplete teaches the next implementer to guess instead of to report.
+- B5: `StorageRetirement` is the authoritative record for exact work; pg-boss is execution/wakeup only; domain mutations create both transactionally before losing a locator; no FK to a purgeable Content row; payloads carry structural IDs, never the raw key.
+- Completion clears the locator, keeps digest, operation and timestamps; an error keeps the locator, increments attempts, records a fixed code (never the object-store message); `COPY_OUTCOME_UNKNOWN` stays pending for reconciliation; positive copy settlement is persisted before deletion ([storage](storage.md#exact-retirement-authority-b4b5)); a timer never stands in for evidence.
+- Startup imports legacy exact-key jobs in UUID pages and re-enqueues due unresolved records before readiness; five attempts exhaust the pg-boss job but the domain record survives for later reconciliation; deleting pg-boss history erases nothing; expired pre-upgrade jobs cannot be rebuilt from hashed audit coordinates; historical orphans need a separately authorised investigation.
+- Each wakeup locks its row first; page entries use separate transactions; no locks accumulate across unrelated content.
+- `upload.gc`: lists ≤250 objects under one fixed staging scope, deletes only `LastModified < cutoff`, enqueues the next continuation transactionally; delete is idempotent; provider recordings never enter these prefixes (they keep their R100 exact job).
+- `content.quarantine-sweep` (R170 §10, closing R59.4): the same loop with another profile (`sweepPage`, `storage-lifecycle.service.ts`): `quarantine/` in both buckets, 90 days, plus `quarantinedObjectIsOwed` (a Trash entry or unfinished `StorageRetirement` retains the object); keys not `quarantine/<uuid>/…` are never touched. It destroys a REPLACED file's old object; a deleted item's goes with its Trash entry via `trash.retention-purge`; the seven-day Trash window (R133) is untouched.
+- Quarantine worker: replacement/soft-deletion records `quarantine_retired_object` (old bucket/key) and enqueues only the retirement ID; Super Admin permanent deletion records `manual_permanent_delete`; both validate the canonical `content/{content_id}/…` coordinate; the first copies to its deterministic quarantine key then deletes the canonical object, the second deletes both possible leftovers. Content lock before retirement-row lock; canonical coordinate rechecked; live canonical bytes never deleted; after a committed permanent purge both old coordinates are retired; storage exceptions consume the TD-7 budget; no storage handler selects `Trash.purge_after`.
 
 ### `session-recording-ingest` — provider `completed` is not Bodour «متاح»
 
-The sentence the whole job exists to make true (R99.13):
+R99.13: a recording is finished when the object exists in the platform's storage and an `EducationalContent` row references it. R99 named no queue; C2 built it and reported the omission; R100 (2026-08-21) added the TD-7 row.
 
-> A recording is finished when the object exists in the platform's own storage and an
-> `EducationalContent` row references it — **not when the provider says it has one.**
-
-**Why it is a job and not part of the callback.** A صوت وصورة lesson is up to 500 MB (TD-9).
-Copying that inside the webhook handler holds the request open for as long as the copy takes,
-and **a provider that times out retries** — so one slow import becomes several concurrent ones,
-which is the failure mode most likely to produce duplicate content. The handler writes one row
-and inserts one job.
-
-**The order is the design.** Each step protects against a specific way of producing a broken
-library item:
-
-1. **Already ingested?** → skip verification, copying and database writes, then finish the
-   exact staging cleanup recorded on that `SessionRecording`.
-   `session_recording.educational_content_id` is `UNIQUE`, and it is the durable idempotency
-   anchor for both the ingest and a post-commit cleanup retry.
-2. **Verify the actual bytes**, never the provider's metadata — exists, non-empty, within
-   TD-9's cap, magic bytes matching, **and the media family the class asked for**. An OGG
-   delivered for a صوت وصورة class is a perfectly valid OGG and is refused anyway, because
-   R99.7 forbids silently downgrading the lesson.
-3. **Copy server-side into the content bucket.** `CopyObject` runs *inside* MinIO, so half a
-   gigabyte never passes through a container pinned at 768 MB (TD-13).
-4. **One transaction**: allocate the R75.6 name under `SELECT … FOR UPDATE` on the occurrence,
-   create the `EducationalContent` (`origin = session_recording`), create the `SessionContent`
-   link, set `educational_content_id`, write the audit row.
-5. **Then sweep staging.** A cleanup failure never undoes valid content: the relation is
-   already committed, so «متاح» remains true. The worker throws the cleanup failure to
-   pg-boss instead of swallowing it; the same durable job retries, lands on step 1, and
-   addresses only that recording's stored staging bucket/key. S3 `DeleteObject` treats an
-   already-missing key as success, so a worker killed after the delete but before job
-   completion converges safely on the next attempt.
-
-This is **not `upload.gc`**. The ingest job first attempts immediate cleanup and retains its
-own durable obligation only when that exact post-commit delete fails. `upload.gc` is the
-separate age-based collector for initiated browser uploads that never completed; neither is
-a general scan of the recording bucket.
-
-**Availability is derived, never stored.** *«متاح»* is exactly
-`educational_content_id IS NOT NULL`. An `available` status value would be a second fact that
-can disagree with the object it describes, and R99.14 is explicit that a content item whose
-object is absent is worse than an honest failure — it is discoverable, downloadable and empty.
-
-**A failed import is recoverable and says so.** `ingestion_failure_reason` is a column of its
-own, separate from the provider's `failure_reason`: *the provider could not record* and *the
-platform could not accept what it recorded* have different remedies, and only the second is
-fixed by trying again. Nothing is deleted on failure — the staging object is deliberately kept
-so a corrected one can be retried — and no content row is created.
-
-**The durable key is deterministic.** Its hash segment is derived from the recording id rather
-than random, so a job that copied the object and then died finds *its own* object on retry
-instead of minting a second key and orphaning the first. The object is copied only if it is not
-already there, so the key is still written exactly once (§20 rule 15).
-
-**A cleanup failure is not an ingestion failure.** It does not populate
-`ingestion_failure_reason`, because the canonical object, content row and relation already
-exist. Repeated storage failure remains on the existing pg-boss job under TD-7's retry budget
-and terminal failed-job observability; it never creates a second worker or an in-memory retry.
+- A job, not the callback: up to 500 MB (TD-9), and a provider that times out retries, producing concurrent duplicates; the handler writes one row and inserts one job.
+- Order: (1) already ingested → skip to the exact staging cleanup recorded on the `SessionRecording`; (2) verify the bytes, never metadata: exists, non-empty, within TD-9's cap, magic bytes, and the media family the class asked for (an OGG for a صوت وصورة class is refused, R99.7); (3) server-side `CopyObject` inside MinIO (container pinned at 768 MB, TD-13); (4) one transaction: R75.6 name under `SELECT … FOR UPDATE` on the occurrence, `EducationalContent` (`origin = session_recording`), `SessionContent`, `educational_content_id`, audit row; (5) sweep staging: a failure is thrown to pg-boss, the retry lands on step 1 and deletes only that recording's stored bucket/key; `DeleteObject` on a missing key is success.
+- Not `upload.gc`: the ingest keeps a durable cleanup obligation only when the post-commit delete fails.
+- «متاح» is exactly `educational_content_id IS NOT NULL`; no stored `available` status (R99.14: an empty discoverable item is worse than a failure).
+- `ingestion_failure_reason` is its own column, separate from the provider's `failure_reason`; on failure nothing is deleted and no content row is created.
+- The durable key's hash segment derives from the recording id; copy only if absent; written exactly once (§20 rule 15).
+- A cleanup failure is not an ingestion failure: it does not populate `ingestion_failure_reason`; it stays on the same pg-boss job under TD-7's budget, never a second worker or in-memory retry.
 
 ### `session-recording-reconcile` — a recording is never left to a delivery that may not happen
 
-SRS Revision 167 §5; `services/session-recording-reconcile.service.ts`. A finished recording
-reaches the library through two hand-offs, and each used to be attempted a fixed number of times
-and then never again:
+R167 §5; `services/session-recording-reconcile.service.ts`.
 
-| Hand-off | How it was lost | What the reconciler does |
+| Hand-off | Lost when | Reconciler |
 |---|---|---|
-| The provider's completion callback | The API was restarting when a two-hour class ended. The row stayed `processing` for ever with the finished file in staging, and the occurrence could not be recorded again | After a three-minute grace the recording is **asked about** (`OnlineClassProvider.reportRecording`) and the answer goes through `applyProviderReport` — the same door a verified callback uses |
-| …and the provider has no answer (it forgets old jobs; it is down; TD-13 has none configured) | — | **The staged object is the fact.** The recorder uploads it in one atomic PUT after finalising, so an object that exists is a complete recording: marked `completed`, import queued |
-| The import job | TD-7's four retries ran out in a minute against a defect (R166 §4 was one); a deployed FIX healed nothing until an operator ran `ops:requeue-recordings` | Every `completed` recording with no `educational_content_id` is re-queued every run, indefinitely. The singleton key collapses a re-queue onto a job already waiting |
+| provider completion callback | API restarting when the class ended; row stuck `processing` | after a three-minute grace, `OnlineClassProvider.reportRecording` → `applyProviderReport` (the verified-callback door) |
+| provider has no answer (forgets, down, TD-13 unconfigured) | — | the staged object is the fact (one atomic PUT after finalising): marked `completed`, import queued |
+| import job | four retries exhausted against a defect (R166 §4); a fix healed nothing until `ops:requeue-recordings` | every `completed` recording without `educational_content_id` is re-queued every run; the singleton key collapses onto a waiting job |
 
-A recording the provider **positively** no longer knows, twenty-four hours on, with nothing
-staged, is recorded `failed` — otherwise «جاري التسجيل» would show for ever and the class could
-never be recorded again. An unreachable provider concludes nothing.
-
-It deletes nothing, and nothing else deletes a recording's staged file either: `upload.gc`'s scope
-catalogue is fixed and does not name the recording staging bucket, and the import sweeps staging
-only after the library row and its relation are committed.
-
-**A recorder that dies mid-class (R168 §2).** The recorder now uploads ten-second safety segments
-while the class runs, and this job is what turns them back into a recording
-([how and why](../development/online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2)):
-
-1. A recording still marked live whose segments have been silent for ten minutes is **retired** —
-   the provider is asked to stop the job, the row moves to `processing`, its segments stay. The
-   provider's own answer is not used for this: measured, it calls a killed recorder «active» for
-   ever. Only a recording that has delivered at least one segment is judged by silence — one
-   started before R168 writes none.
-2. On a **later** pass — never in the same breath as the doubt — a retired or provider-failed
-   recording with no final file is assembled by `ffmpeg` into its own `output_key`, marked
-   `completed` + `recovered_from_segments`, and its import enqueued in the same transaction. That
-   is the one sanctioned exit from `failed`/`aborted`: the reason for the failure, *no file*, is no
-   longer a fact. A failed assembly is written to `ingestion_failure_reason`, keeps every segment,
-   and is retried.
-
-A deployment still asks `npm run ops:active-recordings` first
-([deployment](../operations/deployment.md#the-pipeline)): a recovered recording is whole but for
-its last ten seconds, and an uninterrupted one is simply whole.
+- Positively unknown to the provider after 24 h with nothing staged → `failed`; an unreachable provider concludes nothing; deletes nothing (`upload.gc` does not name the recording staging bucket).
+- Recorder dying mid-class (R168 §2; [provider page](../development/online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2)): a live recording whose ten-second safety segments have been silent ten minutes is retired (provider asked to stop, row → `processing`, segments kept; the provider's «active» is not trusted; only a recording with ≥1 segment is judged by silence). On a later pass a retired or provider-failed recording with no final file is assembled by `ffmpeg` into its own `output_key`, marked `completed` + `recovered_from_segments`, import enqueued in the same transaction: the one exit from `failed`/`aborted`; a failed assembly writes `ingestion_failure_reason`, keeps segments, retries.
+- Deployment asks `npm run ops:active-recordings` first ([pipeline](../operations/deployment.md#the-pipeline)); a recovered recording lacks at most its last ten seconds.
 
 ### `session.materialize` — eager, and the reason is correctness
 
-Sessions are generated ahead of time rather than computed when the calendar is
-read. That is not a caching decision:
+Conflict detection runs against materialised rows, not recurrence rules ([calendar](calendar-and-hijri.md#scheduling-is-schedule-driven)).
 
-> Conflict detection runs against materialized sessions, not against recurrence
-> rules. Comparing rules cannot see that a weekly and a biweekly-alternating
-> Tuesday 15:00 collide **only on alternate weeks**.
+1. Idempotent per `(schedule, date)`, unique index.
+2. Never rewrites work: an individually changed, cancelled or held session, or one carrying attendance, grades, recordings, notes, homework or attached content, is left as is and reported back, whatever its date. The rule is semantic (R43.6): protected whenever it holds user/administrator data whose loss would change historical truth. `policies/session-protection.ts` is the single authority; modules contribute `registerSessionProtectionRule({ code, describes, evaluate })`, evaluated in bulk; built-ins are always present, not registered at boot; rules only add protection. Overwriting a protected session requires naming it explicitly; no «regenerate all», no defaultable flag.
+3. Never regenerates the past once there is one: generation starts at Morocco's today; a schedule that has never produced an occurrence starts at its own first date (R172 §2; `expandSchedule` applies `anchor_date` to every pattern, R55).
+4. Snapshots room and staff onto each occurrence (R43.4); an edit re-syncs only future un-overridden occurrences; re-aligning a past one is a separate audited action.
 
-A lazily-derived calendar could not answer the one question scheduling has to
-answer, so the rows exist.
-
-**Three guarantees, each one a rule a later change could quietly break:**
-
-1. **Idempotent** per `(schedule, date)`, enforced by a unique index. Re-running,
-   retrying, or running twice concurrently creates nothing.
-2. **Never rewrites work.** A session someone has individually changed, or that
-   carries educational work — attendance, grades, recordings, notes, homework,
-   attached content — or that has been cancelled or held, is left exactly as it
-   is **and reported back**, because a silent skip and a silent overwrite are
-   equally bad answers to *"what did my edit just do"*. **The protection is
-   date-independent**: a recording attached to next Tuesday's class is as much
-   someone's labour as one attached to last Tuesday's.
-
-   **The rule is semantic, not a list of features** (Revision 43.6): *a session
-   is protected whenever it holds data created by a user or an administrator
-   whose loss or silent modification would change historical truth.* Attendance,
-   grades, evaluations, certificates and messaging are **instances** of that
-   rule, not clauses of it — an implementer asks *"would losing this
-   misrepresent what happened?"*, not *"is my feature on the list?"*.
-
-   **One mechanism, extended by contribution.** `policies/session-protection.ts`
-   is the single authority every scheduling operation asks, and a module
-   contributes its condition **knowing nothing about scheduling**:
-
-   ```ts
-   registerSessionProtectionRule({
-     code: 'HAS_ATTENDANCE',
-     describes: 'attendance has been recorded for this session',
-     evaluate: (tx, sessions) => /* one query for all of them */,
-   });
-   ```
-
-   Two properties are required and are not negotiable: rules are **evaluated in
-   bulk**, so protection never becomes a per-session query; and the **built-ins
-   are always present** rather than registered at boot, because a protection you
-   can switch off by forgetting a bootstrap call is not a protection. Rules may
-   only *add* protection — there is no un-protect, or one module could overrule
-   another's safeguard.
-
-   *(The deletion path carried its own private copy of this test until Revision
-   43.5 unified it — which is exactly the failure the registry now prevents.)*
-
-   Overwriting a protected session is possible only by **naming it explicitly**.
-   There is no blanket "regenerate all" option and no flag on the edit: an option
-   that can be defaulted true is not a confirmation.
-3. **Never regenerates the past — once there is one.** Generation starts at
-   today (Morocco's day), so a schedule edited in November does not resurrect
-   September. **A schedule that has never produced an occurrence has no past
-   to protect and starts at its own first date** (R172 §2): a week-long
-   conference entered after it was held gets its five days; a class said to
-   begin next month gets nothing before it. Both were silent defects before:
-   the first materialised nothing and showed on no calendar, the second began
-   today — because `anchor_date` (R55: «starts the series») bounded only
-   `none` and the biweekly parity, never a daily or weekly series
-   (`expandSchedule` now applies it to every pattern).
-4. **Snapshots the teaching assignment** (Revision 43.4). Room and staff are
-   written onto each occurrence rather than re-derived at read time, so a class
-   that has already been taught keeps the people who actually taught it when the
-   schedule later changes hands. A schedule edit re-syncs only **future,
-   un-overridden** occurrences; re-aligning one that has already happened is a
-   separate, audited administrator action.
-
-**The horizon is the end of the current academic year**, extended by the nightly
-run. Bounded deliberately: an unbounded horizon would generate rows for a
-schedule that may be discontinued next term.
-
-**Schedule writes materialize inside their own transaction**, so the calendar is
-never briefly empty and the conflict check just performed is not against a state
-that never existed. The job exists to advance the horizon and to reconcile.
+- Horizon: end of the current academic year, extended nightly.
+- Schedule writes materialise inside their own transaction; the job advances the horizon and reconciles.
 
 ### `consent.reevaluate` — full recompute, deliberately
 
-It recomputes the complete current audience of every Session linked to the same recording,
-rather than applying a delta. Audience resolution is the canonical R43/R92 rule: entire
-Level at the occurrence's audience branches, Administrative Group, or Teaching Group. The
-union is strict: one linked Session containing one beneficiary without an effective latest
-`media_release` grant forces the recording. Absence is no consent; an empty audience does not
-engage the gate.
-
-The inverse student-to-Session trigger follows retained live occurrences even after their
-recurring schedule is soft-deleted, and it applies R92 occurrence audience branches rather
-than falling back to the schedule branch. Changing those R92 branches enqueues in the same
-transaction as the audience update.
-
-The complete shared-recording Session graph is discovered first, then its rows are locked once
-in global UUID order before audiences are resolved. Link/replacement/deletion writers take the
-same anchors; if the graph grows during acquisition, the worker retries rather than taking a
-late lower-order lock. Recording rows are then locked in UUID order. A concurrent mutation is
-therefore included or commits a follow-up.
-
-**What it writes changed with SRS Revision 170 §3 (the Owner, 2026-09-21).** The worker used
-to move only toward safety — set `consent_forced_private`, audit `content.visibility_change`,
-enqueue the exact-source public→private migration, and never clear the flag after a later
-grant. It now writes **`media_consent_missing`** on every recording of the graph, **in both
-directions**: `true` when a student of the resolved audience has no effective `media_release`
-grant, `false` otherwise, each change audited as `content.consent_warning`. It forces nothing,
-moves no bytes, and enqueues no migration. The warning reaches staff on «مكتبة المحتوى» and on
-the class dialog before recording; the visibility stays whatever the Category default or a
-staff member set. `consent_forced_private` is retired (never written), and the consent arm of
-`content.bucket-migrate` completes any pre-R170 obligation with the code `withdrawn_r170`
-without touching storage. The trigger graph above is unchanged.
-
-The physical machinery `content.bucket-migrate` still runs is the non-consent one: replacement
-and deletion commit exact-key retirement obligations in this queue — replacement retires the
-old key into same-bucket quarantine, deletion likewise — and a missing source is success,
-which is what makes a retry after an ambiguous successful delete converge without guessing.
-
-Rows committed before B-01 used the older three-column repository insert and therefore lack
-per-job retry/expiry policy. They are not bulk-rewritten. When such a row becomes active, the
-worker first commits one correctly configured full-recompute follow-up under the same
-singleton key; many legacy duplicates therefore converge on one pending recovery obligation,
-and an old one-shot failure cannot strand safeguarding.
+- Recomputes the complete current audience of every Session linked to the same recording (R43/R92: entire Level at the occurrence's audience branches, Administrative Group, or Teaching Group); strict union; absence is no consent; an empty audience does not engage the gate.
+- The student→Session trigger follows retained live occurrences after schedule soft-delete and uses R92 occurrence branches; changing them enqueues in the same transaction.
+- The shared-recording Session graph is locked once in global UUID order, then recording rows; writers take the same anchors; a grown graph retries.
+- R170 §3 (2026-09-21): writes `media_consent_missing` on every recording of the graph in both directions (`true` when a resolved-audience student lacks an effective `media_release` grant), audited as `content.consent_warning`; forces nothing, moves no bytes, enqueues no migration; the warning shows on «مكتبة المحتوى» and the class dialog. `consent_forced_private` is retired (never written); the consent arm of `content.bucket-migrate` closes pre-R170 obligations with `withdrawn_r170`.
+- Pre-B-01 rows lack per-job retry policy and are not bulk-rewritten; on activation the worker first commits one correctly configured follow-up under the same singleton key.
 
 ### `audit.purge` — the one that needed three attempts
 
-Retention deletes audit rows matching **BOTH** an **enumerated action-type allowlist** **AND**
-the 12-month age horizon:
-
-```
-auth.login · auth.login_denied · auth.identity_bound
-auth.refresh · auth.logout · auth.token_revoked
-```
-
-Extending that list requires a specification revision.
-
-**Age-only deletion is prohibited. So is prefix matching.** An earlier version selected
-`auth.*` rows older than the horizon; the Document Owner required an explicit allowlist
-rather than age alone, and review found that **a glob is not an allowlist** — `auth.*` would
-silently sweep in any future action beginning with `auth.` (post-MVP local authentication
-adds several) without anyone having decided it was purgeable.
-
-Every other action type — including the indefinitely-retained security events
-`consent_gate.override`, `grade.passfail_override`, `settings.change`, and
-`trash.manual_restore` — must survive the job untouched, and **a test asserts exactly that
-rather than trusting the query.**
-
-This job is also what makes the storage projection real rather than aspirational. Access
-tokens live one hour, so every active session writes a refresh audit row roughly hourly:
-roughly **800–900k authentication rows a year** at launch scale. Those rows are **bounded
-rather than cumulative** precisely because this job collects them. Without it, per-refresh
-auditing grows without limit.
+- Deletes rows matching BOTH the allowlist `auth.login · auth.login_denied · auth.identity_bound · auth.refresh · auth.logout · auth.token_revoked` AND the 12-month horizon; extending the list needs a specification revision.
+- Age-only deletion and prefix matching (`auth.*`) are prohibited: a glob is not an allowlist.
+- `consent_gate.override`, `grade.passfail_override`, `settings.change`, `trash.manual_restore` and every other type survive; a test asserts it.
+- Bounds ~800–900k authentication rows/year.
 
 ## Why some things are deliberately *not* jobs
 
-**Quran coverage recalculation is synchronous.** Creating, editing, or deleting a log
-recomputes that Surah's coverage **in the same request**, and the guardrails forbid moving
-it into a job.
-
-The reason is correctness, not responsiveness: coverage drives level completion. A deferred
-recalculation leaves a window in which a student appears to have completed a level they have
-not, and a teacher correcting a mis-logged range would not see the correction.
-
-**Per-user quota enforcement is synchronous.** A job queue is asynchronous; a quota decision
-must be synchronous and transactional with the request it gates. Routing it through pg-boss
-is explicitly prohibited.
+- Quran coverage recalculation is synchronous: coverage drives level completion.
+- Per-user quota enforcement is synchronous and transactional with the request; pg-boss is prohibited for it.
 
 ## What is prohibited as a substitute
 
-> Never replace these with in-memory queues, `setImmediate`, unawaited promises, or ad-hoc
-> timers. **Job state must survive container restarts.**
-
-Nor in-process mutexes or advisory-lock improvisations for concurrency control — pg-boss
-singleton keys are the mechanism for background work.
+In-memory queues, `setImmediate`, unawaited promises, ad-hoc timers, in-process mutexes and advisory-lock improvisations; job state must survive container restarts; singleton keys are the concurrency mechanism.
 
 ## When the workers are down
 
-Because enqueues are database inserts inside application transactions, they **keep
-succeeding** while workers are down. Jobs are **delayed, never lost**, and drain on restart.
-
-A queue-lag alarm past ten minutes surfaces on the Admin dashboard.
-
-> [Resilience](../operations/resilience.md#degraded-operation)
+- Enqueues are database inserts inside application transactions, so they keep succeeding; jobs are delayed, never lost, and drain on restart.
+- A queue-lag alarm past ten minutes surfaces on the Admin dashboard ([resilience](../operations/resilience.md#degraded-operation)).
 
 ---
 
-**Next:** [Calendar and Hijri](calendar-and-hijri.md) · **Related:**
-[Backend](backend.md#transactions), [Storage](storage.md#consent-gating)
+**Next:** [Calendar and Hijri](calendar-and-hijri.md) · **Related:** [Backend](backend.md#transactions), [Storage](storage.md#consent-gating)

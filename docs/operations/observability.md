@@ -2,57 +2,20 @@
 
 # Observability
 
-Deliberately minimal. There is no metrics stack, no tracing backend, no log aggregator — on a
-single VPS at this scale those are containers to run and secure in exchange for very little.
-
-What exists instead is designed to answer the three questions that actually get asked.
-
-## The three questions
+Deliberately minimal: no metrics stack, tracing backend or log aggregator on a single VPS at this scale.
 
 | Question | Answer |
 |---|---|
 | *Is it up?* | `GET /healthz` |
-| *A user reported an error — what happened?* | The `request_id` in the error they saw, grepped in the logs |
+| *A user reported an error — what happened?* | The `request_id` in the error, grepped in the logs |
 | *Did something happen, and who did it?* | The audit log |
 
 ## Health
 
-`GET /healthz` — public, unauthenticated, served at the origin root rather than under the
-API prefix, so it is reachable exactly as the deployment step calls it.
-
-It checks:
-
-- **Database** connectivity
-- **MinIO** reachability
-- **pg-boss queue infrastructure** — whether the durable queue schema is available
-- **Application workers** — whether this API process completed runner startup, registered
-  its implemented worker catalog, and those workers remain active and fresh
-
-Returns `200`, or **`503` with per-component detail** so a failure names which dependency is
-down rather than reporting a generic outage.
-
-The API container runs this same whole-application probe as its Docker healthcheck. Database
-or storage failure, missing queue infrastructure, incomplete worker registration and stale
-workers therefore appear as `unhealthy` in `docker compose ps`; process liveness alone is not
-reported as readiness. Deployment uses curl's fail-on-HTTP-error mode with a 15-second ceiling,
-so the endpoint's truthful `503` cannot be mistaken for a successful verification command.
-
-The existing `components.database`, `components.storage`, and `components.jobs` fields remain
-stable. `components.queue` separates infrastructure from workers, while `details.jobs` gives a
-machine-readable reason and expected/registered/active counts. In particular,
-`queue: "ok"` with `jobs: "down"` means enqueue storage exists but this process has no ready
-runner — schema presence alone is never a worker heartbeat.
-
-`bash scripts/deploy/verify-production-bootstrap.sh` proves this boundary against the actual
-Production-mode image and TLS edge, not a controller mock: it first requires all four components
-green, stops only its isolated MinIO, observes HTTPS `503` with `storage: "down"`, waits for the
-API container itself to become `unhealthy`, then restarts storage and requires both signals to
-recover. It additionally proves a worker-down job drains after restart and health returns only
-after the complete worker catalogue is live; database, edge, full-stack and container-recreation
-recovery retain the same health contract. The drill publishes no database or object-store port
-and destroys its own volumes. Before inducing those failures it also loads the built application
-through the real TLS edge in headless Chrome, so a green recovery result cannot hide a broken
-anonymous shell, CSP, public catalogue read, refresh boundary, or Production auth limiter.
+- `GET /healthz`: public, unauthenticated, at the origin root (not under the API prefix). Checks **database** connectivity, **MinIO** reachability, **pg-boss queue infrastructure** (durable schema present) and **application workers** (runner startup completed, implemented catalog registered, workers active and fresh). Returns `200`, or **`503` with per-component detail**.
+- The API container's Docker healthcheck is the same whole-application probe, so database/storage failure, missing queue schema, incomplete registration and stale workers show as `unhealthy` in `docker compose ps`; process liveness is never readiness. Deployment uses curl's fail-on-HTTP-error mode with a 15-second ceiling.
+- `components.database`, `components.storage`, `components.jobs` are stable; `components.queue` separates infrastructure from workers; `details.jobs` gives a reason and expected/registered/active counts. `queue: "ok"` with `jobs: "down"` = enqueue storage exists but this process has no ready runner.
+- `bash scripts/deploy/verify-production-bootstrap.sh` proves the boundary on the real Production-mode image and TLS edge: all four components green → stop its isolated MinIO → HTTPS `503` with `storage: "down"` and the API container `unhealthy` → restart storage → both recover; a worker-down job drains after restart and health returns only with the complete catalogue live; database, edge, full-stack and container-recreation recovery keep the contract. It publishes no DB/object port, destroys its own volumes, and first loads the app through the TLS edge in headless Chrome (anonymous shell, CSP, public catalogue read, refresh boundary, Production auth limiter).
 
 ```json
 {
@@ -75,166 +38,71 @@ anonymous shell, CSP, public catalogue read, refresh boundary, or Production aut
 }
 ```
 
-Worker reason codes distinguish `not_started`, `starting`, `startup_failed`, incomplete
-registration, a missing/inactive/stale worker, shutdown, and an unavailable live-worker
-registry. Names appear only for missing or stale workers and contain queue identifiers, never
-payload data.
-
-That per-component detail is what makes the [degraded-operation
-matrix](resilience.md#degraded-operation) actionable — "MinIO is down" and "PostgreSQL is
-down" have completely different blast radii.
+- Reason codes: `not_started`, `starting`, `startup_failed`, incomplete registration, missing/inactive/stale worker, shutdown, unavailable live-worker registry. Names appear only for missing or stale workers and contain queue identifiers, never payload data.
+- Per-component detail is what makes the [degraded-operation matrix](resilience.md#degraded-operation) actionable.
 
 ## Logs
 
-**Structured JSON**, with a `request_id` on every line.
-
-That same id is propagated into:
-
-- **every error envelope** returned to a client, and
-- **every job record**
-
-So a user reporting *"it said something went wrong, and there was a code b3f1…"* is
-traceable end to end — through the request, into the job it enqueued, without ever asking who
-the user was.
-
-Every base-Compose service uses Docker's `local` logging driver with five files of at most
-10 MB each. This preserves `docker compose logs` while bounding one container's retained
-stdout/stderr to 50 MB instead of inheriting Docker's unrotated `json-file` default. The
-limit applies when a container is created or recreated; changing Compose does not retrofit an
-already-running container.
+- **Structured JSON**, `request_id` on every line, propagated into **every error envelope** and **every job record** — traceable end to end without asking who the user was.
+- Every base-Compose service uses Docker's `local` driver, five files × 10 MB (50 MB per container). Applies when a container is created/recreated; a Compose change does not retrofit a running container.
 
 ### No PII in logs
 
-Not a guideline. The rule:
+> **Log user ids, never names, phones, or emails. Never log request bodies on registration or consent endpoints. Never log a child-context header value beside identifying data.**
 
-> **Log user ids, never names, phones, or emails. Never log request bodies on registration or
-> consent endpoints. Never log a child-context header value beside identifying data.**
-
-The population includes minors, the association is subject to Moroccan data-protection law,
-and logs are the least-controlled surface in any system — they get copied into tickets,
-pasted into chats, and shipped to third parties by accident.
-
-The edge therefore generates its own opaque request id; a public
-`X-Request-Id` is never preserved. Nginx's structured access record contains
-time, request id, method, status, byte count and timings — **no URI and no
-client address**. The application logs the matched Express route template
-(`/admin/users/:id`), never the requested coordinate, and uses `<unmatched>` for
-unknown routes. Internal exception text is not logged: database/storage errors
-may embed SQL, connection strings or filename-derived object keys, so the fixed
-failure stage plus `request_id` is the diagnostic join.
-
-Nginx's error-log format cannot be made JSON and can echo request coordinates.
-Its own source includes request-context log calls at `crit`, so even that level
-is unsafe for this boundary; the error log is restricted to process/configuration
-`emerg` failures. Request outcomes, including upstream failures, remain visible
-in the structured access record.
-
-An indefinitely retained `AuditLog` follows the same identity rule. Its one
-repository write rejects nested detail properties that copy names, contacts,
-titles, labels, filenames or exact storage locators. Domain target ids and
-non-reversible storage-coordinate ids carry attribution without duplicating a
-display/identity value into a broader retention boundary. Content workers still
-receive exact keys in their governed job/domain rows; finalization retries derive
-the current canonical key from the signed grant id and accepted SHA-256, with a
-read-only fallback for legacy audit rows.
-
-This is not a blanket free-text sanitizer. TD-8 still requires reasons,
-justifications and setting old/new values, while TD-14 says never PII; silently
-discarding those fields would destroy evidence the SRS requires. The same TD-8
-grid still asks for identity email on auth rows and raw storage keys on content
-rows. Current code follows the stricter no-redundant-PII boundary; the three
-smallest Document Owner reconciliations are recorded in `TASKS.md`.
-
-A **log audit** is an explicit item on the deployment checklist.
+- Minors in the population, Moroccan data-protection law, and logs as the least-controlled surface.
+- The edge generates its own opaque request id; a public `X-Request-Id` is never preserved. Nginx's structured access record holds time, request id, method, status, bytes, timings — **no URI, no client address**. The application logs the matched Express route template (`/admin/users/:id`), never the coordinate; `<unmatched>` for unknown routes. Internal exception text is not logged (SQL, connection strings, filename-derived keys); the fixed failure stage plus `request_id` is the join.
+- Nginx's error log cannot be JSON and echoes request coordinates even at `crit`; it is restricted to process/configuration `emerg`. Outcomes stay visible in the access record.
+- `AuditLog` (indefinite retention) follows the same rule: its one repository write rejects nested detail that copies names, contacts, titles, labels, filenames or exact storage locators; domain target ids and non-reversible storage-coordinate ids carry attribution. Content workers still receive exact keys in governed job/domain rows; finalization retries derive the canonical key from the signed grant id and accepted SHA-256, with a read-only fallback for legacy rows.
+- Not a blanket free-text sanitizer: TD-8 requires reasons, justifications and old/new setting values while TD-14 says never PII; TD-8 also asks identity email on auth rows and raw keys on content rows. Code follows the stricter no-redundant-PII boundary; the Document Owner reconciliations are in `TASKS.md`.
+- A **log audit** is a deployment-checklist item.
 
 ### Verbosity
 
-`LOG_LEVEL` defaults to `info`. **`debug` is prohibited in production**, where it would
-otherwise be the fastest route to the rule above being violated.
+`LOG_LEVEL` defaults to `info`; **`debug` is prohibited in production**.
 
 ## Required alerts — two of four are on the Super Admin's screen (R169 §11)
 
-«حالة النظام» (`/admin/operations`, `GET /admin/operations/status`, Super Admin only) is the
-Admin-visible surface TD-14/TD-16 asked for, **for the half the application can see**:
+«حالة النظام» (`/admin/operations`, `GET /admin/operations/status`, Super Admin only) is the TD-14/TD-16 surface **for the half the application can see**:
 
 | Condition (TD-14/TD-16) | Surfaces as | State |
 |---|---|---|
-| A job exhausts its four retries (five total attempts) | «مهام فشلت نهائيًا» — a count, and the ten worst queues by name | **built** |
-| Job queue lag past 10 minutes | «مهام متأخرة أكثر من عشر دقائق» | **built** |
-| Storage retirement failed, late, or of unknown copy outcome | «ملفات في انتظار الإزالة من التخزين» | **built** (not in TD-16's list; it is the monitor's third number) |
-| **Backup replication fails** | the host monitor only — `ESCALATE_OWNER` after two failures | **not on the screen**, and the screen says so |
-| TLS renewal failing (alert at 21 days) | nothing yet | **not built** — no expiry check exists anywhere |
+| A job exhausts its four retries (five attempts) | «مهام فشلت نهائيًا» — a count and the ten worst queues by name | **built** |
+| Queue lag past 10 minutes | «مهام متأخرة أكثر من عشر دقائق» | **built** |
+| Storage retirement failed, late or unknown copy outcome | «ملفات في انتظار الإزالة من التخزين» | **built** (the monitor's third number; not in TD-16's list) |
+| **Backup replication fails** | host monitor only — `ESCALATE_OWNER` after two failures | **not on the screen**, and the screen says so |
+| TLS renewal failing (alert at 21 days) | nothing | **not built** — no expiry check exists anywhere |
 
-**One definition.** The read runs the host monitor's own SQL, verbatim
-(`scripts/backup/check-readiness.sh`: the same two tables, the same ten-minute grace), so the screen
-and the monitor cannot disagree. **Counts only** — never a payload, an error text or a storage key: a
-job's `data` may carry ids of people and an error may quote a request (TD-14). Queue names ARE sent;
-they are the platform's own fixed vocabulary (`jobs/runner.ts`).
-
-**Why backup and TLS are not there.** The restic repository and `/etc/letsencrypt` are deliberately
-NOT mounted into the API container, so the application cannot read them. The answer carries
-`host_checks: "not_visible_from_here"` and the screen states it in words, because a page of zeros would
-otherwise read as «the backup is fine», which it does not know. Putting them on the screen needs the
-HOST to publish its status somewhere the API may read (a read-only mounted status file, or a row the
-monitor writes) — an infrastructure decision, recorded in TASKS, not taken here.
-
-**A schedule the code no longer owns is retired at start-up.** pg-boss keeps cron schedules in the
-database, so a release that removes a queue leaves its schedule behind, creating every night a job no
-worker will ever take — «late» for ever on this screen. `retireUnownedSchedules` (`jobs/runner.ts`)
-unschedules anything not in `QUEUES` and removes that queue's never-started jobs; its completed and
-failed history is left to pg-boss's retention. Found by this screen on its first reading.
-
-**It is a read, not a notification.** Nothing is pushed into anybody's inbox: `Notification` stays
-restricted to targeted Session, Event and Exam facts (R77–R93), exactly as the earlier note required.
-B8's [host monitor](recovery.md#operator-signals-not-an-invented-dashboard) is unchanged and remains
-the only thing that can notice the application itself being down.
+- **One definition:** the read runs the host monitor's SQL verbatim (`scripts/backup/check-readiness.sh`: same two tables, same ten-minute grace). **Counts only** — never payload, error text or storage key (TD-14); queue names are the platform's fixed vocabulary (`jobs/runner.ts`).
+- Backup and TLS are absent because the restic repository and `/etc/letsencrypt` are deliberately NOT mounted into the API; the answer carries `host_checks: "not_visible_from_here"`. Surfacing them needs the host to publish status where the API may read (read-only mounted file, or a row the monitor writes) — an infrastructure decision recorded in TASKS.
+- `retireUnownedSchedules` (`jobs/runner.ts`) unschedules any pg-boss cron not in `QUEUES` at start-up and removes that queue's never-started jobs (history left to retention); a removed queue's leftover schedule would otherwise show «late» forever.
+- **A read, not a notification**: `Notification` stays restricted to Session, Event and Exam facts (R77–R93). B8's [host monitor](recovery.md#operator-signals-not-an-invented-dashboard) is the only thing that can notice the application itself being down.
 
 ## The audit log as an operational tool
-
-Distinct from logs, and worth knowing when debugging:
 
 | | Logs | Audit log |
 |---|---|---|
 | For | Diagnosis | **Accountability** |
-| Retention | Rotated | 12 months for authentication rows; **indefinite** for everything else |
-| Contains PII | **Never** | User ids and minimized action detail; mandated free text remains an explicit Owner-policy decision |
+| Retention | Rotated | 12 months for authentication rows; **indefinite** otherwise |
+| Contains PII | **Never** | User ids and minimized detail; mandated free text is an explicit Owner-policy decision |
 | Deletable | Rotated freely | Only by one job, on an enumerated allowlist |
 
-In the MVP there is **no audit browsing page** — reads happen through a documented SQL
-runbook. Audit **writing** is fully mandatory; only the reading interface is deferred.
-
-> [Runbooks](runbooks.md#reading-the-audit-log)
-
-One deliberate design note that matters when reading it: `actor_user_id` is **nullable**, and
-a null means **system-initiated**, not *attribution lost*. Two mandated actions genuinely have
-no human actor — replay-detected session revocation, and the consent job's forced visibility
-changes. The action type and detail carry the *why*.
+- **No audit browsing page** in the MVP; reads via the [SQL runbook](runbooks.md#reading-the-audit-log). Writing is mandatory.
+- `actor_user_id` is **nullable**; null = **system-initiated** (replay-detected revocation, the consent job's forced visibility changes), never attribution lost.
 
 ## Timeouts
 
-Every outbound call — Google, MinIO — carries an **explicit timeout, 5 seconds by default**,
-and **no automatic in-request retries beyond one**.
-
-> Retry belongs to the user action or the job layer, **not hidden loops that stack latency.**
-
-A hidden retry inside a request turns a 5-second dependency stall into a 15-second one, and
-the user has already left.
+Every outbound call (Google, MinIO) carries an **explicit timeout, 5 seconds by default**, and **no in-request retries beyond one**; retry belongs to the user action or the job layer.
 
 ## What is deliberately absent
 
-- **No metrics stack.** Latency targets are verified by load testing against ceiling-scale
-  fixtures before launch, not continuously scraped.
-- **No distributed tracing.** There is one service; the request id is sufficient.
-- **No log aggregation.** One box, `docker compose logs`.
-- **No uptime SaaS.** The realistic target is 99 % monthly on a single VPS, and the health
-  endpoint is public for whatever external checker the association chooses.
+- **No metrics stack** — latency verified by load testing at ceiling-scale fixtures before launch.
+- **No distributed tracing** — one service; the request id suffices.
+- **No log aggregation** — `docker compose logs`.
+- **No uptime SaaS** — target 99 % monthly on one VPS; `/healthz` is public for any external checker the association chooses.
 
-Each of these becomes worth adding at a scale this platform is explicitly not built for. The
-[binding guidance](../architecture/performance-and-scale.md#binding-guidance) against
-premature infrastructure applies here as much as to caching layers.
+[Binding guidance](../architecture/performance-and-scale.md#binding-guidance) against premature infrastructure applies.
 
 ---
 
-**Next:** [Resilience](resilience.md) · **Related:**
-[Security § auditing](../architecture/security.md#auditing-as-a-security-control),
-[Background jobs](../architecture/background-jobs.md)
+**Next:** [Resilience](resilience.md) · **Related:** [Security § auditing](../architecture/security.md#auditing-as-a-security-control), [Background jobs](../architecture/background-jobs.md)

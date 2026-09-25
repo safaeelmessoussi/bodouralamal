@@ -2,142 +2,50 @@
 
 # Environments
 
-Three tiers, and the boundary between them is a **legal** boundary as much as a technical
-one.
-
-**Vercel/"Preview" is retired (Owner decision, 2026-09-13).** It was used only in the
-project's early development for frontend-only visual review against MSW mocks and calling
-no real backend; it was never a rehearsal of the real stack and is no longer part of the
-architecture, testing strategy, Staging environment, or Production plan. A green/successful
-Vercel status on any GitHub commit is a legacy artifact of that retired integration, not
-evidence of the actual VPS/Hostoweb deployment path — see [Vercel retirement](#vercel-retirement--owner-action-required)
-below for the exact external action still needed to stop it triggering automatically.
+Three tiers; the boundary between them is **legal** as much as technical. Vercel/"Preview" is retired (Owner, 2026-09-13): it was frontend-only review against MSW mocks, never a rehearsal of the real stack; a green Vercel status on any commit is a legacy artifact, not deployment evidence ([Owner action still needed](#vercel-retirement--owner-action-required)).
 
 | Tier | Frontend | Backend / DB / storage | Data | Residency |
 |---|---|---|---|---|
-| **Local Development** | Local Vite dev server | Developer's machine, inside the same containerized architecture with locally built app images | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
-| **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | Synthetic fixtures plus exactly the R115-authorised Owner staff identity for controlled OAuth UAT | Currently OVH France. No real beneficiary/educational/content or other staff data is permitted |
-| **Production** | Served by Nginx from the **Moroccan VPS**, same origin as the API | Same VPS: the full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
+| **Local Development** | Local Vite dev server | Developer's machine, same containerized architecture, locally built app images | **Fixtures only** | Non-Moroccan hardware permitted: no real data exists |
+| **Staging** | Nginx on the staging VPS, **same origin as the API**, HTTPS | Same VPS, full production-shaped stack | Synthetic fixtures plus exactly the R115-authorised Owner staff identity for controlled OAuth UAT | Currently OVH France; no real beneficiary/educational/content or other staff data |
+| **Production** | Nginx on the **Moroccan VPS**, same origin | Same VPS, full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
 
 ## Staging is the one pre-production rehearsal tier
 
-With Preview retired, **Staging** is the only tier besides Local Development that exists
-before Production, and it is a real, full-stack, production-shaped deployment with its own
-database and object storage — never a frontend-only mock review.
-
-> **Staging is not a relaxed environment. It is Production-shaped controlled UAT:**
-> synthetic data plus exactly `safae.elmessoussi@gmail.com` as the authorised Platform
-> Owner/Global Super Admin identity.
-
-The tier is structural in Compose. `docker-compose.production.yml` forces
-`NODE_ENV=production`; `docker-compose.staging.yml` forces `development`, the value that
-permits fixture seeding, and adds its resource ceilings. An operator cannot turn Production
-into a fixture-permitting process by forgetting to edit `.env.example`'s safe local default.
-
-HTTPS, the `HttpOnly; Secure; SameSite=Lax` refresh cookie on its R101 Path, the CSRF
-boundary, same-origin routing, the whole authorization matrix, and the B-01 public-storage
-database gate, B-02 placement invariant and B-03 immutable finalization are all **fully
-enabled there**. Weakening one to make something work in Staging is prohibited exactly as it
-is everywhere else.
-
-What Staging still does **not** replace is the dress rehearsal on the production VPS: it
-exercises neither Moroccan residency, nor TLS on the production domain, nor the backup
-pipeline.
+- A real full-stack deployment with its own database and object storage — **Production-shaped controlled UAT**, not a relaxed environment: synthetic data plus exactly `safae.elmessoussi@gmail.com` as Platform Owner/Global Super Admin.
+- Tier is structural in Compose: `docker-compose.production.yml` forces `NODE_ENV=production`; `docker-compose.staging.yml` forces `development` (permits fixture seeding) and adds resource ceilings; forgetting `.env.example`'s default cannot make Production fixture-permitting.
+- HTTPS, the `HttpOnly; Secure; SameSite=Lax` refresh cookie on its R101 Path, the CSRF boundary, same-origin routing, the full authorization matrix, the B-01 public-storage gate, B-02 placement invariant and B-03 immutable finalization are **fully enabled**; weakening any is prohibited.
+- Staging does **not** replace the dress rehearsal on the production VPS: no Moroccan residency, no TLS on the production domain, no backup pipeline.
 
 ## The residency firewall
 
-The hard rule, enforced as [`BR-18`](../reference/business-rules.md#br-18):
+[`BR-18`](../reference/business-rules.md#br-18): **no real beneficiary, educational or content data ever enters Local Development or Staging**; Staging's only real-person exception is the R115 Owner identity. Three mechanisms:
+1. **The fixtures seed refuses to run when `NODE_ENV=production`** — the same guard in both directions; Staging runs `development` because that value permits fixtures. The Owner account comes from the production seed's pre-provisioning contract, not a copied database.
+2. **Production dumps are never copied to any other tier.**
+3. **The development database and its MinIO objects are never copied into Staging**: a developer's database accumulates real addresses and experiments.
 
-> **No real beneficiary, educational or content data ever enters Local Development or
-> Staging.** Staging's only real-person exception is the exact Owner staff identity
-> authorised by R115 for OAuth UAT.
-
-Three mechanisms hold it, not one:
-
-1. **The fixtures seed refuses to run when `NODE_ENV=production`.** The same guard that
-   stops fixtures polluting production is the residency firewall in the other direction.
-   It is also why Staging runs `NODE_ENV=development`: that value is what *permits* the
-   fixtures, and it changes no security behaviour — see below. The Owner account comes from
-   the production seed's bounded pre-provisioning contract, not from a copied database.
-2. **Production dumps are never copied to any other tier.** Not "discouraged" — never.
-3. **The development database and its MinIO objects are never copied into Staging.** A
-   developer's database is not fixture data: it accumulates real addresses and real
-   experiments, and it is exactly the thing that looks harmless to copy.
-
-The controlled-UAT exception grants no latitude to add another real identity. Any expansion
-requires a new explicit Owner decision and a residency/compliance review.
+The controlled-UAT exception grants no latitude for another real identity; expansion needs a new Owner decision and residency/compliance review.
 
 ### `NODE_ENV` does not change security behaviour
 
-Worth stating because Staging depends on it. `NODE_ENV` gates exactly three things: the
-fixture guard, the production-only `BACKUP_TARGET_SSH` requirement, and the production ban
-on `LOG_LEVEL=debug`. **It does not gate error detail.** The error envelope is uniform in
-every environment and never returns a stack trace, an SQL fragment or an internal path —
-`middleware/request-context.ts` is unconditional, with no environment branch anywhere.
-
-The specification used to list *"error verbosity"* among what `NODE_ENV` controls. That
-described a branch which never existed, and [Revision 104](../SRS.md) corrects it.
-
-Production data, backups, and restores remain physically in Morocco. The Owner's
-temporary [B8 same-VPS decision](recovery.md) supersedes the older two-location
-prerequisite; it provides no recovery from total VPS/provider/disk loss.
-
-> Recorded as Risk R-10.
+- `NODE_ENV` gates exactly three things: the fixture guard, the production-only `BACKUP_TARGET_SSH` requirement, the production ban on `LOG_LEVEL=debug`. **Not error detail**: the envelope is uniform everywhere and never returns a stack trace, SQL fragment or internal path — `middleware/request-context.ts` has no environment branch. The SRS once listed "error verbosity"; [Revision 104](../SRS.md) corrected it.
+- Production data, backups and restores stay physically in Morocco; the temporary [B8 same-VPS decision](recovery.md) supersedes the two-location prerequisite and gives no recovery from total VPS/provider/disk loss. Risk R-10.
 
 ## Cookie attributes are identical in every environment
 
-Authenticated flows — login, sessions, cookie refresh, end-to-end journeys — are exercised
-only against a **same-origin compose stack**: Local Development, Staging, or the production
-rehearsal, each serving the identical built frontend through Nginx exactly as production
-does. No tier ever calls the API cross-origin, so no tier ever needs a CORS exception or a
-relaxed cookie.
-
-> **Cookie attributes are identical in every environment ([SRS Revision 104](../SRS.md)).
-> Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS
-> with credentials — are prohibited.**
->
-> An agent "fixing" staging cookies by weakening them is introducing a CSRF vulnerability,
-> not fixing a bug.
-
-Local development terminates at HTTP on `localhost`, which browsers treat as a **secure
-context** — so the `Secure` cookie is delivered normally without weakening a single
-attribute. The problem simply does not arise there.
+- Authenticated flows run only against a **same-origin compose stack** (Local, Staging, production rehearsal) serving the built frontend through Nginx; no tier calls the API cross-origin, so none needs CORS or a relaxed cookie.
+- **Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS with credentials — are prohibited** ([R104](../SRS.md)); weakening a staging cookie introduces CSRF.
+- Local HTTP on `localhost` is a browser **secure context**, so `Secure` cookies work unchanged.
 
 ## Vercel retirement — Owner action required
 
-The frontend-only Preview tier that ran on Vercel is retired (Owner decision, 2026-09-13).
-No `vercel.json` or Vercel-specific configuration exists in this repository — there was
-never anything to remove on the code side. What remains is **external, GitHub/Vercel-side
-state this task cannot and must not touch**:
-
-- Vercel's own GitHub App integration (installed against this repository, not represented in
-  this codebase) still auto-triggers a build on every push to `develop`. **Exact Owner action
-  to stop it permanently:** in the Vercel dashboard, open the project connected to this
-  repository → **Settings → Git** → disconnect/remove the repository connection (or delete
-  the project, once separately authorized) — **or**, from GitHub itself, **Settings →
-  Integrations → Applications → Installed GitHub Apps → Vercel → Configure**, and remove this
-  repository from the app's repository access list. Either action independently stops future
-  automatic deployments; doing both is not required.
-- Any commit-status check or deployment marked "Vercel" (past or future, on any commit,
-  including a successful/green one) is a **legacy artifact of the retired integration** —
-  it is not evidence of, and has no bearing on, the actual Production launch decision, which
-  depends solely on the VPS/Hostoweb path in [Deployment](deployment.md).
-- This task does not delete the Vercel project, its historical deployments, or the external
-  integration — that requires separate, explicit Owner authorization, as instructed.
-
-The development overlay therefore **replaces** the release edge's published-port list with
-exactly `127.0.0.1:80 → nginx:80` and `[::1]:80 → nginx:80`. Both are host loopback;
-publishing only the first is insufficient because a browser may resolve `localhost` to `::1`
-on a later navigation and receive `ERR_CONNECTION_REFUSED` before Nginx sees a request. The
-overlay does not publish 443: the Local Nginx configuration has no TLS listener. Publishing
-an unserved container port would instead make Docker accept an HTTPS connection and reset it
-before Nginx could receive an HTTP request (`ERR_CONNECTION_CLOSED`). Staging and Production
-do not select this overlay and retain the release edge's 80/443 topology.
+- No `vercel.json` or Vercel configuration ever existed in the repository; what remains is external GitHub/Vercel state this codebase must not touch.
+- Vercel's GitHub App still auto-builds every push to `develop`. **Owner action:** Vercel dashboard → project → **Settings → Git** → disconnect the repository (or delete the project once authorised) — **or** GitHub **Settings → Integrations → Applications → Installed GitHub Apps → Vercel → Configure** → remove this repository. Either suffices.
+- Any "Vercel" commit status, past or future, is a legacy artifact with no bearing on the launch decision ([Deployment](deployment.md)). Deleting the project, its deployments or the integration needs separate explicit Owner authorization.
 
 ## What development actually runs
 
-The same service topology as Production, through `docker-compose`; API and web images are
-built from the working source rather than pulled from GHCR:
+Same topology as Production via `docker-compose`, with API and web images built from working source:
 
 ```
 nginx   ← the only public WEB edge (release tiers: 80/443; Local: loopback HTTP 80 only)
@@ -147,102 +55,58 @@ db      ← PostgreSQL 18.4, with the production memory and pool pins
 minio   ← dual buckets, created idempotently by a one-shot init container
 ```
 
-`certbot` is behind a `production` profile, so it never starts locally.
+`certbot` is behind the `production` profile and never starts locally.
 
 ### The dev overlay, and why it is a separate file
-
-Host-run integration tests need to reach PostgreSQL directly, and the base compose file
-deliberately does not publish its port. An overlay does:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-The overlay also replaces the release HTTP server, which is permanently ACME-only plus an
-HTTPS redirect, with `nginx/dev/default.conf`, and replaces the inherited Nginx port list
-with loopback port 80 only. This is the only tier that serves the application directly over
-HTTP, and only on localhost; no runtime environment flag can weaken a release host into that
-mode.
-
-Two deliberate choices in that file:
-
-**It is not named `docker-compose.override.yml`**, precisely so Compose **cannot merge it
-automatically**. Deployment explicitly selects `docker-compose.release.yml` and must never
-pick the development overlay up by accident.
-
-**Ports are bound to loopback (`127.0.0.1`, plus `[::1]` for the browser-facing HTTP edge),
-never wildcard addresses**, and use non-default numbers (5433 for PostgreSQL, 9001 for
-MinIO) because a host PostgreSQL commonly occupies 5432 — and **a
-silent connection to the wrong database is far worse than a port clash.** That clash was
-real on the development machine.
+- Publishes PostgreSQL for host-run integration tests (the base file does not); replaces the release HTTP server (ACME-only plus HTTPS redirect) with `nginx/dev/default.conf`; replaces the Nginx port list with exactly `127.0.0.1:80 → nginx:80` and `[::1]:80 → nginx:80` (a browser may resolve `localhost` to `::1` and get `ERR_CONNECTION_REFUSED` otherwise). It does not publish 443: Local Nginx has no TLS listener, and an unserved port would reset HTTPS connections (`ERR_CONNECTION_CLOSED`). Only this tier serves HTTP directly, only on localhost; no runtime flag can weaken a release host into it.
+- **Not named `docker-compose.override.yml`**, so Compose cannot merge it automatically; deployment selects `docker-compose.release.yml` explicitly.
+- **Ports bound to loopback (`127.0.0.1`, plus `[::1]` for the HTTP edge), never wildcard**, on non-default numbers (5433 PostgreSQL, 9001 MinIO): a host PostgreSQL commonly occupies 5432, and **a silent connection to the wrong database is worse than a port clash.**
 
 ## Two config files, and why they are separate
 
 | File | Holds | Why separate |
 |---|---|---|
-| `.env` | **Application runtime config** — the full variable inventory | Generated from, and kept in lockstep with, the specification's authoritative table |
-| `infra.env` | **Container bootstrap credentials** — the Postgres superuser password | Compose-level bootstrap is infrastructure, not application config. Keeping it out preserves the lockstep above |
+| `.env` | **Application runtime config** — the full variable inventory | Generated from, and in lockstep with, the SRS table |
+| `infra.env` | **Container bootstrap credentials** — the Postgres superuser password | Compose-level bootstrap is infrastructure, not application config |
 
-Both are gitignored, and a CI guard fails the build if either is ever committed.
-
-The one coupling to remember: **the password in `infra.env` must match the one embedded in
-`DATABASE_URL`.**
-
-> [Configuration](configuration.md)
+Both gitignored; a CI guard fails the build if either is committed. **The password in `infra.env` must match the one in `DATABASE_URL`** ([Configuration](configuration.md)).
 
 ## Version and image pinning
 
 | Component | Pin |
 |---|---|
-| Node | `24.11.0`, pinned in `.nvmrc` and the base image |
-| PostgreSQL | `postgres:18.4` — the Debian variant, because **ICU is required** for Arabic collation |
-| Object storage (Localhost, Staging, Production) | SeaweedFS `4.46`, digest-pinned in `docker-compose.yml`, identical for every tier (Owner decision, 2026-09-20); [selection and compatibility](../architecture/storage.md#b1-candidate-verification-checkpoint) |
-| LiveKit server / Egress / Redis / certbot | `v1.9.1` / `v1.9.1` / `8.2-alpine` / `latest`, each digest-pinned in `docker-compose.yml` |
+| Node | `24.11.0`, in `.nvmrc` and the base image |
+| PostgreSQL | `postgres:18.4`, Debian variant — **ICU required** for Arabic collation |
+| Object storage (every tier) | SeaweedFS `4.46`, digest-pinned in `docker-compose.yml` (Owner, 2026-09-20); [selection](../architecture/storage.md#b1-candidate-verification-checkpoint) |
+| LiveKit server / Egress / Redis / certbot | `v1.9.1` / `v1.9.1` / `8.2-alpine` / `latest`, each digest-pinned |
 | Nginx | `stable-alpine` |
 
-**Every third-party image in `docker-compose.yml` carries an index digest** (SRS §3.1a Phase 2,
-pinned 2026-09-22 to what Staging had verified); `scripts/ci/check-compose-operations.sh` refuses
-an unpinned one. A tag that is re-pushed upstream therefore changes nothing until a dedicated,
-Owner-approved upgrade task moves the digest. To re-resolve a tag when that task comes:
-`docker buildx imagetools inspect <image:tag> --format '{{.Manifest.Digest}}'`.
-
-One PostgreSQL detail that will waste an afternoon if unknown: **PG 18+ images require the
-volume mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.** Data lands in a
-major-version subdirectory, which is what keeps `pg_upgrade --link` possible without
-mount-boundary issues. Mounting at `.../data` makes the container refuse to start outright.
+- **Every third-party image in `docker-compose.yml` carries an index digest** (§3.1a Phase 2, pinned 2026-09-22 to what Staging verified); `scripts/ci/check-compose-operations.sh` refuses an unpinned one. A re-pushed tag changes nothing until an Owner-approved upgrade task moves the digest; re-resolve with `docker buildx imagetools inspect <image:tag> --format '{{.Manifest.Digest}}'`.
+- **PG 18+ images require the volume at `/var/lib/postgresql`, not `/var/lib/postgresql/data`**: data lands in a major-version subdirectory (keeps `pg_upgrade --link` possible); mounting at `.../data` refuses to start.
 
 ## What the Staging VM backup does and does not cover
 
-OVH Standard automated VM backup is enabled on the Staging host. It is a **whole-VM
-snapshot**, so what it covers follows from where things sit rather than from any application
-configuration:
+OVH Standard automated VM backup is enabled on Staging — a **whole-VM snapshot**:
 
 | | Covered? | Because |
 |---|---|---|
-| PostgreSQL data | yes | `bodour_db-data` is a Docker volume under `/var/lib/docker/volumes`, on the root filesystem |
+| PostgreSQL data | yes | `bodour_db-data` under `/var/lib/docker/volumes`, root filesystem |
 | Object storage (SeaweedFS) | yes | `bodour_seaweedfs-data`, same place |
-| TLS certificate and ACME state | yes | `bodour_certbot-conf` / `bodour_certbot-www`, same place |
-| `/opt/bodour/.env` and `infra.env` | **yes — and this matters** | The snapshot therefore contains every staging secret. Treat a restored image as credential-bearing |
+| TLS certificate and ACME state | yes | `bodour_certbot-conf` / `bodour_certbot-www` |
+| `/opt/bodour/.env` and `infra.env` | **yes — and this matters** | The snapshot holds every staging secret; a restored image is credential-bearing |
 
-**This closes nothing for Production.** A VM snapshot is not the specified backup: §6 requires
-a **second Moroccan location**, a tested restore, and an RTO the drill has actually met. A
-snapshot of the wrong country would not satisfy Law 09-08 even if it were tested, and it has
-not been. Host-scoped encrypted [recovery tooling](runbooks.md#creating-and-restoring-a-full-recovery-point)
-now exists and passes a disposable restore, but `backup.replicate`, the actual Moroccan target,
-retention decision, critical alert and Production-volume drill remain open readiness items.
-
-For Staging specifically, losing the VM costs nothing that cannot be rebuilt: it holds only
-fixtures, and the deployment is reproducible from Git plus regenerated secrets.
+- **Closes nothing for Production**: §6 requires a **second Moroccan location**, a tested restore and a met RTO; a snapshot in the wrong country fails Law 09-08 regardless. Host-scoped encrypted [recovery tooling](runbooks.md#creating-and-restoring-a-full-recovery-point) passes a disposable restore, but `backup.replicate`, the Moroccan target, retention decision, critical alert and Production-volume drill remain open.
+- Losing the Staging VM costs nothing unrebuildable: fixtures only, reproducible from Git plus regenerated secrets.
 
 ## The dress rehearsal still runs on the real VPS
 
-Staging exercises a great deal — TLS automation, the memory ceiling of a small box, the
-real deployment pipeline. It still does **not** exercise Moroccan
-residency, TLS on the production domain, or the backup pipeline. So the integration dress
-rehearsal runs **on the production VPS itself**, before launch, and Staging does not replace
-it.
+Staging exercises TLS automation, the small-box memory ceiling and the real pipeline, but not Moroccan residency, production-domain TLS or the backup pipeline; the dress rehearsal runs **on the production VPS itself** before launch.
 
 ---
 
-**Next:** [Configuration](configuration.md) · **Related:**
-[Deployment](deployment.md), [Security](../architecture/security.md#data-residency)
+**Next:** [Configuration](configuration.md) · **Related:** [Deployment](deployment.md), [Security](../architecture/security.md#data-residency)

@@ -2,9 +2,7 @@
 
 # Database
 
-PostgreSQL 18.4, accessed through Prisma 7.9. The database is not a passive store here — it
-carries a meaningful share of the system's invariants, and several of them **cannot be
-expressed in Prisma's schema language at all**.
+PostgreSQL 18.4 through Prisma 7.9. The database carries invariants, several of which Prisma's schema language cannot express. Field-by-field definitions are SRS §7; this page covers the non-obvious parts.
 
 ## The entity model
 
@@ -54,459 +52,55 @@ erDiagram
     User ||--o| StudentSurahProgress : "coverage cache"
 ```
 
-Plus the platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`,
-`AcademicPeriod`, `Attendance`, `ExamQuestion`, `ExamQuestionOption`,
-`StudentExamAnswer`, `StudentExamAnswerOption`,
-`EducationalContent`, `ConsumedToken`, `RateLimitCounter`, and `HijriMonthStart`.
-
-> The authoritative field-by-field definition is SRS §7. This page explains the parts that
-> are non-obvious.
+Platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `AcademicYear`, `AcademicPeriod`, `Attendance`, `ExamQuestion`, `ExamQuestionOption`, `StudentExamAnswer`, `StudentExamAnswerOption`, `EducationalContent`, `ConsumedToken`, `RateLimitCounter`, `HijriMonthStart`.
 
 ## Entities that carry a design decision
 
-### `StorageRetirement` — operational authority beyond job retention
-
-B4/B5 adds this minimal outbox in migration
-[`20260911130000_durable_storage_retirement`](../../backend/prisma/migrations/20260911130000_durable_storage_retirement/migration.sql).
-It has no FK to purgeable content: the exact deletion coordinate must survive
-the content and Trash rows. SQL constrains operations, buckets, nonnegative
-attempts and pending/resolved locator states. A pending record requires its
-content-prefixed key; completion clears that key. `copy_settled` is false only
-for an unresolved placement attempt; SQL prohibits completing such a record.
-This single additional bit distinguishes an absent object from proof that its
-possible late write has settled. Non-placement/legacy records default true.
-The unique domain-separated
-coordinate/operation digest makes replays idempotent. Only a new authorized,
-Content-locked transition may renew a completed obligation for reused restored
-bytes. See [storage lifecycle jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation)
-for reconciliation and rollout constraints. This is operational state, not a
-new durable audit payload or a new job catalog.
-
-### `User` — one table, several kinds of person
-
-Staff, parents, adult students, and minors are all `User` rows. What differs is what hangs
-off them.
-
-| Column | Why it exists |
+| Entity | Decision |
 |---|---|
-| `account_status` | The lifecycle: pending → active → suspended, with rejected terminal. Separate from a per-branch `user_status` |
-| `sex` | The **person-side half** of the level's `gender_restriction`. Without it the restriction is unenforceable — nothing could compare a person against a girls-only level. Captured **at registration**, in the same transaction that creates the person, because the registration exists before the `User` does |
-| `pre_provisioned_email` | The address authorized to claim this account **before any external identity exists**. Unique among non-null values. **Retained after binding**, never cleared, so provenance survives and the address cannot be claimed twice |
-| `public_display_name` | An optional name the person chooses to publish. Distinct from `nickname`, which is an internal search convenience — this is a publication choice |
-| `version` | Optimistic locking on staff edits |
-
-### `UserIdentity` — completed bindings only
-
-Keyed by `(provider, provider_subject_id)`, unique. MVP has one provider: Google.
-
-**Placeholder rows are prohibited.** A row with a null, empty, or synthetic subject id
-standing in for an unbound account would make *"has an identity"* stop meaning *"has
-authenticated"* — and that predicate is what the entire login routing rests on. An account
-awaiting its first binding is represented by `pre_provisioned_email` and nothing else.
-
-### `NormalizedEmailLock` — synchronization, not ownership
-
-`User.pre_provisioned_email` and active `UserIdentity.email` are separate representations of
-one normalized-address claim. Their indexes cannot constrain one another and cannot lock an
-address absent from both tables. `NormalizedEmailLock(email_digest, created_at)` supplies one
-stable row per address for the production ownership writers to lock before deciding. The
-64-character lowercase hex coordinate is a domain-separated HMAC under `EMAIL_LOCK_KEY`,
-not a raw email or a bare hash. Its SQL CHECK rejects malformed coordinates. The
-[ratified keying design](../development/email-lock-keying.md) owns the exact input,
-stopped-writer migration/rotation procedure and current acceptance status.
-
-It deliberately has no User foreign key. Adding one would make it a third ownership record
-that could disagree with the two SRS fields; deleting it on account lifecycle changes would
-also reopen the race. Rows may therefore outlive an active claim and remain harmless lock
-targets. The availability decision always comes from an under-lock re-read of the actual
-ownership channels.
-
-`SelfManagedClaim` retains the approved transition fact needed by `SELF_MANAGED`,
-not a second credential archive. Permanent account erasure clears its `email`,
-`provider_subject_id` and decision text, and removes related Trash snapshots.
-Pending requests are withdrawn via `deleted_at`, not fabricated as approved/rejected.
-The two credential columns are nullable together; a SQL CHECK requires both on a
-live pending claim. The migration repairs only audit-proven permanent deletions,
-leaving recoverable accounts and their claims intact.
-
-### `UserBranchRole` — the whole authorization model
-
-Unique on `(user_id, role_id, branch_id)`, so one person may hold the same role once per
-branch. **`branch_id IS NULL` means all branches for that assignment** — not "Super Admin".
-Super Admin's bypass follows from its role.
-
-### `PlatformOwner` — singleton lifecycle, not RBAC
-
-The one row has fixed key `platform` and a unique restricted FK to its owner User. PostgreSQL
-triggers require that User to remain active, undeleted and assigned a live global Super Admin
-role; deleting the singleton is refused. Transfer locks the singleton first, then the current
-and target Users in id order, so two concurrent attempts cannot create two successors or a
-zero-owner interval. The relationship is what the Users screen labels; it is not represented
-by another Role row.
-
-### `RoleRequest` and `CirclePreference` — what was asked, never what was granted (R168 §1)
-
-One registration may ask for several roles, and each is approved or declined on its own
-([identity and access](identity-and-access.md#one-registration-several-roles-r168-1)). `role_request`
-is one row per person and role — `student · guardian · teaching · administration` — walking
-`pending → approved | declined`. **It is a request and never an authority**: authority is
-`UserBranchRole`, written only by the audited approval, and no read of `role_request` decides what
-anybody may do.
-
-* **UNIQUE `(user_id, kind)`** — one line of history per person and role. Asking again for a declined
-  role, when that is built, re-opens the row rather than adding a second.
-* **Three CHECKs carry the state machine**, so no code path can write a half-decision: pending means
-  no `decided_at` and no `decided_by`; decided means a `decided_at`; a `decline_reason` exists only
-  on a decline; `first_time` exists only on `student`.
-* **`first_time` is nullable on purpose.** NULL is «nobody was asked» — every row the migration
-  back-filled for a registration still pending — and no answer is invented.
-* **`decided_by` is `SET NULL`, the person is `CASCADE`.** WHO decided is always written by the
-  service and is in the audit log; the column may only empty if that row ever ceases to exist.
-  The rows themselves go with the person, so account deletion and rejection retention needed no
-  new rule (`account-deletion.service.ts` still clears them explicitly — it de-identifies, it does
-  not delete the `User`).
-* **A partial index on `status = 'pending'`** serves the approval queue, which now also lists an
-  ACTIVE account that still has a request waiting.
-
-`circle_preference` is her ranked memorisation حلقات — PK `(user_id, teaching_group_id)`, UNIQUE
-`(user_id, rank)`, `rank` 1–20. **A wish, never a seat**: nothing reads it to place anybody; the
-approver sees it beside the placement control. What she may rank is not stored anywhere — it is
-read from the schedule each time (`registration-circle-slots.service.ts`).
-
-The migration **back-fills** one request for every registration still `pending` (teaching where
-`requested_role = 'teacher'`, guardian where child applications wait, student otherwise), so the
-queue never shows an old registration as having asked for nothing.
-
-### Framing preference and availability mode — planning only
-
-`FramingPreference` records `in_person | online | both`. Physical modes require either
-explicit `FramingPreferenceBranch` rows or future-inclusive `all_branches = true`; online
-requires neither. Deferred constraint triggers validate the final transaction state so nested
-creation is legal while incomplete committed preferences are not.
-
-`TeacherAvailability.mode` reuses the vocabulary per weekly interval and is nullable. Null is
-legacy/not stated; no migration guesses a value. These records affect advisory scheduling
-warnings only. Authority still comes from `CourseScheduleStaff` / `SessionStaff`.
-
-### `RefreshSession` and `RefreshToken` — one stable chain, rotating generations
-
-Rotation, revocation, the grace window, and revoke-on-suspension all need per-token server
-state that no other entity holds.
-
-`RefreshSession` is deliberately only `(id, user_id, created_at)`: it is the stable row locked
-by refresh, logout, revoke-all and `token.purge`, not another credential or revocation source.
-Token generations cannot fill that role at `READ COMMITTED`: rotation may insert a successor
-outside a lock statement's snapshot and purge may delete the predecessor on which a waiter was
-queued. The anchor is removed only when purge, while holding it, finds no token generation left.
-PostgreSQL advisory locks were rejected because §16.2 permits repository raw SQL for row locks,
-and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without collision.
-
-The anchor is intentionally session-scoped, not user-scoped. The already-stable `User` row is
-the higher-level lock for the two operations that must govern anchors which do not exist yet:
-identity binding, new login/session creation, current-role credential decisions and user-wide
-revocation, including Pending → Rejected. Their order is User first, then existing
-`RefreshSession` ids in UUID order. The
-explicit User mode is `FOR NO KEY UPDATE`: `User.id` is immutable, while all protected status,
-deletion and role decisions still conflict with this lock. A successful login re-reads status
-and assignments while holding it; rejection and suspension hold it while changing status and
-enumerating/revoking all anchors. The shared session issuer independently re-checks that the
-account is Active or Pending under this lock, so a helper call cannot bypass that boundary.
-
-Refresh, logout and purge never request that **explicit** User lock. Refresh-token and audit
-inserts can nevertheless acquire an **implicit `KEY SHARE`** on the referenced User during FK
-validation. That real database edge is why `FOR NO KEY UPDATE` matters: it is compatible with
-`KEY SHARE`, whereas `FOR UPDATE` allowed a refresh/logout holding a session anchor to wait on
-User while suspension holding User waited on that same anchor. Session-first operations now
-finish their FK write and release the anchor without weakening User-wide serialization.
-
-| Field | Consumer |
-|---|---|
-| `token_hash` | **Hashed, never raw** — a stolen database dump must not yield usable 30-day credentials. Unique |
-| `session_id` | The stable id of one rotation chain. Makes "revoke this session" a single indexed `UPDATE` instead of a recursive walk of predecessors |
-| `rotated_from_id` | The immediate predecessor. **This one field decides all three refresh outcomes**: current → rotate, immediate predecessor within grace → accept, anything older → reuse detected |
-| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout, detected replay, suspension, R102 rejection, deletion, and R101's one-time cookie-Path rollout; NULL remains reserved for ordinary rotation |
-
-The fields **deliberately excluded** are documented in the specification with their reasons,
-so a later implementer does not re-add them by reflex: `created_at` (identical to
-`issued_at`), `revoked_by` (duplicates the audit actor, and two actor records will
-eventually disagree), `created_by_ip` and `user_agent_hash` (personal data on a population
-including minors, with no consumer and no retention rule), `last_used_at` (under mandatory
-rotation a token is used exactly once).
+| `StorageRetirement` (B4/B5, [`20260911130000_durable_storage_retirement`](../../backend/prisma/migrations/20260911130000_durable_storage_retirement/migration.sql)) | Minimal outbox, no FK to purgeable content (the coordinate outlives content and Trash rows). SQL constrains operations, buckets, nonnegative attempts, pending/resolved locator states; pending requires its content-prefixed key, completion clears it. `copy_settled` is false only for an unresolved placement attempt (SQL forbids completing it); legacy/non-placement rows default true. Unique domain-separated coordinate/operation digest → idempotent replays; only a new authorized Content-locked transition renews a completed obligation. Operational state, not audit or job catalog — [storage lifecycle jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation) |
+| `User` | Staff, parents, adult students, minors: all rows. `account_status` pending → active → suspended, rejected terminal (separate from per-branch `user_status`). `sex`: person-side half of `gender_restriction`, captured at registration in the creating transaction. `pre_provisioned_email`: may claim the account before any identity; unique among non-null; retained after binding. `public_display_name`: a publication choice, distinct from `nickname` (internal search). `version`: optimistic locking on staff edits |
+| `UserIdentity` | Unique `(provider, provider_subject_id)`; one provider (Google). Placeholder rows (null/empty/synthetic subject id) prohibited; an unbound account is `pre_provisioned_email` and nothing else |
+| `NormalizedEmailLock(email_digest, created_at)` | One stable row per normalized address for ownership writers to lock (`pre_provisioned_email` and active `UserIdentity.email` cannot constrain each other). 64-char lowercase hex, domain-separated HMAC under `EMAIL_LOCK_KEY`; SQL CHECK rejects malformed values; [keying design](../development/email-lock-keying.md). No User FK on purpose (a third ownership record; lifecycle deletes would reopen the race); rows may outlive a claim; availability comes from an under-lock re-read of the ownership channels |
+| `SelfManagedClaim` | The approved transition fact for `SELF_MANAGED`, not a credential archive. Permanent erasure clears `email`, `provider_subject_id`, decision text and related Trash snapshots; pending requests withdraw via `deleted_at`. Credential columns nullable together; SQL CHECK requires both on a live pending claim; the migration repairs only audit-proven permanent deletions |
+| `UserBranchRole` | Unique `(user_id, role_id, branch_id)`. `branch_id IS NULL` = all branches for that assignment, not "Super Admin" (the bypass follows from the role) |
+| `PlatformOwner` | Singleton key `platform`, unique restricted FK to the owner User. Triggers require that User active, undeleted, holding a live global Super Admin role; deleting the singleton is refused. Transfer locks the singleton, then current and target Users in id order. Labelled on the Users screen; not a Role row |
+| `RoleRequest` (`role_request`, R168 §1; [identity and access](identity-and-access.md#one-registration-several-roles-r168-1)) | One row per person and role (`student · guardian · teaching · administration`), `pending → approved \| declined`. A request, never an authority (`UserBranchRole`, written only by the audited approval). UNIQUE `(user_id, kind)`; re-asking re-opens the row. Three CHECKs: pending ⇒ no `decided_at`/`decided_by`; decided ⇒ `decided_at`; `decline_reason` only on decline; `first_time` only on `student`. `first_time` NULL = nobody asked. `decided_by` SET NULL, person CASCADE (`account-deletion.service.ts` clears explicitly). Partial index on `status = 'pending'` for the approval queue, which also lists an ACTIVE account with a waiting request. The migration back-fills one request per pending registration (teaching where `requested_role = 'teacher'`, guardian where child applications wait, student otherwise) |
+| `CirclePreference` (`circle_preference`) | Ranked حلقات: PK `(user_id, teaching_group_id)`, UNIQUE `(user_id, rank)`, `rank` 1–20. A wish, never a seat; nothing reads it to place anybody. The rankable set is read from the schedule each time (`registration-circle-slots.service.ts`) |
+| `FramingPreference`, `TeacherAvailability` | `in_person \| online \| both`; physical modes need `FramingPreferenceBranch` rows or `all_branches = true`; deferred constraint triggers validate the final transaction state. `TeacherAvailability.mode` reuses the vocabulary per weekly interval, nullable (NULL = not stated; no migration guesses). Advisory warnings only; authority is `CourseScheduleStaff` / `SessionStaff` |
+| `RefreshSession` | Only `(id, user_id, created_at)`: the stable row locked by refresh, logout, revoke-all and `token.purge`; removed only when purge, holding it, finds no generation left (generations cannot serve at READ COMMITTED). Advisory locks rejected: §16.2 permits repository raw SQL row locks and a UUID does not fit a 64-bit key. The `User` row is the higher lock for identity binding, login/session creation, current-role credential decisions and user-wide revocation incl. Pending → Rejected; order User first, then `RefreshSession` ids in UUID order. User mode `FOR NO KEY UPDATE` (`User.id` immutable; status/deletion/role decisions still conflict) is compatible with the implicit `KEY SHARE` token/audit inserts take during FK validation — `FOR UPDATE` deadlocked refresh/logout against suspension. Login re-reads status and assignments under it; the session issuer re-checks Active or Pending under it; refresh, logout and purge never take the explicit User lock |
+| `RefreshToken` | `token_hash` hashed, never raw, unique. `session_id` = one rotation chain (revoke = one indexed `UPDATE`). `rotated_from_id` decides: current → rotate, immediate predecessor within grace → accept, older → reuse detected. Revocation check `revoked_at IS NULL`; `revoked_reason` separates logout, replay, suspension, R102 rejection, deletion, R101 cookie-Path rollout; NULL reserved for ordinary rotation. Excluded on purpose: `created_at` (= `issued_at`), `revoked_by` (duplicates the audit actor), `created_by_ip` / `user_agent_hash` (personal data incl. minors, no consumer or retention rule), `last_used_at` (used once) |
+| `Subject.tracks_quran_progress` (R107–R108) | Authorization, not curriculum type. القرآن الكريم has no Subject row; only حفظ القرآن carries the marker; a current staffing assignment for it authorises memorisation entry. The partial unique index enforces at most one live marker ("exactly one" is impossible: empty DB before bootstrap; absence is fail-closed); the Production seed asserts exactly one and refuses a different marked Subject or duplicate live rows. `LevelSurah` = the Level's حفظ القرآن syllabus, followed by تفسير القرآن; `QuranProgressLog` keyed by student and Surah, no Subject FK. Tafsir is outside the coverage engine; أحكام القرآن, ترتيل وتجويد القرآن and later unmarked Subjects use `LevelSubject`; the eight-row seed is additive |
+| `Subject.requires_surahs` (R165 §2) | A class or exam of the Subject names its Surahs. حفظ القرآن and تفسير القرآن carry it (set once by migration; no runtime name rule). `subject_tracker_requires_surahs_check` = `NOT tracks_quran_progress OR requires_surahs`; the service refuses un-marking with `TRACKER_REQUIRES_SURAHS`. Surahs live in `course_schedule_surah` (cascades with the schedule), `session_surah` (an occurrence's own, replacing the class's that date; RESTRICT) and `exam.surah_id`; the joins hard-delete (a plan correction; audit records who) |
+| `LevelCompletionMark` (R167 §3) | BR-11 is derived on read, never stored (R166 §1, `policies/level-completion.ts`). The mark records an Admin/Super Admin attestation, allowed while BR-11 is unmet after `409 REQUIREMENTS_NOT_MET` → `acknowledge_unmet`; `requirements_met` keeps BR-11's reading then. Nothing reads it into BR-11, but it takes the Level out of what she is studying (R172 §14): `inProgressEnrolmentWhere` (same file) is read by «تقويمي», the library's private tier and `GET /students/me`; the enrolment is untouched; lifting the mark restores both. UNIQUE `(student_id, level_id)` (not per enrolment; R122). `branch_id` = her enrolment's branch when recorded (Admin scope, certificate). Certificate: `certificate_number` (UNIQUE, from `level_certificate_number_seq` at first issue, never reused), `certificate_issued_at`, `certificate_issued_by`, `level_completion_mark_certificate_check`; withdrawing clears the two issued columns and keeps the number. No soft delete, no Trash; removal refused while a certificate is showing |
+| `CategorySubject` (R172 §1) | Same shape as `LevelSubject` (soft-deleted, unique per pair, RESTRICT both ways): a Subject taught to every live Level of the Category, present and future (الفقه to «المرأة»). Nothing is copied down: `policies/curriculum.ts` (`subjectsTaughtAt`, `levelsTeaching`, `assertSubjectTaughtAtLevel`) reads both through the Level's `category_id`; every surface asks it — «الكل» resolution (R169 §7), content initiation, scope options (`levels[].subject_ids`, `categories[].subject_ids`), public programme, personal calendar Subject filter, BR-11's «examined» Levels. Subject deletion tombstones its links (`cascaded_category_subject_ids`, `legacyOptional` in Trash plans). Routes `GET\|PUT\|DELETE /admin/categories/{id}/subjects[/{subjectId}]`; screen: «مواد المستوى»'s first table |
+| `EducationalContent.whole_category` (R167 §5) | `level_id` stays NOT NULL; `whole_category = true` addresses every Level of that Level's Category. No `category_id` column: the Category is read through `level_id` (`tierPredicate`, `?level_id=` filter), so later Levels are included. `branch_id` NULL = every branch. Partial index `WHERE whole_category AND deleted_at IS NULL` serves «كل مستويات الفئة». R172 §1: `POST /uploads/initiate` takes `category_id` in place of `level_id`; the item is filed under the Category's first live Level with `whole_category`, decided at initiation and carried in the ticket |
+| `EducationalContentLevel` (R169 §10) | `educational_content.level_id` remains the home Level (NOT NULL; what `assertSubjectTaughtAtLevel`, the shelves and `whole_category` read through); the join holds only ADDITIONAL Levels. PK `(content_id, level_id)`, `content_id` CASCADE, `level_id` RESTRICT (`deleteLevel`'s guard counts both). Trigger `educational_content_level_not_home` refuses the home Level, so the service clears rows BEFORE moving the home Level and writes AFTER. Three reads in `library.service.ts` know it: private tier (hers when ANY Level is hers), `level_id` filter, `category_id` filter; the consent gate derives from the class audience via `SessionContent`, never the item's Level. Ingest never writes `whole_category` and additional Levels together |
+| `SessionRecording.recovered_from_segments` (R168 §2) | `true` when the final file never arrived and the recording was assembled from safety segments; status stays `completed`; availability derives from `educational_content_id`. Written only by `markRecoveredFromSegments`, the only path out of `failed`/`aborted` |
+| `SessionRecording.educational_content_id` (R99) | Nullable, unique, FK RESTRICT — optional 1:1. NULL while capturing, finalising and importing. Unique so duplicate deliveries, pg-boss retries and killed workers converge on one `EducationalContent` (the ingestion job reads it first). RESTRICT so deleting the library item never erases the record of a class recorded. No `available` status: «متاح» is `educational_content_id IS NOT NULL` (R99.14). `ingestion_failure_reason` is separate from `failure_reason` (only the second is fixed by retrying) |
+| `User.notes` — dropped (R121, Owner 2026-09-02) | A personal-data field needs a specific documented purpose. `20260902220000_drop_user_notes` drops it behind a guard refusing a non-blank value. Bounded fields with a purpose stay: `ChildApplication.internal_note` (R62.8), `FamilyLink.decision_reason`, `Session.cancellation_reason`; `notes` on the §5.2 Session projection is unrelated |
+| `StudentSocialProfile` — dropped (R120, Owner 2026-09-02) | No health, medical or social-case-file data; no surface ever collected it. `20260902200000_drop_student_social_profile` refuses a non-empty table and reports the count (0 on Localhost and Staging; Production not deployed). Data-minimisation policy: no personal-data categories beyond current operational purposes — a technical fact, not a CNDP legal conclusion |
+| `ConsentRecord` | Append-only state-change history; effective status = most recent record; absence = no consent. `consent_text_id` nullable only for pre-R119 rows (no wording manufactured); `consent_text_version` retained for exports, audit and compliance |
+| `LegalConsentText` (R119) | Exact Arabic text, unique `version_label`, SHA-256 digest, `draft \| active \| superseded`, creation/activation provenance. Immutable once activated (service-enforced). Exactly one active: `legal_consent_text_one_active` partial unique index. Never deleted; `consent_record` and `child_application` reference it RESTRICT |
+| `AuditLog.actor_user_id` | NULL = system-initiated (replay-detected session revocation; the consent job's forced visibility changes), never "attribution lost" |
 
 ### `HijriMonthStart` — the calendar's sole source
 
-One row per Hijri month: year, month, the Gregorian date it officially began, and a status
-of `draft | published`. **Only published months render anywhere**, so a year can be entered
-progressively and reviewed first.
-
-`source` records provenance on the row — `manual` today, an importer's identifier if one is
-ever added — so the two are distinguishable without a schema change. Every write goes
-through one service method, which is what makes a future importer inherit its ordering rule,
-locking, draft state, and audit trail rather than reimplementing them.
-
-> [Calendar and Hijri](calendar-and-hijri.md)
+- One row per Hijri month: year, month, Gregorian start date, status `draft | published`; only published months render anywhere.
+- `source` records provenance (`manual` today; an importer's identifier if added). Every write goes through one service method (ordering rule, locking, draft state, audit) — [Calendar and Hijri](calendar-and-hijri.md).
 
 ### `StudentSurahProgress` — a cache that cannot go stale
 
-Coverage percentage plus the merged interval set, keyed by `(student_id, surah_id)`,
-carrying `last_log_id` / `last_log_at` stamps of the newest governing log.
+- Coverage percentage plus merged interval set, keyed `(student_id, surah_id)`, with `last_log_id` / `last_log_at` of the newest governing log.
+- Never the source of truth: every consumer compares the stamp with the student+surah's latest log (indexed max) and on mismatch recomputes from the logs and repairs the row before use — stale reads are impossible, including after a crash between log commit and cache upsert.
+- List pages run the guard as one joined query (cache rows left-joined to each pair's latest log id), never per-row reads plus per-row max lookups.
 
-**It is never the source of truth — the logs are.** Every consumer compares the stamp
-against the student+surah's latest log (a cheap indexed max) and, on mismatch, recomputes
-from the logs and repairs the row in place *before* using the value. That makes a stale read
-structurally impossible, including after a crash between the log commit and the cache
-upsert.
+### Every application session is UTC (since 2026-09-21)
 
-**List pages run the guard as one joined query** — cache rows left-joined against each
-pair's latest log id — never as per-row cache reads plus per-row max lookups, which would be
-an N+1 wearing a cache costume.
-
-### Every application session is UTC — the adapter assumes it (found 2026-09-21)
-
-`@prisma/adapter-pg` exchanges `timestamptz` as text: it sends an instant with no offset and
-reads one back by discarding the offset Postgres printed. That is correct only in a UTC session.
-This database's own default zone is `Africa/Casablanca` (the `db` container's `TZ`, written into
-`postgresql.conf` at init), so every instant the application wrote was understood **an hour
-early** and every instant it read came back **an hour late**. The errors cancel on a round trip —
-which is how it passed every test — and cancel nowhere else: a `DEFAULT now()` read by the app,
-raw SQL comparing a written instant with `now()`, a backup, an export, an operator's `psql`.
-
-`createPrismaClient` therefore opens every session with `options: '-c TimeZone=UTC'`. It is
-pinned on the connection rather than on the database because it is the ADAPTER's assumption: it
-travels with the adapter to every tier and every disposable stack, and an operator's own session
-still reads the association's clock. Nothing in this codebase's SQL depends on the session zone —
-dates and wall-clock times are `date`/`time` columns (TD-11), which carry none.
-`lib/prisma-timezone.integration.test.ts` asks the two questions a round trip cannot (what did
-Postgres understand; what does the app make of `now()`) and holds the precondition that the
-database it runs against is NOT UTC, so it cannot go quietly vacuous.
-
-**Data written before the fix** is one hour earlier, in absolute terms, than was meant, and now
-reads as such. There was no Production data; Localhost and Staging carry it knowingly.
-
-### `Subject.tracks_quran_progress` — authorization, not curriculum type
-
-SRS R107–R108 keeps the existing boolean and partial unique index, and narrows their meaning.
-The broad Quran domain القرآن الكريم has no Subject row; its atomic Subjects are scheduled
-normally. Only حفظ القرآن may carry the marker, and a current staffing assignment for that
-Subject authorises memorisation entry for its resolved audience.
-
-The database enforces **at most one live marker**. It deliberately cannot enforce “exactly
-one”: an empty database must exist before bootstrap, and absence is a valid fail-closed
-configuration. The Production seed establishes and asserts exactly one for launch. It
-refuses a different marked Subject or duplicate live حفظ القرآن rows rather than guessing
-or rewriting Owner-managed reference data.
-
-`LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows.
-`QuranProgressLog` remains keyed by student and Surah with no Subject foreign
-key, because the marker answers *who may write* while the log answers *what was memorised*.
-
-**`Subject.requires_surahs` — a second, separate marker** (SRS Revision 165 §2): the Subject
-works by Surah, so scheduling a class or an exam of it must name which. حفظ القرآن and
-تفسير القرآن carry it (the migration sets both once, against the seeded baseline; no runtime
-rule reads a name). `subject_tracker_requires_surahs_check` — `NOT tracks_quran_progress OR
-requires_surahs` — makes a tracker that names no Surah unrepresentable, and the service
-refuses un-marking the tracker with a coded `TRACKER_REQUIRES_SURAHS` so the CHECK never
-surfaces as a `500`. The Surahs themselves live in two hard-row joins — `course_schedule_surah`
-(a class's, cascading with its schedule) and `session_surah` (one occurrence's own, which
-**replace** the class's for that date; RESTRICT, like every other reference to a Session) —
-and in `exam.surah_id`, one per sitting. Neither join soft-deletes: changing a planned Surah
-is a correction to a plan, and the audit row records who made it.
-
-Tafsir still carries no `tracks_quran_progress` and does not participate in the coverage engine; أحكام القرآن,
-ترتيل وتجويد القرآن and any later unmarked Quran-domain Subject use ordinary
-`LevelSubject` curriculum. The eight-row Production seed is an additive baseline and does
-not constrain or rewrite later Super-Admin additions.
-
-### `LevelCompletionMark` — an attestation beside a derived rule, never instead of it (R167 §3)
-
-BR-11 — *has she completed this Level* — is **derived on read and never stored** (Revision 166 §1;
-`policies/level-completion.ts`). `level_completion_mark` is a different fact: that an Admin or
-Super Admin **recorded** she completed it, which the Owner allows while BR-11 is unmet provided
-the caller was told (`409 REQUIREMENTS_NOT_MET` until `acknowledge_unmet`). `requirements_met`
-keeps what BR-11 read at that moment, so the record says for ever whether the attestation agreed
-with the engine. Nothing reads the mark back into BR-11 — but **the mark is what takes a Level out of what she is
-studying** (R172 §14): `inProgressEnrolmentWhere` (same policy file) is the enrolment predicate
-«تقويمي», the library's private tier and `GET /students/me` read through — live, at a Level with no
-mark for her. The enrolment row is untouched; lifting the mark restores the Level to both pages.
-
-* **One row per `(student_id, level_id)`** — a UNIQUE index, not per enrolment: completion is about
-  her and the Level, and R122 lets her hold several enrolments at one Level.
-* **`branch_id`** is her enrolment's branch when it was recorded — what an Admin's scope is checked
-  against, and what the certificate names.
-* **The certificate is three columns and one CHECK**: `certificate_number` (UNIQUE, drawn from
-  `level_certificate_number_seq` at FIRST issue and never reused), `certificate_issued_at`,
-  `certificate_issued_by`; `level_completion_mark_certificate_check` makes *issued* mean *by
-  somebody, with a number*. Withdrawing clears the two `issued` columns and keeps the number, so a
-  copy printed earlier stays traceable.
-* **No soft delete and no Trash entry.** Removing a mark made in error is a correction — nothing of
-  hers is lost, the audit row records who — and it is refused while a certificate is showing.
-
-### `CategorySubject` — a Subject taught to a WHOLE Category, read beside `LevelSubject` (R172 §1)
-
-`LevelSubject` stays what a Level teaches on its own. `CategorySubject` (same shape: soft-deleted,
-unique per pair, RESTRICT both ways) says a Subject is taught to **every live Level of the
-Category, present and future** — الفقه to «المرأة». Nothing is copied down: the curriculum
-policy (`policies/curriculum.ts` — `subjectsTaughtAt`, `levelsTeaching`,
-`assertSubjectTaughtAtLevel`) reads both through the Level's `category_id` at the moment of the
-read, and every surface asks the policy — scheduling's «الكل» resolution (R169 §7), content
-initiation, the scope options (`levels[].subject_ids` include them; `categories[].subject_ids`
-list them), the public programme, the personal calendar's Subject filter, BR-11's «examined»
-Levels. A Subject's deletion tombstones its Category links with it
-(`cascaded_category_subject_ids`, **optional in a snapshot older than the link** — `legacyOptional`
-in the Trash plans — so a Subject deleted before R172 stays restorable). Routes:
-`GET|PUT|DELETE /admin/categories/{id}/subjects[/{subjectId}]`; the screen is «مواد المستوى»'s
-first table.
-
-### `EducationalContent.whole_category` — a scope read through the Level, never copied (R167 §5)
-
-`level_id` stays `NOT NULL`: §4.9 groups the library by Level and every reader keeps a Level to
-join through. `whole_category = true` says the item is **addressed to every Level of that Level's
-Category**. There is deliberately no `category_id` column beside it: the Category is read through
-`level_id` at the moment of the read (`tierPredicate`, the `?level_id=` filter), so a Level added
-to the Category later is included and the two can never disagree. `branch_id` keeps its meaning —
-`NULL` is every branch. A partial index (`WHERE whole_category AND deleted_at IS NULL`) serves the
-«كل مستويات الفئة» shelf. **R172 §1 — filed with no Level chosen:** `POST /uploads/initiate`
-takes `category_id` in place of `level_id`; the server files the item under the Category's first
-live Level (its own order — the rule the recording ingest already applies) with `whole_category`,
-decided at initiation and carried in the upload ticket like every other scope fact.
-
-### `EducationalContentLevel` — an item's OTHER Levels; the home Level stays a column (R169 §10)
-
-A class may address several Levels, and its recording — or any library item — may belong to all of
-them. `educational_content.level_id` was NOT turned into a join: it is the item's **home Level**,
-NOT NULL, what `assertSubjectTaughtAtLevel` checks the Subject against, what the library's shelves
-and R167's `whole_category` are read through, and what a dozen readers already select. The join
-holds only the ADDITIONAL Levels, so every reader that knows only `level_id` is still right about
-the home Level, and an item with no rows here behaves exactly as it always did.
-
-* **PK `(content_id, level_id)`**, `content_id` CASCADE (the rows mean nothing without the item,
-  purge included), `level_id` RESTRICT (a Level something still belongs to is not deleted from
-  beneath it — `deleteLevel`'s guard counts both).
-* **A trigger refuses the home Level** (`educational_content_level_not_home`): one fact, one place.
-  That is why the service clears the rows BEFORE moving an item's home Level and writes them AFTER.
-* **Three reads know about it, all in `library.service.ts`**: the private tier (hers when ANY of its
-  Levels is hers), the `level_id` filter and the `category_id` filter. The consent gate does not: it
-  is derived from the class's audience through `SessionContent`, never from the item's Level, so
-  widening the Levels cannot weaken it.
-* `whole_category` and additional Levels are not written together by the ingest: «every Level of
-  the Category» already reaches them all, including one added later.
-
-### `SessionRecording.recovered_from_segments` — how the file was obtained, not a status (R168 §2)
-
-`true` where the recorder's final file never arrived and the recording was assembled from the
-safety segments it had uploaded while the class ran. The status is the ordinary `completed` and
-availability is still derived from `educational_content_id`; this column exists so the library item
-can say, honestly, that its last seconds may be missing, and so an operator can count how often a
-recorder dies. It is written by exactly one function (`markRecoveredFromSegments`), which is also
-the only path out of `failed`/`aborted`.
-
-### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
-
-One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —
-an optional 1:1. Each half is load-bearing.
-
-**Nullable**, because most of a recording's life is spent before there is anything to point at:
-it is `NULL` while capturing, while the provider finalises, and while the import job runs.
-
-**Unique**, because a provider may deliver the same completion twice, a pg-boss job may be
-retried, and a worker may be killed between the server-side copy and the row write. All three
-must converge on **one** `EducationalContent`. The ingestion job reads this column first and
-returns the existing result when it is set — and the unique index is what makes that check hold
-under concurrency rather than merely usually.
-
-**`RESTRICT`**, because deleting the library item must not silently erase the record that a
-class was recorded. The link is severed deliberately or not at all.
-
-**And it is why there is no `available` status value.** *«متاح»* is exactly
-`educational_content_id IS NOT NULL`. A status enum carrying `available` would be a second fact
-about the same thing, and the two can disagree — the disagreement looking like a working library
-item whose object is absent, which R99.14 calls worse than an honest failure. **Derive the
-state from the row that proves it.**
-
-`ingestion_failure_reason` sits beside it and is deliberately **not** the same column as
-`failure_reason`: the provider failing to record and the platform failing to accept what it
-recorded are different events with different remedies, and only the second is fixed by retrying.
-
-### No generic free-text collection
-
-**A personal-data field must have a specific, documented purpose** (Owner
-decision, 2026-09-02; SRS R121).
-
-`User.notes` was 2 000 characters of unbounded free text on the **public
-registration form**, so an applicant could volunteer a health condition, a
-custody arrangement or a judicial matter into a platform that collects none of
-them — and no requirement stated what it was for or who had to read it. R62.1
-had already excluded it from the child shape for exactly that reason; R121
-extends the rule to every person. Migration
-`20260902220000_drop_user_notes` drops the column behind a guard that refuses a
-non-blank value.
-
-The bounded free-text fields that **do** have a stated purpose are untouched:
-`ChildApplication.internal_note` (R62.8), `FamilyLink.decision_reason`,
-`Session.cancellation_reason`. The `notes` key on the focused §5.2 Session
-projection used by the calendar dialog is a different field on a different
-entity and is unrelated.
-
-### No health, medical or social-case-file data
-
-**The platform collects none of it** (Owner decision, 2026-09-02; SRS R120).
-
-A `StudentSocialProfile` entity used to hold a child's health condition, family
-situation, home address, siblings count and both parents' names and professions,
-behind the strictest authorization in the system. **No product surface ever
-collected any of it** — not registration, not «تسجيل طفل», not the beneficiary
-profile, and no parent, مؤطِّرة or administrative screen; the frontend contained
-no reference to it at all.
-
-The Owner withdrew the capability rather than leave it unused, because **an
-unused capability is still a capability**: an endpoint nobody calls is a live
-ability to collect health data about a minor, and an empty column is a declared
-purpose. Migration `20260902200000_drop_student_social_profile` drops the table
-behind a guard that **refuses a non-empty one** and reports the row count, since
-the drop is irreversible and the table was the only place that data ever lived.
-Localhost and Staging both held **0 rows** when it was written; Production is
-not deployed.
-
-> **Data-minimisation policy:** the platform does not collect categories of
-> personal data that are not necessary for the association's current operational
-> purposes.
-
-This states a technical fact about what the software does. It is **not** a legal
-conclusion about which CNDP regime applies — that assessment is the Owner's and
-their counsel's, and nothing here should be read as making it.
-
-### `ConsentRecord` and `AuditLog` — append-only by design
-
-Consent is a **state-change history**, never overwritten. Effective status is always
-derived from the most recent record, and absence means no consent.
-
-**`LegalConsentText` is the wording each record was given against** (R119). It
-carries the exact Arabic text, a unique human-readable `version_label`, a
-SHA-256 digest, `draft | active | superseded`, and creation and activation
-provenance. Three properties are load-bearing:
-
-* **Immutable once in force.** A version that has ever been activated cannot be
-  edited; new wording is a new version. Enforced in the service, because *has
-  this been used* is a question about other tables that a CHECK cannot ask.
-* **Exactly one active version, enforced by the DATABASE** —
-  `legal_consent_text_one_active`, a partial unique index over
-  `status = 'active'`. A service-level check alone is a race, and this is the
-  invariant whose violation means somebody could be recorded as agreeing to
-  wording nobody put in force.
-* **Never deleted.** There is no delete verb, and both `consent_record` and
-  `child_application` reference it `ON DELETE RESTRICT`, so consent evidence
-  cannot lose the words it was given against.
-
-`consent_record.consent_text_id` is **nullable only for legacy**: rows written
-before R119 name a version whose wording was never stored, none was
-manufactured for them, and NULL states honestly that the wording is not
-resolvable. `consent_text_version` is retained beside the reference because it
-is what an export, an audit row and a compliance reader act on.
-
-`AuditLog.actor_user_id` is **nullable**, and a null means *system-initiated*, not
-*attribution lost*. Two mandated actions genuinely have no human actor: replay-detected
-session revocation (triggered by an unauthenticated request presenting a stolen secret) and
-the consent job's forced visibility changes.
+- `@prisma/adapter-pg` exchanges `timestamptz` as offset-less text, correct only in a UTC session; the database default is `Africa/Casablanca` (the `db` container's `TZ` in `postgresql.conf`), so instants were written an hour early and read an hour late — cancelling on round trips, not for `DEFAULT now()`, raw SQL against `now()`, backups, exports or `psql`.
+- `createPrismaClient` opens every session with `options: '-c TimeZone=UTC'` — on the connection, not the database, because it is the adapter's assumption and travels with it; an operator's session still reads the association's clock. No SQL depends on the session zone (`date`/`time` columns, TD-11).
+- `lib/prisma-timezone.integration.test.ts` checks what Postgres understood and what the app makes of `now()`, and requires the database NOT be UTC so it cannot go vacuous.
+- Data written before the fix is one hour early in absolute terms; no Production data; Localhost and Staging carry it knowingly.
 
 ## Constraints the application layer cannot be trusted with
 
@@ -516,236 +110,87 @@ the consent job's forced visibility changes.
 |---|---|
 | `UserIdentity (provider, provider_subject_id)` | One external identity, one account |
 | `UserIdentity (provider, email)` among active | Case variants cannot become distinct identities |
-| `ConsumedToken (jti)` | **The onboarding-token replay guard.** A replay hits this violation, the transaction aborts, and the request fails — enforcement is mechanical, not aspirational |
-| `FamilyLink (student_id, parent_id)` **where not deleted** | A revoked link can be requested again later |
+| `ConsumedToken (jti)` | The onboarding-token replay guard: a replay violates it and the transaction aborts |
+| `FamilyLink (student_id, parent_id)` where not deleted | A revoked link can be requested again |
 | `AcademicYear` exactly one `is_current` | Partial unique index |
-| `ExamQuestion (exam_id, display_order)` **where not deleted** | **Two questions cannot claim one place** (R124). Partial, so a removed question frees its position rather than blocking the one that takes it — and the reorder writes through a negative range first, because writing `1,2,3` over `3,1,2` collides halfway otherwise |
-| `ExamQuestionOption (question_id, display_order)` **where not deleted** | The same, for a question's own choices: their order is part of what the student saw |
-| `StudentExamAnswer (submission_id, question_id)` | **One answer per question.** The `answers` jsonb column it replaces asked for *"keyed by question UUID, never by array position"* — the right instinct, expressed where nothing could enforce it. This is that key, as a foreign key |
-| `Attendance (session_id, event_id, exam_id, occurrence_date, student_id)` **where not deleted**, `NULLS NOT DISTINCT` | **One presence per person per occurrence** (R123). `NULLS NOT DISTINCT` is what makes it work with two of the three occurrence columns null — without it PostgreSQL treats every NULL as unique and the index would permit unlimited duplicates, which is exactly the double-tap on «تسجيل حضوري» the rule exists for |
-| `AcademicPeriod (academic_year_id, sequence)` | One الفصل 1، one الفصل 2 per year — a second row for the same semester would make *which period is this enrolment in* ambiguous |
-| `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
-| `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
-| `NormalizedEmailLock.email` | One collision-free transaction boundary across pre-provisioned and completed identity ownership, including absent-row creation |
-| `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
-| `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable, database-enforced serialization target |
-| `Enrollment (student_id, level_id, academic_period_id)` **where not deleted** | **Exactly one live enrolment per Level per academic period** (BR-21, narrowed by R122). Only expressible because `level_id` sits on the enrolment row — see below. **The period is part of the key on purpose:** the same student enrols in the same Level again next semester, and the previous row is history that must survive |
-| `AdministrativeGroup (id, level_id)` | Redundant against the primary key **on purpose**: PostgreSQL requires a unique constraint on the referenced pair before `Enrollment` can declare its composite foreign key |
-| `StudentTeachingGroup` — at most one per `(student, subject, level)` **where not deleted** | At most one split-group per subject (BR-22). `subject` and `level` come from the teaching group, so this is a **functional** index over the join, hand-written |
-| `Session (schedule_id, date)` | What makes `session.materialize` idempotent — a second run creates no duplicate occurrence |
+| `ExamQuestion (exam_id, display_order)` where not deleted | Two questions cannot claim one place (R124); partial so a removed question frees its position; the reorder writes through a negative range first (`1,2,3` over `3,1,2` collides halfway) |
+| `ExamQuestionOption (question_id, display_order)` where not deleted | Same for a question's choices: their order is part of what the student saw |
+| `StudentExamAnswer (submission_id, question_id)` | One answer per question — the key the replaced `answers` jsonb asked for, as a foreign key |
+| `Attendance (session_id, event_id, exam_id, occurrence_date, student_id)` where not deleted, `NULLS NOT DISTINCT` | One presence per person per occurrence (R123); without `NULLS NOT DISTINCT` the two null occurrence columns would permit unlimited duplicates (the double-tap on «تسجيل حضوري») |
+| `AcademicPeriod (academic_year_id, sequence)` | One الفصل 1، one الفصل 2 per year |
+| `RateLimitCounter (user_id, bucket, window_start)` | Makes the increment safe under concurrency |
+| `User.pre_provisioned_email` among non-null | Two accounts never claim one address |
+| `NormalizedEmailLock.email` | One collision-free transaction boundary across pre-provisioned and completed ownership, incl. absent-row creation |
+| `RefreshToken.token_hash` | Presented token → exactly one row, by lookup |
+| `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable serialization target |
+| `Enrollment (student_id, level_id, academic_period_id)` where not deleted | Exactly one live enrolment per Level per academic period (BR-21, narrowed by R122); the period is in the key so re-enrolling next semester keeps the previous row as history. Expressible only because `level_id` sits on the enrolment row |
+| `AdministrativeGroup (id, level_id)` | Redundant against the PK on purpose: PostgreSQL requires it before `Enrollment` can declare its composite FK |
+| `StudentTeachingGroup` at most one per `(student, subject, level)` where not deleted | At most one split-group per subject (BR-22); `subject` and `level` come from the teaching group, so it is a hand-written functional index over the join |
+| `Session (schedule_id, date)` | Makes `session.materialize` idempotent |
 
-#### The composite foreign key on `Enrollment`
-
-`Enrollment` carries `level_id` **as well as** `administrative_group_id`, which looks like
-duplication and is not. A composite foreign key
-`(administrative_group_id, level_id) → AdministrativeGroup(id, level_id)` makes the database
-**refuse** a row whose level disagrees with its group's.
-
-That is the whole point. The invariant "exactly one group per enrolled level" spans two
-hops, and a plain unique index cannot express it. The alternatives were a trigger or a
-service-layer check — both of which can be bypassed and neither of which the database
-enforces. With the composite FK the redundant column is a *constraint*, not a copy, so
-there is no second source of truth to drift.
-
-**Never drop this FK to "simplify" the schema.** Removing it turns `Enrollment.level_id`
-into exactly the kind of copy that the platform has been burned by before.
+- Composite FK `Enrollment (administrative_group_id, level_id) → AdministrativeGroup(id, level_id)`: the database refuses a row whose level disagrees with its group's. The redundant `level_id` is a constraint, not a copy; a trigger or service check could be bypassed. Never drop this FK to "simplify" the schema.
 
 ### Checks
 
-- **A live beneficiary carries a date of birth (R169 §9)** —
-  `user_beneficiary_birth_date_check`: `NOT is_beneficiary OR deleted_at IS NOT NULL OR birth_date
-  IS NOT NULL`. The COLUMN stays nullable (a guardian-only adult and a staff request are never
-  asked, R49/R130), and a deleted row is exempt because de-identification erases the date. The rule
-  is APPLIED by a trigger rather than by each service: `user_beneficiary_birth_date_fill` gives a
-  live beneficiary row that would carry no date the fixed **1900-01-01** with
-  `birth_date_is_placeholder = true` — whatever path made her a beneficiary, including a restore from
-  the Trash or a script — and clears the mark when any other date is written.
-  `user_birth_date_placeholder_check` ties the mark to that one date. **The placeholder is a mark,
-  never an age**: every rule reads `knownBirthDate()` (`lib/birth-date.ts`), which answers `null` for
-  it — read naively it would make a child «eligible at eighteen» (R132) — and no DTO sends it as a
-  date: the API says `birth_date: null`, so the forms ask for the real one. Recording it is
-  COMPLETION (R130): it replaces the placeholder once, and correcting a recorded date stays refused.
-- `QuranProgressLog`: `start_ayah >= 1 AND start_ayah <= end_ayah`. The upper bound against
-  the Surah's total crosses tables, so it is a **trigger** plus a service check.
-- All stored scores: `>= 0 AND <= 10000`. **No float score column exists anywhere.**
-- `display_order >= 0`; `RecurringCourseSchedule.start_time < end_time`;
-  `Session.start_time < end_time`; `Room.capacity > 0` **when present — a shape check only,
-  because nothing compares a roster against it** (BR-23).
-- `RecurringCourseSchedule`: **exactly one target FK is non-null and it matches
-  `teaching_mode`.** A mode without its target, or a target without its mode, is a schedule
-  nothing can resolve a roster for. Also `recurrence <> 'none'` — a non-recurring occurrence
-  is an Event, not a schedule.
+- `user_beneficiary_birth_date_check` (R169 §9): `NOT is_beneficiary OR deleted_at IS NOT NULL OR birth_date IS NOT NULL`; the column stays nullable (guardian-only adults and staff requests are never asked, R49/R130); deleted rows are exempt (de-identification erases the date). Trigger `user_beneficiary_birth_date_fill` gives a live beneficiary row without a date the fixed `1900-01-01` with `birth_date_is_placeholder = true` (any path, restore or script included) and clears the mark when another date is written; `user_birth_date_placeholder_check` ties the mark to that date. The placeholder is a mark, never an age: `knownBirthDate()` (`lib/birth-date.ts`) answers `null` for it (naively it would make a child «eligible at eighteen», R132); DTOs send `birth_date: null`. Recording it is completion (R130): once; correcting a recorded date stays refused.
+- `QuranProgressLog`: `start_ayah >= 1 AND start_ayah <= end_ayah`; the upper bound against the Surah total crosses tables, so it is a trigger plus a service check.
+- All stored scores `>= 0 AND <= 10000`; no float score column exists.
+- `display_order >= 0`; `RecurringCourseSchedule.start_time < end_time`; `Session.start_time < end_time`; `Room.capacity > 0` when present (shape only; nothing compares a roster against it, BR-23).
+- `RecurringCourseSchedule`: exactly one target FK non-null and matching `teaching_mode` (`course_schedule_mode_target_check`); `recurrence <> 'none'` (a one-off is an Event).
 - `AcademicYear.label` matches `^\d{4}-\d{4}$`.
-- `Exam`: **exactly one target, and it matches the declared arm**
-  (`exam_target_check`, R124). R58 stored the narrower sitting as a non-null
-  `administrative_group_id` and read NULL as *the whole Level*; with a Session, a
-  Teaching Group and a single beneficiary added, that inference stops being
-  decidable, so the arm is stored. Same idiom as
-  `course_schedule_mode_target_check`.
-- `ExamQuestion`: `justification = 'none'` unless the kind is a choice
-  (`exam_question_justification_check`) — **a text answer IS its own
-  justification**, so asking for a second one would ask the same question twice.
-  Prompts and option labels are refused blank.
-- `Attendance`: **exactly one** of `session_id`, `event_id`, `exam_id` is
-  non-null (`attendance_one_occurrence_check`) — the same idiom `Notification`
-  uses for its four targets. A row naming none would be presence at nothing; one
-  naming two would be presence in two places at once.
-- `AcademicPeriod`: `sequence >= 1` and `end_date >= start_date`. **Overlap between two
-  periods of one year is refused in the service, not by the database** — an exclusion
-  constraint over a date range needs the `btree_gist` extension, and the platform's
-  deployment contract does not install extensions. The service check is the enforcement, and
-  this line records that it is the *only* one.
-- `HijriMonthStart`: month 1–12; year 1300–1600 (brackets any date this platform will render
-  while rejecting a mistyped Gregorian year); **two months of one year may not share a start
-  date, and month *n+1* must start after month *n*** — an out-of-order pair would make date
-  resolution ambiguous.
-- `CHECK (email = lower(email))` on both email columns. The application lowercases on every
-  write; **this is the backstop**, so a single unlowered code path — a form, an import — can
-  never create a case variant that slips past the unique index.
+- `Exam`: exactly one target matching the declared arm (`exam_target_check`, R124) — with a Session, a Teaching Group and a single beneficiary as targets, R58's "NULL group = whole Level" inference stopped being decidable, so the arm is stored.
+- `ExamQuestion`: `justification = 'none'` unless the kind is a choice (`exam_question_justification_check`; a text answer is its own justification); prompts and option labels refused blank.
+- `Attendance`: exactly one of `session_id`, `event_id`, `exam_id` non-null (`attendance_one_occurrence_check`; the idiom `Notification` uses for its four targets).
+- `AcademicPeriod`: `sequence >= 1`, `end_date >= start_date`. Overlap between two periods of one year is refused in the service only — an exclusion constraint needs `btree_gist`, and the deployment contract installs no extensions.
+- `HijriMonthStart`: month 1–12; year 1300–1600; two months of one year may not share a start date; month *n+1* starts after month *n*.
+- `CHECK (email = lower(email))` on both email columns — the backstop for any unlowered code path.
 
 ## Arabic collation
 
-The single `name` column on Branch, Category, Level, and Subject, plus sortable person-name
-columns, are **natively collated `ar-x-icu` at the column level**.
-
-This matters more than it sounds. Default `C`/`en_US` collation sorts Arabic by codepoint
-and produces orderings that look wrong to every user. Collating the column means sorting is
-correct **by default, in every query**, with no per-query `COLLATE` clause anywhere.
-
-> **Never add a per-query `COLLATE` workaround. Fix the column.**
-> [`BR-19`](../reference/business-rules.md#br-19) · [Internationalization](internationalization.md)
+- The `name` column on Branch, Category, Level and Subject, plus sortable person-name columns, are collated `ar-x-icu` at the column level, so ordering is correct in every query with no per-query `COLLATE`.
+- Never add a per-query `COLLATE` workaround; fix the column. [`BR-19`](../reference/business-rules.md#br-19) · [Internationalization](internationalization.md)
 
 ## Search
 
-Substring matching, not prefix-only and not whole-word — `سعاد` matches `أم سعاد`. Minimum
-query length 2, case-insensitive.
-
-**Normalization is applied identically to the query and the stored value:** strip tashkeel
-and tatweel, fold أإآ→ا, ة→ه, ى→ي; lowercase and fold Latin accents for French names; strip
-spaces and `+` from phone numbers.
-
-The implementation matters: each searchable column is paired with a **generated normalized
-shadow column**, indexed, and queried with `ILIKE '%…%'` against the shadow. Normalization
-is **never** applied per row at query time — that would defeat every index.
-
-**No fuzzy matching in the MVP.** No trigram similarity, no Levenshtein, no search engine.
-Paper-roster spelling variance is absorbed by the normalization rules, which collapse the
-dominant variant classes; genuine misspellings are a data-entry problem, not a
-search-engine problem. Revisiting this is an explicit decision, not an implementer's
-initiative.
+- Substring matching (`سعاد` matches `أم سعاد`), minimum query length 2, case-insensitive.
+- Normalization applied identically to query and stored value: strip tashkeel and tatweel; fold أإآ→ا, ة→ه, ى→ي; lowercase and fold Latin accents; strip spaces and `+` from phone numbers.
+- Each searchable column has a generated, indexed normalized shadow column queried with `ILIKE '%…%'`; normalization is never applied per row at query time.
+- No fuzzy matching in the MVP (no trigram, Levenshtein or search engine); revisiting it is an explicit decision.
 
 ## A model with no `@@map` silently targets a different table
 
-Every table on this project is `snake_case` and every Prisma model is
-`PascalCase`, so **the mapping is what connects them**. Drop `@@map("exam")`
-while editing a model and Prisma does not complain: it generates a client that
-queries `"Exam"`, a table that does not exist, and the schema still *validates*
-because a mapping is optional.
-
-The failure surfaces far from the cause — `The table public.Exam does not exist`
-from whatever runs first, which reads as an unapplied migration. It cost a slice
-here: R58's model block was rewritten by hand after `prisma format` mangled it,
-and the rewrite lost the `@@map` **and** the `@@index`. The migration was correct
-and applied; the endpoints were unreachable anyway.
-
-Two habits, both cheap:
-
-* **Rewriting a model block means re-checking its trailing `@@` lines** — they
-  sit at the bottom, which is exactly where a hand-written replacement stops.
-* **Run something that touches the table before believing the model.** A
-  typecheck cannot see this; one integration test can. It is the general rule of
-  [measure, don't infer](../development/engineering-efficiency.md) in its
-  cheapest form.
+- Tables are `snake_case`, models `PascalCase`; dropping `@@map("exam")` still validates and generates a client querying `"Exam"` — surfacing as `The table public.Exam does not exist`, which reads as an unapplied migration (R58's hand-rewritten model block lost `@@map` and `@@index`).
+- Rewriting a model block means re-checking its trailing `@@` lines; run something that touches the table before believing the model ([measure, don't infer](../development/engineering-efficiency.md)).
 
 ## Migrations
 
 ### Hand-written SQL
 
-Prisma **cannot declare** custom collations, CHECK constraints, partial or functional unique
-indexes, or triggers. An agent that writes them into `schema.prisma` will fail to compile
-or — worse — silently drop the validation.
+Prisma cannot declare custom collations, CHECK constraints, partial or functional unique indexes, or triggers.
 
-The mandatory workflow:
-
-1. Model tables, columns, enums, FKs, and plain unique indexes in `schema.prisma` normally.
-2. For every PostgreSQL-specific element, run **`prisma migrate dev --create-only`** and
-   **hand-write the SQL** into the generated file before applying.
-3. The very first hand-written migration **registers the collation explicitly**:
-   ```sql
-   CREATE COLLATION IF NOT EXISTS "ar-x-icu" (provider = icu, locale = 'ar', deterministic = true);
-   ```
-   Not relying on it being predefined is what makes the migration history self-contained and
-   portable.
-4. **`prisma db push` is prohibited in every environment** — it bypasses the history and
-   silently drops the hand-written SQL. CI enforces this.
+1. Model tables, columns, enums, FKs and plain unique indexes in `schema.prisma`.
+2. For every PostgreSQL-specific element, run `prisma migrate dev --create-only` and hand-write the SQL into the generated file before applying.
+3. The first hand-written migration registers the collation: `CREATE COLLATION IF NOT EXISTS "ar-x-icu" (provider = icu, locale = 'ar', deterministic = true);` — the history is self-contained.
+4. `prisma db push` is prohibited in every environment; CI enforces this.
 
 ### The R124 legacy mapping
 
-`20260904090000_r124_assessment_builder` is the migration most worth reading
-before trusting, because it does two things this policy normally forbids in one
-file: it **drops two `jsonb` columns** and it **writes a value no old column
-proves**. Both were audited on 2026-09-04 and the reasoning is recorded here so
-the next person does not have to re-derive it. The operational half — three
-counts that must be run against production first — is in
-[Deployment](../operations/deployment.md#the-r124-migration-has-a-mandatory-preflight-and-it-is-three-counts).
+`20260904090000_r124_assessment_builder` drops two `jsonb` columns and writes a value no old column proves (audited 2026-09-04). Preflight: [three counts against production first](../operations/deployment.md#the-r124-migration-has-a-mandatory-preflight-and-it-is-three-counts).
 
-**`target_kind` is derived from a real fact.** R58 stored the narrower sitting as
-a non-null `administrative_group_id` and read `NULL` as *the whole Level* — its
-own schema comment says so: *«`null` is **the whole Level**, never "no target"»*.
-The migration re-encodes that inference exactly: `NULL → level`,
-`NOT NULL → administrative_group`. **Nothing is fabricated**, and the inference
-had to be made explicit because with a Session, a Teaching Group and a single
-beneficiary added, *which target is this* stopped being decidable from which
-columns happen to be null.
-
-**`status = 'published'` is a CHOICE, and it is inert.** `is_published` existed
-since the schema's first migration and **no application code ever wrote or read
-it** — established by search, not assumed — so there was no better fact to
-consult. What makes the choice safe rather than merely convenient is that
-**every reader of `exam.status` is scoped `mode = 'online'`**: they are all in
-`assessment.service.ts`, and a physical sitting's `status` is consulted by
-nothing. `published` is the conservative direction *if* that ever changes: a
-future feature reading the column without scoping to the mode would show an
-arranged sitting rather than hide one. `createPhysicalExam` writes the same
-value for the same reason, so legacy and new physical rows agree.
-
-**Neither blob is discarded.** A non-empty `exam.questions` or
-`student_exam_submission.answers` is snapshotted into `Trash` before the column
-goes. **That is a safety net, not a retention plan** — the snapshot carries the
-ordinary 90-day `purge_after` — which is why the production preflight refuses to
-migrate at all when either is non-empty, rather than relying on it. On this
-installation both were empty except one development fixture, whose blob held an
-auto-scoring shape (`correctIndex`, `maxPointsBp`) that v1 deliberately does not
-have; migrating it would have meant inventing a marking key the builder cannot
-edit.
-
-**The `NOT NULL` window is inside one transaction.** `ADD COLUMN` → `UPDATE` →
-`SET NOT NULL` would be a gap if a row could be inserted between them; Prisma
-applies each migration file in a single transaction, and the application is not
-running during step 5 of the deployment runbook.
+- `target_kind` is derived from a real fact: R58 read `administrative_group_id` NULL as the whole Level, so `NULL → level`, `NOT NULL → administrative_group`; nothing fabricated.
+- `status = 'published'` is a choice and inert: `is_published` was never written or read by application code; every reader of `exam.status` is scoped `mode = 'online'` in `assessment.service.ts`; `published` is the conservative direction if that changes, and `createPhysicalExam` writes the same value.
+- Neither blob is discarded: a non-empty `exam.questions` or `student_exam_submission.answers` is snapshotted into `Trash` (ordinary 90-day `purge_after` — a safety net, so the preflight refuses to migrate when either is non-empty). Here both were empty except one fixture with an auto-scoring shape (`correctIndex`, `maxPointsBp`) v1 does not have.
+- The `NOT NULL` window (`ADD COLUMN` → `UPDATE` → `SET NOT NULL`) is inside one transaction; the application is stopped during runbook step 5.
 
 ### Compatibility policy
 
-- **Forward-only in production.** Down-migrations are never written or run. Rollback means
-  restoring the pre-deployment backup.
-- **Migrations preserve data — always.** A migration that loses rows is a defect regardless
-  of what it enables. Every deployment takes a `pg_dump` **immediately before** applying
-  migrations, so the rollback point matches the pre-migration state exactly.
-- **Destructive operations follow expand–migrate–contract.** Dropping a column, or
-  tightening a constraint on populated data, is permitted only as the final *contract* step
-  of a three-phase sequence, with the drop in a **separate, later migration** after no
-  released code references the old structure. A single migration that adds and drops is
-  prohibited.
-- **No direct renames.** Prisma renders a naive rename as DROP + ADD, which destroys data.
-  A rename is expand–migrate–contract.
-- **New NOT NULL columns** on populated tables ship with a default or an in-migration
-  backfill.
-- **Every migration is rehearsed** against ceiling-scale fixtures. Duration matters: an
-  `ALTER` rewriting a million audit rows must be known about beforehand, not discovered
-  during a deploy window.
-
-CI enforces the append-only history, the `db push` ban, the presence of the hand-written
-SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase justification.
+- Forward-only in production; no down-migrations; rollback = restore the pre-deployment backup.
+- Migrations preserve data; every deployment takes a `pg_dump` immediately before applying them.
+- Destructive operations follow expand–migrate–contract; the drop is a separate, later migration after no released code references the old structure; add-and-drop in one migration is prohibited.
+- No direct renames (Prisma renders them DROP + ADD).
+- New NOT NULL columns on populated tables ship with a default or an in-migration backfill.
+- Every migration is rehearsed against ceiling-scale fixtures (duration known beforehand).
+- CI enforces the append-only history, the `db push` ban, the presence of hand-written SQL, and flags every `DROP`/`RENAME` for review with its contract-phase justification.
 
 ### Current migration history
 
@@ -860,201 +305,67 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260924100000_r169_content_additional_levels
 ```
 
-Note the pattern: schema changes and their hand-written constraints are **separate
-migrations**, and revision-driven changes carry the revision number in the name.
+- Schema changes and their hand-written constraints are separate migrations; revision-driven changes carry the revision number.
+- R101 is two adjacent migrations (PostgreSQL cannot add an enum value and consume it in one transaction): the first adds `cookie_path_migration`; the second, one data-modifying CTE, writes system audit and revokes every still-live pre-cutover token. Deployment stops the old issuer before either; `_prisma_migrations` is the one-time cutover marker, so a repeated `migrate deploy` cannot revoke new sessions; running the SQL manually after cutover is prohibited. The later R101 anchor migration creates one `RefreshSession` per distinct `session_id`, refuses a chain spanning more than one user, then adds the FK; it does not repeat the invalidation.
+- R102 only adds the `rejection` attribution value; the application transaction performs each revocation.
+- The plaintext normalized-email migration creates and backfills lock targets only, never an owner; it aborts if one email names more than one User across retained pre-provisioned addresses and active identities — reconcile per the deployment runbook and rerun (idempotent).
+- The B3 transition replaces those coordinates with the [HMAC key space](../development/email-lock-keying.md) by stopped-writer truncate/re-key (not a digest backfill), makes claim identity fields nullable as a pair and minimizes audit-proven permanently erased claims; User Trash and recoverable claims are preserved. [`verify-deletion-upgrade.mjs`](../../scripts/test/verify-deletion-upgrade.mjs) checks row preservation, SQL constraints and repository reads/locks. Whole-schema comparison reports the same 26 unrelated SQL/Prisma differences before and after (named indexes, defaults, raw-SQL FKs/types): separate review, not a corrective migration or `db push`.
+- R141's data-only migration removes only the top-level `reason`, `decisionReason`/`decision_reason` and `rejectionReason`/`rejection_reason` fields on `selfmanaged.reject` audit events; no PII guessing, row deletion or schema change; atomic, idempotent; stop old writers first and restart only the corrected release. Live-host execution is separately authorized.
 
-R101 deliberately uses two adjacent migrations. PostgreSQL cannot safely add an enum value
-and consume it in persisted rows inside the same migration transaction. The first migration
-adds `cookie_path_migration`; after Prisma commits it, the second uses one data-modifying CTE
-to write system audit and revoke every still-live pre-cutover token atomically. Deployment
-stops the old issuer before either migration, so no narrow-Path credential can be minted after
-the sweep. `_prisma_migrations` is the one-time cutover marker: a repeated `migrate deploy`
-does not execute the data migration again and therefore cannot revoke sessions issued by the
-new application. Running migration SQL manually after cutover is prohibited.
+### Filename order is apply order
 
-The later R101 anchor migration is ordinary forward-only schema evolution: it creates one
-`RefreshSession` per existing distinct `session_id`, refuses an inconsistent chain spanning
-more than one user, then adds the foreign key. It does not repeat the cookie-path invalidation
-and therefore cannot sign out sessions merely because `migrate deploy` is run again.
-
-R102 is a forward-only enum extension only. It adds the durable `rejection` attribution value;
-the application transaction performs each actual Pending → Rejected revocation, so rerunning
-`migrate deploy` has no session side effect.
-
-The original plaintext normalized-email migration creates and backfills only lock targets; it does not choose an
-owner. Before backfill it checks the union of retained pre-provisioned addresses and active
-identities and aborts if one email already names more than one User. Automatically clearing a
-pre-provisioned address or merging people would destroy provenance and make a person-level
-decision in migration SQL. Reconcile such rows explicitly using the deployment runbook, then
-rerun `migrate deploy`; a clean retry is forward-only and backfill is idempotent.
-
-The B3 transition above replaces those ownerless plaintext coordinates with the
-[ratified HMAC key space](../development/email-lock-keying.md), using a stopped-writer
-truncate/re-key, not a digest backfill. The same migration makes claim identity
-fields nullable as a pair and minimizes audit-proven permanently erased claims;
-current User Trash and recoverable claims are preserved. The
-[disposable upgrade rehearsal](../../scripts/test/verify-deletion-upgrade.mjs)
-checks row preservation and SQL constraints plus actual repository reads/locks.
-Both changed models match the migrated DB. Whole-schema comparison reports the
-same 26 unrelated SQL/Prisma table differences before and after this batch (named
-indexes, defaults, raw-SQL FKs/types); it is **not** a globally empty schema diff.
-Those existing differences require separate review, not a generated corrective
-migration or `db push` here.
-
-R141's subsequent data-only migration removes only the top-level `reason`,
-`decisionReason`/`decision_reason` and `rejectionReason`/`rejection_reason`
-fields on `selfmanaged.reject` audit events. The implemented writer historically
-used `reason`; the explicit aliases cover equivalent rejection-reason keys.
-No value-content/PII guessing, row deletion, unrelated action rewrite or schema
-change occurs. The update is atomic and idempotent, and does not require a live
-claim or beneficiary to exist. Stop old writers before applying it and restart
-only the corrected release so an old binary cannot reintroduce reason copies.
-Live-host execution remains a separately authorized operation.
-
-### Filename order is apply order — and it bit us
-
-Look at the two `r36_1` entries. The **constraint** is `…060000`; the migration that **adds the
-column it constrains** is `…150624`, nine hours later. Prisma applies migrations in **filename
-order**, so on a clean database the CHECK ran first and failed:
-
-```
-ERROR: column "public_display_name" does not exist   (SQLSTATE 42703)
-```
-
-**Every existing database was fine**, because the two were applied in the order they were
-*authored* and `_prisma_migrations` recorded both as done. The break was therefore invisible to
-every developer and to CI, and would have surfaced **exactly once**: at the first production
-deployment, where [§19.1 step 5](../operations/deployment.md) runs `prisma migrate deploy` against an empty
-database. It was found in Revision 39 only because Prisma's shadow-database replay refused to
-create the *next* migration.
-
-**The repair was to make both migrations idempotent and order-independent — not to renumber
-one.** A directory name is recorded in `_prisma_migrations`, so renaming it orphans the row on
-every database that has already applied it. Instead the constraint migration now creates the
-column `IF NOT EXISTS` before constraining it, and the column migration is `IF NOT EXISTS` too,
-so either order produces the same schema.
-
-Editing an applied migration changes its checksum, which Prisma refuses. Because nothing is in
-production yet, the two recorded checksums were re-computed in place (`sha256` of the file, the
-same value Prisma stores) rather than resetting a developer database. **A future occurrence
-would not have that luxury** — which is the argument for the guard below.
-
-**The rule:** a migration must be **runnable on an empty database, in filename order, with no
-predecessor it does not name in its own filename**. When a constraint and its column are split
-across two migrations, the constraint's timestamp must be the later one. `check-migrations.sh`
-verifies presence; ordering is verified by the only test that actually proves it — running
-`migrate deploy` against a freshly created database, which is now part of the release check.
+- The `r36_1` constraint (`…060000`) predates the column it constrains (`…150624`): on a clean database the CHECK failed (`column "public_display_name" does not exist`, SQLSTATE 42703) while every existing database was fine (found by the shadow-database replay, R39).
+- Repair: both migrations `IF NOT EXISTS` and order-independent — renumbering would orphan the `_prisma_migrations` row; the two recorded checksums were recomputed in place (`sha256` of the file) because nothing was in production.
+- Rule: a migration must run on an empty database, in filename order, with no predecessor it does not name; a constraint split from its column takes the later timestamp. `check-migrations.sh` verifies presence; ordering is proven by `migrate deploy` against a fresh database in the release check.
 
 ## Soft delete and cascade
 
-Every soft-deletable table carries `(deleted_at, deleted_by)`. Deleting writes a **Trash
-snapshot** and an **audit row** in the same transaction.
-
-Cascade rules are per entity and mostly *prohibitive*:
+Every soft-deletable table carries `(deleted_at, deleted_by)`; deleting writes a Trash snapshot and an audit row in the same transaction.
 
 | Entity | Rule |
 |---|---|
-| Branch, Room, Category, Level, Group | **Deletion prohibited** while dependents reference them → `409` |
-| User | **Soft delete only.** Anonymize sensitive fields in the live row (full snapshot in Trash), deactivate identities, **revoke every live refresh token in the same transaction**, cascade-remove family links and group assignments. Grades and progress logs are **retained** as historical record |
-| Un-enrolment | Soft-deletes the enrolment row **only**. Never touches grades, submissions, or progress logs — a transferred student keeps their history |
-| Content | Soft delete moves the object to a quarantine prefix pending the 90-day window. A **purge** removes the quarantined object too — a destroyed row beside surviving bytes is an orphan, not a deletion |
-| Hijri month | **Only the last recorded month may be withdrawn** (R59.5). The months are a contiguous sequence §5.7's conversion walks, so a hole would reach a reader as *missing Ministry data* rather than as the deletion that caused it |
-| Exam | Soft delete cascades to `ExamStaff` only, which is why it is the first cascading type that **restore** reinstates (R59.3). **R172 §6:** an exam holding a paper or a mark is refused (`STUDENT_EVIDENCE_EXISTS`, with the counts) until the administration acknowledges it (`?acknowledge_evidence=true`); the papers, answers, marks and attendance then stay attached to the tombstone — hidden, restored with it, and **destroyed with it** when the Trash lets it go (`purgeExamEvidence`, counts in the audit), the way a class's occurrences go with a class (R170 §8). The 2026-09-03 refusal-only rule is superseded |
+| Branch, Room, Category, Level, Group | Deletion prohibited while dependents reference them → `409` |
+| User | Soft delete only: anonymize sensitive fields in the live row (full snapshot in Trash), deactivate identities, revoke every live refresh token in the same transaction, cascade-remove family links and group assignments; grades and progress logs retained |
+| Un-enrolment | Soft-deletes the enrolment row only; grades, submissions and progress logs untouched |
+| Content | Soft delete moves the object to a quarantine prefix for the 90-day window; purge removes the quarantined object too |
+| Hijri month | Only the last recorded month may be withdrawn (R59.5): the months are the contiguous sequence §5.7's conversion walks |
+| Exam | Soft delete cascades to `ExamStaff` only, the first cascading type restore reinstates (R59.3). R172 §6: an exam holding a paper or mark is refused (`STUDENT_EVIDENCE_EXISTS`, with counts) until `?acknowledge_evidence=true`; papers, answers, marks and attendance then stay on the tombstone — hidden, restored with it, destroyed on purge (`purgeExamEvidence`, counts in the audit), like a class's occurrences (R170 §8). Supersedes the 2026-09-03 refusal-only rule |
 
-### What gets a Trash entry, and what does not (R59.2)
+### What gets a Trash entry (R59.2)
 
-The rule BR-15 states is *every deletion is soft with a restorable snapshot*. What it did
-not state — and what four deletions shipped without — is the **test for whether a write is
-a deletion at all**:
-
-> A deletion **a person deliberately performed** gets its own Trash entry. Rows removed
-> **as a consequence** of that deletion do not; the parent's snapshot describes them.
-
-So un-enrolling a student, removing a Teaching Group member, unassigning a Subject from a
-Level and unlinking content from a Session each get an entry — every one of them a
-deliberate act that was previously audited and **invisible on the one screen that answers
-*what was deleted and by whom***. Whereas `SessionStaff` reconciliation during a session
-edit and `UserBranchRole` revocation during a role change get none: each is one field of an
-*update* wearing a tombstone, and an entry apiece would fill the screen with rows nobody
-deleted.
-
-The same rule applies to the Quran curriculum join: deliberately unassigning a Surah writes
-a `LevelSurah` Trash entry. When either unique curriculum pair is assigned again, the service
-revives the existing row and removes that exact stale Trash entry in the same transaction;
-the unique key makes inserting a replacement row impossible.
-
-`services/trash-coverage.integration.test.ts` enforces this by parsing each exported
-delete/remove/unassign operation and checking its own body — not merely asking whether some
-other function in the same file writes a snapshot. That old file-wide test missed both
-`unassignSurahFromLevel` and `deletePartner` because their files happened to contain an
-unrelated compliant deletion. The guard remains structural because a functional test of the
-domain removal can pass while the second Trash write is absent.
+- A deletion a person deliberately performed gets its own Trash entry; rows removed as a consequence do not (the parent's snapshot describes them).
+- Entries: un-enrolling a student, removing a Teaching Group member, unassigning a Subject from a Level, unlinking content from a Session, unassigning a Surah (`LevelSurah`). No entry: `SessionStaff` reconciliation during a session edit, `UserBranchRole` revocation during a role change (fields of an update).
+- Re-assigning either unique curriculum pair revives the existing row and removes that exact stale Trash entry in the same transaction.
+- `services/trash-coverage.integration.test.ts` parses each exported delete/remove/unassign operation and checks its own body (a file-wide check missed `unassignSurahFromLevel` and `deletePartner`).
 
 ### Restoring children: one timestamp per deletion
 
-Where a restore reinstates declared children (R59.3), it identifies *the rows this deletion
-removed* by comparing their tombstone against **the record's own** `deleted_at`. That works
-only if the deleting service stamps the record and its children from **one** `new Date()`.
-
-`deleteExam` called `new Date()` twice, four milliseconds apart, and wrote the Trash entry
-from a third reading. The restore compared against the entry's timestamp, the staff rows
-fell before it, and **a restored exam came back with nobody supervising it** — a clean `200`,
-a row on every screen, and a silent half-restore of exactly the kind §7 describes. It was
-found by exercising the flow, not by any test that existed.
-
-Two rules follow, and both are cheap:
-
-* **One `now` per deletion**, passed to every statement in it including the snapshot.
-* **The restore keys on the record's tombstone, never the Trash entry's** — the entry is
-  written after the rows it describes, so it is always the later reading.
-* **A parent snapshot names exact consequence ids.** Subject and Level deletion record the
-  `LevelSubject`, `LevelSurah`, and empty `AdministrativeGroup` ids they tombstoned. Restore
-  and purge use only those ids. A legacy snapshot without them fails closed on restore and
-  deletes no guessed child during purge; PostgreSQL then refuses the parent if a child remains.
+- A restore identifies the rows a deletion removed by comparing their tombstone with the record's own `deleted_at`, so the deleting service stamps record, children and snapshot from one `new Date()` (`deleteExam` once used three readings and a restored exam came back with no staff).
+- The restore keys on the record's tombstone, never the Trash entry's (written later).
+- A parent snapshot names exact consequence ids: Subject and Level deletion record the `LevelSubject`, `LevelSurah` and empty `AdministrativeGroup` ids; restore and purge use only those; a legacy snapshot without them fails closed on restore and deletes no guessed child on purge (PostgreSQL refuses the parent if a child remains).
 
 ### What comes back with a Level, a circle and a class schedule (R169 §8)
 
-Three cascading types joined the restorable set, each because its reinstatement is now written
-and tested against PostgreSQL (`trash-lifecycle.integration.test.ts`), not assumed:
+Each reinstatement is tested against PostgreSQL (`trash-lifecycle.integration.test.ts`).
 
-| Type | Comes back with | What does NOT come back, and why |
+| Type | Comes back | Does not, and why |
 |---|---|---|
-| `TeachingGroup` | the seats its deletion released (`restoreCircleSeats`) | a seat whose student has since been seated in another circle of the same Subject and Level — one live seat per `(student, subject, level)` is a database index, and moving her back would undo a later decision — or who is no longer enrolled at the Level. Counted and said (`seats_not_restored`) |
-| `RecurringCourseSchedule` | the occurrences its deletion removed that are still AHEAD, by the ids the snapshot names (`removed_session_ids`) — never ones `session.materialize` would invent, never ones protection spared | occurrences whose date has passed (a class nobody held is not history). **Refused whole** with `SCHEDULE_CONFLICT` when the room or a member of staff was booked since — `findConflicts`, the scheduling form's own check, over exactly the span coming back |
-| `Level` | its `LevelSubject`, `LevelSurah` and `AdministrativeGroup` rows by snapshot id, and the ACTIVITIES that were addressed to it or its groups | an activity that has itself been deleted since. A Level deleted before R169 recorded no activity links — they are hard-deleted, with no tombstone — so it restores without them and says so (`event_links_unknown`) |
+| `TeachingGroup` | The seats its deletion released (`restoreCircleSeats`) | A seat whose student is since seated in another circle of the same Subject and Level (one live seat per `(student, subject, level)` index) or no longer enrolled at the Level; counted in `seats_not_restored` |
+| `RecurringCourseSchedule` | The occurrences still AHEAD, by snapshot ids (`removed_session_ids`) — never ones `session.materialize` would invent or protection spared | Past-dated occurrences; refused whole with `SCHEDULE_CONFLICT` when the room or staff was booked since (`findConflicts` over the returning span) |
+| `Level` | Its `LevelSubject`, `LevelSurah` and `AdministrativeGroup` rows by snapshot id, and the activities addressed to it or its groups | An activity since deleted; a pre-R169 Level snapshot recorded no activity links (hard-deleted, no tombstone) — restores without them and says so (`event_links_unknown`) |
 
-Each refuses while something it hangs from is still in the Trash (`PARENT_DELETED`, now over several
-foreign keys — `parents` — not one). A returning seat re-enqueues consent re-evaluation for its
-student, the mirror of what the deletion enqueued. `AdministrativeGroup` on its own, `Session`,
-`Event`, `Enrollment`, `StudentTeachingGroup`, `FamilyLink` and `EducationalContent` stay
-read-only in the Trash: their reinstatement is not written.
+- Each refuses while a parent is still in the Trash (`PARENT_DELETED`, over several FKs — `parents`). A returning seat re-enqueues consent re-evaluation.
+- `AdministrativeGroup` on its own, `Session`, `Event`, `Enrollment`, `StudentTeachingGroup`, `FamilyLink` and `EducationalContent` stay read-only in the Trash: reinstatement is not written.
 
 ### Hard deletion
 
-Two paths, and only two:
-
-* **`DELETE /admin/trash/{id}`** (R59.1) — a Super Admin destroying a record deliberately.
-  The children it removes are **declared per entity type** in `PURGEABLE`, never inferred;
-  anything else that references the row is a record in its own right, and the `Restrict`
-  foreign key makes PostgreSQL refuse. *The database is the authority on what still points
-  at a row* — a hand-maintained list of blockers would be a second copy of the schema.
-* **The quarantine-purge job after 90 days** — the queue now handles exact replacement,
-  deletion and deliberate manual-purge storage obligations, but its automatic age arm remains
-  intentionally absent (R59.4). `purge_after` is written on every tombstone and nothing reads
-  it, so BR-15's automatic window is still not in force pending the Owner decision.
-
-> **A `RESTRICT` violation is not `P2003`.** `P2003` is *foreign key constraint failed*,
-> PostgreSQL `23503`. A relation declared `onDelete: Restrict` — which is how essentially
-> every relation on this schema is declared — raises **`23001` `restrict_violation`**, and
-> the Prisma 7 driver adapter surfaces it as **`P2039`** with the SQLSTATE buried in
-> `meta.driverAdapterError.cause.code`. Matching only `P2003` therefore lets the raw error
-> escape as a `500` for the single most likely refusal a purge endpoint has. Match the
-> SQLSTATE, not the Prisma code.
+- `DELETE /admin/trash/{id}` (R59.1): a Super Admin destroying a record. Removed children are declared per type in `PURGEABLE`, never inferred; any other reference is refused by the `Restrict` FK — the database is the authority on what still points at a row.
+- The quarantine-purge job after 90 days: the queue handles exact replacement, deletion and manual-purge storage obligations, but the automatic age arm is intentionally absent (R59.4); `purge_after` is written on every tombstone and nothing reads it, pending the Owner decision.
+- A `RESTRICT` violation is not `P2003` (`23503`): `onDelete: Restrict` raises `23001 restrict_violation`, surfaced by the Prisma 7 adapter as `P2039` with the SQLSTATE in `meta.driverAdapterError.cause.code`. Match the SQLSTATE, not the Prisma code.
 
 ## Connection budget
 
-Pinned, not defaulted — the real concurrency risk on a 4 GB box is **pool exhaustion**, not
-deadlock:
+Pinned, not defaulted — the risk on a 4 GB box is pool exhaustion:
 
 ```
 Prisma connection_limit = 10

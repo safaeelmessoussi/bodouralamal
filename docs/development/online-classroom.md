@@ -1,449 +1,163 @@
 # Entering a class عن بُعد — بذور الأمل authorizes, the provider executes
 
-**SRS Revisions 98 and 99.** How a person gets into an online class and how a
-class gets recorded — and, far more important than either, how the platform
-decides she may.
+SRS Revisions 98 and 99: the join and the recording. Delivery is [class-delivery.md](class-delivery.md) (R97); the provider is [online-class-provider.md](online-class-provider.md).
 
-> **The durable rule, and everything on this page is a consequence of it:**
->
 > ## بذور الأمل AUTHORIZES; the media provider EXECUTES the media session.
 >
-> The inverse is prohibited in terms. Membership of a provider's room is never
-> evidence of authorization, the provider is never asked who is present, and
-> nothing it reports may enter a permission decision. Reading it the other way
-> makes a third party the identity provider for a platform serving minors.
+> Room membership is never evidence of authorization; the provider is never asked who is present; nothing it reports enters a permission decision.
 
-Delivery itself — *is this class حضوري or عن بُعد* — is
-[class-delivery.md](class-delivery.md) and R97. The provider choice is
-[online-class-provider.md](online-class-provider.md). This page is the join and
-the recording.
-
----
-
-## The whole flow, in order
+## The flow
 
 ```
-client:  POST /sessions/{id}/online-join     ← the Session id, and an EMPTY body
-   │
-   ├─ TD-12 freshness ....... roles and status re-read from live rows
-   ├─ the occurrence ........ online?  not cancelled?      → else 409 + reason
-   ├─ WHO IS ASKING ......... staff → administration → beneficiary side
-   ├─ the join window ....... server time, AFTER authorization
-   ├─ the room .............. DERIVED from the Session id — never stored
-   └─ the credential ........ minted with exactly the permissions decided
-   │
-provider:  a bounded participant token. Nothing else. No key, no room API.
+POST /sessions/{id}/online-join      ← Session id, EMPTY body
+ ├─ TD-12 freshness .... roles/status re-read from live rows
+ ├─ the occurrence ..... online? not cancelled?   → else 409 + reason
+ ├─ WHO IS ASKING ...... staff → administration → beneficiary side
+ ├─ the join window .... server time, AFTER authorization
+ ├─ the room ........... DERIVED from the Session id, never stored
+ └─ the credential ..... minted with exactly the permissions decided
+provider: a bounded participant token; no key, no room API.
 ```
 
-Everything the client could have forged, it cannot say: participant identity,
-display name, room, role, permissions and expiry are all resolved server-side,
-and `onlineJoinSchema` is an **empty `.strict()` object** so a body naming any of
-them is a `400` at the boundary rather than a value some service might read.
+- `onlineJoinSchema` is an empty `.strict()` object: a body naming identity, name, room, role, permissions or expiry is `400`.
 
----
+## Who may enter
 
-## Who may enter, and through which door
-
-Precedence matters for a dual-role account: a مؤطِّرة who is also a parent opens
-the class **she teaches** as its مؤطِّرة.
-
-| door | the authority | resolved by |
+| door | authority | resolved by |
 |---|---|---|
-| **teaching staff** | R91 effective assignment | `staffsSession` — `SessionStaff` first (where a one-off cover lives), then the schedule's assignments **effective on that occurrence's date** |
-| **administration** | the same branch scope that already edits the occurrence | `branch-scope` — no *«admin ⇒ every room»* shortcut exists anywhere |
-| **beneficiary / guardian** | R92 audience, §4.3 approved `FamilyLink` | `audienceForSession` + `audienceWhere`, and `resolveActingStudent` |
+| teaching staff | R91 effective assignment | `staffsSession`: `SessionStaff` first (one-off cover), then schedule assignments effective on the occurrence's date |
+| administration | the branch scope that edits the occurrence | `branch-scope`; no «admin ⇒ every room» shortcut |
+| beneficiary / guardian | R92 audience, §4.3 approved `FamilyLink` | `audienceForSession` + `audienceWhere`, `resolveActingStudent` |
 
-**Nothing here is re-implemented.** Every one of those resolvers already existed;
-a second audience query is the failure [R92 names in terms](class-delivery.md),
-and it is why whole-Level scope, Administrative-Group scope, Teaching-Circle
-scope and R92's cross-branch override all work here without this code knowing
-any of them by name.
+- Precedence: a مؤطِّرة who is also a parent opens the class she teaches as its مؤطِّرة.
+- Nothing re-implemented: a second audience query is the failure [R92 names](class-delivery.md); every scope and the cross-branch override work unnamed here.
+- Refused: expired مؤطِّرة, future مؤطِّرة, R88 capability-only مؤطِّرة (planning data staffs nothing); a one-off cover enters that occurrence only.
+- Assistant = identical operational authority to the main مؤطِّرة (R87 §G); position reported for audit ([teaching-authority.md](teaching-authority.md)).
+- Guardian enters AS THE CHILD: credential carries the child's identity and display name; the guardian gains no beneficiary role; authority is the approved `FamilyLink`, re-read per request; revoked link and forged child are both `404`, indistinguishable (§4.3).
 
-### Four refusals that are the point, not the edge
+## The room is derived
 
-* **An expired مؤطِّرة** — her period ended yesterday; today's class is not hers.
-* **A future مؤطِّرة** — her period begins next month.
-* **A مؤطِّرة who merely *declared* she can teach the subject (R88)** — capability
-  is planning data. It staffs nothing, so it opens nothing.
-* **A one-off cover** — enters *that* occurrence and no other. The next week
-  resolves normally.
-
-An **assistant holds identical operational authority to the main مؤطِّرة**
-(R87 §G): the position is reported honestly because it is responsibility and
-audit, and the permissions are the same object. See
-[teaching-authority.md](teaching-authority.md).
-
-### The guardian enters AS THE CHILD
-
-The credential carries the child's identity and the child's display name. The
-guardian's own `User` never enters in her place, and **she acquires no
-beneficiary role by it** — the authority is the approved `FamilyLink`, re-read
-on that very request. A revoked link and a forged unrelated child are both
-`404`, with no distinction between them (§4.3 — distinguishing them would leak
-the existence of another family's daughter).
-
----
-
-## The room is derived, and that is what keeps R97.9 true
-
-```
-sha256("bodour.online-class.v1:" + session.id)  →  bodour-<32 hex>
-```
-
-Deterministic, opaque, collision-safe, and **stored nowhere**. R97.9 forbids a
-provider identifier on `RecurringCourseSchedule`, `Session` or the calendar
-occurrence projection; a derived name means there is no column to forbid.
-
-**No `OnlineRoom` table exists, and adding one was considered and refused.** A
-room is opened by the provider on the first authorised join and closed when the
-last participant leaves, so there is no lifecycle state that is not derivable —
-nothing to create ahead of time, nothing to reconcile, nothing to clean up. That
-is also the whole of idempotence: repeating the request writes no row, and a
-page refresh costs nothing.
-
-**Knowing the name grants nothing** and it must never be treated as a secret. A
-room is entered with a credential minted for one named person after the checks
-above; a guessed name reaches a room the guesser holds no credential for.
-Opacity keeps the association's timetable out of a third party's operational
-logs — it is hygiene, never authorization.
-
----
+- `sha256("bodour.online-class.v1:" + session.id)` → `bodour-<32 hex>`; stored nowhere (R97.9 forbids a provider identifier on `RecurringCourseSchedule`, `Session`, the occurrence projection).
+- No `OnlineRoom` table (refused): the provider opens on first authorised join and closes when the last leaves; nothing to create, reconcile or clean up; repeated requests write nothing.
+- The name is not a secret and grants nothing; opacity is hygiene (timetable out of third-party logs).
 
 ## The join window
 
 | | |
 |---|---|
-| opens | **15 minutes** before the scheduled start |
-| closes | **30 minutes** after the scheduled end |
-| clock | **the server's**, on the association's own timezone (TD-13 `TZ`) |
-| credential lifetime | bounded by the window; never timeless, never past a 6-hour ceiling, never under a minute |
+| opens | 15 minutes before scheduled start |
+| closes | 30 minutes after scheduled end (reconnection allowance) |
+| clock | the server's, association timezone (TD-13 `TZ`) |
+| credential lifetime | bounded by the window; never timeless, never past 6 hours, never under a minute |
 
-The tail is a **reconnection allowance**, not an invitation to arrive late: a
-three-hour class that overruns, or a مؤطِّرة whose connection drops in the last
-minute, must not find the platform refusing to let her back in.
-
-**The window is evaluated *after* authorization**, deliberately. *«الحصة لم تبدأ
-بعد»* tells the reader when a class begins, and telling that to somebody not
-entitled to attend would confirm the occurrence exists and when it runs. An
-unauthorised caller gets `404` and learns nothing about the timetable
-(§20 rule 17).
-
----
+- Evaluated AFTER authorization: an unauthorised caller gets `404`, never «الحصة لم تبدأ بعد» (§20 rule 17).
 
 ## What the credential carries
 
-The smallest set that lets each kind of person do their job.
-
 | | publish | subscribe | moderation | sources |
 |---|---|---|---|---|
-| beneficiary | yes | yes | **no** | mic + camera (`audio_video`) |
-| مؤطِّرة / assistant | yes | yes | **yes** | mic + camera |
-| administrator | yes | yes | **no** | mic + camera |
-| any of them, `audio_only` | yes | yes | as above | **microphone only** |
+| beneficiary | yes | yes | no | mic + camera (`audio_video`) |
+| مؤطِّرة / assistant | yes | yes | yes | mic + camera |
+| administrator | yes | yes | no | mic + camera |
+| any, `audio_only` | yes | yes | as above | microphone only |
 
-**«صوت فقط» is a property of the credential**, not of a stylesheet: the
-permitted sources are named in the token, so a modified client cannot publish a
-camera into an audio-only class. The client separately never *requests* one —
-see below — so the promise holds at the device, at the client and at the server.
-
-Never issued, at any level: room creation, room listing, ingress, and
-**recording**. The recording grant stays absent **after** R99, and for a better
-reason than before: capture is **server-side** (see below), so a participant
-token has no business carrying it — a browser that can stop talking must not be
-able to stop the lesson's recording.
-
----
+- «صوت فقط» is in the token (a modified client cannot publish a camera); the client never requests one either.
+- Never issued: room creation, room listing, ingress, recording (capture is server-side).
 
 ## One classroom, for every portal
 
-`/classroom/{sessionId}` — a beneficiary, a guardian acting for her daughter, a
-مؤطِّرة, her assistant and an administrator all arrive at the same page. It adapts
-to two facts that arrive **on the credential**: `media_mode` and `role`.
-
-There is no Student classroom, no Teacher classroom and no Admin classroom
-(rule C). Three copies of a live media surface is three places for a media bug
-to be fixed in two of.
-
-**The class runs inside بذور الأمل** — never a redirect to a third party's page —
-in Arabic, RTL, with **no vendor named on any surface a beneficiary, parent or
-مؤطِّرة can read** (rule M). She enters «حصة».
-
-### صوت فقط is a listening surface
-
-Not a video layout with the pictures removed:
-
-* the **camera is never requested** (`video={false}`), so no permission prompt
-  and no device indicator appears for a class that has no video;
-* there is **no empty video grid** — an empty grid states *«nobody has their
-  camera on»* about a class that has no cameras at all;
-* who is present and **who is speaking now** is what a listener actually needs,
-  and speaking is marked by a **word** as well as a highlight (rule AV);
-* the camera control is **absent, not disabled**.
-
-### Failures are sentences
-
-Every refusal and every device problem is stated in the reader's own words with
-the next step attached — never a browser exception, never an SDK string, never a
-bare code. **A camera failure does not end an `audio_video` class**: the class
-continues by voice, because a beneficiary without a working camera must not be
-put out of a lesson.
-
----
+- `/classroom/{sessionId}` for every role; adapts to `media_mode` and `role` from the credential; no per-portal classroom (rule C).
+- Inside بذور الأمل, Arabic, RTL, no vendor named on any surface a beneficiary, parent or مؤطِّرة reads (rule M); she enters «حصة».
+- صوت فقط is a listening surface: camera never requested (`video={false}`), no empty video grid, speaker marked by a word and a highlight (rule AV), camera control absent not disabled.
+- Failures are sentences with the next step — no exception, SDK string or bare code; a camera failure does not end an `audio_video` class.
 
 ## The public calendar is unchanged
 
-It may say **«عن بُعد»** — that is a fact about the class, and hiding it would
-hide something harmless. It may never expose an actionable way into a teaching
-room, a room identity, or a credential. «دخول الحصة» appears only for an
-authenticated reader, on a `session`, delivered `online`.
-
-**Whether *this particular* reader may enter is not decided in the client**
-(rule O). The button is a link; the classroom asks the server and says the answer
-in her own words. Probing at dialog-open time was rejected on two grounds: it
-would cost an authorization request for every occurrence anybody merely *looked*
-at, and it would be **stale by the time she clicked**, since the window opens
-fifteen minutes before the class.
-
----
+- May say «عن بُعد»; never exposes a way in, a room identity or a credential; «دخول الحصة» only for an authenticated reader on a `session` delivered `online`.
+- Entry is not decided in the client (rule O): the button is a link, the classroom asks the server. Probing at dialog-open rejected (a request per occurrence looked at; stale by the click).
 
 ## Recording a class (R99)
 
-**Optional, explicit, and never a side effect.** `دخول الحصة` starts nothing. A
-class runs from beginning to end with no recording unless somebody presses
-**«بدء التسجيل»**, and if nobody does there is **no provider job, no file, no
-row** — asserted directly, because the tempting implementation starts one on
-join and the difference is invisible until somebody audits the table.
-
-### Who, and where the authority comes from
-
-`startRecording` runs **the whole of `authorizeJoin` first** — R91 effective
-staffing, assistant parity, branch-scoped administration, online-ness, the join
-window — and then asks one further question: may this role record? Nothing is
-re-derived.
+- Optional and explicit: joining starts nothing; without «بدء التسجيل» there is no provider job, file or row (asserted directly).
+- `startRecording` runs all of `authorizeJoin` first, then: may this role record?
 
 | | start / stop | see «جاري التسجيل» |
 |---|---|---|
-| مؤطِّرة, assistant | ✅ *identical authority* (R87 §G) | ✅ |
+| مؤطِّرة, assistant | ✅ identical (R87 §G) | ✅ |
 | administrator in scope | ✅ | ✅ |
-| beneficiary, guardian | **403 `RECORDING_NOT_PERMITTED`** | ✅ |
+| beneficiary, guardian | 403 `RECORDING_NOT_PERMITTED` | ✅ |
 
-**`403`, not `404`**, and deliberately: she is legitimately in this class and the
-platform has already told her so by letting her in. Concealment (§20 rule 17) is
-for things outside her reach.
+- `403` not `404`: she is legitimately in the class (§20 rule 17 conceals only what is outside reach).
+- Stopping is not restricted to the starter.
+- «جاري التسجيل» is driven by `useIsRecording()` (room state): true for every participant at once, for late joiners, after the starter leaves.
+- Capture is a room-composite Egress job, not a tab; `verify-livekit-join` closes the starter's tab mid-recording and asserts it still runs.
 
-**Stopping is not restricted to whoever started.** A class covered by an
-assistant must be stoppable by the person actually delivering it, and a مؤطِّرة
-whose connection died must not leave a recording nobody can end.
+| class | output |
+|---|---|
+| `audio_video` | MP4 with audio |
+| `audio_only` | AAC in MP4 (`audio/mp4`); OGG until R168 §2 (HLS safety segments are AAC, one codec per recording — [provider page](online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2)); plays on every iPhone |
 
-### Nobody is recorded silently
+- `recordingCommandSchema` is empty `.strict()`: a body with `media_mode` is `400`.
 
-«جاري التسجيل» is driven by **`useIsRecording()`** — the state the media server
-attaches to the **room**. That matters more than it looks:
-
-* it is true for **every participant** the instant recording starts, not only
-  for whoever pressed the button;
-* it is true for somebody who **joins while it is already running**, which is
-  the half a naive implementation forgets;
-* it survives the starter leaving.
-
-A banner driven by the starter's own click would be invisible to everybody else;
-one driven by polling would be late. Neither is acceptable for *«nobody is
-recorded silently»*.
-
-### Capture is server-side, and that is the point
-
-The recording is a **room-composite Egress job**, not a recorder in a مؤطِّرة's
-tab. A laptop that sleeps, a tab that closes, a connection that drops — each of
-those silently loses a lesson when the browser is doing the recording.
-`verify-livekit-join` **closes the starter's tab outright mid-recording** and
-asserts the recording is still running, because that is the failure this design
-exists to prevent.
-
-### The artefact follows the class
-
-| class | output | why |
-|---|---|---|
-| `audio_video` | **MP4 with audio** | it is a صوت وصورة lesson; an audio stub would be the platform deciding it was worth less than it was |
-| `audio_only` | **AAC audio in MP4** (`audio/mp4`) | no video is captured for a class that has none. It was OGG until R168 §2: the recorder's safety segments are HLS, which is AAC, and one recording has one audio codec — see [the provider page](online-class-provider.md#a-recorder-that-dies-mid-class-loses-nothing-recorded-r168-2). Unlike OGG it plays on every iPhone |
-
-The client cannot name the format — `recordingCommandSchema` is empty and
-`.strict()`, so a body carrying `media_mode` is a `400`. A client that could
-choose would be able to record video of a صوت فقط class.
-
-### The state machine
+### State machine
 
 ```
 starting ─┬─→ recording ─→ stopping ─→ processing ─→ completed
           │        └──────────┴───────────┴────────→ failed / aborted
           └─→ (stopping, processing, completed, failed, aborted)
-completed · failed · aborted  →  terminal, accept nothing
+completed · failed · aborted  →  terminal
 ```
 
-Written out rather than inferred from a chain of `if`s, and **the guard is in
-the `where`, not read-then-write**: two callbacks delivered simultaneously would
-both pass an in-memory check and both write.
+- Guard in the `where`, not read-then-write (simultaneous callbacks).
+- `starting → stopping` is a transition (بدء then change of mind); its absence once froze the screen on «جارٍ بدء التسجيل».
 
-`starting → stopping` is in the table because pressing بدء and immediately
-changing your mind is ordinary, not an edge case. Its absence was a real defect
-the tests caught: the stop silently did nothing and the screen went on saying
-«جارٍ بدء التسجيل».
+### The callback
 
-### The callback verifies, and can manufacture nothing
+`POST /integrations/online-class/callback` — the only route outside the guarded router. A row changes only when: (1) the provider's signature over the RAW body verifies — mounted before the JSON parser; (2) the event names an egress job this platform started; (3) the transition is allowed. Always `204` (a distinguishable refusal informs a prober; a `4xx` makes the provider retry forever).
 
-`POST /integrations/online-class/callback` is the only route here outside the
-guarded router, because the caller is a machine with no Bodour session. Three
-things must all hold before a row changes:
+### Failure shapes
 
-1. **the provider's signature over the RAW body verifies** — which is why the
-   route is mounted before the JSON parser: a parsed-and-reserialised body no
-   longer matches the signature, and every genuine callback would fail while
-   nothing extra was accepted;
-2. the event names an egress job **this platform started** — an id nobody here
-   has seen is ignored, so an arbitrary request creates no recording and no
-   content;
-3. the transition is one the machine allows.
-
-**It always answers `204`.** A distinguishable refusal would tell a prober its
-guess was wrong, and a provider retrying forever against a `4xx` it cannot fix
-is worse than a silent discard.
-
-### Two failure shapes worth knowing about
-
-* **Two staff press بدء at the same instant.** The read-then-create check cannot
-  separate them; the **partial unique index** on the live states decides, and the
-  loser is handed *the recording that won* rather than a five-hundred.
-* **The provider accepts and the database write then fails.** The dangerous one:
-  walking away would leave a recorder running to the end of the lesson, writing
-  a file nobody tracks, whose callback matches no row. The handle is captured
-  before the write is attempted and the **orphan is cancelled**. The clean-up
-  itself uses `updateMany`, because the failure path must not be able to fail —
-  it did, once, and the مؤطِّرة got a raw database error instead of her refusal.
+- Two staff press بدء at once: the partial unique index on live states decides; the loser gets the winning recording, not a 500.
+- Provider accepts, database write fails: the handle is captured before the write and the orphan cancelled with `updateMany` (the failure path must not fail).
 
 ### Provider output is staging, never the asset
 
-Egress writes to **`RECORDING_STAGING_BUCKET`** — a bucket the platform owns and
-does **not** serve. `completed` means *the provider produced an object*, and it
-is **not** availability.
+- Egress writes to `RECORDING_STAGING_BUCKET` (owned, not served); `completed` ≠ availability.
+- The completion callback persists the report and inserts a `session-recording-ingest` job in the same transaction (§16.2, §20 rule 8); it never copies (up to 500 MB; a timed-out webhook retries).
+- Job: verify bytes in staging → server-side copy to the content bucket → `EducationalContent` (`origin = session_recording`) + `SessionContent` → set `session_recording.educational_content_id` → sweep staging. See [background jobs](../architecture/background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح) and [storage](../architecture/storage.md#the-third-bucket-recordings-staging-r99).
+- Failed final delete: still «متاح»; the failed job retries, reads the relation first, performs only the exact staging cleanup; no second queue, no bucket sweep.
+- `GET` carries `status` (provider's) and `availability` (association's):
 
-### From staging object to library item (C2)
-
-The verified completion callback does **two things and returns**: it persists the
-provider's report, and it inserts a `session-recording-ingest` job **in the same
-transaction** (§16.2, §20 rule 8). It does not copy the file. A صوت وصورة lesson
-is up to 500 MB, and a provider whose webhook times out **retries** — so importing
-inside the handler turns one slow import into several concurrent ones.
-
-The job then: verifies the **actual bytes** in staging → copies them
-**server-side** into the ordinary content bucket → creates the
-`EducationalContent` (`origin = session_recording`) and its `SessionContent` link
-→ sets `session_recording.educational_content_id` → sweeps staging. The mechanism,
-the ordering and what each step protects against are in
-[background jobs](../architecture/background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح);
-the storage side is in [storage](../architecture/storage.md#the-third-bucket-recordings-staging-r99).
-
-If that last delete fails, the recording is still «متاح»: its canonical object and relation
-already committed. The existing pg-boss job remains failed/retryable, and its next attempt
-reads the relation first and performs only the exact staging cleanup. No second cleanup queue
-and no general bucket sweep are involved.
-
-**What a مؤطِّرة is told follows from that, and never from the provider.** The
-`GET` route carries two different answers: `status` is the **provider's**, and
-`availability` is the **association's**.
-
-| `availability` | what she reads | true when |
+| `availability` | she reads | when |
 |---|---|---|
-| `capturing` | «جارٍ بدء التسجيل…» · «جاري التسجيل» · «جارٍ إيقاف التسجيل…» | the recording is live |
-| `processing` | «تتم معالجة التسجيل…» | the provider is finalising |
-| `importing` | «انتهى التسجيل، وتتم تهيئته للنشر.» | **provider `completed`, no library item yet** |
-| `available` | «التسجيل متاح الآن…» | `educational_content_id` is set |
-| `import_failed` | «تعذّرت تهيئته للنشر… ستُعاد المحاولة» | the last import attempt was refused |
-| `failed` | «تعذّر تسجيل هذه الحصة.» | the capture itself failed or was aborted |
+| `capturing` | «جارٍ بدء التسجيل…» · «جاري التسجيل» · «جارٍ إيقاف التسجيل…» | live |
+| `processing` | «تتم معالجة التسجيل…» | provider finalising |
+| `importing` | «انتهى التسجيل، وتتم تهيئته للنشر.» | provider `completed`, no library item |
+| `available` | «التسجيل متاح الآن…» | `educational_content_id` set |
+| `import_failed` | «تعذّرت تهيئته للنشر… ستُعاد المحاولة» | last import refused |
+| `failed` | «تعذّر تسجيل هذه الحصة.» | capture failed/aborted |
 
-**«متاح» is derived, never stored** — it is exactly `educational_content_id IS NOT
-NULL`. A status value would be a second fact that can disagree with the object it
-describes, and R99.14 is explicit that a content item whose object is absent is
-worse than an honest failure: it is discoverable, downloadable and empty.
+- «متاح» = `educational_content_id IS NOT NULL`, never stored (R99.14).
+- A failed IMPORT is not a failed RECORDING; only the import retries; `ingestion_failure_reason` is its own column.
 
-**A failed IMPORT is not a failed RECORDING**, and the interface says so. There
-*is* an artefact; the platform could not accept it. Only that one is retried, and
-`ingestion_failure_reason` is a column of its own for the same reason.
+### Naming
 
-### What a recording is called, and who decides
-
-**The server.** R75.6's naming rule — base name from the class and the date,
-then ` 2`, ` 3` — used to live in the browser recorder, and R99 gives the
-platform a producer of recordings that is not a browser at all. Both now consume
-[`backend/src/lib/recording-name.ts`](../../backend/src/lib/recording-name.ts),
-and **both number into one namespace: the titles already linked to that
-occurrence.** Two recordings of one lesson, one made in a tab and one captured by
-the provider, must not be able to land on the same name.
-
-The browser still shows the name, editable, before saving — only the canonical
-default and collision rule moved. The
-[UX rule](ux-architecture.md#the-recordings-name-belongs-to-the-server-r756-moved-by-r99)
-is the authoritative statement.
+- The server names recordings (R75.6: class + date base, then ` 2`, ` 3`) in [`backend/src/lib/recording-name.ts`](../../backend/src/lib/recording-name.ts); browser recorder and provider capture share one namespace per occurrence; the browser still shows the name editable before saving. Rule: [UX](ux-architecture.md#the-recordings-name-belongs-to-the-server-r756-moved-by-r99).
 
 ### Local infrastructure
 
-`livekit-server --dev` records nothing: **Egress is a separate service and needs
-Redis**. Both are dev-overlay containers, absent from `docker-compose.yml`:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis livekit livekit-egress
-```
-
-LiveKit runs from an explicit configuration rather than `--dev`, because the
-flag cannot express a Redis address or a webhook target. Since SRS Revision 164 that
-configuration lives in `docker-compose.yml` itself and is the same on every tier
-([how it is deployed](online-class-provider.md#how-it-is-deployed-srs-revision-164)). The Egress worker runs
-a headless browser to composite the room, so it needs `shm_size: 1gb` — the
-default 64 MB makes Chrome crash part-way through a long lesson.
+- `livekit-server --dev` records nothing; Egress + Redis are dev-overlay containers: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis livekit livekit-egress`.
+- Explicit configuration (not `--dev`), since R164 in `docker-compose.yml` on every tier ([deployment](online-class-provider.md#how-it-is-deployed-srs-revision-164)); Egress needs `shm_size: 1gb` (64 MB crashes Chrome mid-lesson).
 
 ## The provider seam
 
-One file in the backend knows a media platform exists —
-`backend/src/lib/online-class-provider.ts` — and
-`scripts/ci/check-provider-seam.sh` fails the build if a second one appears, if
-a vendor's name reaches user-facing text, or if a recording capability arrives
-early. The seam exists **not** to make swapping providers cheap (it would not
-be), but so the reach of the decision stays visible and auditable.
-
-It has exactly one method, `issueJoinCredentials`. Everything else a provider
-might have been asked turned out not to be the provider's to answer: creating
-the room (there is nothing to create), who is in the room (a participant list is
-not attendance, §4.7, and must never become an authorization input), and
-recording (a later revision).
-
----
+- `backend/src/lib/online-class-provider.ts` is the one backend file knowing a media platform; `scripts/ci/check-provider-seam.sh` fails on a second file, a vendor name in user text, or an early recording capability. Purpose: auditable reach, not cheap swapping.
+- One method, `issueJoinCredentials`; room creation, presence (§4.7: a participant list is not attendance nor an authorization input) and recording are not the provider's to answer.
 
 ## Configuration
 
-`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (TD-13) — **all three or
-none**.
-
-* **None** is a complete, valid deployment: the association runs no online
-  classes, the platform offers no «دخول الحصة», and the join route answers
-  `503 SERVICE_UNAVAILABLE` naming the settings.
-* **Some** is refused at boot. A URL with no secret boots, reads as configured
-  to anyone inspecting `.env`, and fails at the one moment that matters.
-
-The secret never leaves the API process.
-
-### The CSP must name the media origin — in BOTH schemes
-
-§3.1's CSP is `default-src 'self'`. A class عن بُعد connects the **browser**
-directly to the media server, so without an entry the classroom cannot open at
-all. `nginx/snippets/media-origin.conf` holds it in one place; development
-mounts `media-origin.dev.conf` over it, exactly as the rate limits do.
-
-**Both `wss:` *and* `https:` (or `ws:`/`http:` locally).** The client validates
-the connection over ordinary HTTP *before* upgrading to a socket, and CSP treats
-the two as different sources — so listing only the socket origin produces
-*«could not establish signal connection: Failed to fetch»* **with no CSP
-violation event at all**, because the blocked request is the HTTP one. That is
-how it failed here, and only a real browser could have found it.
-
----
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (TD-13): all three or none. None = no «دخول الحصة», join route answers `503 SERVICE_UNAVAILABLE` naming the settings; some = refused at boot. The secret never leaves the API process.
+- CSP (§3.1 `default-src 'self'`) names the media origin as BOTH `wss:` and `https:` (`ws:`/`http:` locally) — the client validates over HTTP before upgrading; socket-only fails *«could not establish signal connection: Failed to fetch»* with no CSP violation event. `nginx/snippets/media-origin.conf`; development mounts `media-origin.dev.conf` over it.
 
 ## Local development
 
@@ -455,27 +169,17 @@ LIVEKIT_API_KEY=devkey
 LIVEKIT_API_SECRET=devsecretdevsecretdevsecretdevsecret
 ```
 
-`livekit-server --dev` runs the whole signalling stack in one container with a
-fixed key pair, so **no automated test ever touches a paid account**. It carries
-no Egress and no Redis — see
-[online-class-provider.md](online-class-provider.md), which recorded that before
-this container existed.
-
----
+- `--dev`: fixed key pair, no paid account, no Egress, no Redis.
 
 ## What is guarded
 
 | property | guard |
 |---|---|
-| Authorization, all four refusals, R91 · R92 · guardian · window · grants | `backend/src/services/online-class.integration.test.ts` |
-| The wire shape, no secret on it, `X-Active-Child-ID` honoured, forged bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
-| Join button placement, one classroom, one route, Arabic for every failure | `frontend/src/components/classroom/classroom.test.tsx` |
-| One backend file knows the vendor · no vendor in user text · no recording | `scripts/ci/check-provider-seam.sh` |
+| Authorization, four refusals, R91 · R92 · guardian · window · grants | `backend/src/services/online-class.integration.test.ts` |
+| Wire shape, no secret, `X-Active-Child-ID`, forged bodies; callback refusals over real HTTP with raw bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
+| Join button placement, one classroom, one route, Arabic failures | `frontend/src/components/classroom/classroom.test.tsx` |
+| One vendor file · no vendor in user text · no recording grant | `scripts/ci/check-provider-seam.sh` |
 | Recording lifecycle, concurrency, orphan cancellation, out-of-order callbacks | `backend/src/services/session-recording.integration.test.ts` |
-| The callback refuses everything it should, over real HTTP with raw bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
-| **A real three-party room, REAL recorded media in both formats, and capture surviving the starter's tab closing** | `scripts/dev/browser/verify-livekit-join.sh` |
-| Ingestion end to end: the bytes verified, the durable copy, one content row under concurrency, mixed-origin naming, failure and retry | `backend/src/services/session-recording-ingest.integration.test.ts` |
-| **A real recording actually opened and played by an authorised beneficiary**, and refused for a different Level | `scripts/dev/browser/verify-livekit-ingest.sh` |
-
-The last one is the only place several people are actually in a room at once,
-and it is what caught the CSP.
+| Real three-party room, real media in both formats, capture surviving the starter's tab closing (found the CSP) | `scripts/dev/browser/verify-livekit-join.sh` |
+| Ingestion: bytes verified, durable copy, one content row under concurrency, mixed-origin naming, failure and retry | `backend/src/services/session-recording-ingest.integration.test.ts` |
+| Real recording played by an authorised beneficiary, refused for a different Level | `scripts/dev/browser/verify-livekit-ingest.sh` |

@@ -2,211 +2,117 @@
 
 # Configuration
 
-All runtime configuration flows through **environment variables** or the **settings table**.
-Nothing is hardcoded.
-
-## Two kinds of configuration
+All runtime configuration is **environment variables** or the **settings table**; nothing is hardcoded.
 
 | | **Environment variables** | **`SystemSetting` table** |
 |---|---|---|
-| Changed by | An operator editing `.env`, then restarting | A Super Admin, in the application |
+| Changed by | Operator editing `.env`, then restarting | A Super Admin, in the application |
 | Requires | A restart | Nothing |
 | Holds | Connection strings, secrets, origins, tiers | Branding and platform settings; legal documents/consent versions and category defaults have their own domain records |
 | Validated | **At boot, fail-fast** | At write time |
 
 ## The variable inventory
 
-The specification's table is **the single authoritative list**; `.env.example` is generated
-from it and must stay in lockstep. **The application fails fast at boot with a named error
-if any required variable is missing.**
+The SRS table is **the single authoritative list**; `.env.example` is generated from it. **Boot fails fast with a named error on any missing required variable.**
 
 ### Required
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL, for both Prisma and the job queue |
+| `DATABASE_URL` | PostgreSQL, for Prisma and the job queue |
 | `GOOGLE_CLIENT_ID` | OAuth client |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `JWT_SIGNING_KEY` | Access-token signing. Rotatable |
-| `ONBOARDING_TOKEN_KEY` | Onboarding-token signing — **must be distinct** from the JWT key |
-| `EMAIL_LOCK_KEY` | Required dedicated email-lock HMAC secret, at least 32 bytes and distinct from both signing keys. No fallback; never stored in the database |
+| `JWT_SIGNING_KEY` | Access-token signing; rotatable |
+| `ONBOARDING_TOKEN_KEY` | Onboarding-token signing — **distinct** from the JWT key |
+| `EMAIL_LOCK_KEY` | Dedicated email-lock HMAC secret, ≥ 32 bytes, distinct from both signing keys; no fallback; never stored in the database |
 | `MINIO_ENDPOINT` | Internal S3 API endpoint |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Storage credentials |
-| `PUBLIC_BASE_URL` | The canonical origin. Also what the refresh endpoint validates `Origin` against |
-| `STORAGE_BASE_URL` | Public storage path prefix. **Presigned URLs are signed against this**, so signatures survive the proxy |
-| `NODE_ENV` | `production` \| `development` \| `test`. Boot validation enumerates exactly these three, so a typo fails fast rather than silently passing the non-production guard |
+| `PUBLIC_BASE_URL` | Canonical origin; the refresh endpoint validates `Origin` against it |
+| `STORAGE_BASE_URL` | Public storage prefix; **presigned URLs are signed against it**, so signatures survive the proxy |
+| `NODE_ENV` | `production` \| `development` \| `test` — exactly these three; a typo fails fast |
 
-The origin relationship is validated, not conventional: `PUBLIC_BASE_URL` must be one
-canonical HTTP(S) origin with no path/query/fragment/trailing slash, and `STORAGE_BASE_URL`
-must be exactly its same-origin `/storage` path. Every non-loopback public origin requires HTTPS;
-HTTP is accepted only for Local Development on `localhost`, `127.0.0.1`, or `[::1]`.
-`JWT_SIGNING_KEY` and `ONBOARDING_TOKEN_KEY` must be distinct; reusing one key would collapse
-two separately scoped credential boundaries.
+- `PUBLIC_BASE_URL` must be one canonical HTTP(S) origin (no path/query/fragment/trailing slash); `STORAGE_BASE_URL` must be exactly its same-origin `/storage` path. Non-loopback origins require HTTPS; HTTP only on `localhost`, `127.0.0.1` or `[::1]`.
+- `JWT_SIGNING_KEY` and `ONBOARDING_TOKEN_KEY` must differ: one key would collapse two credential boundaries.
 
 ### Conditional
 
 | Variable | When |
 |---|---|
-| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only.** See below |
-| `BACKUP_TARGET_SSH` | Production-only nonempty legacy setting; B8 temporarily permits `/var/lib/bodour-backups/bodour`. Host backup paths/key/floor belong to the separate root-only [operator configuration](recovery.md#before-enabling-anything-on-an-authorized-host), not the API |
-| `LIVEKIT_URL` / `LIVEKIT_API_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_NODE_IP` | **The self-hosted media server (SRS R164) — required on Staging and Production; host preflight refuses a release without them.** `LIVEKIT_URL` is the deployment's own origin, because signalling is proxied as `/rtc`: `wss://<domain>` (Localhost `ws://localhost`). `LIVEKIT_API_URL` is always `http://livekit:7880`. The key pair is read by the API, the media server AND the recorder; the secret is dedicated and at least 32 bytes (`openssl rand -hex 32`). `LIVEKIT_NODE_IP` is the host's public IPv4, read by Compose rather than by the application, and stated so no public STUN server is asked (empty on Localhost). For the application alone the group is still all-or-none: half-configuration refuses boot, and with none set media actions fail closed while the rest of the API serves. See [how it is deployed](../development/online-class-provider.md#how-it-is-deployed-srs-revision-164) |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only** (below) |
+| `BACKUP_TARGET_SSH` | Production-only nonempty legacy setting; B8 temporarily permits `/var/lib/bodour-backups/bodour`. Host backup paths/key/floor are root-only [operator configuration](recovery.md#before-enabling-anything-on-an-authorized-host), not the API |
+| `LIVEKIT_URL` / `LIVEKIT_API_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_NODE_IP` | **Self-hosted media server (R164) — required on Staging and Production; preflight refuses a release without them.** `LIVEKIT_URL` = the deployment's own origin (`wss://<domain>`; Localhost `ws://localhost`) since signalling is proxied as `/rtc`. `LIVEKIT_API_URL` = `http://livekit:7880` always. Key pair read by API, media server AND recorder; secret dedicated, ≥ 32 bytes (`openssl rand -hex 32`). `LIVEKIT_NODE_IP` = host public IPv4, read by Compose, stated so no public STUN is asked (empty on Localhost). Application group is all-or-none: half-configured refuses boot; none set → media actions fail closed, rest serves. [Deployment detail](../development/online-class-provider.md#how-it-is-deployed-srs-revision-164) |
 
 ### Optional, with defaults
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `TZ` | `Africa/Casablanca` | Container wall-clock alignment |
-| `PORT` | `3000` | API listen port behind Nginx |
-| `LOG_LEVEL` | `info` | `info` \| `debug`. **`debug` is prohibited in production** |
+| `PORT` | `3000` | API port behind Nginx |
+| `LOG_LEVEL` | `info` | `info` \| `debug`; **`debug` prohibited in production** |
 | `RECORDING_STAGING_BUCKET` | `recordings-staging` | Provider-ingest staging, never a public content bucket |
 
 ### Exact-release host inventory
 
-This is a provisioning checklist, **not a command to provision this workspace**.
-Derivation: [`config.ts`](../../backend/src/lib/config.ts),
-[`infra.env.example`](../../infra.env.example), the root Compose overlays and
-the [B8 root-only environment](recovery.md#before-enabling-anything-on-an-authorized-host).
-
-- Application `.env` and bootstrap `infra.env` remain operator-owned mode `0600`.
-  `POSTGRES_PASSWORD` must match the URL-encoded password in `DATABASE_URL` for
-  internal host `db`, database `bodour`, user `app`. No externally published DB port.
-- Generate independent random signing/onboarding/email-lock and storage credentials
-  directly into private host files, never command arguments, chat, shell recordings,
-  Git or printed resolved Compose. The existing guidance is 48 random bytes encoded
-  as base64; preserve special-character escaping in environment/URL formats.
-  Record secure retrieval/rotation custody, not values, in the private operator record.
-- `MINIO_*` names stay for compatibility with SeaweedFS, internal `http://minio:9000`;
-  AWS aliases in Production Compose resolve from the same secrets. Do not run the
-  legacy MinIO image or attach its populated physical volume to SeaweedFS.
-- `PUBLIC_BASE_URL=https://bodouralamal.com` and `STORAGE_BASE_URL` exactly that
-  origin plus `/storage`; Google redirect exactly
-  `https://bodouralamal.com/api/v1/auth/google/callback`, scopes `openid email`.
-  **OWNER INPUT REQUIRED:** separately authorized Production OAuth client/domain
-  configuration, final privacy URL/text and transfer review; no console change here.
-- `COMPOSE_PROJECT_NAME` and full `BODOUR_RELEASE_TAG` identify the exact accepted
-  checkout/images. Keep `TZ=Africa/Casablanca`, `PORT=3000`, `LOG_LEVEL=info` and
-  the Production overlay's `NODE_ENV=production`; no developer auth mechanism.
-- Seed-only Owner values below are not recurring credentials. Restic key, repository
-  pin, backup floor and timers belong only to B8 host configuration, never the API.
-  No shared Production/Staging secrets or backup key committed to the checkout.
+Provisioning checklist, **not a command to provision this workspace**. Derived from [`config.ts`](../../backend/src/lib/config.ts), [`infra.env.example`](../../infra.env.example), the Compose overlays and the [B8 root-only environment](recovery.md#before-enabling-anything-on-an-authorized-host).
+- `.env` and `infra.env`: operator-owned mode `0600`. `POSTGRES_PASSWORD` must match the URL-encoded password in `DATABASE_URL` (host `db`, database `bodour`, user `app`). No published DB port.
+- Generate independent random signing/onboarding/email-lock and storage credentials (48 random bytes, base64) directly into private host files — never command arguments, chat, shell recordings, Git or printed resolved Compose; preserve special-character escaping. Record custody, not values.
+- `MINIO_*` names stay for SeaweedFS compatibility, internal `http://minio:9000`; AWS aliases in Production Compose resolve from the same secrets. Never run the legacy MinIO image or attach its populated volume to SeaweedFS.
+- `PUBLIC_BASE_URL=https://bodouralamal.com`, `STORAGE_BASE_URL` = that origin + `/storage`; Google redirect exactly `https://bodouralamal.com/api/v1/auth/google/callback`, scopes `openid email`. **OWNER INPUT REQUIRED:** separately authorised Production OAuth client/domain configuration, final privacy URL/text and transfer review.
+- `COMPOSE_PROJECT_NAME` and full `BODOUR_RELEASE_TAG` identify the exact checkout/images. Keep `TZ=Africa/Casablanca`, `PORT=3000`, `LOG_LEVEL=info`, the Production overlay's `NODE_ENV=production`; no developer auth mechanism.
+- Seed-only Owner values are not recurring credentials. Restic key, repository pin, backup floor and timers belong to B8 host configuration only. No shared Production/Staging secrets or backup key in the checkout.
 
 ### Secret rotation and installation, at a glance
 
-Every value below is generated independently (`openssl rand -base64 48` unless noted),
-written directly into the operator's private `.env`/`infra.env`/root-only recovery
-config — **never** a command argument, chat message, ticket, or printed resolved
-Compose — and installed only on the target host. A placeholder shown here is a
-**format example, never a usable value.**
+Every value is generated independently (`openssl rand -base64 48` unless noted), written directly into the private `.env`/`infra.env`/root-only recovery config, installed only on the target host. Placeholders are format examples, never usable values.
 
-| Variable | Secret? | Generation | Restart required to take effect? |
+| Variable | Secret? | Generation | Restart required |
 |---|---|---|---|
-| `DATABASE_URL` password component | Secret | Random, matched to `POSTGRES_PASSWORD` in `infra.env` | `db` + `api` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Secret (Owner/Google Cloud Console) | Issued by Google Cloud Console, not generated locally | `api`; live OAuth users are unaffected until Google itself revokes the old value |
-| `JWT_SIGNING_KEY` | Secret | Random ≥32 bytes | `api`; every access token signed with the old key is invalidated immediately, every refresh token is unaffected (hashed, not signed by this key) |
-| `ONBOARDING_TOKEN_KEY` | Secret | Random ≥32 bytes, distinct from `JWT_SIGNING_KEY` | `api`; only in-flight onboarding tokens are invalidated |
-| `EMAIL_LOCK_KEY` | Secret | Random ≥32 bytes, distinct from both keys above | `api`, plus the [stopped-writer truncate/re-key migration](../development/email-lock-keying.md) — never a live rotation |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Secret | Random, shared identically between the `api`, `minio` (SeaweedFS) and `minio-init` services | `minio` + `minio-init` + `api`; a mismatch after rotation fails the S3 initializer's own credential-match preflight |
-| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Secret | Key: any identifier. Secret: random ≥32 bytes, dedicated (`openssl rand -hex 32`), shared identically between `api`, `livekit` and `livekit-egress` | `livekit` + `livekit-egress` + `api`, together; a mismatch fails preflight. Live classes are dropped and a recording in progress is lost, so rotate outside teaching hours |
-| `LIVEKIT_NODE_IP` | Public (the host's own IPv4) | Fixed by the provider-approved address | `livekit`; wrong, and browsers are told to send media somewhere that is not this host |
-| Backup repository encryption password | Secret, **escrowed separately from the host** | Random ≥32 bytes, written directly on the host (never through this application) | Not a live-restart concern — see [recovery.md](recovery.md#before-enabling-anything-on-an-authorized-host); rotation is a new-key procedure, never an overwrite |
-| `PUBLIC_BASE_URL` / `STORAGE_BASE_URL` | Public (not secret) | Fixed by the accepted domain | `api`; changes what the refresh endpoint accepts as `Origin` and what presigned URLs are signed against |
-| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | Sensitive, one-time only | Fixed values, not generated | Read only by the seed before the Owner singleton exists; ignored forever after |
-| `BODOUR_RELEASE_TAG` | Public (a commit SHA, not a secret) | Set to the exact accepted 40-character commit | Every Compose command in the pipeline |
+| `DATABASE_URL` password | Secret | Random, matched to `POSTGRES_PASSWORD` in `infra.env` | `db` + `api` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Secret (Google Cloud Console) | Issued by Google, not generated | `api`; live OAuth users unaffected until Google revokes the old value |
+| `JWT_SIGNING_KEY` | Secret | Random ≥ 32 bytes | `api`; every access token invalidated immediately; refresh tokens unaffected (hashed) |
+| `ONBOARDING_TOKEN_KEY` | Secret | Random ≥ 32 bytes, distinct from `JWT_SIGNING_KEY` | `api`; only in-flight onboarding tokens invalidated |
+| `EMAIL_LOCK_KEY` | Secret | Random ≥ 32 bytes, distinct from both | `api` plus the [stopped-writer truncate/re-key migration](../development/email-lock-keying.md) — never live |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Secret | Random, identical for `api`, `minio`, `minio-init` | `minio` + `minio-init` + `api`; mismatch fails the initializer's credential-match preflight |
+| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Secret | Key: any identifier; secret random ≥ 32 bytes (`openssl rand -hex 32`), identical for `api`, `livekit`, `livekit-egress` | All three together; mismatch fails preflight. Live classes drop and an in-progress recording is lost: rotate outside teaching hours |
+| `LIVEKIT_NODE_IP` | Public (host IPv4) | Provider-approved address | `livekit`; wrong → browsers send media elsewhere |
+| Backup repository password | Secret, **escrowed off-host** | Random ≥ 32 bytes, written on the host, never via the application | Not a restart concern ([recovery](recovery.md#before-enabling-anything-on-an-authorized-host)); rotation is a new-key procedure, never an overwrite |
+| `PUBLIC_BASE_URL` / `STORAGE_BASE_URL` | Public | Fixed by the domain | `api`; changes accepted `Origin` and presign target |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | Sensitive, one-time | Fixed values | Read only by the seed before the Owner singleton exists |
+| `BODOUR_RELEASE_TAG` | Public (commit SHA) | Exact accepted 40-character commit | Every Compose command |
 
-Logging/monitoring destinations and required alerts are **not** environment variables in
-this codebase — there is no external log/metrics sink. The Admin-visible alert surface is
-«حالة النظام» (R169 §11), which needs no configuration; see
-[Observability](observability.md#required-alerts--two-of-four-are-on-the-super-admins-screen-r169-11)
-for what it shows and the half it cannot (backup, certificate), and the host-level
-[operator signal](recovery.md#operator-signals-not-an-invented-dashboard) that still covers those.
+Logging/monitoring destinations and alerts are **not** environment variables: no external sink exists. The Admin alert surface «حالة النظام» (R169 §11) needs no configuration — [what it shows and cannot](observability.md#required-alerts--two-of-four-are-on-the-super-admins-screen-r169-11); backup and certificate stay with the host [operator signal](recovery.md#operator-signals-not-an-invented-dashboard).
 
 ## Secrets have no defaults, by design
 
-> **A secret that silently defaults is a vulnerability, not a convenience.**
-
-Every secret in `.env.example` is intentionally empty. The generation guidance in the
-comments (`openssl rand -base64 48`) is **documentation, not an auto-generation mechanism** —
-nothing generates a key for you, because a generated-on-first-boot key is a key nobody knows
-they need to back up.
-
-Secrets never appear in logs, error payloads, or the API contract. A CI guard fails the
-build if an `.env` file is ever committed.
+- Every secret in `.env.example` is empty; `openssl rand -base64 48` in the comments is documentation, not auto-generation — a first-boot-generated key is one nobody knows to back up.
+- Secrets never appear in logs, error payloads or the API contract; a CI guard fails the build if an `.env` file is committed.
+- The template defaults to `NODE_ENV=development`; release hosts do not trust it: `docker-compose.production.yml` forces `production`, the Staging overlay forces `development`.
+- Every tier's SeaweedFS `minio` service receives `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` and the shared initializer uses TD-13 `MINIO_*` (Owner, 2026-09-20), all from the private env files. **Resolved Compose and `docker inspect` output contain secrets: never publish it.** `BODOUR_STORAGE_INIT_IMAGE` is a test-harness override; Production preflight requires the initializer image to equal the release API image ([Storage](../architecture/storage.md#b1-candidate-verification-checkpoint)).
 
 ### Email-lock rollout and rotation
 
-The B3 migration is **not a rolling upgrade**. Stop every email-ownership writer,
-including API instances and seed/bootstrap processes, before applying
-`20260911100000_deletion_generation_identity_minimization`. Provision the same
-operator-generated `EMAIL_LOCK_KEY` for every writer before restarting the new code.
-The migration discards ownerless plaintext lock coordinates, not User/UserIdentity
-ownership. It also minimizes copied claim credentials for audit-proven permanent
-deletions; it does not purge recoverable accounts. Never roll back to the old binary
-against the new schema, or restore a pre-erasure backup just to downgrade.
-
-Rotation or key loss requires the same stopped-writer maintenance boundary and
-truncation of the **lock table only**, followed by one new shared key. No online
-mixed-key rollout, raw fallback, automatic key generation or computed backfill is
-supported. See the [ratified design and acceptance status](../development/email-lock-keying.md).
-No Localhost/Staging/Production secret has been provisioned by this code-only batch;
-operator provisioning remains a prerequisite for deploying it.
-
-The checked-in template defaults to `NODE_ENV=development` for Local Development. Release
-hosts do not trust that editable default: `docker-compose.production.yml` forces
-`production`, and the fixture-only Staging overlay forces `development`.
-
-### One example of that discipline in the compose file
-
-Every tier's SeaweedFS `minio` service receives `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`,
-and its shared S3 initializer uses the existing TD-13 `MINIO_*` settings, identically for
-Localhost, Staging and Production (Owner decision, 2026-09-20). All come from the operator's
-unchanged private environment files, not command-line credential arguments. **Resolved Compose
-and Docker inspect output still contain environment secrets**: never publish that output.
-`BODOUR_STORAGE_INIT_IMAGE` is a test-harness override; Production preflight requires the
-initializer image to equal the exact release API image. See
-[Storage](../architecture/storage.md#b1-candidate-verification-checkpoint) for the single pin,
-bucket rules and separate-volume migration boundary.
+- B3 is **not a rolling upgrade**: stop every email-ownership writer (API instances, seed/bootstrap) before applying `20260911100000_deletion_generation_identity_minimization`; provision the same `EMAIL_LOCK_KEY` for every writer before restarting. The migration discards ownerless plaintext lock coordinates, not User/UserIdentity ownership; minimizes copied claim credentials for audit-proven permanent deletions; does not purge recoverable accounts. Never run the old binary on the new schema or restore a pre-erasure backup to downgrade.
+- Rotation or key loss: same stopped-writer boundary, truncate the **lock table only**, one new shared key. No mixed-key rollout, raw fallback, automatic generation or computed backfill ([design](../development/email-lock-keying.md)). No secret has been provisioned by the code-only batch.
 
 ## Platform Owner bootstrap values
 
-The variable with the most subtle lifecycle in the system.
-
 - **The running API never reads them.**
-- Before `PlatformOwner('platform')` exists, the seed requires exactly
-  `SUPER_ADMIN_EMAIL=safae.elmessoussi@gmail.com` and `SUPER_ADMIN_SEX=female`, failing
-  loudly and atomically on any other value or identity conflict.
-- Once the singleton exists, both values are ignored permanently and may be removed from
-  `.env`. A rerun cannot reclaim a valid transfer, create an automatic successor, or reopen
-  because the active-Super-Admin population changed.
-
-**Editing these lines later does not move ownership or a role.** Ownership transfers through
-the application to another eligible Global Super Admin; ordinary administrator changes use
-the ordinary role-management workflow. The database remains the source of truth.
-
-> Full resolution order:
-> [Identity and access](../architecture/identity-and-access.md#platform-owner-and-initial-bootstrap)
+- Before `PlatformOwner('platform')` exists the seed requires exactly `SUPER_ADMIN_EMAIL=safae.elmessoussi@gmail.com` and `SUPER_ADMIN_SEX=female`, failing atomically on any other value or identity conflict.
+- Once the singleton exists both are ignored permanently and may be removed; a rerun cannot reclaim a transfer, create a successor or reopen because the Super-Admin population changed. Ownership transfers only through the application ([resolution order](../architecture/identity-and-access.md#platform-owner-and-initial-bootstrap)).
 
 ## Runtime settings
 
-Branding uses `SystemSetting`; per-category visibility uses the Category record.
-Consent wording uses `LegalConsentText`, while privacy/terms use `LegalDocument`
-(R119/R138): published versions are not rewritten. No production legal wording is
-invented by the seed. Grades use each Exam's `maxGrade` (R81), not the obsolete
-global basis-point scale or invented per-level passing-grade settings.
+Branding: `SystemSetting`; per-category visibility: the Category record; consent wording: `LegalConsentText`; privacy/terms: `LegalDocument` (R119/R138), published versions never rewritten, no legal wording invented by the seed. Grades use each Exam's `maxGrade` (R81), not a global basis-point scale or per-level passing-grade settings.
 
 ## Rate limits
-
-Split across two layers because one **cannot** do the other's job.
 
 | Layer | Limit |
 |---|---|
 | **Nginx, per IP** | Auth endpoints 10 req/min · general API 120 req/min |
-| **Nginx, per IP, uploads** | A coarse guard at the nearest expressible floor (`1r/m`) — **explicitly not the quota** |
+| **Nginx, per IP, uploads** | Coarse guard at the nearest floor (`1r/m`) — **not the quota** |
 | **Application, per user** | **Upload initiations 30/hour** — the authoritative quota, counted in PostgreSQL |
 
-Nginx keys on connection variables and cannot read a token subject; its grammar admits only
-`r/s` and `r/m`, so an hourly quota has no representation there.
-
-> [Security](../architecture/security.md#rate-limiting-in-two-layers)
+Nginx cannot read a token subject and admits only `r/s`/`r/m` ([Security](../architecture/security.md#rate-limiting-in-two-layers)).
 
 ## Body size limits
 
@@ -220,7 +126,7 @@ location /storage/ { client_max_body_size 110m;
 
 ## Resource pins
 
-These are configuration, not suggestions — leaving any at its default is non-compliant.
+Configuration, not suggestions; a default is non-compliant. Target steady state ≈ 2.2 GB on a 4 GB box.
 
 ```
 Postgres   max_connections=30 · shared_buffers=256MB · work_mem=8MB
@@ -231,19 +137,12 @@ Prisma     connection_limit=10
 pg-boss    pool ≤ 5
 ```
 
-Target steady state ≈ 2.2 GB on a 4 GB box.
-
 ## Changing configuration safely
 
-1. **Adding a variable** means updating the specification's inventory table first — it is
-   the authoritative list — then regenerating `.env.example`, then the boot validation.
-2. **Rotating a signing key** invalidates every token signed with it. Access tokens die
-   within an hour; refresh tokens are hashed in the database and are unaffected by a JWT key
-   rotation.
-3. **Changing `PUBLIC_BASE_URL`** changes what the refresh endpoint accepts as a valid
-   `Origin`, and what presigned URLs are signed against. Both break together if it is wrong.
+1. **Adding a variable:** SRS inventory table first, then regenerate `.env.example`, then boot validation.
+2. **Rotating a signing key** invalidates every token signed with it; access tokens die within an hour; refresh tokens are hashed and unaffected.
+3. **Changing `PUBLIC_BASE_URL`** changes the accepted refresh `Origin` and the presign target; both break together if wrong.
 
 ---
 
-**Next:** [Deployment](deployment.md) · **Related:**
-[Environments](environments.md), [Security](../architecture/security.md#secrets)
+**Next:** [Deployment](deployment.md) · **Related:** [Environments](environments.md), [Security](../architecture/security.md#secrets)

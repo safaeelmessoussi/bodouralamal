@@ -2,218 +2,93 @@
 
 # Error codes
 
-The **canonical application error-code catalogue**. All services use exactly these
-identifiers, and the set is **extensible only by specification revision** — so a client can
-switch on `code` safely.
+Canonical catalogue; every service uses exactly these identifiers; extensible only by specification revision, so a client switches on `code`.
+- Envelope on every non-2xx ([API](../architecture/api.md#the-error-envelope)): `{ "error": { code, message_key, message, details, request_id } }`. `code`: stable closed set. `message_key`: i18n, Arabic primary. `message`: log fallback, not display. `request_id`: same id in server logs and any enqueued job; show discreetly.
+- Never in a response: stack traces, SQL, internal paths. Toasts: no PII beyond first names, no raw internals.
+- Not envelopes: OAuth callback failures redirect to `/login?error=<key>` (`user_denied`, `state_mismatch`, `oauth_unavailable`, `email_unverified`); concurrency conflicts are coded 409s, never 500s.
+- Deletion blocked by references carries `details.blocked_by` `{ relationship: count }`, every blocker at once.
 
-## The envelope
+## Codes
 
-Every non-2xx response, without exception:
+| HTTP | Code | When | Client |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | Field validation; missing child header from a parent-only caller; `details.reason` below | Inline field errors, sticky |
+| 400 | `CONSENT_REQUIRED` | Registration without a mandatory consent checkbox | Highlight the checkbox |
+| 401 | `AUTH_REQUIRED` | No/expired session; every refresh refusal (expired, revoked, unknown, purged, reuse) deliberately indistinguishable, the audit log knows | Single-flight refresh, then login. Never on a public endpoint: an invalid credential is ignored, request proceeds anonymously |
+| 403 | `FORBIDDEN` | Permission-matrix violation, consent gate, global-scope violation; only where the caller may know the resource exists | Red toast, message key, 6 s |
+| 404 | `NOT_FOUND` | Missing or out of scope (branch, family), never distinguished: [security control](../architecture/security.md#no-existence-leaks) | "Not found"; never speculate about permissions |
+| 409 | `STATE_CONFLICT` | Transition the state machine forbids; onboarding-token replay; `details.reason` discriminates (below) | Branch on `reason`; else "already handled", refresh |
+| 409 | `VERSION_CONFLICT` | Optimistic-lock mismatch on a staff-edited entity | "Changed by someone else"; reload, re-apply |
+| 409 | `DUPLICATE` | Unique-constraint race loser; a duplicate staff-created family link (status to a non-owner would leak existence) | Treat as already created |
+| 409 | `SCHEDULE_CONFLICT` | Room, teacher or assistant already committed for an overlapping session (§4.4), against materialized sessions | Name the clash (`details`: resource, date); offer to move one |
+| 409 | ~~`CAPACITY_FULL`~~ | Retired by R43: BR-23 capacity refuses nothing; unraisable, removed from TD-3.8 | — |
+| 409 | `SINGLE_SUBMISSION_FINAL` | Resume on a single-submission exam | Explain the policy |
+| 409 | `UPLOAD_INCOMPLETE` | Completion on a missing or partial object | Retry from the start |
+| 409 | `WEIGHT_SUM_EXCEEDED` | Template items exceed 10,000 bp | post-MVP |
+| 409 | `TEMPLATE_NOT_ACTIVE` | Requires an active template | post-MVP |
+| 409 | `FAMILY_LINK_PENDING` | Own-resource contexts only (a parent's own unapproved request); never from the child-context middleware, where an unapproved link is `404` | Explain it awaits approval |
+| 413 | `PAYLOAD_TOO_LARGE` | Upload caps exceeded | Show the cap; suggest splitting recordings |
+| 429 | `RATE_LIMITED` | Nginx per-IP or the per-user quota; one shape for both | Back off |
+| 500 | `INTERNAL` | Anything else; no internals leaked | Error state |
+| 502 | `OAUTH_EXCHANGE_FAILED` | Google code exchange failed; browser sees only the `/login?error=oauth_unavailable` redirect | — |
+| 503 | `SERVICE_UNAVAILABLE` | Required dependency down (storage, OAuth upstream); [degraded-operation matrix](../operations/resilience.md#degraded-operation); success never fabricated | Error state with retry; the rest works |
+| 503 | `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration; owner task (§2.3); message names the setting | — |
 
-```json
-{
-  "error": {
-    "code": "CAPACITY_FULL",
-    "message_key": "errors.roster.capacity",
-    "message": "…localized fallback…",
-    "details": { },
-    "request_id": "b3f1…"
-  }
-}
-```
+## `409 STATE_CONFLICT` — `details.reason`
 
-- **`code`** — switch on this. Stable, closed set.
-- **`message_key`** — resolve through your i18n catalogue. Arabic is primary.
-- **`message`** — a fallback for logs and debugging, not for display when you can resolve the
-  key.
-- **`request_id`** — show it discreetly. It is the same id in the server logs and in any job
-  the request enqueued.
-
-**Never present in any response:** stack traces, SQL, internal paths.
-
----
-
-## The catalogue
-
-### 400 — the request is wrong
-
-| Code | When | What a client should do |
+| `reason` | Raised by | Next step |
 |---|---|---|
-| `VALIDATION_FAILED` | Field validation; **a missing child header from a parent-only caller** | Show inline field errors. Sticky until corrected |
-| `CONSENT_REQUIRED` | Registration submitted without a mandatory consent checkbox | Highlight the checkbox |
+| `SUBJECT_NOT_IN_LEVEL` | Teaching Group creation, scheduling, filing content | Assign the Subject to the Level (§4.4b); details name `level_name`, `subject_name` (since 2026-09-22) |
+| `NON_CANONICAL_COORDINATE` | `DELETE /content/{id}`, any storage obligation on a key not `content/<id>/…` | Repair the key; only pre-2026-09-22 seed fixtures had one (migration `20260925110000`); formerly a 500 |
+| `TEACHING_GROUPS_EXIST` | Removing a Subject from a Level | Delete the splits first |
+| `SCHEDULES_EXIST` | Deleting a Teaching Group | Move/delete the schedules targeting it |
+| `ALREADY_IN_SUBJECT_SPLIT` | Placing a student | In another split of that Subject; intent is a move |
+| `NOT_ENROLLED_IN_LEVEL` | Placing a student | Enrol first (BR-22) |
+| `ALREADY_HELD` · `SESSION_IN_PAST` | Session edits | Held: no reschedule; past: no restore |
+| `INVALID_TRANSITION` | Suspend / reactivate | TD-1 forbids it from `details.account_status` |
+| `SELF_SUSPENSION` | Suspend | No self-suspension |
+| `LAST_SUPER_ADMIN` | Suspend, `PUT .../roles` | Appoint another Super Admin first (R22 recovery needs a VPS shell) |
+| `GENDER_RESTRICTION` | Enrolment, incl. approval | Level admits one sex (§4.4b); `details.required_sex`; the student's sex is never echoed |
+| `ALREADY_ENROLLED_IN_LEVEL` | Enrolment | BR-21: one group per Level per academic period (R122, *this semester*); `current_administrative_group_id` named |
+| `ACADEMIC_PERIOD_OVERLAP` | Academic period create/edit | Two periods of one year may not share a day; `details` names the covering one; service-checked (no `btree_gist`) |
+| `NO_CURRENT_ACADEMIC_PERIOD` | Approval, child decision | No period covers today; Super Admin opens one (`POST /admin/academic-periods`); fails closed, never fabricates |
+| `ATTENDANCE_NOT_AVAILABLE` | Attendance on an excluded occurrence | R123: عطلة, حفل, unrecorded scheduling type have no sheet; also `self_or_staff` configured on such a type |
+| `SELF_CHECK_IN_NOT_ALLOWED` | «تسجيل حضوري» | R123: `staff_only`, or the caller's Category forbids self-marking (teen/child refused even on `self_or_staff`) |
+| `SELF_CHECK_IN_OTHER_PERSON` | Self route with another id | R123: only herself; the route accepts no id (backstop) |
+| `OCCURRENCE_DATE_REQUIRED` (`400`) | Activity sheet without a date | R123: the date is half a recurring نشاط's identity |
+| ~~`ONLINE_NOT_AVAILABLE`~~ | ~~`POST /exams` `mode: online`~~ | Retired by R124; `/assessments` writes papers; `/exams` still refuses `online` (a sitting) |
+| `ASSESSMENT_HAS_SUBMISSIONS` | Editing a paper after a submission | R124 freeze; no versioning; a draft freezes nothing |
+| `NO_QUESTIONS` | Publishing an empty paper | Add questions |
+| `ALREADY_SUBMITTED` | Save/re-submit after إرسال | Final; no reopen route in v1 |
+| `NOT_YOUR_SUBMISSION` | Student write path | Own only; routes accept no student id (backstop) |
+| `INCOMPLETE_SUBMISSION` · `SINGLE_CHOICE_ONLY` · `JUSTIFICATION_REQUIRED` · `ANSWER_REQUIRED` | إرسال | Completeness required only on submit |
+| `TEXT_NOT_ALLOWED` · `OPTIONS_NOT_ALLOWED` · `OPTIONS_REQUIRED` · `UNKNOWN_OPTION` · `UNKNOWN_QUESTION` · `DUPLICATE_ANSWER` · `DUPLICATE_OPTION` · `JUSTIFICATION_NOT_ALLOWED` | Response or question writes | One reason per mistake; `UNKNOWN_OPTION` = option from another question |
+| `INCOMPLETE_ORDER` | Reordering questions | Whole sequence or nothing (R76) |
+| `TARGET_ID_REQUIRED` · `DATE_REQUIRED` | Creating an assessment | Four of five targets name something; the date fixes the `AcademicPeriod` (R122) |
+| `GUARDIAN_REQUEST_DECLINED` | `POST /admin/child-applications/{id}/decide` | Her children request was declined; PENDING is no obstacle |
+| `ROLE_ALREADY_HELD` | `POST /profile/role-requests` (R169 §1) | Already held; the form offers only `askable` (race or stale tab) |
+| `ALREADY_PENDING` | Same | Already waiting |
+| `BIRTH_DATE_ALREADY_RECORDED` | Same | Completion, never correction |
+| `REQUIREMENTS_NOT_MET` | `PUT /admin/students/{id}/level-completions/{levelId}` (R167 §3) | BR-11 unmet; details `configured_surahs`, `memorised_surahs`, `examined_surahs`, `exams_required`; resend with `acknowledge_unmet: true` |
+| `LEVEL_NOT_COMPLETED` | `PUT …/level-completions/{levelId}/certificate` | Record the completion first |
+| `CERTIFICATE_ISSUED` | `DELETE …/level-completions/{levelId}` | `DELETE …/certificate` first |
 
-### 401 — not authenticated
+## `400 VALIDATION_FAILED` — `details.reason`
 
-| Code | When | What a client should do |
+| `reason` | Raised by | Next step |
 |---|---|---|
-| `AUTH_REQUIRED` | No or expired session | Attempt a single-flight refresh; if that fails, redirect to login |
+| `ENROLLMENT_REQUIRED` | Approval | §4.1: Level and group in the approval itself; `missing_user_ids` names who |
+| `DECIDE_PER_ROLE` | `POST /admin/approvals/{id}/approve\|reject` (R168 §1) | Several roles or an administration place: decide each via `…/roles/{kind}/approve\|decline` («البتّ في الصفات المطلوبة») |
+| `ROLE_NOT_GRANTABLE_HERE` | `POST …/roles/{kind}/approve` | Own roles only: `teaching` → `teacher`; `administration` → `admin`/`super_admin` (`details.allowed`) |
+| `SUPER_ADMIN_IS_UNSCOPED` | Same | `super_admin` never branch-scoped; send `null` |
+| `CIRCLE_NOT_OFFERED` | `POST /registrations`, `POST /profile/role-requests` | Ranked حلقة no longer offered (rescheduled); `details.teaching_group_id`; choose again |
+| `LEVEL_IS_HOME` | `PATCH /content/{id}` (R169 §10) | `additional_level_ids` named the home Level; OTHER Levels only |
+| `NO_LEVEL_TEACHES_SUBJECT` | `POST`/`PATCH /admin/course-schedules` (R169 §7) | «الكل» on Level, group, circle = every Level teaching the Subject, and none does; replaces `MULTI_DIMENSION_NEEDS_A_LEVEL` |
+| `BIRTH_DATE_REQUIRED` | `POST /profile/role-requests` | Beneficiary request without a recorded birth date must bring one (R130) |
+| `NOT_IN_BUNDLE` | Approval | Placement named somebody this approval does not admit |
+| `SURAHS_REQUIRED` | Class, occurrence or exam writes (R165 §2) | Surah Subject: a class names one or more, an exam exactly one; empty «مقرر الحفظ» is set by the Super Admin first |
+| `SURAH_NOT_IN_SYLLABUS` | Same | `details.surah_ids` outside every addressed Level's «مقرر الحفظ» |
+| `SURAHS_NOT_APPLICABLE` | Same | Surah named for a non-Surah Subject; remove it (never stored as an extra) |
+| `TRACKER_REQUIRES_SURAHS` | Editing a Subject | The memorisation Subject always works by Surah; un-mark tracker first |
 
-**A public endpoint never returns `401`.** An invalid or expired credential on a public route
-is **ignored** and the request proceeds anonymously. A client that treats `401` as *redirect
-to login* would otherwise login-wall a public page.
-
-**Every refresh refusal returns this same code** — expired, revoked, unknown, purged, or
-reuse-detected. The paths are deliberately indistinguishable: telling the holder of a stolen
-cookie *why* it failed would confirm the token was once real. The distinction lives in the
-audit log.
-
-### 403 — authenticated, but not allowed
-
-| Code | When | What a client should do |
-|---|---|---|
-| `FORBIDDEN` | Permission-matrix violation, consent gate, global-scope violation | Red toast with the message key |
-
-`403` is used **only** where the caller may know the resource exists. Out-of-scope access is
-`404` — see below.
-
-### 404 — not found, or not yours
-
-| Code | When |
-|---|---|
-| `NOT_FOUND` | Missing **or out of scope** — branch, family — **never distinguished** |
-
-> This is a security control, not an ergonomic choice. `403` would confirm *the thing exists
-> and you may not see it* — precisely the fact that must not leak about a minor's record, an
-> unapproved family link, or another branch's data.
-
-→ [Security](../architecture/security.md#no-existence-leaks)
-
-### 409 — the state or a constraint conflicts
-
-| Code | When | What a client should do |
-|---|---|---|
-| `STATE_CONFLICT` | A transition the state machine does not allow; **onboarding-token replay** | Usually "already handled" — refresh and re-render |
-| `VERSION_CONFLICT` | **Optimistic-lock mismatch** — a stale version on a staff-edited entity | *"This record was changed by someone else."* Reload, let the user re-apply |
-| `DUPLICATE` | Unique-constraint race loser | Treat as already-created |
-| `SCHEDULE_CONFLICT` | **A room, teacher or assistant is already committed** for an overlapping session (§4.4). Detected against **materialized** sessions, so the answer is exact rather than an approximate rule comparison | Name the clashing session and offer to move one — the `details` carry the resource and the date |
-| ~~`CAPACITY_FULL`~~ | **Retired by Revision 43.** BR-23: room capacity informs and refuses nothing, and an Administrative Group has no capacity at all. **Nothing can raise it**, and TD-3.8 removed it because an unraisable code invites someone to find a use for it | — |
-| `SINGLE_SUBMISSION_FINAL` | Resume attempted on a single-submission exam | Explain the policy |
-| `UPLOAD_INCOMPLETE` | Completion called on a missing or partial object | Offer retry from the start |
-| `WEIGHT_SUM_EXCEEDED` | Template items would exceed 10,000 bp | *(post-MVP)* |
-| `TEMPLATE_NOT_ACTIVE` | Operation requires an active template | *(post-MVP)* |
-| `FAMILY_LINK_PENDING` | **Own-resource contexts only** — a parent acting on their own not-yet-approved request | Explain it is awaiting approval |
-
-`FAMILY_LINK_PENDING` carries a deliberate restriction: it is **never returned by the
-child-context middleware**, where an unapproved link is `404`. Returning link status to a
-non-owner would leak existence — which is why a duplicate staff-created link answers
-`DUPLICATE` instead.
-
-#### `STATE_CONFLICT` carries a `reason`, and clients should branch on it
-
-`STATE_CONFLICT` alone says *the state disagrees*; the remedy differs completely by case, so
-`details.reason` is the discriminator a screen actually renders. **A client that shows one
-generic message for all of these is hiding the only useful part of the answer.**
-
-| `reason` | Raised by | The user's next step |
-|---|---|---|
-| `SUBJECT_NOT_IN_LEVEL` | Creating a Teaching Group, scheduling a class, filing content | Assign the Subject to the Level first (§4.4b). Since 2026-09-22 the details name `level_name` and `subject_name`, and الجدولة says which Level — it used to fall back to the concurrency sentence |
-| `NON_CANONICAL_COORDINATE` | `DELETE /content/{id}` (and any storage obligation) on a row whose key is not `content/<id>/…` | Repair the row's key; only the seed's pre-2026-09-22 fixture rows ever had one (repaired by migration `20260925110000`). It used to be a 500 |
-| `TEACHING_GROUPS_EXIST` | Removing a Subject from a Level | Delete the splits first — their members would otherwise hold seats in a subject that is not offered |
-| `SCHEDULES_EXIST` | Deleting a Teaching Group | Move or delete the timetable entries that target it |
-| `ALREADY_IN_SUBJECT_SPLIT` | Placing a student | They are in another split of the same Subject — the intent was almost certainly a *move* |
-| `NOT_ENROLLED_IN_LEVEL` | Placing a student | Enrolment precedes placement (BR-22 from the other side) |
-| `ALREADY_HELD` · `SESSION_IN_PAST` | Session edits | A held session cannot be rescheduled; a past one cannot be restored onto the timetable |
-| `INVALID_TRANSITION` | Suspend / reactivate | TD-1 does not allow it from this status; `details.account_status` says which |
-| `SELF_SUSPENSION` | Suspend | An administrator cannot suspend themselves — the next request would lock them out |
-| `LAST_SUPER_ADMIN` | Suspend, or `PUT .../roles` | Appoint another Super Admin first. Revision 22's lockout recovery needs a VPS shell and is not a UI outcome |
-| `GENDER_RESTRICTION` | Enrolment, including at approval | The Level admits one sex (§4.4b); `details.required_sex` says which. **The student's own sex is never echoed** |
-| `ALREADY_ENROLLED_IN_LEVEL` | Enrolment | BR-21 — one group per Level. `current_administrative_group_id` is named, because the intent was probably a *move* |
-| `ALREADY_ENROLLED_IN_LEVEL` **within the academic period** | Enrolment | R122 narrows BR-21 to one live enrolment per Level **per period**, so the same refusal now says *this semester* rather than *ever* |
-| `ACADEMIC_PERIOD_OVERLAP` | Creating or editing an academic period | Two periods of one year may not cover the same day. `details` names the period already covering it. **Checked in the service, not by the database** — an exclusion constraint needs `btree_gist`, which this deployment does not install |
-| `NO_CURRENT_ACADEMIC_PERIOD` | Approving an applicant, deciding a child application | No period covers today, so the platform refuses to enrol rather than guess a semester. A Super Admin opens the period first (`POST /admin/academic-periods`). **Failing closed is the point:** a fabricated period would be indistinguishable, a year later, from one the association actually ran |
-| `ATTENDANCE_NOT_AVAILABLE` | Reading, marking or configuring attendance on an excluded occurrence | R123 — عطلة and حفل have no sheet at all, and neither does an occurrence whose scheduling type was never recorded. *We do not know whether this takes attendance* is answered by refusing, not by guessing the permissive branch. Also raised when `self_or_staff` is configured on such a type |
-| `SELF_CHECK_IN_NOT_ALLOWED` | «تسجيل حضوري» | R123 — either the occurrence is `staff_only`, or the caller's Category does not permit self-marking. **A teen or a child is refused here even when the occurrence says `self_or_staff`**, which is the rule the configuration cannot override |
-| `SELF_CHECK_IN_OTHER_PERSON` | The self route, with somebody else's id | R123 — a woman marks only herself. The route accepts no student id at all; this is the backstop that makes the rule structural rather than a property of one controller |
-| `OCCURRENCE_DATE_REQUIRED` (`400`) | An activity's attendance sheet with no date | R123 — a recurring نشاط is one row expanded over many dates, so the date is half the occurrence's identity |
-| `ONLINE_NOT_AVAILABLE` | ~~`POST /exams` with `mode: online`~~ | **Retired by R124** — the online half is built, and `/assessments` is where a paper is written. `/exams` still refuses `online`, because it schedules a *sitting* |
-| `ASSESSMENT_HAS_SUBMISSIONS` | Editing a paper after somebody submitted | R124 — the simplest safe freeze, and the reason no versioning scheme exists. A question whose wording, order or options changed after an answer was given makes that answer mean something the student never said. A draft in progress does not freeze anything |
-| `NO_QUESTIONS` | Publishing an empty paper | A student opening one would see a title and nothing to answer, with no way to tell that from a fault |
-| `ALREADY_SUBMITTED` | Saving or re-submitting after إرسال | Submitted is final for the student. Reopening is not in v1 and no route offers one |
-| `NOT_YOUR_SUBMISSION` | The student write path | She writes only her own. The routes accept no student id at all; this is the backstop that makes it structural |
-| `INCOMPLETE_SUBMISSION` · `SINGLE_CHOICE_ONLY` · `JUSTIFICATION_REQUIRED` · `ANSWER_REQUIRED` | إرسال | Completeness is required only on **submit** — a draft is half-finished by definition |
-| `TEXT_NOT_ALLOWED` · `OPTIONS_NOT_ALLOWED` · `OPTIONS_REQUIRED` · `UNKNOWN_OPTION` · `UNKNOWN_QUESTION` · `DUPLICATE_ANSWER` · `DUPLICATE_OPTION` · `JUSTIFICATION_NOT_ALLOWED` | Any response or question write | Each mistake gets its own reason: *«invalid»* alone leaves a student re-reading a form with nothing to correct. `UNKNOWN_OPTION` is the sharpest — an option from another question would attach an answer to a choice she was never shown |
-| `INCOMPLETE_ORDER` | Reordering questions | The **whole** sequence or nothing (R76); a partial list leaves the omitted ones somewhere the caller did not decide |
-| `TARGET_ID_REQUIRED` · `DATE_REQUIRED` | Creating an assessment | Four of the five targets name something; and the date is not decoration — eligibility resolves against the `AcademicPeriod` covering it (R122) |
-| `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
-
-These travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a
-malformed request rather than a state that moved on:
-
-| `details.reason` | Raised by | The user's next step |
-|---|---|---|
-| `ENROLLMENT_REQUIRED` | Approval | §4.1: every admitted student needs a Level and a group **in the approval itself**. `missing_user_ids` names who — on a family bundle that is the only way to know which of them |
-| `DECIDE_PER_ROLE` | `POST /admin/approvals/{id}/approve|reject` (SRS Revision 168 §1) | The registration asked for several roles, or for a place in the administration: there is no single decision. Decide each through `POST /admin/approvals/{id}/roles/{kind}/approve|decline` — the queue offers «البتّ في الصفات المطلوبة» for exactly these rows |
-| `ROLE_NOT_GRANTABLE_HERE` | `POST …/roles/{kind}/approve` | A request grants one of its OWN roles — `teaching` → `teacher`; `administration` → `admin` or `super_admin` (`details.allowed`). A teaching request is never turned into an administrative grant |
-| `SUPER_ADMIN_IS_UNSCOPED` | The same | `super_admin` was granted with a `branch_id`. It is never branch-scoped; send `null` |
-| `CIRCLE_NOT_OFFERED` | `POST /registrations` | A ranked حلقة is not among the circles on offer for her Category and branch — usually a class rescheduled while the form was open. The form tells her to choose again; `details.teaching_group_id` names it |
-| `GUARDIAN_REQUEST_DECLINED` | `POST /admin/child-applications/{id}/decide` — `409 STATE_CONFLICT` | Her request to register children was declined, so no child of hers can be approved under it. (A request still PENDING is no obstacle: approving a child is accepting her) |
-| `LEVEL_IS_HOME` | `PATCH /content/{id}` (SRS Revision 169 §10) | `additional_level_ids` named the item's own home Level. It is `level_id`'s one fact; name only the OTHER Levels |
-| `NO_LEVEL_TEACHES_SUBJECT` | `POST` / `PATCH /admin/course-schedules` (SRS Revision 169 §7) | The class was addressed to «الكل» on Level, group and circle, which means *every Level that teaches this Subject* — and none does (within the chosen Categories). Add the Subject to a Level, or name a Level, group or circle. It replaces `MULTI_DIMENSION_NEEDS_A_LEVEL`, which a class with a Subject no longer raises |
-| `ROLE_ALREADY_HELD` | `POST /profile/role-requests` (SRS Revision 169 §1) — `409 STATE_CONFLICT` | She already holds the role this request would lead to; there is nothing to ask for. The form offers only what `GET /profile/role-requests` lists as `askable`, so this is a race or a stale tab |
-| `ALREADY_PENDING` | The same — `409 STATE_CONFLICT` | A request for this role is already waiting for the administration |
-| `BIRTH_DATE_REQUIRED` | The same | A beneficiary request from a record that has no date of birth must bring one (R130). With one recorded, sending another is `409 BIRTH_DATE_ALREADY_RECORDED` — completion, never correction |
-| `NOT_IN_BUNDLE` | Approval | A placement named somebody this approval does not admit. Without the check, approval would be an unscoped enrolment endpoint |
-| `REQUIREMENTS_NOT_MET` | `PUT /admin/students/{id}/level-completions/{levelId}` (SRS Revision 167 §3) — `409 STATE_CONFLICT` | BR-11 is not met for this Level and the caller has not said she has seen what is missing. The details carry `configured_surahs`, `memorised_surahs`, `examined_surahs` and `exams_required`; show them, ask, and resend with `acknowledge_unmet: true`. Marking anyway is allowed — never unknowingly |
-| `LEVEL_NOT_COMPLETED` | `PUT …/level-completions/{levelId}/certificate` — `409 STATE_CONFLICT` | A certificate is the second confirmation; record the completion first |
-| `CERTIFICATE_ISSUED` | `DELETE …/level-completions/{levelId}` — `409 STATE_CONFLICT` | What she can see and print is withdrawn first (`DELETE …/certificate`), deliberately |
-| `SURAHS_REQUIRED` | Scheduling or editing a class, one occurrence, or an exam (SRS Revision 165 §2) | The Subject works by Surah: name which. A class names one or more, an exam exactly one. If none is on offer, the Level's «مقرر الحفظ» is empty — the Super Admin sets it first |
-| `SURAH_NOT_IN_SYLLABUS` | The same writes | `details.surah_ids` names the Surahs outside the «مقرر الحفظ» of every Level the item addresses |
-| `SURAHS_NOT_APPLICABLE` | The same writes | A Surah was named for a Subject that is not taught by Surah — remove it; it is never stored as a harmless extra |
-| `TRACKER_REQUIRES_SURAHS` | Editing a Subject | The memorisation Subject always works by Surah; un-mark it as the tracker first |
-
-**Deletion blocked by references is different**: it carries `details.blocked_by`, an object of
-`{ relationship: count }` naming every blocker at once, so a screen can say *which* rather than
-making the administrator remove things one at a time to find out.
-
-### 413 · 429
-
-| Code | When | What a client should do |
-|---|---|---|
-| `PAYLOAD_TOO_LARGE` | Upload caps exceeded | Show the cap; suggest splitting long recordings |
-| `RATE_LIMITED` | Nginx per-IP **or** the per-user quota | Back off. **One shape for both layers**, so clients handle it once |
-
-### 500 · 502 · 503
-
-| Code | HTTP | When |
-|---|---|---|
-| `INTERNAL` | 500 | Anything else. **No internals leaked** |
-| `OAUTH_EXCHANGE_FAILED` | 502 | Google code exchange failed. Surfaced to the browser **only** as the `/login?error=oauth_unavailable` redirect |
-| `SERVICE_UNAVAILABLE` | 503 | A required dependency (storage, OAuth upstream) is down |
-
-`SERVICE_UNAVAILABLE` is what the [degraded-operation
-matrix](../operations/resilience.md#degraded-operation) returns. **The system never fabricates
-success** — a failed dependency yields a 503 and a proper error state, never a blank screen
-or silent data loss.
-
----
-
-## Two things that are not envelopes
-
-**OAuth callback failures are redirects.** The callback is a browser flow; it redirects to
-`/login?error=<key>` with one of `user_denied`, `state_mismatch`, `oauth_unavailable`, or
-`email_unverified` — rendered as a friendly message with a retry.
-
-**Concurrency conflicts are never 500s.** They are expected, coded outcomes with their own
-409 codes.
-
----
-
-## Client handling summary
-
-```
-401  → single-flight refresh, then login. NEVER on a public endpoint.
-403  → red toast, message_key text, 6 s
-404  → "not found" — do not speculate about permissions
-409 VERSION_CONFLICT → "changed by someone else", reload, re-apply
-409 (other)          → usually "already handled", refresh
-429  → back off
-503  → error state with retry; the rest of the app still works
-4xx validation → inline field errors, sticky
-```
-
-**Toasts never contain PII beyond first names, and never raw error internals.**
-
----
-
-**Related:** [API](../architecture/api.md#the-error-envelope),
-[API endpoints](api-endpoints.md), [Resilience](../operations/resilience.md)
+**Related:** [API](../architecture/api.md#the-error-envelope), [API endpoints](api-endpoints.md), [Resilience](../operations/resilience.md)

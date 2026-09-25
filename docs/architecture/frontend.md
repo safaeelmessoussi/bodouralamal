@@ -2,36 +2,10 @@
 
 # Frontend
 
-React 19 + Vite 8, TypeScript strict, **no runtime dependencies beyond React itself.**
+React 19 + Vite 8, TypeScript strict. Runtime dependencies: `"react": "19.2.8"`, `"react-dom": "19.2.8"` only — no router, state library, component library, CSS framework, date library or HTTP client. Patch updates are permitted; new frameworks/components need Document Owner approval.
 
-> **Status:** a public shell. The landing page, login, OAuth error states, account status
-> screens, the public branch directory, and the **full dual calendar** are built. **There are
-> no authenticated screens yet** — the M1–M3 endpoints have no interface driving them. This
-> page describes what exists and the patterns the rest will follow.
-
-## Dependency posture
-
-```json
-"dependencies": { "react": "19.2.8", "react-dom": "19.2.8" }
-```
-
-That is the whole list. No router, no state library, no component library, no CSS framework,
-no date library, no HTTP client.
-
-This is not minimalism for its own sake — it follows from the version policy. During active
-development, **patch updates are permitted; new frameworks and components are not**, without
-Document Owner approval. Every dependency is therefore a decision with a stated reason,
-taken deliberately rather than reached for.
-
-Two consequences visible in the code:
-
-- **Routing is a path switch**, not a router. The sitemap is a short fixed list, and a
-  router joins the stack when nested authenticated layouts arrive — as an approved
-  dependency, not a drive-by addition. The *decision* lives in `lib/route.ts` as a pure
-  function; `main.tsx` only maps a decision to a component ([why](#the-router-must-never-return-nothing)).
-- **The dialog is built on native `<dialog>`.** `showModal()` gives a focus trap, Escape
-  handling, page inertness, and top-layer stacking for free — all the things a modal library
-  is usually imported for.
+- Routing is a path switch: `resolveRoute(path)` in `lib/route.ts` is a pure function returning a closed `Route` union; `main.tsx` maps a decision to a component. A router joins only as an approved dependency when nested authenticated layouts arrive.
+- `Dialog` is native `<dialog>`: `showModal()` gives focus trap, Escape, inertness and top-layer stacking.
 
 ## Structure
 
@@ -52,867 +26,184 @@ src/
   styles/            tokens/ · base/ · components/
 ```
 
-### The adapter layer
+## The adapter layer
 
-`adapters/` is the seam between the API's shape and the components' needs. It exists so a
-contract change lands in one file rather than across every component that reads a field.
+`adapters/` is the seam between the API's shape and the components' needs; a contract change lands in one file.
 
-#### The unchecked cast under this whole layer
+### The unchecked cast under this whole layer
 
-`api<T>()` takes a type parameter and **nothing verifies it at runtime.** The generic
-*asserts* a shape; it does not parse one. An adapter type that names a field the API has
-never sent therefore:
+- `api<T>()` asserts a shape and verifies nothing at runtime. A wrong adapter type compiles, passes tests built from the same type, is invisible to `curl`, and fails only in a browser as `undefined` (`adapters/hijri-calendar.ts` once declared `hijri_year`/`months`/`hijri_month_ar` for the real `year`/`data`/`month_name_ar`; `/superadmin/hijri-calendar` rendered blank).
+- Two guards, failing on opposite drifts; neither replaces the other:
 
-- **compiles perfectly** — TypeScript believes the assertion;
-- **passes every frontend test** that builds its own fixtures from that same wrong type;
-- **is invisible to `curl`** — the server's bytes were always correct;
-- and fails **only in a browser**, as `undefined` where an object was expected.
-
-That is not hypothetical. `adapters/hijri-calendar.ts` declared `hijri_year` / `months` /
-`hijri_month_ar` against a real `year` / `data` / `month_name_ar`. The page did
-`data?.months.filter(…)`; the `?.` guarded `data` being null but not `months` being
-`undefined`, `.filter()` threw, React unmounted the tree, and `/superadmin/hijri-calendar`
-rendered **blank white** with no error anywhere.
-
-**The two guards, and why one alone is not enough:**
-
-| Side | Guard | What it catches |
+| Side | Guard | Catches |
 |---|---|---|
-| **Server** | An HTTP test asserting the **exact key set** of the response — `expect(Object.keys(body).sort()).toEqual([…])` | The API drifting away from the contract. `toMatchObject` cannot do this: it checks a subset and is **blind to a field that is missing** |
-| **Client** | A fixture literal typed as the adapter's own interface, written with the key set the server test pins | The adapter's *type* drifting away from the contract — renaming a field breaks the **typecheck**, which is the check the cast cannot perform |
+| Server | HTTP test asserting the exact key set — `expect(Object.keys(body).sort()).toEqual([…])` (`toMatchObject` is blind to a missing field) | The API drifting from the contract |
+| Client | A fixture literal typed as the adapter's own interface with the pinned key set (`pages/admin/hijri-calendar.test.tsx`) | The adapter type drifting — the typecheck fails |
 
-`pages/admin/hijri-calendar.test.tsx` is the worked example of the client half. Both halves
-are cheap; neither substitutes for the other, because they fail on opposite drifts.
+- Never share one type between a read and a write response that differ: the Hijri write returns `hijri_year`, omits `month_name_ar`, and has its own `HijriMonthRecorded`.
 
-A corollary worth stating: **do not declare one type for a read response and a write response
-that differ.** The Hijri write returns `hijri_year` and omits `month_name_ar`, so it has its
-own `HijriMonthRecorded`. Sharing one type across two shapes is what let the mismatch hide.
+### Mock adapters
 
-#### Mock adapters: building a screen before its endpoint exists
+Allowed while a screen's endpoints are unspecified; not licence to invent a contract — the endpoints still need a Document Owner revision (§20 rule 16).
 
-A screen may be built against a **mock adapter** when its endpoints are not yet specified —
-that is what lets the interface, the states and the layout be finished and reviewed while the
-contract is still being decided, instead of the two waiting on each other.
+- The interface is production, only the implementation is mock: types are the expected `snake_case` response; swapping in `api()` touches only the adapter's exports.
+- No component, page or test touches the mock directly.
+- The file states at the top that it is temporary, which endpoints are missing and what authorises them.
+- Mock data exercises the layout (one of each kind, one empty group, one with many), not plausibility.
+- Never document mock behaviour as production behaviour.
+- `adapters/content.ts` is the example: no content endpoint exists — [gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
+- The calendar-occurrence type carries no raw name fields; the backend sends `display_name`, so the client cannot implement the forbidden fallback ([Security](security.md#on-public-surfaces), §20 rule 21).
 
-The convention that makes it safe:
+### One API caller — `lib/api.ts`
 
-| Rule | Why |
-|---|---|
-| **The interface is production; only the implementation is mock** | Types are written as the API response they expect to parse, in `snake_case`. Swapping in real `api()` calls is a change to the adapter's exported functions and to nothing else |
-| **No component, page or test may touch the mock directly** | If they did, replacing it would mean touching all of them — which is the entire cost the seam exists to avoid |
-| **The file states, at the top, that it is temporary and why** | Including which endpoints are missing and what authorises them |
-| **Mock data is chosen to exercise the layout**, not to look plausible | One item of each kind, one empty group, one group with many — the states you need to see |
-| **Never document mock behaviour as production behaviour** | The handbook describes the interface and the states; the numbers live only in the mock file |
-
-`adapters/content.ts` is the worked example: the educational library is complete and
-reviewable, and **no content endpoint exists** — see
-[the gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
-
-A mock adapter is **not** licence to invent a contract. It is a placeholder behind a seam,
-and the endpoints it anticipates still require a Document Owner revision before they are
-built (§20 rule 16).
-
-It carries one rule with security weight: **the frontend type for a calendar occurrence does
-not carry the raw name fields at all.** The backend resolves which name is public and sends
-`display_name`; the adapter's type has no other option to choose from.
-
-That is structural enforcement rather than a rule to remember — a client that cannot see the
-inputs cannot implement the fallback it is forbidden from implementing.
-
-> [Security](security.md#on-public-surfaces) · §20 rule 21
-
-### One API caller
-
-Every request goes through `lib/api.ts`, so the two transport rules live in one place rather
-than at each call site:
-
-- the access token travels **only** in the `Authorization` header;
-- the active child travels **only** in `X-Active-Child-ID`, per request.
-
-**The client never puts a student id in a body or query string for authorization** — the
-server would ignore it anyway.
-
-The error class deliberately carries only the status. The response body is **not** parsed
-there, because only the screen rendering an error knows which of its fields it needs.
+- Access token only in `Authorization`; active child only in `X-Active-Child-ID`, per request; never a student id in body or query for authorization.
+- The error class carries only the status; the rendering screen parses the body.
 
 ## Validation errors name the field
 
-The backend has always sent `details.issues` with an exact `path` per failure —
-`applicant.first_name_arabic`, `child.last_name_french`, `branch_id`. The
-registration form threw all of it away and rendered one sentence, so a rejected
-submission said *"review the fields"* without saying which, and an applicant had
-to guess.
-
-`mapServerIssues` now translates each `path` onto the form's own field keys and
-marks the control. Three details are deliberate:
-
-- **The `path` is used, not the message text.** Zod's message is English prose
-  written for a developer (*"Invalid input: expected string, received
-  undefined"*); showing it to an Arabic-speaking applicant would be worse than
-  showing nothing. A known path becomes our own Arabic message on the right
-  field.
-- **The server's `parent` maps onto the form's `applicant`** — the same person
-  under two names. Without the translation the error would be computed and
-  attached to nothing.
-- **An issue the form cannot place is surfaced verbatim, never dropped.** An
-  `Unrecognized key` is precisely the signal that a stale client is talking to a
-  newer server, which is the failure that produced this section.
+- The backend sends `details.issues` with an exact `path` (`applicant.first_name_arabic`, `child.last_name_french`, `branch_id`); `mapServerIssues` maps each `path` onto the form's field keys and marks the control.
+- The `path` is used, not Zod's English message; a known path becomes our own Arabic message.
+- Server `parent` maps onto form `applicant`.
+- An unplaceable issue is surfaced verbatim, never dropped (`Unrecognized key` = stale client on a newer server).
 
 ## Mandatory UI states
 
-Every page and every data-bearing component implements all of:
-
-| State | Requirement |
-|---|---|
-| **Loading** | A skeleton for tables, not a spinner alone |
-| **Empty** | Friendly, Arabic-first, with the relevant create action if permitted |
-| **Error** | The message key rendered, the request id shown discreetly, a retry button |
-| **No permission** | A proper state — never a blank page, never a crash |
-| **No results** | **Distinct from empty** — "nothing matches your filters", with a clear-filters action |
-| **Offline / retry** | Failed fetches offer a retry; failed uploads restart cleanly |
-
-> *Forgetting empty states is the most common agent failure mode* — the specification says so
-> outright, and end-to-end tests assert them.
-
-The distinction between **Empty** and **No results** is the one most often collapsed, and it
-matters: "you have no groups yet" and "no groups match this filter" call for different
-actions from the user.
-
-### Two specific states
-
-**A Pending user is intercepted before any authenticated route renders.** A global guard
-hard-redirects to the approval-status screen, so a Pending user never sees an empty skeleton
-or a sidebar. This is a **UX layer only** — the server-side denial is the security boundary,
-and both are tested independently.
-
-**An Active account holding no role** renders the no-permission state. It is reachable only
-through staff error, and it must never be a blank page, a crash, or a dashboard.
+- Every page and data-bearing component implements all six §14.4 states (Loading, Empty, Error, No permission, No results — distinct from Empty, with a clear-filters action — and Offline/retry); end-to-end tests assert them.
+- A Pending user is hard-redirected by a global guard to the approval-status screen before any authenticated route renders; UX layer only — the server denial is the boundary; both tested independently.
+- An Active account with no role renders the no-permission state.
 
 ## Navigation
 
-The sitemap is **authoritative**: no invented sections, no reshuffling. Items render only
-for roles the permission matrix allows, and the sidebar is RTL-first.
+- The sitemap is authoritative: no invented sections, no reshuffling; items render only for permitted roles; sidebar RTL-first.
+- Status interstitials (approval-status, account deactivated) are redirect targets, not nav nodes: absent from the sitemap tree, still built.
+- No "log out everywhere" node exists or may be added; revoke-all is internal (suspension, deletion).
 
-Two clarifications that have caused real bugs:
+### Breadcrumb
 
-**Status interstitials are redirect targets, not navigation nodes.** The approval-status and
-"account deactivated" screens appear in no menu, which is why they are absent from the
-sitemap tree. Their absence is **not** licence to omit them — building them is not an
-invented section.
+- The sitemap is flat per section (R69 gave `مواد المستوى` and `حلقات المواد` a node each). `PortalShell` takes an optional `breadcrumb`, rendered above the heading by [`components/portal/breadcrumb.tsx`](../../frontend/src/components/portal/breadcrumb.tsx): `المستويات › مواد مستوى «الثاني» › حلقات مادة «الفقه»`.
+- Passed in, never derived from the URL (deriving invents ancestors §14.1 does not list — §20 rule 16); ancestors link with R69.3's `?level=` deep link.
+- Fewer than two items renders nothing.
+- Renders only for a session permitted to open the module (a crumb names a Level).
 
-**No "log out everywhere" node exists, and none may be added.** The revoke-all capability is
-internal, used by suspension and deletion.
-
-### The sidebar answers *how do I get there*; the breadcrumb answers *where am I*
-
-The sitemap is a **flat list per section**, and a flat list cannot express that a
-Subject's circles live inside one Level's subjects, which live inside a Level.
-Revision 69 gave `مواد المستوى` and `حلقات المواد` a node each — that made them
-reachable, and left the hierarchy invisible. `PortalShell` therefore takes an
-optional `breadcrumb`, rendered above the heading by
-[`components/portal/breadcrumb.tsx`](../../frontend/src/components/portal/breadcrumb.tsx):
-
-```
-المستويات  ›  مواد مستوى «الثاني»  ›  حلقات مادة «الفقه»
-```
-
-Three rules make it safe to add anywhere:
-
-**The trail is passed in, never derived from the URL.** Deriving it would mean
-inventing an ancestor for any path that has none — which is how a breadcrumb
-grows a landing page that SRS §14.1 does not list (§20 rule 16). The page knows
-its own ids; ancestors are linked with the `?level=` deep link R69.3 defines, so
-every crumb points at a node that already exists.
-
-**A trail shorter than two items renders nothing.** `مواد المستوى` before a
-Level is chosen is not *inside* anything, and a one-item breadcrumb naming only
-the current screen is decoration.
-
-**It renders only for a session permitted to open the module.** A crumb names a
-Level, and the no-permission state must not disclose one.
-
-### A deploy that never reaches the browser
-
-`index.html` was served with **no `Cache-Control` header at all**. Browsers then
-apply *heuristic* caching, so a returning visitor kept executing the previous
-bundle — and because Vite emits content-hashed filenames, the stale shell also
-pointed at the stale JS, which the browser likewise held. **The entire old
-application ran from cache, with no error anywhere.**
-
-It produced a genuinely confusing failure: a registration form rendering last
-week's fields, posting last week's payload, refused by a server that had
-correctly moved on. Both halves looked like application bugs and neither was —
-the shipped code was right and simply was not running.
-
-The pairing that fixes it:
+### Cache headers
 
 | Path | `Cache-Control` | Why |
 |---|---|---|
-| `index.html`, and every SPA route | `no-cache` | *Revalidate before reuse* — not "do not store". The ETag makes it a `304` in the common case, so the cost is one conditional request and the guarantee is that a deploy takes effect immediately |
-| `/assets/*` | `public, max-age=31536000, immutable` | The filename changes whenever the bytes do, so the response never needs revalidating |
+| `index.html` and every SPA route | `no-cache` | Revalidate before reuse; ETag → `304`; a deploy takes effect immediately |
+| `/assets/*` | `public, max-age=31536000, immutable` | The filename changes whenever the bytes do |
 
-**The rule: a content-hashed asset may be cached forever; the document that
-names it may not be cached at all.** Getting that backwards is indistinguishable
-from a code bug, because the code is correct — it simply is not the code that is
-running.
+Rule: a content-hashed asset may be cached forever; the document naming it never (without it, heuristic caching ran the whole old bundle after a deploy).
 
 ### The router must never return nothing
 
-`/dashboard` rendered a **blank white page**, and it was reachable in one click by every
-signed-in user.
+- `/dashboard` is not a §14.1 path; homes are role-specific: `/dashboard/student`, `/teacher`, `/admin` (R62 removed `/dashboard/parent`; §4.1b step 4a "role-based dashboard redirect").
+- A `default` branch returning `null` is a blank page (§14.4). `AdminRouter`'s `AdminNotFound` was unreachable because `isAdminPath` is `moduleForPath(path) !== null`.
+- The route test asserts `/dashboard`, `/nonsense`, `/admin-not-really` and `''` resolve to something; a `null` fallback fails six tests.
+- `not-found` (§14.1 does not define the path) renders `NotFound` with a way home; `screen-pending` (§14.1 defines it, no milestone built it) renders `ScreenPending` naming why — the back office's `ModulePending` is the same distinction.
+- `roleHomePath(roles)` resolves most-privileged first; `null` for no role hides the button (§14.4 Revision 16).
 
-Two mistakes met:
+### Header guards
 
-1. **The header's Dashboard button linked to `/dashboard`** — a path §14.1 does not define.
-   The sitemap lists *role-specific homes*: `/dashboard/student`, `/teacher`, `/admin`
-   (R62 removed `/dashboard/parent` with the Family Dashboard — a parent's home is their
-   child's dashboard). §4.1b step 4a calls the post-login landing a "role-based dashboard
-   redirect" for the same reason: which home you get depends on who you are.
-2. **The path switch's `default` branch returned `null`.** React renders nothing, and the
-   browser shows an empty document — which §14.4 forbids outright ("never a blank page,
-   never a crash"). Any typo'd URL did the same; the button just guaranteed someone found it.
-
-A third, quieter problem sat behind them: `AdminRouter`'s `AdminNotFound` was **unreachable**.
-`main.tsx` only reaches it when `isAdminPath(path)` is true, and `isAdminPath` *is*
-`moduleForPath(path) !== null` — so the null check inside could never fire. The application
-had a not-found page that no path could reach, and no not-found page for the paths that
-needed one.
-
-**The fix makes the invariant checkable rather than trusting a switch statement.** The routing
-decision is now `resolveRoute(path)` in `lib/route.ts`, a pure function returning a closed
-`Route` union, and the test asserts every path — including `/dashboard`, `/nonsense`,
-`/admin-not-really` and `''` — resolves to *something*. Reintroducing the `null` fallback fails
-six tests.
-
-Two states, deliberately distinct:
-
-| | Means | Rendered as |
-|---|---|---|
-| `not-found` | §14.1 does not define this path | `NotFound`, with a way home |
-| `screen-pending` | §14.1 *does* define it; no milestone has built it | `ScreenPending`, naming why |
-
-Collapsing them would tell a teacher their home is *gone* when it is merely unbuilt — the same
-distinction the back office already draws with `ModulePending`.
-
-`roleHomePath(roles)` resolves the button's target, most-privileged role first, and returns
-`null` for an account with no role so the button is **hidden** rather than pointing nowhere
-(§14.4 Revision 16 puts that account on the no-permission state).
-
-### A cascade bug worth remembering
-
-The header's burger menu was declared *after* the media query that hides it, at equal
-specificity — so it stayed visible at every width. A CI guard
-(`check-header-nav-exclusive.sh`) now asserts that the burger and the horizontal navigation
-are mutually exclusive, and it was **proven by reintroducing the bug**.
-
-A second: the dashboard link was removed from the navigation because it is an *account
-control*, not a site section — and it duplicated a destination already reachable. The fix
-included extracting navigation building into a **pure function** so it could be tested
-directly, and server-rendering the header in both states to verify the output rather than
-assert the intent.
+- `check-header-nav-exclusive.sh` asserts the burger and horizontal nav are mutually exclusive (a cascade-order bug once kept the burger visible; proven by reintroducing it).
+- The dashboard link is an account control, not a site section; nav building is a pure function; the header is server-rendered in both states in tests.
 
 ## Shared components
 
-The registry is build-once-reuse, and duplicating one per page is prohibited:
+The §14.3 registry (`StudentSelector`, `GroupSelector`/`LevelSelector`/`BranchSelector`, `PaginatedTable`, `DualDateDisplay`, `VisibilityBadge`/`VisibilitySelect`, `ConsentStatusBadge`, `FileUploader`, `ChildContextSwitcher`, `ApprovalCard`, `ConfirmDialog`, `EmptyState`/`ErrorState`/`NoPermissionState`, `JobStatusIndicator`) is build-once-reuse; duplicating one per page is prohibited.
 
-`StudentSelector` · `GroupSelector` / `LevelSelector` / `BranchSelector` ·
-`PaginatedTable` · `DualDateDisplay` · `VisibilityBadge` / `VisibilitySelect` ·
-`ConsentStatusBadge` · `FileUploader` · `ChildContextSwitcher` *(R62.9 — no longer a header dropdown of its own; it is the `ولي الأمر` GROUP inside the one account switcher, because selecting a child sets the active role and the active child in a single action)* · `ApprovalCard` ·
-`ConfirmDialog` · `EmptyState` / `ErrorState` / `NoPermissionState` · `JobStatusIndicator`
+- `ChildContextSwitcher` is the `ولي الأمر` group inside the one account switcher (R62.9): selecting a child sets active role and child in one action.
+- `DualDateDisplay` renders the Gregorian date alone when the Hijri month is unpublished — no placeholder, no guess.
+- `Dialog` has a `wide` variant for lists.
+- Behavioural contracts live in [Platform UX & atomic design](../development/ux-architecture.md); this is a register.
+- `SearchableSelect`: one choice from a large set, options shown on open (replaced pickers showing nothing before two typed characters).
+- `Button variant="add"` emits the `＋` convention.
+- `withCategoryNames` joins a Category name onto Levels carrying `category_id` so `levelLabel` renders `{Category} — {Level}`.
+- `.button` / `.button.primary` in `status-pages.css` (a second button system, ten call sites) was deleted for `ButtonLink`.
 
-`DualDateDisplay` carries a rule from the calendar design: it renders **the Gregorian date
-alone** when the Hijri month has not been published. No placeholder, no computed guess.
+## The calendar page
 
-`Dialog` takes a `wide` variant, for a dialog carrying a **list** rather than prose — the
-default width is a reading measure, which is right for an event record and too narrow for a
-day's timetable.
+Atomic components: title, navigation, filter toolbar, three filter selects, grid, day cell, event chip, day dialog, details dialog.
 
-### The rules these components exist to keep
-
-**The behavioural contract of each shared component — and the page-shape rules
-they compose into — live in [Platform UX & atomic
-design](../development/ux-architecture.md), not here.** That page is the one a
-future UI change is interpreted against; this section stays a *register of what
-exists*, because a component list and a set of rules drift apart the moment they
-are maintained in one place.
-
-The three additions of 2026-08-17 are worth naming in the register, since each
-replaced something hand-rolled:
-
-* **`SearchableSelect`** — one choice from a large set, **showing its options on
-  open**. The gap it filled had been met by *typed-search workflows*: a picker
-  returning nothing until two characters were entered, which offers nothing at all
-  to a reader who does not already know the name.
-* **`Button variant="add"`** — the `＋` convention, emitted by the variant so a
-  caller never types it. It had lived in a *translation string* for exactly one
-  screen.
-* **`withCategoryNames`** — joins a Category name onto Levels carrying only
-  `category_id`, so `levelLabel` can render `{Category} — {Level}` from the
-  calendar bootstrap without a second label format.
-
-And one deletion: **`.button` / `.button.primary` in `status-pages.css` was a
-second complete button system**, across ten call sites on the registration, status
-and profile pages — its own class name, its own padding, and none of `ghost`,
-`danger` or `add`. Every one of them now renders `ButtonLink`.
-
-## The calendar page, as a worked example
-
-The most complete screen in the client, and the one whose decisions generalise furthest.
-
-Decomposed into atomic components — title, navigation, filter toolbar, three filter selects,
-grid, day cell, event chip, day dialog, details dialog — each with a single responsibility.
-
-### The page reads top to bottom as a sequence of questions
-
-```
-            الجدول الزمني            ← eyebrow: what page is this
-        يوليوز 2026 │ محرم 1448      ← the headline: WHICH MONTH
-     السابق      اليوم      التالي    ← how do I move
-      [branch]  [category]  [level]  ← what am I filtering
-   ┌───────────────────────────────┐
-   │            the grid           │
-```
-
-*Where am I → how do I move → what am I looking at → the thing itself.* Each step gets its
-own centred block and generous vertical rhythm, so they read as four steps rather than one
-dense control bar.
-
-**The `<h1>` is an eyebrow, not the headline.** A visitor came to read *which month*, so the
-dual title takes the visual weight and the page label recedes — while remaining a real
-heading, because the page still needs one.
-
-### Navigation: three buttons, and no month label
-
-`السابق · اليوم · التالي`. The month name appears **once**, in the title.
-
-The previous control was a month selector that carried *its own copy* of the Gregorian month
-beside the title's — two renderings of one fact, which is the duplication this project removes
-rather than syncs. A test asserts the nav contains **no** month name at all.
-
-**`اليوم` is the primary variant; the other two are secondary.** It is the action most often
-wanted and the only one not reversible by pressing its opposite, so it earns the single
-emphasis. It changes the month and deliberately does **not** open the day dialog — pressing a
-navigation button should move the view, not launch a modal over it.
-
-**Short labels, long accessible names.** Visible text is `السابق`; the accessible name is
-`الشهر السابق`, because "previous" alone is ambiguous when announced out of context. The long
-name **contains** the short one, which is what keeps voice control working (WCAG 2.5.3 *Label
-in Name*) — a user saying "السابق" still matches. A test asserts the containment rather than
-just the presence of both.
-
-**Navigation preserves every filter**, because the filters are state independent of the month
-and nothing in the handler touches them.
-
-### Two requests, never a third
-
-| Request | Returns | Cached |
-|---|---|---|
-| `GET /calendar/bootstrap` | The **chrome**: Hijri days, month metadata, categories, levels, branches | 5 min + ETag |
-| `GET /calendar` | The **occurrences**, each self-sufficient | No |
-
-Opening a day or an event costs **nothing further**. That is what
-[occurrence self-sufficiency](calendar-and-hijri.md#the-calendar-screens-two-requests) buys,
-and it is why the details dialog needs no loading state.
-
-### The client computes no dates
-
-The dual title renders `gregorian_months` and `hijri.months` **as the backend assembled
-them**: one entry renders one name, two render both joined by a slash. A Gregorian month
-straddling two Hijri months therefore needs no special case in the client — which is the
-whole point, because computing a Hijri date in a client is prohibited outright (§20 rule 14).
-
-Per-cell Hijri numbers come from `hijri.days`, keyed once into a map for O(1) lookup.
-The cell's small coordinate row is explicitly LTR within the RTL page: Hijri first/physical
-left, Gregorian second/physical right, matching the title without exchanging date values.
-
-### Absence is rendered as absence
-
-The rule appears three times on this screen, and it is the same rule each time:
-
-- A day whose Hijri month is **not recorded** shows **no Hijri number** — not a dash, not a
-  computed guess. An empty slot is reserved so the Gregorian number does not shift.
-- When **no** month in view is recorded, the title's Hijri side **and its divider** are
-  omitted entirely rather than rendered blank.
-- A field the backend did not send is **absent** from the details dialog. An empty row claims
-  the value *is* blank, which is a different statement from *"not recorded"*.
-
-### The two title sides fail differently, on purpose
-
-The **Hijri side has no fallback** — that is the rule above.
-
-The **Gregorian side falls back** to the month the page is already displaying. The asymmetry
-is deliberate: the month on screen is *client state*, so a failed reference fetch must not
-cost the page its own heading, and a Gregorian month name is not a Hijri computation. It reads
-from the same i18n list the dialogs use, so the names still have one source.
-
-Removing the month selector made this necessary. Previously the label came from client state
-via that control and always rendered; with the title as the only label, an unqualified
-"render what the backend sent" would have left the page headless whenever the chrome request
-failed.
-
-### An accessibility regression the removal nearly caused
-
-The month selector held the `aria-live="polite"` region that announced month changes. Deleting
-it would have made navigation **silent** for keyboard and screen-reader users — the grid
-redraws with no spoken feedback.
-
-`aria-live` now sits on the **title**, which is the element that names the month. A test
-asserts it, because this is precisely the kind of behaviour that disappears in a refactor and
-nobody notices until someone who relies on it does.
-
-### Two dialogs, and why
-
-**Clicking a day** opens the full day programme; **clicking an event** opens its record. Both
-are dialogs rather than panels, decided on the page's shape: the grid now claims nearly the
-full viewport width and most of its height, so anything below it opens off-screen and turns
-every click into a scroll.
-
-The day dialog **replaced a panel** that used to sit beneath the grid. Removing it is what
-let the cells grow to hold a real day's programme — the cell is the compact view, and the
-dialog is the complete one, which is what makes the cell's compactness affordable.
-
-### Filters: the dependency is server-side
-
-Branch, category, and level. **Selecting a category re-requests the bootstrap with
-`category_id`**, and the server returns only that category's levels.
-
-This is not a preference. §4.4 requires the narrowing to happen server-side *"so the client
-never filters a list it was handed"*, and the level selector is built so that rule cannot be
-broken: **it has no category prop at all.** There is nothing in it to filter with.
-
-Changing category **resets the level**, in the page rather than in either select — the two
-are one filter with a dependency, and the reset belongs where that relationship is visible.
-Without it, a level from the previous category would silently filter the grid to nothing
-while both selects looked perfectly reasonable.
-
-### A defect worth remembering: the shared dialog id
-
-A native `<dialog>` must be in the DOM to be openable, so a page with two of them keeps both
-mounted permanently. The shared `Dialog` hardcoded `aria-labelledby="dialog-title"` — which
-was harmless with one dialog and became **two elements with the same id** the moment the
-calendar had two. A screen reader resolving the reference finds whichever comes first, so the
-event dialog would have announced the *day* dialog's title.
-
-Fixed with `useId`, which makes it structurally impossible rather than a rule to remember.
-The lesson generalises: **a hardcoded id in a reusable component is a latent collision**, and
-it stays invisible until the component is used twice on one page.
-
-The shared grid's [responsive month design](calendar-and-hijri.md#scheduling-is-schedule-driven)
-also applies to personal and administrative calendars. Authentication changes the API tier,
-not the public page's chosen filters. Profile defaults must not silently replace the view
-while the refresh-cookie exchange completes; test that transition with a populated profile.
+- Order, each a centred block: eyebrow `الجدول الزمني` (the `<h1>`) → dual title (`يوليوز 2026 │ محرم 1448`) → `السابق · اليوم · التالي` → `[branch] [category] [level]` → grid.
+- The month name appears once, in the title (test: the nav has none). `اليوم` is primary, the others secondary; it moves the month without opening the day dialog. Visible `السابق`, accessible name `الشهر السابق` (test: containment, WCAG 2.5.3). Navigation preserves every filter.
+- `GET /calendar/bootstrap` returns the chrome (Hijri days, month metadata, categories, levels, branches; cached 5 min + ETag); `GET /calendar` returns self-sufficient occurrences (uncached). Opening a day or event costs no request ([occurrence self-sufficiency](calendar-and-hijri.md#the-calendar-screens-two-requests)); the details dialog has no loading state.
+- The client computes no dates (§20 rule 14): the title renders `gregorian_months` and `hijri.months` as assembled (one → one name, two → slash-joined). `hijri.days` is keyed into a map; the cell coordinate row is LTR in the RTL page: Hijri left, Gregorian right.
+- Absence renders as absence: an unrecorded Hijri month shows no number (slot reserved); no recorded month → Hijri title side and divider omitted; a field not sent is absent from the details dialog.
+- The Hijri title side has no fallback; the Gregorian side falls back to the displayed month (client state, same i18n list as the dialogs).
+- `aria-live="polite"` is on the title (tested).
+- Day click → day-programme dialog (replaced a panel under the grid); event click → record dialog.
+- A category change re-requests the bootstrap with `category_id` and the server returns that category's levels (§4.4); the level selector has no category prop; the page resets the level.
+- `Dialog` uses `useId` for `aria-labelledby` (a hardcoded `dialog-title` collided with two dialogs mounted).
+- The grid's [responsive month design](calendar-and-hijri.md#scheduling-is-schedule-driven) also serves personal and administrative calendars; authentication changes the API tier, not the chosen filters; profile defaults must not replace the view during the refresh-cookie exchange (test with a populated profile).
 
 ### Installable, and deliberately NOT offline (R167 §4)
 
-`/manifest.json` (standalone, RTL Arabic, 192/512 icons and a maskable one), `/sw.js`, and
-«تثبيت التطبيق» in the top menu — desktop bar and mobile sheet, signed in or not.
+- `/manifest.json` (standalone, RTL Arabic, 192/512 icons + maskable), `/sw.js`, «تثبيت التطبيق» in the top menu — desktop bar and mobile sheet, signed in or not.
+- `lib/install-app.ts` `installOffer` (pure, unit-tested): the browser's install sheet where `beforeinstallprompt` fired (Chrome, Edge, Samsung Internet, Opera; the event is held at module level); Share-sheet steps on iPhone/iPad; browser-menu steps on other phones; nothing once installed or on a non-installing desktop.
+- The service worker caches nothing (it exists only because some browsers require one to install); a unit test holds it to no `respondWith` and no cache write. The API is never cacheable; a private recording must never be readable after its permission is gone; an offline mode is a separate decision with privacy consequences.
+- `sw.js` and `manifest.json` are served by `location /` → `no-cache`.
 
-**The button does what the DEVICE can do**, decided once in `lib/install-app.ts`
-(`installOffer`, pure and unit-tested): the browser's own install sheet where it announced
-`beforeinstallprompt` (Chrome, Edge, Samsung Internet, Opera — the event is held at module level,
-because it fires once and often before the header mounts); the Share-sheet steps on iPhone and
-iPad, where every browser is Safari underneath and nothing else installs; the browser-menu steps
-on other phones; and **nothing** once installed or on a desktop that cannot install — so it takes
-no room in an installed app.
+### Printing one certificate (R167 §3)
 
-**The service worker caches nothing, and that is the design.** It exists because some browsers
-still ask for one before offering installation. Every request goes to the network exactly as in a
-tab: the caching table above already does the right thing for the shell and the assets, the API is
-never cacheable (tiers, consent and child context are decided per request), and a private
-recording must never be readable from a device after its permission is gone. Offline is the
-browser's own offline page. An offline mode is a separate decision with privacy consequences — it
-must never arrive as a side effect of a caching library. `sw.js` and `manifest.json` are served by
-`location /` and therefore `no-cache`: a new worker is picked up on the next load. A unit test
-holds the worker to containing no `respondWith` and no cache write.
+- «شهاداتي» prints one certificate as A4-landscape PDF via the browser's print-to-PDF (real selectable Arabic text; nothing generated, stored or sent; no dependency).
+- The document renders into a portal under `<body>` (`.certificate-print-root`); `html.print-certificate` is set during that `window.print()`; the print stylesheet sets `display: none` on every other `<body>` child (hidden boxes still print blank pages); a named `@page` asks A4 landscape; the box is `297 / 209` (`297 / 210` spills a blank page); every length in `cqw`.
 
-### Printing one document from a page of many (R167 §3)
+## The educational library
 
-«شهاداتي» prints ONE certificate as an A4-landscape PDF with the browser's own print-to-PDF — the
-browser's text engine shapes the Arabic, so the file holds real, selectable text; nothing is
-generated, stored or sent, and no dependency is added. The mechanism is reusable: the chosen
-document renders into a portal directly under `<body>` (`.certificate-print-root`),
-`html.print-certificate` is set for the duration of that one `window.print()`, and the print
-stylesheet removes every other child of `<body>` from the flow (`display: none` — hidden boxes
-still produce blank pages). A named `@page` asks for A4 landscape so no other print on the
-platform is affected; a browser that ignores `@page size` prints the same box scaled to its paper.
-The box is a hair shorter than the sheet (`297 / 209`): at exactly `297 / 210` a sub-pixel
-rounding spills onto a second, blank page. Every length inside the certificate is in `cqw`, so
-the preview, a phone and the printed page are one drawing at different scales.
-
-## The educational library, as a second worked example
-
-`/resources` (§5.2, §4.9) — two views of a drilling folder system: a level index grouped by
-category, and one level's contents grouped **academic year → branch**.
-
-### Two views, one navigation node
-
-§14.1's sitemap defines exactly **one** resources node, and §5.2 describes it as a *drilling
-folder system* with a "Level List" and a "Level Resources View". Those two views are therefore
-one route with a **`?level=` parameter**, not a second path segment.
-
-**R167 §5 added a third view by the same rule — `?category=`**, «كل مستويات الفئة»: the shelf of
-what was made for EVERY Level of one Category (`whole_category`). It is the Category's shelf, so
-the index opens each Category with its card, counts its items there rather than under the one
-Level they are filed under, and an item carries a «لكل مستويات الفئة» badge wherever it is listed.
-
-The reasoning is worth reusing: **a new path segment would be a navigation node the sitemap
-does not list**, and inventing navigation outside §14.1 is prohibited (§20 rule 16). A query
-parameter keeps the view shareable and bookmarkable, and becomes a path the day the sitemap
-says so. The same question will arise for every drill-down screen still to be built.
-
-### Category order is editorial, not data
-
-Categories always render **المرأة → اليافعات → الطفل** (Revision 121 — the association's own
-names; the constant matched R27's sex-neutral forms until then, so **nothing matched a real
-row** and every category ranked equal-last). That is the association's own progression, and it is neither alphabetical nor `display_order` — so it is a constant in the
-page with unrecognised categories sorted **last rather than dropped**, because a category added
-later must still appear.
-
-### Academic years sort as strings, safely
-
-`YYYY-YYYY` is constrained by TD-6, so `2026-2027 > 2025-2026` lexicographically *and*
-chronologically. Newest-first therefore needs no date parsing.
-
-> **A divergence, reported rather than resolved:** §5.2 pins the `is_current` year at top,
-> while this sorts strictly newest-first. They coincide for every ordinary year and differ only
-> if a future year is recorded ahead of the current one. §5.2 also specifies a **Subject** tier
-> beneath Branch, which is rendered here as a **badge on the card** rather than a fourth
-> grouping level — see [the gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
-
-### Filtering locally is right here and would be wrong on the calendar
-
-The content filters narrow **the response the page already holds**. The calendar's
-category→level dependency instead re-requests, because §4.4 requires *that* narrowing to happen
-server-side — the level list is reference data the server owns.
-
-The distinction is the object being filtered: **filtering a list you were handed as reference
-data is forbidden; filtering your own already-fetched result set is not.** Every filter option
-is also derived from the content actually present, so a control can never offer a year, branch
-or type that yields nothing.
-
-### The preview architecture
-
-One viewer implements the whole §14.6 table, so preview behaviour is defined once:
-
-| Kind | Behaviour |
-|---|---|
-| PDF | Inline `<iframe>` + download |
-| Video / Audio | Native `<video>` / `<audio controls>` + download |
-| Image | Shown full-width + download |
-| Office document | **Download only** — no in-browser rendering in the MVP |
-
-**Native elements, not a player library.** A `<video>` gives keyboard control, captions and
-picture-in-picture for free, and the CSP admits no external script host anyway — the same call
-the `<select>` and the native `<dialog>` got.
-
-**The URL is fetched when the dialog opens, never with the list.** Private content is reachable
-only through a short-lived presigned GET minted after a server-side permission check (§3.1,
-TD-12). A ten-minute URL attached to every card would be expired before most were clicked, and
-would mint permission checks for content nobody opened.
-
-> **A consequence, not a bug:** a long recording can outlive its URL — a 40-minute video opened
-> at minute nine of its URL's life will stall. The viewer offers a retry that re-mints. Whether
-> the client should refresh pre-emptively is a Document Owner decision, not an implementation
-> detail.
+- `/resources` (§5.2, §4.9): a level index grouped by category, and one level's contents grouped academic year → branch.
+- §14.1 defines one resources node, so views are `?level=` (a path segment would be an unlisted nav node, §20 rule 16). R167 §5 added `?category=` «كل مستويات الفئة» (`whole_category`): the index opens each Category with its card and counts those items there; the item carries a «لكل مستويات الفئة» badge wherever listed.
+- Category order is a page constant `المرأة → اليافعات → الطفل` (R121 — the association's names; R27's sex-neutral forms matched no row), neither alphabetical nor `display_order`; unrecognised categories sort last, never dropped.
+- Academic years `YYYY-YYYY` (TD-6) sort as strings, newest first.
+- Divergence reported, not resolved: §5.2 pins `is_current` at top (differs only if a future year is recorded); §5.2's Subject tier beneath Branch is a card badge, not a fourth grouping — [gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
+- Filters narrow the held response (filtering your own result set is allowed; filtering server-owned reference data is not — the calendar re-requests); options come from present content.
+- Preview (§14.6): PDF — inline `<iframe>` + download; video/audio — native `<video>` / `<audio controls>` + download; image — full-width + download; Office document — download only, no in-browser rendering in the MVP. Native elements, no player library (the CSP admits no external script host).
+- The URL is fetched when the dialog opens, never with the list: a short-lived presigned GET after a server-side permission check (§3.1, TD-12). A long recording can outlive its URL; the viewer's retry re-mints; pre-emptive refresh is a Document Owner decision.
 
 ## The active role drives the whole interface (R60)
 
-**One rule: presentation reads `activeRoles`, never `me.roles`.**
-
-`/me` reports every assigned role on purpose (R60.9) — the switcher's menu is
-built from it, so narrowing it would let a person trap themselves in a lesser
-role. That full list is therefore available everywhere, and **using it to decide
-what the interface shows was the defect**: it answers *what could this account
-do*, where the question is *what is it doing now*.
-
-`useActiveRole()` exposes both, and the names say which is which:
-
-| | Use it for |
-|---|---|
-| `roles` | The switcher's menu. Nothing else |
-| `activeRole` | Labels — "you are working as …" |
-| `activeRoles` | **Everything else**: navigation, dashboards, route guards, write affordances |
-
-`activeRoles` is the active role as a one-element array, because the helpers that
-decide these things (`visibleModules`, `roleHomePath`, `canAccess`) all take a
-role *list* — they predate R60 and were written against `me.roles`. Handing them
-`[activeRole]` makes them correct with no change to their signatures, and gives
-every caller **one obvious thing to read** instead of a choice between two lists
-where only one is right.
-
-> **The two defects this fixed, and why neither was a routing bug.** `لوحة
-> التحكم` resolved most-privileged-first from the full list, so a Super Admin
-> working as مؤطِّرة was sent to `/admin` — a portal her active role does not own
-> — and met the wrong-role screen instead of her dashboard. And the back-office
-> sidebar listed Super Admin modules to somebody acting as Admin: a menu of
-> things the server would refuse. Both were `me.roles` read where the active role
-> was meant, in thirteen places.
-
-### The rule is enforced, not documented
-
-`scripts/ci/check-active-role-presentation.sh` scans the frontend and fails on
-any presentation read of the account's full list. It catches three forms — the
-direct read, destructuring it out of `me`, and taking `roles` from the context
-that publishes both — because the second and third are the obvious ways around
-the first.
-
-**A source scan rather than an ESLint rule**, deliberately: the project has no
-ESLint plugin configuration and twelve guards of this exact shape already wired
-into CI. A custom rule would mean a new dependency to pin (§3.1a) to catch a
-pattern that is a grep.
-
-**Four files may read the full list**, each for a stated reason: the context that
-owns the distinction, the session that fetches `/me`, the switcher whose menu
-*is* that list, and `hasMultipleRoles` — which asks whether there is a choice to
-offer, a switcher question.
-
-**A screen that needs to know what the person could switch to asks by name.**
-`switchableTo(candidates)` exists so the wrong-role screen never destructures
-`roles`; reading the list there would be indistinguishable, to a reader and to
-the guard, from the mistake R60 shipped.
-
-> **What it cannot catch, stated rather than implied.** A value laundered through
-> an intermediate — `const s = me; s.roles` — is beyond a regex. What it does
-> catch is every direct read and every destructuring, which is how all thirteen
-> sites were written and how a fourteenth would be.
-
-**Write affordances follow it too.** A Super Admin working as مؤطِّرة is not
-offered a control the server will refuse — the affordance follows the authority,
-which is the whole point of R60 reaching the client.
-
-**And the same rule governs DATA, not only roles: a selector feeding a
-validated pair must be populated from that pair's own source.** `حلقات المواد`
-listed its Subjects from `listSubjects` — every Subject on the platform,
-independent of the chosen Level — while the server requires the `(Level,
-Subject)` pair to exist before a Circle can split it (§4.4c). A Level teaching
-nothing therefore showed a full dropdown whose every option produced
-`SUBJECT_NOT_IN_LEVEL`. The fix is `listLevelSubjects(levelId)`, never a looser
-validation:
-
-> **A control that can only be refused is the defect.** When the server rejects
-> a combination the interface offered, the interface is wrong — read the
-> refusal as a statement about the *options*, not about the rule.
-
-The second half of that repair is what a screen does when the correct list is
-**empty**. An empty selector is not an answer; a Level that teaches nothing has
-nothing to split, so the screen says so and links to `مواد المستوى`, the node
-that fixes it. That is the same shape as the Levels table's `لا مواد` state —
-a named empty state carrying the one action that helps.
-
-**The wrong-role screen survives, for deep links only.** A bookmark or a shared
-URL into a portal the active role does not own still needs an answer, and §14.4
-forbids a blank page. Nothing *inside* the application navigates there any more.
+- Presentation reads `activeRoles`, never `me.roles`; `/me` reports every role (R60.9) for the switcher's menu only.
+- `useActiveRole()`: `roles` → the switcher's menu, nothing else; `activeRole` → labels ("you are working as …"); `activeRoles` → everything else (navigation, dashboards, route guards, write affordances). `activeRoles` is `[activeRole]` because `visibleModules`, `roleHomePath`, `canAccess` take a list.
+- Defects fixed at thirteen sites: `لوحة التحكم` sent a Super Admin working as مؤطِّرة to `/admin`; the sidebar listed Super Admin modules to someone acting as Admin.
+- `scripts/ci/check-active-role-presentation.sh` fails on a direct read, destructuring from `me`, or `roles` from the context; a source scan, not ESLint (no plugin config, twelve such guards, no dependency to pin — §3.1a); it cannot catch laundering through an intermediate.
+- Four files may read the full list: the context, the session fetching `/me`, the switcher, `hasMultipleRoles`; the wrong-role screen asks `switchableTo(candidates)`.
+- Write affordances follow the active role.
+- Same rule for data: a selector feeding a validated pair is populated from that pair's source — `حلقات المواد` uses `listLevelSubjects(levelId)`, not `listSubjects` (§4.4c; every option produced `SUBJECT_NOT_IN_LEVEL`). A control that can only be refused is the defect; an empty correct list is a named state linking to `مواد المستوى` (like the Levels table's `لا مواد`).
+- The wrong-role screen survives for deep links only (§14.4); nothing inside the application navigates there.
 
 ## Scheduling is one screen (R56)
 
-`الجدولة` (`/admin/schedules`) is the single scheduling entry point. An
-administrator schedules *something* and picks its kind on the form; they never
-have to know whether it is stored as an `Event` or a `RecurringCourseSchedule`.
-
-**The models are not merged** (§20 rule 22): Events are computed on read while
-Sessions are materialized as rows (TD-4.6c), which is what lets §4.4 compute
-conflicts against real occurrences and lets R50 split a schedule. The divergence
-lives in `adapters/scheduling.ts` and nowhere else — every screen above that line
-deals in `SchedulingItem` and `SchedulingType`.
-
-### Two views, one question each
-
-* **List** — the *definitions*. One weekly class is **one row**, not forty,
-  because that is what an administrator created and what edit and delete act on.
-* **Calendar** — the *occurrences*, from `GET /calendar`, rendered by the same
-  `CalendarGrid` the public calendar uses.
-
-**That distinction is the substantive one.** The two former pages listed *rules*
-and *expanded occurrences* respectively — not two styles of one screen but two
-different questions, which is why no amount of restyling made them feel alike.
-The view is a query parameter, not a second navigation node (§20 rule 16).
-
-### Event cancellation is a saved change, then a delivery decision
-
-Deleting an activity first uses the ordinary destructive `ConfirmDialog` and
-soft-deletes the Event. Only after that request succeeds does the same R82
-notification confirmation used by create and reschedule appear. Choosing
-`بدون إشعار` sends no second request; choosing `إرسال الإشعار` calls the existing
-Event notify adapter with `cancelled`. Classes and exams do not enter this arm:
-Session occurrence changes keep their separate R83 flow, and an exam announces
-its R116 scheduling/staffing lifecycle automatically in the domain transaction;
-grade publication remains its separate BR-8 event.
-
-The ordering is deliberate. Asking before deletion would either announce a
-change that could still fail or require coupling delivery back into the delete
-request, which R82.5 explicitly separates. The dialog remains open on a failed
-send, and retry is safe because the notification uniqueness constraint absorbs
-duplicates.
-
-### The form is a shell, and that is what makes Exams cheap
-
-`SchedulingForm` owns **only what every schedulable item has** — a name, an
-optional description, when it starts and ends, and how it repeats. The
-type-specific fields arrive as `children`: `ClassSection` (§4.4c — subject,
-target, room, teacher, assistants), `ActivitySection` (§4.4 — visibility and
-scope) or `ExamSection` (§4.6 — see below). A `type === 'class'` ladder inside it
-would be how a "generic" form quietly becomes three forms sharing a wrapper, and
-the parity guard asserts there is none.
-
-For a **new** class, the teaching-mode draft begins at `entire_level`
-(`المستوى كامل`); editing seeds the stored mode instead. A new staffing-period row begins
-at the responsible `teacher` position (`مؤطّرة مسؤولة`), while existing rows keep their
-recorded positions and both defaults remain editable before Save.
-
-The scheduling dialog compares an exhaustive normalized snapshot with its pristine opening
-state and passes that one result to `FormDialog`. Closing an unchanged form is immediate;
-Cancel/Escape/X on a dirty form use the shared discard confirmation; backdrop is ignored while
-dirty; and restoring every value makes it clean again. Successful Save unmounts the form and
-never raises a discard prompt.
-
-**The claim was tested by cashing it.** R58 added Exams, and the shell, the
-recurrence editor, the list and the calendar grid were unchanged: what moved was
-one registry entry (`SCHEDULING_TYPE_SPECS.exam`), one section component and one
-arm in `saveSchedulingItem`. That is the whole cost of a third kind.
+- `الجدولة` (`/admin/schedules`) is the single entry; the kind is picked on the form. Models are not merged (§20 rule 22): Events computed on read, Sessions materialized (TD-4.6c); the divergence lives in `adapters/scheduling.ts` only; screens deal in `SchedulingItem` / `SchedulingType`.
+- List = definitions (one weekly class is one row); Calendar = occurrences from `GET /calendar` via the shared `CalendarGrid`; the view is a query parameter (§20 rule 16).
+- Event cancellation: `ConfirmDialog` soft-deletes; after success the R82 notification confirmation appears (`بدون إشعار` sends nothing; `إرسال الإشعار` calls the Event notify adapter with `cancelled`). Classes and exams are excluded: Sessions keep R83, an exam announces its R116 lifecycle in the domain transaction, grade publication is BR-8. Order per R82.5; the dialog stays open on a failed send; retry is safe (notification uniqueness constraint).
+- `SchedulingForm` owns name, optional description, start/end and recurrence; type fields arrive as `children`: `ClassSection` (§4.4c — subject, target, room, teacher, assistants), `ActivitySection` (§4.4 — visibility, scope), `ExamSection` (§4.6). The parity guard asserts no `type === 'class'` ladder.
+- New class teaching-mode draft `entire_level` (`المستوى كامل`); new staffing row `teacher` (`مؤطّرة مسؤولة`); editing seeds stored values; both editable.
+- Dirty state: an exhaustive normalized snapshot vs the pristine opening state, passed to `FormDialog`; unchanged closes at once; Cancel/Escape/X on dirty → shared discard confirmation; backdrop ignored while dirty; restoring values makes it clean; Save unmounts without a prompt.
+- R58 Exams cost `SCHEDULING_TYPE_SPECS.exam`, one section component and one arm in `saveSchedulingItem`.
 
 ### Physical exams (R58)
 
-`ExamSection` asks `نوع الامتحان` first. `حضوري` is built; `عن بُعد` is **offered
-and disabled with its reason stated** (§14.4) — and the server refuses it too,
-with `STATE_CONFLICT` / `ONLINE_NOT_AVAILABLE`, so the block is not a client
-courtesy that a curl request walks past. **No online field is rendered at all,
-disabled or otherwise**: that mode needs an exam link, a selected-student
-audience, an open/close window and submission rules, and drawing any of them now
-would promise a shape nobody has decided.
+- `ExamSection` asks `نوع الامتحان` first; `حضوري` built; `عن بُعد` offered disabled with its reason (§14.4) and refused server-side (`STATE_CONFLICT` / `ONLINE_NOT_AVAILABLE`); no online field rendered (link, audience, window, submission rules undecided).
+- Shared dependent selectors (R55): branch → level → subject → year; room narrowed to the branch, group to that Level at that branch; empty group = whole Level (DTO carries `null`).
+- Editing is arrangements only (date, time, room, group, staff, title, description); `mode`, `level_id`, `subject_id`, `academic_year_id`, `branch_id` refused by `.strict()` — grades are recorded against them.
+- `SchedulingItem.ids`: `PATCH /exams` sends group and staff unconditionally, so the list row carries ids and the form seeds without a second request.
+- `--color-exam` (violet; class = zellij green, activity = brass, far from danger red) on `event-chip--exam`, `badge--exam`, the details dialog and the type indicator; never colour alone (chip edge, badge ring, the word `امتحان`).
 
-The physical fields reuse the shared dependent selectors (R55): branch → level →
-subject → year, with the room narrowed to the chosen branch and the group to that
-Level at that branch. **An empty group means the whole Level sits together** — it
-is an answer, not a gap, and the DTO carries the `null` rather than omitting it.
+### Recurrence editor
 
-**Editing is arrangements only.** Date, time, room, group, staff, title and
-description change; `mode`, `level_id`, `subject_id`, `academic_year_id` and
-`branch_id` are refused by a `.strict()` schema, because each would change *what
-is examined, for whom, or where* while keeping the grades already recorded
-against the old answer. Moving an exam to another Level is a new exam.
+- `expandEvent` repeats every seven days from the start date; `expandSchedule` on the listed weekdays; identical when `weekdays = [start weekday]`, so one editor emits one meaning and the adapter fills the class's weekday set (no backend change).
+- Eight patterns map onto `RecurrenceType` in one place; every-two-weeks with and without chosen days share an enum value, told apart by the weekday set; a round-trip test pins reopening.
+- `allowOnce={false}` for classes (the database refuses `none` on a schedule; a one-off is an Event).
+- Capacity shown, never enforced (BR-23, §20 rule 22): a read-only hint slot; `RoomDto` has no `capacity`, so it renders nothing today.
 
-> **`SchedulingItem.ids` exists because of this.** `PATCH /exams` sends the group
-> and the staff unconditionally, so an edit form that opened with them blank
-> would silently clear the audience of every exam anybody merely re-titled. The
-> list row already carries the ids beside the names, so the form seeds itself
-> with no second request.
+### Form contract
 
-### The exam colour
+- Pre-R56, `الأنشطة` and `الحصص` (`/admin/calendar`, gone) drifted in lede, create-button variant, result notice (`.admin-notice` vs bare `<p role="status">`), filter row, `.form` wrapper, save emphasis and hand-written list dialogs. `components/ui/form-dialog.tsx` closes that: a form supplies fields; the component owns wrapper, notice and the two closing buttons. `ListDialog` was removed; read-only dialogs compose `Dialog` with a list component.
+- `CourseScheduleDto` resolves `subject_name`, `target_name`, `branch_name`, `room_name` (precedent `libraryItemDto`: labels, never identifiers; `target_name` is whichever the mode names, §4.4c).
+- `scheduling-parity.test.tsx` asserts both files use the same primitives and contain no bare `<Dialog>`, raw `<ul>`, raw `<select>` or `r.*_id` in a cell.
+- The primary action lives in the layout's `actions` slot, never the table toolbar.
+- Only domain fields differ (class: Subject, Room, primary teacher, assistants; Event: visibility, four-way scope); `lib/recurrence.ts` keeps the shapes deliberately unmerged.
 
-An exam is the one item on a timetable a reader must not mistake for an ordinary
-class, so it gets a **third hue** — `--color-exam`, violet — rather than
-borrowing the zellij green that means *class* or the brass that means *activity*.
-It is deliberately far from the red that means *danger*: an exam is significant,
-not an error.
-
-One token, four surfaces: the calendar chip (`event-chip--exam`), the list badge
-(`badge--exam`), the details dialog and the type indicator all read it, so they
-cannot drift. **Colour is never the only signal** — the chip carries a
-full-strength edge and the badge a ring, and every surface prints `امتحان` in
-words.
-
-### One recurrence editor, and how the two `weekly`s were reconciled
-
-The editor carried two variants because the expanders disagreed: `expandEvent`
-repeats **every seven days from the start date** and ignores weekdays;
-`expandSchedule` repeats **on the weekdays listed**.
-
-**They describe the same rule** whenever `weekdays = [the start date's weekday]`.
-The divergence was never in the domain — it was in what each caller sent. One
-editor emits one meaning and the adapter fills the weekday set for a class, so
-no backend change was needed: the schedule expander already produces the event's
-behaviour given that set.
-
-Eight patterns map onto the `RecurrenceType` enum **in one place**. *Every two
-weeks* and *every two weeks on chosen days* share an enum value and are told
-apart by whether a weekday set was given — a distinction the interface must make
-because they are different questions, and the database need not because they are
-one rule with a fuller argument. A round-trip test pins that a chosen pattern
-reopens as itself.
-
-**`allowOnce={false}` for classes**: the database refuses `none` on a schedule,
-because a non-recurring occurrence *is* an Event.
-
-### Capacity is shown, never enforced
-
-BR-23 and §20 rule 22 forbid enforcing room capacity. The form has a slot for it
-as a **read-only hint** beside the room — but `RoomDto` publishes no `capacity`,
-so it renders nothing today; putting it on that wire is a further contract change
-and is recorded rather than smuggled in.
-
-### Historical: how the two pages drifted before R56 merged them
-
-*(Retained because the failure mode generalises. `/admin/calendar` no longer
-exists.)* `الأنشطة` and `الحصص` drifted three separate times, and never in a way either page looked wrong for on its own. What
-was wrong was always **the difference**:
-
-| | Events | Sessions (before) |
-|---|---|---|
-| Page lede | layout prop | a `<p className="lede">` in the body, so the first line sat at a different height |
-| Create button | `variant="primary"` in the layout's action slot | no variant — the page's main action was not the emphasised one |
-| Result message | shared `.admin-notice` | bare `<p role="status">`, carrying no spacing or colour |
-| Filter row | present | **none**, though the endpoint accepts branch, subject and year |
-| Form fields | wrapped in `.form` | **no wrapper** — every field's spacing differed |
-| Save button | `variant="primary"` | default, so *cancel* and *save* looked equally weighted |
-| List dialogs | — | two hand-written `<Dialog>` + `<ul>` blocks |
-
-**The frame was shared and the contents were not**, which is the whole story:
-`Dialog` gave the outline, and each form assembled the rest by hand.
-`components/ui/form-dialog.tsx` closes that — a form supplies its **fields**, and
-the component owns the wrapper, the notice, and the two buttons that end every
-form the same way. The former `ListDialog` wrapper lost all consumers when these
-screens were consolidated and was removed; read-only dialogs compose `Dialog`
-with the relevant current list component. The historical comparison above
-explains the form contract, not a second supported implementation.
-
-### A table shows names, and that is a contract property
-
-The sessions table looked foreign long after its shell matched, because it led
-with a clock time and printed a **raw UUID** for the room. No component could
-have fixed that: `CourseScheduleDto` published five ids and no labels, so no
-client could render a timetable without five further requests.
-
-The DTO now resolves `subject_name`, `target_name`, `branch_name` and
-`room_name` — the precedent `libraryItemDto` set, for the reason it states:
-**labels, never identifiers**, with the ids remaining what a client filters and
-links by. `target_name` is whichever of the three the mode names (§4.4c), so a
-reader is not asked to resolve *who this class is for* from three nullable ids.
-
-**Presence is not absence.** The first parity test asserted the shared
-components were *used*, which a page can satisfy while still carrying custom UI
-beside them — and one did, for a whole revision. The guard now also asserts what
-must not be there: no bare `<Dialog>`, no raw `<ul>`, no raw `<select>`, no
-`r.*_id` in a table cell.
-
-### Where the primary action lives
-
-**In the layout's `actions` slot, never the table's toolbar.** The toolbar is for
-narrowing what is listed; creating a record is not a filter. Mixing them put the
-same button in two places depending on which screen you were on.
-
-### What genuinely differs, and why it should
-
-Only the **fields the domain requires**: a class has a Subject, a Room, a primary
-teacher and assistants; an Event has a visibility and a four-way scope. The
-recurrence control is one component with two variants because `lib/recurrence.ts`
-states the shapes are *deliberately not merged* — an Event is anchored on a start
-date, a class happens **on Tuesdays**. The control is identical, which is what an
-administrator notices; the fields differ, because the models do.
-
-`scheduling-parity.test.tsx` pins this **structurally** rather than
-per-difference: it asserts both files reach for the same primitives and that
-neither contains the hand-rolled equivalents. A per-difference test would have to
-be remembered for each new divergence, which is the discipline that already
-failed three times.
-
-## Every selector is dependent, and one module says how
-
-**The defect this exists for.** Each screen's selectors were independent: a form offered all 21
-Levels and all 3 Subjects and let an administrator pick any pair, while a Subject reaches a Level
-only through `LevelSubject` (§4.4b, R43). The interface was offering combinations the domain does
-not contain, and then reporting them as the user's mistake.
-
-`hooks/use-scope-options.ts` states the graph once:
+## Every selector is dependent — `hooks/use-scope-options.ts`
 
 ```
 Category ──< Level ──< LevelSubject >── Subject
@@ -921,582 +212,105 @@ Category ──< Level ──< LevelSubject >── Subject
     └──< CategorySubject >── Subject          (R172 §1 — taught to the WHOLE Category)
 ```
 
-**R172 §1.** The scope options carry a Subject taught to a whole Category under every Level of
-that Category (`levels[].subject_ids`) and beside the Category (`categories[].subject_ids`), so
-the Level → Subject narrowing learns no second rule. Two additions to the hook: a Level control may
-offer «{Category} — كل مستويات الفئة» (`wholeCategoryOptions`, only for a Category some Subject is
-taught whole; the value travels in the Level slot as `category:<id>` and `wholeCategoryOf()`
-recovers it — the content scope then sends `category_id` instead of `level_id`), and
-`subjectsIndependentOfLevel` tells `ScopeSelectors` when a FORM's Subject may be chosen with no
-Level in play (a filter-built class addressed to «الكل», R169 §7 — the gate used to disable it
-with «اختاري المستوى أولًا» regardless).
+- R172 §1: a whole-Category Subject appears under every Level (`levels[].subject_ids`) and beside the Category (`categories[].subject_ids`). `wholeCategoryOptions` lets a Level control offer «{Category} — كل مستويات الفئة» (only where some Subject is taught whole; value `category:<id>` in the Level slot, recovered by `wholeCategoryOf()`; the content scope then sends `category_id` instead of `level_id`). `subjectsIndependentOfLevel` lets `ScopeSelectors` allow a form's Subject with no Level (a filter-built class addressed to «الكل», R169 §7; formerly disabled with «اختاري المستوى أولًا»).
+- Changing a parent reloads every child (a Level change invalidates Subjects and Groups); a selection no longer offered is cleared, not kept.
+- One module for six screens, not one chain each. Academic Year is unchained (years are global, §4.10).
+- The field list is keyed by content (`scopeFieldKey`), not identity: an inline literal once caused a render loop that the rate limiter (TD-13) refused. A hook taking an array/object prop keys on content or documents the memoisation requirement; the test asserts the key is content-based and used.
+- `components/scope/scope-selectors.tsx` words three empties differently: parent not chosen → *choose a level first*; loading → field is `busy`, label does not flicker; genuinely empty → *this level teaches no subjects*, naming the screen that changes it.
+- Global / بدون فرع (`branch_id = null`, §4.9) travels as `extraOptions` from the screens that mean it.
 
-Two rules a screen must never re-implement:
+## Content upload
 
-1. **Changing a parent reloads every child** — not just the next one. A Level change invalidates
-   Subjects *and* Groups.
-2. **A selection no longer offered is cleared, not kept.** A stale id left in state is precisely
-   what reaches the server as an impossible pair; clearing it is what makes *"the UI cannot
-   express an invalid combination"* true rather than aspirational.
-
-**Why one module and not one chain per screen.** Six screens ask overlapping versions of the
-same question, and six copies of *"when the Level changes, reload the Subjects and clear the
-stale one"* is exactly the duplication that drifts here — the copy that forgets to clear still
-passes its own tests.
-
-**Academic Year is deliberately unchained.** The platform's years are global (§4.10). Inventing
-a dependency so the set looks uniform would be a lie about the model.
-
-### The field list is a dependency by content, never by identity
-
-`useScopeOptions` takes the fields a screen wants. That list is keyed by
-**content** (`scopeFieldKey`), not by array identity, and the reason is a defect:
-
-a page passed the list as an inline literal → a new reference every render →
-`wants` was keyed on it → the loading effects were keyed on `wants` → those
-effects set state → re-render. Four steps, closed loop. The requests then
-started failing, which looked like a server fault and was the **rate limiter
-working correctly** against a client defect (TD-13).
-
-**Every other caller happened to pass a module constant**, which is exactly why
-it survived review: the convention concealed a hook that punished anyone who did
-the obvious thing. So the fix is not *"always pass a constant"* — that is the
-convention that already failed. Identity simply cannot matter now.
-
-**A hook that takes an array or object prop must key on its content**, or
-document why the caller is required to memoise it. The test asserts both halves:
-that the key is content-based, and that the hook *uses* it — the second because
-the first alone would pass while the bug was back.
-
-### An empty list is never a bare empty dropdown
-
-`components/scope/scope-selectors.tsx` owns *how they look and what they say*, and three states
-are worded differently because they are different:
-
-| State | What it says |
-|---|---|
-| Parent not chosen | *choose a level first* — an instruction |
-| List loading | the field is `busy`; the label does not flicker |
-| Genuinely empty | *this level teaches no subjects* — a fact about the curriculum, naming the screen that changes it |
-
-The third is the one that mattered: it is the state that used to reach the server as
-`SUBJECT_NOT_IN_LEVEL`.
-
-**Global / بدون فرع is passed in, not built in.** `branch_id = null` is a real scope (§4.9) that
-no branch list can contain, so it travels as `extraOptions` from the screens that mean it —
-rather than teaching a shared component why a branch selector sometimes offers a non-branch.
-
-## Content upload, and why one screen serves two portals
-
-`/admin/content` (§5.6) and `/teacher/content` (§5.5) render **the same component**. The
-user-facing capability is identical — attach a new file to a Subject within a Level and
-delete it —
-and what differs between the audiences is **what the server will accept**, not what the client
-offers: a Teacher cannot choose the Global scope and is confined to the branches of the
-schedules they staff (§4.9). Building two screens would put that difference in the client,
-which is exactly where it must not live.
-
-The R53 replacement primitive remains in the upload contract for compatibility and internal
-recovery, but the page offers no «استبدال الملف» action. A reader creates/uploads a new item
-instead; upload, download, linkage and deletion keep their existing flows.
-
-So the page **renders refusals rather than pre-empting them**, with one deliberate exception:
-the Global option is not offered to a Teacher at all, because an option that always fails is
-worse than no option. Everything else the server decides, and the uploader turns each refusal
-into a sentence someone can act on — *"a teacher cannot publish without a branch"* rather than
-*"upload failed"*.
-
-### A teacher's branch list comes from their schedules
-
-Revision 30 forbids a teacher browsing reference data, and the admin branch list would in any
-case offer branches every upload would then be refused for. The list is therefore derived from
-**the schedules they staff** — the same §4.4c derivation the server uses to decide — with the
-*names* coming from the public branch list the landing page already serves anonymously.
-
-### Progress is a contract, not a flourish
-
-MVP uploads are single-shot with no resume: a failure restarts from zero (Risk R-9), and §4.9
-accepts that risk **in exchange for** visible progress and a clear retry. That is why the
-uploader uses `XMLHttpRequest` for the PUT and nothing else does: `fetch` reports download
-progress and not upload progress, and streamed request bodies are not supported across §14.7's
-matrix. One older API, in one place, for the one thing it can do.
-
-**Retry re-runs the whole flow** — a new ticket, a new key, a new hash segment — never a
-resumption. There is nothing to resume, and pretending otherwise is how a half-written object
-gets completed as though it were whole.
-
-### The list is `GET /library`, not a new endpoint
-
-TD-3.13's route is already tier-aware and shows staff all three visibilities including
-`hidden`, which is exactly the management view. A parallel admin listing would have been a
-second expression of the §4.9 tiers — the duplication that drifts. **Branch is the one filter
-applied client-side**, because TD-3.13 publishes no `branch_id` parameter and widening a public
-contract for a back-office convenience is the wrong trade.
-
-### Session materials link, never own
-
-The materials dialog on `/admin/schedules/{id}/sessions` is built around Revision 43's rule
-that content is **referenced** by a session and never owned by it. Linking an existing item is
-the primary action, because the semester PDF belongs to the Subject and is referenced by every
-session that uses it; uploading is a shortcut that creates the library item and then links it.
-**Removing unlinks and never deletes** (TD-3.12) — destroying a file for every other session
-that references it is not what *"remove from this session"* means.
+- `/admin/content` (§5.6) and `/teacher/content` (§5.5) render the same component; the server decides (a Teacher cannot choose Global and is confined to staffed branches, §4.9); the one client exception: Global is not offered to a Teacher. Refusals render as actionable sentences.
+- The R53 replacement primitive stays in the upload contract; the page offers no «استبدال الملف» action.
+- A teacher's branch list derives from staffed schedules (§4.4c; Revision 30 forbids browsing reference data), names from the public branch list.
+- Uploads are single-shot, no resume (Risk R-9, §4.9), with visible progress: `XMLHttpRequest` for the PUT (`fetch` has no upload progress; streamed bodies unsupported across §14.7). Retry re-runs the whole flow — new ticket, key, hash segment.
+- The list is `GET /library` (TD-3.13; staff see `hidden`); branch is the one client-side filter (no `branch_id` parameter).
+- Session materials (`/admin/schedules/{id}/sessions`): content is referenced, never owned (Revision 43); link is primary, upload creates then links; remove unlinks, never deletes (TD-3.12).
 
 ## The CRUD framework
 
-Branches was the first CRUD module, and the deliverable was **not a branches screen** — it was
-the framework every later module configures (constitution §0.1, *build systems, not pages*).
+Branches delivered the framework, not a branches screen (constitution §0.1).
 
-| Capability | What it owns |
+| Capability | Owns |
 |---|---|
-| `DataTable` | §14.2's list standard and all of §14.4's states, once |
+| `DataTable` | §14.2's list standard and all §14.4 states, once |
 | Field primitives | Label association, error wiring, required marking, hints |
 | `ConfirmDialog` | Every destructive action, plus TD-8's mandatory justification |
-| `Pagination` | TD-10's envelope, stepped the same way everywhere |
+| `Pagination` | TD-10's envelope |
 | `Badge` | A status label — state in words, never colour alone |
-| `ApprovalCard` | §14.3's bundle-aware queue item: who is in the bundle, and what approving it changes |
-| `BranchSelector` | §14.3's branch picker — one component, filtering *and* required-choice modes |
+| `ApprovalCard` | §14.3's bundle-aware queue item |
+| `BranchSelector` | §14.3's branch picker — filtering and required-choice modes |
 
-**There is no `BranchTable` and there never will be** (§2.1). The next module passes different
-columns and actions; if it ever needs to *edit* `DataTable` rather than configure it, the
-component is drawn wrongly and that is the signal to redraw it (§2.3).
-
-### The second module tested the claim
-
-The approval queue (`/admin/approvals`) was built next, and `DataTable` and the field
-primitives took it **as configuration** — different columns, different actions, no edit.
-
-Two components were **improved rather than forked**, which is the §2.5 path when a shared
-component *almost* fits:
-
-- **`ConfirmDialog` gained configurable reason bounds.** It had hard-coded TD-9's
-  consent-override floor of 10 characters, but a §5.6 rejection is 1–500. A client refusing
-  what the server accepts is a bug in the client (§1.1), so the bounds became parameters with
-  the consent values as defaults — no existing caller changed behaviour.
-- **`Badge` was extracted** from the inline `className="badge badge--warn"` the Hijri screen had
-  been carrying. Extracted on the second use, not the third (§2.7).
-
-Neither was a `RejectDialog` or an `ApprovalBadge`. That distinction is the whole framework.
-
-R117 keeps the queue row readable by making submitted registration data a row action, not more
-columns. `عرض التفاصيل` opens the explicit staff-only projection: guardian contact/consent data
-and one fieldset per child, including that child's requested Category and Branch. An exact
-`review_user_id` from the notification opens this dialog automatically; no row produces the
-ordinary unavailable state. Parent/child approval deliberately opens a plain guardian
-confirmation, while each child owns the shared placement picker and its own Category default.
-
-### The registration form found three selectors that were one
-
-Revision 39 gave the registration form a required Branch choice, and the calendar already had
-a `BranchSelector`. Copying it would have been the obvious move; it was also the wrong one,
-because that component had three defects the shared registry exists to prevent:
-
-1. **A hardcoded `id="branch-filter"`** — two on one page produce duplicate ids and a label
-   pointing at the wrong control. The same literal-id bug as `Dialog`, and its two calendar
-   siblings (`CategorySelector`, `LevelSelector`) had it too.
-2. **Its own markup and `.branch-selector` styles**, so it inherited none of `field.tsx`'s
-   error wiring, hint association or required marking.
-3. **An always-present "all branches" option** — right for a filter, wrong for a required
-   choice. Registration must not let someone submit *"all branches"* as their branch.
-
-All three selectors are now thin configurations of `SelectField`, ids come from `useId`, and
-`BranchSelector` carries an `allowAll` variant rather than having a `RequiredBranchSelector`
-grown beside it (§2.5). `SelectField` gained a `busy` prop so the Level selector's
-"options are loading" state stayed a primitive's concern rather than a caller's.
-
-**Three consumers, one component**: the calendar filter, the approvals filter, the registration
-choice.
-
-### What the table refuses to do
-
-It does not fetch, does not sort server data, and does not know what a Branch is (§3.2). The
-page owns the data and the decisions.
-
-Three behaviours are worth knowing because they are easy to get wrong and impossible to see
-once wrong:
-
-- **The first column is a `<th scope="row">`.** Without it a screen reader announces "3" with
-  no idea which branch it belongs to.
-- **Empty and no-results are different states.** Only one of them offers a way out.
-- **A row action that does not apply is hidden, not disabled** — a permanently dead control
-  teaches nothing.
-
-### Field primitives close a real gap
-
-§14.3's registry listed selectors and a file uploader but **no form primitives at all**. That
-mattered: a hand-rolled `<input>` is one missing `for` attribute away from an unlabelled
-control, and nobody notices until someone using a screen reader does.
-
-Each field generates its own id with `useId`, so two instances on one page cannot collide —
-**the exact bug the shared `Dialog` shipped with**, prevented here by construction rather than
-by remembering. Errors are wired through `aria-describedby` and `role="alert"` so they are
-*announced*, not merely displayed; hints go in `aria-describedby` too, because a limit a reader
-learns by tripping over it was stated too late.
-
-### Mirrored validation is courtesy; the server is the rule
-
-The branch form checks TD-9's limits for immediate feedback. That is **not** redundant with the
-server's checks and does not replace them (§1.1): one is responsiveness, the other is
-correctness. A client skipping a check the server enforces is a bug in the client.
-
-### What an adapter is for, and what it is not for
-
-`GET /admin/branches` used to return **raw Prisma rows**: row fields in `camelCase` while `meta`
-was `snake_case`, `operationalStartDate` as an *instant* where TD-11 says a branch's operational
-start is a **date**, and four internal columns (`createdAt`, `updatedAt`, `deletedAt`,
-`deletedById`) that no screen had any use for.
-
-`adapters/branches-admin.ts` absorbed all of it behind a parallel set of wire types and a
-truncating date converter. That was the wrong repair, and the Document Owner rejected it:
-
-> Do not keep an inconsistent API and compensate in the frontend adapter. The backend contract
-> is the source of truth.
-
-**SRS Revision 38 fixed the endpoint.** Every response is now an explicit contract DTO — see
-[api.md](api.md#the-contract-is-an-interface-not-a-serialisation) — and the adapter collapsed to
-typed calls with no mapping at all.
-
-The distinction is worth keeping, because both things look like "adapter work" from inside the
-adapter:
-
-| | |
-|---|---|
-| **Adapting** | Turning a contract into what the UI needs — paging arguments, a `Page<T>` wrapper, an endpoint the screen shouldn't know the URL of. Legitimate; that is the seam's job. |
-| **Repairing** | Normalising a shape the backend got wrong. Illegitimate — it leaves the contract broken for the next client, and hides *that* it is broken from everyone, because the one place the symptom was visible now silently handles it. |
-
-A repair is a defect report, not a code change. When you find one: stop, report it, and fix the
-contract.
+- No `BranchTable`, ever (§2.1); needing to edit `DataTable` rather than configure it means redraw it (§2.3).
+- `/admin/approvals` took it as configuration. `ConfirmDialog` reason bounds became parameters (TD-9 consent floor 10 as default; §5.6 rejection 1–500; §1.1). `Badge` was extracted from the Hijri screen's inline `badge badge--warn` on the second use (§2.7). No `RejectDialog`, no `ApprovalBadge` (§2.5).
+- R117: submitted data is a row action `عرض التفاصيل` opening the staff-only projection (guardian contact/consent, one fieldset per child with requested Category and Branch); an exact `review_user_id` from a notification opens it automatically; parent/child approval opens a plain guardian confirmation, each child owning the shared placement picker and its Category default.
+- `BranchSelector`, `CategorySelector`, `LevelSelector` are thin `SelectField` configurations: `useId` (the old `id="branch-filter"` collided), `field.tsx` wiring, an `allowAll` variant rather than a `RequiredBranchSelector` (§2.5; registration must not submit "all branches", Revision 39); `SelectField` has `busy`. Consumers: calendar filter, approvals filter, registration.
+- `DataTable` does not fetch, sort server data or know a Branch (§3.2); first column `<th scope="row">`; Empty ≠ No results; an inapplicable row action is hidden, not disabled.
+- Field primitives: `useId`; errors via `aria-describedby` + `role="alert"`; hints in `aria-describedby`.
+- Mirrored validation (TD-9 limits) is courtesy; the server is the rule; a client refusing what the server accepts is a client bug (§1.1).
+- Adapter vs repair: `GET /admin/branches` returned raw Prisma rows (camelCase, an instant for a TD-11 date, internal columns) and `adapters/branches-admin.ts` compensated; the Document Owner rejected that ("the backend contract is the source of truth"); SRS Revision 38 made every response a contract DTO ([api.md](api.md#the-contract-is-an-interface-not-a-serialisation)). Adapting (paging arguments, a `Page<T>` wrapper, hiding an endpoint URL) is legitimate; repairing a wrong backend shape is a defect report, not a code change.
 
 ## The back office: one registry drives nav, routing and permissions
 
-`lib/admin-modules.ts` holds §14.1's back-office hierarchy **as data**. The sidebar, the
-router and the role guard all read that one list.
+- `lib/admin-modules.ts` holds §14.1's hierarchy as data; sidebar, router and role guard read it, so a menu entry without a route, a route without a permission, or a module visible to a role TD-2 excludes cannot exist. A test asserts the paths against §14.1.
+- R105: only the `الإدارة` section remains; placement in it makes a node Super-Admin-only (R61), asserted over the section in `admin-modules.test.ts`. The four other headings gated nothing; adding one is a §14.1 change for the Document Owner.
+- Order: the sidebar renders `ADMIN_MODULES`; `dashboardCards()` (exported from `pages/admin/index.tsx`) maps the same array minus `/admin` (by path, not `section !== null`, which after R105 gave an Admin no cards). Both sequences are pinned literally in `admin-modules.test.ts`.
+- `status` is part of the contract: a module without endpoints renders a named "not built" state and a sidebar badge; seven of eleven modules are ready, four blocked on endpoints that do not exist.
+- Path resolution is longest-match, separator-aware: `/admin/groups/{id}/roster` → groups; `/admin/groupsomething` does not.
+- Role gating is a UX layer; the server enforces TD-2 on every endpoint; routes stay under `/admin/*` even where only a Super Admin may write (Revision 26). The back office mounts inside `PendingGuard`.
+- The dashboard is a launcher: §5.6's counts and stats have no endpoint.
 
-§14.1 is emphatic — *"implement exactly this navigation hierarchy, no invented sections, no
-reshuffling"* — and holding it as data is what makes that **checkable rather than reviewed by
-eye**. Three failures become impossible by construction:
+## Child section — `components/registration/children.tsx`
 
-- a menu entry with no route,
-- a route with no permission,
-- a module visible to a role TD-2 excludes.
+- Owns the child fields, add/remove, the cap and validation; `/register` and `/profile/register-child` compose it (R62 unified the service, R64 found the parent form collected no branch/stage, R65 moved the page). `/register` asks one branch and stage per family; the personal page per submission.
 
-Adding a module is **one entry**. A test asserts the registry's paths against §14.1's list, so
-inventing a route fails the build rather than passing review.
+## Dates — `lib/format-date.ts`
 
-### A section exists only where the heading states a fact about permission (R105)
+- The one formatter (`١٢ يونيو ٢٠٢٦`, calendar month names); every `<time>` uses it.
+- `<input type="date">` renders in the user agent's locale (`mm/dd/yyyy`); `DateField` keeps the native input with `lang="ar-MA"`, a hint naming the order and the chosen date echoed via `formatDate`. Stored values stay `YYYY-MM-DD` (TD-11).
 
-The sidebar used to carry five headings — `الشؤون التعليمية`, `الأشخاص`, `الجدولة`, `المحتوى`
-and `الإدارة`. Revision 105 removed the first four and kept the last, and the rule it left
-behind is the reason, not the outcome:
+## Footer
 
-**`الإدارة` means something.** R61 makes *placement in that section* the thing that renders a
-node Super-Admin-only, so the heading is a statement about authority a reader can act on, and
-`admin-modules.test.ts` asserts it **over the section** rather than per module — written as
-nine independent decisions, the tenth node added there would inherit nothing, which is exactly
-how `/admin/branches` once came to be the odd one out.
-
-The other four gated nothing. They sorted eleven destinations into buckets that answered no
-question anybody was asking, and §14.1 had drifted into listing `Administration` **twice** —
-once holding a single node. So: **a decorative group is a change to §14.1, not a layout
-preference.** Adding one back needs the Document Owner.
-
-### The registry's ORDER is the navigation and the dashboard, in one list
-
-The sidebar renders `ADMIN_MODULES` as it stands, and `dashboardCards()` — exported from
-`pages/admin/index.tsx` for exactly this reason — maps the same array minus `/admin` itself.
-The launcher and the menu therefore cannot disagree, because there is nothing to disagree
-*with*: they are one list read twice.
-
-`dashboardCards` is exported so the guard asserts **the code the page runs** rather than a
-second copy of the rule. That is not hypothetical here. The filter was `section !== null`,
-which excluded the dashboard back when the dashboard was the only ungrouped node; R105 made
-eleven nodes ungrouped, and the same line would have shown a Super Admin nine cards and an
-Admin **none** — a launcher that launches nothing. Filtering by path says what was always
-meant: a launcher does not link to itself.
-
-Both sequences are pinned **literally** in `admin-modules.test.ts`, because the defect §14.1's
-*"no reshuffling"* guards against is a reorder, and no set comparison can see one.
-
-### `status` is part of the contract
-
-A module whose endpoints do not exist renders a **named** "not built" state saying *what* is
-missing — not "coming soon", which tells nobody whether the wait is a day or a milestone. The
-same badge appears in the sidebar, so a reader deciding where to click learns before the click
-rather than after.
-
-This is also the honest signal about where the back office stands: **seven of eleven modules are
-ready; four are blocked on endpoints that do not exist.**
-
-### Path resolution: longest match, separator-aware
-
-`/admin/groups/{id}/roster` resolves to the groups module. A module owns its internal views
-**without registering each as a navigation node §14.1 does not list** — the same reasoning
-that put the library's level view behind `?level=`.
-
-Matching requires an exact hit or a `/` separator, so `/admin/groupsomething` does not resolve
-to `/admin/groups`. A bare `startsWith` would.
-
-### Role gating is a UX layer, and says so
-
-The layout renders the §14.4 no-permission state for a module the session's roles do not
-admit. **The server enforces TD-2 on every endpoint regardless** — the URL prefix is not the
-permission boundary, which is why the routes stay under `/admin/*` even where only a Super
-Admin may write (Revision 26).
-
-The whole back office mounts **inside `PendingGuard`**: a sidebar and headings are exactly the
-"empty skeleton layout" that guard exists to prevent a Pending user from glimpsing.
-
-### The dashboard is a launcher, not a statistics screen
-
-§5.6 asks for pending-approval counts and overview stats. **No endpoint serves them**, and
-inventing a number would be worse than omitting one — so it lists the modules the session may
-open, with blocked ones marked, and becomes a dashboard when there is something true to count.
-
-## The child section is one component, not one per entry point
-
-`components/registration/children.tsx` owns the child fields, the add/remove
-behaviour, the cap and the validation. `/register` and `/profile/register-child`
-both compose it.
-
-**They diverged twice before this.** R62 unified the *service* and left the
-*forms* separate; R64 then found that the parent-facing one collected no branch
-and no stage, so approvers received requests missing the two things §4.1 step 1
-and Revision 39 exist to give them. R65 moved the page and the personal copy
-still had no repeatable section — a parent of three submitted three requests
-from one page while the other took them in a single one.
-
-What stays with each page is the *request-level* answer: `/register` asks one
-branch and one stage for the whole family, the personal page asks them per
-submission. Those belong to the surrounding form. A **child** belongs to the
-shared component.
-
-## Dates read in Arabic, and where that stops being possible
-
-`lib/format-date.ts` is the one formatter — `١٢ يونيو ٢٠٢٦`, month names from
-the catalogue the calendar already uses. Every `<time>` on the platform goes
-through it; before, the same day printed three ways depending on the screen
-(`2026-06-12`, `created_at.slice(0, 10)`, or a private helper inside one card).
-
-**`<input type="date">` is the boundary.** Its placeholder and its value render
-in the **user agent's** locale — `lang`, `dir` and CSS cannot change it, which is
-why the fields read `mm/dd/yyyy`. Only abandoning the native control could fix
-that, at the cost of the platform picker, the mobile keyboard, and the keyboard
-and screen-reader behaviour that comes with it. So `DateField` keeps the native
-input and makes the rest Arabic: `lang="ar-MA"`, a hint naming the expected
-order, and the chosen date echoed underneath through `formatDate`.
-
-Stored and transmitted values are untouched — `YYYY-MM-DD` (TD-11).
-
-## The footer sits at the bottom, or after the content
-
-`#root` is a flex column of `min-height: 100dvh`; `#root > main` and
-`#root > .admin` take the slack with `flex: 1 0 auto`.
-
-A short page used to leave the footer floating mid-screen with background below
-it. This is a layout, not a margin and not `position: fixed`: on a long page the
-body is already taller than the slack, nothing stretches, and the footer follows
-the content exactly as before. There is no threshold to tune. `dvh` rather than
-`vh` so mobile browser chrome collapsing does not tuck the footer under a
-toolbar.
+- `#root` is a flex column `min-height: 100dvh`; `#root > main` and `#root > .admin` take `flex: 1 0 auto` (`dvh` so mobile chrome does not tuck the footer away).
 
 ## Every table shows every field its own form collects (R64)
 
-**The rule, stated once.** A management table exposes **every field the entity's
-own create/edit form collects**, minus two exceptions:
-
-* **operational metadata** — `version`, `created_at`/`updated_at`, `deleted_*` —
-  which belongs to the mechanism, not to the entity;
-* **a relation the row already names another way**, so it is not printed twice.
-
-§14.2 calls its column list *"the minimum set"*, and that was read as a ceiling.
-The audit that produced this rule found two tables silently short:
-
-| Table | Collected by its form, absent from the table |
-|---|---|
-| `/admin/branches` | `phone`, `email`, `opening_hours_ar`, `google_maps_url` |
-| `/admin/levels` | `display_order` |
-
-Neither omission was a decision. An administrator who entered a branch's phone
-number and opening hours could not see either again without reopening the
-editor, so the screen could not answer *is this branch's public information
-complete* — the question Revision 35 makes worth asking, since exactly those
-fields are published to anonymous visitors.
-
-**A URL renders as an affordance, not as text**: the map column is a link
-labelled «فتح الخريطة», because ninety characters of query string is not
-information. Everything else renders its value or the shared *not set* marker.
-
-Checked and already complete: `/admin/groups`, `/admin/users`, `/admin/subjects`
-and `/admin/categories`. `/admin/trash`, `/admin/schedules` and the occurrences
-list are composite views rather than one entity's CRUD, and the rule does not
-reach them.
+- Exceptions: operational metadata (`version`, `created_at`/`updated_at`, `deleted_*`) and a relation the row already names.
+- §14.2's column list is a minimum, not a ceiling. Found short and fixed: `/admin/branches` lacked `phone`, `email`, `opening_hours_ar`, `google_maps_url`; `/admin/levels` lacked `display_order`.
+- A URL renders as an affordance: the map column is a link «فتح الخريطة»; other values render or show the shared *not set* marker.
+- Complete: `/admin/groups`, `/admin/users`, `/admin/subjects`, `/admin/categories`. Composite views (`/admin/trash`, `/admin/schedules`, occurrences) are out of scope.
 
 ## One form pattern: `FormDialog` (R64)
 
-Every create/edit dialog is a `FormDialog`, and every control inside it is a
-`field.tsx` primitive. The component exists precisely to end drift — its own doc
-comment records the Events-versus-Sessions divergence that produced it — and
-`إضافة مجموعة` was the last screen that had not adopted it:
-
-| | `إضافة مجموعة` before | Everything else |
-|---|---|---|
-| Selects | raw `<label><select>` | `SelectField` |
-| Buttons | its own `dialog__actions` row | the shared pair |
-| Save emphasis | default (secondary) | `primary` |
-
-Beside `إضافة مستوى` the difference was visible at a glance, and none of it was
-a decision anybody took. A hand-rolled `<select>` also has no label association,
-no placeholder handling, no required marking and no error announcement except
-what that screen remembers to add, which is the accessibility half of the same
-problem.
+- Every create/edit dialog is a `FormDialog` and every control a `field.tsx` primitive; `إضافة مجموعة` was the last adopter (raw `<label><select>` → `SelectField`; its own `dialog__actions` row → the shared pair; default save emphasis → `primary`).
 
 ## The personal section is role-independent (R65)
 
-**`/profile` carries what concerns the person; a portal carries what concerns a
-role.** The line is not stylistic — it decides who can reach a screen at all.
-
-§5.2 has listed `Profile (/profile)` under *Shared / Cross-Role* since long
-before the portals existed, and it was never built. So when R64 needed somewhere
-to put child registration it hung the page off `/dashboard/student/` — and **a
-مؤطِّرة who is nobody's student then had no way to register her own child**, even
-though `POST /child-applications` had never required a role and never checked
-one. The capability was there; only the door was missing.
-
-The test for whether something belongs here: **would you still want it if the
-account's only role were `teacher`?** Your own details, editing your contact
-info, registering a child, and the status of requests you have made — yes, all
-of them. A roster, a schedule, a grade — no.
-
-**The account menu (`الحساب`) is the entry**, because it is the one header
-control that never depends on a role.
-
-**One entry point, not one per role.** R64 exists because a dialog reachable only
-by parents carried fewer fields than the public form, and approvers received
-requests naming no branch and no stage. A second door invites a second form.
-
-**`ولي الأمر` stays about already-approved children.** Selecting it → a child is
-how you enter that child's Student Dashboard, and no registration action lives
-inside it.
-
-### Account deletion belongs to the person, not to a role
-
-R111 closed the earlier design gap. Every authenticated account sees the deletion control in
-`/profile`; the subject comes from the session, so the request has no id with which to name
-somebody else. The confirmation says plainly that educational and consent history survives,
-that sessions end immediately, and that a Super Admin can restore the same account during the
-three-day window. A live staff responsibility or last-Super-Admin block is rendered through
-the shared `BlockedNotice`, including the server's `blocked_by` breakdown.
-
-The separate Users action is Super-Admin-only. Its ordinary form uses the same recoverable
-window; its permanent variant de-identifies now and is explicitly irreversible. Both are one
-server mechanism rather than two frontend interpretations of retention.
-
-### The write surface is two fields
-
-`PATCH /profile` accepts `phone` and `nickname`. The exclusions are the
-specification, not an oversight:
-
-| Excluded | Why |
-|---|---|
-| names | **Identity.** §1.1 composes them server-side from parts collected once; a rename is a staff act on §14.2 where it is reviewable |
-| `sex` | Feeds §4.4b's `gender_restriction` — self-editing it moves a person past an admission rule |
-| `email` | The Google identity the account is keyed to (§4.1b) |
-| `account_status` | An approver's decision (TD-1) |
-
-They are **refused, not ignored**: the schema is `.strict()`, so a client that
-tried to rename someone learns it failed rather than believing it worked. The
-read shows them anyway — a person should see the name and email staff will use
-to find them.
+- `/profile` carries what concerns the person (details, contact info, registering a child, request status); a portal carries what concerns a role (roster, schedule, grade). §5.2 lists `Profile (/profile)` under Shared / Cross-Role.
+- The account menu `الحساب` is the one entry point (the header control independent of role); not one per role.
+- `ولي الأمر` stays about approved children; no registration action inside it.
+- Account deletion (R111): every account sees the control in `/profile`; the subject comes from the session; the confirmation states educational and consent history survives, sessions end immediately, a Super Admin can restore within the three-day window; a staff-responsibility or last-Super-Admin block renders through the shared `BlockedNotice` with the server's `blocked_by`. The Users action is Super-Admin-only: same recoverable window plus a permanent, irreversible de-identifying variant; one server mechanism.
+- `PATCH /profile` accepts `phone` and `nickname`; `.strict()`, so the rest is refused, not ignored; the read still shows them. Excluded: names (identity — §1.1 composes them server-side; a rename is a staff act on §14.2), `sex` (feeds §4.4b's `gender_restriction`), `email` (the Google identity, §4.1b), `account_status` (an approver's decision, TD-1).
 
 ## The family surface: one switcher, one dashboard (R62)
 
-**`ولي الأمر` is not a separate destination — it is a group on the supported Student
-Dashboard route.** The account switcher's `parent` entry expands into approved children, and
-picking one sets the active role and active child **in one action**. Registering another child
-is a task under `/profile/register-child`, not a context inside this menu.
+- `ولي الأمر` is a group on the Student Dashboard route, not a destination: the switcher's `parent` entry expands into approved children; picking one sets active role and child in one action; no second child dropdown. A parent-only account still gets the switcher. `ولي الأمر` is offered only once a child is approved.
+- «＋ تسجيل طفل» moved out of the switcher (R64) to `/profile/register-child` (R65); it posts a single child, asking what `/register`'s child section asks; the public form is the multi-child one.
+- `/dashboard/student` renders the caller's own record as student or the active child's as parent: `GET /students/me` resolves the acting student server-side (§4.3, R63); the client only sends the child header.
+- The stored child coordinate reconciles to `null` outside Parent context; switching to Student clears it before navigation. A Parent-only account has no standalone `مستفيدة` option (roles come from live roles, not children).
+- A persistent banner names the child (R62.10). Scope: identity block, today's and upcoming sessions; Quran progress, grades and exams are later milestones and are not stubbed (§14.4).
+- Every authenticated calendar consumer passes the access token to `GET /calendar` (public, optionally authenticated); visibility is decided by the backend, never locally.
 
-That is why there is no longer a second child dropdown beside the role switcher. Two menus
-made one decision into two, and left two places to be wrong about who is currently active.
+## Toasts and browser support
 
-**A parent-only account still gets the switcher.** The old rule hid it below two roles,
-which for a parent holding exactly one role hid the entire family surface — the children are
-inside that menu.
-
-**R64 moved «＋ تسجيل طفل» out of the switcher onto its own page, and R65 moved
-that page out of the student dashboard** to `/profile/register-child`. A switcher lists the *contexts* a person may
-work in and registering is a task — and, more concretely, a dialog opened from a
-menu could only ever carry a subset of what the public form collects. That subset
-is exactly how the two registration paths diverged: a parent adding a second child
-supplied **no branch and no stage**, so the approver received a request missing the
-two things §4.1 step 1 and Revision 39 exist to give them. The page asks what
-`/register`'s child section asks and nothing more. It posts a single child — the
-public form is the multi-child one, because a family arrives at once.
-
-**`ولي الأمر` is offered only once a child is approved.** The entry expands into
-the children and nothing else, so with none approved it would open an empty menu:
-an entry onto nothing is the same defect as a button that renders a blank page.
-
-### `/dashboard/student` serves two contexts, and says which
-
-The same route renders the caller's own record when they act as a student and the active
-child's when they act as a parent, because `GET /students/me` resolves the **acting**
-student server-side (§4.3, R63). The client sends the child header and renders whatever
-comes back; it never decides whose data this is.
-
-The stored child coordinate is reconciled to `null` outside Parent context. Switching to
-Student clears it before navigation, so a genuine Parent+Student acts as herself and never as
-the child selected in the previous context. A Parent-only account has no standalone
-`مستفيدة` option because role choices come from live roles, not from the presence of children.
-
-**A persistent banner names the child** (R62.10) — not a toast and not a subtitle. A parent
-looking at the wrong child's schedule must find that out by reading the screen, not by
-noticing something is off.
-
-Its scope is R62.10's and stops there: the identity block, today's and upcoming sessions.
-Quran progress, grades and exams are later milestones and are **not** stubbed — an empty
-section promising a feature is a §14.4 problem, not a placeholder.
-
-**Every authenticated calendar consumer passes the access token to `GET /calendar`.** The
-endpoint is public and optionally authenticated, so the same `/calendar` page is anonymous
-without a session and receives the caller's live tier after login. Neither this page nor the
-student session list decides visibility locally; the backend does. On the student screen a
-session restricted to the student's own Level is exactly what is wanted.
-
-## Toasts
-
-| Kind | Treatment |
-|---|---|
-| Success | Green, auto-dismiss 4 s |
-| Validation failure | Amber, or inline field errors — **field errors preferred** — sticky until corrected |
-| Permission denied / consent lock | Red, the message key text, auto-dismiss 6 s |
-| Job queued | Blue "queued", then a status indicator; completion raises a success toast |
-
-**Toasts never contain PII beyond first names, and never raw error internals.**
-
-## Browser support
-
-| Browser | Minimum |
-|---|---|
-| Chrome / Edge, desktop and Android | Last 2 majors |
-| iOS Safari / WebView | **iOS 16+** |
-| macOS Safari, Firefox | Last 2 majors |
-| Anything older | Best-effort rendering; download-link fallback; **upload always works** |
-
-**No support for browsers without ES2020** — no legacy transpilation targets, no IE.
-Responsive layout is tested at **360 px minimum**.
+- Toast rules are SRS §14.5 (success 4 s, permission/consent 6 s, validation sticky or inline, job queued → `JobStatusIndicator`; no PII beyond first names, no raw error internals).
+- Browser support is §14.7 (last 2 majors of Chrome/Edge/macOS Safari/Firefox, iOS 16+, no ES2020-less browsers, no IE; older browsers get best-effort rendering, a download-link fallback, and upload always works). Layout is tested at 360 px minimum.
 
 ## Verifying a styling change
 
-Two tools, and **neither alone is sufficient**:
-
-- `scripts/dev/css-resolve.py` resolves every `var()` to literals and reports one line per
-  declaration — this catches changed **values**.
-- Diffing the built `dist/assets/*.css` before and after catches changed **order**.
-
-The lesson is recorded because it was learned the hard way: during a file split the resolver
-reported zero change, while the built CSS showed 52 chunks had moved. In a stylesheet where
-every rule has single-class specificity, **order is the cascade**, and a value-level check
-cannot see a rule moving past another.
+- `scripts/dev/css-resolve.py` resolves every `var()` to literals, one line per declaration — catches changed values.
+- Diff the built `dist/assets/*.css` before and after — catches changed order (single-class specificity means order is the cascade; a file split once moved 52 chunks with zero value change).
 
 > [Design system](design-system.md)
 

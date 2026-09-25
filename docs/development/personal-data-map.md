@@ -2,37 +2,13 @@
 
 # Personal data map — what a deletion request reaches
 
-**This page extends SRS Revision 111 §3; it does not replace or restate
-it.** R111 classified all the relationships a `User` carried when it was written,
-**enumerated from the live database**, and that classification is the base.
-
-**Read the columns below as historical** (Revision 133). They were written when
-deletion had two modes — Option A preserved the educational archive, Option B
-destroyed it — and the *«Option A»* column records what the preserving mode kept.
-There is **one** deletion now, and it does what the Option B column describes.
-The table is kept because the per-relationship reasoning in it is still the
-reasoning that decides what is hers and what is shared; only the two-mode framing
-is gone.
-
-Where R111 §3 and this page appear to disagree, R111 §3 is the base and the
-delta below is the amendment.
-
----
+- Extends SRS Revision 111 §3 (the base classification of every relationship a `User` carried, enumerated from the live database); where they seem to disagree, R111 §3 is the base and this page the amendment.
+- The «Option A» column is historical (R133): there is ONE deletion now and it does what Option B described; the per-relationship reasoning still decides what is hers and what is shared.
 
 ## Measured, not remembered
 
-Re-enumerated from the live schema on **2026-09-03**: **42 foreign keys
-reference `user.id`**, against R111's 35.
-
-```
-34 of R111's 35 survive  (student_social_profile.student_id was removed by R120)
- 8 added since           (listed below)
-──
-42
-```
-
-Re-run the enumeration rather than trusting this number before any destructive
-work:
+- Re-enumerated 2026-09-03: 42 foreign keys reference `user.id` (R111 counted 35): 34 of R111's 35 survive (`student_social_profile.student_id` removed by R120) + 8 added since.
+- Re-run before any destructive work:
 
 ```sql
 SELECT tc.table_name, kcu.column_name, rc.delete_rule
@@ -49,304 +25,105 @@ ORDER BY 1, 2;
 
 | relationship | added by | *(historical)* Option A | why |
 |---|---|---|---|
-| `attendance.student_id` | R123 | **PRESERVE** | the register is the institution's record of who was there |
-| `attendance.marked_by` | R123 | **PRESERVE** | *«who marked this»* is the accountability half; a register with no marker is not evidence |
-| `exam.student_id` | R125 | **PRESERVE** | the individual target of an assessment — a fact on somebody else's row |
-| `framing_preference.user_id` | R115 | **DELETE** | R88.2 planning data that grants nothing, exactly like `teacher_availability` |
-| `legal_consent_text.created_by_id` | R119 | **PRESERVE** | authorship of immutable legal wording; the text outlives its author |
-| `legal_consent_text.activated_by_id` | R119 | **PRESERVE** | *«who put this wording in force»* is the accountability record for every consent given against it |
-| `notification.subject_user_id` | R116 | **PRESERVE** | the message sits in **somebody else's** inbox. R111 deletes `user_id` because the person no longer has an inbox; this one is another person's record, and the tombstone renders it correctly as «حساب محذوف» |
-| `platform_owner.owner_user_id` | R115 | **BLOCK** | R115 already forbids deleting the current owner; ownership is transferred first |
+| `attendance.student_id` | R123 | PRESERVE | the register is the institution's record of who was there |
+| `attendance.marked_by` | R123 | PRESERVE | «who marked this» is the accountability half |
+| `exam.student_id` | R125 | PRESERVE | the individual target of an assessment, a fact on somebody else's row |
+| `framing_preference.user_id` | R115 | DELETE | R88.2 planning data granting nothing, like `teacher_availability` |
+| `legal_consent_text.created_by_id` | R119 | PRESERVE | authorship of immutable legal wording |
+| `legal_consent_text.activated_by_id` | R119 | PRESERVE | «who put this wording in force» backs every consent given against it |
+| `notification.subject_user_id` | R116 | PRESERVE | sits in somebody else's inbox (R111 deletes `user_id` because the subject has no inbox); tombstone renders «حساب محذوف». The one judgment call, by the Owner's rule «do not guess when deletion would destroy another person's record»; deleting it would be a narrowing decision, not a defect |
+| `platform_owner.owner_user_id` | R115 | BLOCK | R115 forbids deleting the current owner; transfer ownership first |
 
-`notification.subject_user_id` is the one judgment call here, and it is made by
-applying the Owner's own rule — *do not guess when deletion would destroy another
-person's legitimate record* — rather than by inventing a policy. If the Owner
-prefers it deleted, that is a narrowing decision and not a defect.
+## ONE deletion (Revision 133)
 
-## ONE deletion, and what it removes (Revision 133)
-
-**There is one request: «حذف الحساب».** R131's Option A / Option B distinction is
-withdrawn, along with `FullDeletionRequest`, its request/review routes and its
-screens. A person deletes her account; access stops at once; a Super Admin may
-restore it for seven days or destroy it earlier; otherwise it is permanently
-deleted at the boundary.
-
-### What permanent deletion removes
-
-Everything whose **only purpose is that person** — her authentication identity,
-sessions and tokens, her profile, name, birth date, `reference_code`, her copied
-identity on a `ChildApplication`, her enrolments, grades, attendance, Quran
-progress, assessment submissions and answers, her group membership, and every
-`Trash` snapshot able to restore any of it.
-
-`erasure.ts` is where that boundary is defined, and it is the **only** place. Every
-statement in it is keyed on `student_id` or on an id belonging to the subject.
-
-### What it must never remove
-
-**Shared institutional data is never deleted because one person referenced it.**
+- One request, «حذف الحساب»: R131's Option A / B distinction, `FullDeletionRequest`, its request/review routes and screens are withdrawn. Access stops at once; DELETE → seven-day Trash → restore by a Super Admin (or earlier destruction) or permanent deletion; one window for every entity, accounts included. No Option A/B, no account-return queue, no ten-year archive, no deletion replay (history in `CHANGES.log`).
+- Permanent deletion removes everything whose only purpose is that person: authentication identity, sessions and tokens, profile, name, birth date, `reference_code`, copied identity on a `ChildApplication`, enrolments, grades, attendance, Quran progress, assessment submissions and answers, group membership, family links, and every `Trash` snapshot able to restore any of it.
+- `erasure.ts` is the only place the boundary is defined; every statement is keyed on `student_id` or an id belonging to the subject.
+- Shared institutional data is never deleted because one person referenced it:
 
 | Deleted | Preserved |
-| --- | --- |
+|---|---|
 | her `Grade` | the `Exam` several beneficiaries sat |
-| her `Attendance` row | the `Session` itself |
+| her `Attendance` row | the `Session` |
 | her submission and answers | the assessment definition |
-| her `Enrollment` | the `Level`, `Branch` and `AcademicPeriod` |
+| her `Enrollment` | the `Level`, `Branch`, `AcademicPeriod` |
 | her copied `ChildApplication` identity | her guardian's applications about other children |
 | — | teacher-authored `EducationalContent` and every other person's records |
 
-**The `User` row itself survives, de-identified.** Forty-seven foreign keys point
-at it, several from other people's records and from consent and audit evidence;
-removing the row would delete their data to delete hers.
+- The `User` row survives, de-identified: forty-seven foreign keys point at it, several from other people's records and from consent/audit evidence.
+- Never promise «zero rows anywhere»: the deletion's own audit trail and consent/legal evidence survive under their own rule.
+- Never promise erasure from backups: a live deletion does not modify an existing backup; stated before she confirms, never engineered around.
+- Attestation: R122's promise to attest a former beneficiary's Level is withdrawn by R133 for anyone who deletes her account (history gone, attestation possibly impossible; the confirmation says so); a beneficiary who keeps her account keeps her record.
 
-### What must not be promised
+## Retention *(HISTORICAL)*
 
-**Do not promise "zero rows anywhere".** Narrowly necessary evidence survives:
-the deletion's own audit trail and consent/legal evidence under its own rule.
+- Ten-year policy (adopted 2026-09-03, ran one day): identifiable educational history retained TEN YEARS after the beneficiary's last educational activity; purposes: educational continuity, former-beneficiary requests, attestations; «last educational activity» derived from durable facts (enrolment period end, attendance date, exam date, submission, Quran log), never a maintained `last_activity_at` column.
+- WITHDRAWN by R133: two purposes are gone (no attestation promise after deletion, no return path); the third is served by the account's lifetime. Rule: **beneficiary data lives while the account lives; permanent account deletion removes it.**
+- It was never externally required (§4.10a: «the association's own purpose-based policy … not prescribed, reviewed or approved by the CNDP»); no document may say otherwise.
+- Removed with it: the service, dry run, daily job, readiness worker slot, tests, tombstone-reading exemption. `erasure.ts` survives with permanent account deletion as its only caller.
 
-**And do not promise erasure from backups.** A live deletion does not modify an
-existing backup; an older encrypted generation may hold a previous copy until
-rotation expires it. That limit is stated to the person before she confirms,
-never engineered around.
+## Before any destructive automation — the list, closed
 
-### The attestation consequence, stated plainly
+Owner precondition: a partial purge that claims data is gone while copies remain is worse than none.
 
-R122 once committed the association to answering *«كنت أدرس عندكم وأريد شهادة
-تثبت المستوى الذي وصلت إليه»* years later, and R131 kept an archive so it could.
-**R133 withdraws that promise for anyone who deletes her account**: the history
-is gone, an attestation based on it may be impossible, and the confirmation says
-so before she agrees. A beneficiary who has *not* deleted her account keeps her
-record for as long as the account exists.
+| copy to find | handling |
+|---|---|
+| `ChildApplication`'s copied identity (names, sex, birth date) | whole row destroyed with the account |
+| `Trash` snapshots (JSON copy for restore) | every snapshot naming a destroyed row goes in the same transaction |
+| audit detail | minimised to fields and ids by TD-8/TD-14, asserted |
+| consent evidence | kept under its own rule; carries no name, birth date or contact |
+| `NormalizedEmailLock` | raw lowercased address with no owner — the one item still open, blocked on `EMAIL_LOCK_KEY` |
+| backups | stated, not engineered around |
+| twelve-month application rule | built; touches the same rows |
 
-## Retention — the association's own policy *(HISTORICAL)*
+- The copies that mattered (application identity, restorable snapshot) were not on the `User` row.
+- R59.4: `Trash.purge_after` ends BR-15's ninety-day window; `purgeExpiredEntries` in `trash.service.ts` (daily job, Owner-authorised 2026-09-04) destroys expired tombstones; purging a content snapshot's object destroys the only copy. The «what would it delete» report module was removed 2026-09-25 (unused).
 
-**Everything in this section is superseded** by the subsection below. It is kept
-because it records what the ten-year policy was, what it was for, and — the part
-that still matters — that it was **never externally required**. A future reader
-asking *«why did the ten years go, and may they come back?»* needs that, and it
-is nowhere else.
+## Option B — SUPERSEDED (Revision 133)
 
-> **Default: identifiable educational history is retained for TEN YEARS after the
-> beneficiary's last educational activity.** Bodour Al Amal's own purpose-based
-> retention policy, adopted 2026-09-03. **Not** prescribed, reviewed or approved
-> by the CNDP, and no document may describe it as such. Its purposes: historical
-> educational continuity, answering former-beneficiary requests, and issuing or
-> verifying educational attestations.
->
-> *«Last educational activity»* was **derived** from canonical durable facts — an
-> enrolment's period end, an attendance date, an exam date, a submission, a
-> Quran log — never from a maintained `last_activity_at` column, because a clock
-> nobody updates consistently deletes the wrong records.
+- Option B («delete all my deletable data», Super-Admin-reviewed) is what ordinary permanent deletion now does. Removed: `FullDeletionRequest` and table, four routes, OpenAPI entries and TD-3 registrations, the profile request block, adapter, Arabic copy, `pending_full_deletion_request` account purpose. `erasure.ts` (its destruction primitive) survives.
 
-### The ten-year clock is WITHDRAWN (Revision 133)
+## Backups
 
-It ran for one day. §4.10a gave it three stated purposes — **educational
-continuity, former-beneficiary requests and attestations** — and R133 withdraws
-two of them outright: there is no attestation promise after deletion and no
-return path to serve a former beneficiary's request. The third is served by the
-account's own lifetime, which is the simpler rule the Owner asked for:
-
-> **Beneficiary data lives while the account lives. Permanent account deletion
-> removes it.**
-
-**It was never externally required.** §4.10a says so in terms — *«the
-association's own purpose-based policy … not prescribed, reviewed or approved by
-the CNDP»* — so removing it costs no obligation, and no document may say
-otherwise.
-
-Removed with it: the service, its dry run, the daily job, its worker slot in
-readiness, its tests and its tombstone-reading exemption. What survives is
-`erasure.ts`, the primitive that decides **what counts as her own data** — now
-reached by permanent account deletion, which is its only caller.
-
-## Before any destructive automation *(the list, and how it closed)*
-
-This list was the Owner's precondition for writing any purge, because **a partial
-purge that claims data is gone while obvious copies remain is worse than no purge
-at all**. Every item is now answered, and the answers are what the erasure
-boundary is made of:
-
-| the copy that had to be found | how it is handled |
-| --- | --- |
-| `ChildApplication`'s copied identity — names, sex, birth date, held independently of the `User` | the whole row is destroyed with the account |
-| `Trash` snapshots — a JSON copy written precisely so the row can come back | every snapshot naming a destroyed row goes in the same transaction |
-| audit detail | minimised to fields and ids by TD-8/TD-14, and asserted, not assumed |
-| consent evidence | kept under its own rule, and it carries no name, birth date or contact |
-| `NormalizedEmailLock` | still holds a raw lowercased address with no owner — **the one item still open**, and blocked on `EMAIL_LOCK_KEY` |
-| backups | stated honestly rather than engineered around; see below |
-| the twelve-month application rule | built, and it touches the same rows |
-
-**The lesson worth keeping**: the copies that mattered were never in the obvious
-place. Two of them — the application's copied identity and the restorable
-snapshot — would each have made a "complete" deletion a lie, and neither is on
-the `User` row.
-
-### R59.4 — the ninety-day window is enforced
-
-`Trash.purge_after` records the end of BR-15's ninety-day window. Expired tombstones are destroyed by `purgeExpiredEntries` in `trash.service.ts` (daily job, authorised by the Owner 2026-09-04); the storage half is the consequential one — purging a content snapshot's object destroys the only copy. The «what would it delete» report module that preceded enforcement was removed 2026-09-25 (unused).
-
-## Option B is withdrawn — SUPERSEDED (Revision 133)
-
-Option B was *«delete all my deletable data»*: a Super-Admin-reviewed request
-that destroyed the educational record, beside Option A which closed the account
-and kept it. **R133 makes ordinary permanent account deletion do exactly what
-Option B did**, so the distinction has no subject and the request queue has
-nothing to decide between.
-
-Removed: `FullDeletionRequest` and its table, four routes, the OpenAPI entries
-and TD-3 registrations, the profile request block, the adapter, the Arabic copy,
-and the `pending_full_deletion_request` account purpose. What survives is
-`erasure.ts` — Option B's own destruction primitive, now reached by the single
-deletion path.
-
-## Backups — what may honestly be claimed
-
-A deletion request removes data from the **live operational system**. Encrypted,
-finite-lifetime backups may still contain an older copy until they expire, and
-**no document or screen may promise immediate byte-level erasure from backups
-that have already been written**, because that is not true.
-
-Two obligations follow:
-
-* **A restore must not silently resurrect deleted personal data.** A restore
-  that reinstates a row somebody asked to have removed re-creates the very state
-  the request ended.
-* **The mechanism must be the smallest reliable one.** Prefer reusing an existing
-  reconciliation ledger over inventing a subsystem.
-
-Neither is implemented. Auditing the existing restic design and choosing the
-mechanism is operational work, recorded in [`TASKS.md`](../TASKS.md).
-
-### Restore suppression is WITHDRAWN (Revision 133)
-
-A design existed for one day: a durable ledger of deletions carrying no deleted
-content, replayed after any restore so the restored system would not resurrect
-people who had left. **The Owner removed it**, along with the runbook step that
-carried it.
-
-It was a subsystem whose only purpose was to compensate for a restore that should
-be rare, and it added a ledger, a procedure and a place to be wrong. What replaces
-it is a sentence the association can actually keep:
-
-> **A restored backup represents the state at the instant it was taken.** It does
-> not remember later deletions, and nothing claims it does.
-
-The privacy limit that follows is stated rather than engineered around — a live
-deletion never modifies an existing backup, so deleted data may remain in an
-older encrypted generation until rotation expires it, which is **at most two
-months** given one backup a month and two generations kept. **The person is told
-this on the confirmation, before she deletes anything.**
+- Deletion removes data from the live system; encrypted finite-lifetime backups may hold an older copy until expiry; no document or screen may promise byte-level erasure from written backups.
+- Restore suppression (a deletion ledger replayed after restore) existed one day and was removed by the Owner with its runbook step: **a restored backup represents the state at the instant it was taken** and nothing claims otherwise.
+- Deleted data may remain in an older generation at most two months (one backup a month, two generations); the person is told on the confirmation.
+- Not implemented: a restore that must not silently resurrect deleted data, with the smallest reliable mechanism (prefer an existing reconciliation ledger); operational work in [`TASKS.md`](../TASKS.md).
 
 ## The consent wording has fallen behind the decisions
 
-**Inventory, gap analysis and a DRAFT. Nothing here is applied.** The active
-wording is evidence: R119 makes it immutable once in force, and only the Owner
-authors and activates a version (SRS §2.3, R119 (8)). This section exists so the
-Owner can act on a prepared draft rather than a discovered surprise.
-
-### What is in force
+Inventory and DRAFT only; nothing applied. Active wording is immutable evidence (R119); only the Owner authors and activates (SRS §2.3, R119 (8)).
 
 | `version_label` | Status | In force since |
-| --- | --- | --- |
+|---|---|---|
 | `dev-unapproved-v1` | `superseded` | 2026-09-02 |
 | `نص-الموافقة-القانوني-إصدار-2026-09-02` | `active` | 2026-09-02 |
 
-**One active row, and the database enforces it** — the partial unique index over
-`status = 'active'`. Everything below concerns that row.
-
-### What is out of date in the active wording
-
-The active wording predates R130, R132 and R133. Four things it says or omits:
-
-* **Retention periods.** It defers them — *«سيتم تحديدها … بعد استكمال إجراءات
-  المطابقة»* — and they are decided: educational data lives while the account
-  lives, twelve months for applications.
-* **Date of birth.** R130 makes it required for every beneficiary and R133
-  deletes it with the account; the text names neither.
-* **Deletion.** It offers the 09-08 trio — access, rectification, opposition —
-  and the platform now implements a deletion the notice does not mention, whose
-  consequences (history gone, attestation possibly impossible) a person should
-  read *before* she uses it.
-* **Backups.** The notice is silent, and the honest limit is that a deleted
-  person's data may remain in an older encrypted generation for up to two
-  months.
+- One active row, enforced by the partial unique index over `status = 'active'`.
+- Out of date (predates R130, R132, R133): retention deferred («سيتم تحديدها … بعد استكمال إجراءات المطابقة») though decided (account lifetime; twelve months for applications); date of birth unnamed (R130 requires it, R133 deletes it); deletion absent (offers only access, rectification, opposition); backups unmentioned (up to two months in an older generation).
 
 ### The draft paragraphs
 
-**For the Owner to author, adapt and activate — not for me to install.** Each one
-states behaviour the platform actually has; **none states a CNDP requirement**,
-and none describes the seven days or the backup rotation as anything other than
-the association's own choices.
+For the Owner to author, adapt and activate; each states real platform behaviour; none states a CNDP requirement; seven days and backup rotation are the association's own choices. Rewritten 2026-09-05 for R133.
 
-**Rewritten 2026-09-05 for Revision 133.** The 2026-09-04 draft described a model
-that no longer exists — two requests, a ten-year archive, and a route back to a
-closed account — so those paragraphs are replaced rather than patched. What
-replaces them is shorter, which is the point.
+Replacing the retention paragraph:
 
-**Replacing the retention paragraph:**
+> تحتفظ الجمعية بالمعطيات التعليمية الخاصة بالمستفيدة ما دام حسابها قائماً. وعند حذف الحساب نهائياً تُحذف معه هذه المعطيات. أما طلبات التسجيل، فيتم الاحتفاظ بالطلب المرفوض مدة اثني عشر (12) شهراً ابتداءً من تاريخ قرار الرفض، وبالطلب الذي لم يُبتّ فيه مدة اثني عشر (12) شهراً ابتداءً من تاريخ تقديمه. ويبقى الاحتفاظ ببعض المعطيات لمدة أطول ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو متطلبات إثبات العمليات. وهذه المدد سياسة اعتمدتها الجمعية لأغراضها الخاصة.
 
-> تحتفظ الجمعية بالمعطيات التعليمية الخاصة بالمستفيدة ما دام حسابها قائماً. وعند
-> حذف الحساب نهائياً تُحذف معه هذه المعطيات. أما طلبات التسجيل، فيتم الاحتفاظ
-> بالطلب المرفوض مدة اثني عشر (12) شهراً ابتداءً من تاريخ قرار الرفض، وبالطلب
-> الذي لم يُبتّ فيه مدة اثني عشر (12) شهراً ابتداءً من تاريخ تقديمه. ويبقى
-> الاحتفاظ ببعض المعطيات لمدة أطول ممكناً عندما يفرضه التزام قانوني أو تنظيمي أو
-> متطلبات إثبات العمليات. وهذه المدد سياسة اعتمدتها الجمعية لأغراضها الخاصة.
+Added to the data-categories paragraph:
 
-**Added to the data-categories paragraph:**
+> تشمل معطيات الهوية المطلوبة لكل مستفيدة أو مستفيد تاريخ الازدياد الكامل، ويُستعمل لتحديد بلوغ سن الرشد وما يترتب عنه على مستوى تدبير الحساب، ولا يُستعمل لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن. ويُحذف تاريخ الازدياد عند حذف الحساب.
 
-> تشمل معطيات الهوية المطلوبة لكل مستفيدة أو مستفيد تاريخ الازدياد الكامل،
-> ويُستعمل لتحديد بلوغ سن الرشد وما يترتب عنه على مستوى تدبير الحساب، ولا يُستعمل
-> لقبول أو رفض إدراج المستفيدة أو المستفيد في فئة أو مستوى معيّن. ويُحذف تاريخ
-> الازدياد عند حذف الحساب.
+Replacing the rights paragraph's deletion clause:
 
-**Replacing the rights paragraph's deletion clause:**
-
-> يمكنكِ حذف حسابك. ينقطع الدخول فوراً، ويبقى الحساب قابلاً للاسترجاع عبر
-> الإدارة مدة سبعة (7) أيام؛ وبعدها يُحذف نهائياً هو والمعطيات التعليمية الخاصة
-> بكِ. وقد يتعذّر بعد ذلك إثبات المستوى الذي وصلتِ إليه أو إصدار شهادة لكِ. ولا
-> يشمل الحذف ما يفرض الاحتفاظ به التزام قانوني أو تنظيمي، ولا أدلة الموافقة، ولا
-> السجلات الأمنية الضرورية، وهي تخضع لمدد احتفاظ خاصة بها. كما لا يشمل ما لا
-> يخصّك وحدك، كالحصص والاختبارات والمحتوى التعليمي وسجلات الأشخاص الآخرين.
+> يمكنكِ حذف حسابك. ينقطع الدخول فوراً، ويبقى الحساب قابلاً للاسترجاع عبر الإدارة مدة سبعة (7) أيام؛ وبعدها يُحذف نهائياً هو والمعطيات التعليمية الخاصة بكِ. وقد يتعذّر بعد ذلك إثبات المستوى الذي وصلتِ إليه أو إصدار شهادة لكِ. ولا يشمل الحذف ما يفرض الاحتفاظ به التزام قانوني أو تنظيمي، ولا أدلة الموافقة، ولا السجلات الأمنية الضرورية، وهي تخضع لمدد احتفاظ خاصة بها. كما لا يشمل ما لا يخصّك وحدك، كالحصص والاختبارات والمحتوى التعليمي وسجلات الأشخاص الآخرين.
 >
-> ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية: تُؤخذ نسخة احتياطية
-> مشفّرة كل شهر ويُحتفظ بنسختين على الأكثر، فقد تبقى نسخة سابقة من معطياتك داخل
-> النسخة الأقدم إلى أن يحين دورها في الحذف.
+> ولا يمكن للجمعية أن تَعِد بمحو فوري من النسخ الاحتياطية: تُؤخذ نسخة احتياطية مشفّرة كل شهر ويُحتفظ بنسختين على الأكثر، فقد تبقى نسخة سابقة من معطياتك داخل النسخة الأقدم إلى أن يحين دورها في الحذف.
 >
-> وإذا رغبتِ في العودة إلى الجمعية بعد الحذف النهائي، فذلك تسجيل جديد يُنشئ سجلاً
-> جديداً؛ ولا يمكن استرجاع السجل المحذوف.
+> وإذا رغبتِ في العودة إلى الجمعية بعد الحذف النهائي، فذلك تسجيل جديد يُنشئ سجلاً جديداً؛ ولا يمكن استرجاع السجل المحذوف.
 
-**Added to the paragraph on minors:**
+Added to the paragraph on minors:
 
-> وعند بلوغ المستفيدة أو المستفيد سن الثامنة عشرة، يمكنه أن يطلب تدبير حسابه
-> بنفسه، ويصبح ذلك نافذاً بعد مصادقة إدارة الجمعية. وابتداءً من تلك اللحظة تنتهي
-> صلاحية ولي الأمر في تدبير هذا الحساب ولا تُستعاد. ولا يتم هذا الانتقال بصورة
-> تلقائية بمجرد بلوغ هذا السن.
+> وعند بلوغ المستفيدة أو المستفيد سن الثامنة عشرة، يمكنه أن يطلب تدبير حسابه بنفسه، ويصبح ذلك نافذاً بعد مصادقة إدارة الجمعية. وابتداءً من تلك اللحظة تنتهي صلاحية ولي الأمر في تدبير هذا الحساب ولا تُستعاد. ولا يتم هذا الانتقال بصورة تلقائية بمجرد بلوغ هذا السن.
 
-### What activating it costs
-
-**Nothing is restamped.** R119 (6) is the rule: existing `ConsentRecord` rows keep
-the version they were written against, because they record what those people
-actually read. A new version applies to consents given **after** it takes effect,
-and the old wording stays readable forever as the evidence for the ones before.
-**Nobody is re-asked**, and no screen should imply they were.
-
-## Status
-
-**One deletion lifecycle, and this page describes it** (Revision 133):
-
-* **DELETE → seven-day Trash → restore, or permanent deletion.** One window for
-  every entity, accounts included.
-* **Permanent account deletion destroys what is hers alone** — profile, birth
-  date, `reference_code`, authentication, enrolments, grades, attendance, Quran
-  progress, submissions, group membership, her copied application identity, her
-  family links, and every snapshot able to restore them. `erasure.ts` is the one
-  place that boundary is defined.
-* **Shared institutional data survives**, always: the Session, the Exam, the
-  Level, the Branch, teacher-authored content and every other person's records.
-* **No Option A, no Option B, no account-return queue, no ten-year archive, no
-  deletion replay.** Each was real and each is withdrawn; the history is in
-  `CHANGES.log`, and nothing above is normative any more.
-* **A future attestation is not guaranteed after deletion**, and the person is
-  told so before she confirms.
-* **Backups rotate monthly at two generations**, so deleted data may persist in
-  the older one until it rotates out — stated, never engineered around.
+- Activating restamps nothing (R119 (6)): existing `ConsentRecord` rows keep their version; the new version applies to consents given after it; old wording stays readable; nobody is re-asked.

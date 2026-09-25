@@ -2,886 +2,229 @@
 
 # Identity and access
 
-The part of the system with the most consequence if it is wrong. Read it before touching
-anything that decides who may see what.
-
-Four separable concerns, in the order a request meets them:
-
-1. **[Authentication](#authentication)** — who is calling
-2. **[Sessions](#sessions)** — how that survives across requests
-3. **[Authorization](#authorization)** — what they may do
-4. **[Child context](#child-context)** — whose data they may act on
-
----
+Request order: [Authentication](#authentication) → [Sessions](#sessions) → [Authorization](#authorization) → [Child context](#child-context).
 
 ## Authentication
 
-**Google OAuth is the only identity provider.** No passwords, no hashes, no reset flows, no
-password columns "for later". Minor students have no login identity at all.
+- Google OAuth is the only identity provider: no passwords, hashes, reset flows or password columns; minor students have no login identity.
+- `UserIdentity` (provider + subject id) abstracts the provider so local credentials can be added post-MVP without restructuring `User` ([Risk R-1](../overview/scope-and-roadmap.md#open-risks)).
+- Scope is `openid email` only (Owner 2026-09-02, R121): `sub` binds the account; `email` feeds `UserIdentity.email` and the `email_verified` hard stop (§4.1b step 7); `profile` was never read by `verifyGoogleIdToken`, so removed. The privacy page names the same two scopes; `legal.test.ts` asserts it and `oauth.ts` agree.
+- Always: PKCE S256, `state`, HMAC-sealed flow cookie, `prompt=select_account`, subject binding; no Google token is ever persisted and no Google API is called after login.
 
-The identity layer is **provider-abstracted** — a `UserIdentity` table keyed by provider and
-subject id — specifically so local credentials can be added post-MVP without restructuring
-`User`. That abstraction exists because the Google-only decision has a known cost
-([Risk R-1](../overview/scope-and-roadmap.md#open-risks)).
+### Onboarding sequence
 
-### The onboarding sequence
+OAuth-first: the registration form is never shown before Google authentication completes; its email field is pre-filled and read-only.
 
-**OAuth-first: the registration form is never shown before Google authentication
-completes.** The verified email therefore always exists before any account data is
-collected, and the email field on the form is pre-filled and read-only.
+1. `GET /auth/google`: state + PKCE verifier in a short-lived signed HttpOnly cookie scoped to the callback; redirect to Google.
+2. `GET /auth/google/callback?code&state`: validate state + PKCE, exchange the code, verify the ID token (below), extract verified email + subject id.
+3. Resolve against the LOWERCASED email: `UserIdentity(google, subject_id)` → else `User.pre_provisioned_email` regardless of `deleted_at` → else nobody known.
+4. Identity exists → session, routed on the condition below. Pre-provisioned match → lock the `User`, re-read status/deletion/roles, create and bind the identity transactionally only if still eligible. Nobody known → onboarding token → registration form.
 
-```mermaid
-sequenceDiagram
-    participant V as Visitor
-    participant C as Client
-    participant A as API
-    participant G as Google
-
-    V->>C: "Continue with Google"
-    C->>A: GET /auth/google
-    A->>A: mint state + PKCE verifier<br/>store in a short-lived signed<br/>HttpOnly cookie scoped to the callback
-    A-->>C: redirect to Google
-    C->>G: authenticate
-    G-->>A: GET /auth/google/callback?code&state
-    A->>A: validate state + PKCE
-    A->>G: exchange code
-    G-->>A: signed ID token
-    A->>A: verify signature + provider claims<br/>then extract verified email + subject id
-
-    Note over A: Resolution order — always against the LOWERCASED email
-    A->>A: 1. UserIdentity(google, subject_id)?
-    A->>A: 2. else User.pre_provisioned_email?<br/>   regardless of deleted_at
-    A->>A: 3. else nobody we know
-```
-
-Then routing:
-
-| Case | Action |
-|---|---|
-| **Identity exists** | Establish the session and route on the **complete** condition (below) |
-| **Pre-provisioned match** | Lock the matched `User`, re-read status/deletion and roles, then **create and bind** the identity transactionally only if still eligible. From here every later login resolves at step 1 |
-| **Nobody we know** | Issue a short-lived onboarding token, redirect to the registration form |
-
-Resolution is deliberately not credential authority. Before an Active or Pending result can
-mint anything, the callback opens one final transaction, locks that person's stable `User` row,
-and re-reads status plus live role assignments. It creates the `RefreshSession`, first refresh
-generation, and `auth.login` audit in that transaction; the access token and cookie leave the
-service only after commit. If suspension committed after the earlier resolution, the re-read
-routes to the existing deactivated screen and creates no credential.
-
-The first binding has the same authoritative boundary. Its earlier email lookup only discovers
-a candidate; it does not authorize the write. The binding transaction takes the User lock and
-re-runs the complete routing condition before creating `UserIdentity` or `auth.identity_bound`.
-Suspension first therefore leaves no new identity or binding audit; binding first commits both,
-after which suspension may proceed and final issuance still re-reads the deactivated state.
-
-### One registration, several roles (R168 §1)
-
-The form the onboarding token leads to asks **what she wants** as four checkboxes, any combination
-— مستفيدة · تسجيل الأبناء · هيئة التدريس · هيئة الإدارة — and who she is **once**. The contract is
-SRS Revision 168 §1; this is how it is held together.
-
-| Piece | Where | The rule it carries |
-|---|---|---|
-| The request | `validators/registration.validators.ts` (`kind: 'roles'`) | A section for every role asked for and for no other; a date of birth exactly when `student` is asked (R130). **No field names an administrative role** — `administration` carries only where she would prefer to serve |
-| The write | `services/registration.service.ts` | All three request shapes are normalised into one write: the `User`, one `RoleRequest` per role, her `CirclePreference` rows (each checked against what is on offer — `CIRCLE_NOT_OFFERED`), the framing preference, the child applications |
-| What she may rank | `services/registration-circle-slots.service.ts` | Read from the SCHEDULE every time: the live weekly memorisation classes addressed to a حلقة of her Category's FIRST Level at her branch. Anonymous, so it publishes a name, days and times and nothing else; never a «مخفي» class |
-| One role decided | `services/role-request.service.ts` | `student` = a placement (`enrolAtPlacement`); `teaching`/`administration` = a grant the APPROVER states; `guardian` = nothing granted. Roles are ADDED through `ensureRoleAssignment` — never `applyRoleAssignments`, which replaces the set and would revoke what an earlier approval gave |
-| The account | same | `pending → active` on the FIRST approval; `rejected` (sessions revoked in the same transaction, R102) only when EVERY request was declined |
-| The whole-account act | `services/approval.service.ts` | Kept for a registration that asked for one ordinary thing, mirroring its decision onto the request. Several requests, or a lone `administration` one, answer `DECIDE_PER_ROLE` |
-
-**Asking grants nothing.** A `RoleRequest` is never read to decide what anybody may do; authority is
-`UserBranchRole`, and the only writer reached from here is the audited approval, behind
-`assertFreshActive`, the User row lock (TD-15.3 first-wins) and the privilege guard of the one
-role-management implementation. **A place in the administration is a Super Admin's decision on
-both paths** — the per-role act refuses an Admin with `403`, and the whole-account act, which is
-open to every approver, refuses a lone `administration` request rather than let an Admin record it
-as accepted while granting nothing.
-
-**A guardian is accepted by accepting a child.** `parent` is still granted with her first approved
-child (R62). Approving a child application directly marks a pending `guardian` request approved —
-that has always been possible and is what an approver means by it — and is blocked only when the
-request was **declined** (`GUARDIAN_REQUEST_DECLINED`). Declining `guardian` rejects her pending
-child applications with it (`not_eligible`): a child is not admitted under a guardian the
-association did not accept.
-
-**After admission, the same request — one role at a time (R169 §1).** `requestFurtherRole`
-(`POST /profile/role-requests`) lets an ACTIVE account ask for a role it does not hold, or again for
-one that was declined. It writes no authority either: it opens one `RoleRequest` or **re-opens the
-existing row** (UNIQUE `(user_id, kind)` keeps one line of history; the audit log keeps both
-decisions), replaces her ranked circles and framing preference with what she says NOW, completes a
-missing date of birth (never corrects one), and raises the approvers' ordinary
-`registration_review_required` notice. The queue lists such an account because it lists any account
-with a pending request, and marks the item `account_active` — there is no pending ACCOUNT to approve
-or reject, so the whole-account act does not apply and the screen offers the per-role review only.
-Registering a child re-opens a declined `guardian` request for the same reason. **The decline
-reason is never returned to her** (`GET /profile/role-requests` omits it by projection). The same
-read answers `held[]` — the kinds she HOLDS, from live role rows — because «صفاتي وطلباتي» is
-always on «حسابي» (R170 §1): a person holding every role has nothing askable and no request, and a
-section that then rendered nothing is how the Owner could not find it.
-
-**The access token is renewed, not merely obtained (R172 §5).** It lives one hour (TD-12), and
-until Revision 172 the client fetched it once and never again: a tab open for an hour then failed
-every call with 401 until reloaded — the Owner met it as a failed save after a 65-minute recording.
-`lib/token-refresh.ts` now renews it two ways: `api()` retries a 401 to a bearer request ONCE with
-a freshly refreshed token (a session that is genuinely over yields none, and the 401 stands; an
-anonymous request never triggers it), and `SessionProvider` renews on a timer five minutes before
-expiry and when a hidden tab becomes visible again. Single-flight, as before; the refreshed token
-is announced to the session context so every later request carries it (`api.test.ts`).
-
-**A granted role is hers at her next page, not at her next sign-in (R169 §2).** The access token
-lives in memory only; every page load calls `POST /auth/refresh`, which reads the live
-`UserBranchRole` rows and re-resolves the active role. Nothing is revoked when a role is ADDED —
-revocation is for suspension, rejection, deletion and replay — and
-`auth-refresh.http.integration.test.ts` pins that the very next refresh of the same session carries
-the new role.
-
-**The self-managed claim (R132) is not one of the roles** — it claims a record that exists. Its
-entry stays withdrawn from the form (R160 §8) and is reached by `/register?mode=self-managed`.
+- Resolution is not credential authority: before an Active/Pending result mints anything, one final transaction locks the `User` row, re-reads status + live roles, creates `RefreshSession`, first refresh generation and `auth.login` audit; token and cookie leave only after commit; a suspension committed meanwhile routes to the deactivated screen with no credential.
+- First binding: the email lookup only discovers a candidate; the binding transaction takes the User lock and re-runs the routing condition before creating `UserIdentity` or `auth.identity_bound`.
 
 ### The Google identity trust boundary
 
-The authorization-code exchange and ID-token validation are **two different security
-steps**. TLS protects the server-to-server code exchange; it does not make an unverified
-JWT payload an identity. The callback passes Google's `id_token` to the supported Google
-Auth Library before it reads `sub` or `email`. The verifier requires an `RS256` protected
-header with a non-empty provider key id, verifies the signature against Google's fetched
-and cached signing certificates, and checks the token lifetime, the two documented Google
-issuers, and this deployment's configured client id as the audience. Only then does the
-application require a non-empty subject and email plus `email_verified = true`.
+- Code exchange and ID-token validation are two separate steps; TLS does not make an unverified JWT payload an identity.
+- `id_token` goes to the Google Auth Library before `sub`/`email` are read: `RS256` header with non-empty key id, signature against Google's fetched and cached certificates, lifetime, the two documented Google issuers, this deployment's client id as audience; then non-empty subject and email plus `email_verified = true`.
+- Malformed, bad-signature, expired, wrong-issuer/audience, unknown-key tokens and certificate retrieval failures fail closed as `oauth_unavailable` without touching an account; false or missing `email_verified` → `email_unverified`. Neither the token nor provider error details are logged.
+- Pure code flow (`response_type=code`): no ID token reaches the browser, so no nonce (signed flow state binds the callback, PKCE the code); revisit if the flow ever becomes hybrid/implicit.
 
-Malformed tokens, bad signatures, expired tokens, wrong issuer or audience, unknown keys,
-and provider-certificate retrieval failures all fail closed as `oauth_unavailable` without
-touching an account. A false or missing `email_verified` claim uses the SRS-specific
-`email_unverified` redirect. Neither the token nor provider error details are logged.
-
-This is a pure authorization-code flow (`response_type=code`), so the browser receives no
-ID token in the authorization response. A nonce is therefore not added: the signed,
-short-lived flow state binds the browser callback and PKCE binds the exchanged code, while
-Google defines `nonce` as optional for this response type. If the flow ever changes to a
-hybrid or implicit response that returns an ID token through the browser, that decision
-must be revisited rather than copied forward.
-
-### The routing condition, in full
+### Routing condition
 
 ```
-account_status = Active     AND deleted_at IS NULL  → role dashboard
-account_status = Pending    AND deleted_at IS NULL  → approval-status screen, zero data access
-account_status ∈ {Rejected, Suspended} OR deleted_at IS NOT NULL
-                                                    → "Account deactivated"
+Active  AND deleted_at IS NULL → role dashboard
+Pending AND deleted_at IS NULL → approval-status screen, zero data access
+Rejected|Suspended OR deleted_at IS NOT NULL → "Account deactivated"
 ```
 
-**Both terms are required.** Routing on `account_status` alone would hand a soft-deleted
-user a dashboard, because a soft delete sets `deleted_at` without necessarily moving the
-status.
+- Both terms required: a soft delete sets `deleted_at` without necessarily moving status.
+- The pre-provisioned lookup is NOT scoped to `deleted_at IS NULL` (that once offered a deleted person the registration form); refusal is solely the routing condition's job (R20).
 
-This condition took two revisions to get right, and the bug it fixed is instructive. The
-pre-provisioned lookup was originally scoped to `deleted_at IS NULL` — which is exactly what
-made a deleted account **unreachable**, so it fell through to onboarding and the platform
-would have offered **a deleted person the registration form**, contrary to the rule that
-nothing silently re-registers. The scoping was removed and refusal became solely the
-routing condition's job: **one rule instead of two half-rules** (Revision 20).
+### One registration, several roles (R168 §1)
 
-### Account deletion is a recoverable tombstone before it is de-identified
+One form: four checkboxes in any combination — مستفيدة · تسجيل الأبناء · هيئة التدريس · هيئة الإدارة — and who she is, once.
 
-R133 supersedes R111's earlier retention window. `DELETE /profile` (the account
-owner) and `DELETE /admin/users/{id}` (Super Admin) first stamp `deleted_at`, revoke every
-refresh session, and write a seven-day Trash snapshot in one transaction. They remove no
-identity, role, family, enrolment or staffing-history row during that window. The Trash
-restore action can therefore restore the complete same account by clearing the tombstone;
-revoked credentials remain revoked and the person signs in again.
+| Piece | Where | Rule |
+|---|---|---|
+| Request | `validators/registration.validators.ts` (`kind: 'roles'`) | A section per role asked and no other; date of birth exactly when `student` is asked (R130); no field names an administrative role — `administration` carries only where she would prefer to serve |
+| Write | `services/registration.service.ts` | All three request shapes normalise into one write: `User`, one `RoleRequest` per role, `CirclePreference` rows (checked against the offer — `CIRCLE_NOT_OFFERED`), framing preference, child applications |
+| Rankable circles | `services/registration-circle-slots.service.ts` | Read from the SCHEDULE every time: live weekly memorisation classes for a حلقة of her Category's FIRST Level at her branch; anonymous, so name, days, times only; never a «مخفي» class |
+| One role decided | `services/role-request.service.ts` | `student` = placement (`enrolAtPlacement`); `teaching`/`administration` = a grant the APPROVER states; `guardian` = nothing granted. Roles ADDED via `ensureRoleAssignment`, never `applyRoleAssignments` (replaces the set) |
+| Account | same | `pending → active` on the FIRST approval; `rejected` (sessions revoked in the same transaction, R102) only when EVERY request was declined |
+| Whole-account act | `services/approval.service.ts` | Kept for a registration asking one ordinary thing, mirroring its decision onto the request; several requests, or a lone `administration` one, answer `DECIDE_PER_ROLE` |
 
-`?permanent=true` performs the later de-identification immediately. The User id, sex,
-account lifecycle, beneficiary fact and institutional relationships survive, while names and
-their split parts, contact/public identity, registration-request fields, notes, spoken and QR
-identifiers, Google binding, roles, live credentials, quota rows, notifications, safeguarding
-case-file detail and teaching-planning rows are cleared. The recoverable snapshot is deleted
-in the same transaction: leaving the original name, phone and email in Trash would make the
-erasure cosmetic. Removing the two ownership facts releases the address and re-registration is
-tested. The Owner-ratified [keyed-lock design](../development/email-lock-keying.md) retains
-only a stable HMAC coordinate, not the address, so the next claimant remains serialized.
-No post-commit lock-retirement loop remains. The User repository's erasure-only
-`minimizeSelfManagedClaimIdentity` operation receives the existing User-locked
-transaction and includes tombstoned claims. Claim credentials (`email`, provider subject
-and decision text) are cleared in that transaction, including related Trash snapshots;
-an approved claim retains its structural self-management fact so removing authentication
-cannot restore guardian authority. Pending claims are withdrawn. Claim request/decision
-writers take the beneficiary User lock and re-read state before writing. Ordinary
-pending-list/decision reads remain live-only; erasure returns counts, not claim records.
+- Asking grants nothing: a `RoleRequest` is never read for authority; authority is `UserBranchRole`, written only by the audited approval behind `assertFreshActive`, the User row lock (TD-15.3 first-wins) and the one role-management privilege guard.
+- Administration is a Super Admin decision on both paths: the per-role act refuses an Admin with `403`; the whole-account act refuses a lone `administration` request.
+- A guardian is accepted by accepting a child: `parent` is granted with her first approved child (R62); approving a child application approves a pending `guardian` request, blocked only when it was declined (`GUARDIAN_REQUEST_DECLINED`); declining `guardian` rejects her pending child applications (`not_eligible`).
+- After admission, one role at a time (R169 §1): `requestFurtherRole` (`POST /profile/role-requests`) lets an ACTIVE account ask for a role not held or declined; writes no authority; opens or re-opens the `RoleRequest` row (UNIQUE `(user_id, kind)`; audit keeps both decisions); replaces ranked circles and framing preference; completes a missing date of birth, never corrects one; raises `registration_review_required`; the queue marks it `account_active`, per-role review only. Registering a child re-opens a declined `guardian` request.
+- The decline reason is never returned (`GET /profile/role-requests` omits it by projection); the same read answers `held[]` from live role rows because «صفاتي وطلباتي» is always on «حسابي» (R170 §1).
+- Token renewal (R172 §5, `lib/token-refresh.ts`): `api()` retries a bearer 401 ONCE with a refreshed token (an ended session yields none; anonymous requests never trigger it); `SessionProvider` renews five minutes before expiry and when a hidden tab becomes visible; single-flight; announced to the session context (`api.test.ts`).
+- A granted role is hers at her next page (R169 §2): the token lives in memory only; every page load calls `POST /auth/refresh`, which reads live `UserBranchRole` rows; adding a role revokes nothing (`auth-refresh.http.integration.test.ts`).
+- The self-managed claim (R132) is not a role; its form entry stays withdrawn (R160 §8), reached by `/register?mode=self-managed`.
 
-R141 also prohibits copying self-managed rejection rationale into audit detail:
-only the claim stores that text. The rejected event retains claim/beneficiary
-ids, actor, timestamp and event type. A data-only migration removes historical
-reason copies under the narrow TD-8 append-only exception, including records
-whose claim/beneficiary is already gone; it preserves all other audit evidence.
+### Account deletion: recoverable tombstone, then de-identification
 
-Live responsibilities and the last active Super Admin still block the first step. The check is
-time-aware: ended schedule/assignment periods and past occurrences are history, while live or
-future schedules, Sessions, responsible Events and Exams must be reassigned. Event liveness is
-read from `start_date`/`end_date`/`recurrence_end_date`, never a nonexistent generic date field.
-Session regeneration selects only the staff assignment effective on that occurrence date, and a
-schedule split validates only assignments whose dated interval can staff its successor; an ended
-former assignment remains historical evidence rather than an obligation that blocks forever.
+- R133 supersedes R111. `DELETE /profile` (owner) and `DELETE /admin/users/{id}` (Super Admin) stamp `deleted_at`, revoke every refresh session and write a seven-day Trash snapshot in one transaction; no identity, role, family, enrolment or staffing-history row is removed in that window; restore clears the tombstone; revoked credentials stay revoked.
+- `?permanent=true` de-identifies now: User id, sex, account lifecycle, beneficiary fact and institutional relationships survive; names and split parts, contact/public identity, registration-request fields, notes, spoken and QR identifiers, Google binding, roles, live credentials, quota rows, notifications, safeguarding case-file detail and teaching-planning rows are cleared; the Trash snapshot is deleted in the same transaction; the address is released (re-registration tested); the [keyed-lock design](../development/email-lock-keying.md) keeps only a stable HMAC coordinate; no post-commit lock-retirement loop.
+- `minimizeSelfManagedClaimIdentity` (User repository, erasure-only, User-locked, tombstoned claims included) clears claim `email`, provider subject and decision text (related Trash snapshots too); an approved claim keeps its structural self-management fact so removing authentication cannot restore guardian authority; pending claims withdrawn; claim writers take the beneficiary User lock and re-read; erasure returns counts, not claim records.
+- R141: rejection rationale is never copied into audit detail (event keeps claim/beneficiary ids, actor, timestamp, type); a data-only migration removed historical copies under the narrow TD-8 exception.
+- Live responsibilities and the last active Super Admin block the first step, time-aware: ended periods and past occurrences are history; live/future schedules, Sessions, responsible Events and Exams must be reassigned; Event liveness reads `start_date`/`end_date`/`recurrence_end_date`; Session regeneration selects only the assignment effective on that date; a schedule split validates only assignments whose dated interval can staff its successor.
+- Serialized: every staffing mutation locks its distinct User ids in UUID order and revalidates active/non-deleted state; deletion takes the same lock first; a future Exam restore does too before reviving `ExamStaff`; the loser refuses `STAFF_ACCOUNT_UNAVAILABLE`; the last-Super-Admin count locks the stable `super_admin` Role row after the target User lock.
+- Satellite writers (admin teaching-profile replacement, teacher availability, safeguarding-profile writes, upload initiation/publication) revalidate after the User lock; notification delivery locks recipients in UUID order and omits a committed tombstone; a published upload remains institutional history, its retry idempotently readable.
+- De-identification locks email → PlatformOwner → User, re-reads the tombstone, refuses `NOT_DELETED` if restoration won; a converged retry is a no-op (QR coordinate kept, no second `user.deidentify` event); sweep work names the exact `Trash.id` and revalidates under the User lock; restoration re-reads the exact entry and refuses at/after its deadline.
+- Permanent purge destroys the beneficiary's own educational/personal record and FamilyLinks; consent/audit and shared accountability keep pointing at the tombstone; the User row is never hard-deleted.
 
-The rule is serialized, not merely checked. Every supported staffing mutation locks its distinct
-User ids in UUID order and revalidates active/non-deleted state; deletion takes the same User lock
-before reading responsibilities. A future Exam restore does too before reviving its `ExamStaff`.
-Thus staffing either commits first and deletion names the obligation, or deletion commits first
-and staffing/restoration refuses transactionally with `STAFF_ACCOUNT_UNAVAILABLE`. The
-last-Super-Admin count uses the stable `super_admin` Role row as its platform-wide lock after the
-target User lock, so two different administrators cannot both observe the other and leave the
-platform with none.
+### Onboarding token
 
-Final erasure uses that lock boundary for the satellite writers too. Administrative teaching-
-profile replacement, teacher availability self-service, safeguarding-profile writes and upload
-initiation/publication revalidate the target only after taking the User lock. Notification
-delivery locks distinct recipients in UUID order and omits a committed tombstone. Consequently a
-request authorised or resolved just before deletion cannot recreate planning, case-file, quota or
-inbox rows—or mint/publish a new upload—after de-identification: either the writer commits first
-and the purge removes its deletable satellite, or the purge commits first and the writer
-refuses/omits it. An already-published upload remains institutional history and its retry remains
-idempotently readable.
-
-De-identification follows email → PlatformOwner → User lock order and then re-reads the tombstone. If
-Trash restoration committed first, it refuses with `NOT_DELETED` instead of erasing the restored
-live account. A converged retry is a no-op: it preserves the already rotated QR coordinate and
-does not manufacture a second `user.deidentify` audit event. Automatic work also names the
-exact `Trash.id` observed by the sweep: under the User lock it revalidates target, current
-deletion and expiry of that exact generation. Restore/re-delete therefore makes old work
-stale even when the same User is deleted again. User restoration takes the same lock,
-re-reads the exact Trash entry and refuses at/after its deadline without waiting for a sweep.
-
-R133 destroys the beneficiary's own educational/personal record and FamilyLinks at permanent
-purge. Required consent/audit and shared institutional accountability keep pointing at the
-tombstone; the User row itself is never hard-deleted. This is not an educational archive.
-
-### The onboarding token
-
-Short-lived (10 minutes), signed, single-use. It carries the verified email and subject id
-from the callback to the form submission.
-
-**The server extracts identity exclusively from the token payload.** Any email or OAuth
-identifier in the request body is ignored entirely — the schema for that endpoint does not
-even accept those fields, so a client cannot bind a different identity than the one Google
-verified.
-
-**Single-use is enforced mechanically.** Every token carries a unique `jti`; at submission
-the `jti` is inserted into `ConsumedToken` **inside the registration transaction**, under a
-unique constraint. A replayed token hits the violation, the transaction aborts, and the
-request fails with `409`. Not a check — a constraint.
+- 10 minutes, signed, single-use; carries verified email + subject id to the form submission; identity comes exclusively from the token payload and the endpoint schema accepts no email/OAuth fields.
+- Single-use by constraint: unique `jti` inserted into `ConsumedToken` inside the registration transaction; replay → `409`.
 
 ### Callback failures are redirects, never JSON
 
-The callback is a browser redirect flow. Its failures never emit the API error envelope;
-they redirect to `/login?error=<key>` and render as a friendly message with a retry:
+- `/login?error=<key>`: `user_denied` · `state_mismatch` (also a security-event log) · `oauth_unavailable` · `email_unverified` (hard stop, no account touched); no partial state on any failure path.
+- The flow-state cookie is single-use: Back onto a consumed callback URL renders the standalone `state_mismatch` screen; its missing app header does not mean the refresh session was lost.
 
-`user_denied` · `state_mismatch` (also logged as a security event) · `oauth_unavailable` ·
-`email_unverified` (hard stop, no account touched).
+### Email normalization and the cross-table lock
 
-No partial state is ever persisted on any failure path.
-
-The flow-state cookie is single-use. Pressing Back onto a callback URL after a successful
-callback therefore replays an already-consumed coordinate and correctly renders the compact,
-standalone `state_mismatch` login/retry screen. That screen is an authentication status
-surface, not the ordinary public-page shell; its missing application header does not mean the
-refresh session was lost. A fresh page still attempts the ordinary refresh-cookie flow.
-
-### Email normalization
-
-Every Google email is **lowercased before every lookup and every write** — identity
-binding, pre-provision matching, the bootstrap comparison, persistence. The database
-independently enforces lowercase storage with a `CHECK`, so a single unlowered code path
-cannot create a case variant that slips past the unique index.
-
-### One normalized email across both ownership channels
-
-An address may be represented before login by `User.pre_provisioned_email`, or after a
-completed binding by `UserIdentity.email`. The two same-table unique indexes cannot protect
-the **absent-row race** between those channels: registration and staff pre-provisioning could
-both observe no owner and insert into different tables.
-
-`NormalizedEmailLock` is the shared transaction boundary. It contains only a domain-separated
-keyed digest of the normalized email and creation time — deliberately **no owner id**. Ownership remains in the two SRS
-fields above; the extra row supplies the stable target that PostgreSQL can lock even when
-neither ownership row existed when the transactions began. On first use, `INSERT … ON
-CONFLICT DO NOTHING` establishes the row and `SELECT … FOR UPDATE` holds it through the
-authoritative cross-table re-read and write.
-
-Production writers participate through one repository primitive: onboarding registration,
-staff pre-provisioning, first-login identity binding, self-managed claim approval and
-Super Admin bootstrap. Their order is email lock first,
-then the existing User lock where binding or account-state serialization also applies. A
-callback's ten-minute onboarding token is therefore a routing snapshot, not a reservation:
-if staff provision the address before submission, registration returns the existing duplicate
-conflict and its transaction rolls back the `ConsumedToken` insert too. The next verified
-OAuth attempt follows the ordinary pre-provisioned binding path.
-
-A persisted owner/claim row was rejected because it would duplicate which User the two SRS
-fields already name. A transaction advisory lock was rejected because it would hash an
-unbounded email into PostgreSQL's finite advisory-key space and depart from the repository
-row-lock convention. A hypothetical HMAC collision merely serializes two addresses on the
-same lock; the actual ownership re-read still distinguishes them. Row locks release at
-transaction end, failed inserts roll back, and committed digest rows remain stable.
-
-The Owner resolved the former plaintext-lock question through the
-[ratified keyed-lock design](../development/email-lock-keying.md). The retained digest
-is not an email **claim** and does not block OD-07 re-registration. Do not delete
-lock rows during account erasure; operational migration/rotation uses the design's
-stopped-writer maintenance boundary, with a shared operator-provisioned key.
-
----
+- Every Google email is lowercased before every lookup and write; a DB `CHECK` enforces lowercase storage.
+- An address lives in `User.pre_provisioned_email` or, after binding, `UserIdentity.email`; two same-table unique indexes cannot protect the absent-row race between them.
+- `NormalizedEmailLock` ([design](../development/email-lock-keying.md)): a domain-separated keyed digest + creation time, no owner id; `INSERT … ON CONFLICT DO NOTHING` then `SELECT … FOR UPDATE` held through the cross-table re-read and write.
+- Writers via one repository primitive: onboarding registration, staff pre-provisioning, first-login binding, self-managed claim approval, Super Admin bootstrap; email lock first, then the User lock.
+- The onboarding token is a routing snapshot, not a reservation: staff provisioning first → duplicate conflict, `ConsumedToken` insert rolled back; the next OAuth attempt binds via the pre-provisioned path.
+- Rejected: a persisted owner/claim row (duplicates the two SRS fields); a transaction advisory lock (unbounded email into finite key space). An HMAC collision merely serializes two addresses.
+- The digest is not an email claim and does not block OD-07 re-registration; never delete lock rows during erasure; rotation uses the stopped-writer boundary with a shared operator-provisioned key.
 
 ## Sessions
 
 | Token | Lifetime | Transport |
 |---|---|---|
-| **Access** | 1 hour | `Authorization: Bearer` header — **never a cookie** |
-| **Refresh** | 30 days | `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` cookie |
+| Access | 1 hour | `Authorization: Bearer` header — never a cookie |
+| Refresh | 30 days | `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` cookie |
 
-### The CSRF posture
+### CSRF
 
-Because the access token lives in a header and never in a cookie, **ordinary API mutations
-are structurally immune to CSRF** — a cross-site attacker cannot set the header.
+- Access token in a header → ordinary mutations are structurally immune to CSRF.
+- Only `POST /auth/refresh` and `POST /auth/logout` read the cookie; both require `X-Requested-With` and validate `Origin` against the public base URL BEFORE reading it; no double-submit token; frontend JS never receives the cookie.
+- Same-origin routing is never CSRF protection.
 
-Exactly two routes consume the refresh cookie: `POST /auth/refresh` and
-`POST /auth/logout`. Both require a custom header (`X-Requested-With`) and validate the
-`Origin` against the configured public base URL **before reading the cookie**. Combined with
-`SameSite=Lax`, that closes the remaining surface without a double-submit token system.
-The browser manages the credential throughout; frontend JavaScript never receives it.
+### Rotation: three outcomes
 
-> **Same-origin routing is a delivery mechanism, not a security shield.** Never treat it as
-> CSRF protection by itself.
+Refresh tokens are stored hashed, never raw; lookup is by hash:
 
-### Rotation, and the three outcomes
+| Presented | Outcome |
+|---|---|
+| Current, live | ROTATE: revoke, insert a successor in the same session, new access token |
+| Immediate predecessor within 10 s of its successor | ACCEPT: fresh access token, RE-SEND the issued successor; no third token (a fork would defeat reuse detection) |
+| Older, or revoked | REUSE DETECTED: revoke EVERY live token in the session, refuse, two audit rows |
 
-Refresh tokens are stored **hashed, never raw** — a stolen database dump must not yield
-usable 30-day credentials. The presented value is hashed and looked up against the unique
-hash. Exactly three outcomes, decided by the predecessor pointer and the revocation flag:
+- The client single-flights refreshes with a mutex.
+- Refresh, logout and maintenance serialize on the chain: the hash discovers `session_id`; the transaction locks the stable `RefreshSession` row and re-reads before deciding (first read = discovery, never authority).
+- Login, Pending → Rejected, suspension and revoke-all serialize on the `User` row; hierarchy always User → `RefreshSession` anchors in UUID order; the issuer re-reads Active/Pending under that lock.
+- The User lock is `FOR NO KEY UPDATE`: compatible with the implicit `KEY SHARE` from refresh/logout inserting a `RefreshToken`/`AuditLog` row; `FOR UPDATE` would deadlock Session → User against User → Session.
+- Rotation commits as the TD-4.13 unit; HTTP refresh re-takes the session lock, verifies a live generation, reads authoritative account + assignments and signs under the lock; logout in between → `401`, no credential; only authoritative `Active`/`Pending` accounts are eligible; holding a transaction across response delivery was rejected.
+- Reuse ends the whole session; never accepted, never resurrected.
+- Every refusal is `401` in the standard envelope; no new error code; the distinction lives in the audit log.
+- Revoke-all is internal (rejection, suspension, deletion); no user-facing "log out everywhere" route or nav node; locks User, then session rows in UUID order.
+- Pending → Rejected: reason `rejection`; `user.reject` + `auth.token_revoked` in the status transaction; audit failure rolls the decision back; Rejected is terminal; an issued access token keeps only its TTL and per-request freshness.
 
-```mermaid
-flowchart TD
-    P["refresh token presented"] --> L{"look up by hash"}
-    L -->|"current, live"| R["ROTATE — revoke it, insert a successor<br/>in the same session, return new access token"]
-    L -->|"immediate predecessor,<br/>within 10 s of its successor"| G["ACCEPT — return a fresh access token<br/>and RE-SEND the already-issued successor.<br/>No third token is minted."]
-    L -->|"anything older,<br/>or already revoked"| X["REUSE DETECTED — revoke EVERY live token<br/>in that session, refuse, write two audit rows"]
-```
+### Logout
 
-Three details carry real weight:
+- `POST /auth/logout` revokes every live token with the cookie's `session_id`, writes `auth.logout` in the same transaction (mandatory: if unwritable, the revocation rolls back and the cookie stays), then expires the cookie; another browser stays signed in.
+- Idempotent: valid CSRF context + absent/unknown/cleared cookie → `204`; missing or foreign CSRF context → `401` before the cookie is inspected.
+- R101 moved the Path from `/api/v1/auth/refresh` to `/api/v1/auth`: stop the old API first, invalidate all pre-cutover refresh rows with `cookie_path_migration` + system audit, apply the new code, users re-authenticate.
 
-**The grace window is idempotent.** It returns the *already-issued* successor rather than
-minting a third token. Rotating there would **fork the chain into two live tokens, and a
-forked chain makes reuse detection impossible.** The window exists to absorb the race
-created by multiple browser tabs, which the client also mitigates with a single-flight
-mutex — one in-flight refresh, concurrent callers awaiting its result.
+### Freshness (TD-12)
 
-**Refresh, logout and token maintenance serialize on the rotation chain, not on one token
-generation.** The presented hash first discovers the server-owned `session_id`; the transaction
-then locks that chain's stable `RefreshSession` row and re-reads the credential before deciding.
-The first read is discovery, never authority. This target survives successor insertion and
-predecessor purge, which token-row locks cannot guarantee at PostgreSQL `READ COMMITTED`.
-A different `session_id` locks a different row, so another browser session remains independent.
-
-**New-session creation and user-wide revocation serialize one level higher.** A session anchor
-cannot protect an anchor that does not exist yet, so successful login, Pending → Rejected,
-suspension and revoke-all share the stable `User` row. The lock hierarchy is always **User →
-`RefreshSession` anchors in UUID order**. The shared session issuer re-reads Active/Pending
-eligibility under that lock before inserting anything. Rejection and suspension take the same
-User lock before deciding the state transition, change status and revoke every session in that
-transaction. Therefore either the state change commits first and issuance refuses, or issuance
-commits first and the subsequent enumeration includes its new anchor. Locks are per user, so an
-unrelated person's login does not wait.
-
-The explicit User lock is PostgreSQL `FOR NO KEY UPDATE`, not `FOR UPDATE`. The application never
-changes `User.id`; the weaker mode still conflicts with another governing lock and with every
-User update/delete that these flows must serialize. It is also compatible with the **implicit
-`KEY SHARE`** acquired when refresh/logout insert a `RefreshToken` or `AuditLog` row carrying a
-User foreign key. That compatibility is load-bearing: refresh/logout already hold a session
-anchor, while suspension holds User and waits for that anchor. `FOR UPDATE` would complete a
-Session → User versus User → Session deadlock; `NO KEY UPDATE` lets the child FK write finish so
-the session transaction commits and suspension can take the anchor.
-
-Rotation's predecessor/successor/audit write commits as the TD-4.13 unit. The HTTP refresh then
-takes the same session lock once more, verifies that a live generation still exists, reads the
-authoritative account and assignments, and signs the access token while holding that lock. If
-logout completed between rotation and this finalization, refresh returns the ordinary `401` and
-no credential; if finalization locks first, the token was issued before logout and logout waits.
-Only authoritative `Active` and `Pending` accounts are eligible at this boundary. Rejected,
-Suspended, deleted or missing accounts receive the same ordinary refusal and no access/refresh
-credential, rather than relying on a downstream route guard after rotating indefinitely.
-Holding a database transaction across response delivery was rejected: a commit failure after
-bytes reached the client would expose a credential whose rotation never committed.
-
-**Reuse ends the whole session.** A replayed rotated token is the signature of a stolen
-cookie, so the response is to end the session, not to extend grace. Never accepted, never
-resurrected.
-
-**Every refusal looks identical.** Expired, revoked, unknown, purged, reuse-detected — all
-answer `401` in the standard envelope. **No new error code was introduced**, deliberately:
-telling the holder of a stolen cookie *why* it failed would confirm the token was once real.
-The distinction is recorded in the audit log, not in the response.
-
-Revoke-all exists as an internal capability — rejection, suspension and deletion use it — but **there
-is no user-facing "log out everywhere" control**, no such route, and no such navigation
-node. The capability exists because safeguarding requires it, not because a user invokes it.
-It locks the affected User first, then the stable session rows in UUID order before revoking,
-so no new session can appear after enumeration and another user's sessions stay independent.
-
-Pending → Rejected uses the dedicated reason `rejection` and writes both `user.reject` and
-`auth.token_revoked` in the same transaction as the status change. Mandatory audit failure
-rolls the whole decision back. Rejected remains terminal; even if a future authorized recovery
-changes the account state, the old refresh chain remains revoked and fresh authentication is
-required. An already-issued access token retains only its existing TTL and per-request
-freshness behavior; rejection does not mint, extend, or otherwise alter it.
-
-### Logout: browser cleanup and server revocation are separate
-
-`POST /auth/logout` identifies the current rotation chain from the HttpOnly refresh cookie,
-revokes every live token carrying that `session_id`, writes `auth.logout` in the same
-transaction, and only then returns the cookie expiry. A cookie disappearing from a browser is
-not proof that its retained value is dead; the persisted revocation is the security property.
-Another browser has another `session_id` and remains signed in.
-
-The audit row is mandatory transaction state, not best-effort logging: if `auth.logout` cannot
-be written, PostgreSQL rolls the revocation back and the endpoint does not expire the browser
-cookie. No committed state may contain a logout revocation without its required audit row.
-
-The endpoint stays idempotent: with a valid CSRF request context, an absent, unknown or
-already-cleared cookie is `204`. A repeated browser logout therefore remains safe. Missing or
-foreign CSRF context is `401` before the cookie is inspected.
-
-Revision 101 changes the Path from `/api/v1/auth/refresh` to `/api/v1/auth`. The deployment
-that introduces it stops the old API, atomically invalidates all live pre-cutover refresh
-rows with `cookie_path_migration` plus system audit, applies the new code, and asks users to
-authenticate again. Stopping the old issuer first is load-bearing: otherwise it could mint a
-legacy narrow-path cookie after the one-time sweep.
-
-### Freshness: where statelessness ends
-
-An unexpired access token is **not sufficient authorization** for a defined set of
-operations. Each of these asserts against the database, **per request**, that the caller is
-still `Active` and still holds the invoked role and scope:
-
-- Presigned URL minting
-- Approval actions
-- Consent-gate overrides and staff-recorded consent
-- Pass/fail overrides
-- User-management mutations
-
-The reasoning is explicit: a teacher or admin suspended mid-session must lose access to
-minors' case files and private recordings **immediately**, not at token expiry. A one-hour
-stateless window is acceptable for reading your own schedule; it is not acceptable for
-safeguarding-sensitive reads.
-
-The assertion is one indexed read on low-frequency endpoints, so latency targets are
-unaffected. Parent→child access is already fresh by construction — the link is checked on
-every request anyway.
+- An unexpired token is not sufficient for presigned URL minting, approval actions, consent-gate overrides and staff-recorded consent, pass/fail overrides, user-management mutations: each asserts per request (one indexed read) that the caller is still `Active` with the invoked role and scope; parent → child access is fresh by construction.
 
 ### JWT claims
 
 ```
 sub            user id
 roles[]        derived from role_scopes at issue time, so the two cannot disagree
-role_scopes[]  one entry per role held: { role, branches }
-               branches: null  ⇒  ALL branches for that assignment
+role_scopes[]  one entry per role held: { role, branches }; branches: null ⇒ ALL branches
 account_status
 iat / exp
 ```
 
-**A flat `branch_scopes[]` is deliberately not a claim.** It cannot express "all branches",
-and unioning scopes across roles extends one role's authority to another role's branches.
-
-**No PII beyond these. No email in the token. The active child is never a claim.**
-
----
+- No flat `branch_scopes[]`: it cannot express "all branches" and a union extends one role's authority to another's branches.
+- No PII beyond these; no email; the active child is never a claim.
 
 ## Authorization
 
-**Branch is the sole access-control axis.** Everything else is a capability.
+- Branch is the sole access-control axis; everything else is a capability.
+- A role assignment is `(user, role, branch)`, unique; `branch = NULL` = all branches for that assignment, not a Super Admin marker.
+- Scope resolves per role: role R is constrained by R's OWN assignments' branches, never by another role's (flat union until R24); `branch_id IS NULL` is never an empty scope.
+- Teachers reach students only through effective `CourseScheduleStaff`/`SessionStaff` assignments and their resolved audience (exam authoring, Quran logging, content upload, case-file access).
+- Quran memorisation requires the schedule's single live `tracks_quran_progress` marker (R107–R108), owned only by حفظ القرآن; أحكام القرآن, ترتيل وتجويد القرآن, تفسير القرآن and any unmarked Quran-domain Subject never authorise it; structural, not a name comparison; absence fails closed.
 
-A role assignment is `(user, role, branch)`, unique. The branch may be `NULL`, meaning **all
-branches for that assignment** — not a Super Admin marker; Super Admin's bypass is a
-property of its role.
+### Permission matrix
 
-### Scope resolves per role
+Normative in [TD-2](../reference/technical-design.md#td-2), enforced server-side on every endpoint; UI hiding is never enforcement. See [Users and roles](../overview/users-and-roles.md).
+- Reference data (branches, rooms, levels, categories, subjects, academic year, academic periods, settings, display order, Hijri calendar): Super Admin writes; Admin reads in scope; Teacher no access (R30).
+- A Level target does not override branch authorization (R125): a branch-scoped Admin may create, use or publish a Level-targeted assessment only when the resolved audience is entirely within her branches; one check for all five arms via `examAudienceWhere` (enrolment is the branch fact, §20 rule 22); re-asked at publish.
+- A مؤطِّرة addresses THIS student, not a Level (R125): `studentsTaughtBy` (§4.4c); outside her teaching → `404`, never `403`.
+- `GET /assessments/targets`: staff only, scoped per caller, not the boundary — every refusal is re-made on the write.
+- An online paper carries no branch, and «no branch to check» is not «no check» (R124, corrected 2026-09-04): a named individual is checked against her enrolment branches, `NOT_FOUND` not `403` (§20 rule 17); other target arms are deliberately unchecked; whether a branch-scoped Admin may author a Level-wide online paper is an open Owner question.
+- The assessment builder (§4.6, R124) uses the exam rule (TD-2 as split by R70.4): Super Admin, Admin in scope, Teacher within own teaching; grading is `/exams/{id}/grades`; a student writes only her own answers (no student id accepted; subject = JWT `sub` via the §4.3 middleware); a guardian reaches her child only via an approved `FamilyLink`; a parent reads a paper, never writes one; unpublished grades invisible per `Grade.status`.
+- Assessments and attendance are deliberately NOT TD-12 freshness surfaces; the catalogue is approvals, consent overrides, pass/fail overrides, user management, settings and presigned minting.
+- Attendance (§4.7, R123) delegates per occurrence kind: Session → whoever staffs it on its date (R91 `staffsSession`); Event → whoever may edit it (R71 responsible person, Admin in scope, Super Admin); Exam → its supervisor or an Admin in the branch. Self check-in is not a role: the occurrence's `attendance_marking` + the caller's Category flag authorise marking exactly herself.
+- Branch event backfill stays Admin (operational work).
+- Routes are not the boundary: checks live in services; `/admin/*` is not a permission boundary; `/superadmin/*` was rejected as churn.
 
-```
-capability granted by role R
-   is constrained by the branches attached to R's OWN assignments
-   — never by branches reaching the user through a different role
-```
-
-The failure this prevents is concrete: a Teacher in Casablanca who is also an Admin in
-Marrakesh must not thereby administer Casablanca. The implementation resolved scope as a
-flat union until Revision 24 caught it.
-
-Related and equally concrete: `branch_id IS NULL` was documented as "unscoped (Super
-Admin)" while the implementation derived an *empty* scope list from it — so an Admin
-assigned to all branches could see **0 of 2**.
-
-### Teachers reach students through teaching assignments only
-
-A Teacher's role assignment carries the role, **not** their teaching reach. Exam authoring,
-Quran logging, content upload, and case-file access all resolve **exclusively** through
-effective `CourseScheduleStaff`/`SessionStaff` assignments and each assignment's resolved
-audience. A teacher teaching Level 1 in Marrakesh and Level 2 in Casablanca is expressed by
-two schedule assignments, because delivery carries both level audience and branch.
-
-Quran memorisation adds one narrow Subject filter (SRS R107–R108): the schedule must carry the
-single live `tracks_quran_progress` marker, which belongs only to حفظ القرآن. أحكام القرآن,
-ترتيل وتجويد القرآن, تفسير القرآن, and any later unmarked Quran-domain Subject are ordinary
-Subjects and never authorise memorisation. The marker is structural rather than an
-Arabic-name comparison, and absence fails closed.
-
-### The permission matrix
-
-Normative in TD-2, and it is **enforced server-side on every endpoint**. UI hiding is never
-the enforcement mechanism.
-
-A few rows worth knowing without opening the table:
-
-- **Reference data** (branches, rooms, levels, categories, subjects, academic year,
-  **academic periods**, settings, display order, the Hijri calendar) — **Super Admin
-  writes**. Admin reads within scope. **Teacher: no access at all** — they receive reference information through the
-  operational APIs they are authorised to use (Revision 30).
-- **A Level target does not override branch authorization (R125).** A Level spans
-  branches, so a **branch-scoped Admin** may create, use or publish a
-  Level-targeted assessment only when the **resolved audience** is entirely
-  within her branches. The rule is stated over the audience rather than the
-  target's shape — one check for all five arms, composed from
-  `examAudienceWhere`, introducing **no second source of truth for branch
-  membership** (enrolment is the branch fact, §20 rule 22). It is **re-asked at
-  publish**, because the audience is resolved rather than stored. A Super Admin
-  is unaffected.
-- **A مؤطِّرة addresses THIS student, not a whole Level (R125).** The individual
-  target is answered by **`studentsTaughtBy`** — §4.4c's canonical derivation,
-  the same one behind Quran logging, exam authoring and sensitive social data —
-  and is **reused, not restated**. She gains no association-wide beneficiary
-  lookup, and a student outside her teaching answers `404`, never `403`, so the
-  refusal never becomes a way to discover who exists.
-- **`GET /assessments/targets` is a smaller question, not a wider permission.**
-  Staff only; scoped per caller; **and it is not the boundary** — every refusal
-  it enacts is made again on the write, so an id typed by hand buys nothing.
-- **An online paper carries no branch, and «no branch to check» is not «no
-  check» (R124, corrected 2026-09-04).** The first reading skipped the branch
-  assertion entirely because the row has no `branch_id`, which let a
-  branch-scoped Admin address a paper **by name** to a beneficiary at any other
-  branch and then read her submitted answers through the inbox authoring brings.
-  **A named individual is now checked against the branches she is actually
-  enrolled at**, answering `NOT_FOUND` rather than `403` (§20 rule 17). **The
-  other target arms are deliberately not checked this way**: a Level-wide online
-  paper is cross-branch *by construction*, so whether a branch-scoped Admin may
-  author one is an **open Owner question**, recorded rather than decided.
-- **The assessment builder (§4.6, R124) invents no reach either.** Authoring,
-  publishing and reading the inbox use the exam's own rule (TD-2 as split by
-  R70.4): Super Admin, Admin in branch scope, Teacher within their own teaching.
-  Grading is `/exams/{id}/grades`, unchanged. **A student writes only her own
-  answers** — the routes accept no student id at all, and the subject is the JWT
-  `sub` resolved through the §4.3 middleware, so a guardian reaches her child
-  only through an approved `FamilyLink`. **A parent may read a paper and may
-  never write one.** An unpublished grade is invisible to both, by the rule
-  `Grade.status` already enforces.
-- **Assessments are deliberately NOT a TD-12 freshness surface**, for the reason
-  attendance is not: writing a question is ordinary operational work, and adding
-  one write to that catalogue would make it assert against live rows while its
-  siblings on the same screen do not.
-- **Attendance (§4.7, R123) invents no reach of its own.** Marking is delegated
-  to the rule each occurrence kind already has: a Session to whoever staffs
-  **that occurrence on its date** (R91's `staffsSession`, the only honest answer
-  for a past class), an Event to whoever may edit it (R71's responsible person,
-  an Admin in scope, a Super Admin), an Exam to its supervisor or an Admin in the
-  branch. Widening any of those later widens attendance with them rather than
-  leaving a second matrix behind. **Self check-in is not a role** — it is the
-  occurrence's `attendance_marking` plus the caller's own Category flag, and it
-  authorises her to mark exactly one person: herself.
-- **Attendance is deliberately NOT a TD-12 freshness surface.** The catalogue is
-  approvals, consent overrides, pass/fail overrides, user management, settings
-  and presigned minting; marking a register is ordinary operational work and
-  adding it would make one class of write assert against live rows while its
-  siblings on the same screen do not.
-- **Branch event backfill** stays an **Admin** capability, because it is operational work
-  (populating events when a branch activates), not reference management.
-
-> [Technical design § TD-2](../reference/technical-design.md#td-2) ·
-> [Users and roles](../overview/users-and-roles.md)
-
-### Routes are not the boundary
-
-Permission checks live in services. The `/admin/*` prefix is **not** a permission boundary —
-moving endpoints to `/superadmin/*` purely because of who may call them was rejected as
-pointless churn.
-
----
-
-## Who sees which branches
-
-Viewing a branch is **not privileged** — but seeing branches you have nothing to
-do with is noise at best and organisational detail at worst. So the list is
-scoped, and the two staff roles derive their reach differently, because §4.2
-forbids unioning roles into one flat scope:
+### Who sees which branches
 
 | Role | Reaches |
 |---|---|
 | Super Admin | Every branch |
-| Admin | The branches on their own `admin` assignments (`branches: null` = all, R24) |
-| Teacher | **The branches of the schedules they staff** (§4.4c, R43.3) |
+| Admin | Own `admin` assignments (`branches: null` = all, R24) |
+| Teacher | Branches of the schedules they staff (§4.4c, R43.3) via `teacherBranchIds`; the role row is never consulted |
 | Anyone else | Refused |
 
-**A teacher's role row is deliberately not consulted.** A `teacher` assignment
-with `branch_id IS NULL` means *every branch* under R24, so reading it would show
-a teacher the whole organisation — the opposite of the rule. Reach is where they
-teach, resolved by `teacherBranchIds`, which every other teacher surface already
-uses.
+- An unassigned teacher sees an empty list, not an error; this closed a gap against R26 (a test pinning the refusal was corrected).
+- Rooms follow the branch; out of reach → `404`, never `403` (§20 rule 17).
+- Branch/room writes are Super Admin only (R26); the screen is Super-Admin-only (R61).
 
-An unassigned teacher therefore sees an **empty list**, which is the honest
-answer rather than an error: they teach nowhere yet.
+### Legal consent wording
 
-> **This closed a gap against R26, not a new rule.** R26 retained read access for
-> *"Admins (branch-scoped) and **Teachers (own groups)**"*, and the guard demanded
-> `isAdmin` — so every teacher was refused a list the specification grants them.
-> A test asserted the refusal, pinning the implementation rather than the
-> specification; it is corrected in place, with a note saying which it was,
-> because a green test over wrong behaviour makes a defect look like a decision.
-
-Rooms follow the branch through the same resolution. A branch out of reach
-answers **`404`, never `403`** (§20 rule 17): a refusal would confirm the branch
-exists to somebody with no business knowing.
-
-**Writes are unchanged**: every create, edit and delete of a branch or room stays
-Super Admin only (R26), and the screen itself is Super-Admin-only (R61).
-
-## The Google scope is the minimum the identity contract needs
-
-`openid email` — and nothing else (Owner, 2026-09-02; SRS R121).
-
-`openid` yields the `sub` an account is bound to; `email` yields the address
-`UserIdentity` stores and the `email_verified` claim §4.1b step 7 hard-stops on.
-Those two claims are the entire contract.
-
-**`profile` was requested for a year and never read.** It carries name, picture
-and locale; `verifyGoogleIdToken` extracts `sub` and `email` and discards the
-rest, so the platform was asking Google for personal data in order to throw it
-away. Nothing downstream changed when it was removed, which is the point — a
-scope nothing reads is a scope nothing needs.
-
-Unchanged by that reduction: PKCE S256, `state`, the HMAC-sealed flow cookie,
-`prompt=select_account`, the `email_verified` hard stop, the subject binding,
-and the rule that **no Google token is ever persisted and no Google API is ever
-called after login**. The public privacy page names the same two scopes, and
-`legal.test.ts` asserts the page and `oauth.ts` agree — a policy naming a scope
-the application does not request is as wrong as one omitting a scope it does.
-
-## The legal consent wording — Super Admin only, and freshness-checked
-
-Creating, editing and **activating** a `LegalConsentText` (R119) is Super Admin
-only, asserted through `assertFreshActive` like every other §5.6 setting. Two
-things make that stricter than a role check on a token:
-
-* **R60's freshness.** This decides what people are held to have agreed to, so
-  the difference between *held the role when the token was minted* and *holds it
-  now* is exactly the difference that matters.
-* **The read is refused too.** An Admin cannot list the wordings. A read-only
-  leak is still a leak, and the negative half is asserted — a permission test
-  that proves only the yes is not one.
-
-`GET /registration/consent-text` is the deliberate exception and is
-**anonymous**: the registration form is reached before any account exists, so
-the notice a person is legally entitled to read before agreeing cannot sit
-behind a session. It publishes the id, the label and the text — never
-provenance, status or usage counts.
+- Create, edit, activate `LegalConsentText` (R119): Super Admin only via `assertFreshActive` (R60 freshness); the read is refused to Admin too, and the negative half is tested.
+- `GET /registration/consent-text` is anonymous; publishes id, label, text — never provenance, status or usage counts.
 
 ## Active role
 
-A person may hold several roles at once (§2.1), and the header carries an
-**account switcher** for choosing between them.
-
-**R60 made it a real authorization context.** It was a client-side context; it
-is now a **JWT claim**, and a Super Admin working as مؤطِّرة genuinely loses
-Super Admin authority until they switch back.
-
-**Safety, not containment.** Switching back is self-service and instant, so this
-cannot defend against a Super Admin who intends harm — and no design allowing
-instant switching could. What it delivers is what it was approved for: testing
-the platform exactly as another role experiences it, and an accidental click
-while acting as مؤطِّرة that cannot delete a branch.
-
-### How one claim narrows 103 call sites
-
-Every authorization decision in the backend reads `Actor.roleScopes` — 103
-references across 28 files, through five helpers in `branch-scope.ts`. When
-`active_role` is present, `issueAccessToken` emits `role_scopes[]` **already
-filtered to that one role**, and `roles[]` is derived from it, so both narrow
-together.
-
-Nothing downstream was edited. More importantly, nothing downstream *can*
-consult an un-narrowed array, because none exists in that request.
-
-```
-narrowToRole(scopes, 'teacher')  →  [ { role: 'teacher', branches: [...] } ]
-        ↓
-isSuperAdmin(scopes) === false   →  refused at all 44 call sites
-branchesForRole()                →  the Super Admin short-circuit stops applying
-```
-
-**§4.2 is untouched.** Scope still resolves per role; the array simply has one
-entry, and that entry keeps its own `branches`, so a مؤطِّرة scoped to Marrakesh
-stays scoped to Marrakesh.
-
-### The two places that would have leaked
-
-**TD-12 freshness** rebuilds roles from live rows and *ignores the token*. Left
-alone it would have handed back full Super Admin authority on exactly the
-endpoints TD-12 protects — everything narrowing except the most dangerous
-surfaces. `assertFreshActive` now takes the active role, checks it is still
-assigned, and returns scopes narrowed to it. This is the single largest risk the
-revision carried, and `active-role.http.integration.test.ts` mutation-proves it:
-reverting only that narrowing turns `/admin/settings` green for a teacher.
-
-**`/me`** reads **live** rows rather than the token. Under an active role the
-token carries one role, so reading the claim would leave the switcher a menu of
-one — the person could narrow themselves and never widen again. `/me` answers
-*what may this person become*; authorization answers *what is this person now*.
-
-| Question | Answer |
-|---|---|
-| Where does it live? | The **JWT**, as `active_role` (R60). The client mirrors it in `contexts/active-role.tsx` |
-| How is it persisted? | Not server-side at all — **no column on `User` or `RefreshToken`**. The claim is in the token, and the token is per-device |
-| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, after a User-locked re-read of current Active state and assignments. No logout, no new session, and the replacement `exp` is capped at the presented bearer's verified `exp` |
-| What makes it survive a page load? | `POST /auth/refresh`. The client holds the token in memory and switching navigates by full page load, so **refresh is the load-bearing path**; it re-asserts the role and returns the one it granted |
-| A revoked active role? | Refresh **falls back to the most privileged still-valid assignment** and says so — never a silent widening back to every role |
-| Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |
-| Can a person select a role they lack? | No. The list comes from `/me`, which is derived from the server-issued token, and `setActiveRole` refuses anything outside it |
-| What happens on switch? | The context changes and the browser navigates to that role's home (`homeForRole`) |
-| A role with no portal? | Every role §14.1 declares now has one. **`/dashboard/student` is built** (R62.10) and serves both the student's own record and, for a parent, the active child's. **`/dashboard/parent` is `not-found`** — R62 removed the screen, and the difference from `screen-pending` is the point: `screen-pending` promises a page that is coming |
-
-### Why both the active role and the active child persist
-
-Both live in **`sessionStorage`**, and for one reason: switching **navigates**,
-which in this application is a full page load, so an in-memory selection would be
-destroyed by the very navigation it causes.
-
-The active child did *not* persist until R62, on the reasoning that a stale child
-would silently change *whose data* a page requests after a link is revoked. R62
-made that untenable rather than merely inconvenient — choosing a child now also
-switches the active role, so the selection was lost by the action that made it.
-
-**The staleness argument was answered, not dropped**, and by three independent
-mechanisms rather than by a storage choice:
-
-1. a revoked link is absent from the next `GET /me`, and `ActiveChildProvider`
-   drops any stored id that is not in that list;
-2. `localStorage` is still refused, so nothing survives the tab;
-3. the server re-checks the approved `FamilyLink` on **every** request and
-   answers `404` regardless of what the client believes (§4.3).
-
-(1) is what makes the stored value safe: it is a *preference*, reconciled against
-live authorization on every load, never a claim. Neither value is ever a token
-claim — §4.3 is explicit that the active child must not be, so that revocation
-takes effect on the very next request.
-
-R117 adds the other axis of the same fail-closed rule: a child coordinate is valid only while
-the active role is Parent. Any switch to a non-Parent role clears it before navigation. Thus a
-person who genuinely holds Parent and Student acts as herself in Student context, while a
-Parent-only account exposes only Parent/linked-child contexts and cannot acquire a synthetic
-self-beneficiary context from the children it manages.
-
-> **The defect this replaced.** `RoleSwitcher` held its selection in local
-> component state and did nothing with it: picking a role re-labelled the trigger
-> and changed nothing else. The control was documented as *"presentation only"*,
-> and it was not even that. The old tests asserted that the switcher *appeared* —
-> which it did — so nothing failed.
-
-### The Trash is TD-12 fresh
-
-Restore and permanent delete re-read the caller's roles from the database and
-ignore the token (`assertFreshSuperAdmin`). A Super Admin whose role is revoked
-would otherwise go on destroying records irreversibly until their access token
-expired.
-
-Found by probing, not by reading: `/admin/settings` already refused a validly
-signed token claiming `super_admin` for a user who did not hold it, while
-`/admin/trash` answered `200` to the identical request. Same platform, same
-claim, two answers — and the weaker one guarded the deletions. The list read
-takes the same check, because it is the one surface spanning every entity in
-every branch (§5.6).
+- Several roles per person (§2.1); the header switcher chooses; R60 made it the JWT claim `active_role`: a Super Admin acting as مؤطِّرة loses Super Admin authority until switching back (safety, not containment: switching back is instant).
+- `issueAccessToken` emits `role_scopes[]` narrowed to the active role and derives `roles[]` from it; all 103 `Actor.roleScopes` references (28 files, five helpers in `branch-scope.ts`) narrow with no downstream edit; `isSuperAdmin(scopes) === false` at 44 call sites; §4.2 untouched — the one entry keeps its own `branches`.
+- `assertFreshActive` takes the active role, checks it is still assigned and returns scopes narrowed to it (`active-role.http.integration.test.ts` mutation-proves it); `/me` reads live rows, not the token, so the switcher never shrinks to one.
+- Not persisted server-side (no column on `User`/`RefreshToken`); client mirror `contexts/active-role.tsx`; the list comes from `/me` and `setActiveRole` refuses anything outside it.
+- `POST /auth/switch-role` re-issues after a User-locked re-read; no logout or new session; `exp` capped at the presented bearer's `exp`; then navigates to `homeForRole`.
+- `POST /auth/refresh` re-asserts the role on every page load and returns the one granted (load-bearing: token in memory, switching is a full page load); a revoked active role falls back to the most privileged still-valid assignment and says so, never a silent widening.
+- Every §14.1 role has a portal; `/dashboard/student` (R62.10) serves the student's own record or the active child's; `/dashboard/parent` is `not-found` (R62 removed it; `screen-pending` promises a coming page).
+- Active role and active child persist in `sessionStorage`; `localStorage` refused; a revoked link is absent from the next `GET /me` and `ActiveChildProvider` drops it; the server re-checks the `FamilyLink` on every request (§4.3); neither is ever a token claim.
+- R117: a child coordinate is valid only while the active role is Parent; any switch to a non-Parent role clears it; a Parent-only account never gains a synthetic self-beneficiary context.
+- The Trash is TD-12 fresh: restore, permanent delete and the list read use `assertFreshSuperAdmin` (§5.6).
 
 ## Child context
 
-The safeguarding gate. A parent acting for a minor asserts which child on **every** request.
-
-```
-X-Active-Child-ID: <child user id>
-```
-
-### Resolution, in order
+`X-Active-Child-ID: <child user id>` on every request by a parent acting for a minor (SRS §4.3 · [BR-5](../reference/business-rules.md#br-5) · §20 rule 6).
 
 | Situation | Behaviour |
 |---|---|
-| **Header present** | Verify an `Approved` family link matching **BOTH** the authenticated parent **AND** the header's child. Matching the child alone is a vulnerability |
-| **Header absent + caller holds the Student role** | **Bypass entirely.** The acting student is the caller; ownership is verified against the token subject. Adult students never need and never send the header |
-| **Header absent + caller is Parent-only** | `400` — the request is genuinely ambiguous without a child |
+| Header present | Verify an `Approved` family link matching BOTH the authenticated parent AND the child |
+| Absent + caller holds Student | Bypass; ownership verified against the token subject |
+| Absent + Parent-only | `400` |
 
-Every other failure — no such child, another parent's child, pending, rejected, deleted —
-returns **`404`**, indistinguishable from each other and from a child that does not exist.
-
-### Why per request
-
-Because it makes revocation instant. Soft-deleting an approved link **is** the revocation
-mechanism: the middleware re-checks the row on the very next call, and a deleted link is
-already among the `404` conditions. No `Approved → Revoked` transition exists or should be
-added — the enforcement is already complete.
-
-The resolved acting-student id is what downstream policies and repositories receive. **They
-never trust a student id from a request body or query string** for authorization.
-
-Client-side context switching is presentation only. The header is an assertion; the server
-decides.
-
-> SRS §4.3 · [`BR-5`](../reference/business-rules.md#br-5) · §20 rule 6
-
----
+- Every other failure (no such child, another parent's child, pending, rejected, deleted) → `404`, indistinguishable.
+- Per request so revocation is instant: soft-deleting the link IS the revocation; no `Approved → Revoked` transition exists or should be added.
+- Downstream policies/repositories receive the resolved acting-student id and never trust a student id from body or query; client switching is presentation, the server decides.
 
 ## Platform Owner and initial bootstrap
 
-Platform ownership is a protected singleton lifecycle relationship, not a special RBAC
-role. The owner must be active, undeleted and hold a live global Super Admin assignment.
-The database and application refuse suspension, deletion, permanent de-identification or
-demotion until ownership is transferred.
+- A protected singleton lifecycle relationship, not an RBAC role; the owner must be active, undeleted and hold a live global Super Admin assignment; DB and application refuse suspension, deletion, de-identification or demotion until transfer.
+- Initial Owner (R115): `safae.elmessoussi@gmail.com`, صفاء المسوسي, female. The seed creates or claims that account as active Global Super Admin with `both`/all-current-and-future-branches framing willingness, no weekly hours; stores `pre_provisioned_email`; never fabricates a `UserIdentity` or Google subject.
+- Bootstrap gate: before the singleton exists the seed requires the exact email and `female`, takes an advisory transaction lock, fails atomically on an address conflict; once it exists every rerun is a no-op (after transfer, wrong env, admin changes); the seed never reclaims the original Owner, creates a successor or reopens when no other Super Admin remains.
+- Transfer: current-owner-only, to an already-active Global Super Admin; one transaction locks the singleton then both Users in id order, updates the relationship, increments its version, audits previous/new UUIDs; roles unchanged; concurrent attempts yield one winner, one stale refusal.
+- Ownership freezes only the required global Super Admin assignment: `PUT /admin/users/{id}/roles` may change the Owner's other roles; omitting or rescoping the global one fails in the singleton-locked transaction.
+- `/admin/users` = live Active and Suspended (incl. valid pre-provisioned Active); `/admin/directory` = live Active only; Pending/Rejected never appear as users, staffing candidates or roster choices.
 
-The initial Owner is fixed by SRS Revision 115: `safae.elmessoussi@gmail.com`, صفاء
-المسوسي, female. The seed creates or claims that one account, makes it an active
-Global Super Admin, stores general `both`/all-current-and-future-branches framing
-willingness, and creates no weekly hours. It stores `pre_provisioned_email`; it **does not
-fabricate a `UserIdentity` or Google subject**. The first verified Google login binds the
-real provider subject through the normal transaction.
-
-The singleton is the bootstrap gate:
-
-1. Before it exists, the seed requires the exact approved email and `female`, takes a
-   database advisory transaction lock, and fails atomically on an address conflict.
-2. Once it exists, every seed rerun is an ownership no-op — even after a legitimate
-   transfer, with absent/wrong environment values, or after other administrators change.
-3. The seed never reclaims the original Owner, creates a successor or reopens because no
-   other active Super Admin remains.
-
-Ownership transfer is current-owner-only and accepts another already-active Global Super
-Admin. One transaction locks the singleton first and both Users in deterministic id order,
-updates the single relationship, increments its version and audits previous/new UUIDs. It
-does not alter either person's role. Concurrent transfer attempts therefore produce one
-winner and one stale former-owner refusal, never two owners.
-
-Ownership freezes **that required global Super Admin assignment, not the whole role set**.
-`PUT /admin/users/{id}/roles` may add, move or remove the Owner's ordinary roles while the
-global assignment remains present; omitting it or changing its scope fails inside the same
-singleton-locked transaction. This preserves the platform invariant without preventing the
-Owner from also teaching or studying.
-
-The two people-list populations are intentionally narrower than the authentication table.
-`/admin/users` is approved account management: live Active and Suspended accounts, including
-valid pre-provisioned Active accounts. `/admin/directory` is an operational picker and returns
-only live Active people. Pending and Rejected rows belong to the approval lifecycle and are
-never offered as ordinary users, staffing candidates or roster choices.
-
----
-
-**Next:** [Security](security.md) · **Related:**
-[Users and roles](../overview/users-and-roles.md), [API](api.md#authentication-semantics-decided-once)
+**Next:** [Security](security.md) · **Related:** [Users and roles](../overview/users-and-roles.md), [API](api.md#authentication-semantics-decided-once)

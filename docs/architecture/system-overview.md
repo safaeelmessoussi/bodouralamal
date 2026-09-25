@@ -33,171 +33,73 @@ graph TB
     PG -- "nightly pg_dump" --> BACKUP
 ```
 
-**Everything is one origin.** The client, the API, and storage are served from a single
-domain under different path prefixes. This is not a convenience — it is what makes the
-refresh cookie first-party on every call, and it is why **no CORS allow-listing exists
-anywhere, in any environment**.
+- One origin: client, API and storage under one domain by path prefix; the refresh cookie is first-party on every call; no CORS allow-listing anywhere, in any environment.
 
 ## The request path
 
-| Path prefix | Serves | Notes |
+| Prefix | Serves | Notes |
 |---|---|---|
-| `/` | The static React bundle | gzip (and brotli where available) for weak mobile links |
-| `/api/v1/` | The Express API | `client_max_body_size 2m` |
+| `/` | Static React bundle | gzip (brotli where available) |
+| `/api/v1/` | Express API | `client_max_body_size 2m` |
 | `/storage/` | Proxied to MinIO | `client_max_body_size 110m`, `proxy_request_buffering off` |
-| `/healthz` | Component health | Public, unauthenticated, served at the origin root |
+| `/healthz` | Component health | Public, unauthenticated, origin root |
 | `/.well-known/acme-challenge/` | Certbot | TLS renewal |
 
-Two of those Nginx directives decide whether uploads work at all, and both are scoped to
-`/storage/` only:
-
-- **`client_max_body_size 110m`** — Nginx defaults to 1 MB. Without this, every recording
-  upload dies with an Nginx-level `413` before it reaches any application code.
-- **`proxy_request_buffering off`** — default buffering spools the entire body to Nginx's
-  disk before forwarding. On a small VPS that is doubled disk I/O and a disk-fill vector.
-
-**Never raise the body limit globally to "fix" uploads.** The API stays at 2 MB.
+- `client_max_body_size 110m` on `/storage/` only (Nginx default 1 MB → `413` before application code); `proxy_request_buffering off` avoids spooling bodies to disk (doubled I/O, disk-fill vector).
+- Never raise the body limit globally; the API stays at 2 MB.
 
 ### The storage proxy, and signatures
 
-Presigned URLs are generated against the **public** storage origin, so the signature matches
-exactly what the browser sends through the proxy. The `/storage/` location must strip the
-`/storage` prefix when forwarding and rewrite the `Host` header consistently with the
-endpoint the signature was computed for. Any mismatch between signed host/path and proxied
-host/path produces `SignatureDoesNotMatch`.
-
-A signed PUT plus signed GET round-trip **through the proxy** is a mandatory acceptance
-test. Verifying it by talking to MinIO directly proves nothing, because direct access is
-the one path production never uses.
+- Presigned URLs are generated against the public storage origin so the signature matches what the browser sends through the proxy.
+- `/storage/` strips the `/storage` prefix and rewrites `Host` consistently with the signed endpoint; any mismatch → `SignatureDoesNotMatch`.
+- Signed PUT + signed GET through the proxy is a mandatory acceptance test; talking to MinIO directly proves nothing.
 
 ## Why one box
 
-The platform is built for ~900 users at launch against a 5,000-user ceiling. At that scale
-the single-VPS topology is **the correct architecture**, not a compromise — and the
-specification says so as binding guidance.
+- ~900 users at launch, 5,000-user ceiling; single VPS is the correct architecture, binding per SRS §2.4.
+- Do not introduce caching layers, read replicas, sharding, search engines or horizontal scaling.
+- Do not die at the ceiling: every list paginated, every hot path index-backed, no unbounded scan or N+1; latency targets measured on ceiling-scale fixtures.
+- Growth past the ceiling = separate deployment or deliberate re-architecture.
 
-**Do not introduce** caching layers, read replicas, sharding, search engines, or horizontal
-scaling machinery. Premature optimization is a defect here.
-
-**But do not write code that dies at the ceiling either**: every list is paginated, every
-hot path is index-backed, and no endpoint performs an unbounded scan or an N+1 loop.
-Latency targets are measured against **ceiling-scale fixture data**, not a ten-row
-development database.
-
-Growth past the ceiling means a separate deployment or a deliberate re-architecture — not
-something MVP code should speculatively absorb.
-
-> [Performance and scale](performance-and-scale.md) · SRS §2.4
+> [Performance and scale](performance-and-scale.md)
 
 ## Single-tenant, deliberately
 
-There is no tenancy dimension anywhere: no tenant tables, no `tenant_id` columns, no tenant
-claim in a token, no tenant-scoped repository injection. An earlier revision carried a
-multi-tenant-ready design and **Revision 11 removed it entirely**.
-
-The trade-off is recorded rather than hidden. A second institute means a separate dedicated
-deployment — its own VPS, database, MinIO, and domain, which the containerized pipeline
-makes operationally cheap — or an owner-approved re-architecture. **Reintroducing tenant
-columns speculatively is prohibited.**
+- No tenant tables, `tenant_id` columns, token claims or tenant-scoped repository injection; the multi-tenant-ready design was removed (R11).
+- A second institute = separate deployment (own VPS, database, MinIO, domain) or owner-approved re-architecture; speculative tenant columns prohibited.
 
 ## The technology, and why each piece
 
-| Layer | Choice | Why this one |
+| Layer | Choice | Why |
 |---|---|---|
-| Runtime | **Node.js 24.11.0**, TypeScript 6.0.3 strict | One language across client and server |
-| API | **Express 5.2.1** | Small, unopinionated; the layering discipline comes from conventions, not a framework |
-| ORM | **Prisma 7.9.0** (`@prisma/adapter-pg`) | Typed access with a real migration history. Its limits are known and worked around explicitly ([database](database.md#hand-written-sql)) |
-| Validation | **Zod 4.4.3** | One place where field limits are encoded, shared with the client |
-| Jobs | **pg-boss 12.26.2** | Postgres-backed, so **no Redis container**. On a 4 GB box, container count is a real budget — and it is what lets a job be enqueued *inside* the transaction that triggers it |
-| Database | **PostgreSQL 18.4** | ICU collation for correct Arabic sorting; partial and functional indexes; the job queue and rate-limit counters live here too |
-| Storage | **S3-compatible object store** | Self-hosted SeaweedFS, identical for Localhost, Staging and Production (Owner decision, 2026-09-20). [Storage](storage.md#b1-candidate-verification-checkpoint) owns the pin, compatibility and Moroccan primary/backup residency requirements |
-| Client | **React 19.2.8** + **Vite 8.1.5** | Vite because the build is fast and the output is static. **Next.js is prohibited** — server-rendering would break the same-origin routing model |
-| Edge | **Nginx** stable-alpine + Certbot | Same-origin routing, TLS, rate limits, error-page mapping |
-| Tests | **Vitest 4.1.11** | Unit and integration in one runner |
+| Runtime | Node.js 24.11.0, TypeScript 6.0.3 strict | One language client and server |
+| API | Express 5.2.1 | Small, unopinionated; layering by convention |
+| ORM | Prisma 7.9.0 (`@prisma/adapter-pg`) | Typed access, real migration history; limits worked around in [database](database.md#hand-written-sql) |
+| Validation | Zod 4.4.3 | Field limits encoded once, shared with the client |
+| Jobs | pg-boss 12.26.2 | Postgres-backed, no Redis container (4 GB box); jobs enqueued inside the triggering transaction |
+| Database | PostgreSQL 18.4 | ICU collation for Arabic; partial and functional indexes; job queue and rate-limit counters |
+| Storage | S3-compatible object store | Self-hosted SeaweedFS on Localhost, Staging, Production (Owner decision, 2026-09-20); pin, compatibility and residency in [Storage](storage.md#b1-candidate-verification-checkpoint) |
+| Client | React 19.2.8 + Vite 8.1.5 | Fast static build; Next.js prohibited (server rendering breaks same-origin routing) |
+| Edge | Nginx stable-alpine + Certbot | Same-origin routing, TLS, rate limits, error-page mapping |
+| Tests | Vitest 4.1.11 | Unit and integration in one runner |
 
-Version majors and minors are **locked**. During active development only patch-level
-updates are permitted, each in its own commit with a stated reason and a full CI run
-([version policy](../development/conventions.md#versions)).
-
-## Repository layout
-
-```
-backend/
-  prisma/
-    schema.prisma        the model
-    migrations/          forward-only, incl. hand-written SQL
-    seed/                production seed + development fixtures
-  src/
-    controllers/         HTTP only — no business logic
-    services/            business logic, transactions, state machines
-    repositories/        all database access — the single data-access layer
-    policies/            permission and scope checks
-    validators/          Zod schemas mirroring the validation limits
-    middleware/          auth, child context, request id, error envelope
-    jobs/                pg-boss handlers
-    lib/                 storage, OAuth, tokens, config, hijri, pagination,
-                         search normalization, display-name resolution
-frontend/
-  src/
-    components/          shared registry + feature components
-    pages/               one per sitemap node
-    adapters/            API payload → view model
-    contexts/            session, active child
-    hooks/               navigation, data
-    i18n/                ar catalog (fr/en post-MVP)
-    styles/              tokens/ · base/ · components/
-nginx/                   same-origin routing, TLS, rate limits, error pages
-scripts/
-  ci/                    the guard scripts CI runs
-  dev/                   integration test runner, CSS resolver
-docs/                    this documentation, and the specification
-```
+- Majors and minors locked; patch updates only, each in its own commit with a reason and a full CI run ([version policy](../development/conventions.md#versions)).
 
 ## Where the interesting logic actually is
 
-AI-assisted development compresses CRUD scaffolding, migrations, and layout to hours. It
-does **not** compress these, and they are planned as full engineering effort:
-
-- The **Quran coverage interval-merge** calculation and its self-healing cache
-- The **grading engine**'s basis-point invariants and recalculation lifecycle (post-MVP)
-- The **auth and permission boundary** — especially the child-safeguarding gate, the
-  `X-Active-Child-ID` middleware, and the consent re-evaluation engine
-- The **presigned-URL permission layer**
-- The **dual calendar** rendering
+Planned as full engineering effort, not scaffolding: Quran coverage interval-merge and its self-healing cache; grading engine basis-point invariants and recalculation (post-MVP); the auth/permission boundary (child-safeguarding gate, `X-Active-Child-ID` middleware, consent re-evaluation engine); the presigned-URL permission layer; dual calendar rendering.
 
 ## Data flow: one request, end to end
 
-```
-Browser
-  │  GET /api/v1/admin/groups?page=2   ·   Authorization: Bearer …
-  ▼
-Nginx ─ TLS termination, per-IP rate limit, proxy to the API
-  ▼
-requestContext ─ assigns a request id, carried into every log line and error body
-  ▼
-authenticate ─ verifies the token; 401 on any failure
-  │             (optionalAuthenticate on public routes: an invalid credential
-  │              is ignored and the caller is anonymous — never a 401)
-  ▼
-controller ─ parses and validates input with Zod, calls exactly one service method
-  ▼
-service ─ opens a transaction where the operation needs one,
-  │        enforces the permission matrix and branch scope,
-  │        validates the state transition, writes the audit row
-  ▼
-repository ─ the only code that touches Prisma;
-  │           applies soft-delete filtering uniformly
-  ▼
-PostgreSQL ─ constraints reject anything the application layer missed
-  │
-  ▼
-errorHandler ─ maps typed domain errors to the single error envelope
-```
+1. Nginx: TLS termination, per-IP rate limit, proxy to the API.
+2. `requestContext`: assigns a request id carried into every log line and error body.
+3. `authenticate`: verifies the token, `401` on any failure; `optionalAuthenticate` on public routes ignores an invalid credential and treats the caller as anonymous, never `401`.
+4. Controller: parses and validates with Zod, calls exactly one service method.
+5. Service: opens a transaction where needed, enforces the permission matrix and branch scope, validates the state transition, writes the audit row.
+6. Repository: the only code touching Prisma; applies soft-delete filtering uniformly.
+7. PostgreSQL constraints reject what the application missed.
+8. `errorHandler` maps typed domain errors to the single error envelope.
 
-Each arrow is a boundary a reviewer will hold you to. The layering is
-[binding](../development/conventions.md#layering), not stylistic.
+Layering is [binding](../development/conventions.md#layering).
 
----
-
-**Next:** [Backend](backend.md) · **Related:** [Identity and access](identity-and-access.md),
-[Deployment](../operations/deployment.md)
+**Next:** [Backend](backend.md) · **Related:** [Identity and access](identity-and-access.md), [Deployment](../operations/deployment.md)

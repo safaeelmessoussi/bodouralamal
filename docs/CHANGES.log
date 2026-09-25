@@ -8,3 +8,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Rewritten compact: `CLAUDE.md`, `AGENTS.md`, `README.md`, `IMPLEMENTATION_PLAN.md`, `docs/README.md`, `TASKS.md` (open items only, 59 boxes → 32 rows), tier-1 handbook pages.
 - De-duplicated: one `WEEKDAYS` (`lib/weekdays.ts`), one `GLOBAL` sentinel, student `canAccess` aliased; `scripts/backup/test_*.py` (12) wired into the CI guards job; stale «never built» purge paragraph in `personal-data-map.md` corrected.
 - Verification: frontend tsc/lint/1509 tests; backend typecheck/lint/unit; all `check-*.sh` guards; `check-doc-links.sh`; build.
+
+## 2026-09-25 — handbook token pass, tiers 2–3 (TASKS E8 closed)
+- 49 handbook pages rewritten as tables/bullets: every rule, command, route, guard, env var, number, SRS citation and «rejected because» kept; narrative, history and SRS restatements dropped. Handbook (excl. SRS/archive): 3.45 MB → 0.83 MB (−76 %; incl. TASKS/proposals −79 %).
+- Every inbound anchor preserved (`check-doc-links` 841 links / 66 files, exit 0); all `check-*.sh` guards green; `git diff --check` clean.
+- Stale facts corrected in passing: scope-and-roadmap's «M4–M8 not started» table and July test counts; purpose-and-context «Revision 37.2»; class-delivery «recording not built»; decision-log R24 wording (from the archive ledger); duplicate `### BR-20` heading in business-rules left as-is (Owner item).
+- The three guards missing from ci-cd's table (`check-no-pii-logs`, `check-storage-lifecycle`, `check-ci-portability`) added. Hosted CI 8/8 on `398accac` (the cleanup) — `docs/CHANGES.log` had been skipped by `*.log` in .gitignore; force-added and un-ignored.
+

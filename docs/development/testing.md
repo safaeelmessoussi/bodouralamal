@@ -2,156 +2,6 @@
 
 # Testing
 
-## HIGH readiness checkpoint 2026-09-13
-
-**H1/H2/H4/H5/H6 CLOSED for local engineering; committed, not pushed.** Base
-`45cf1f0`, six commits ahead of origin. H3 remains an unresolved Owner/spec
-decision (below) and was not touched.
-
-The corrected nine-suite focused run (six inherited suites plus the H6/B4/B5
-suites named below) passed **245/245** (5 skipped) on first rerun after the
-maximum-grade fixture correction, but exposed one genuine gap: `an exact-Session
-cover may schedule that Session, never the whole Level` failed with `FORBIDDEN
-TARGET_OUTSIDE_BRANCH_SCOPE`. Command:
-
-```bash
-timeout --signal=TERM --kill-after=30s 1800 bash scripts/ci/test-integration.sh \
-  src/controllers/exam.http.integration.test.ts \
-  src/controllers/teacher-exam-scope.http.integration.test.ts \
-  src/controllers/grade.http.integration.test.ts \
-  src/controllers/exam-max-grade.http.integration.test.ts \
-  src/services/assessment.integration.test.ts \
-  src/services/exam-deletion.integration.test.ts \
-  src/services/consent-safeguarding.integration.test.ts \
-  src/services/storage-retirement.integration.test.ts \
-  src/services/storage-lifecycle.integration.test.ts
-```
-
-**Root cause (H2 gap, fixed):** `publishOccurrenceTx`'s re-check at publish
-(R125 — "author or publish", same transaction) called
-`assertAudienceWithinBranchScope` directly, the branch-only subset `assertMayAuthor`
-uses solely inside its own `admin`-gated arm. A مؤطِّرة holding no `admin` scope was
-read by `reachableBranches` as zero reachable branches rather than "not applicable",
-so a session/teaching_group/student target she was correctly authorized for
-moments earlier (by `assertMayAuthor`, at scheduling) was wrongly refused at
-publish. Fixed in `assessment.service.ts` by calling `assertMayAuthor` itself at
-publish — the one per-arm authority definition — instead of its branch-only
-subset. Reachable only for `mode: 'online'` occurrences, which the
-`exam_online_has_no_room_check` constraint always gives `branchId: null`, so the
-admin arm's added `assertCanActOnBranch` is a guaranteed no-op there: no change
-for Admin/Super Admin, only the Teacher path is corrected. Rerun: **245/245**.
-
-This also surfaced a second, same-shaped fixture gap outside the nine-suite set:
-`notification-targets.http.integration.test.ts` › *"re-publishing after the score
-CHANGED makes the notice unread again"* silently no-opped its `PUT
-/exams/:id/grades` (H5's now-unconditional current-version requirement rejected
-the versionless update), so the republish saw no real change and `notified: 0`
-instead of `1`. Fixed the fixture to supply the grade's current version, the same
-correction already applied to the maximum-grade suite. Not an assertion weakened.
-
-H6's `consent-safeguarding.integration.test.ts` additions — retagging in both
-directions without a bucket move, immediate anonymous denial, immutable-byte
-private migration, mandatory-audit rollback and the first-link/discovery race —
-all passed. B4/B5 storage-retirement and storage-lifecycle regressions passed
-unchanged: canonical-winner, late-copy retirement, immutable exact keys, staging
-cleanup and object-retirement durability show no H6 regression.
-
-Full disposable-stack run (all files, after both fixes): **2,549 passed / 18
-skipped, 0 failed**, 112 passing files / 2 skipped, real-edge browser probe
-**193/193**, 96 migrations, both seeds, clean all-table isolation.
-
-Final permitted local checks: `npm --prefix backend run lint`, `run typecheck`,
-`test` and `run build` all pass; default tests **342/342, 40 files**. The
-storage-lifecycle source guard's four-argument cron-registration requirement
-(explicit timezone options, reconcile-only payload preserved) passes. No runtime
-gate was weakened. SRS, routes, schema and migration files are unchanged.
-
-All 9 checked non-link repository guards pass, plus `git diff --check`.
-Documentation links: current count in the same `CHANGES.log` entry. TD-3
-registry conformance: **226/234**, same eight pending endpoints, zero
-undocumented routes. **OpenAPI currency now passes** (`scripts/ci/check-openapi-current.sh`
-regenerated and reconciled 175 paths / 226 operations against the live router) —
-the earlier sandbox `tsx` IPC-listener `EPERM` did not recur this run. Independent
-Docker inventory after the final full run shows no disposable
-`bodour-ci-integration-*` containers, volumes or networks left behind; the
-pre-existing persistent local dev stack (`bodour-api-1` etc.) was untouched
-throughout.
-
-## H3 readiness checkpoint 2026-09-13
-
-**CLOSED locally; committed, not pushed.** Base `5eabe63` (the H1/H2/H4/H5/H6
-commit above), one further local commit. Owner decision: a manual remote exam
-is opened explicitly by an already-authorized teacher or administrator through
-an «فتح الاختبار» action, never by the scheduled start time arriving on its
-own — see [SRS Revision 142](../SRS.md).
-
-**No schema/migration change.** `Exam.available_from` (R136 clause 5) already
-documented *"once by an explicit staff 'open now' act"* as a legitimate way to
-set it; `openAssessment` (`assessment.service.ts`) is that one missing write —
-`POST /assessments/{id}/open`, mirroring `POST /assessments/{id}/close`'s own
-established shape exactly: the governing `lockExamRow` acquired first, a fresh
-re-read of state and authority inside the same transaction, `assertMayAuthor`
-unchanged (never its branch-only subset — the exact regression this same
-checkpoint's H2 section above records and fixes), then one `audit.write`. Mode/
-status/already-open are checked together and refused as a single
-`STATE_CONFLICT`/`INVALID_TRANSITION`, the same coded conflict `closeAssessment`
-already uses — **non-idempotent by design**: repeating Open against an
-already-open exam is refused, not silently accepted, proven by an audit-count
-assertion showing no duplicate event.
-
-Focused command (added to `assessment.integration.test.ts`, run standalone
-first):
-
-```bash
-bash scripts/ci/test-integration.sh src/services/assessment.integration.test.ts
-```
-
-First run surfaced two authoring mistakes in the new tests themselves (not the
-implementation): the Level/administrative-group teacher-scope fallback answers
-`FORBIDDEN`, not `NOT_FOUND` (`assertExamInTeacherScope`'s own established
-taxonomy, unchanged); and several new fixtures dated `TODAY` collided with this
-file's own documented pagination-sensitive convention (`OTHER_DATE` exists
-precisely so new same-dated rows do not push another test's expected row off
-its page) — corrected to `OTHER_DATE`, no assertion weakened. Rerun:
-**128/128** in this file, 13 new: Admin opens; a genuine `entire_level`-staffed
-Teacher opens; an exact-Session-only Teacher opens her session but is refused
-`FORBIDDEN` on a Level target (no expansion); an R91-dated ended assignment
-still authorizes an exam dated inside its old window and refuses one dated
-outside it; a branch-scoped Admin is refused `FORBIDDEN`/`TARGET_OUTSIDE_BRANCH_SCOPE`
-on a Level spanning another branch; an outsider Teacher and the student herself
-are refused; a `physical` and a still-`draft` row both refuse
-`STATE_CONFLICT`/`INVALID_TRANSITION`; repeat-Open and two genuinely concurrent
-Opens (`Promise.allSettled`, real row lock, not a mocked barrier) each leave
-exactly one audit row; a successful Open's audit event names the actor and
-target; the student is `NOT_FOUND` before Open and reads her paper after it,
-through `openAssessment` alone; and opening does not bypass an unrelated
-student's own Level-eligibility refusal.
-
-Full disposable-stack run after both test corrections: **2,563 passed / 18
-skipped, 0 failed**, 112 passing files / 2 skipped, real-edge browser probe
-**193/193**, clean all-table isolation. Backend lint/typecheck/build and unit
-suite (**342/342, 40 files**) unaffected. Frontend lint/typecheck/build clean;
-frontend unit suite **1,263 passed, 106 files** (13 new source-guard assertions
-in `assessment-ui.test.ts`, none rendering the DOM — this screen's own
-established convention: a decision about what is offered, not styling).
-
-All 9 checked non-link repository guards pass, plus `git diff --check` and
-documentation links (see the `CHANGES.log` entry for the exact count). TD-3
-registry conformance: **227/235** (one more implemented — `/assessments/{id}/open`
-— same eight still-pending endpoints, zero undocumented). OpenAPI regenerated
-(`npm --prefix backend run openapi:generate`) and current: **176 paths, 227
-operations**, reconciled against the live router. Independent Docker inventory
-after the final run shows no disposable `bodour-ci-integration-*` resources
-left; the pre-existing persistent local dev stack was untouched.
-
-The frontend gains one action, `openable` (client-side display only, rule O —
-the calendar's own `ExamAccessAction` discipline; the server remains the actual
-boundary): a primary «فتح الاختبار» button beside «إغلاق الاختبار», visible
-only for a still-unopened `online`/`published` paper the caller may write to,
-behind the same shared `ConfirmDialog`/`busy`/`act()` state machine `close`
-already uses — no new pending-state or duplicate-submission logic. A neutral
-«لم يُفتح بعد» badge marks the state next to the status badge.
-
 Four layers, each testing something the others structurally cannot.
 
 | Layer | Scope | Tooling | Gate |
@@ -159,55 +9,14 @@ Four layers, each testing something the others structurally cannot.
 | **Unit/default** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | CI on every push/PR |
 | **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | CI on every push/PR, disposable stack |
 | **API** | HTTP integration tests against the contract; child-context tests; envelope conformance | Vitest + real Nginx/API/pg-boss | CI on every push/PR, disposable stack |
-| **Browser/E2E** | Journeys, RTL rendering, mandatory UI states, upload retry | Chrome over CDP | Targeted harnesses; the public-reader path is required by disposable integration CI, while other journeys remain operator-run |
+| **Browser/E2E** | Journeys, RTL rendering, mandatory UI states, upload retry | Chrome over CDP | Targeted harnesses; the public-reader path is required by disposable integration CI, other journeys are operator-run |
 
-**Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
-code — a coverage number that counts generated clients measures nothing.
-
-Exact test totals belong to each verified commit's [CHANGES entry](../CHANGES.log)
-and hosted run, not a second manually maintained inventory here. The integration job
-provisions an isolated real stack rather than pointing at Local Development.
-
-The backend suite includes deterministic worker-readiness regression tests. They inject the
-clock and pg-boss live-worker view, so startup failure, incomplete registration, lost/stale
-workers, and the long-running-handler exception are covered without sleeps. Controller tests
-separately prove that a healthy database plus a present `pgboss` schema cannot make
-`/healthz` green when the runner never started.
-
-The R115 identity/framing matrix runs on the same disposable real stack. It exercises the
-Platform Owner singleton and database lifecycle triggers, current-owner-only transfer and two
-concurrent targets, first verified Google binding with no fabricated subject, exact bootstrap
-and rerun behavior, strict هيئة التأطير one/multiple/all/online framing persistence, deferred
-cross-table constraint failures, read-only post-approval profile projection, per-window mode,
-legacy null and modality-aware advisory warnings. Its fixtures restore the singleton and User
-version counters as well as the owner id, so a passing assertion cannot still mutate the seeded
-owner behind the all-table isolation guard.
-
-Calendar/Hijri suites must never reserve the operator-facing 1447/1448 years or their real
-Gregorian timeline. Their overlay fixtures use reserved test-only Hijri years **and** remote
-Gregorian dates, and teardown names only those coordinates. This is intentional in both
-dimensions: lookup is Gregorian-timeline based, so changing only `hijri_year` can still make a
-test read operator data. The all-table isolation runner caught the old teardown deleting twelve
-local official rows; the repaired 46-assertion run leaves the restored catalogue unchanged.
-
-The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
-anonymous and Nginx-gated read before withdrawal; the committed application/public-origin
-denial while physical migration is pending; full-stream SHA-256 equality; and write-only
-public staging. Its 19 scenarios cover R92 audience changes, retained Sessions after schedule
-deletion, bounded startup discovery, opposing shared-recording lock graphs, monotonic re-grant
-ordering, real upload replacement, exact old/new-key obligations, deletion before/after an
-ambiguous storage response, duplicate/stale jobs, retry, process restart, terminal failure
-observability and replacement/deletion CAS. The real Nginx case additionally proves the
-external method allowlist, S3 Select/WebDAV-shaped denial before MinIO, signed-versus-unsigned
-PUT behavior, exact bucket-root denial with listing queries, and fail-closed duplicate/encoded
-path normalization. It never deletes the historical consent backlog: only tagged fixture jobs
-receive temporary priority and all tagged rows/objects are removed.
-
-The storage-proxy suite also checks the temporary P0.1 edge defence without reproducing the
-object-store vulnerability: an unsigned, credential-free, bodyless request carrying the
-vendor-named unsupported content-hash mode must receive the Nginx-only policy marker. The
-same suite then completes a real presigned PUT/GET round trip, so a broad filter that breaks
-legitimate SigV4 traffic cannot pass.
+- Coverage **≥ 80 % on services and policies**; no gate on generated or boilerplate code.
+- Exact test totals belong to each verified commit's [CHANGES entry](../CHANGES.log) and hosted run, never a second inventory here.
+- Integration tests run **serially** (one shared database); the integration job provisions an isolated real stack, never Local Development.
+- Both package builds include a compiler pass and CI keeps the named exact-typecheck step: types get their own gate, the build verifies emission and bundling.
+- Backend default suite: deterministic worker-readiness regressions (injected clock and pg-boss live-worker view: startup failure, incomplete registration, lost/stale workers, long-running handler); controller tests prove a healthy database plus a present `pgboss` schema cannot make `/healthz` green when the runner never started.
+- The shared HTTP helper returns `res.headers`: the calendar bootstrap's `Cache-Control`/`ETag` are contract.
 
 ## Running them
 
@@ -230,1946 +39,325 @@ Focused tests while editing; the full established gates once at the coherent bou
 
 ### B8 same-VPS backup and recovery
 
-The Owner temporarily authorizes same-VPS encrypted storage, **not full VPS-loss DR**;
-[operator setup and recovery](../operations/recovery.md). No runtime application, schema,
-API or job catalog is changed by this slice.
+Owner authorizes same-VPS encrypted storage temporarily, **not VPS-loss DR** ([recovery](../operations/recovery.md)); no application, schema, API or job-catalog change. No timer installed, no external host, no live dataset; drills remove only their uniquely named resources.
 
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/backup -p 'test_*.py'`:
-  **12/12** metadata and aggregate-alert assertions. Missing/mismatched repository/project/image
-  identity fails closed; green worker counts do not hide retirement failure or an unknown copy.
-- `bash scripts/backup/verify-backup-restore.sh`: **passed in 150 seconds** against real
-  PostgreSQL, B1 SeaweedFS and pinned encrypted restic. Tests raw and separately executed logical
-  dump restore, object/config bytes, exact container identities, low-space/wrong-key/overlap
-  refusal before outage, durable repeated failures, corruption of a saved disposable **data** pack
-  (located exactly through restic — a first-listed pack may hold tree blobs, which fail the next
-  backup in `create` instead and made this step pass only about half the time)
-  causing full verification failure without pruning old snapshots, repaired retry, exactly two
-  project generations across differing paths, foreign-project preservation, monthly skip and
-  repository/foreign-snapshot refusal **before target creation**. A newer foreign snapshot does
-  not become the default source. Restore waits for real data-service health before reading.
-- `bash scripts/deploy/verify-production-bootstrap.sh`: **passed**, from frozen source verified
-  by SHA-256 before/after the run, with **96/96** migrations and browser **15/15**. Exercises the actual Production-mode
-  graph and the new read-only operator command before/after raw rollback. Its isolated synthetic
-  future-due unknown-copy row must be reported despite healthy workers and no associated job;
-  the exact probe row is removed before final health acceptance.
-- All **30** non-link repository guards pass (OpenAPI/TD-3 remains **226/234**, eight pending,
-  zero undocumented). Systemd template validation and a real one-second utility timeout with
-  exact container cleanup pass. Final inventory finds no disposable containers, project volumes,
-  networks, images, processes or temporary recovery directories. Templates were never installed.
-
-The same B1 runtime source retains its accepted **2,536 passed / 18 skipped**, browser
-**193/193**, **342/342** units, **96/96** migrations and clean isolation. No repeated full
-application suite is justified by host scripts/docs alone. Both recovery drills remove only
-their uniquely named resources. No timer is installed, no external host is contacted and no
-live dataset is used by these checks.
-
-The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL
-and object-store volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every
-migration, creates objects across the complete staging-prefix catalog, proves the strict
-48-hour boundary and bounded continuation, and verifies canonical objects survive. Its purge
-case removes the queue first to prove the content row/Trash deletion rolls back, then uses the
-real production worker with a deliberately lost first `DeleteObject` response: pg-boss retries,
-both exact old leftovers disappear, and a newer key under the same content UUID remains. It
-then delivers a stale quarantine job after the row is gone and proves the worker removes the
-late copy without targeting that newer key.
-Automatic `purge_after` destruction is asserted absent rather than simulated, because it still
-requires the Owner decision.
-
-Integration tests run **serially**, because the suites share one database.
-
-The two production-build commands intentionally repeat part of typechecking: both package
-build scripts include a compiler pass, while CI also keeps the named exact-typecheck step.
-The separate step gives type failures their own gate; the build then verifies emission and
-bundling, which typecheck alone cannot observe.
+| Check | Proved | Figure |
+|---|---|---|
+| `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/backup -p 'test_*.py'` | Missing/mismatched repository, project or image identity fails closed; green worker counts hide neither retirement failure nor an unknown copy | 12/12 |
+| `scripts/backup/verify-backup-restore.sh` | Raw and logical-dump restore, object/config bytes, container identities, low-space/wrong-key/overlap refusal before outage, durable repeated failures, a corrupted **data** pack located through restic (a first-listed pack may hold tree blobs and fail in `create` instead) fails verification without pruning, repaired retry, two project generations, foreign-project preservation, monthly skip, foreign-snapshot refusal **before target creation**; restore waits for real data-service health | pass, 150 s |
+| `scripts/deploy/verify-production-bootstrap.sh` | Frozen source (SHA-256), Production-mode graph, read-only operator command before/after raw rollback; a synthetic future-due unknown-copy row is reported despite healthy workers, then removed before final health | pass; 96/96 migrations; browser 15/15 |
+| `scripts/storage/verify-storage-lifecycle.sh` | Own disposable volumes; whole staging-prefix catalog, strict 48-hour boundary, canonical objects survive; purge with the queue removed rolls back; real worker with a lost first `DeleteObject` retries, both exact leftovers go, a newer key under the same content UUID stays; a stale quarantine job removes the late copy only. Automatic `purge_after` destruction asserted **absent** (Owner decision pending) | 5/5 |
+| Guards | 30 non-link guards; OpenAPI/TD-3 226/234 (eight pending, zero undocumented); systemd template validation; one-second utility timeout with exact cleanup; templates never installed | pass |
 
 ## Why integration tests use a real database
 
-Not mocks. The properties being checked **do not exist in a mock**:
+The properties do not exist in a mock: does the partial unique index reject the second row, does `ar-x-icu` order Arabic, does the transaction roll back, does the presigned signature survive the proxy.
 
-- Does a partial unique index actually reject the second row?
-- Does `ar-x-icu` collation actually order Arabic correctly?
-- Does the transaction actually roll back?
-- Does a presigned signature actually survive the proxy?
-
-A mock returns whatever you told it to. The whole point of these tests is to find out what
-PostgreSQL, MinIO, and Nginx *really* do.
-
-The content/storage suite includes focused B-02 placement and B-03 finalization matrices. B-02 treats
-`EducationalContent.visibility` as the authority, inspects the real row and both MinIO buckets,
-and reads through the real Nginx storage boundary. The matrix covers new public/private content,
-replacement with omitted or manipulated visibility, a contradictory pre-fix ticket, anonymous
-public/private reads, unrelated-object isolation, `SessionContent`, and recording origin. Its
-cleanup owns exact object keys (including quarantine keys), so a green rerun cannot be borrowing
-bytes or rows from an earlier run.
-
-B-03 drives the actual presigned PUT, strict HEAD, one full staging GET, bounded magic/length
-validation, SHA-256 hashing into private server staging, and the re-hashed canonical PUT. The
-committed collision fixture is a copyright-free pair of valid equal-size PDFs with identical
-real MD5 and different SHA-256. A production hook pauses after the real source GET is open and
-its prefix accepted, replaces staging through the retained real PUT, then proves canonical
-download and mandatory audit still match the opened snapshot's SHA-256. A separate truncated
-source fixture proves no row/canonical object appears and client staging remains retryable.
-
-Two-party barriers pause concurrent completions after real canonical publication and before
-database publication; same-ticket calls converge to one row/audit/object, including when the
-two readers accepted different stable snapshots for either creation or replacement, while
-different replacement tickets produce one winner and one version conflict. Controlled canonical `PutObject`, audit and `DeleteObject`
-failures prove retry, compensating cleanup and post-commit staging cleanup. A stop immediately
-after canonical PUT proves restart recovery reuses one canonical object rather than overwriting
-or duplicating it. Legacy non-replacement and already-completed tickets retain safe compatibility;
-an outstanding replacement without `replaces_version` is rejected and must be re-initiated.
-
-The completed B-03 matrix is **50/50** in the content service and **86/86** across
-content, upload HTTP and R99 ingest. The full isolated backend integration count is recorded
-by the latest `CHANGES.log` entry after each cumulative run. The recorder browser harness and
-library-recorder harness remain the relevant browser gates.
-
-**Some of the contract lives in headers.** The shared HTTP helper therefore returns
-`res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
-are a stated part of that endpoint's behaviour, and a body-only assertion cannot see whether
-the policy actually shipped.
+| Suite | Pins |
+|---|---|
+| R115 identity/framing matrix | Owner singleton and triggers; owner-only transfer with two concurrent targets; first verified Google binding, no fabricated subject; bootstrap/rerun; strict هيئة التأطير one/multiple/all/online framing; deferred constraints; read-only post-approval projection; per-window mode; legacy-null/modality warnings. Fixtures restore singleton, User version counters and owner id |
+| Calendar/Hijri | Reserved test-only Hijri years **and** remote Gregorian dates (lookup is Gregorian-timeline based); never 1447/1448; teardown by those coordinates only |
+| B-01 safeguarding (19) | Real PostgreSQL/MinIO/pg-boss: read before withdrawal, denial while migration pends, full-stream SHA-256, write-only public staging, R92 audience changes, retained Sessions, bounded discovery, lock graphs, monotonic re-grant, exact key obligations, ambiguous storage response, duplicate/stale jobs, retry, restart, terminal failure, CAS; real Nginx method allowlist, S3 Select/WebDAV denial, signed vs unsigned PUT, bucket-root denial, fail-closed path normalization; never deletes the consent backlog |
+| Storage proxy P0.1 | An unsigned bodyless request with the vendor-named unsupported content-hash mode gets the Nginx-only marker, then a real presigned PUT/GET round trip |
+| B-02 placement | `EducationalContent.visibility` is the authority: real row, both buckets, real Nginx; new/replacement/manipulated visibility, contradictory pre-fix ticket, anonymous reads, `SessionContent`, recording origin; cleanup owns exact keys incl. quarantine |
+| B-03 finalization (50/50; 86/86 with upload HTTP and R99 ingest) | Presigned PUT, strict HEAD, one staging GET, magic/length, SHA-256, re-hashed canonical PUT; collision fixture = equal-size PDFs, equal MD5, different SHA-256; staging replaced after the source GET opens → canonical/audit match the opened snapshot; truncated source → no row/object, retryable; barriers: same ticket → one row/audit/object, different tickets → one winner + `VERSION_CONFLICT`; `PutObject`/audit/`DeleteObject` failures; stop after canonical PUT reuses one object; replacement without `replaces_version` rejected |
+| `trash-lifecycle` | Real `RESTRICT` graph: owned-child ids snapshotted, an independently deleted child not swept, no stale Trash after leaf purge or unique-pair revival |
+| `email-ownership` | Production `lockNormalizedEmail`, no mutex, no sleeps: an early onboarding token cannot create a second account and stays unconsumed; case-varied double arrival → one owner, one conflict; registration-first blocks pre-provisioning; forced failure rolls back ownership and lock row. Lock rows have no User FK, so suites delete their own |
+| `session-recording-ingest` | Real SeaweedFS, fault only at the selected `DeleteObject`: canonical row/object exist while staging remains, `ingestion_failure_reason` null; retry deletes only that key; real temporary pg-boss queue: durable `retry`, worker restart, terminal `failed` with the error in output, production limit → five executions (delay only removed) |
+| `session-recording` | Fake provider on purpose: *who may record* fails for authorization, never for an unreachable media server; only `verify-livekit-join.sh` proves media |
+| R111 final erasure | Concurrent with teaching-profile replacement, safeguarding upsert, notification delivery and upload initiation at the User lock: no satellite for the tombstone in either order; deletion-first mints no upload authority |
+| `visibility-matrix.http` (35/35) | Three tiers × نشاط/حصة/امتحان × thirteen callers; direct-by-id **404, never 403**; management list un-gated; a WARNED public recording served, warning to staff only (R170 §3); R91 dated ownership |
+| `notification.http` + `notification-targets.http` + `event-staff` (74/74) | R116 four-target CHECK, account-safe DTO, exact recipients, idempotency, remove/re-grant, reconciliation, R109 withdrawal (Session → teacher, Event → responsible, Exam → supervisor) |
+| `journey.integration.test.ts` | Admission-to-achievement over real routes, beside `business-scenario` (teaching steps), two shared entities. Found `publishAssessment` notified nobody (R116 wired physical, R124 built online on the same `Exam` row): a composition question needs a composition test |
+| `abandoned-fixtures.integration.test.ts` | Sweeps rows older than `ABANDONED_AFTER_MS` under `RUN_UNIQUE_FIXTURE_PREFIXES` (both), never force-deletes FK-held rows, asserts nothing aged survives and a fresh same-shape row does |
 
 ## Test the property, not the path
 
-The most important habit on this project.
+> ❌ *"The service calls `checkPermission` before returning."* ✅ *"A teacher requesting another teacher's student receives `404`."*
 
-> ❌ *"The service calls `checkPermission` before returning."*
->
-> ✅ *"A teacher requesting another teacher's student receives `404`."*
-
-The first passes when someone refactors the check into something broken. The second fails.
-
-Applied consistently, this is why the suite catches things review does not:
-
-- The mid-transaction **process kill** test — nothing partial persists
-- A **suspended teacher denied a presigned mint** within the unexpired-token window
-- A **deliberately stalled cache row** repaired by the read-side guard
-- **Two concurrent enrolments at capacity − 1** admitting exactly one
-- **Every path resolves to a page** — the assertion that would have caught `/dashboard`
-  rendering a blank white document
+- The first passes when the check is refactored into something broken; the second fails.
+- Examples: mid-transaction process kill persists nothing · suspended teacher denied a presigned mint inside the token window · a stalled cache row repaired by the read guard · two concurrent enrolments at capacity − 1 admit one · every path resolves to a page (would have caught `/dashboard` rendering blank).
 
 ## Assert the exact key set, not the presence of the fields you wanted
-
-A wire-shape test asserts the **complete** set of keys in a response:
 
 ```ts
 expect(Object.keys(res.body).sort()).toEqual(BRANCH_KEYS);
 ```
 
-Not `toHaveProperty('name')` for each field you expect. The failure being guarded is a field
-**arriving** that nobody chose — and a presence check passes straight through that, cheerfully,
-forever.
-
-This is the lesson of Revision 38. `GET /admin/branches` returned raw Prisma rows for months:
-four internal columns, `camelCase` names, an instant where TD-11 defines a date. **Every test
-stayed green**, because a service test asserts the *decision* and never the *wire*, and the
-endpoint had no HTTP-level test at all. Nothing in the suite could have noticed, because
-nothing in the suite was looking at the response as a *shape*.
-
-So: an endpoint whose contract matters gets a test that would fail if the contract grew. The
-counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#guards-scriptscicheck-sh--each-proven-by-reintroducing-its-bug) — the guard makes the
-projection exist, the test makes it *correct*.
+- Not `toHaveProperty` per field: the guarded failure is a field **arriving** that nobody chose (R38: `GET /admin/branches` returned raw Prisma rows for months with every test green and no HTTP-level test).
+- [`check-contract-dto.sh`](ci-cd.md#guards-scriptscicheck-sh--each-proven-by-reintroducing-its-bug) makes the projection exist; the test makes it correct.
 
 ### The client half of the same guard
 
-A server-side key-set test catches the **API** drifting. It cannot catch the **client's
-declared type** drifting, because `api<T>()` is an unchecked cast — see
-[the adapter layer](../architecture/frontend.md#the-unchecked-cast-under-this-whole-layer).
-A wrong adapter type compiles, passes every test that builds fixtures from that same wrong
-type, and fails only in a browser.
-
-The client-side counterpart is a **fixture literal typed as the adapter's own interface**,
-written with the key set the server test pins:
-
-```ts
-const WIRE: HijriMonthRow = { hijri_month: 1, month_name_ar: 'محرم', /* …all six keys */ };
-```
-
-Rename a field in the adapter and the **typecheck** fails here. That is the check the cast
-cannot perform. `pages/admin/hijri-calendar.test.tsx` is the worked example — written after a
-type mismatch rendered a whole admin screen blank white with nothing red anywhere.
+- `api<T>()` is an unchecked cast ([adapter layer](../architecture/frontend.md#the-unchecked-cast-under-this-whole-layer)): a wrong adapter type compiles, passes fixtures built from itself, fails only in a browser.
+- Counterpart: a fixture literal typed as the adapter's interface with the server-pinned key set — `const WIRE: HijriMonthRow = { hijri_month: 1, month_name_ar: 'محرم', /* all six keys */ };` — so a renamed field fails typecheck. Example: `pages/admin/hijri-calendar.test.tsx`.
 
 ## Driving a real browser, on real authenticated screens
 
-Vitest here renders with `renderToStaticMarkup`: **no jsdom, no layout engine, no
-events, no fetches.** Whole classes of fact are therefore invisible to it — where
-a button actually lands, whether a header click issues a request, whether a
-dragged row moves. The project has no Playwright and §3.1a forbids adding a
-dependency casually, so the browser scripts drive the **installed Chrome** over
-the DevTools Protocol using Node's built-in `WebSocket`: no install, no lockfile
-change. `scripts/dev/browser/cdp.mjs` is the shared client — connect, evaluate in
-the page, record a pass/fail line — extracted when the second script had grown
-its own copy of the same twenty lines and a third would have made three.
-
-**None of them runs in CI.** They need a live stack, a real Chrome and (for the
-seeded scenarios) a development database, so they are run by hand and their
-result is reported in the slice that ran them.
-
-**Which is also how they rot, so a harness addresses a control by what it IS.**
-Three of them were found red on 2026-09-21 for changes months old that nobody had
-run them against: a date «typed» into an input the calendar control had replaced,
-a branch list that had become a collapsed dropdown, a date field that had left the
-assessment builder. Two shared helpers exist so the next harness has no reason to
-guess markup or wording: `catalogue.mjs` (a scheduling type by its kind and
-attendance mode, never its name — R168 §4) and `date-picker.mjs` (`pickDate` DRIVES
-the platform's one calendar: trigger → year → month by POSITION → day). The
-registration form publishes `data-role-choice`, `data-role-section`,
-`data-circle-ranking` and `data-ranked-circle` for the same reason: the wording of a
-choice is the association's to change.
-
-| Script | Answers |
-|---|---|
-| `scripts/dev/browser/verify-platform-owner-framing.sh` | **R115 end to end on its own disposable real stack.** Operates one/multiple/all/online/both هيئة التأطير registration choices and stale-choice clearing; proves approval and read-only teaching-profile rendering; round-trips stated and legacy-null per-window modes; withholds destructive controls against a synthetic Platform Owner while her edit form adds a branch-scoped Teacher role through the primary Save without losing global Super Admin; transfers between two synthetic Global Super Admins while the current owner is filtered off-page; rejects the former owner's still-live bearer; then checks the exact PostgreSQL singleton, roles, framing and availability rows. Every ordinary phase is bounded and the project, volumes, images, Chrome profile and tagged identities are destroyed afterwards. **Last run: 23/23 plus 8/8 exact database assertions.** |
-| `scripts/dev/browser/verify-role-requests.sh` | **R168 §1 on the real pages** — one applicant, four roles, asked who she is once; the ranked circles are the SCHEDULED ones; an Admin is shown the administration request and offered no decision on it; the first approval activates the account; the Super Admin places her with her wishes beside the control and chooses WHICH administrative role. Seeds and removes its own `[r168-roles]` scenario (and, only when no academic period covers today, one fixture period). Journey D (R169 §1): an account that already exists asks for a further role, is declined, asks again. **Each sign-in step mints its OWN session** — presenting a refresh cookie a second time after the platform rotated it is the replay R101 detects, and it revokes the session, correctly; the harness learnt that by doing it. **Last run: 80/80.** |
-| `scripts/dev/browser/verify-room-capacity.sh` | **R169 §3** — a room's capacity on the real rooms dialog: refused in words when it is not a whole number, saved, said back, kept across a reload, cleared to «not stated». **Last run: 8/8.** |
-| `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
-| `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
-| `backend/src/controllers/visibility-matrix.http.integration.test.ts` | **NEW B §E — the visibility authorization matrix over real HTTP.** Three tiers × نشاط/حصة/امتحان × a thirteen-caller cast; `hidden` asserted as a set over the whole cast; direct-by-id gated separately from the list and answering **404, never 403**; the management list asserted **un-gated**; the full 3×3 content independence including a WARNED public recording (R170 §3: served, and the warning reaches staff only); and R91's dated ownership — two occurrences, two main teachers, each reading only her own date. **The suite owns every row it touches under one tag and its before/after snapshot of shared state is identical.** **35/35.** |
-| `scripts/dev/browser/verify-content-scope.sh` | **NEW D under a genuine, scenario-owned مؤطِّرة**: `/admin/levels`, `/admin/subjects` and `/admin/academic-years` **still 403** — no permission was widened — while `/me/scope-options` answers her; every مكتبة المحتوى filter populated, including المادة with no Level chosen; choosing a Level narrows المادة to **exactly** that Level's `subject_ids` (the Level is picked from the payload, because the first one in the list genuinely teaches nothing); the **library results change**, not merely the controls; clearing restores the wider set; the Add dialog carries its own determining fields (rule AX); and she still cannot create a Subject. **Last run: 14/14.** |
-| `scripts/dev/browser/verify-visibility-ui.sh` | NEW B §D on the real forms: مستوى الظهور rendered for نشاط, حصة دراسية and اختبار and defaulting to عام; a private and a hidden حصة **hydrating from the row**; an unrelated save preserving hidden; an explicit change making the form dirty so closing asks; the NEW H attendance notice present for حصة دراسية/اختبار and **absent** for محاضرة/حفل/عطلة; and the three R50 scopes landing where they should — one occurrence for *هذه الحصة فقط*, the split leaving earlier ones alone and the overridden one keeping its tier, and future occurrences materializing under the successor. **Mutates only the scenario's own schedule**, which `--clean` removes. **Last run: 19/19.** |
-| `scripts/dev/browser/verify-scheduling-types.sh` | R110 on the real pages: أنواع الجدولة renders the Owner's five seeded rows **in her order**, with `حضور إجباري` read from the column and three of the five sharing one entity; the الجدولة picker offers the **catalogue rows** and no longer the bare entity label «نشاط»; and the attendance notice follows the flag — present for اختبار, **absent for عطلة**, which is the half that makes it mean anything. **It earned its keep on the first run**, reading `5 → 4 → 3 → 2 → 1` off a catalogue a new integration test had reversed and not restored. **Last run: 10/10.** |
-| `scripts/dev/browser/verify-circles-reorder.sh` | R78.1 on the real حلقات المواد page: handle disabled and explained with no `(Level, Subject)` chosen, enabled once chosen, a circle dragged to last and **persisted server-side**, surviving a reload, and ↑/↓ reordering too. Circles addressed by **seeded id, never by title**. **Last run: 9/9.** |
-| `scripts/dev/browser/verify-circle-branch.sh` | R172 §15 on the real حلقات المواد page: the seeded circles carry their branch on the wire and in the row, `?branch_id=` and the screen's «تصفية بالفرع» keep this branch's three and empty the table for another, and «إضافة حلقة» with الفرع chosen creates a circle whose row carries it (deleted after). **Last run: 10/10.** |
-| `scripts/dev/browser/shoot-pages.sh` | Not a check — a LOOK (`design.mmd` §13): renders the landing, the phone menu, the sign-in sheet, the calendar, the library, the registration door and (with a dev session) the back-office home, a list, its dialog and the schedules list at 390 px and 1366 px into `scratch/shots/`, and says beside each whether the document is wider than the viewport. **Last run: 13 surfaces, none scrolls sideways.** |
-| `scripts/dev/browser/verify-weekly-follows-start.sh` | R172 §13 on the real الجدول page: a weekly class created on a Monday is opened with «تعديل», تاريخ البداية moved one day through the real date picker («الشهر التالي», the day cell), saved — and the server's `weekdays` and its next three occurrences say Tuesday. **Last run: 4/4.** |
-| `scripts/dev/browser/verify-sorting.sh` | The sorting contract **clicked** across four tables: ascending → descending → ascending, exactly one header claiming a direction, non-sortable headers not clickable, the actions column never sortable, and **no row on two pages** of a sorted collection (R76.3's `id` tiebreaker). **Last run: 39/39.** |
-| `scripts/dev/browser/verify-approvals-sorting.sh` | **NEW C's owed proof: طلبات الانضمام actually reorders.** The queue holds pending registrations and a healthy development database has none, which is why this table was left out of `verify-sorting.sh`. The harness seeds **three tagged applicants of its own** whose alphabetical order (أ ب ج) and oldest-first submission order (ج أ ب) are **neither the same list nor reverses of each other** — so a screen that dropped the sort parameter and returned its default could not satisfy both assertions. Asserts on the relative order of its own rows only, never the whole table, and removes exactly what it created. **Last run: 7/7.** |
-| `scripts/dev/browser/verify-public-calendar.sh` | قائمة and تقويم driven **anonymously**: both views offered, the choice in the URL, month stepping withheld where it means nothing, RTL with the marker on the inline start — and what a public reader must NOT see (no student name, no notification surface, no recordings, **no cancellation reason**). R83 removes a cancelled occurrence from the ordinary projection; `include_cancelled=true` still retrieves it. **Last run: 18/18.** |
-| `scripts/dev/browser/verify-library-recorder.sh` | The recorder's second entry point in مكتبة المحتوى, plus the sort indicator's **measured** placement. **Last run: 16/16.** |
-| `scripts/dev/browser/verify-error-experience.sh` | Rule AZ where only a browser can answer: the anonymous startup produces **no** visible error and no raw envelope; an offline API call really does reject as a `TypeError` (with the network cut over CDP); the edge really returns **429** when the brute-force zone is exhausted; an unknown route lands on the branded not-found. Per-class wording, codes and identifiers are settled by `error-panel.test.tsx`. On the permissive DEV edge (6000 r/m, `burst=5`) it asserts that MOST of a 25-request burst passes — «never a 429» was a race a fast machine loses. **Last run: 7/7.** |
-| `scripts/dev/browser/verify-uat-2026-09-02.sh` | **The 2026-09-02 manual-UAT defects**, each asserted as the user-facing behaviour that was reported wrong rather than the implementation under it: `الوصف` on a Level survives a save **and a reload**; `النوع` on الجدول الزمني reaches the request as `type=` (it was computed and never sent); a new activity opens on **`مرة واحدة`**, chosen after the kind is switched, because the kind is picked after the form opens; and the content edit form offers title, Level, Subject and visibility while carrying **no file input** — editing is not re-uploading. **Last run: 5/5.** |
-| `scripts/dev/browser/verify-hijri-baseline.sh` | **التقويم الهجري prefills, and never overwrites.** Fills an empty year from the Umm al-Qura baseline, then runs the import **again** and asserts the table did not move and the notice reports twelve skipped rather than twelve added — the property whose failure is silent and would surface as Ramadan on the wrong day. **It refuses to click until the page demonstrably shows its own test year**: the year control is React-controlled and a `change` event alone did not take, so an early run imported into a REAL year that the teardown, scoped to the test year, did not remove (P1.2). The teardown now also removes anything carrying the derived `source`. **Last run: 5/5.** |
-| `scripts/dev/browser/verify-teacher-capabilities.sh` | **A مؤطِّرة edits her own المواد and الفئات** — driven as a genuine teacher from the R82 scenario, never a widened Admin token. The two declarations are **operable controls** rather than the read-only text rule AF required while R88.2 stood; a choice saves and survives a reload; and her portal grows **no** administrative link by it. The server half of *grants nothing* is asserted in `teaching-profile.http.integration.test.ts`, where declaring every Subject still yields an empty `/quran-students` and `403` on `/admin/users`. **Last run: 4/4.** |
-| `scripts/dev/browser/verify-enrolment-save.sh` | **حفظ on `تسجيل مستفيدة` actually saves.** The reported defect produced *no request at all*: the dialog resolved the enrolment's branch by re-looking-up the pre-chosen مستفيدة in a `beneficiaries_only` directory search, while the page builds its rows from the **union** of that fact and the Student role (R79.7) — so a person on the page could be absent from the dialog's own list, the branch came back `''`, and that both disabled the button and made `submit` return before its first statement. Drives the Owner's exact case (a Level plus a **حفظ القرآن** circle) and asserts **two** `201`s — the enrolment and the circle membership — plus a closed dialog. Seeds its own branch, مستفيدة and Student role and removes all of it, the enrolment included (P1.2). **Last run: 4/4.** |
-| `scripts/dev/browser/verify-staff-period-bounds.sh` | **A staffing period is measured against its schedule as it is typed.** It first proves a new row renders with the requested responsible-`teacher` default. A class beginning 30 غشت 2026 with an assignment of 29 غشت → 29 غشت is `STAFF_PERIOD_OUTSIDE_SCHEDULE`, correctly — and the administrator learned it only on Save, from a message naming no field. Asserts the native `min` carries the schedule's start, that the pair is marked and `aria-invalid` on **both** date fields immediately, and then the half no source test can observe: **editing the schedule's own start date re-marks a staffing row nobody touched.** Read-only — it types and never saves. **Last run: 5/5.** |
-| `scripts/dev/browser/verify-unsaved-guard.sh` | Rule AY in a browser, both halves: `＋إضافة مقر` **pristine** closes on a backdrop click with no question; **dirty** refuses the backdrop, asks on Escape and on Cancel, keeps the typed value when the reader continues editing, becomes **pristine again** when the value is restored, and closes only on an explicit discard. `＋تسجيل مستفيدة` is re-run as the reference; the real new-item scheduling form also proves its rendered default is `entire_level` before closing pristine. **Last run: 24/24.** |
-| `scripts/dev/browser/verify-registration.sh` | **R117's exact parent + two-child journey through real Nginx/SPA/API/PostgreSQL.** Proves the guardian label, prospective required phone before the wire, one request consent, opposite per-child media decisions, two distinct requested Categories/Branches, successful single-use submission, then switches to a real Super-Admin session and clicks the new-registration notification into the exact authorized review. The details dialog must show guardian phone/email and both child blocks with their own coordinates; a stale review id must render the unavailable state rather than blank. Exact tagged DB state is asserted and cleaned. **Last run: 41/41 browser plus 12/12 database assertions.** |
-| `scripts/dev/browser/verify-consent-disclosure.sh` | **The registration consent notice, collapsed by default (Owner, 2026-09-02).** Two properties no unit test can see. **`[hidden]` actually hides** — its only defence is the UA's `display: none`, which an author `display` of any specificity outranks (rule AG), so the computed style is what tells a working hide from a coincidence. **The legend is spaced from the notice** — a `<legend>` is not a grid item, so `gap` never applied to it; CSS says the margin is there, only a browser says the boxes are apart. Also asserts that the revealed wording is **character-for-character** what `GET /registration/consent-text` serves, that opening or closing never touches consent state, and that at 360px nothing scrolls sideways. Nothing is submitted, so no applicant is created. **Last run: 19/19.** |
-| `scripts/dev/browser/verify-content-visibility.sh` | §14.1's visibility selector, **operated**: not disabled while the default is unknown · shows a placeholder rather than عام for a `null` state · initialises from the Level's Category default · خاص is genuinely selectable and stays selected · the `/uploads/initiate` body carries `visibility: "private"` · a Level change re-proposes the new default. It proves a real library row exposes no «استبدال الملف» action/dialog, while the create dialog still contains editable Level, Subject, Year, Branch and Visibility controls; changing Level inside it re-narrows Subject and re-proposes the tier. Performs a real upload and removes its own row afterwards. |
-| `scripts/dev/browser/verify-public-reader.mjs` (owned by `scripts/ci/test-integration.sh`) | Required disposable-stack proof: fresh anonymous image/PDF/audio/video/Office bytes through Nginx, decoding/playback, exact content-to-occurrence links and refresh, and protected-coordinate refusal. Real Admin/Teacher/Student refresh sessions exercise anonymous → authenticated → logout calendar transitions; an admin enrolled in an empty profile Level catches automatic prefill narrowing. Private branches and hidden ownership remain checked separately from public retention. `calendar-geometry.mjs` measures seven equal RTL columns, populated tappable cells, separate readable Gregorian/Hijri dates, and document overflow at 320, 360, 375, 390, 412, 430, 768 and 1280 px. Phone filters and canonical dialogs are operated. Chrome and ffmpeg are required; the suite cannot silently skip in CI. |
-| `scripts/dev/browser/verify-admin-navigation.sh` | §14.1's back-office menu (R105) **as it renders**: the eleven main entries and the eleven under الإدارة, in the Owner's order, for a Super Admin and for a real Admin — who sees **no heading at all**, since an empty الإدارة would still be a claim. It starts from the real Local landing page with the production-shape `Secure; HttpOnly; SameSite=Lax` refresh cookie, clicks the rendered لوحة التحكم link, and pins the transport regression: HTTP origin, no dead TLS edge, Back/Forward, reload, logout/re-login, the standalone consumed-callback retry state and a fresh tab. Then the half the menu is not: a genuine Admin access token, obtained through `POST /auth/refresh` the way the application obtains one, asking the server for the same destinations. **The reads R61.2 keeps open are asserted alongside the writes it refuses**, because the wrong fix for a leaked write is to close the read — and that breaks every scope selector silently. **Last run: 42/42.** |
-| `scripts/dev/browser/verify-teacher-portal.sh` | The مؤطِّرة's portal (R106) driven as a **genuine teacher**, minted as she already is: the six-entry menu in the Owner's order with no headings, `إدخال متى أنا متاحة` **operated** — planning-only notice on screen, حفظ disabled until a range is added — and then the boundary a menu cannot show: her own availability written through a real bearer token, while another مؤطِّرة's profile, the user directory, the curriculum and **editing a class she teaches** (TD-2 `⊘`) are each refused. It also **prints how many classes she staffs**, because §4.4c makes an empty portal *correct* for zero and that number is what tells a reader whether they are looking at seed data or a defect. **Last run: 25/25.** |
-| `scripts/dev/browser/verify-sorting-headers.sh` | §6's header sorting **clicked**: a real `<button>` in the `<th>`, `aria-sort` announcing the direction, a second click reversing and a third returning to ascending rather than to unsorted. Covers all three value types on real screens — Arabic **text** and **numeric** size on مكتبة المحتوى (server-side; the descending run reads 31.7 MB → 1.5 MB → 396 KB → 265 KB, which a string compare cannot produce) and **date/time** on الجدولة (client-side over the three-source merge). It also runs the audit in **both** directions: `الهدف`, `التكرار` and `إجراءات` must carry no button. **Last run: 19/19.** |
-| `scripts/dev/browser/verify-recorder.sh` | R75 with a **real `MediaRecorder`**: start · elapsed advancing · pause freezing the reading · resume · stop · editable name · save · discard · a second recording numbered « 2» — then the bytes in **MinIO** through a presigned URL, the row in the library, and the link as a *recording* in the focused Session projection. Chrome runs with `--use-fake-device-for-media-capture`, which supplies a synthetic microphone; **the API is not stubbed**. **Last run: 22/22.** |
-| `scripts/dev/browser/verify-schedule-edit.sh` | «تعديل العنصر»: the dialog opens with the row's own mode, a seeded المستوى and its own الحلقة; changing only «نهاية التكرار» saves; and `teaching_mode`/`target_id` are untouched afterwards. **Last run: 12/12.** |
-| `scripts/dev/browser/verify-notifications.sh` | **Audience/API harness** for R77/R82/R83: cancellation and restoration reconciliation, Event scope recipients, personal calendars, and send/decline/repeat. It calls `/notify` directly, so it proves the server resolver and not the UI button. **Last run: 22/22.** |
-| `backend/src/controllers/notification.http.integration.test.ts` + `notification-targets.http.integration.test.ts` + `services/event-staff.integration.test.ts` | **R116's real HTTP/PostgreSQL transition matrix.** Proves the four-target CHECK, account-safe DTO, exact Event/Session/Exam recipients, dual-role distinct meanings, no-op/retry idempotency, remove/re-grant, schedule/detail/cancel reconciliation, and R109 withdrawal: hidden Sessions retain only the teacher, hidden Events only the responsible person, hidden Exams only the supervisor. The run snapshots all application tables before/after. **Last run: 3 files, 74/74, isolation-clean.** |
-| `scripts/dev/browser/verify-notify-ui.sh` | The real sender-to-recipient flow: clicks the UI decision, records the page's request, then opens the recipient's own bell. Covers Session cancel/reschedule, Event create and delete/cancel, unrelated recipients, grade publication, R91 staffing and R92 cross-branch audience. |
-
-**Localhost runtime is separate evidence from a green commit.** The development overlay
-bind-mounts `frontend/dist`, but the API executes compiled code baked into its image. A new
-SPA can therefore call an older API indefinitely; `/healthz` proves dependencies, not source
-freshness. On 2026-09-07 the real public audio card reached a stale guarded mint route and
-returned `401 AUTH_REQUIRED`, while CI's freshly built API returned `200`. Compare the
-running route/build with the checkout before changing authorization. With Owner approval,
-refresh only the local API (`build api`, then `up -d --no-deps --wait api` using the ordinary
-development overlay), with no migrations or seeds, then verify the same item in fresh Chrome
-through actual bytes/playback. Never claim disposable fixtures prove the Owner's populated
-runtime was refreshed. The previous browser suite also lacked a calendar login transition
-with nonempty profile suggestions, so its direct API and anonymous layout checks missed the
-second, filter-driven empty response.
+- Vitest renders with `renderToStaticMarkup` (no jsdom, layout, events, fetches); no Playwright (§3.1a). Harnesses drive the installed Chrome over CDP with Node's built-in `WebSocket`; `scripts/dev/browser/cdp.mjs` is the shared client.
+- Only `verify-public-reader.mjs` runs in CI; the rest need a live stack, Chrome and a development database and report in the slice that ran them.
+- Address a control by what it **is**: `catalogue.mjs` (scheduling type by kind and attendance mode, R168 §4), `date-picker.mjs` (`pickDate`: trigger → year → month by position → day), registration `data-role-choice`/`data-role-section`/`data-circle-ranking`/`data-ranked-circle`.
+- Source-text tests cannot see `busy` mapped to `disabled`, or `value=''` with no matching `<option>` showing the first option (عام) for `null`. When the property is what a person sees or can do, the test is a browser; `verify-content-visibility.sh` reintroduced both defects. A suspected third (an effect overwriting a choice) could not be demonstrated: guarded, but no check claims it.
+- Localhost runtime is separate evidence: the dev overlay bind-mounts `frontend/dist` but `api` runs baked code, so a new SPA can call an old API and `/healthz` proves dependencies, not freshness. Compare the running build with the checkout before changing authorization; with Owner approval refresh only the API (`build api`, `up -d --no-deps --wait api`, dev overlay, no migrations or seeds), verify in fresh Chrome. Disposable fixtures never prove the Owner's runtime was refreshed.
+- No source suite sees a CSP: `connect-src 'self'` blocked R98's classroom; the pre-upgrade validation request is plain HTTP and raises no `securitypolicyviolation`, so **both** schemes are in `nginx/snippets/media-origin.conf`.
 
 ### Testing the Google identity boundary without trusting a fixture token
 
-OAuth verifier tests do not call live Google services and do not replace cryptographic
-validation with payload decoding. They generate an ephemeral RSA keypair, sign deterministic
-ID tokens locally, inject only the corresponding provider-certificate response, and run the
-real Google Auth Library verifier. The matrix includes a valid token, invalid signature,
-expiry, wrong issuer, wrong audience, malformed/unsupported headers, unknown key, missing
-identity claims, unverified email and signing-certificate retrieval failure.
-
-The code exchange has a separate narrow verifier seam, and the callback exposes that same
-dependency only to tests. A callback test carries a valid signed flow-state cookie and PKCE
-verifier through the production handler, rejects a decodable forged token, and proves that
-account resolution is never reached. Identity binding and pre-provisioned-account resolution
-remain covered by the database integration suite; no test seam grants a role or bypasses
-those services.
+- No live Google, no payload decoding as validation: ephemeral RSA keypair, locally signed deterministic ID tokens, injected provider-certificate response, the real Google Auth Library verifier.
+- Matrix: valid, invalid signature, expiry, wrong issuer, wrong audience, malformed/unsupported headers, unknown key, missing identity claims, unverified email, certificate retrieval failure.
+- The code exchange has a narrow verifier seam exposed only to tests; a callback test with a valid signed flow-state cookie and PKCE verifier rejects a decodable forged token before account resolution. No seam grants a role.
 
 ### Getting past the login wall without bypassing it
 
-Every `/admin/*` screen needs a session, and the only issuer is Google OAuth
-(§4.1b) — which a headless browser on a developer machine cannot complete. That
-is not a reason to skip browser verification; it is a reason to provision a
-session properly.
-
-`scripts/dev/issue-dev-session.sh` mints one by calling **`issueNewSession`, the
-production code path the OAuth callback itself calls**, and prints the raw token
-to be set as the ordinary `bodour_refresh` cookie at `Path=/api/v1/auth`
-(TD-12, R101), exactly as the server sets it. **Nothing about authorisation is
-bypassed**: the user is an ordinary `super_admin` row, and every request it makes
-is checked by the same TD-2 rules as any other. What is replaced is the identity
-*provider*, and only in a development database — the script refuses to run
-against a non-loopback `DATABASE_URL` or with `NODE_ENV=production`.
-
-It takes an optional user uuid:
-
-```bash
-bash scripts/dev/issue-dev-session.sh              # the script's own Super Admin
-bash scripts/dev/issue-dev-session.sh <user-uuid>  # an existing user, as they are
-```
-
-The admin-navigation browser guard sets that token with the real cookie attributes, including
-`Secure`, even though the Local origin is `http://localhost`. Localhost is the deliberate
-secure-context exception; tests must never make the result green by weakening cookie
-attributes. The Local Compose edge is correspondingly HTTP-only and loopback-only on both
-`127.0.0.1` and `[::1]`. The browser harness probes both families before opening Chrome:
-`localhost` resolution may change between connections, so an IPv4-only edge can serve the
-landing page and still refuse a later full-page Dashboard navigation before Nginx sees it.
-A harness that inherits or publishes a dead port 443 can instead turn that navigation into a
-TLS reset, so the Compose operations guard pins the complete port boundary as well as the
-browser result.
-
-The authentication integration coverage drives both cookie consumers over HTTP. It proves a
-refresh rotates first, logout receives that successor, the persisted chain is revoked, a
-retained copy is refused, another device still rotates, repeat/missing-session logout is
-idempotent, and the response clears the cookie with the matching Path and security attributes.
-The service-level R101 coverage uses explicit barriers around the real PostgreSQL session lock —
-never timing sleeps — to force both ordinary orderings: refresh identifies first but logout
-locks first, and logout identifies first but refresh locks first. A controller-level HTTP test
-then pauses the refresh after its rotation transaction but before final access-token issuance,
-lets logout commit, and proves the resumed response is `401` with no credential. The purge race
-holds rotation before successor insertion, queues purge on the stable session row, then queues
-logout while purge owns it; after the predecessor is deleted, logout still revokes the exact
-successor. The companion after-insertion case proves purge leaves that successor usable.
-A controlled mandatory-audit failure occurs after the real revocation write and proves the
-enclosing database transaction rolls that write back; the same test then proves the successful
-path commits both revocation and `auth.logout`.
-The user-wide R101 race coverage uses a second set of explicit barriers around the production
-User-row lock. In the suspension-first ordering, OAuth resolution has already read Active but
-final issuance waits; suspension commits and the resumed callback re-reads Suspended, redirects
-to the existing deactivated contract, and creates no access token, cookie or session. In the
-login-first ordering, the callback holds the User lock while creating its anchor/token/audit;
-suspension waits, then enumerates and revokes that new anchor together with two older sessions.
-An unrelated user's login completes while the target is blocked, proving the lock is not global.
-A forced `auth.login` audit failure proves the new anchor and token roll back before any
-credential reaches the response.
-The auth hardening companion coverage drives two additional database-level crossings. A refresh
-holds its real session anchor immediately before successor insertion while suspension holds the
-User governing lock and queues on that anchor; the successor's implicit User FK `KEY SHARE`
-finishes, then suspension revokes it and refresh finalization refuses. Logout is forced through
-the analogous ordering immediately before its mandatory audit insert. Both use explicit barriers
-on production repository calls rather than sleeps, proving `FOR NO KEY UPDATE` removes the old
-FK-lock cycle without weakening the business outcome. The same suite forces both
-suspension-versus-first-binding orders: suspension-first writes neither identity nor binding
-audit, while binding-first commits both before final credential issuance observes suspension.
-
-Active-role HTTP coverage uses a bearer minted 50 minutes in the past, logs out its refresh
-session, and switches the same role twice. Both replacements retain an `exp` no later than the
-original, while authoritative suspension and deletion each refuse switching. Refresh lifecycle
-coverage moves a Pending account to terminal Rejected and proves repeated presentation returns
-no credential; a Pending control still rotates for its status-screen session. It also reactivates
-a suspended account and presents its old cookie, proving reactivation never reverses durable
-session revocation. Durable immediate
-revoke-all on Pending → Rejected remains an Owner decision because TD-4.15 currently enumerates
-only suspension and deletion and the revocation-reason enum has no rejection value.
-The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
-transaction, so it verifies revocation and system audit without signing out local developers.
-
-**With a uuid it grants nothing.** The Super Admin role is created only for the
-script's own default user; a user named on the command line is minted for exactly
-as they already exist. That distinction is the whole point of the argument:
-verifying a student's own screens has to exercise a student's real authorisation,
-and a script that quietly widened it would be verifying a session nobody has.
+- `/admin/*` needs a session and the only issuer is Google OAuth (§4.1b). `scripts/dev/issue-dev-session.sh` calls **`issueNewSession`** (the callback's own path) and prints the raw `bodour_refresh` value (`Path=/api/v1/auth`, TD-12, R101). Authorization is untouched; only the provider is replaced, only in a development database (refuses non-loopback `DATABASE_URL` and `NODE_ENV=production`).
+- `bash scripts/dev/issue-dev-session.sh` → its own `super_admin`; `… <user-uuid>` → that user **as they are** (grants nothing).
+- Cookie set with the real attributes incl. `Secure` on `http://localhost` (deliberate exception; never weaken). Local edge is HTTP-only and loopback-only on `127.0.0.1` and `[::1]`; harnesses probe both families (an IPv4-only edge refuses a later full-page navigation; a dead 443 gives a TLS reset; the Compose guard pins the port boundary).
+- Auth HTTP coverage: refresh rotates first, logout receives the successor, chain revoked, retained copy refused, another device still rotates, repeat/missing-session logout idempotent, cookie cleared with matching Path/attributes.
+- R101 races use barriers on the real session lock, never sleeps: both identify/lock orders; refresh paused after rotation → `401`, no credential; purge race before/after successor insertion; forced mandatory-audit failure rolls revocation back, success commits revocation + `auth.logout`.
+- User-lock races: suspension-first → callback re-reads Suspended, redirects to the deactivated contract, mints nothing; login-first → suspension revokes the new anchor plus two older sessions; an unrelated login completes (lock not global); forced `auth.login` audit failure rolls back anchor and token; `FOR NO KEY UPDATE` removes the FK-lock cycle (successor's implicit User FK `KEY SHARE`); suspension-vs-first-binding in both orders.
+- Active-role: bearer minted 50 min in the past, switched twice, `exp` never later; suspension and deletion refuse switching. Pending → Rejected returns no credential; a Pending control still rotates; reactivation never reverses revocation. Durable revoke-all on Pending → Rejected remains an Owner decision (TD-4.15 lists only suspension and deletion; no rejection reason value).
+- The R101 rollout test executes the data-migration SQL inside a rolled-back transaction.
 
 ### The scenario the browser reads
 
-`scripts/dev/seed-dev-scenario.sh` builds the association's own case in the
-development database and prints the ids as one JSON line:
-
-    المرأة — وميض الأمل · تفسير · كل اثنين 15:00–17:00 · تاركة · القاعة 5
-    صفاء (أستاذة) · أمينة (مساعدة) · مستفيدة مسجّلة · مستفيدة غير معنية
-
-The occurrences come from **`materializeSchedule`, the production materializer**,
-so what the browser then reads is what the platform would really have made —
-including the R43.4 staffing snapshot each Session carries. The unrelated
-مستفيدة is the control: she is enrolled in nothing, and a notification reaching
-her would mean the audience is not the audience.
-
-Every row it writes is tagged `[dev-scenario]`, and **`--clean` removes exactly
-those rows and nothing else**. It is idempotent — it cleans before it seeds — and
-`verify-notifications.sh` traps `EXIT` to clean up after itself, so a run leaves
-the database as it found it. Same guards as the session script: it refuses
-`NODE_ENV=production` and a non-loopback `DATABASE_URL`. It is local development
-and browser verification only; nothing in CI or in any suite calls it.
-
-### What browser verification found that no test could
-
-The R76 drag worked from the keyboard and did nothing on a synthetic drag
-sequence. The cause was real and would have bitten a real user on a fast
-pointer: `dragstart` and the first `dragover` can arrive **in the same task**, so
-a handler reading only React state sees `null` and never begins. The dragged row
-and the arrangement in progress now live in refs; state drives the styling, the
-refs drive the logic.
-
-The lesson generalises: *a behaviour that depends on a re-render happening between
-two events is a behaviour that works only when the machine is slow enough.*
-Neither a unit test nor a code reading would have asked.
-
-The R77 run found nothing wrong with the application, and two things wrong with
-the harness — worth recording because both are traps a later harness will set
-again:
-
-* **It aimed at an occurrence already past.** `restoreSession` refuses that with
-  `STATE_CONFLICT / SESSION_IN_PAST`, because reinstating a class that has
-  already not happened would put a session on the calendar claiming it did. The
-  refusal was correct; the harness was aiming at the one occurrence the scenario
-  cannot be run against. It now takes the next Monday ahead of today.
-* **It matched occurrences by title.** Other suites seed their own `تفسير`, so
-  the filter picked up an occurrence belonging to a different schedule. Selection
-  now comes from `GET /admin/course-schedules/{id}/sessions` — the same read the
-  admin screen uses before offering «إلغاء» or «استعادة». **The schedule is the
-  identity; a name never was.**
-
-The R75 run found **three real defects and no harness fault at all**, which is
-the strongest argument for this kind of verification the project has:
-
-* **Every recording was refused by the server.** TD-9's whitelist compared the
-  whole declared MIME string, so `audio/webm;codecs=opus` — exactly what
-  `MediaRecorder` produces — read as a foreign type. A media type is its essence
-  plus parameters; that string *is* `audio/webm`.
-* **The recording vanished the moment it was saved.** The dialog read the
-  focused Session projection anonymously, and that endpoint is public *at the caller's tier* —
-  so it returned the public tier while a fresh recording is private. The
-  numbering rule then computed its suffix from an empty set and produced **two
-  recordings with the same name**, the exact overwrite R75.6 exists to prevent.
-* **Uploads declared a Group as their Level**, because the sessions page read
-  `levelId` from `target_id`.
-
-None of the three is visible from source, and each needed the *next* step to
-expose it — the whitelist refusal only appears once a real container reaches the
-server, and the tier bug only once a private row exists to be hidden.
-
-**The trap that caught this session twice, stated plainly:** a probe that
-identifies a row by what it *renders* rather than by its **id** will one day
-match a different row. The public-calendar check matched an occurrence by date
-and found one another probe run had left behind — correctly not cancelled — and
-reported the rendering rule broken. Identity now comes from the API. The same
-mistake is why the recorder harness once matched a `تفسير` belonging to another
-schedule.
-
-A third correction was in the harness's own bookkeeping rather than its aim:
-TD-4.13 **rotates the refresh token on every use**, with reuse detection behind
-it, so re-presenting the token the script was handed works exactly once per
-identity. Switching between three sessions means carrying each one's *rotated*
-cookie forward — which is what a second person on a second device actually is.
-
-## Source-text tests cannot see a browser
-
-The visibility selector shipped once with tests that passed and a control nobody could
-operate. Two of its three defects were **browser behaviour, not code**:
-
-- `busy` mapped to `disabled`, so the control was present and inoperable;
-- `value=''` with no matching `<option>` made the browser render the **first** option — عام —
-  for a state that was actually `null`, so the control displayed a tier it did not hold and
-  did not send.
-
-Neither is visible in source. The tests asserted on the file's text and on the adapter, and
-both assertions were true while the screen was broken. **A test that reads source cannot
-observe a disabled attribute, a browser's first-option fallback, or what a `<select>` shows.**
-
-The rule this leaves: **when the property is what a person sees or can do, the test has to be
-a browser.** `verify-content-visibility.sh` operates the real control and reads the real
-request body, and each of the two defects was reintroduced to prove it fails — the repository's
-standing requirement that a guard be proven against the defect it exists for.
-
-One further honesty note, recorded because it is the kind of thing that otherwise becomes
-folklore: a **third** defect was suspected from reading the code — an effect overwriting a
-deliberate choice — and could not be demonstrated in the browser. The implementation still
-guards against it because doing so is cheap and states the rule legibly, but no check claims
-to catch it, and the harness says so where it would otherwise be read as protection.
-
-## Four environment traps the integration suite sets
-
-**Running the full suite repeatedly hits the real Nginx rate limits.** The stack
-under test is the production one, limits included, so a second or third full run
-inside the same minute can exhaust the auth zone and fail whichever
-`auth-refresh` assertions happen to land last. The signature is a **`429` where a
-`200` was expected, moving to a different test each run** — a genuine failure
-stays put. Confirm by running that one suite alone; if it passes, the code is
-fine and the window simply needs to elapse.
-
-**The API container serves the HTTP suites, so ANY backend change needs a
-rebuild — not only a schema change.** This is stated more broadly than it first
-was, because the narrow version produced a false green: a branch-visibility
-change was committed after a full suite run that had exercised the *previous*
-build. The suite was truthful about the container it hit and silent about the
-code that had been written. The failure surfaced one commit later, looking like
-a regression in unrelated work.
-
-A green HTTP suite means *the running container passes*. Rebuild before you
-believe it about your own change.
-
-### The same trap on the client, and it has no test to catch it
-
-**Nginx serves `frontend/dist`, a static build mounted read-only** — not a dev
-server. `npm test` and `npx tsc` run against `frontend/src`, so the whole
-frontend suite goes green on code the browser is not running. Nothing in CI or
-in any suite observes the gap.
-
-It surfaced exactly as you would expect: a slice removed `/dashboard/parent` and
-was verified green, and the Document Owner then reported that the interface
-still offered it. Both were true. `dist` was three commits old.
-
-**`cd frontend && npm run build` after any frontend change, before believing
-anything you see in a browser.** If a screen still shows what you just deleted,
-check the bundle before you debug the code:
-
-```bash
-curl -s http://localhost/ | grep -o 'assets/index-[^"]*\.js'   # which bundle is served
-curl -s http://localhost/assets/index-XXXX.js | grep -c 'the string you removed'
-```
-
-**The original wording, still true:**
-`*.http.integration.test.ts` calls the running container, not an in-process app.
-After a migration the container still holds the previous Prisma client, so a
-dropped table surfaces as a `500` — or, where the route degrades, as an
-unexplained empty result rather than an error. Rebuild `api` before running
-those suites. (Health lives at the **origin root**, `/healthz`, not under
-`/api/v1/` — a `401` there means you asked the guarded router, not that the API
-is unwell.)
-
-**Run the suite through `scripts/dev/test-integration.sh`, never `vitest` directly.**
-`.env` is canonical and **container-shaped** (TD-13): `DATABASE_URL` names the
-`db` service and `MINIO_ENDPOINT` names `minio`, hostnames that resolve only
-inside the compose network. The script rewrites both to the loopback ports the
-dev overlay publishes. Sourcing `.env` and calling `vitest` yourself rewrites
-neither — or, worse, rewrites only the database, which is the confusing case:
-**48 suites pass and the storage suite fails twelve times** with `no object at
-the initiated key`, which reads as a broken presigned-upload implementation and
-is a hostname that does not resolve.
-
-Lifecycle purge coverage belongs in a real database suite. In particular,
-`trash-lifecycle.integration.test.ts` asserts the actual `RESTRICT` graph and transaction
-rollback: parent deletion snapshots exact owned-child ids, an independently deleted child
-cannot be swept by a later parent purge, and leaf purge/unique-pair revival leave no stale
-Trash. A repository mock cannot prove any of those properties.
-
-**A queue must be registered before anything can be enqueued into it.**
-`pgboss.job` is partitioned by queue name, so adding a job to the TD-7 catalogue
-means the **worker process must restart** before any test can insert one — until
-then the insert fails with a foreign-key violation on `q_fkey`, which reads like
-a schema bug and is not one. Rebuild the API container after adding a queue.
-
-## A fixture must not leave the application unrunnable
-
-Every suite touching registration upserted `legal.consent_text_version` in
-`beforeEach` and **deleted it in `afterAll`**. Running
-`npm run test:integration` therefore left the developer's database with no
-consent text version, and registration then failed closed with a `503` for
-everyone who used the form afterwards.
-
-The failure was doubly confusing: **the tests were green, the application was
-broken, and the tests were the reason.**
-
-**It then happened a second time, from an ordering mistake rather than a missing
-restore.** `email-ownership.integration.test.ts` called the restore as the
-**last** statement of an `afterAll` that deleted five fixture rows first — so
-any one of those throwing skipped it, and the suite's scratch value
-(`email-owner-test-v1`) was left in the shared database. The helper was correct
-and was simply not reached.
-
-**And a third time, from a cause no code change can prevent: the run was
-KILLED.** On 2026-09-03 `scripts/dev/test-integration.sh` was started twice
-concurrently by accident, and the second was killed by a `timeout` mid-suite. An
-`afterAll` that never runs restores nothing, so `appr-test-v1` was left **active**
-in the shared database — and every later suite that installs its own wording then
-failed with *«appr-test-v1 is already in force»*, seventeen tests at a time, in a
-file that had passed minutes earlier.
-
-Three consequences worth carrying:
-
-* **The suite is not safe to run concurrently with itself.** Two runs share one
-  database, one consent text and one fixture namespace. Start one, wait for it.
-* **A killed run leaves damage a green re-run cannot clear**, because the
-  scratch wording is now the *pre-existing* state the next run refuses to
-  overwrite. That refusal is correct — it is the guard doing its job — and the
-  fix is to restore, not to weaken it.
-* **Restore through `removeTestConsentText`, never by hand-written SQL.** It
-  supersedes the scratch row and reactivates the one it displaced, putting the
-  version counter back too, which is exactly the state the suite would have left.
-  It also declines to *delete* a row that consent records still reference: a
-  superseded development version is inert and honest, while deleting it would
-  destroy the only copy of the words a stored record points at.
-
-Diagnosing this is quick if the shape is recognised: `SELECT version_label,
-status FROM legal_consent_text` shows a `*-test-*` label sitting `active`.
-
-## Two defects a browser found that no source test could (R132)
-
-`verify-self-managed-claim.sh` drives the whole account-claim journey — her
-entry point (**the link `/register?mode=self-managed` and only the link**: R160 §8
-withdrew the option from the form, and the harness asserts both halves), the
-Super Admin's review screen, and a database assertion that a
-pending claim exists while **nothing is bound**. Writing it found two real
-defects in code that typechecked, linted and passed every unit test:
-
-1. **A silent dead end.** The claim arm's early return in `validate` sat *after*
-   `person(state.applicant, …)`, so a form whose name fields are not even
-   rendered was permanently invalid. `valid` stayed false, the submit button did
-   nothing at all — no error, no request, no explanation — and every source-level
-   check was green. It is now pinned by four cases in `register.test.tsx`.
-2. **The wrong success message.** A claim rendered the *registration* wording,
-   telling her an application had been received and would be decided. True of a
-   different thing: she asked to be given a login on a record that already
-   exists.
-
-Neither is visible from a service test (the service was correct) or from a unit
-test of the component (both rendered). What showed them was performing the
-journey and reading what a person actually sees.
-
-## One journey suite, reused by the browser phase (added 2026-09-04)
-
-`backend/src/controllers/journey.integration.test.ts` drives the whole
-admission-to-achievement chain through the real routes: two registrations, the
-Super Admin's approvals, two enrolments, an online assessment, its publication,
-the notices it writes, the sitting (save · resume · submit), marking,
-publication of the mark, and a memorisation entry — sixty-six assertions,
-against the containerised stack and a real PostgreSQL.
-
-It sits beside `business-scenario.integration.test.ts` rather than inside it:
-that file proves the **teaching** steps compose (taxonomy → scheduling →
-materialization → calendar), and this one proves the **admission-to-achievement**
-steps do. They share two entities and nothing else.
-
-**The browser phase reuses this fixture instead of seeding its own.**
-`scripts/dev/browser/verify-journey.sh` runs the suite with `JOURNEY_KEEP=1`,
-which skips only the `afterAll` cleanup, resolves the ids with the read-only
-`backend/scripts/journey-fixture-ids.ts`, drives the screens, and then re-runs
-the suite normally so nothing tagged survives. The alternative — a
-`seed-journey-scenario.ts` alongside the suite — would have been a second
-implementation of the same eleven steps, and on this project the copy that
-drifts still passes its own tests.
-
-Two consequences worth keeping:
-
-* **The cleanup runs from a shell `trap`, not at the end of the happy path.** An
-  abandoned `[journey]` branch would reach the association's *public* homepage,
-  which is the defect recorded in the section below.
-* **A negative browser check must prove the surface OPENED.** The inbox lives
-  behind the top bar's bell (R85 moved it off the student dashboard), so an
-  unopened panel yields an empty string — which passes *«she was told nothing»*
-  while proving nothing at all. `verify-journey.mjs` asserts the panel is
-  non-null before asserting what it does not contain.
-
-### What this journey found that 2,246 integration tests did not
-
-**Publishing an online assessment notified nobody.** R116 wired the *physical*
-Exam lifecycle to the inbox; R124 then built the online assessment on the same
-`Exam` row with a lifecycle of its own, and `publishAssessment` wrote a state
-change and an audit row and told no one. Every per-feature suite passed
-throughout, because each asked whether its own step worked and none asked
-whether publication **reaches** anybody.
-
-That is the same shape as the two defects below and the six «a complete
-capability with no reach» instances in `ux-architecture.md`. The lesson is not
-*write more unit tests*: it is that a **composition** question needs a
-composition test, and the cheapest one is the journey a real person takes.
-
-## A run-unique tag is not a handle either (found 2026-09-04)
-
-The section below records fixtures reaching the public homepage because their
-titles carried no tag. This is the **opposite** failure, and it reached a screen
-the association uses to do real work.
-
-Eight suites own their rows with a per-run tag —
-`` const TAG = `[content-test:${randomUUID()}]` `` — and delete by exactly that
-string. The comment beside one of them gives the reason, and it is a good one:
-
-> a new process must never treat residue from an interrupted older process as its
-> fixture and delete it from the ambient DB
-
-What was never written down is the cost. **A run that dies before its `afterAll`
-leaves rows whose tag no future run can ever reproduce.** They are unreachable by
-construction and they accumulate — and when the fixture is taxonomy, they
-accumulate *in the selectors people use*. Four abandoned runs from one minute on
-2026-09-02 put four fake Categories, Levels and Subjects into the Level dropdown
-of «اختبار جديد», where the Document Owner found them while creating an actual
-exam. `[r82-test:]` had leaked a fifth cluster that nobody had noticed at all.
-
-### Age is the discriminator, because the concern was concurrency
-
-The original worry is entirely about two live runs colliding. **Age answers it
-without giving anything up**: no integration suite here takes hours, so a row
-older than `ABANDONED_AFTER_MS` cannot belong to a run that is still going.
-`src/test-support/abandoned-fixtures.ts` sweeps exactly those, keyed on the
-owning prefix — both conditions must hold, and it is never a truncate or a
-name-shaped guess.
-
-It **never force-deletes**. A row a foreign key still holds is left standing and
-counted, because entanglement is a fact to look at rather than to cascade
-through. That mattered immediately: chasing the residue proved the sweep
-incomplete twice — a `RecurringCourseSchedule` held a Level after everything else
-had gone, then a `Room` held a Branch after that. Both were found by the guard
-failing, which is the guard doing its job.
-
-### The guard repairs as well as reports
-
-`abandoned-fixtures.integration.test.ts` sweeps and *then* asserts nothing aged
-survives. A guard that only reported would leave the rows sitting on the screen it
-exists to protect. Its second case pins the other half — **a fresh row of the same
-shape must survive** — because a sweep that took those would break every parallel
-run, which is the property the run-unique tag was bought for in the first place.
-
-Adding a suite that uses a run-unique tag means adding its prefix to
-`RUN_UNIQUE_FIXTURE_PREFIXES`; the guard then covers it.
-
-## What the assessment library found that the journey could not
-
-The admission-to-achievement journey was green, and the product was still
-incoherent: a paper an author created could not be found again, because **no
-list endpoint existed**. Every route addressed one paper by id, so every test
-addressed one paper by id, and the question *which papers exist* was never asked
-by anything — code or test.
-
-The lesson is narrower than "test more". A journey proves that a **sequence**
-works. It cannot see a capability that is missing from the sequence entirely,
-because nothing in the sequence needs it. What found this was a person using the
-product, and what makes it stay found is a browser check that navigates **away**
-and back (`verify-assessment-library.sh`) — the one thing an API test never does.
-
-Two failures in writing that check are worth keeping:
-
-* **A negative assertion against a surface that did not render proves nothing.**
-  The first version loaded `/admin/scheduling`, which is not a route, got the
-  dashboard, and cheerfully passed *«it no longer says قريباً»* about a page that
-  never contained the words. Assert the surface arrived, then assert what is on it.
-* **Confirming an action that navigates tears down the execution context.** A
-  single `evaluate` that clicked «نسخ كمسودة» and then read the result returned
-  `undefined` and looked exactly like a missing button. Click in one evaluation,
-  read in the next.
-
-## Integration residue reaches USER-FACING screens (found 2026-09-05)
-
-**The suites share one database with the running application, so a row a suite
-forgets is a row the association's public homepage renders.** This was found by
-screenshotting the landing page during a design pass, not by any test.
-
-What was on `http://localhost/` — the public page, logged out:
-
-* **13 of 17 branches were fixtures** — `[content-test:<uuid>] فرع`,
-  `[http-childapp-test] مقر آخر`, each with its address, phone and opening hours
-  laid out exactly like a real one. The page was 4,536px tall on desktop and
-  6,891px on mobile, and almost all of it was test data.
-* **Three fixture academic years** — including one with 20 periods — appeared in
-  the year selector on «اختبار جديد», beside the single real one.
-
-### Why the existing sweeps missed it
-
-Each suite tags what it creates and deletes by that tag. The leak is in the
-**untagged children**: four `EducationalContent` rows titled «العنوان الصحيح» and
-«مع خاص** were attached to tagged branches, so a title-prefix sweep could never
-find them — and their `Restrict` foreign key then held the branch, which held the
-`UserBranchRole`, which held the user. **One untagged row pins an entire cluster.**
-
-### What to do about it
-
-* **Tag every row a fixture creates, including the ones nobody reads.** A title
-  that looks like production data is a row no sweep will ever match.
-* **Sweep by ownership, not by name, wherever the FK graph allows it** — delete
-  children by `parentId IN (…)` rather than by their own tag.
-* **Look at the product occasionally.** No assertion in 2,241 integration tests
-  noticed that the homepage was listing test fixtures, because none of them
-  renders the homepage. A screenshot did.
-
-## The scheduling suites race the materialisation job (found 2026-09-05)
-
-**A pre-existing intermittency, diagnosed but not fully fixed**, recorded here so
-the next person does not spend the afternoon I nearly did.
-
-`session.materialize` is a scheduled worker in the API container. It creates
-occurrences for whatever schedules exist in the shared development database —
-including the fixtures a suite has just created — and it does so **concurrently
-with the suite that owns them**. Two consequences, and they look like completely
-different bugs:
-
-* **Teardown failures.** An occurrence materialised between the session sweep
-  and the schedule delete makes `session_schedule_id_fkey` (`Restrict`) refuse
-  the delete, and the whole test FILE fails to load.
-  **Predicate-based deletes are not enough** — that was the first fix and it
-  failed again in a different suite, because the window is not inside the query,
-  it is *between* the sweep and the schedule delete. Both suites now **re-sweep
-  immediately before deleting the schedule and retry once**. One retry, not a
-  loop: a second failure means something genuinely still references the schedule
-  and must surface rather than be swallowed.
-* **Assertion failures.** A suite counting or listing occurrences can see one it
-  did not create. This is the residue: it shows up on a **different test each
-  run**, always in the scheduling area, and passes on repeat. It is not fixed.
-
-**The tell is that repeat runs are green and the failing test moves.** Before
-concluding that a scheduling change broke something, run the suite two or three
-times in isolation — a real regression fails the same test every time.
-
-**The proper fix is a slice of its own**: make those suites count only the
-occurrences they created, rather than everything attached to their schedule.
-Widening a timeout would not help, and disabling the worker in tests would remove
-the very production behaviour the materialisation suites exist to prove.
-
-## A rebuilt frontend image is not a rebuilt container
-
-`docker compose up -d --build nginx` rebuilds `bodour-web:dev` and **may leave
-the running container on the previous image**, so a browser harness keeps
-serving the old bundle and a correct fix looks ineffective. On 2026-09-03 that
-cost most of an investigation: the source was right, the image was right, and
-the page was stale.
-
-**The tell is the content-hashed asset name.** Compare what the edge serves with
-what a local build produces:
-
-```
-curl -s http://127.0.0.1/ | grep -o '/assets/index-[^"]*\.js'   # served
-cd frontend && npx vite build                                    # local
-```
-
-Two different hashes means the edge is stale.
-
-### What actually makes a frontend change reach the harness (corrected 2026-09-04)
-
-**In local development it is `npm run build`, not a Docker rebuild.**
-`docker-compose.dev.yml` bind-mounts `./frontend/dist` over
-`/usr/share/nginx/html`, so the running container serves the **host** directory
-and the image's own copy is never read. A `docker compose build nginx` therefore
-changes nothing a browser can see, and the advice this paragraph used to give —
-force-recreate the container — is right only for a release-shaped stack where
-the bundle is baked in. Locally:
-
-```
-cd frontend && npm run build     # this is the step that matters
-```
-
-**And never bring the edge up without the dev overlay.** `docker compose up -d
---force-recreate nginx` — no `-f` flags — silently drops
-`docker-compose.dev.yml`, which is what mounts `nginx/dev/default.conf` (the
-localhost HTTP exception) and publishes port 80 on both loopbacks. The release
-config fails closed to HTTPS, no certificate exists locally, and **every browser
-harness on the machine then dies with `ECONNRESET` on port 443** — a failure that
-looks exactly like a broken test and is not. The recovery is one command:
-
-```
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps nginx
-```
-
-### The api container has no bind mount, and that is the slow one
-
-`api` is fully baked: no volume, so **every backend change needs a real image
-rebuild** before an HTTP or browser harness can observe it, and the TypeScript
-build inside Docker takes many minutes. Two consequences worth planning around:
-
-* **Batch backend edits before rebuilding.** A rebuild started mid-slice is
-  stale on arrival — it captures the source as of the moment it started, not as
-  of when it finishes.
-* **Verify the running revision, never the build log.** A build that succeeded
-  and a container that is running it are different facts:
-
-```
-docker exec bodour-api-1 sh -c 'grep -c "your-new-route" /app/dist/src/app.js'
-```
-
-This is not hypothetical bookkeeping: on 2026-09-04 a guardian-cleanup browser
-run reported **17 of 18 checks passing** against an API that answered `404
-<unmatched>` for the route under test, because the container predated it. The
-DB assertions in the harness footer are what caught it — which is why those exist
-and why a browser check should never be the only evidence for a write.
-
-Four lessons, all now enforced in code:
-
-- **"Clean up after yourself" means restore what was there, not delete what you
-  used.** `test-support/legal-consent-text.ts` records what was in force,
-  installs the suite's own development wording, and puts the previous one back.
-  It **never deletes** a wording another suite or the developer installed, and
-  it leaves its own row `superseded` rather than deleting it when consent
-  evidence still points at it — a superseded development version is inert and
-  honest, while deleting it would destroy the only copy of the words a stored
-  record names.
-- **Restore FIRST, and put fixture teardown in the `finally`.** A restore that
-  runs after the deletes is a restore that does not run when a delete fails.
-  This is the ordering that leaked, and it is the ordering every suite now
-  avoids.
-- **Capture once, not per test.** A `beforeEach` capture would re-save whatever
-  the previous test left, so the suite would "restore" its own scratch value
-  rather than the developer's.
-- **Track ownership when the coordinate is created.** Registration fixtures
-  record the exact random onboarding-token JTIs they issue, then delete only
-  those coordinates. A before/after database delta is unsafe too: a real user
-  can finish registration during the sweep, and deleting that newly observed
-  replay guard would make their spent token usable again.
-- **A browser harness owns its rows by its own tag, and sweeps nothing else.**
-  R123's `seed-attendance-scenario.ts` creates a branch, a Category, a Level, a
-  group, a year, a period, a beneficiary, two scheduling types, a schedule, a
-  session and an event — all prefixed `[attguard]` — and `--clean` removes
-  exactly those. It deletes no academic year outside the label it minted and no
-  user outside its tag, because the local database is shared with whatever else
-  is running against it.
-- **A shared fixture must never sweep a namespace it does not own.** R122's
-  `test-support/academic-period.ts` mints academic years into a far-future label
-  band, and its first teardown swept *the whole band*. Integration files run
-  concurrently against one database, so it deleted the period another file had
-  just created and not yet enrolled into — surfacing as a missing record in a
-  suite that had touched nothing. **The fix is to track what this file
-  provisioned**, and the band is now only asserted, as a backstop against a bug
-  in the helper ever reaching a seeded year.
-- **A random coordinate is not a unique one.** The same helper first minted a
-  year per call with a random label from an 800-wide band. A single suite
-  calling it from `beforeEach` collided inside one file — the birthday problem,
-  arriving immediately rather than eventually. It now mints **one year per test
-  file** and numbers the periods inside it with a counter, so uniqueness is
-  structural rather than probabilistic.
-- **Run platform-wide destructive repository proofs inside a rolled-back
-  transaction.** The audit-purge suite uses a per-run marker and a fixed clock,
-  then deliberately rolls back the purge. It can prove the production query
-  without consuming an ambient audit fact that happens to resemble a fixture.
-
-### The same failure, a second time: a global invariant needs global fixtures
-
-It recurred while testing `LAST_SUPER_ADMIN`, and the shape is worth naming
-because the first lesson did not prevent it.
-
-That guard **counts across the whole database** — *is this the last active Super
-Admin anywhere* — so proving it fires means making the target genuinely the
-last. The first version revoked the `super_admin` **role assignment** of every
-other holder, including real seeded accounts outside the suite's own `TAG`
-namespace, and restored only the spare it had created itself. It left the
-development database with **zero active Super Administrators**, locked out of
-its own back office, and every test passed.
-
-Recovering it meant hand-restoring two `user_branch_role` rows identified by a
-shared `deleted_at` timestamp and a null `deleted_by` — the fingerprint of a
-`updateMany` rather than of a person.
-
-**Three rules, in order of how much they buy:**
-
-- **A fixture may create and destroy rows it owns; it may only ever *borrow*
-  rows it does not.** The `TAG` prefix convention marks ownership, and a
-  `where` clause without it is the smell.
-- **Prefer no ambient mutation.** The original rewrite borrowed
-  `account_status` rather than revoking grants, but R115 makes even that obsolete:
-  the Platform Owner cannot be suspended. The current singleton/bootstrap suite
-  observes the seeded Owner and creates its own synthetic eligible successors;
-  it never parks or rewrites any ambient administrator.
-- **Restore in `finally`, not at the end of the happy path.** The original
-  restore was the last statement of the test, so any earlier assertion failure
-  skipped it. A guard this consequential must survive its own test failing.
-
-**Why no code enforces this yet:** the check would have to know which rows a
-suite owns, and `TAG` is a convention rather than a column. The cheap
-approximation — assert in `afterAll` that at least one active Super Admin
-exists — is now part of the test itself.
-
-### And a third time, from the other direction: teardown ORDER and tag overlap
-
-Revision 49 added `User.intended_category_id` as `ON DELETE RESTRICT`, and two
-teardown bugs surfaced within an hour. Both looked like logic failures. Neither
-was.
-
-- **`clearPlacement` ran before the suite deleted its users.** A Category still
-  named by a pending applicant refuses to go — *the constraint working exactly as
-  designed*. Shared cleanup helpers must run **after** the rows that reference
-  them, and the helper's docstring now says so rather than leaving each caller to
-  rediscover it.
-- **The placement fixture was tagged `${TAG}p`, which `startsWith(TAG)` matches.**
-  The suite's own `clear()` swept the placement's Branch before its
-  Administrative Group was gone, and `Restrict` refused again. Fixture tags must
-  be **disjoint namespaces, not prefix extensions** — `[appr-test-place]` rather
-  than `[appr-test]p`, because the closing bracket is what separates them.
-
-**Both produced nine to fourteen red tests across unrelated files**, including
-pagination and permission tests with no connection to the change. That breadth is
-the signature: **when a failure list spans files with no common subject, suspect
-the fixture, not the feature.**
-
-**A failed teardown compounds.** Each crashed run left its rows behind, and after
-three runs `listUsers`' first page of 25 no longer contained the user a
-visibility test expected — a *real* test asserting a *real* rule, failing on
-accumulated debris. The development database had to be purged by hand before the
-suite could be trusted again. **A red teardown is never "just cleanup"; it is the
-next run's false failure.**
-
-### A fourth time: a tag in a MUTABLE column is not a handle (2026-08-28)
-
-Every suite here identifies its own rows by a `TAG` prefix and sweeps them with
-`startsWith(TAG)`. That works precisely as long as nothing under test rewrites
-the tagged column — and R111's whole purpose is to rewrite one:
-
-```ts
-await prisma.user.update({
-  where: { id: departed },
-  data: { deletedAt: new Date(), nameArabic: "حساب محذوف" },
-});
-```
-
-Two tests in `administrative-group.http` do this. After each of them the row no
-longer answers to the TAG, the teardown found nothing, and the full sweep leaked
-**two users per run** — caught by the all-table snapshot guard as
-`user 25 → 27`, and invisible to the suite itself, which passed 26/26 every
-time.
-
-**The fix is to hold a handle the test under test cannot destroy: the id.**
-`makeUser` records into a `createdUserIds` array and the teardown deletes the
-**union** of the name query and the recorded ids — the shape
-`user-management.http` already used, for exactly this reason and against exactly
-this feature.
-
-Generalised: **a fixture's handle on its rows must live in a column no test
-writes.** A tag is a convenience for finding rows a helper did not record; it is
-never the only handle when the subject under test is a mutation. The tell is a
-suite that is green and a snapshot that is not — which is the whole reason the
-snapshot guard is all-table rather than per-suite.
-
-## Assert that a failure is ACTIONABLE, not merely that it fails
-
-There *was* a test for the missing consent version. It asserted
-`code: 'SERVICE_UNAVAILABLE'` — and passed throughout, because the code was
-right. What it never asserted was that the failure told anyone what to do, so
-the empty `details` that made the form say *"try again later"* was invisible to
-it.
-
-A test that pins only the status pins half the contract. Where a failure carries
-a cause, assert the cause.
-
-## The named regression tests
-
-These are the traps the specification exists to prevent. Each has a dedicated test:
-
-- Ramadan **DST wall-clock stability**
-- Consent revocation **rippling through to bucket migration**
-- Teacher **global-scope rejection**
-- **Re-upload cache-key immutability**
-- **Retained completed-upload PUT mutates staging only**, including a forced verification/copy race
-- Pending-session **data-access denial across all endpoints**, plus the client route guard
-- **Child-context verification on every student-context endpoint**, including the
-  Student-role bypass and the foreign-parent `404`
-- **Quran log deletion synchronously un-completing a level**
-- **Onboarding-token replay → 409**
-- **Presigned PUT/GET round trip through the storage proxy**
-- **Case-variant Google email resolving to one identity**
-- **Stale-version edit → `VERSION_CONFLICT`** (two admins, one group)
-- **Concurrent roster adds at capacity − 1 admit exactly one**
-- **Double approval: first wins, second `409`**
-- **MinIO down: content 503s while scheduling and grading stay functional**
-- **Workers down: enqueues succeed and jobs drain on restart**
-- **Body-email substitution against a valid onboarding token is ignored**
-- **Suspended teacher denied a presigned mint** within the token window
-- **Self-healing cache repairs a deliberately stale row**
-- **First draft save initializes absent-zero rows for the full roster**
-- **Concurrent teacher score vs admin override → `VERSION_CONFLICT`**
-- **The 31st upload in an hour → `429`**, and two concurrent initiations at the boundary
-  admit exactly one
-- **Replayed refresh token outside the grace window revokes the whole session**
-- **Suspension revokes refresh tokens inside its own transaction**
-- **Two-tab concurrent refresh rotates exactly once and logs nobody out**
-
-## Cross-channel email ownership is a database concurrency test
-
-`email-ownership.integration.test.ts` coordinates the production
-`lockNormalizedEmail` boundary against real PostgreSQL. It never substitutes an in-memory
-mutex and never sleeps to guess which transaction won. Four properties are pinned:
-
-- an onboarding token issued before staff pre-provisioning cannot create a second account,
-  remains unconsumed on refusal, and a later verified login binds the intended staff account;
-- registration and pre-provisioning arriving from an initially absent, case-varied address
-  produce exactly one committed owner and one expected duplicate conflict;
-- registration committed first prevents later pre-provisioning from opening the other channel;
-- a forced failure after lock acquisition rolls back both the ownership write and a newly
-  inserted lock row, after which the same legitimate operation succeeds.
-
-Successful ownership tests delete the lock rows for their own generated addresses. The rows
-have no User foreign key by design, so deleting tagged Users alone is no longer sufficient
-test cleanup.
+- `scripts/dev/seed-dev-scenario.sh`: المرأة — وميض الأمل · تفسير · كل اثنين 15:00–17:00 · تاركة · القاعة 5 · صفاء (أستاذة) · أمينة (مساعدة) · مستفيدة مسجّلة · مستفيدة غير معنية (the control); ids printed as one JSON line.
+- Occurrences come from **`materializeSchedule`** incl. the R43.4 staffing snapshot; the class sits on a live academic year.
+- Rows tagged `[dev-scenario]`; `--clean` removes exactly those; idempotent; same guards as the session script; nothing in CI calls it.
+
+## Browser harnesses
+
+All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions and the last complete sweep in [qa-inventory](qa-inventory.md#browser-harnesses-that-exist-today). «—» = no run figure recorded.
+
+| Harness | Proves | Last run |
+|---|---|---|
+| `measure-page-header.sh` | Primary action stays put as the description grows, nine widths | 9/9 widths |
+| `shoot-pages.sh` | A look, not a check (`design.mmd` §13): 13 surfaces at 390/1366 px into `scratch/shots/`, flags sideways overflow | 13, none scrolls sideways |
+| `verify-academic-periods.sh` | R122 الفصول الدراسية create; جارٍ from dates; year as text (rule AF) | 4/4 |
+| `verify-account-deletion.sh` | R133 one deletion, Trash as recovery, three withdrawn workflows absent; read-only | 20/20 |
+| `verify-admin-navigation.sh` | R105 menus as rendered (Admin: no الإدارة heading); cookie transport regression (Back/Forward, reload, re-login, consumed callback, fresh tab); real Admin bearer vs server; R61.2 reads kept beside refused writes | 42/42 |
+| `verify-approvals-sorting.sh` | NEW C طلبات الانضمام reorders; three tagged applicants whose name and submission orders are neither equal nor reversed | 7/7 |
+| `verify-assessment-library.sh` | A created paper is found after navigating away and back; fixture = journey suite | stale since R136 §2 (24/31) |
+| `verify-assessments.sh` | R124/R125 builder: draft saves, target picker names her own student, إرسال asks then locks | 6/6 |
+| `verify-attendance.sh` | R123/R163 §3: public calendar offers «الحضور» to nobody; management roster marks حاضرة; عطلة offers none | 6/6 |
+| `verify-authenticated-login.sh` | Landing and `/api/v1/auth/google` in both session states; authenticated lands on her dashboard server-side | — |
+| `verify-calendar-filters.sh` | AL a filter survives the view switch (controls, URL, other view's request) | 11/11 |
+| `verify-calendar-header.sh` | AJ/AK geometry at 1440/390 px, title drift, dual-date order | 19/19 |
+| `verify-calendar-surfaces.sh` | AO five calendar surfaces, one contract matrix | 23/23 |
+| `verify-circle-branch.sh` | R172 §15 circles carry and filter by branch (`?branch_id=`) | 10/10 |
+| `verify-circles-reorder.sh` | R78.1 حلقات المواد drag and ↑/↓ persisted; by seeded id | 9/9 |
+| `verify-class-filters.sh` | R163 §5/R165–R167 five-filter class form, server-composed name, «السور», split editor, journeys C (`200`, one class) and D (one `PATCH /sessions/{id}`) | 20/20 |
+| `verify-consent-disclosure.sh` | `[hidden]` hides by computed style (rule AG), legend spacing, wording = `GET /registration/consent-text`, 360 px | 19/19 |
+| `verify-content-scope.sh` | NEW D مؤطِّرة: admin routes 403, `/me/scope-options`, Level narrows المادة to `subject_ids`, results change, rule AX | 14/14 |
+| `verify-content-visibility.sh` | §14.1 selector operated; `/uploads/initiate` carries `visibility: "private"`; no «استبدال الملف»; real upload removed | 24/24 |
+| `verify-cross-branch.sh` | R91 × R92 six identities on one combined occurrence | 16/16 |
+| `verify-date-picker.sh` | The one date picker on DOB, R122 periods, R124 builder, R58 exam date | 24/24 |
+| `verify-delivery.sh` | R97 حضوري/عن بُعد; `ADMIN_COOKIE` vs `ADMIN_API_COOKIE`; throws on «ليست لديك صلاحية» | — |
+| `verify-dialog-states.sh` | AG closed/open/close/reopen on 15 pages, scroll ownership | 110/110 |
+| `verify-effective-staffing.sh` | R91 replacement as four identities, per-date occurrences | 13/13 |
+| `verify-enrolment-gender.sh` | R79 six person-shapes + R27/BR-21 Level narrowing | 17/17 |
+| `verify-enrolment-save.sh` | حفظ on تسجيل مستفيدة sends two `201`s (enrolment + circle); owns its fixtures | 4/4 |
+| `verify-enrolments-dialog.sh` | R167 `GET /clock`, «إدارة التسجيلات», «إتمام المستوى» naming BR-11 gaps, `acknowledge_unmet`, certificate as the student, PDF portal, installable manifest | 24/24 |
+| `verify-error-experience.sh` | Rule AZ: expected `401` seen and silent, offline `TypeError`, real 429 on a production edge, branded 404; detects the edge | 7/7 |
+| `verify-exam-scheduling.sh` | R136 sitting from الجدولة, `?source=&mode=` prefill, paper-less physical named by the server (R166 §3), three widths | 92/92 |
+| `verify-grading.sh` | R81 own maximum, empty ≠ zero, publish notifies, draft silent | 16/16 |
+| `verify-guardian-child.sh` | R96.1 switcher: each child's `user_qr_ref`; forged child and revoked FamilyLink refused | 12/12 |
+| `verify-hijri-baseline.sh` | Umm al-Qura import fills, a second import skips twelve; clicks only once its test year shows; teardown removes derived `source` | 5/5 |
+| `verify-journey.sh` | Admission-to-achievement screens; fixture = journey suite (`JOURNEY_KEEP=1`, `journey-fixture-ids.ts`), cleaned from a `trap` | — |
+| `verify-legal-pages.sh` | NEW P `/privacy`, `/terms` signed-out, OWNER-INPUT markers | 8/8 |
+| `verify-level-subjects.sh` | «مواد المستوى» bounded reads, Subjects listed, edit saves without `DUPLICATE` | 7/7 |
+| `verify-library-recorder.sh` | Recorder's second entry in مكتبة المحتوى, measured sort indicator | 16/16 |
+| `verify-livekit-ingest.sh` | R99 C2 record → Egress → import → plays (`readyState >= 2 && duration > 0`); URL `/storage/` not `recordings-staging`; starter's tab closed; staging swept (R99.13) | 28/28 |
+| `verify-livekit-join.sh` | R98 real `livekit-server --dev`, fake devices, three-party room across tabs, `data-connection`, media bytes via `list-bucket.mjs` | 61/61 |
+| `verify-nav-toggle-geometry.sh` | R138 item 8 sidebar toggle at 320/390/1280/1440; empty-module portal | 46/46 |
+| `verify-notifications.sh` | R77/R82/R83 audience through `/notify`: the resolver, not the button; ids from `GET /admin/course-schedules/{id}/sessions` | 22/22 |
+| `verify-notify-ui.sh` | Clicks «إرسال الإشعار», reads the recipient's own bell; R91/R92, Event delete/cancel, grade republish | 37/37 |
+| `verify-occurrence-details.sh` | AT one details dialog from four calendars; walks to the scenario's month by ARIA label | 13/13 |
+| `verify-operations-status.sh` | R169 §11 «حالة النظام»: anonymous refused, five counts, no payload/key on screen | 8/8 |
+| `verify-partners.sh` | NEW N «شركاؤنا» absent without a visible partner, present with one | 1/1 + 3/3 |
+| `verify-platform-owner-framing.sh` | R115 on its own disposable stack: framing choices, approval, per-window modes, Owner controls withheld, transfer, former owner's bearer rejected, exact DB rows | 23/23 + 8/8 DB |
+| `verify-portals.sh` | AP three portals, one frame; R87 §M gates «إدخال حفظ المستفيدات» | 25/25 |
+| `verify-public-calendar.sh` | قائمة/تقويم anonymously; no name, notification, recording or cancellation reason; R83 with `include_cancelled=true` | 18/18 |
+| `verify-public-reader.mjs` (CI, owned by `scripts/ci/test-integration.sh`) | Anonymous media bytes through Nginx, playback, content↔occurrence links, protected-coordinate refusal, role calendar transitions, `calendar-geometry.mjs` 320–1280 px; Chrome + ffmpeg required | 193/193 |
+| `verify-quran-entry.sh` | Section C إدخال الحفظ as ten identities; R88 grants nothing; R91/R92; forged Surah refused | 24/24 |
+| `verify-recorder-crash.sh` | R168 §2 recorder SIGKILLed: segments every 10 s, provider still «active», re-offer after 90 silent s, `recovered_from_segments` via `ffmpeg`; ~15 min, no clock switch by design | 14/14 |
+| `verify-recorder.sh` | R75 real `MediaRecorder` (fake device): lifecycle, « 2» numbering, bytes in MinIO, library row; API not stubbed | 22/22 |
+| `verify-registration.sh` | R117/R168 §1/R170 §2 family journey via `role-chooser.mjs` and `date-picker.mjs`, Super Admin review from the bell, stale id → unavailable | 45/45 + 12/12 DB |
+| `verify-reorder.sh` | R76 five screens: header sends `sort_by`, drop survives reload, handle explained | 30/30 |
+| `verify-role-requests.sh` | R168 §1/R169 §1/R170: four roles, scheduled circles ranked, per-role review, first approval activates, Super Admin places; re-ask after decline; `[r168-roles]`; one session per sign-in | 85/85 |
+| `verify-room-capacity.sh` | R169 §3 capacity refused in words, saved, kept, cleared | 8/8 |
+| `verify-schedule-edit.sh` | «تعديل العنصر» hydrates; «نهاية التكرار» via the real picker; `teaching_mode`/`target_id` untouched | 13/13 |
+| `verify-scheduling-types.sh` | R110 catalogue in stored order, picker offers only catalogue rows, notice follows the flag; no name typed (R168 §4) | 11/11 |
+| `verify-self-managed-claim.sh` | R132/R160 §8 claim only via `/register?mode=self-managed`; pending claim, nothing bound; found a silent `validate` dead end (pinned in `register.test.tsx`) | 20/20 |
+| `verify-sorting-headers.sh` | §6 `<th>` button, `aria-sort`, text/numeric/date; audit columns carry no button | 19/19 |
+| `verify-sorting.sh` | R76 four tables, no row on two pages (R76.3 `id`); found «التسجيلات» `sort_by=first_name` → 400 (2026-09-22) | 39/39 |
+| `verify-staff-period-bounds.sh` | Staffing period marked as typed (`min`, `aria-invalid` on both dates); schedule-start edit re-marks it; never saves | 5/5 |
+| `verify-staff-picker.sh` | AR five مؤطِّرات told apart; matches the select offering a seeded name | 13/13 |
+| `verify-student-flows.sh` | Beneficiary portal incl. حسابي enrolments (NEW G) | 10/11 (check 11 fixture-coupled) |
+| `verify-teacher-capabilities.sh` | مؤطِّرة edits her own المواد/الفئات as a genuine teacher, no admin link gained; server half in `teaching-profile.http.integration.test.ts` | 4/4 |
+| `verify-teacher-portal.sh` | R106 menu, availability operated and written with a real bearer; other profile/directory/curriculum/own-class edit (TD-2 `⊘`) refused; prints staffed-class count (§4.4c) | 25/25 |
+| `verify-teacher-scheduling.sh` | Merged مؤطرة surface: R93 assistant notice, R94 type picker, exam on own class, R140 Level list | 14/14 |
+| `verify-teaching-profile.sh` | AQ/X/AY «الملف التدريسي»; NEW E untouched profile closes silently; dialog scoped to the row | 14/14 |
+| `verify-trash-restore.sh` | R169 §8 «استعادة» offered, asks, restores, reports seats | 6/6 |
+| `verify-uat-2026-09-02.sh` | Level `الوصف` survives reload, `type=` sent, new activity on `مرة واحدة`, content edit has no file input | 5/5 |
+| `verify-unsaved-guard.sh` | Rule AY pristine/dirty on `＋إضافة مقر` and `＋تسجيل مستفيدة`; new-class default `entire_level` | 24/24 |
+| `verify-user-qr.sh` | R96 own squares, distinct payloads, no PII/role, child context, reference refused as credential | 11/11 |
+| `verify-ux-slice.sh` | AG/AI/W scroll ownership, control geometry, sidebar `scrollTop` | 22/22 |
+| `verify-visibility-ui.sh` | NEW B §D tier on three forms, hydration, dirty close; NEW H notice by kind (`catalogue.mjs`); R50 scopes; `--clean` | 20/20 |
+| `verify-weekly-follows-start.sh` | R172 §13 start moved a day; server `weekdays` and next three occurrences follow | 4/4 |
+| `verify-whole-category-recording.sh` | R172 §1/§11 recorder asks the Category first; «كل مستويات الفئة»; Subject offered with no Level | 7/7 |
+
+### Harness rules
+
+- Mint **once per identity**; the app refreshes on load and re-presenting a rotated cookie is the replay TD-4.13 revokes for (symptom: `401` after the first read, or «ليست لديك صلاحية» on the second navigation). One session per consumer and per phase; mint every bearer up front; set the browser cookie once.
+- `/auth/refresh` compares `X-Requested-With` literally with `XMLHttpRequest` (TD-12).
+- A fixture user needs the **role** its screen is gated on, not only the domain fact.
+- Identify rows by **id from the API**, never by rendered title or date.
+- A negative check must prove the surface **opened** (`/admin/scheduling` is not a route; an unopened bell panel yields `''`); helpers report a non-200 instead of swallowing it.
+- Scope the query to the row and assert **whose** record the dialog shows.
+- `.state[role="status"]` is loading, not ready; wait for the requested pathname and the skeleton to leave.
+- Discriminate a control by what it offers, not its label; `.admin-nav a`, not `nav a` (`PortalShell`, rule AP); `/teacher`, not `/dashboard/teacher`; `.bell__count`, not `.bell__badge`.
+- If the requirement is that the UI sends the request, the harness makes the UI send it; a notification is proved by reading it as the recipient.
+- Match the **tagged** name (the dev database holds a Level «وميض الأمل»); reproduce against the reporter's own rows first (R78.3 excludes the actor, so a cancellation can resolve correctly to nobody); a zero-recipient result must say so.
+- Click in one `evaluate`, read in the next; instrument with `Page.addScriptToEvaluateOnNewDocument` and assert the observation, not only the absence of a symptom.
+- Detect the edge (DEV auth zone 6000 r/m vs production 10 r/m) and assert what is true there.
+- Make state readable (`data-connection`); a rendered element is not a connected one. `readyState >= 2 && duration > 0` is the only proof a recording plays.
+- Every harness traps `EXIT`; batch long runs (the tool cap SIGTERMs the loop and an outer trap does not fire for the killed child); kill the process **group** (`setsid`, negative PID) or renderers keep the `mktemp -d` profile open.
+- Chrome debug-port wait is `60 × 0.5s`, a missing port an explicit `FAIL` (the dev overlay's Egress worker also runs headless Chrome).
+- **NO RESULT** (no summary line) is never green. Open note: `verify-recorder`/`verify-reorder` reported NO RESULT in long sweeps while passing alone (not memory, not leaked browsers); one clean sweep since is not evidence. Rerun individually; never drop them from the sweep.
+- A bare `finish()` exits 0 whatever it printed; «لا يُسجَّل الحضور» contains «يُسجَّل الحضور».
+- A contract change reaches harnesses: `grep -rln '<route>' scripts/dev/browser/`, restate rather than loosen.
+- Running them is what makes them coverage; unrun harnesses decay silently.
+
+## Environment traps
+
+- **Real Nginx rate limits**: a `429` where `200` was expected, moving between tests on repeated full runs, is the auth zone; rerun the one suite alone.
+- **`api` has no bind mount**: any backend change needs an image rebuild before HTTP or browser suites see it; batch edits; verify the running revision — `docker exec bodour-api-1 sh -c 'grep -c "your-new-route" /app/dist/src/app.js'` — never the build log. Stale container: `404 <unmatched>`; dropped table: `500` or an empty result. Health is `/healthz` at the origin root (a `401` under `/api/v1/` is the guarded router).
+- **Frontend reaches the harness by `cd frontend && npm run build`**: the dev overlay bind-mounts `./frontend/dist`; `docker compose up -d --build nginx` may leave the container on the old image. Compare `curl -s http://127.0.0.1/ | grep -o '/assets/index-[^"]*\.js'` with a local `npx vite build`; `curl -s http://localhost/assets/index-XXXX.js | grep -c '<removed string>'`.
+- **Never bring the edge up without the dev overlay**: `docker compose up -d --force-recreate nginx` drops `nginx/dev/default.conf` and port 80, fails closed to HTTPS, and every harness dies with `ECONNRESET` on 443. Recovery: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate --no-deps nginx`.
+- **`scripts/dev/test-integration.sh`, never `vitest` directly**: `.env` is container-shaped (TD-13: `DATABASE_URL` → `db`, `MINIO_ENDPOINT` → `minio`); the script rewrites both to the published loopback ports. Sourcing `.env`: the storage suite fails with `no object at the initiated key`.
+- **A new TD-7 queue needs a worker restart** (`pgboss.job` is partitioned by queue; inserts fail on `q_fkey`).
+- **Never run the integration sweep with a browser sweep or with itself**: one database, one consent text, one fixture namespace (53 failures across `quran`, `quran-entry`, `effective-staffing` once). A failure that moves between runs is residue; a regression fails the same test every time.
+- **`session.materialize` runs in the API container concurrently with the suite that owns a schedule**: teardown re-sweeps just before the schedule delete and retries **once** (`session_schedule_id_fkey`); moving assertion failures in scheduling suites are a known, unfixed intermittency. Proper fix (own slice): count only owned occurrences; never widen timeouts or disable the worker.
+- **A killed run leaves damage a green rerun cannot clear**: a `*-test-*` label left `active` in `legal_consent_text` fails later suites with «… is already in force». Restore through `removeTestConsentText`, never SQL (supersedes the scratch row, reactivates the displaced one, restores the counter, never deletes a row consent records reference).
+- **`?raw` on a `.css` file reads `''`** under Vitest: CSS invariants are shell guards in `scripts/ci/`, checking `length > 0` first; grep guards strip comments (`check-progress-css.sh`).
+- **CI guards search with POSIX `grep`**: an absent `rg` prints to stderr and the prohibition condition is false, so the guard passes open (proved with a `proxy_pass $minio_upstream` bypass against `check-storage-edge.sh`; `check-backup-tooling.sh` failed closed). `check-ci-portability.sh` fails on `rg`, `fd`, `ag`, `ack` and refuses moving `check-no-pii-logs.sh` before `npm ci`.
+
+## Fixture ownership
+
+- A fixture creates and destroys rows it **owns** (`TAG` prefix) and only borrows others; a `where` without the tag is the smell. Tags are disjoint namespaces (`[appr-test-place]`, never `${TAG}p`).
+- Tag every row incl. children nobody reads; sweep by ownership (`parentId IN (…)`) where the FK graph allows; one untagged `Restrict` child pins a cluster onto the public homepage.
+- Hold a handle in a column no test writes: R111 rewrites `nameArabic` to «حساب محذوف», emptying a `startsWith(TAG)` sweep; record ids (`createdUserIds`) and delete the union.
+- Run-unique tags (`[content-test:${randomUUID()}]`) prevent cross-process deletion but strand rows on a killed run; `src/test-support/abandoned-fixtures.ts` sweeps by age + prefix; new prefixes go into `RUN_UNIQUE_FIXTURE_PREFIXES`. R111, content, teaching-profile and notification suites carry a random run id.
+- Restore **first**, teardown in `finally`, capture once per file (`test-support/legal-consent-text.ts` records what was in force, installs the suite wording, puts the previous back, leaves its own row `superseded` while consent evidence points at it).
+- Track ownership at creation (registration fixtures record their onboarding-token JTIs; a before/after delta could delete a real user's replay guard).
+- Never sweep a namespace you do not own: `test-support/academic-period.ts` mints **one year per file** with counter-numbered periods (a random label from an 800-wide band collided inside one file); the band is only asserted.
+- Global invariants need global fixtures: the `LAST_SUPER_ADMIN` test once revoked every real Super Admin's role; it now creates synthetic successors and its `afterAll` asserts one active Super Admin remains. Platform-wide destructive proofs (audit purge, R101 rollout, R141 migration) run inside an always-rolled-back transaction.
+- Shared cleanup (`clearPlacement`) runs **after** the rows referencing it (`User.intended_category_id` RESTRICT); a red teardown is the next run's false failure; a failure list spanning unrelated files means the fixture.
+- Quran fixtures consume the seeded `tracks_quran_progress` marker (partial unique index, R73.4/R107–R108, حفظ القرآن only) through a fail-closed helper, never creating or deleting the reference Subject; the R91 fixture uses تفسير القرآن; teardown removes only owned joins.
+- A new table means every fixture touching its parent (`session_recording` RESTRICTs `session`); a seed failing in its **wipe** is a UI-created row the tag never saw — key teardown on the owning entity and follow the FKs (`seed-notify-scenario.ts`).
+- Seeds create the reference data their assertions turn on (`findFirstOrThrow` once picked a Subject with `tracks_quran_progress: false`); schedules go through `createCourseSchedule` (a raw `prisma.create` has no occurrences); a cover is `PATCH /sessions/{id}` with `staff` (sets `overridden`, R43.6), never a raw `SessionStaff` row; `seed-attendance-scenario.ts` (`[attguard]`) deletes nothing outside its tag.
+- "Today" is the association's clock: `Date.UTC(y, m, d + offset)` from local parts, every date from one clock (UTC-zeroed date and local `getDay()` disagree at 00:34 Casablanca).
+- **All-table isolation**: `scripts/test/run-integration-suite.sh` digests every base table (counts + row hashes minus `created_at`/`updated_at`, no row data) before and after Vitest and fails on any difference; a source guard rejects `deleteMany` without `where` or with `undefined` (P1.2: `branch.integration.test.ts` deleted all `course_schedule_staff` via `userId: undefined`). Re-seeding is not a remedy. Caught: a leaked `normalized_email_lock`, relative-only `display_order` restoration, a UTC-built online-class date, `SessionRecording` missing from teardown, browser probes on ambient "first" rows, `user 25 → 27` from the mutable-tag suite.
+- Consent-migration retry accepts `completed` and `already_completed` (a live worker may converge first); the retry proof uses a unique real pg-boss queue with the TD-7 policy and asserts its job id.
+
+## Named regression tests
+
+Ramadan DST wall-clock stability · consent revocation rippling to bucket migration · Teacher global-scope rejection · re-upload cache-key immutability · retained completed-upload PUT mutates staging only (forced verification/copy race) · pending-session data-access denial on all endpoints plus the client route guard · child-context verification on every student-context endpoint incl. Student-role bypass and foreign-parent `404` · Quran log deletion synchronously un-completing a level · onboarding-token replay → `409` · presigned PUT/GET through the proxy · case-variant Google email → one identity · stale-version edit → `VERSION_CONFLICT` · concurrent roster adds at capacity − 1 admit one · double approval: first wins, second `409` · MinIO down: content 503s, scheduling and grading work · workers down: enqueues succeed, jobs drain on restart · body-email substitution against a valid onboarding token ignored · suspended teacher denied a presigned mint · self-healing cache repairs a stale row · first draft save initializes absent-zero rows · concurrent teacher score vs admin override → `VERSION_CONFLICT` · 31st upload in an hour → `429`, two concurrent initiations at the boundary admit one · replayed refresh token outside grace revokes the session · suspension revokes refresh tokens in its own transaction · two-tab refresh rotates once, logs nobody out.
 
 ## The token lifecycle is specified as tests
-
-The refresh chain is *the only part of the system where a single missing check silently
-extends a 30-day credential*, so it is specified as twelve pass/fail criteria rather than
-prose:
 
 | # | Criterion | Expected |
 |---|---|---|
 | T1 | Refresh with the current live token | New access **and** refresh token; predecessor revoked; one transaction; audit written |
-| T2 | Tokens are never stored raw | Only the hash persists — **a database dump yields no usable credential** |
-| T3 | Immediate predecessor **within** 10 s | Accepted; **no third token minted** — the chain does not fork |
+| T2 | Tokens never stored raw | Only the hash persists; a dump yields no credential |
+| T3 | Immediate predecessor **within** 10 s | Accepted; no third token minted |
 | T4 | Immediate predecessor **after** 10 s | Refused as reuse |
-| T5 | Anything older, or already revoked | **Whole session revoked**; two audit rows |
-| T6 | Logout | Revokes **only** the current session; another device keeps working |
-| T7 | Revoke-all | Every live token revoked; **no user-facing route exists** |
-| T8 | Suspension | All tokens revoked **in the suspension transaction** — verified by refreshing immediately after |
-| T9 | Soft delete | As T8, with a different reason |
-| T10 | Past expiry | Refused; a purged token refused identically — **fail-closed** |
+| T5 | Anything older, or already revoked | Whole session revoked; two audit rows |
+| T6 | Logout | Revokes only the current session |
+| T7 | Revoke-all | Every live token revoked; no user-facing route |
+| T8 | Suspension | All tokens revoked in the suspension transaction |
+| T9 | Soft delete | As T8, different reason |
+| T10 | Past expiry | Refused; a purged token refused identically (fail-closed) |
 | T11 | Revoked token, any age | Never accepted, never resurrected |
-| T12 | Concurrent refresh, two tabs | **Exactly one** rotation; the loser absorbed by grace, not logged out |
+| T12 | Concurrent refresh, two tabs | Exactly one rotation; the loser absorbed by grace |
 
-## Mutation testing
+## Mutation testing, guards and failures
 
-Used as standard practice, and it has repeatedly caught defects that inspection missed.
+- Mutation testing is standard; a surviving mutant is distrusted until the mutation is proven shipped: a build break kept the old image, an unquoted variable made the runner run zero tests, single-file runs use another failure format — each read as "every mutant survived".
+- Every CI guard is proven by reintroducing its bug (display-identity guard: an inline fallback in the calendar service; header-navigation guard: the burger re-declared after its media query). A guard that has never failed is untested.
+- A guard failing because the product changed is restated, not deleted: R98.18's «mounts no recording affordance» became, after R99, "composes بذور الأمل's own panel, mounts no vendor recording component, grants no `roomRecord`".
+- Assert that a failure is actionable: pin the cause (`details`), not only `code: 'SERVICE_UNAVAILABLE'`.
+- Test the error path with the error that makes it hard: `startRecording`'s catch used `update` (throws when the row is gone); `updateMany` is the clean-up semantics.
+- A negative uses the rule's axis: §4.9 visibility is Level-based, so the same Level at another branch is a positive; the refused person is in another Level.
+- A date-scoped rule threads the date through: `teacherEventScope(prisma, teacherId)`'s `on` defaulted to today and `assertExamInTeacherScope` dropped it; the group now comes from the staffing row's schedule, date-correct by construction.
+- No-PII logging is tested both ways: `request-context.test.ts` (email-shaped `X-Request-Id`, paths and exception reach no output), `audit.repository.test.ts` (nested identity/locator keys never reach the write), content tests with an email-shaped filename keep only 64-hex ids, Trash audit outlives its entity without the label; `check-no-pii-logs.sh` pins Nginx id generation, no URI/client address in the access format, no raw exception text, no mailbox/raw key/Trash label in audit detail, every audit write through the recursive repository guard (mutation-tested with a direct `prisma.auditLog.create`).
 
-**But: a surviving mutant is worth distrusting until the mutation is proven to have
-shipped.** Three separate false negatives here traced to harness problems, not to genuinely
-robust code:
+### The `auth-refresh` flake, and what it actually was
 
-| Cause | Symptom |
-|---|---|
-| The mutation broke the build, so the container kept the **old image** | Every mutant "survived" |
-| The shell did not word-split an unquoted variable, so the runner received **one giant filename** and ran **zero tests** | Every mutant "survived" |
-| The runner uses a **different failure format** for single-file runs | Failures parsed as passes |
-
-**Verify the mutation actually shipped before drawing a conclusion from it.**
-
-## Testing the guards
-
-Every CI guard was proven by **reintroducing the bug it exists to catch** and confirming the
-build went red.
-
-The display-identity guard was proven by planting an inline fallback in the calendar
-service — rejected with file and line, passing again once reverted. The header-navigation
-guard was proven by re-declaring the burger after its media query.
-
-A guard that has never failed is a guard nobody has tested.
-
-## The `auth-refresh` flake, and what it actually was
-
-**Resolved 2026-08-05.** Worth keeping because the wrong hypothesis was reasonable and cost a
-session, and because the diagnosis is a reusable method rather than a fact about one test.
-
-**The symptom.** Green in isolation, 8/8, repeatedly. Inside the full sweep: intermittent
-failures across four consecutive runs — **1, 0, 0, 3** — on **different tests each time**,
-always inside *the CSRF posture (TD-12)*.
-
-**The wrong hypothesis, recorded because it was plausible.** Non-determinism plus
-isolation-passes reads as cross-file interference over the shared container and database, and
-two candidates fit: the `beforeEach` re-issuing a session while another file's request is in
-flight, and `purgeExpired`, the one delete in the codebase not scoped to a test tag. **Both
-were wrong.** `purgeExpired` only removes genuinely expired rows, so a freshly issued token
-survives it.
-
-**What resolved it was reading the failure, not the test.** The assertion message said
-`expected 429 to be 401`. Not a data problem at all:
-
-> **`limit_req_zone` keys on `$binary_remote_addr`, and the entire suite arrives from one
-> host.** TD-13's ceiling models *a person using the platform*; it does not model a test
-> runner. As the suite grew past ~680 tests, it started tripping — which is why the flake
-> appeared to worsen over time rather than randomly.
-
-**The fix is in the dev overlay only** — `nginx/snippets/rate-limits.dev.conf`, mounted over
-`rate-limits.conf` by `docker-compose.dev.yml`. **Only the zone rates change.** Every
-`limit_req` directive, zone assignment and burst stays exactly as production has it, so a
-misrouted zone still fails here rather than in production, and no TD-13 number moves.
-
-Three alternatives were rejected, each for a reason worth keeping:
-
-- **Retrying on 429 in the test** — hides the interference, which then resurfaces in a suite
-  whose failure is not so obviously spurious.
-- **Dropping `limit_req` from the dev routing** — stops exercising the limiter at all.
-- **Raising the production numbers** — bends a normative value to accommodate a test harness.
-
-**Verified by three consecutive clean sweeps** (688/688 each). One would have proved nothing:
-the flake's whole character was that it passed sometimes.
-
-### The method, which generalises
-
-**Read the failure message before theorising about the harness.** The status code named the
-cause in the first run that printed it; two sessions of plausible reasoning about FK ordering
-and purge scoping did not. A flake is still a defect with a mechanism, and the mechanism is
-usually in the output already.
+- `expected 429 to be 401`: `limit_req_zone` keys on `$binary_remote_addr` and the whole suite arrives from one host; TD-13 models a person, not a runner.
+- Fix in the dev overlay only: `nginx/snippets/rate-limits.dev.conf` over `rate-limits.conf` via `docker-compose.dev.yml`; only zone rates change, every `limit_req`, zone assignment and burst stays as production.
+- Rejected: retrying on 429 (hides interference), dropping `limit_req` from dev (stops exercising the limiter), raising production numbers (bends a normative value). Verified by three consecutive clean sweeps.
+- Method: read the failure message before theorising about the harness.
 
 ## What is not tested, and why
 
-- **No load-testing infrastructure runs continuously.** Latency targets are verified against
-  ceiling-scale fixtures before launch. There is no metrics stack to regress against.
-- **Browser matrix testing is E2E-only**, at the audio-playback level where containers
-  genuinely differ per browser.
-- **The staging origin never exercises authenticated flows** — it is cross-origin by design,
-  so those run against the local same-origin stack and the production rehearsal.
-
-## Browser harnesses and the traps they have paid for
-
-Two recorded once, because both were mistaken for product defects:
-
-**Never mint a second access token while the app is running.** The app refreshes
-on load; a harness refreshing again against the cookie it had just rotated is
-exactly what TD-4.13's **reuse detection revokes a session for**. The first read
-succeeds and everything after it answers `401`, which reads like a broken
-feature. `verify-notifications.mjs` mints **once per identity** and reuses it.
-
-**`/auth/refresh` compares `X-Requested-With` literally** — the value must be
-`XMLHttpRequest` (TD-12's CSRF posture). Any other value is `AUTH_REQUIRED`.
-
-**One refresh chain, one rotating browser credential.** Refresh and logout are
-the only two consumers (R101), but a harness that drives the API *and* loads the
-app still needs a **separate session per phase**: the page's own refresh rotates
-the cookie, and the other phase's mint then fails. The symptom is a dashboard
-stuck at «جارٍ التحميل…», which reads as a missing feature.
-
-**A fixture user needs the ROLE its screen is gated on**, not only the domain
-fact. A beneficiary with an enrolment but no `student` role renders the error
-state — reported once as a missing calendar.
-
-**A negative check that cannot fail proves nothing.** In the same harness, every
-*unrelated person sees nothing* check passed while the reads were 401ing —
-an empty list because the request failed is not the same fact as an empty list.
-The inbox helper now reports a non-200 rather than swallowing it.
-
-**A harness that finds its target outside the scope it clicked in will pass
-while testing something else.** `verify-teaching-profile` clicked a row's action
-and then searched the **whole document** for the dialog it opens, so it opened
-whichever مؤطِّرة sorted first and read *her* stale data as proof that a save had
-persisted. Three checks were green and all three described the wrong person.
-Scope the query to the row, and assert **whose** record the dialog is showing.
-
-**A loading state is not a ready one.** `verify-sorting` and `verify-reorder`
-waited for `.datatable__skeleton` and then accepted `.state` as ready — but the
-shared `LoadingState` renders `.state[role="status"]`, so the *loading* state
-satisfied the *ready* predicate. Both failed intermittently, naming a screen that
-worked; the tell was «جارٍ التحميل…» sitting in the diagnostic.
-
-**Discriminate a control by what it OFFERS, not by its label.** `verify-staff-picker`
-looked for the lead selector by label text and got an empty result the moment the
-catalogue said «المؤطّرة المسؤولة» rather than «المؤطّرة»; matching on the fixture
-tag alone then found the *Branch* selector, whose one option was the seeded
-branch. It now matches the select that offers a seeded مؤطِّرة **by name**.
-
-**A fixture that takes whichever row sorts first asserts something nobody chose.**
-`seed-r82-scenario` read `subject.findFirstOrThrow({ deletedAt: null })` and
-titled its schedule «حلقة الحفظ» on the strength of it. That Subject carries
-`tracks_quran_progress: false`, so R87 §M **correctly** hid «إدخال الحفظ» from a
-مؤطرة who staffs no Quran class — and `verify-portals` reported the correct
-behaviour as a defect. Seeds create the reference data their assertions turn on.
-
-**A fixture created with a raw insert has no occurrences.** `seed-r91-scenario`
-wrote its schedule with `prisma.create` and every per-date assertion came back
-empty — materialization lives in the **service**, and the thing under test was
-exactly that materialization snapshots each occurrence with the staff effective
-on its own date. The seed calls `createCourseSchedule`; a seed that wrote the
-Sessions by hand would be re-implementing the behaviour it exists to prove.
-
-**Navigate to the route that exists.** The same harness read an empty menu for a
-مؤطِّرة whose roster and marker were both correct, because `/dashboard/teacher` is
-not a route — the teacher portal is `/teacher`, and «الصفحة غير موجودة» has no
-menu. **Check what the page actually rendered before believing an absence.**
-
-**`.admin-nav a`, not `nav a`.** All three portals render the same `PortalShell`
-(rule AP), and its menu carries that class.
-
-**A harness must not substitute an API call for the action under test.**
-`verify-notifications` POSTed to `/notify` itself and was green for weeks while
-manual use did not behave: it proved the audience resolver and never touched the
-button a person presses. The rule is narrow and worth stating plainly — *if the
-requirement is that the UI sends the request, the harness must make the UI send
-it*, and nothing below that layer is evidence about it.
-
-**And a notification is proved by reading it as the recipient.** Not a row in
-the table, not a 200 from the endpoint, not a string in the bundle:
-`verify-notify-ui` logs in as the student and asserts the Arabic sentence in her
-own bell.
-
-**Two ambiguities that made a working feature look broken**, both fixture-side
-and both worth recognising by shape:
-
-* **A label matched loosely picked development data.** The event scope was
-  attached by matching «وميض الأمل», and the dev database already holds a Level
-  by that name — so the activity was scoped to a Level the fixture's student is
-  not enrolled in, the send correctly reached nobody, and the harness reported
-  the feature broken. Match the **tagged** name.
-* **A selector that named nothing reported a missing control.** The unread count
-  is `.bell__count`; the harness looked for `.bell__badge`, found nothing, and
-  called the count missing while the panel plainly showed one.
-
-**Reproduce against the reporter's own rows before building a fixture.** Both
-notification failures the Owner reported were invisible to a tagged scenario. The
-Level cancellation resolved *correctly to nobody*, because the only beneficiary
-enrolled in that Level at that branch was the administrator's own account and
-R78.3 excludes the actor — a fact only the real ids showed. A fresh fixture would
-have passed and taught nothing.
-
-**And a zero-result success message hides a whole class of failure.**
-«أُرسل الإشعار إلى 0 من المعنيين» reads as *done*. When an action resolves to
-nobody, say so — the count is the answer, not a detail of it.
-
-### Running them is what makes them coverage
-
-On 2026-08-19 all nineteen harnesses were run for the first time in one pass.
-**Three could not have been counted**: one asserted a rule R83 had reversed and
-read markup R84 had replaced, one was reading a correct behaviour as a defect,
-and two were racing the loading state. All three had existed, been cited in the
-documentation, and been treated as coverage. A harness nobody runs decays against
-the product exactly as documentation does — and it decays *silently*. The current
-inventory, with the count each one actually produced, is in
-[qa-inventory](qa-inventory.md#browser-harnesses-that-exist-today).
-
-### `?raw` on a `.css` file yields an empty string
-
-A CSS invariant written as a vitest assertion — `import css from './x.css?raw'`
-— reads `''` under this setup, so the guard passes while checking nothing. It
-has happened twice now; the second time (2026-08-20, the shared `ProgressBar`)
-it was caught only because the assertion checked `length > 0` first.
-
-**CSS invariants belong in `scripts/ci/`**, as shell guards over the file
-itself. And whichever layer a new guard lives in, **prove it against the defect
-it exists for before counting it as protection** — the tell is a guard that has
-never failed, not even while being written.
-
-**Grep guards must strip comments first.** `check-progress-css.sh` initially
-failed on the component's own docstring, which *explains* why `transform:
-scaleX()` was rejected. A guard that cannot tell prose from code fails on the
-documentation recording its own reason.
-
-
-### Fixtures consume the one Production memorisation marker
-
-`Subject.tracks_quran_progress` has a **partial unique index** — at most one live
-Subject may carry it (R73.4/R107–R108), because two would make *which* teaching authorises
-a log ambiguous. In Production it belongs only to حفظ القرآن. Quran integration
-and browser fixtures consume that seeded row through a shared fail-closed helper;
-they never create or delete the reference Subject. The R91 Tafsir fixture consumes
-the separate, unmarked تفسير القرآن row. This makes concurrent fixtures compatible
-with the uniqueness invariant and makes missing, duplicate, or wrongly named marker
-data fail with a legible R107/R108 setup error.
-
-The tagged-Subject cleanup remains in the older scenario scripts solely to recover
-residue created by pre-R107 versions of those fixtures. Current teardown removes only
-the fixture-owned joins and retains the Production Subjects.
-
-### The Production Subject seed has its own fresh-database drill
-
-Run `bash scripts/seed/verify-production-seed.sh`. It starts a disposable PostgreSQL 18
-volume, applies every migration, executes the **actual** Production seed entry point twice,
-and then checks the R107–R108 boundary through the real policy and Quran service. It also boots
-the real API/pg-boss catalog against a disposable SeaweedFS object store, runs all 18 integration files affected
-by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
-
-The drill's internal S3 client uses its loopback object-store endpoint (`MINIO_ENDPOINT`, a compatibility name), while its browser-facing
-`STORAGE_BASE_URL` is the exact same-origin `${PUBLIC_BASE_URL}/storage` coordinate required
-by §3.1. The latter is configuration validation in this seed-focused harness, not a claim that
-the harness's direct API listener is an Nginx storage proxy; production-shaped proxy traffic is
-covered by the disposable full-stack CI gate.
-
-- the exact eight seeded Subjects exist once, with stable ids and timestamps across the second run;
-- القرآن الكريم, محو الأمية, the ambiguous bare تفسير, and separate ترتيل/تجويد synonyms are absent from a fresh seed;
-- Super-Admin additions, later Quran-domain Subjects, and historical rows survive a rerun unchanged and unmarked;
-- exactly one live marker exists and it is حفظ القرآن;
-- a teacher staffed on حفظ القرآن can log memorisation for the resolved audience;
-- teachers staffed only on أحكام القرآن, ترتيل وتجويد القرآن, تفسير القرآن, or a later
-  unmarked Quran-domain Subject for that same audience receive `NOT_FOUND`;
-- a conflicting Owner-managed marker aborts before Subjects or unrelated seed data change.
-
-The opt-in variable and unique database volume are deliberate. This proof owns its whole
-database and invokes the bootstrap seed, so it must never share a development or Owner
-database merely to make the test convenient.
-
-Hosted CI runs this drill as its own `seed-drill` job, and `check-release-artifacts.sh` fails
-if that job is removed or stops gating release publication. It is the only routine that
-executes `backend/scripts/seed-*.ts` against a real schema; while it sat outside CI, R124's
-`ExamQuestion` relation broke two of those scripts and nothing noticed. `backend/scripts/`
-is also part of `npm run typecheck` (see `tsconfig.typecheck.json`), so the compiler now sees
-that class of drift as well; the shipped build still excludes it.
-
-### A contract change reaches the harnesses too
-
-`/quran-students` began answering `{ students, levels }` instead of a bare array.
-The integration tests failed loudly; `verify-effective-staffing.mjs` failed with
-`(roster.data ?? []).map is not a function`, and had it been written slightly
-more defensively it would have read `undefined` and **passed while asserting
-nothing**. When a response shape changes, grep the harnesses as well as `src` —
-`grep -rln '<route>' scripts/dev/browser/` — and restate the assertion rather
-than loosening it.
-
-
-### A fixture must be wiped by what it OWNS, not by what it is called
-
-`seed-notify-scenario.ts` wiped by tag: users named `[notify] …`, schedules
-titled `[notify] …`. But the harnesses that use it **create a class through the
-real scheduling form**, so that schedule's title is whatever the harness typed —
-`تفسير الفاتحة 777777777777` — and the tag-keyed wipe never saw it. The
-`course_schedule_staff` row survived, `user` RESTRICTs against it, and the
-**next** run of the seed died at `user.deleteMany` with a foreign-key error
-naming neither the schedule nor the harness that made it.
-
-The tell is the shape of the failure: a seed that has worked for weeks failing
-in its *wipe* rather than in its *setup*. Driving the real UI is the whole point
-of a browser harness, so **anything the UI creates is fixture residue the seed
-must own** — key the teardown on the entity the fixture actually created (here,
-the user) and follow the foreign keys out from it.
-
-Two related habits, both already paid for above: give every harness a `trap`
-that cleans on exit, and **batch long harness runs**, because the tool cap
-SIGTERMs the loop and a `trap` in the *outer* shell does not fire for the child
-that was killed.
-
-### One cookie, ONE consumer — and the symptom is not a 401
-
-TD-4.13 refresh-token reuse detection revokes a session whose cookie is
-presented twice. `verify-delivery` minted its API bearer from the Admin's
-browser cookie and then handed that same cookie back to the browser; the first
-navigation worked and the **second** rendered «ليست لديك صلاحية».
-
-That reads as an authorization bug in the feature under test, which is why it
-cost a debugging cycle. Two rules follow:
-
-* mint a **separate dev session per consumer** — `ADMIN_COOKIE` for the browser,
-  `ADMIN_API_COOKIE` for the harness's own `fetch`;
-* mint **every** bearer up front, before the browser holds any identity, and
-  then set the browser's cookie once and never touch it again — re-setting an
-  identity's original cookie after a page load presents an already-rotated
-  token.
-
-`verify-delivery.mjs` now **throws** on «ليست لديك صلاحية» rather than reporting
-it as a delivery failure, so the next person meets the real cause immediately.
-
-### A live media surface needs fake devices, and a REAL server
-
-`verify-livekit-join` is the only harness where several people are in one place
-at once, and three things make that possible without a paid account or a human:
-
-* **`livekit-server --dev`** in the dev overlay — the whole signalling stack in
-  one container with a fixed key pair. CI consumes no cloud minutes.
-* **`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`** — a
-  headless browser has no microphone, and a permission dialog nobody can click
-  makes every join time out. The tracks are synthetic; the signalling, the room
-  and the connection are real.
-* **Sequential identities across tabs.** Cookies are browser-wide, so a second
-  participant is: set the cookie, open a new tab. The tab already connected keeps
-  its in-memory access token and its live connection, which is what lets one
-  browser hold a genuine three-party room.
-
-### Assert the STATE, not the surface that displays it
-
-The first version of that harness waited for the classroom element to appear and
-called it *connected*. The element renders while the connection is still
-negotiating, so **three tabs reported success while one was actually connected**
-— and the check that counted participants was the only thing that noticed.
-
-The component now puts the connection state in the DOM (`data-connection`), and
-the harness asserts on that. The general rule: when a check needs a state, make
-the state readable and read it; a proxy for it will eventually be true when the
-state is not.
-
-### A CSP is invisible to every test that is not a browser
-
-R98's classroom could not open at all: §3.1's `connect-src 'self'` blocked the
-media server. Neither typechecker, no unit test and no HTTP integration test can
-see a CSP — the request is refused inside the browser before it reaches the
-network.
-
-**And the second half cost as much as the first.** Naming only the socket origin
-(`ws://…`) left the *validation* request — plain HTTP, made before the upgrade —
-still blocked, and it produces **no `securitypolicyviolation` event** on the
-socket, only «could not establish signal connection: Failed to fetch». Both
-schemes must be listed. See `nginx/snippets/media-origin.conf`.
-
-### "NO RESULT" is a failure — and one of them is still unexplained
-
-A full sweep records a harness as **NO RESULT** when it printed no summary line
-at all. That is **indistinguishable from a harness that proved nothing**, so it
-must never be counted as green.
-
-After C1, full sweeps reported `verify-recorder` and `verify-reorder` as
-NO RESULT while **every one of them passes on its own** (22/22, 30/30) and also
-passes when run back-to-back in the same order the sweep uses. What was ruled
-out, by measurement rather than assumption:
-
-* **not memory** — 6 GB free at the time;
-* **not leaked browsers** — the Chrome processes on the box were the
-  developer's own, not harness leftovers (a first, too-broad `pgrep` suggested
-  otherwise);
-* **not the feature under test** — both pass individually, repeatedly.
-
-**One real problem was found and fixed on the way**: every harness waited only
-`30 x 0.3s = 9 seconds` for Chrome to open its debug port, and the dev overlay
-now also runs an Egress worker with its own headless Chrome. Reaching `connect()`
-before the port exists throws an unhelpful JSON error — exactly the shape of a
-NO RESULT. The wait is now `60 x 0.5s` and a missing port is an explicit `FAIL`
-with a reason. That recovered one of the three affected harnesses.
-
-**The remaining two are an open, environment-level flake in long sweeps**, and
-are recorded here rather than papered over. A sweep reporting them must be
-followed by running them individually; if they pass there, the feature is fine
-and this note is the reason. **Do not "fix" it by removing them from the sweep.**
-
-**2026-08-21 (C2): the flake did NOT recur.** A full 30-harness sweep reported
-**zero** NO RESULT — `verify-recorder` 22/22 and `verify-reorder` 30/30 both
-inside the sweep. That is one clean run and **not** evidence the cause is gone:
-the `auth-refresh` flake below passed sometimes for four runs before its cause
-was found, which is exactly what made *passing sometimes* worthless as a signal.
-The note stays open.
-
-### Never run the integration sweep and a browser sweep at the same time
-
-They share one database, and the browser harnesses **wipe and reseed** their
-fixtures — users, Levels, schedules, enrolments. Running both at once produced
-**53 failures across three suites** (`quran`, `quran-entry`,
-`effective-staffing`), none of them related to anything being changed, and one
-harness check reporting `404` where it expected `400`.
-
-Every one of them passed on a serial re-run. The lesson is not "retry a flake":
-it is that **a shared-fixture failure looks exactly like a regression in
-whatever you last touched**, which is the most expensive way to lose an hour.
-Run the suites in sequence, and when something unrelated to the change fails,
-check what else was writing to the database before reading the diff again.
-
-### A harness teardown leaks its profile directory
-
-`kill "$CHROME_PID"` reaps the launcher and leaves Chrome renderer and GPU
-children alive, holding the `mktemp -d` profile open — so the `rm -rf` that
-follows silently fails. **727 orphaned `/tmp/tmp.*` directories** had
-accumulated before anyone looked. Killing the process *group* (`setsid` at
-launch, negative PID at teardown) is the fix; it is noted here rather than
-applied blind, because a first attempt at it broke the single-quoted `trap`
-blocks in all thirty scripts — the injected comment contained apostrophes.
-
-**And the recovery from that mistake cost more than the mistake:** restoring
-with `git checkout -- scripts/dev/browser/` reverted *every* file in the
-directory, including C1 work that was correct and uncommitted. Restore the files
-you broke, never the directory they live in.
-
-### No-PII logging is tested in both directions
-
-`request-context.test.ts` supplies an email-shaped `X-Request-Id`, an
-email-shaped supported path, an email-shaped unmatched path and an internal
-exception containing the same value. The accepted outputs are a newly generated
-opaque id, the registered route template / `<unmatched>`, and a fixed operator
-message. The input must appear in none of them. The staff-pre-provisioning
-integration asserts its indefinitely retained `user.create` audit contains the
-non-identifying channel and never the mailbox.
-
-`audit.repository.test.ts` attacks the shared durable-detail boundary with
-nested snake-case and camel-case identity/locator keys and proves the database
-write is never reached. Real PostgreSQL/MinIO content tests use an email-shaped
-filename, then prove upload, same-ticket retry, replacement and deletion retain
-only deterministic 64-hex coordinate ids in audit while their exact-key storage
-transitions still converge. The Trash integration proves an irreversible audit
-row outlives its entity without copying the entity label.
-
-The complete-sweep isolation guard caught a separate falsely-green proof.
-*(The suite named below went with the `StudentSocialProfile` feature in R120;
-the lesson is kept because the mechanism it established — a destructive
-platform-wide proof runs inside an always-rolled-back transaction — is in force
-across the suites that remain.)* `social-profile.integration.test.ts` called the
-platform-wide `audit.purge`
-with a 2099 horizon and asserted only that its retained safeguarding row
-survived. It passed while deleting ambient eligible authentication history. The
-purge and survival assertion now run inside an always-rolled-back transaction;
-a fixture tag cannot restore rows deleted by a global selection.
-
-`check-no-pii-logs.sh` pins the deployment half: Nginx must generate the id,
-its access format may contain neither URI nor client address, its fixed-format
-error log is process-emergency only, and neither runtime logger may reintroduce
-raw exception text. It also rejects copying the pre-provisioned mailbox into
-the audit detail, raw content keys, or Trash labels, and requires every audit
-write to cross the recursive repository guard. This is intentionally a source
-guard plus behavior tests: a
-behavior-only test cannot observe the loaded Nginx format, while a source-only
-guard cannot prove the redaction code actually handles hostile values.
-The direct-write rule was mutation-tested with an otherwise unreachable
-`prisma.auditLog.create`: the guard named the exact service line and failed.
-Because that final check parses TypeScript rather than grepping comments, CI
-runs it after the backend's locked dependency install. `check-ci-portability.sh`
-refuses either moving it back into the dependency-free job or placing it before
-`npm ci`; this closes the clean-checkout failure that a warm Local install hid.
-
-### An integration run must leave the database it found
-
-P1.2 closed a defect that a passing suite concealed: the complete integration
-sweep reduced `course_schedule_staff` from **2** rows to **0**. It was not an
-interaction between files. `branch.integration.test.ts` reproduced the loss by
-itself. Its first `beforeEach` called `clear()` before assigning `actorUserId`,
-and Prisma omitted `userId: undefined` from the filter, turning an apparently
-scoped `deleteMany` into an unscoped deletion. Cleanup now discovers the
-suite-owned, tagged users first and deletes staffing only for those exact ids.
-The shared teaching-fixture helper also refuses empty, malformed, or reserved
-development-fixture tags before it can query anything.
-
-`scripts/test/run-integration-suite.sh` enforces the general ownership rule for
-both the Local wrapper and the disposable hosted-CI wrapper. It takes a
-privacy-safe logical digest of every application base table before and after
-Vitest and fails if any table differs. The digest contains row counts and
-hashes of every row's logical fields, excluding only `created_at` and
-`updated_at`; it prints no row data. This catches residue, deletion,
-replacement, changed relationships, and same-count mutation. A source guard
-also rejects integration cleanup whose `deleteMany` has no `where` clause or
-contains `undefined`.
-
-The first disposable hosted-CI run proved that this is not decorative: all
-**1887 active assertions passed**, but the gate still failed on one leaked
-`normalized_email_lock` and one changed `scheduling_type` digest. The first
-belonged to a fixed search-fixture email omitted from teardown; the second came
-from restoring only a whole-set order rather than each exact prior
-`display_order`. Exact owned-email tracking and exact-coordinate restoration
-make both focused suites isolation-clean.
-
-The bounded ownership audit found further teardown defects while the original
-fix was being proved:
-
-- whole-set Branch, Category, and Subject reorder tests restored only relative
-  order, not the exact shared `display_order`; they now capture and restore the
-  exact shared positions in `finally` blocks;
-- the online-class test constructed a date from UTC while the authorization
-  path uses Morocco-local dates, so a sweep spanning local midnight could
-  expire its own class window;
-- recording cleanup depended on successful assertions and omitted
-  `SessionRecording` from suite teardown, so one failure could strand an entire
-  scenario. Both the assertion path and teardown are now fail-safe;
-- three browser authorization probes depended on ambient "first" rows: the
-  Teacher portal wrote availability for a development Teacher, the Admin
-  navigation probe targeted a development Level and could create a Category if
-  its refusal regressed, and the gender probe could create an enrolment across
-  ambient user/Level/Branch coordinates. They now use exact tagged scenario
-  identities and coordinates whose fail-safe shell traps remove domain, audit,
-  and refresh-token rows even when the expected refusal regresses.
-
-The consent migration retry check permits `completed` and `already_completed`:
-a live worker can converge the exact obligation before the direct retry does,
-and the test still proves the authoritative row and object postconditions. The
-same worker race made a retry-policy test select a newer legitimate follow-up
-row and made replacement setup lose an optimistic-version race. The retry proof
-now uses a unique real pg-boss queue carrying the registered TD-7 policy and
-asserts its exact job id; replacement/deletion tests establish their exact
-forced-private precondition directly. Production delivery, follow-up
-deduplication, replacement, and deletion remain covered separately, without two
-workers competing for a test that is specifically measuring one retry.
-
-R111's final-erasure regressions also meet writers at the governing User-lock
-boundary rather than relying on timing. The test starts permanent
-de-identification concurrently with teaching-profile replacement,
-safeguarding-profile upsert, notification delivery and upload initiation. Both
-legitimate serial orders must converge on no planning, case-file, inbox or quota
-satellite for the tombstone, and deletion-first mints no upload authority. This
-specifically detects a stale request that passed an earlier
-authorization/roster read and writes after the purge's `deleteMany`; a
-sequential "write, then delete" test cannot observe that race.
-
-Those focused suites also exposed a second ownership trap: a fixed tag such as
-`[content-test]` is not proof that the current process owns a row. A process
-restarted after interruption can find the earlier process's tagged Users and
-delete their domain/audit rows during its opening cleanup. The affected R111,
-content, teaching-profile and notification suites now include a random run id in
-their ownership prefix (the social-profile suite did too, until R120 withdrew
-that feature). Their cleanup can match only ids born
-in that process, while the all-table wrapper remains the backstop that detects
-any residue left by an interrupted run.
-
-The browser audit also repaired evidence defects exposed while isolation was
-being measured: navigation now waits for the requested pathname and for the
-skeleton to leave, the Admin catalogue expectation includes R110's tenth item,
-and the enrolment scenario records the durable beneficiary fact rather than
-assuming a `student` role implies it.
-
-The ownership guard was falsified deliberately: restoring the old
-`actorUserId ?? undefined` predicate left all **17/17** branch assertions green,
-then the wrapper failed with only `course_schedule_staff` changing **2 → 0**.
-With the correction restored, the final **1802-test** integration sweep passed
-and left the all-table logical snapshot identical. Re-seeding after a sweep is
-no longer an accepted remedy for isolation damage.
-
-### In-page instrumentation must survive navigation, or it proves nothing
-
-`verify-error-experience.sh` installed a `window.fetch` wrapper by `evaluate`
-on the document at `/`, then navigated to `/register` — which creates a **new
-document**, destroying the wrapper and `window.__seen` with it. The read that
-followed returned `[]` every time, and the variable holding it was **never
-asserted at all**. The harness therefore claimed to prove *"whatever
-`/auth/refresh` answers"* while observing nothing: had the call never been made,
-or answered `500`, the checks would have passed identically.
-
-Use **`Page.addScriptToEvaluateOnNewDocument`**. CDP re-runs it before any page
-script on every navigation, so each document gets the instrumentation rather
-than one document keeping it. Then **assert the observation**, not only the
-absence of a symptom — the repaired harness checks that `/auth/refresh` was
-seen *and* answered `401`, which is what turns *the page looks fine* into *the
-expected 401 happened and was handled silently*.
-
-Proven by reintroduction: restoring the per-document install drops the probe to
-**0 observed calls** and fails both checks.
-
-### An assertion the environment has switched off is not an assertion
-
-The same harness asserted a `429` from a 25-request burst. Under
-`docker-compose.dev.yml` the auth zone is **6000r/m** against production's
-**10r/m**, deliberately, so the integration suite is not throttled — the burst
-cannot trip it and the check failed for a reason that had nothing to do with the
-product. The harness now **detects which edge it is running against** and
-asserts the property that is true there, while still failing on a
-production-shaped edge that has stopped limiting.
-
-### A guard that depends on an unasserted tool fails OPEN
-
-Three CI guards shipped written with `ripgrep`, their prohibition checks taking
-the form:
+- No continuous load testing; latency targets verified against ceiling-scale fixtures before launch; no metrics stack.
+- Browser-matrix testing is E2E-only, at the audio-playback level.
+- The staging origin never exercises authenticated flows (cross-origin by design); those run on the local same-origin stack and the production rehearsal.
+
+## HIGH readiness checkpoint 2026-09-13
+
+H1/H2/H4/H5/H6 closed for local engineering (base `45cf1f0`, committed, not pushed); H3 untouched.
+
+| Evidence | Figure |
+|---|---|
+| Nine-suite focused run (below) after the maximum-grade fixture correction | 245/245 (5 skipped) |
+| H2 gap fixed: `publishOccurrenceTx`'s publish re-check (R125) called `assertAudienceWithinBranchScope`, the branch-only subset of `assertMayAuthor`; a مؤطِّرة with no `admin` scope read as zero reachable branches → `FORBIDDEN TARGET_OUTSIDE_BRANCH_SCOPE` at publish. `assessment.service.ts` now calls `assertMayAuthor`; reachable only for `mode: 'online'` (`exam_online_has_no_room_check` gives `branchId: null`, so the admin arm's `assertCanActOnBranch` is a no-op) | rerun 245/245 |
+| `notification-targets.http.integration.test.ts` «re-publishing after the score CHANGED» silently no-opped `PUT /exams/:id/grades` (H5 requires the current version) → `notified: 0`; fixture supplies the version | no assertion weakened |
+| H6 `consent-safeguarding.integration.test.ts`: retagging both directions without a bucket move, immediate anonymous denial, immutable-byte private migration, mandatory-audit rollback, first-link/discovery race; B4/B5 regressions unchanged | pass |
+| Full disposable stack | 2,549 / 18 skipped, 112 files / 2, browser 193/193, 96 migrations, both seeds, isolation clean |
+| Backend lint/typecheck/test/build; storage-lifecycle source guard (four-argument cron registration, explicit timezone, reconcile-only payload) | 342/342, 40 files |
+| 9 non-link guards, `git diff --check`, TD-3 226/234 (eight pending), `check-openapi-current.sh` 175 paths / 226 operations; no `bodour-ci-integration-*` residue | pass |
 
 ```bash
-if rg -n 'forbidden-pattern' dir | grep -q .; then fail '...'; fi
+timeout --signal=TERM --kill-after=30s 1800 bash scripts/ci/test-integration.sh \
+  src/controllers/exam.http.integration.test.ts \
+  src/controllers/teacher-exam-scope.http.integration.test.ts \
+  src/controllers/grade.http.integration.test.ts \
+  src/controllers/exam-max-grade.http.integration.test.ts \
+  src/services/assessment.integration.test.ts \
+  src/services/exam-deletion.integration.test.ts \
+  src/services/consent-safeguarding.integration.test.ts \
+  src/services/storage-retirement.integration.test.ts \
+  src/services/storage-lifecycle.integration.test.ts
 ```
 
-Where `rg` is absent, the command writes `rg: command not found` to **stderr**
-and nothing to stdout, so the condition is simply **false** — the guard prints
-its success line and exits `0` **while the thing it forbids sits in the tree.**
+## H3 readiness checkpoint 2026-09-13
 
-It was proven rather than argued: a real `proxy_pass $minio_upstream` bypass was
-injected into `nginx/snippets/`, and `check-storage-edge.sh` passed. The two
-checks made inert this way were precisely the ones protecting Owner decisions —
-that no Nginx path bypasses the storage edge filter, and that automatic
-quarantine destruction stays disabled. A third guard (`check-backup-tooling.sh`)
-failed *closed* instead, which is loud and safe but still wrong.
+Closed locally (base `5eabe63`, one further commit, not pushed). Owner decision ([SRS R142](../SRS.md)): a manual remote exam is opened explicitly by an authorized teacher or administrator through «فتح الاختبار», never by its start time.
 
-**So: CI guards search with POSIX `grep`.** It exists on every runner and in
-every container this project uses. `check-ci-portability.sh` now fails the build
-if a guard reaches for `rg`, `fd`, `ag` or `ack`; if one ever genuinely needs a
-richer tool, it must assert the tool exists **first**, so a missing dependency is
-loud rather than silently permissive.
-
-This is the same rule as *"a guard must be able to read what it guards"* — the
-`?raw` CSS guard that passed for a whole commit while reading empty strings —
-seen from the other side. **The tell is identical: a guard that has never
-failed.**
-
-### A guard that fails because the PRODUCT changed is restated, not deleted
-
-R98.18's frontend guard read *«mounts no recording affordance»* — true and
-deliberate then, because recording did not exist. R99 authorised recording, so
-the sentence stopped being the property while the property itself survived:
-recording is **the platform's**, driven by its own control and its own
-server-side capture, never a capability handed to a browser.
-
-The restated check asserts the classroom composes بذور الأمل's own panel, mounts
-**no vendor recording component**, and grants no `roomRecord` to any participant.
-Deleting it would have removed the only thing standing between the product and a
-client-side recorder.
-
-### A new table means every fixture that touches its parent
-
-`session_recording` references `session` with `onDelete: Restrict`, on purpose —
-a recording is part of the record of what happened. The R98 fixture knew nothing
-about it, so the next seed died inside its own wipe with a foreign-key error.
-The rule `testing.md` already recorded — *a fixture must be wiped by what it
-OWNS* — extends to tables added afterwards: adding one means auditing the
-teardowns that unwind its parent.
-
-### A failure path that can itself fail is not a failure path
-
-`startRecording`'s catch marked the row failed with `update`, which **throws when
-the row is gone** — and the row being gone is precisely one of the situations
-that lands there. The throw escaped the catch, so a مؤطِّرة received a raw
-database error instead of her refusal, and the orphan-cancellation the block
-exists for was invisible.
-
-`updateMany` matches zero rows without complaint, which is the correct
-semantics for a clean-up. **Test the error path with the error that makes the
-error path hard**, not with a convenient one.
-
-### A mock proves the rules; only real media proves the recording
-
-`session-recording.integration.test.ts` uses a fake provider deliberately: an
-assertion about *who may record* must fail because authorization is wrong, not
-because a media server was unreachable. But a fake can report any file it likes,
-so it can never show that a صوت وصورة class produced video and a صوت فقط class
-did not.
-
-`verify-livekit-join.sh` therefore records **both**, against real local Egress,
-and then checks the **extensions and the byte counts** of the media objects *this
-run* added to the canonical store — because a zero-length file is a passing
-lifecycle and a failed recording, which is exactly the pair that check exists to
-tell apart. It reads the canonical store, not the staging bucket: a completed
-recording is imported and its staging media swept (R99.13, asserted by
-`verify-livekit-ingest.sh`), so a healthy run leaves nothing in staging.
-
-Three defects hid in these two harnesses together, and each hid the next. The
-status of the browser run was read on the line *after* it under `set -e`, so any
-failing check aborted the script before the storage check ran. The storage
-listing swallowed its own failure (`|| true`), so an unreachable store read as
-"nothing left" — a PASS in the ingest harness on the very failure it exists to
-catch. And the staging-bucket assertion had been unsatisfiable since ingest
-landed. The listing is now `scripts/dev/browser/list-bucket.mjs`, which exits
-non-zero on any failure, and the join harness selects its own occurrence by
-today's cell and the online mark rather than by the first chip whose text
-matches — a chip renders the Subject name, which the dev fixtures also use.
-
-### The staging-cleanup failure is after success, so test both truths
-
-`session-recording-ingest.integration.test.ts` drives the real object store (SeaweedFS) and injects a fault only at
-the selected `DeleteObject` call. The intermediate assertion is load-bearing: the canonical
-object, content row and relation exist while the staging object remains, and
-`ingestion_failure_reason` stays null. A retry must then delete the selected staging key while
-the canonical object and an unrelated staging object remain byte-addressable.
-
-The same suite runs the service behind a real temporary pg-boss queue. It observes the
-durable `retry` row, stops that worker completely, starts a new worker and proves eventual
-cleanup. A bounded test-only retry budget also reaches terminal `failed` state and asserts
-that the cleanup error remains in job output. Every temporary queue and fixture object is
-removed by the suite. The terminal-failure case uses the production retry limit against real
-pg-boss and proves five executions total; only its delay is removed so the assertion finishes
-promptly. The production queue name and worker catalog are unchanged.
-
-### And only a real browser proves that a recording can be HEARD
-
-A recording pipeline can be green end to end and still deliver a file nobody can
-play. `verify-livekit-ingest.sh` (R99 C2) drives the whole chain — a مؤطِّرة
-presses «بدء التسجيل» on the real screen, a real Egress worker writes a real
-file, the platform imports it, a مستفيدة opens the library — and then asserts on
-the **media element itself**:
-
-```
-readyState >= 2  and  duration > 0
-```
-
-Every cheaper check passes on an empty file. A `200` does; a non-zero byte count
-does for a truncated one; a `<video>` element rendering does. Only the browser
-decoding it says the lesson survived, and it is the last link in a chain where
-every earlier one was already green.
-
-Two further things only this harness can say:
-
-- **The URL is Bodour's.** A library item pointing at the provider's staging
-  bucket plays perfectly today and rots when the provider expires it (R99.13),
-  so the minted URL is asserted to be `/storage/` and **not**
-  `recordings-staging`.
-- **The starter never comes back.** Her tab is closed *while the recording
-  runs*, and the callback, the queued job, the server-side copy and the content
-  row all happen with nobody watching.
-
-### A negative that uses the wrong axis asserts the opposite of the rule
-
-§4.9's content visibility is **Level**-based. So *the same Level at another
-branch* is a **positive** — she is legitimately elsewhere, not excluded — and a
-refusal test written against her would have asserted the opposite of the rule
-while looking like a refusal test that passed.
-
-The R98 fixture had exactly two beneficiaries and both were in the same Level,
-so C2's negative needed a **new** one in a different Level. **Check which axis
-the rule actually turns on before choosing the person who must be refused.**
-
-### A date-scoped rule needs the date threaded ALL the way through
-
-R106 scoped a مؤطِّرة's exam list per assignment window — correct — and then took
-the group set from `teacherEventScope(prisma, teacherId)`, whose `on` parameter
-**defaults to today**. The clause therefore read *"exams inside this
-assignment's window, whose group I teach RIGHT NOW"*, and a مؤطِّرة whose group
-assignment had lapsed lost her whole group-scoped history: the very symptom the
-revision existed to fix, reintroduced one line lower. The `entire_level` path
-masked it, because it carries no group constraint at all.
-
-Two lessons. **A default parameter is where a date silently becomes *now*** —
-`assertExamInTeacherScope` had the identical defect, receiving `on` and then not
-passing it. And **the durable fix was structural, not a threaded argument**: the
-group is now taken from the schedule the staffing row points at, so the answer
-is date-correct *by construction* rather than by remembering.
-
-### A fixture's "today" must be the association's clock, not UTC's
-
-`verify-livekit-join` needs **today's** occurrence, because the join window is
-real. Its fixture computed the date by zeroing the UTC hours of `new Date()` —
-the idiom every other fixture here uses — while taking the weekday from
-`new Date().getDay()`, which is **local**. At 00:34 in Casablanca those are two
-different days, and the seed died with «no record was found» while the
-occurrence sat there under tomorrow's date.
-
-The other fixtures never noticed because they ask for occurrences **after**
-today (`date: { gt: day(0) }`), where being a day out changes nothing. Build a
-calendar date from the local parts — `Date.UTC(y, m, d + offset)` — whenever a
-fixture needs *today* exactly, and make sure every date in it comes from the
-same clock.
-
-### A one-off cover must be written the way the platform writes it
-
-The R98 fixture created a `SessionStaff` row directly and the harness then
-reported the cover as *refused*. The row was real; materialization had
-soft-deleted it seconds later, because an occurrence that is not `overridden`
-gets resynced from its schedule — which named nobody (R43.6).
-
-The platform's own cover flow is `PATCH /sessions/{id}` with `staff`, and it
-sets `overridden` precisely so that cannot happen. **A fixture that writes rows
-the application would have written differently is testing a state the
-application cannot reach.**
+| Evidence | Figure |
+|---|---|
+| No schema change: `Exam.available_from` (R136 clause 5) already allowed an explicit staff «open now»; `openAssessment` = `POST /assessments/{id}/open`, mirroring `/close`: `lockExamRow` first, re-read in the same transaction, `assertMayAuthor` (never its branch-only subset), one `audit.write`; mode/status/already-open refused together as `STATE_CONFLICT`/`INVALID_TRANSITION`; **non-idempotent by design** (audit count shows no duplicate) | — |
+| `bash scripts/ci/test-integration.sh src/services/assessment.integration.test.ts`, 13 new: Admin opens; `entire_level` Teacher opens; exact-Session Teacher opens hers, `FORBIDDEN` on a Level; R91 ended assignment authorizes inside its window only; branch Admin `FORBIDDEN`/`TARGET_OUTSIDE_BRANCH_SCOPE` across branches; outsider Teacher and the student refused; `physical` and `draft` → `STATE_CONFLICT`/`INVALID_TRANSITION`; repeat and two concurrent Opens (`Promise.allSettled`, real row lock) leave one audit row; audit names actor and target; student `NOT_FOUND` before, reads after; an unrelated student's Level refusal not bypassed | 128/128 |
+| Authoring mistakes corrected: Level/group fallback is `FORBIDDEN` not `NOT_FOUND` (`assertExamInTeacherScope` taxonomy); fixtures dated `OTHER_DATE`, not `TODAY` (pagination convention) | no assertion weakened |
+| Full disposable stack | 2,563 / 18 skipped, 112 files / 2, browser 193/193, isolation clean |
+| Backend units; frontend lint/typecheck/build and units (13 source-guard assertions in `assessment-ui.test.ts`, none rendering the DOM) | 342/342 (40 files); 1,263 (106 files) |
+| 9 guards, diff and doc links; TD-3 227/235 (`/assessments/{id}/open`, same eight pending); OpenAPI regenerated (`npm --prefix backend run openapi:generate`) 176 paths / 227 operations; no residue | pass |
+| Frontend `openable` action (rule O, `ExamAccessAction`; the server remains the boundary): «فتح الاختبار» beside «إغلاق الاختبار» for an unopened `online`/`published` paper the caller may write to, on the shared `ConfirmDialog`/`busy`/`act()` machine; «لم يُفتح بعد» badge | — |
 
 ## B2/B3/B7 account-lifecycle acceptance (2026-09-11)
 
-Acceptance requires disposable runtime proof, not unit/static checks alone. The new
-`backend/src/services/deletion-generation.integration.test.ts` uses real Prisma
-transactions and explicit barriers at the sweep read/User lock, not sleep-based
-interleavings. It covers immediate disable, deadline refusal, restore/re-delete
-generation binding, duplicate erasure, pending/rejected/approved claim minimization,
-claim-vs-purge serialization and the SQL digest shape. The future sweep clock is
-explicit so fixtures need not wait seven days. Existing account-closure,
-trash-lifecycle, email-ownership, auth/session-serialization, registration/approval,
-user-management and self-management suites remain part of acceptance.
+Disposable runtime proof only: the [CI integration harness](../../scripts/ci/test-integration.sh) with its synthetic `EMAIL_LOCK_KEY`, all migrations onto an empty database, focused suites first, then the full suite with all-table isolation; never Owner-populated localhost; never bypass an execution rejection or cite an earlier passing version as proof of the final move. Not Production approval.
 
-Use only the [disposable CI integration harness](../../scripts/ci/test-integration.sh),
-with its dedicated synthetic `EMAIL_LOCK_KEY`; never source Owner-populated localhost
-for these destructive lifecycle checks. It must apply all migrations to an empty
-database, run the focused suites first, then the full suite with all-table isolation.
-Exact fixture-owned digest cleanup replaces plaintext-prefix cleanup.
-
-A separate representative **pre-batch disposable** upgrade includes existing
-plaintext lock rows, live/recoverable claim states, and audit-proven permanently
-erased claim states. Stop all ownership writers; apply the one new migration with
-bounded lock/statement and outer shell timeouts. Assert:
-
-- only `email_digest`/`created_at` remain in the lock table; malformed coordinates
-  fail its CHECK and newly claimed addresses use the shared HMAC primitive;
-- old lock coordinates are removed without touching ownership, unrelated Users,
-  current Trash or recoverable claims;
-- proven erased claims/snapshots lose credentials, but approved transition facts
-  still prevent former-guardian authority; live pending claims require both
-  credential fields and partial-null writes fail;
-- the real pre-provision/bind/re-register races still yield one authoritative
-  owner, retained digest rows are stable across deletion/retry, and wrong/missing
-  deployment-key configuration is refused before service startup.
-
-The earlier Docker execution block was resolved without using the shared database.
-Reproduce the focused and populated checks from the repository root (commands are
-bounded; the upgrade script owns its PostgreSQL container and temporary schema file):
-
-```bash
-timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
-  src/services/deletion-generation.integration.test.ts \
-  src/services/email-ownership.integration.test.ts \
-  src/services/self-managed-claim.integration.test.ts \
-  src/policies/self-management.integration.test.ts \
-  src/services/account-closure.integration.test.ts \
-  src/services/trash-lifecycle.integration.test.ts \
-  src/controllers/user-management.http.integration.test.ts
-(cd backend && timeout --kill-after=10s 240s node --import tsx ../scripts/test/verify-deletion-upgrade.mjs)
-timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
-```
-
-Focused result: **159/159**, isolation clean; after strengthening the combined
-delete/restore/re-delete/stale-purge/final-erasure and retained-identifier search,
-the lifecycle suite passed **8/8**, isolation clean. The first focused run passed
-156/159: a purge test barrier also paused the newly locked restore, contaminating
-its successor on timeout; another test expected a minimized/withdrawn claim to
-remain eligible for a detailed refusal. The barrier now pauses only the purge;
-the latter asserts `NOT_FOUND`, null credentials and no resurrected identity.
-
-Fresh `prisma migrate deploy`: **94/94**. Populated replay: 93 old migrations then
-the exact new file, 11 Users/10 claim states/two recovery windows, with ownership,
-User Trash, FamilyLink and audit rows unchanged; only three proven-erased claims
-and their snapshots minimized. Live/recoverable/unproven-deleted claims remain
-byte-equivalent. HMAC locks converge after transition, CHECKs/PK/indexes/defaults
-pass, and both changed Prisma models match. A broad Prisma comparison initially
-returned exit 2: **26 pre-existing SQL/Prisma table differences** are reproduced
-byte-for-byte against committed `a4174b1` before the upgrade. The rehearsal asserts
-no new divergence; it does not claim global zero drift or change unrelated schema.
-Its initial readiness race (temporary Unix-socket PostgreSQL initialization server)
-and enum-parameter fixture error were corrected; the final bounded run passes.
-
-Full-suite and final gate evidence is recorded in [TASKS](../TASKS.md) and
-[CHANGES](../CHANGES.log). No Owner database, real environment key or deployment
-was changed. This batch is not Production approval.
-
-**Final repository-boundary checkpoint:** the first full run passed 2,512 tests,
-failed one, and skipped 17; its real-edge browser check passed 193/193. The failure
-was `trash-coverage.integration.test.ts`'s ordinary-read assertion identifying
-`account-deletion.service.ts:638 selfManagedClaim.findMany`. That erasure query
-must include deleted claims, so adding a live-only filter would retain copied PII.
-It now lives in `user.repository.ts` as `minimizeSelfManagedClaimIdentity`, using
-the caller's transaction and already-held User lock. No guard change, exception,
-or auth-reader widening was made. Post-move lint/typecheck and the **exact unchanged
-source-only ordinary-read assertion** pass; this does not substitute for integration.
-The initial ten-suite disposable retry was rejected **before execution** by the
-approval service usage limit. Once execution allowance was restored, the unchanged
-current-code retry below passed **220/220 across ten files**, including **8/8**
-lifecycle cases and the ordinary-read guard, with all-table isolation clean.
-The final current-code full run then passed **2,513 tests / 17 skipped** across
-110 passing files / two skipped, with all-table isolation clean (390.39 s).
-Its required real-edge browser probe passed **193/193** and its fresh database
-applied **94/94** migrations plus both seeds. The ordinary-read guard is unchanged;
-no further implementation or migration edits followed. The unchanged populated
-93→94 rehearsal evidence above was reused, not rerun. Reproduction commands:
+| Evidence | Figure |
+|---|---|
+| `deletion-generation.integration.test.ts`: real Prisma transactions, barriers at the sweep read/User lock, explicit future sweep clock; immediate disable, deadline refusal, restore/re-delete generation binding, duplicate erasure, pending/rejected/approved claim minimization, claim-vs-purge serialization, SQL digest shape; exact digest cleanup replaces plaintext-prefix cleanup | 159/159 (7 suites); lifecycle 8/8 |
+| First run 156/159: a purge barrier also paused the newly locked restore (now purge only); a minimized claim asserts `NOT_FOUND`, null credentials, no resurrected identity | corrected |
+| Populated upgrade (`scripts/test/verify-deletion-upgrade.mjs`, own PostgreSQL, bounded timeouts): only `email_digest`/`created_at` remain in the lock table, malformed coordinates fail its CHECK, the shared HMAC primitive is used; ownership, Users, Trash and recoverable claims untouched; proven-erased claims lose credentials, approved transition facts still block former-guardian authority; live pending claims need both credential fields; races yield one owner; wrong/missing deployment key refused before startup | 93→94: 11 Users, 10 claim states, two windows; three proven-erased claims minimized; 26 pre-existing SQL/Prisma differences reproduced against `a4174b1`, no new divergence |
+| Fresh `prisma migrate deploy` | 94/94 |
+| Final boundary: `trash-coverage` flagged `account-deletion.service.ts:638 selfManagedClaim.findMany` (must include deleted claims; a live-only filter would retain PII) → `user.repository.ts` `minimizeSelfManagedClaimIdentity` on the caller's transaction and held lock; no guard change or reader widening | ten-suite retry 220/220 |
+| Final full run | 2,513 / 17 skipped, 110 files / 2, 390.39 s, browser 193/193, 94/94 migrations, isolation clean |
 
 ```bash
 timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
@@ -2183,111 +371,36 @@ timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
   src/services/trash-coverage.integration.test.ts \
   src/services/auth.integration.test.ts \
   src/services/user.integration.test.ts
+(cd backend && timeout --kill-after=10s 240s node --import tsx ../scripts/test/verify-deletion-upgrade.mjs)
 timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
 ```
 
-Do not rerun against Owner-populated localhost, bypass the execution rejection,
-or report the earlier passing version as proof of the final repository move.
+### R141 self-managed rejection audit follow-up
 
-## R141 self-managed rejection audit follow-up
-
-The prior B7 lifecycle fixture used a non-identifying refusal and missed the
-second copy in audit detail. It now rejects with `b7-rejection-pii:` plus a
-fixture-specific identifier and email, confirms rationale is retained on the
-claim before erasure, then searches retained User/claim/audit data after the
-delete/restore/re-delete/final-erasure sequence. Claim Trash also contains the
-reason and must disappear. Actor/claim/beneficiary/time evidence survives; the
-approved case still proves structural self-management authority.
-
-Before the writer correction, the exact disposable lifecycle suite failed at
-the post-erasure marker assertion (**7 passed / 1 failed**). This is independent
-of the earlier ordinary-read guard failure; that guard remains unchanged.
-
-`self-managed-audit-migration.integration.test.ts` executes the exact R141
-data-only SQL migration over synthetic historical events. It checks all five
-explicit reason keys, identifying and ordinary values, orphan targets, actor and
-timestamp preservation, unrelated action preservation, unchanged claim rationale
-and a second-run no-op. The entire test transaction is **always rolled back**:
-the platform-wide migration must never persist fixture or ambient audit updates
-in a test. Lock/statement/transaction timeouts bound it. No value-based PII scrubber
-or generic audit-mutation API is introduced.
-
-Focused current-code proof: **140/140 across eight suites**, all-table isolation
-clean; the fresh disposable stack applied **95/95** migrations and both seeds.
-The eight suites were deletion-generation, self-managed-claim, self-management,
-account-closure, user-management HTTP, trash-coverage, audit-purge and
-self-managed-audit-migration. The exact ordinary-read guard and shared audit
-repository/PII guard are unchanged. Final full disposable integration passed
-**2,514 tests / 17 skipped**, 111 files passed / two skipped (467.44 s), with
-all-table isolation clean and **193/193** real-edge browser checks. The fresh
-stack again applied **95/95** migrations and both seeds. Backend lint, exact
-typecheck, **341/341** units, build, all 30 non-link guards, **1,031/1,031** doc
-links and diff checks pass. No shared-audit, ordinary-read-guard, B2/B3, frontend
-or API-contract implementation changed. This is local verification, not rollout.
+| Evidence | Figure |
+|---|---|
+| B7 fixture rejects with `b7-rejection-pii:` + identifier + email, confirms rationale retained before erasure, searches User/claim/audit after delete/restore/re-delete/final-erasure; claim Trash reason must disappear; actor/claim/beneficiary/time evidence survives | 7/1 before the writer fix, then pass |
+| `self-managed-audit-migration.integration.test.ts`: exact R141 data-only SQL over synthetic events — five reason keys, orphan targets, actor/timestamp and unrelated actions preserved, rationale unchanged, second run no-op; **always rolled back**; no value-based PII scrubber or generic audit-mutation API | pass |
+| Focused: deletion-generation, self-managed-claim, self-management, account-closure, user-management HTTP, trash-coverage, audit-purge, audit-migration | 140/140; 95/95 migrations |
+| Full run; lint/typecheck/build; units; 30 guards; doc links | 2,514 / 17 skipped, 111 files, 467.44 s, 193/193; 341/341; 1,031/1,031 |
 
 ## B4/B5/B6 storage retirement and Event scope (2026-09-12)
 
-The parent visibility move copied to a shared destination and deleted that same
-coordinate on an optimistic-lock loss. The new barrier-controlled regression
-requires one winner, an unchanged byte stream at its fresh canonical key, and a
-safe same-visibility retry. Real-store cases cover post-copy publication failure,
-lost copy response, exact orphan cleanup and stale retirement of a live canonical
-coordinate. No parent commit was reverted to manufacture a negative proof.
+Locally accepted, one local commit, no push; [pre-maintenance legacy import](../operations/runbooks.md#b5-retirement-backlog-and-rollout) is a separately authorized prerequisite; a healthy worker is not proof the backlog is empty; not Production approval.
 
-`storage-retirement.integration.test.ts` drives the production worker catalog
-against PostgreSQL/MinIO/pg-boss: duplicate delivery while active, fixed-code
-failure evidence beyond five attempts, disappearance of execution history,
-reconciliation, lost delete response, legacy import and queue-absence rollback.
-The queue fixture always rolls back, including if the expected failure stops
-occurring. Fixture teardown removes only explicitly owned content obligations;
-the all-table guard includes the new table, without exemptions.
-
-Consent tests preserve the globally ordered shared-Session locking assertion and
-add revocation immediately before/after stale migration completion. Completion
-must recheck under the Content lock, and a later authorized transition must renew
-an old completed obligation. The existing isolated storage-lifecycle drill adds
-the equivalent later-purge case and passes **5/5**, including real worker restart,
-replacement quarantine failure, missing queue, strict staging GC and exact-key
-ambiguous deletion. Its fixture now uses a valid same-origin configuration and
-inserts the exact signed-ticket staging object internally; it does **not** claim
-an Nginx proof. The separate content suite continues real presigned PUTs through
-the production edge.
-
-B6 tests send crafted mixed/foreign branches through HTTP, check total rollback,
-retain explicit all-permitted-branch expansion and reject PATCH scope keys.
-Service tests pin foreign/mixed groups and recurrence; Teacher definition tests
-distinguish complete own-group authority, live responsibility, unrelated global
-definitions, hidden assistants and date filtering. Public calendar code is unchanged.
-
-Current focused proof: **189/189 across eight suites**, clean all-table isolation,
-**193/193** real-edge browser checks, fresh **96/96** migrations and both seeds.
-The populated **95→96** rehearsal preserves a legacy User and exact failed-job
-payload byte-for-byte, imports idempotently, removes only its fixture job and
-proves the obligation/locator survives; the SQL locator constraint fails closed.
-
-Earlier checkpoints are not acceptance of the final code: 176/177 exposed duplicate
-wakeup accounting; a later 180/182 run exposed the queue fixture's schedule FK and
-the added hidden-assistant exclusion; 181/182 still exposed wakeup duplication
-behind an active job. Obligations now own initial/renewal wakeups, with explicit
-backlog recovery. The interrupted affected-only retry finished **97/97**, clean,
-before the final revocation/purge renewal cases above. The standalone drill first
-failed configuration validation, then passed 4/4 and finally the expanded 5/5.
-No guard or authorization boundary was weakened to resolve these failures.
-
-The first full run passed **2,529**, failed one and skipped 18 (111 passing
-files / one failing / two skipped), with clean all-table isolation and browser
-**193/193**. The calendar operational-boundary fixture attempted creation before
-its sole branch was operational. It now enters that historical Event after the
-branch opens, preserving every read assertion and the real creation policy.
-Final review also serialized concurrent retirement wakeups on their own row:
-ordinary pg-boss queues do not uniquely constrain `singleton_key`. The outbox
-suppresses active exact-operation duplicates while ordinary full-recompute queues
-retain their followup semantics. Reconciliation/import releases each record's
-transaction before the next, avoiding multi-record lock cycles with publication.
-The affected five-suite retry passed **129/129**, isolation clean and browser
-**193/193**, including explicit concurrent/active wakeup coverage.
-
-Bounded reproduction (disposable infrastructure only):
+| Evidence | Figure |
+|---|---|
+| Parent visibility move copied to a shared destination and deleted it on optimistic-lock loss → barrier regression: one winner, unchanged bytes at a fresh canonical key, safe same-visibility retry; real-store post-copy publication failure, lost copy response, exact orphan cleanup, stale retirement of a live coordinate | pass |
+| `storage-retirement.integration.test.ts` on the production worker catalog: duplicate delivery, failure evidence beyond five attempts, lost execution history, reconciliation, lost delete response, legacy import, queue-absence rollback; queue fixture always rolls back; all-table guard includes the new table | pass |
+| Consent: revocation before/after stale migration completion; completion rechecks under the Content lock; a later transition renews an old obligation | pass |
+| `scripts/storage/verify-storage-lifecycle.sh`: worker restart, replacement quarantine failure, missing queue, strict staging GC, exact-key ambiguous deletion; same-origin config, signed-ticket staging object inserted internally, **no Nginx claim** | 5/5 |
+| B6: crafted mixed/foreign branches over HTTP → total rollback, all-permitted expansion retained, PATCH scope keys rejected; Teacher definitions: own-group authority, live responsibility, unrelated global definitions, hidden assistants, date filtering; public calendar unchanged | pass |
+| Intermediate runs exposed duplicate wakeup accounting, the queue fixture's schedule FK, hidden-assistant exclusion, wakeup duplication behind an active job → obligations own initial/renewal wakeups with backlog recovery | fixed |
+| First full run failed one: calendar operational-boundary fixture created its Event before its branch was operational → fixed; concurrent retirement wakeups serialized on their own row (pg-boss `singleton_key` is not unique); outbox suppresses active exact-operation duplicates; reconciliation/import releases each record's transaction before the next | five-suite retry 129/129 |
+| Review found DB locks could expire while a remote COPY pended → reproduced first (barrier holds the copy: deterministic injection, not a real timeout), then `copy_settled` added to the still-uncommitted migration 96; publication uses a one-attempt S3 client; positive settlement commits before destructive I/O; SQL rejects completion while false; late-orphan retirement never deletes the winner; unknown absence cannot complete | 77/77; drill 5/5; 95→96 rehearsal |
+| Populated 95→96 rehearsal: legacy User and failed-job payload byte-for-byte, idempotent import, only its fixture job removed, obligation/locator survives, locator constraint fails closed | pass |
+| Final affected batch (eight suites); final full gate | 193/193; 2,534 / 18 skipped, 112 files / 2, 299.42 s, browser 193/193, 96/96 |
+| Lint, typecheck, units, build, Prisma format/validate/generate, 30 guards, shell/Node syntax, doc links; OpenAPI 175/226, TD-3 226/234; no residue; no SRS/frontend contract change, no new constitution exception | 341/341 (39 files); 1,038/1,038 |
 
 ```bash
 timeout --kill-after=30s 1200s bash scripts/ci/test-integration.sh \
@@ -2305,153 +418,27 @@ timeout --kill-after=15s 300s bash scripts/storage/verify-storage-lifecycle.sh
 timeout --kill-after=30s 1500s bash scripts/ci/test-integration.sh
 ```
 
-The pre-late-copy-fix full run completed successfully: **2,531 passed / 18 skipped**,
-**112 files passed / two skipped**, **258.36 seconds**, all-table isolation clean,
-browser **193/193**, fresh **96/96** migrations and both seeds. Its start was
-2026-09-12 09:33:19 Africa/Casablanca; the then-current runtime files predated that
-start (latest retirement repository change: 09:31:52). The recovered command
-exited zero. Final lint/typecheck/build and all **30 non-link guards** also passed;
-backend units remain **341/341**. OpenAPI remains 175 paths / 226 operations;
-TD-3 remains **226/234**, eight pending, zero undocumented endpoints.
-
-Final review then identified a missing ordering: DB locks could expire while a
-remote COPY was still pending; cleanup could clear an absent destination's only
-locator before late bytes appeared. The original copy-then-error test did not
-cover it. The first continuation stopped without committing when the command
-approval service exhausted capacity (links then **1,037/1,037**); that interruption
-is not acceptance of the later code.
-
-The next continuation **reproduced the defect before changing production code**:
-one targeted assertion failed because the intent already had `completedAt` while
-the copy was still held behind a barrier (68 other assertions skipped). The
-barrier models an accepted request's delayed remote effect; the real object store performs
-the COPY only after caller failure and absent cleanup. This is deterministic
-failure injection, not a claim that a real network timeout was induced.
-
-The correction adds only `copy_settled` to the existing, still-uncommitted
-migration 96. Publication uses a one-attempt S3 client, verified by the regression;
-normal storage/presigning clients are unchanged. Unknown absence stays pending.
-Positive settlement commits before destructive I/O, and SQL rejects completion
-while the flag is false. The delayed-copy regression removes its own job history,
-reconciles while absent, releases the real copy, publishes a fresh winning key,
-then proves late-orphan retirement without deleting the winner. Additional real
-tests prove confirmed settlement survives a lost delete response, unknown absence
-cannot complete, and positive no-dispatch evidence permits absent completion.
-
-The two affected suites pass **77/77**, all-table isolation clean, browser
-**193/193**. The lifecycle drill passes **5/5** again; populated **95→96** passes
-with the new SQL copy-state check and unchanged legacy data. Exact typecheck
-initially found the unit fixture's missing new client property; that fixture was
-adapted without changing its behavior. No arbitrary grace period, cancellation assumption,
-second cleanup system or new destruction policy was introduced.
-
-Final affected batch: **193/193 across eight suites**, clean isolation and browser
-**193/193**. Final exact-code full disposable gate: **2,534 passed / 18 skipped /
-zero failures**, **112 files passed / two skipped**, **299.42 seconds** (start:
-2026-09-12 10:17:34 Africa/Casablanca), browser **193/193**, all-table isolation
-clean. Fresh **96/96** migrations and both seeds passed. The interrupted command
-exited zero; the next continuation matched the tracked runtime diff hash and all
-six intended new-file hashes before reusing the result. No code changed afterward.
-
-Final gates: backend lint, exact typecheck, **341/341** units (39 files), build,
-Prisma format/validate/generate, **30 non-link guards**, shell/Node syntax,
-**1,038/1,038** documentation links and diff checks passed. The first guard
-invocation hit a sandbox `tsx` IPC-socket denial, not a code failure; the approved
-retry passed without changing a gate. OpenAPI remains 175 paths / 226 operations,
-TD-3 **226/234** with the same eight pending and zero undocumented endpoints.
-
-Independent read-only Docker/process inventory found no disposable test containers,
-project volumes/networks/images or active test processes. Remaining anonymous
-volumes predate this batch (latest 2026-09-09); none was removed. All six new
-files are implementation/migration/test support, not generated residue. The
-complete diff was reviewed for scope, migration ordering, canonical protection,
-PII, fixture ownership and guard weakening. The new operational state stays in
-the shared repository/service lifecycle; no UI/API/audit framework was duplicated,
-no SRS or frontend contract changed, and no new constitution exception is required.
-B4/B5/B6 are locally accepted at this boundary; one local commit, no push.
-
-[Pre-maintenance legacy import](../operations/runbooks.md#b5-retirement-backlog-and-rollout)
-remains a separately authorized operational prerequisite. Unobservable copy
-outcomes retain their operational locator; a healthy worker is not a claim that
-the domain backlog is empty. This evidence is not Production approval.
-
 ## B1 SeaweedFS compatibility and recovery
 
-The [selected object store](../architecture/storage.md#b1-candidate-verification-checkpoint)
-is tested in isolated Compose projects, not against Owner Localhost or Staging. The shared
-Production store definition is used by `scripts/ci/test-integration.sh`, the Production-mode
-bootstrap/recovery drill and the focused storage-lifecycle drill. No live data was copied.
+The [selected object store](../architecture/storage.md#b1-candidate-verification-checkpoint) is tested in isolated Compose projects; the shared Production store definition serves `scripts/ci/test-integration.sh`, the bootstrap/recovery drill and the storage-lifecycle drill; no live data copied. B1 locally closed, not deployed.
 
-Compatibility defects found and proved before acceptance:
-
-- The bodyless browser presigner attached CRC32(empty). `WHEN_REQUIRED` applies only to
-  the public-origin client; internal checksums remain `WHEN_SUPPORTED`, placement COPY stays
-  single-attempt, and completion still checks the entire stream's SHA-256. The new unit test
-  checks the signature, non-default host port, absence of an invented body checksum and
-  retention of a rejecting internal checksum promise.
-- The old truncated-stream test expected MinIO's transport refusal. SeaweedFS instead reached
-  the application's explicit length-mismatch refusal. The parameterized real-stack regression
-  accepts only those precise failures for a short body, requires a transport failure to remain
-  a 503, proves no DB row/canonical object, cleans server staging, retains browser staging,
-  and then completes the same upload ticket and compares the full original bytes.
-- Explicit source failure exposed an unobserved Smithy checksum-promise rejection. A narrow
-  observation in the shared internal client preserves the same rejecting promise and pipeline
-  refusal. Before correction the real-edge run had 107 passing assertions **and an unhandled
-  rejection**, so it was not accepted. After correction: **108/108 across four suites**,
-  browser **193/193**, clean all-table isolation and exit zero. The standalone transport
-  probe also changed from caught-plus-unhandled to caught-only.
-- SeaweedFS serializes singleton policy Action/Resource values as strings. The shared
-  initializer accepts only that equivalent representation; its policy unit rejects added
-  grants, broad resources, conditions and `NotAction`. No policy is silently cleared.
-- Production recreation exposed a logical/physical volume-name assumption in the drill;
-  it now uses the existing label-based resolver. Restore then correctly refused an image
-  scaffold directory copied into a fresh volume. `volume.nocopy` prevents that copy-up;
-  the empty-target refusal itself is unchanged. Preflight negative cases cover wrong image
-  digest, reuse of the legacy physical volume and removal of `nocopy`.
-
-The focused four-suite run includes real Nginx signed PUT/GET, private Range 206, MIME and
-signed Content-Disposition, public canonical/stale/restricted/deleted-coordinate checks,
-public-staging denials and method/root normalization policy. Existing tests inspect the
-loaded Nginx configuration; the edge and authorization code were not modified. Content,
-recording ingest and durable retirement cover immutable winner protection, barrier-controlled
-late COPY, ambiguous copy/delete, retry and job-history-loss recovery on SeaweedFS. The
-standalone lifecycle drill passes **5/5**, including bounded GC and strict staging safety.
-
-Final exact-code full disposable run: **2,536 passed / 18 skipped / zero failed**, **112
-files passed / two skipped**, **433.40 seconds** (2026-09-12 20:35:41 Africa/Casablanca).
-Browser **193/193**, fresh **96/96** migrations, both seeds and all-table isolation pass.
-The Production-mode drill passes repeat bucket/seed initialization, **15/15** browser
-checks, dependency-down/readiness recovery, durable queue work, independent service restart,
-full stop/start, force-recreate with stable volume identities and encrypted raw-volume
-restore into empty targets. Post-restore private bytes and DB canaries revert to the recovery
-point, exact locally built image identities remain stable, and migration history is unchanged.
-These images were built from the uncommitted B1 worktree and labelled with its parent HEAD;
-this is local exact-image reuse evidence, not a hosted publication or release acceptance.
-
-Backend lint, exact typecheck, build and **342/342 units across 40 files** pass. The same
-30 non-link repository guards pass; OpenAPI remains **175 paths / 226 operations**, TD-3
-**226/234**, with the same eight pending and zero undocumented endpoints. No schema,
-migration, route, frontend behavior or SRS changes are part of B1.
-
-Final shell/Node syntax, diff and documentation-link checks pass (**1,046/1,046**).
-Independent Docker/process inventory finds no disposable containers, project volumes,
-networks, uniquely tagged test images or test processes. The temporary policy probe was
-removed; the pinned dependency image remains cached. All remaining anonymous volumes predate
-this batch, and the running legacy MinIO still mounts only `bodour_minio-data`.
-Complete diff review found no unrelated code, secrets, debug instrumentation or weakened
-guard. The change reuses shared S3 clients, initialization, retirement and recovery helpers;
-no additional constitution exception is needed. B1 is locally closed, not deployed.
+| Evidence | Figure |
+|---|---|
+| Bodyless browser presigner attached CRC32(empty) → `WHEN_REQUIRED` on the public-origin client only; internal checksums stay `WHEN_SUPPORTED`, placement COPY single-attempt, completion checks the whole stream's SHA-256; unit test checks signature, non-default host port, no invented body checksum | pass |
+| Truncated stream: SeaweedFS reaches the application's length-mismatch refusal (MinIO gave a transport refusal) → parameterized regression accepts only those failures, transport failure stays 503, no row/object, server staging cleaned, browser staging retained, same ticket completes with full bytes | pass |
+| Explicit source failure exposed an unobserved Smithy checksum-promise rejection → narrow observation in the shared client; 107 passing **plus an unhandled rejection** was not accepted | 108/108 (four suites), 193/193, exit zero |
+| SeaweedFS serializes singleton policy Action/Resource as strings → initializer accepts only that representation; policy unit rejects added grants, broad resources, conditions, `NotAction`; no policy silently cleared | pass |
+| Recreation drill assumed a physical volume name → label-based resolver; restore refuses an image scaffold copied into a fresh volume (`volume.nocopy`); preflight negatives: wrong image digest, legacy physical volume reuse, `nocopy` removed | pass |
+| Four-suite run: real Nginx signed PUT/GET, private Range 206, MIME, signed Content-Disposition, public canonical/stale/restricted/deleted coordinates, public-staging denials, method/root normalization; immutable winner, late COPY, ambiguous copy/delete, job-history-loss recovery; edge and authorization code unmodified | pass; drill 5/5 |
+| Final full run | 2,536 / 18 skipped, 112 files / 2, 433.40 s, browser 193/193, 96/96 migrations, isolation clean |
+| Production-mode drill: repeat bucket/seed init, dependency-down recovery, durable queue work, service restart, stop/start, force-recreate with stable volume identities, encrypted raw-volume restore into empty targets; canaries revert to the recovery point; images built from the uncommitted worktree, labelled with parent HEAD (local evidence only) | browser 15/15 |
+| Lint, typecheck, build, units; 30 guards; OpenAPI 175/226, TD-3 226/234; syntax/diff/doc links; no residue; legacy MinIO still mounts only `bodour_minio-data`; no schema, route, frontend or SRS change | 342/342 (40 files); 1,046/1,046 |
 
 ## Acceptance checklists
 
-A module is Done only when its checklist is fully ticked, its test gates pass, and its
-journeys run green. **Definition of done is per module, not per week.**
-
-The checklists are in SRS §18 — Authentication & Onboarding, Registration/Approvals/Family,
-Scheduling & Calendar, Quran Progress, Exams & Grading, Content/Consent/Storage,
-Data/Admin/Audit, and Platform & Deployment.
+A module is Done when its SRS §18 checklist is ticked, its test gates pass and its journeys run green — per module, not per week. Checklists: Authentication & Onboarding, Registration/Approvals/Family, Scheduling & Calendar, Quran Progress, Exams & Grading, Content/Consent/Storage, Data/Admin/Audit, Platform & Deployment.
 
 ---
 
 **Next:** [CI/CD](ci-cd.md) · **Related:**
-[User journeys](../overview/user-journeys.md), [Conventions](conventions.md)
+[User journeys](../overview/user-journeys.md), [Conventions](conventions.md), [UX rules](ux-architecture.md)

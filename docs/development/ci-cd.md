@@ -18,6 +18,9 @@
 | `check-design-tokens` · `check-header-nav-exclusive` · `check-dialog-hidden-when-closed` · `check-progress-css` · `check-shared-layout` · `check-logo-alpha` | raw CSS values / primitive tokens / unimported sheet; burger + nav both visible; closed dialog rendering; direction-blind progress; page-header or button system redefined; matted logo |
 | `check-security-headers` · `check-storage-edge` · `check-provider-seam` | an Nginx location dropping HSTS; MinIO reached outside the proxy policy; provider details escaping the seam |
 | `check-backup-tooling` · `check-release-artifacts` · `check-host-preflight` · `check-compose-operations` | floating restic image / unsafe restore; release able to precede a green gate or lacking the exact commit tag; loss of the host preflight; unbounded logs or missing health probes |
+| `check-no-pii-logs` | public input or personal identity crossing into operational logs or the AuditLog (TD-14) |
+| `check-storage-lifecycle` | the storage-retirement job or its exact-obligation contract regressing |
+| `check-ci-portability` | a guard depending on a tool the runner does not guarantee (`ripgrep` once made three guards pass vacuously) |
 | `check-doc-links` | broken relative link or missing anchor (§16.4, §19.2) |
 | `scripts/backup/test_*.py` | the backup scripts' own unit tests (12) |
 

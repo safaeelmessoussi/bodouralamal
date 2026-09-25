@@ -2,213 +2,65 @@
 
 # Calendar and Hijri
 
-The calendar is the platform's most visible surface — it is on the landing page, open to
-anonymous visitors — and its two halves each contain a decision worth understanding.
-
 ## Scheduling is schedule-driven
 
-Organisation and delivery are **separate**, and the calendar is where that separation
-becomes visible.
+Organisation and delivery are separate:
 
-```
-ORGANISATION  (who is grouped with whom)
-  AdministrativeGroup ── level + branch + name.  NO room, teacher, schedule or capacity.
-  TeachingGroup       ── subject + level.  Exists ONLY where a subject splits its students.
+| Layer | Entity | Carries |
+|---|---|---|
+| Organisation | `AdministrativeGroup` | level + branch + name; no room, teacher, schedule, capacity |
+| Organisation | `TeachingGroup` | subject + level; only where a subject splits its students |
+| Delivery | `RecurringCourseSchedule` | subject · `teaching_mode` ∈ `entire_level \| administrative_group \| teaching_group` + one target · branch · room · teacher + assistants · times · recurrence |
+| Delivery | `Session` | one dated occurrence from `session.materialize` (pg-boss, eager, to the academic-year horizon); own date, time, room, teacher, status; notes, recordings, content links, (later) attendance hang here |
+| Non-teaching | `Event` | holidays, ceremonies, exams, one-off activities; never generates a `Session` |
 
-DELIVERY  (what is taught, when, by whom, where)
-  RecurringCourseSchedule
-      subject · teaching_mode + ONE target · branch · room · teacher + assistants
-      start_time · end_time · recurrence
-      teaching_mode ∈ entire_level | administrative_group | teaching_group
+- Sessions are materialised eagerly so room, teacher **and assistant** overlap checks are exact.
+- A session edit marks the row `overridden`; a schedule edit skips overridden rows and any session with a note, recording, content link or grade, and reports what it skipped.
+- A split at the first session is the whole series (R165 §4): closing the predecessor before `anchor_date` is refused by a DB CHECK (used to `500`); a predecessor left with nothing is retired (soft-deleted, `predecessor_retired` audit row, no Trash snapshot: a restore would re-materialise over its successor); one owning protected history stays, closed on its anchor date.
+- A plain weekly class meets on its start date's weekday on every save (R172 §13): «أسبوعيًا» has no weekday control; `weekdaysForClass` (`frontend/src/adapters/scheduling.ts`) derives it from `تاريخ البداية` on create and edit; R87 «أيام محددة» patterns keep theirs.
+- Surah subjects (R165 §2/§5): `Subject.requires_surahs` (حفظ القرآن, تفسير القرآن), never the name; `resolveSurahs` (`policies/curriculum.ts`) is the one rule: a class names ≥1 Surah of the «مقرر الحفظ» of a Level it addresses (`course_schedule_surah`), an exam exactly one (`exam.surah_id`), an occurrence its own (`session_surah`), which REPLACES the class's for that date while audience dimensions are ADDED; occurrences carry `surah_names`; forms read marker, syllabus and names from `/me/scope-options`.
+- Nobody types a class title (R166 §3): `lib/item-title.ts` composes *type — Subject — Surah(s) — main teacher's public name — when* at read time (`services/class-title.ts` for lists and write responses; inline in the calendar projection); free text goes in «الوصف»; activities, holidays and sittings from an authored paper keep their typed title; a bare sitting's is composed but STORED in `exam.title` by `scheduleExam`, recomposed on edit only while still composed; in a `VARCHAR(120)` column Surahs give way first, then the main teacher, never «when»; `recurring_course_schedule.title` and `session.title` are retired in place (nullable, unwritten, unread).
+- «تعديل الحصة» changes everything about ONE session in one save (R166 §2): audience (five lists), Subject, Surah, room, delivery, date, times, visibility, «الوصف», staff; `PATCH /sessions/{id}` takes optional `audience`, written in the same transaction by the writer of `PUT /sessions/{id}/audience`, one version bump, own audit row; only changed fields are sent.
+- A class's branch is derived (R165 §6): «فروع» = who it is for; `branch_id` via `homeBranchOf`: the one branch chosen, else the room's, else the branch already held while still chosen, else the first chosen.
+- One unified public grid; anonymous visitors get the same filter set; every result stays visibility-filtered.
+- Login preserves the chosen public view (Owner 2026-09-07; R135 §4.4/TD-3.4): profile suggestions are returned, not auto-applied; `GET /me/calendar` keeps its personal meaning (R82(8)).
+- The calendar dialog is the only occurrence-detail surface (Owner 2026-09-07); no Session page; stable links carry kind, id, date to `/calendar`; a refresh does a focused tier-scoped day read first, so a stale, deleted or restricted coordinate is an unavailable state, not an existence leak.
+- Month view is a seven-column grid at every width (Owner rejected the phone agenda, 2026-09-07); phone cells put Gregorian right, Hijri left on separate rows, full-width tappable chips, truncated titles; the list/grid switch remains.
 
-           │  session.materialize  (pg-boss, eager, to the academic-year horizon)
-           ▼
-  Session ── ONE DATED OCCURRENCE
-      carries its OWN date · time · room · teacher · status
-      defaulted from the schedule, individually overridable
-      notes · recordings · linked content · (later) attendance hang HERE
-
-NON-TEACHING  (everything that is not a class)
-  Event  ── holidays · ceremonies · exams · one-off activities
-            NEVER generates a Session
-```
-
-**Sessions are materialized eagerly, not computed on read**, and the reason is conflict
-detection. Comparing recurrence *rules* cannot see that a weekly and a biweekly-alternating
-Tuesday 15:00 collide only on alternate weeks. Comparing materialized rows can, so overlap
-checks on room, teacher **and assistant** are exact rather than approximate.
-
-**A session edit is not a schedule edit.** Cancelling a class, moving it to another room, or
-adding a makeup are edits to a *session row*, which marks it `overridden`. The next schedule
-edit then leaves it alone — as it leaves alone any session carrying a note, a recording, a
-content link or a grade — and reports what it skipped. Silently discarding a human decision
-is the failure this rule exists to prevent.
-
-**A split at a class's first session is the whole series** (SRS Revision 165 §4). «هذه الحصة
-وكل ما بعدها» closes the predecessor the day before the split; at the first occurrence that
-day is before the class's own `anchor_date`, which a database CHECK refuses. It used to
-answer `500`. Now a predecessor left with nothing is **retired** (soft-deleted,
-`predecessor_retired` in the audit row, deliberately **no Trash snapshot** — a restore would
-re-materialize the series on top of its own successor), and one that still owns protected
-history stays alive to own it, closed on its anchor date.
-
-**A plain weekly class meets on its start date's weekday, on every save** (R172 §13). «أسبوعيًا»
-has no weekday control; the browser derives the weekday from `تاريخ البداية` on create AND on
-edit (`weekdaysForClass`, `frontend/src/adapters/scheduling.ts`) — it used to resend the stored
-weekday on edit, so moving the start from a Monday to a Tuesday kept Mondays. The R87 «أيام
-محددة» patterns keep their own weekday control.
-
-**Subjects that work by Surah say which Surah** (Revision 165 §2/§5). Whether a Subject works
-by Surah is its `requires_surahs` column — حفظ القرآن and تفسير القرآن carry it; no code reads
-a Subject's name. One rule, `resolveSurahs` in `policies/curriculum.ts`, is asked wherever
-something is scheduled: a class names one or more Surahs of the «مقرر الحفظ» of a Level it
-addresses (`course_schedule_surah`), an exam names exactly one (`exam.surah_id`), and one
-occurrence may name its own (`session_surah`). **An occurrence's Surahs REPLACE the class's for
-that date, where its audience dimensions are ADDED** — a Surah is what is taught that day.
-Calendar occurrences carry `surah_names`; the scheduling forms read the marker, each Level's
-syllabus and the Surah names from `/me/scope-options`, so a مؤطِّرة has them too.
-
-**A class is CALLED what it is; nobody types its title** (Revision 166 §3). A typed — or
-pre-filled — title went stale the first time a teacher, a Surah or an hour changed. A class and
-each of its occurrences now have none: every reader is given one composed at read time by
-`lib/item-title.ts` (*type — Subject — Surah(s) — main teacher's public name — when*), through
-`services/class-title.ts` for lists and write responses and inline in the calendar projection,
-which may hold a month of occurrences. A repeating class's own row carries its time and no date;
-each occurrence carries its own. What she wants to add goes in «الوصف», which the dialog shows.
-**An activity, a holiday and a sitting scheduled from an authored paper keep their typed title** —
-it is their identity. A bare sitting's is composed but STORED (`exam.title` is shared with
-authored titles), written by `scheduleExam` and recomposed on edit only while it is still the
-composed one. Where the text lands in a `VARCHAR(120)` column the composer takes a limit: Surahs
-give way first, then the main teacher, never «when». `recurring_course_schedule.title` and
-`session.title` are retired in place — nullable, unwritten, unread, nothing dropped.
-
-**«تعديل الحصة» changes everything about ONE session, in one save** (Revision 166 §2): its
-audience (the five lists), Subject, Surah, room, delivery, date, times, visibility, «الوصف» and
-staff. `PATCH /sessions/{id}` takes an optional `audience`, written in the same transaction by
-the writer `PUT /sessions/{id}/audience` uses — under one version bump, with its own audit row.
-Only what changed is sent: an inherited audience re-sent would become an override nobody made.
-
-**A class's own branch is derived, never asked twice** (Revision 165 §6). «فروع» says who the
-class is for; `branch_id` says whose administration runs it. إضافة عنصر asks only the first
-and derives the second (`homeBranchOf`): the one branch chosen, else the chosen room's, else
-the branch the class already has while the choice still includes it, else the first chosen.
-
-The calendar renders a unified grid of both sessions and events, in one list. **It is
-public**: anonymous visitors get the same filter set as signed-in users.
-Identical filters never means identical results — every result set stays visibility-filtered.
-The Owner's 2026-09-07 correction requires login to preserve the chosen public calendar
-view. The API still returns profile suggestions, but this page no longer applies them
-automatically: on populated localhost that second request changed 61 authorized occurrences
-to zero by choosing an unrelated profile branch/level. URL filters and explicit controls
-remain freely changeable. SRS Revision 135 ratifies this correction in §4.4/TD-3.4,
-including initial load, session restoration and authentication changes. No tier or scope
-predicate changes, and `GET /me/calendar` retains its personal meaning (R82(8)).
-
-The **calendar dialog is the only occurrence-detail surface** (Owner decision,
-2026-09-07). Grid chips, table titles and content back-links all open that
-same component; there is no dedicated Session page. Stable links carry kind, id
-and date to `/calendar`, and a refresh performs a focused, tier-scoped day read
-before opening. A stale, deleted or restricted coordinate is therefore an
-unavailable state, not a client-side reconstruction or existence leak.
-
-The month view remains a **seven-column grid at every width**. The Owner rejected the
-automatic phone agenda on 2026-09-07. Phone cells place Gregorian/right and Hijri/left
-on separate rows, retain readable type and full-width tappable occurrence chips, and
-truncate long titles. The canonical dialog holds complete details; no alternate page
-or duplicated agenda is rendered. The explicit list/grid switch remains available.
-
-> [`BR-17`](../reference/business-rules.md#br-17) ·
-> [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c
+> [`BR-17`](../reference/business-rules.md#br-17) · [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c
 
 ## Wall-clock time, and the Ramadan trap
 
-**Schedule, session and event times are local Moroccan wall-clock values** — a `time` or
-`date` with an implicit timezone — **not UTC instants.** Persisted timestamps (`created_at`, audit rows,
-job times) are UTC; scheduled times are not.
-
-The specification calls this out as *a known agent trap*, and it is worth the space:
-
-> Morocco observes UTC+1 but **suspends DST during Ramadan every year**. A weekly class
-> stored as a UTC instant would silently shift by an hour, twice a year, for every group in
-> the system.
-
-A class at 17:00 is at 17:00 on the wall clock. Always.
-
-Rendering, recurrence expansion, and "today" boundaries are computed in `Africa/Casablanca`.
-**Week starts Monday** everywhere.
+- Schedule, session and event times are Moroccan wall-clock `time`/`date` values, not UTC instants; `created_at`, audit rows and job times are UTC.
+- Morocco (UTC+1) suspends DST every Ramadan; a UTC instant would shift an hour twice a year; 17:00 is 17:00, always.
+- Rendering, recurrence expansion and "today" use `Africa/Casablanca`; week starts Monday; a named regression test covers a simulated Ramadan transition.
 
 ### Which offset Morocco observes — read from the host, never from an image
 
-SRS Revision 167 §2. Morocco changes its clock by decree, and did on 20 September 2026 (to
-UTC+0). The host knew the same day — `tzdata` arrives through unattended upgrades — and the
-platform did not: **Node converts local time with the ICU zone data compiled into its binary**
-(`process.versions.tz`), and an image freezes that and its own `tzdata` on the day it was built.
-Pinning tzdata in the image, which this page used to prescribe, is exactly what went stale.
+R167 §2. Morocco changes its clock by decree (20 Sep 2026 → UTC+0); Node converts local time with ICU data compiled into its binary (`process.versions.tz`), so pinning tzdata in the image (formerly prescribed) went stale.
 
-| Piece | What it does |
+| Piece | Role |
 |---|---|
-| `docker-compose.yml` | Mounts the HOST's `/usr/share/zoneinfo` read-only into `api` and `db` — one file is the authority for the application and for PostgreSQL's `Africa/Casablanca` alike |
-| `backend/src/lib/morocco-clock.ts` | Parses that TZif itself (RFC 8536, the 64-bit block), answers `moroccoOffsetMinutes`, `moroccoParts`, `moroccoDateIso`, `moroccoTimeHHMM` and `moroccoWallClockToInstant`, and **re-reads the file when its mtime changes** (checked every five minutes) — a host update reaches a RUNNING platform with no rebuild, release or restart |
-| `scripts/ci/check-no-local-clock.sh` | Nothing in `backend/src` may read the process's local clock — `getHours`, `new Date(y, m, d…)`, `toLocale…String` — because those go through ICU. Proven to fail on a planted violation |
-| `GET /clock` | Public, cacheable five minutes: `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }` |
-| `frontend/src/lib/morocco-time.ts` | `formatInstant` uses the SERVER's offset for instants inside its window, so a phone with outdated zone data still shows Morocco's time; older instants use the device's own `Africa/Casablanca` rules, which old rules it does know |
+| `docker-compose.yml` | mounts the HOST's `/usr/share/zoneinfo` read-only into `api` and `db`: one authority for the app and PostgreSQL's `Africa/Casablanca` |
+| `backend/src/lib/morocco-clock.ts` | parses the TZif (RFC 8536, 64-bit block): `moroccoOffsetMinutes`, `moroccoParts`, `moroccoDateIso`, `moroccoTimeHHMM`, `moroccoWallClockToInstant`; re-reads on mtime change (checked every five minutes) |
+| `scripts/ci/check-no-local-clock.sh` | nothing in `backend/src` may read the local clock (`getHours`, `new Date(y, m, d…)`, `toLocale…String`); proven to fail on a planted violation |
+| `GET /clock` | public, cacheable five minutes: `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }` |
+| `frontend/src/lib/morocco-time.ts` | `formatInstant` uses the SERVER's offset inside its window; older instants use the device's `Africa/Casablanca` rules |
 
-If the file cannot be read the backend falls back to ICU and **says so**: `source:
-"icu-fallback"` on `/clock`, wrong by at most the staleness of the image, never silently.
-`source: "host-zoneinfo"` is what a deployment verifies. `TZ` stays set in the containers only
-so that a line the guard missed fails by an hour rather than by a whole zone.
+- Unreadable file → ICU fallback declared as `source: "icu-fallback"`; a deployment verifies `source: "host-zoneinfo"`.
+- `TZ` stays set in containers only so a line the guard missed fails by an hour, not a zone.
+- pg-boss `tz` crons use bundled zone data: nightly jobs may run an hour off after a decree until rebuilt (housekeeping only); `session-recording-reconcile` runs every quarter hour in no zone.
 
-pg-boss computes its `tz`-qualified crons through its own bundled zone data, so after a decree
-the nightly jobs may run an hour early or late until the image is rebuilt. They are
-housekeeping with no wall-clock meaning, and `session-recording-reconcile` runs every quarter
-hour in no zone at all.
+## Recurrence and multi-scope events
 
-A named regression test asserts that wall-clock times survive a simulated Ramadan
-transition.
-
-## Recurrence
-
-Five patterns: none, daily, weekly, **biweekly-alternating** ("week on, week off"), and
-yearly.
-
-The alternating pattern is **modelled and tested explicitly** because it is the one naive
-implementations get wrong — usually by computing parity against an arbitrary epoch rather
-than the series' own anchor.
-
-## Multi-scope events, written explicitly
-
-An event may apply to several branches, categories, levels, or groups at once. Those
-relationships are **written into join tables at creation time**, never evaluated as
-wildcards at read time.
-
-Four join tables — branch, category, level, group — rather than one polymorphic table. That
-choice matters beyond the calendar: it is cited as the precedent for rejecting a generic
-`scope_type`/`scope_id` authorization framework, because a polymorphic scope column **cannot
-carry a foreign key** and would forfeit the referential integrity every other relation
-relies on. One schema should not contain two contradictory scope idioms.
-
-Only branches whose operational start date has arrived are populated.
-
-### Branch activation and backfill
-
-Each branch carries an `operational_start_date`. In branch-scoped calendar views, dates
-before it are **greyed out** with no scheduling data rendered.
-
-When a branch activates, an Admin performs a **manual backfill** listing the applicable
-global and recurring events to attach — or knowingly skips it.
-
-> **The gap is never silently auto-filled and never silently ignored.** Both silent options
-> are wrong: auto-filling invents history nobody scheduled, and ignoring it produces a
-> branch with an inexplicably empty calendar.
-
-Backfill stays an **Admin** capability even though branches are Super-Admin-managed
-reference data, because it is *operational* work — populating events when a branch
-activates — not reference management.
+- Five patterns: none, daily, weekly, biweekly-alternating (week on, week off), yearly; the alternating one is modelled and tested explicitly, parity against the series' own anchor.
+- Branch, category, level and group scopes are written into four join tables at creation, never wildcards on read; four tables, not one polymorphic one, is the precedent for rejecting a generic `scope_type`/`scope_id` authorisation framework (no foreign key possible).
+- Only branches whose `operational_start_date` has arrived are populated; branch-scoped views grey out earlier dates.
+- On activation an Admin manually backfills applicable global and recurring events or knowingly skips; never silently auto-filled nor silently ignored; an Admin capability (operational work) though branches are Super-Admin reference data.
 
 ## The scheduling-type catalogue (R110)
 
-**What an administrator picks from is reference data she manages**, not a
-constant in the client. Five rows, and the Owner calls their order canonical:
+Reference data she manages, not a client constant; Owner-canonical order:
 
 | # | Type | حضور إجباري | `structural_kind` | entity |
 |---|---|---|---|---|
@@ -218,556 +70,116 @@ constant in the client. Five rows, and the Owner calls their order canonical:
 | 4 | حفل | لا | `activity` | `Event` |
 | 5 | عطلة | لا | `holiday` | `Event` |
 
-**Six types, three entities, four structural kinds — and no fifth scheduling
-model.** (`نشاط` joined the five above; `holiday` became a kind of its own in
-R110(9), so عطلة is no longer an `activity`.) R56 settled that
-*"the type selector's branches are exactly the ones that mean something — the
-three that route to different entities"*, and R110 **stores** that routing rather
-than re-deciding it. Three of the five are the same entity, which is precisely
-why the catalogue has to exist as data: an `Event` could not previously say which
-of حفل, محاضرة and عطلة it was, because the only place that difference lived was
-whatever an administrator typed in the title.
-
-### R56 refused this column, and named the condition for adding it
-
-R56 declined `Event.type` because *"the category would drive no rule, no job, no
-report"* — and said in terms that *"it may be added when filtering or reporting by
-category becomes a real requirement."* **`attendance_required` is that
-requirement** (OD-03): it drives the form, which is why it is a stored column and
-not display text. So this exercises R56's own clause. **Its other half stands: a
-holiday still cancels no class** — BR-17 keeps non-teaching activity out of the
-timetable and §4.4(6) makes a cancellation an edit to a `Session` row. عطلة is an
-ordinary schedulable activity (OD-03), not a suppression mechanism.
-
-### Two things share a name, and keeping them apart is the design
-
-| question | answered by |
-|---|---|
-| which types exist, their names, their order, which take attendance | **the catalogue**, from the server |
-| what an entity can express — all-day, an end date, `once`, drillable occurrences | **`adapters/scheduling-types.ts`**, in code |
-
-The second is not administrable and must never become so: no amount of managing
-reference data can make an `Event` have materialized occurrences, or let a
-`RecurringCourseSchedule` recur `none` — the database refuses it. A row's
-`structural_kind` is the join between the two.
-
-### Rules that hold
-
-* **`structural_kind` is never inferred from the name** (§4.4b) and is **fixed
-  after creation**: changing it would re-point every activity recorded against
-  the row at a model that cannot represent them.
-* **`Event.scheduling_type_id` is nullable and required at the boundary** (R35).
-  Activities created before R110 record their type nowhere a query can reach, and
-  guessing one from the title is exactly the name-matching §4.4b forbids.
-* **Deletion is refused while an activity names the type** — `ON DELETE RESTRICT`
-  plus a TD-5 blocked-delete check, so a retired type stays resolvable by the
-  activities that used it.
-* **Read: any staff who may schedule**, a مؤطِّرة included (R93/R94). **Write:
-  Super Admin only** (OD-01), which keeps R105's الإدارة heading a fact about
-  permission. The menu node is never the control.
-* **Seeded does not mean immutable.** The seed finds by live name and creates
-  only when absent, so a rename, a reorder, a re-flag and an addition all survive
-  the next run.
+- Six types (`نشاط` joined), three entities, four structural kinds, no fifth scheduling model; `holiday` is its own kind since R110(9); R56 fixed the selector's branches as the three entities, R110 stores that routing.
+- R56 declined `Event.type` until filtering/reporting by category became real; `attendance_required` (OD-03) is that requirement and drives the form. A holiday still cancels no class (BR-17; §4.4(6)); عطلة is an ordinary schedulable activity (OD-03), not a suppression mechanism.
+- The catalogue (server) answers which types exist, names, order, attendance; `adapters/scheduling-types.ts` (code, never administrable) answers what an entity can express (all-day, end date, `once`, drillable occurrences); `structural_kind` joins the two.
+- `structural_kind` is never inferred from the name (§4.4b) and is fixed after creation.
+- `Event.scheduling_type_id` is nullable, required at the boundary (R35); pre-R110 activities record no type and are not guessed.
+- Deletion refused while an activity names the type: `ON DELETE RESTRICT` plus a TD-5 blocked-delete check.
+- Read: any staff who may schedule, مؤطِّرة included (R93/R94); write: Super Admin only (OD-01); R105's الإدارة menu node is never the control.
+- Seed finds by live name and creates only when absent; rename, reorder, re-flag and addition survive re-runs.
 
 ### The catalogue is what the calendar filters by (Owner, 2026-09-02)
 
-`الجدول الزمني → النوع` offered `session | event | exam` — **the storage
-taxonomy**, which is not the association's vocabulary and cannot express it.
-Three of the six catalogue rows are the same entity, so `type=event` returned
-نشاط, حفل *and* عطلة together: **a holiday could not be asked for at all**, and
-the chip for one read «نشاط».
-
-Three changes, and each is needed for the others to mean anything:
-
-1. **`scheduling_type_id` on the two entities that lacked it.** Only `Event`
-   recorded a catalogue row, so «حصة دراسية» and «محاضرة» — two rows of one
-   `structural_kind` — were indistinguishable on a class, and a class type had
-   nothing to narrow by. `RecurringCourseSchedule` and `Exam` now carry the same
-   nullable, `RESTRICT` column, set through the same picker the form already
-   rendered and validated by the same rule (`assertTypeOfKind`, which
-   `assertActivityType` is now a wrapper over).
-2. **`GET /calendar?scheduling_type_id=` .** The server resolves the type's
-   `structural_kind` **first** — which decides *which of the three sources can
-   hold such a row at all*, so a class type never queries the `Event` table —
-   and then narrows within that source by id. That ordering is what lets two
-   types of one kind be filtered apart.
-3. **The options come from `GET /calendar/bootstrap`**, which every calendar
-   already fetches for its Hijri overlay, so the control costs no request and
-   **cannot be wrong the day somebody adds a type**. One module,
-   `components/calendar/scheduling-type-filter.ts`, serves both the public and
-   the personal calendar: they had two copies of the same hard-coded array.
-
-**Legacy rows are not guessed.** Every schedule and sitting created before this
-revision records no type, none was backfilled, and such a row **matches no type
-filter** while remaining visible under «الكل». A `structural_kind` fallback is
-the tempting bug and is wrong twice over: it would make one untyped class answer
-to «حصة دراسية» *and* to «محاضرة» — two contradictory claims from a row that
-records neither — which is the name-matching §4.4b forbids, arrived at from the
-other direction. The column is editable precisely so somebody who *knows* what a
-row was can say so.
-
-**`type` is still accepted**, so a link saved before the revision narrows the
-same grid; both may be sent and each narrows independently. An id naming no type
-returns an empty set rather than being ignored — silently returning the whole
-grid answers a question nobody asked.
-
-**A عطلة is marked from the row, never from its name.** Each occurrence carries
-`scheduling_type_id`, `scheduling_type_name` and `structural_kind`, and the chip
-renders an outline plus **the type's own word** beside the title (rule AV: the
-word carries the meaning, the tint follows it). Matching «عطلة» as a string
-would break the moment the administration renames the row — which is the one
-thing the catalogue exists to let them do.
-
----
+`الجدول الزمني → النوع` used to offer the storage taxonomy `session | event | exam`, so a holiday could not be asked for:
+1. `scheduling_type_id` (nullable, `RESTRICT`) added to `RecurringCourseSchedule` and `Exam`, validated by `assertTypeOfKind` (`assertActivityType` wraps it).
+2. `GET /calendar?scheduling_type_id=` resolves the type's `structural_kind` first (which source can hold it), then narrows by id.
+3. Options come from `GET /calendar/bootstrap`; one module, `components/calendar/scheduling-type-filter.ts`, serves public and personal calendars.
+- Legacy rows are not guessed: pre-revision schedules and sittings have no type, none backfilled; they match no type filter, stay visible under «الكل», and the column is editable; a `structural_kind` fallback would be §4.4b name-matching.
+- `type` is still accepted and narrows independently; an id naming no type returns an empty set.
+- A عطلة is marked from the row, never its name: occurrences carry `scheduling_type_id`, `scheduling_type_name`, `structural_kind`; the chip renders an outline plus the type's own word (rule AV).
 
 ## Three visibility tiers — on all three kinds (R109)
 
-Stored as an enum, never a boolean, and since **Revision 109** it is carried by every kind of
-scheduling item rather than by نشاط alone:
+Enum, never boolean; since R109 on every kind (before, a class was unconditionally public per §4.4 and a sitting had no tier); pre-existing rows were backfilled `public`.
 
 | Kind | Column | Notes |
 |---|---|---|
-| نشاط `Event` | `event.visibility` | Since it shipped. **The default moved `private` → `public`** for new rows only |
-| حصة `RecurringCourseSchedule` | `.visibility` | The **template** — the default for the Sessions it materializes |
-| حصة `Session` | `.visibility` | The **snapshot**, written at materialization |
-| امتحان `Exam` | `.visibility` | One column, no snapshot: a sitting materializes nothing |
-
-Before R109 a class was unconditionally public (§4.4 — *"Sessions are PUBLIC"*) and a sitting
-had no tier at all (§4.6 — *"it appears to the audience that can see the level it belongs
-to"*, which describes the **audience** and answers nothing about publication). The
-association could therefore announce a celebration and not a class, and could not arrange a
-sitting quietly at all.
-
-**Every row that existed before the revision was backfilled `public`**, so the browsable
-timetable is unchanged in fact; what changes is that it becomes a decision somebody takes
-rather than a property of the model.
+| نشاط `Event` | `event.visibility` | default moved `private` → `public` for new rows only |
+| حصة `RecurringCourseSchedule` | `.visibility` | template: default for materialised Sessions |
+| حصة `Session` | `.visibility` | snapshot at materialisation |
+| امتحان `Exam` | `.visibility` | one column, no snapshot |
 
 | Tier | Who sees it |
 |---|---|
-| **Public** | Unauthenticated visitors and every approved user |
-| **Private** | Any logged-in approved **Student** — deliberately *not* filtered by their own branch or group — Parents in a linked student's context, and Staff within branch scope |
-| **Hidden** | **The responsible person for that item, plus Super Admins. Nobody else.** Invisible to students and parents entirely |
+| Public | unauthenticated visitors and every approved user |
+| Private | any logged-in approved Student (deliberately not filtered by own branch/group), Parents in a linked student's context, Staff within branch scope |
+| Hidden | the responsible person plus Super Admins; invisible to students and parents |
 
 ### `hidden` is OWNERSHIP, and R109 narrowed it
 
-§4.4 read *"Teachers whose scope intersects … and **all Admins regardless of branch scope**"*.
-R109 replaces both arms with one question — *who answers for this item?* — which each kind
-already records:
-
-| Kind | Responsible | Dated? |
-|---|---|---|
-| نشاط | `EventStaff.position = 'responsible'` (R71.3) | no |
-| حصة | `SessionStaff.position = 'teacher'` | **yes** |
-| امتحان | `ExamStaff.position = 'supervisor'` | no |
-
-**This removes reach somebody has today** — every Admin currently sees every hidden نشاط —
-and that is the Owner's decision rather than a side effect. It is the one place in the
-revision where the rule takes access away.
-
-**An assistant does not read a hidden item.** R87 §G — *an assistant IS the main teacher for
-operational authorization* — is about **acting on** a class she staffs. `hidden` is not an
-operation on the class; it is who the item belongs to, and each kind's responsible position
-is named explicitly. `EventStaff` already draws exactly this line: both positions see, only
-`responsible` may edit.
-
-### Event definition authorization (B6)
-
-**B6 — Event management definitions are not public occurrences.** `GET /events`
-allows a Teacher only group-only definitions whose complete group set she teaches,
-or definitions with her live `EventStaff` assignment; R109 still excludes hidden
-items unless she is responsible. Date filters are combined with authorization,
-never overwritten by its `OR`. Public calendar visibility is unchanged.
-
-Creation authorizes the complete explicit branch/group request before applying
-the operational-branch filter. A foreign ID refuses the whole request, and an
-empty resolved branch request cannot silently become global. R139's explicit
-`global:true` still expands to all operational branches permitted to the Admin;
-it is distinct from a mixed explicit request. Category/Level/group joins retain
-their intersection semantics. R71/R72 still restrict Teacher-created Events to
-their own groups. PATCH still refuses scope keys; this does not invent a scope
-editing or series-splitting route.
-
-### One main teacher per DATE, not per series
-
-R91 withdrew `@@unique([scheduleId, userId])`, so one schedule holds several
-`position = 'teacher'` rows with different effective periods. *"At most one main on any given
-date"* is an enforced invariant (`OVERLAPPING_MAIN_TEACHER`); *"one main for the series"* is
-not true at all.
-
-So a hidden occurrence's owner is resolved **on that occurrence's own date**. Resolving it as
-of *now* would strip a replaced مؤطِّرة of the occurrences she actually taught and hand her ones
-she did not — the same defect caught in R106's exam scope.
-
-`SessionStaff` is how that resolution is spelled, and it is not a shortcut:
-`session.materialize` writes the snapshot from `CourseScheduleStaff` effective on that
-occurrence's own date, so the rule holds by construction; where the two can differ at all — a
-past, overridden or otherwise protected occurrence — the snapshot is *the correct answer*, in
-R91's own words (*"schedule staffing answers who is assigned for this period; `SessionStaff`
-answers who took this class"*). It is also the only form expressible as a query filter, since
-no `where` can compare a parent row's `date` against a related row's effective range.
+§4.4's «Teachers whose scope intersects … and all Admins regardless of branch scope» became *who answers for this item* (Admin reach removed by Owner decision): نشاط `EventStaff.position = 'responsible'` (R71.3); حصة `SessionStaff.position = 'teacher'`, resolved on the occurrence's date; امتحان `ExamStaff.position = 'supervisor'`.
+- An assistant does not read a hidden item: R87 §G is about acting, not ownership; `EventStaff` draws the same line (both positions see, only `responsible` edits).
+- B6, event definitions: `GET /events` allows a Teacher only group-only definitions whose complete group set she teaches, or ones with her live `EventStaff` assignment; hidden stays excluded unless responsible; date filters combine with authorisation, never overwritten by its `OR`.
+- B6, creation: the complete explicit branch/group request is authorised before the operational-branch filter; a foreign ID refuses the whole request; an empty resolved branch request cannot become global; R139 `global:true` expands to all operational branches permitted to the Admin; joins keep intersection semantics; R71/R72 restrict Teacher-created Events to own groups; PATCH refuses scope keys; no scope-editing or series-splitting route.
+- One main teacher per DATE, not per series: R91 withdrew `@@unique([scheduleId, userId])`; «at most one main on any date» is enforced (`OVERLAPPING_MAIN_TEACHER`); `session.materialize` snapshots `SessionStaff` from `CourseScheduleStaff` effective that date (R91: `SessionStaff` answers who took the class), the only form expressible as a `where` filter.
 
 ### Where the tier applies — and where it must not
 
-The tier gates **calendar and public occurrence reads**: `GET /calendar`, `GET /me/calendar`,
-the focused §5.2 Session read, and the Sessions a content item is used by. A caller who may not read
-an occurrence receives **`404`, never `403`** — a distinguishable refusal would confirm that
-the hidden class exists (§20 rule 17).
-
-It is **not** applied to the management lists (`GET /admin/events`, `/admin/course-schedules`,
-`/admin/exams`), which stay governed by role plus branch scope. `hidden` is a *publication*
-tier, not an administration one: an Admin who could no longer see a hidden class in the
-management list could no longer un-hide it, so applying the tier there would make hidden
-items **unadministrable** rather than confidential.
-
-Two accepted trade-offs are recorded rather than hidden:
-
-- **Cross-branch private visibility** (Risk R-6): any logged-in student sees every private
-  event across all branches. Accepted deliberately; revisit if branches request isolation.
-  A consequence worth naming: a **branch-scoped Admin sees less private material than any
-  approved beneficiary does**, because §4.4 bounds staff by branch and does not bound
-  students at all. Unchanged by R109.
-- **Hidden-event existence leaks through conflict detection** (Risk R-7): a room-conflict
-  check against a hidden event reveals that *something* occupies that slot. Accepted
-  consciously — and it now applies to a hidden حصة for the same reason.
-
-`Pending` users see the public tier only, which is effectively nothing beyond the public
-calendar.
-
-The public calendar route is optionally authenticated. Its frontend therefore sends the
-current access token when one exists and sends none for an anonymous tab; it never chooses a
-tier itself. The server classifies the live actor. An Active account with no Student, Parent
-or staff role receives the public tier only — lifecycle state alone is not private-calendar
-authority.
-
-### The tier travels schedule → occurrence
-
-Exactly as `room_id` (R43.4) and `delivery_mode` (R97) do, through the mechanism that already
-exists rather than a second one:
-
-1. `RecurringCourseSchedule.visibility` is the **default**.
-2. `session.materialize` **snapshots** it onto each occurrence it creates, and **resyncs**
-   future, un-protected occurrences when the schedule is edited.
-3. `session.overridden` **protects** a per-occurrence decision from that resync — so *«this
-   one Thursday stays hidden»* survives an edit that publishes the series.
-
-There is deliberately **no `visibility_overridden` column**: a second override marker would
-give *«did a human decide about this occurrence?»* two answers that drift. An R50 split
-carries the tier onto the successor and may change it, which is what lets the scope prompt
-express *«hide it from here on»*.
-
-### On the screen (§D)
-
-**One control, `VisibilityField`, everywhere the tier is decided** — the scheduling form for
-all three kinds, and the occurrence editor. It lived inside `ActivitySection` while نشاط was
-the only kind that had a tier; leaving it there would have meant the same three options
-written out four times, which on this project has always drifted.
-
-**The form hydrates from the row, never from the default.** `fromSchedule` and `fromExam`
-carry the stored tier for the same reason `fromEvent` does since §A: the state initialiser
-reads `item?.visibility ?? 'public'`, so a mapper returning `null` republishes a hidden class
-on an unrelated edit — silently, because `dirty` stays false while both halves of the
-comparison agree with each other and neither agrees with the record.
-
-**An occurrence edit uses R50's existing prompt and nothing new.** The three scopes already
-route to the three endpoints that own them, so the tier joins the fields they already carry:
-
-| scope | reaches | effect on the tier |
-|---|---|---|
-| هذه الحصة فقط | `PATCH /sessions/{id}` | this occurrence only, and it becomes `overridden` |
-| هذه الحصة وكل ما بعدها | the R50 split | the successor's tier; earlier occurrences untouched |
-| كل الحصص | `PATCH /admin/course-schedules/{id}` | the rule, resyncing future un-protected occurrences |
-
----
+- Gates `GET /calendar`, `GET /me/calendar`, the focused §5.2 Session read, and the Sessions a content item is used by; refusal is `404`, never `403` (§20 rule 17).
+- Not applied to `GET /admin/events`, `/admin/course-schedules`, `/admin/exams` (role plus branch scope), else hidden items would be unadministrable.
+- Accepted: Risk R-6 cross-branch private visibility (any logged-in student sees every private event; a branch-scoped Admin sees less than a beneficiary); Risk R-7 existence leaks through conflict detection (hidden نشاط and حصة alike).
+- `Pending` users, and Active accounts with no Student, Parent or staff role, see the public tier only; the frontend sends the access token when one exists and never chooses a tier.
+- The tier travels schedule → occurrence like `room_id` (R43.4) and `delivery_mode` (R97): schedule default, `session.materialize` snapshot with resync of future un-protected occurrences, `session.overridden` protection; no `visibility_overridden` column (two markers would drift); an R50 split carries the tier onto the successor and may change it.
+- Screen (§D): one control, `VisibilityField`, in the scheduling form for all three kinds and the occurrence editor (moved out of `ActivitySection`); `fromSchedule`, `fromExam`, `fromEvent` hydrate the stored tier, since the initialiser's `item?.visibility ?? 'public'` would silently republish a hidden class on a `null`.
+- An occurrence edit uses R50's prompt: هذه الحصة فقط → `PATCH /sessions/{id}` (becomes `overridden`); هذه الحصة وكل ما بعدها → the R50 split (successor's tier); كل الحصص → `PATCH /admin/course-schedules/{id}` (resyncs future un-protected occurrences).
 
 ## The Hijri overlay
 
-The more interesting half, and one of the clearer examples of this project's method.
-
-### The problem
-
-**Morocco fixes each Hijri month by local moon sighting**, announced by the **Ministry of
-Habous and Islamic Affairs** on the evening of the 29th. It regularly differs from Umm
-al-Qura and from every calendar library's algorithm — for example, 1 Muharram 1448 falls on
-Wednesday 17 June 2026, where Umm al-Qura gives 16 June.
-
-### What was tried, and why it failed
-
-The original design used a library algorithm plus a **globally adjustable ±2-day offset**
-that a Super Admin could tune.
-
-**Revision 31 removed it entirely.** The reasoning: an offset can only ever *approximate* a
-sighting-based calendar, and it approximates it **uniformly** — while the Ministry's actual
-divergence from Umm al-Qura varies month to month. A single global correction is the wrong
-shape for a per-month phenomenon.
-
-### What replaced it
-
-> **The platform reproduces exactly the official Hijri calendar published by the Ministry.
-> It computes nothing.**
-
-One table, `HijriMonthStart`, records per Hijri year and month the Gregorian date on which
-that month officially began. **Every Hijri value in the platform derives from it**, through
-a single resolution function that every consumer goes through.
-
-```
-Super Admin records the Ministry's announcement
-   └─ HijriMonthStart(year, month, gregorian_start_date, status = draft)
-        └─ reviewed, then published
-             └─ ONLY published months render anywhere
-                  └─ every calendar consumer resolves through one function
-                     against this one table
-```
+- Morocco fixes each Hijri month by local moon sighting, announced by the Ministry of Habous and Islamic Affairs on the evening of the 29th; it regularly differs from Umm al-Qura (1 Muharram 1448 = Wednesday 17 June 2026; Umm al-Qura: 16 June).
+- Rejected (R31): library algorithm plus a Super Admin ±2-day global offset; a uniform correction cannot fit a per-month divergence.
+- The platform reproduces the official calendar and computes nothing: `HijriMonthStart(year, month, gregorian_start_date, status)`, `draft` → `published`; only published months render; every consumer resolves through one function against this table.
+- The Super Admin records, never decides (R32 vocabulary rule across SRS, API, UI, code): *record official month start*, *publish official month*, *official Ministry announcement*; never *choose*, *define* or *set month*.
+- Recording is recurring owner work (about one per month plus Ministry corrections).
+- Month 1–12, year 1300–1600; two months of one year may not share a Gregorian start; month n+1 must start after month n (DB-enforced).
+- Version column for optimistic locking; the recording audit row captures previous and new start date.
 
 ### The overlay is invisible until someone records a month — including in development
 
-This is the single most common source of *"the Hijri dates are broken"*, and they are not.
+`HijriMonthStart` starts empty and the production seed puts nothing in it (§15.1), so a fresh deployment renders no Hijri values, indistinguishable from a broken feature.
 
-`HijriMonthStart` starts **empty**. The production seed deliberately puts nothing in it
-(§15.1), so a fresh deployment renders **no Hijri values at all** until a Super Admin records
-the Ministry's announcements. That is correct by rule and indistinguishable, on screen, from a
-broken feature.
-
-Two further boundaries follow from the resolver, and both look like bugs until you know them:
-
-| Situation | What renders | Why |
-|---|---|---|
-| Nothing recorded | Nothing | Silence over guessing |
-| A month recorded but **`draft`** | Nothing | Only published months render anywhere |
-| A month recorded, the **next one not** | Its first **29** days only | Knowing when a month *began* says nothing about when it *ended* — that depends on the next sighting. Day 30 is only certain once the following month is recorded |
-| Two **consecutive** months recorded | The earlier one, complete | The later start is what proves the month ran 29 or 30 days |
-
-So a partly-labelled month on screen — the first half filled, the second blank — is **the
-resolver working correctly**, not a gap. It means the following month has not been announced
-yet.
-
-**The development fixtures deliberately seed nothing here**, and the reason is worth knowing
-because it is not obvious.
-
-Only two real announcements exist anywhere in this project: 1 Dhu al-Hijja 1447 = 18 May 2026
-and 1 Muharram 1448 = 17 June 2026 (recorded in Revision 31). Seeding beyond them would mean
-**inventing** an official religious calendar — a fabricated month start looks authoritative
-and is wrong, which is the worst possible failure for this feature.
-
-And **the integration suites own those two years, with the stronger claim.**
-`calendar.integration.test.ts` asserts that 16 June 2026 still reads `1447-12-30` — Umm
-al-Qura puts 1 Muharram 1448 there, Morocco announced the 17th — and that test is the guard
-that catches an algorithm creeping back in. It must use the real values. Since
-`(hijri_year, hijri_month)` is unique, a fixture row for 1447/12 collides with the row that
-test creates, and the suite's cleanup deletes it. **A fixture that vanishes the first time
-someone runs the tests is worse than no fixture**, because the disappearance is silent.
-
-> **To see the overlay locally, record two consecutive months through the API** — the exact
-> calls are in [Recording an official Hijri month](../operations/runbooks.md#recording-an-official-hijri-month).
-> Two, not one: a single month resolves only its certain 29 days.
-
-> **There is currently no interface for recording a month.** The Super Admin
-> *Hijri Calendar Management* screen (§5.7) is not built; the four endpoints exist, so the
-> only way to record an announcement today is an authenticated API call. Until that screen
-> ships, keeping the overlay current is a task nobody can perform through the product.
-
-### Three consequences, all deliberate
-
-**A month that has not been recorded and published carries no Hijri label at all.** Not a
-computed guess, not a fallback algorithm — nothing. Where the official answer is genuinely
-not yet known, the platform says nothing. Fabricating one would defeat the entire purpose.
-
-**This is recurring administrative work**, not a one-off setup task: roughly one recording a
-month, plus any correction the Ministry issues. It is listed as an owner task for exactly
-that reason.
-
-**The Super Admin records; they do not decide.** Revision 32 made this a vocabulary rule
-enforced across the specification, the API, the interface, and the code:
-
-| Required | Prohibited |
+| Situation | Renders |
 |---|---|
-| *record official month start* | *choose month start* |
-| *publish official month* | *define month* |
-| *official Ministry announcement* | *set month* |
+| nothing recorded, or recorded but `draft` | nothing (silence over guessing) |
+| a month recorded, the next not | its first 29 days only; day 30 is certain only once the next month is recorded |
+| two consecutive months | the earlier one, complete |
 
-This is not pedantry. Wording that reads as a choice invites treating the value as editorial
-judgement, and the platform's entire claim is that it **reproduces an external authority
-rather than forming its own view.**
+- Development fixtures seed nothing: only two real announcements exist (1 Dhu al-Hijja 1447 = 18 May 2026; 1 Muharram 1448 = 17 June 2026, R31); more would invent an official calendar.
+- `calendar.integration.test.ts` asserts 16 June 2026 reads `1447-12-30` with real values (the guard against an algorithm creeping back); `(hijri_year, hijri_month)` is unique, so a fixture row for 1447/12 would collide and be deleted by the suite's cleanup.
+- To see the overlay locally, record two consecutive months via the API: [Recording an official Hijri month](../operations/runbooks.md#recording-an-official-hijri-month).
+- NOT BUILT: the Super Admin *Hijri Calendar Management* screen (§5.7); the four endpoints exist, so an authenticated API call is the only way to record a month.
 
 ### Why there is no importer
 
-An investigation is recorded in the specification, and its conclusion is a design decision:
-
-The Ministry publishes each month start as a **prose news announcement after the sighting**.
-There is **no API, no feed, no downloadable dataset**. And because Morocco fixes each month
-by observation on the evening of the 29th, **a full year cannot be published in advance**.
-
-So a shipped import endpoint could only ever answer *not configured*.
-
-> An endpoint that cannot succeed is not an integration point; it is a promise the system
-> cannot keep, and it invites a client to build against it.
-
-The manual path is therefore **the primary path, not a fallback**.
-
-**Extensibility is preserved by data, not by scaffolding.** No abstract provider interface
-or registry ships, because an abstraction with no implementation is unused scaffolding.
-What remains is sufficient and deliberate:
-
-- `recordMonthStart` is **the single write path**, so a future importer calls the same
-  service and inherits its ordering rule, optimistic locking, draft state, and audit trail.
-- `HijriMonthStart.source` records provenance on the row, so imported and manually recorded
-  months are distinguishable **without a schema change**.
-- Every reader already goes through one resolution function against one table.
-
-If the Ministry ever publishes an API or dataset, an importer is added **without redesigning
-anything** — what is needed is a fetcher, a route, and an audit row.
-
-### Re-examined 2026-08-05: automation was reconsidered and rejected again
-
-The Document Owner restated *"the system MUST always follow the official Moroccan Hijri
-calendar"* as a project constraint and asked whether something more robust than manual
-maintenance was possible. It was re-examined from scratch, and **the constraint is precisely
-what rules automation out.**
-
-Every automatable Hijri calendar is a *calculation*, and Morocco does not calculate:
-
-| Candidate | Why it fails the constraint |
-|---|---|
-| **Umm al-Qura** | Saudi Arabia's calculated calendar. Diverges from Morocco's announcements regularly, and by design — different country, different method |
-| **Tabular / arithmetic** | A fixed 30-year leap cycle. Cannot represent an observation-based calendar at all |
-| **Astronomical conjunction / visibility models** | Predicts when the crescent *could* be seen. Morocco declares when it *was* seen, by naked eye, from Moroccan territory — the two disagree whenever weather or judgement intervenes |
-| **Scraping the Ministry's announcements** | Prose news posts with no stable structure, published *after* the sighting. A parser here fails silently and produces a wrong date, which is worse than no date |
-
-**An automated overlay would not be occasionally imprecise — it would be confidently wrong**,
-and a wrong official date is a worse failure than a missing one. Automation does not serve
-this constraint; it violates it. **The Revision 32 decision stands unchanged.**
+- The Ministry publishes a prose news announcement after each sighting: no API, feed or dataset, no year in advance; an import endpoint could only answer *not configured*, so none ships and the manual path is primary.
+- No provider interface or registry (unused scaffolding); `recordMonthStart` is the single write path (ordering rule, locking, draft state, audit trail), `HijriMonthStart.source` records provenance, one resolver serves every reader; a future importer needs a fetcher, a route and an audit row.
+- Re-examined 2026-08-05 on the Owner's constraint «the system MUST always follow the official Moroccan Hijri calendar»: automation rejected again, R32 stands: Umm al-Qura is a Saudi calculation that diverges by design; tabular/arithmetic is a fixed 30-year cycle; astronomical models predict when the crescent could be seen, not when it was; scraping the Ministry's prose fails silently with a wrong date.
 
 ### The failure mode that IS worth fixing: running out in silence
 
-Correctness was never the weakness of the manual path — [silence over guessing](#the-overlay-is-invisible-until-someone-records-a-month--including-in-development)
-is exactly right, and `baseHijri` returns `null` rather than a guess.
-
-The weakness is **operational**: when the recorded months run out, every date quietly renders
-Gregorian-only and *nothing says so*. No error, no log, no screen state. A manually maintained
-dataset that degrades in silence is how a feature stops working without anyone noticing.
-
-So `GET /admin/hijri-calendar` carries a **`coverage`** block — `published_through`,
-`days_remaining`, `warning`, `next_unrecorded` — on the screen that exists to maintain it.
-
-Four decisions inside it, each with a reason:
-
-- **It computes no Hijri date.** It is arithmetic on Gregorian dates the Ministry supplied.
-  The constraint is untouched.
-- **`days_remaining` counts to the 29-day floor, not 30**, because day 30 only resolves when
-  the next consecutive month is recorded. Counting to 30 would promise runway the resolver
-  will not deliver.
-- **It goes negative rather than clamping at zero.** *Expired 40 days ago* and *expires today*
-  call for different urgency, and clamping erases the difference.
-- **`null`, never `0`, when nothing is published.** *Nobody has recorded anything* and *it ran
-  out today* are different answers; a screen showing `0` for both reports an expiry that never
-  existed.
-
-**Only published months count** — §5.7 renders only those, so counting drafts would report
-runway the platform will not use.
-
-**No route was added** (§20 rule 16): this extends the response of the endpoint that already
-exists for exactly this job.
-
-### Constraints that protect the data
-
-Beyond the obvious range checks (month 1–12, year 1300–1600 — which brackets any date this
-platform will render while rejecting a mistyped Gregorian year):
-
-- **Two months of one year may not share a Gregorian start date.**
-- **Month *n+1* must start after month *n*.**
-
-An out-of-order pair would make date resolution ambiguous, so the database refuses it.
-
-### Optimistic locking, and why it applies here
-
-`HijriMonthStart` carries a version column: two Super Admins correcting the same month must
-not clobber each other. The recording audit row captures **both the previous and the new
-start date**, because *the correction is the interesting event* — this table reproduces
-official announcements, and a wrong month start silently shifts every Hijri label in it.
-
----
+- `baseHijri` returns `null`, never a guess; when recorded months run out, dates render Gregorian-only with no error, log or screen state.
+- `GET /admin/hijri-calendar` carries `coverage` (`published_through`, `days_remaining`, `warning`, `next_unrecorded`): Gregorian arithmetic only; `days_remaining` counts to the 29-day floor, goes negative rather than clamping, and is `null`, never `0`, when nothing is published; only published months count (§5.7); no route added (§20 rule 16).
 
 ### The Umm al-Qura baseline (Owner, 2026-08-30)
 
-Everything above stands: the table is the sole authority and a computed calendar is not.
-What the Owner added is a way to stop typing twelve dates a year from nothing.
-
-**`POST /admin/hijri-calendar/{year}/import` fills only the months that have no row at
-all.** It is not "import unless edited" — it **never updates**. A month that exists is
-skipped, whatever it says and whoever wrote it.
-
-That is deliberately stronger than a rule about *corrected* rows. Any test of *«has a human
-touched this?»* is a test that can be got wrong, and getting it wrong means silently
-replacing an official Moroccan date with a computed Saudi one — a failure nobody notices
-until Ramadan starts on the wrong day. Skipping every existing row cannot fail that way, and
-it makes re-running the import idempotent by construction.
-
-| | |
-|---|---|
-| **Source** | ICU's Umm al-Qura tables, through `Intl.DateTimeFormat` — `lib/umm-al-qura.ts` |
-| **Provenance** | `source = 'umm_al_qura_icu'` per row; a corrected row reads `manual` |
-| **Status on arrival** | `draft` — nothing derived is displayed until a Super Admin publishes the year |
-| **Network** | none, ever. The tables ship with the Node build |
-| **Runtime authority** | none. No read path consults it; after the insert the row is an ordinary row |
-
-**Why ICU rather than a JSON table.** A checked-in file would have been transcribed from the
-same data, and would then need re-transcribing to extend the range. `assertUmmAlQuraAvailable`
-refuses on a Node without full ICU rather than silently falling back to the arithmetic
-`islamic` calendar, which would produce plausible dates that are simply wrong.
-
-**The example at the top of this section is the whole point.** 1 Muharram 1448 is 17 June
-2026 in Morocco and 16 June in Umm al-Qura. The import will propose the 16th; the Super Admin
-corrects it to the 17th; and every later import leaves her correction alone.
+- `POST /admin/hijri-calendar/{year}/import` fills only months with no row at all and never updates (not «import unless edited»: a «has a human touched this?» test can be got wrong); idempotent by construction.
+- Source: ICU's Umm al-Qura tables via `Intl.DateTimeFormat` (`lib/umm-al-qura.ts`), no network; provenance `source = 'umm_al_qura_icu'` (a corrected row reads `manual`); arrives `draft`; no read path consults ICU.
+- ICU rather than a checked-in JSON table (which would need re-transcribing to extend); `assertUmmAlQuraAvailable` refuses on a Node without full ICU rather than falling back to the arithmetic `islamic` calendar.
 
 ## The calendar screen's two requests
 
-The frontend calendar makes **exactly two requests, and never a third** — including when a
-user opens an event.
+Exactly two requests, never a third, including when opening an event (design: [API](api.md#designing-an-endpoint-the-bootstrap-as-a-worked-example)):
 
 | Request | Returns | Cached |
 |---|---|---|
-| `GET /calendar/bootstrap` | The **chrome**: Hijri day mapping, month metadata for the dual title, category, level, and branch lists | 5 minutes, strong ETag |
-| `GET /calendar` | The **occurrences**, each self-sufficient | No |
+| `GET /calendar/bootstrap` | chrome: Hijri day mapping, month metadata for the dual title, category, level and branch lists | 5 minutes, strong ETag |
+| `GET /calendar` | occurrences, each self-sufficient | no |
 
-`?category_id=` on the bootstrap narrows **only the Level list**, server-side — §4.4 requires
-that (*"so the client never filters a list it was handed"*). The Hijri days, month metadata,
-categories, and branches are the calendar's chrome regardless of which category is selected.
-
-An unknown category id yields an **empty** level list rather than falling back to all levels:
-a filter that quietly stops filtering is worse than one returning nothing, because the screen
-would show every level while claiming to show one category's.
-
-**Occurrences are self-sufficient** — carrying description, recurrence, branch and room
-names, category, level, and resolved instructor display names — so opening an event dialog
-costs no further request. The alternative was an N+1 on a public screen.
-
-**The bootstrap carries reference data only, never operational data.** Events, enrolments,
-progress, and grades are not admissible, whatever a future screen would find convenient.
-Without that limit a bootstrap becomes a dumping ground.
-
-The month metadata is what lets the client render the dual title *"يوليوز 2026 | محرم 1448"*
-— or *"يوليوز / غشت 2026 | محرم / صفر 1448"* across a boundary — **with no month-transition
-logic in the client at all.** The rule the client follows is the whole of it: one entry
-renders one name, two render both joined by a slash; the year prints once when both months
-share it and twice when they do not.
-
-**Where a month has not been recorded, the client renders nothing at all** — no Hijri number
-in the day cell, and the title's Hijri side and its divider are both omitted rather than left
-blank. That is the same "silence over guessing" rule the backend follows, carried through to
-the pixel.
-
-Inside each day cell the coordinate row has one fixed physical contract in the Arabic RTL
-interface: **Hijri is left, Gregorian is right**, matching the dual title. The row alone is
-explicitly LTR so DOM order equals visual order; the page and its Arabic content remain RTL,
-and neither date identity, stored mapping nor event coordinate is swapped to obtain layout.
-
-> Design rationale in full: [API](api.md#designing-an-endpoint-the-bootstrap-as-a-worked-example)
-
-Instructor names arrive **already resolved**. The backend decided which name is public; the
-client renders it verbatim and implements no fallback
-([why](security.md#on-public-surfaces)).
+- Month metadata drives the dual title («يوليوز 2026 | محرم 1448»; «يوليوز / غشت 2026 | محرم / صفر 1448» across a boundary) with no transition logic in the client: two entries join with a slash; the year prints once when shared, twice when not.
+- An unrecorded month renders nothing: no Hijri number in the cell; the title's Hijri side and divider are omitted.
+- Day-cell coordinate row: Hijri left, Gregorian right, matching the dual title; the row alone is LTR so DOM order equals visual order; nothing is swapped for layout.
+- Instructor names arrive resolved; the client renders them verbatim with no fallback ([why](security.md#on-public-surfaces)).
 
 ---
 
-**Next:** [Frontend](frontend.md) · **Related:**
-[Business processes](../overview/business-processes.md#3-scheduling),
-[Database](database.md#hijrimonthstart--the-calendars-sole-source)
+**Next:** [Frontend](frontend.md) · **Related:** [Business processes](../overview/business-processes.md#3-scheduling), [Database](database.md#hijrimonthstart--the-calendars-sole-source)

@@ -2,284 +2,125 @@
 
 # Teaching authority — who may act on whom, and when
 
-**One page for the question every teaching feature asks.** It cites
-[`docs/SRS.md`](../SRS.md) §4.4c and Revisions 73, 87, 88, 90, 91 and 107 rather than
-restating them; where a rule below has an SRS home, the SRS wins.
+Cites [`docs/SRS.md`](../SRS.md) §4.4c and Revisions 73, 87, 88, 90, 91, 107; the SRS wins.
 
----
+## The three facts
 
-## The three facts, and what each one may answer
-
-| Fact | Where it lives | May it authorise? |
+| Fact | Where | May it authorise? |
 |---|---|---|
-| **Capability / availability** — *«I can teach حفظ القرآن», «I am free Thursdays»* | `TeacherSubjectCapability` · `TeacherCategoryCapability` · `TeacherAvailability` (R88) | **never** |
-| **Effective assignment** — *she staffs this class from X to Y* | `CourseScheduleStaff` with `effective_from` / `effective_until` (R91) | **yes**, on dates inside the period |
-| **Occurrence staffing** — *she took this lesson* | `SessionStaff` (R43.4) | **yes**, for that occurrence — and it **overrides** the schedule |
+| Capability / availability — «I can teach حفظ القرآن», «I am free Thursdays» | `TeacherSubjectCapability` · `TeacherCategoryCapability` · `TeacherAvailability` (R88) | never |
+| Effective assignment — she staffs this class from X to Y | `CourseScheduleStaff`, `effective_from` / `effective_until` (R91) | yes, on dates inside the period |
+| Occurrence staffing — she took this lesson | `SessionStaff` (R43.4) | yes, for that occurrence; overrides the schedule |
 
-**The first must never answer for the second.** A مؤطِّرة with a flawless profile
-and no assignment reaches nothing; one assigned a Subject she never declared
-holds full authority from the moment of assignment. Both halves are asserted in
-`teaching-candidates.http.integration.test.ts` and in the browser.
+- A flawless profile with no assignment reaches nothing; an assigned Subject never declared holds full authority (`teaching-candidates.http.integration.test.ts` and browser).
 
-## The period model, stated once
+## The period model
 
-Both bounds are **inclusive calendar dates** (TD-11 — never instants).
+| Bound | Meaning |
+|---|---|
+| both bounds | inclusive calendar dates (TD-11, never instants) |
+| `effective_from = NULL` | from the schedule's own beginning |
+| `effective_until = NULL` | through the schedule's own end (possibly open) |
 
-```
-effective_from = NULL   →  from the schedule's own beginning
-effective_until = NULL  →  through the schedule's own end (itself possibly open)
-```
-
-Every row written before R91 carries two NULLs, which is why the migration
-needed **no backfill**: a time-blind row already meant *the schedule's whole
-life*. Deriving an `effective_from` from `anchor_date` was rejected — it would
-assert an assignment date nobody recorded.
-
-The arithmetic lives in
-[`policies/effective-staffing.ts`](../../backend/src/policies/effective-staffing.ts)
-and **nowhere else**. `effectiveOn(date)` and `effectiveWithin(from, to)` are
-Prisma fragments, so a caller composes them into its own single query rather than
-materialising a list of ids — the snapshot argument `roster-resolution.ts`
-records, unchanged.
-
-### Touching IS overlapping here
-
-`intervalsOverlap` treats two periods that share one day as overlapping, unlike
-`teaching-profile.overlaps` for availability ranges. The difference is
-deliberate: two availability ranges that touch describe one continuous free
-period, while two assignments that share a day mean **two people are the main
-teacher that day** — exactly what R91 §6 forbids.
+- Pre-R91 rows carry two NULLs = the schedule's whole life: no backfill; deriving `effective_from` from `anchor_date` rejected (asserts a date nobody recorded).
+- Arithmetic only in [`policies/effective-staffing.ts`](../../backend/src/policies/effective-staffing.ts): `effectiveOn(date)`, `effectiveWithin(from, to)` are Prisma fragments composed into one query, never an id list (`roster-resolution.ts`).
+- Touching IS overlapping: `intervalsOverlap` counts a shared day (unlike `teaching-profile.overlaps` for availability) — two mains on one day is what R91 §6 forbids.
 
 ## Which date each consumer asks about
 
-**This table is the answer to "do not simply default everything to today".**
-
-| Consumer | Date it asks about | Why |
+| Consumer | Date | Why |
 |---|---|---|
-| `studentsTaughtBy` — teacher roster, `/quran-students` | **today** | *whom do I teach now*; the screens act on current students |
-| `teacherBranchIds` — content upload scope, branch list | **today** | uploading is something somebody does now |
-| `teachesQuran` → `GET /me` → the «إدخال الحفظ» menu | **today** | the marker must agree with the roster, or the menu opens an empty screen |
-| `teacherEventScope` — Hidden-event visibility | **today** | what she teaches today decides what she may see today |
-| `assertExamInTeacherScope` | **the exam's own date** | a replacement authoring a paper for a sitting inside her period is authorised for it |
-| `staffsSession` | **the occurrence's date**, after `SessionStaff` | the occurrence's own truth first, the schedule as it stood on that date second |
-| Personal calendars · notifications · content on an occurrence | **the occurrence's own `SessionStaff`** | materialization already wrote the right person per date |
-| R90 candidate conflicts | **the proposed class's period** | a finished assignment is not a clash |
-| `readableScope` — which class DEFINITIONS she may read | **any period** | hiding a class she taught last term would hide her own history and grant nobody anything |
+| `studentsTaughtBy` — roster, `/quran-students` | today | whom do I teach now |
+| `teacherBranchIds` — upload scope, branch list | today | uploading happens now |
+| `teachesQuran` → `GET /me` → «إدخال الحفظ» menu | today | marker must agree with the roster |
+| `teacherEventScope` — Hidden-event visibility | today | today's teaching decides today's view |
+| `assertExamInTeacherScope` | the exam's own date | a replacement authoring inside her period is authorised |
+| `staffsSession` | the occurrence's date, after `SessionStaff` | occurrence truth first, schedule as of that date second |
+| Personal calendars · notifications · occurrence content | the occurrence's own `SessionStaff` | materialization wrote the right person per date |
+| R90 candidate conflicts | the proposed class's period | a finished assignment is not a clash |
+| `readableScope` — class DEFINITIONS | any period | her own history, grants nothing |
 
-Physical create/schedule and PATCH pass the resolved exam date to the scope helper;
-PATCH checks both the existing target/date and any proposed target/date. Individual
-exam authoring/grading passes that same date to `studentsTaughtBy`, not its ordinary
-today default. Exact-Session cover authority does not become whole-Level authority.
-
-Exam mutation and grade save/publish share `repositories/exam.repository.ts`'s
-governing row lock with paper/submission writes. Authority, version, maximum and
-publication state are read inside that transaction after locking. TD-15 requires
-the current version for an existing Grade; omission is not permission to overwrite.
-See the [current verification status](testing.md#high-readiness-checkpoint-2026-09-13)
-before treating the HIGH continuation as accepted.
+- Physical create/schedule and PATCH pass the resolved exam date to the scope helper (PATCH checks existing and proposed target/date); individual exam authoring/grading passes it to `studentsTaughtBy`; exact-Session cover never becomes whole-Level authority.
+- Exam mutation and grade save/publish share `repositories/exam.repository.ts`'s governing row lock with paper/submission writes; authority, version, maximum, publication state read after locking; TD-15 requires the current version for an existing Grade. Status: [testing](testing.md#high-readiness-checkpoint-2026-09-13).
 
 ## History is never rewritten
 
-The rule R91 states as non-negotiable, and the mechanism that keeps it:
-
-* Materialization snapshots **each occurrence with the assignments effective on
-  its own date**, so one edit produces October→Safa, November→Amina,
-  December→Safa with **no occurrence touched by hand**.
-* Resync reaches **only future, un-overridden, still-`scheduled`** occurrences —
-  §4.4's existing protection predicate, unchanged.
-* A past occurrence is **never** resolved through the schedule. Asking the
-  schedule is precisely what would let today's handover rewrite last month.
+- Materialization snapshots each occurrence with the assignments effective on its date (one edit → October→Safa, November→Amina, December→Safa, nothing touched by hand).
+- Resync reaches only future, un-overridden, still-`scheduled` occurrences (§4.4).
+- A past occurrence is never resolved through the schedule.
 
 ## The occurrence override
 
-A one-off cover is a `SessionStaff` fact about one date. The person named holds
-full operational authority for that occurrence and none beyond it; the schedule
-is untouched; the next occurrence resolves normally. It is edited from
-«مؤطّرة هذه الحصة» on `/admin/schedules/{id}/sessions`, and the dialog says
-*this occurrence only* rather than leaving an administrator to infer it from what
-did not change.
+- One-off cover = `SessionStaff` for one date: full authority there, none beyond; schedule untouched. Edited from «مؤطّرة هذه الحصة» on `/admin/schedules/{id}/sessions`; the dialog says *this occurrence only*.
+- `studentsTaughtBy` has an occurrence arm so a cover with no schedule assignment reaches that day's audience (added when R87 §J's «إدخال الحفظ» handed a cover an empty list — rule P inverted).
 
-`studentsTaughtBy` carries an **occurrence arm** for exactly this: a مؤطِّرة with
-no schedule assignment at all reaches that occurrence's audience on its day. It
-was added because R87 §J opened «إدخال الحفظ» for a cover while the resolver, which
-knew only about schedules, handed her an empty list — rule **P** inverted.
-
-## Who ATTENDS is a different question from who teaches (R92)
-
-Two occurrence-specific dimensions, resolved independently:
+## Who ATTENDS ≠ who teaches (R92)
 
 | Question | Answered by |
 |---|---|
-| **who teaches this occurrence** | R91's effective assignment, then the occurrence's own `SessionStaff` |
-| **who attends this occurrence** | `audienceForSession` — the schedule's audience, unless the occurrence states its own branches |
+| who teaches | R91 effective assignment, then the occurrence's `SessionStaff` |
+| who attends | `audienceForSession` — schedule's audience unless the occurrence states its own branches |
 
-`SessionAudienceBranch` exists for one real case: the association occasionally
-delivers a lesson **once instead of twice**, so two branches' classes meet
-together, physically at one of them, for that occurrence only.
+- `SessionAudienceBranch`: a lesson delivered once instead of twice, two branches meeting at one venue, that occurrence only.
+- Replacement, not addition: no rows → inherited; rows ARE the branches; the dialog seeds the schedule's branch selected.
+- Location ≠ audience: `Session.branch_id` not overloaded or written; `GET /sessions/{id}/roster` reports both.
+- Scope, never a roster (§20 rule 22): resolved against live Enrollments at read time; no Enrollment mutated, Session duplicated or per-student row — asserted.
+- One resolver: `audienceForSession` feeds personal calendar, roster, notification recipients, audit count and the Quran occurrence arm; the Quran arm was missing until 2026-08-20 (`studentsTaughtBy` read `audienceWhere(session.schedule)`); it now covers regular مؤطِّرة and cover, date-bound ([Quran progress](quran-progress.md)).
+- Whole-Level only: Group/Circle targets carry their branch, so a branch list is refused and not offered; cross-branch Groups/Circles is an open Owner question.
+- The counterpart is never guessed: the platform never cancels the other branch's occurrence; the administrator does, through the flow that asks whether to tell people.
 
-**Replacement, not addition.** No rows → the audience is inherited. Rows → they
-*are* the audience's branches. An additive reading leaves nobody able to say
-whether the schedule's own branch still counts; the dialog seeds the override
-with it already selected, so *combine* is expressed by adding the second.
+## An Event is not a class (R93)
 
-**Physical location is not audience.** `Session.branch_id` is not overloaded and
-is not written: the class stays at its venue while people come to it from
-elsewhere. `GET /sessions/{id}/roster` reports both, side by side, so nobody
-infers one from the other.
+- `EventStaff` (R71) and `CourseScheduleStaff` (R91) stay separate (§20 rule 22); event staffing is not effective-dated.
+- A مؤطرة staffs the event she answers for, names assistants, cannot make another responsible (`RESPONSIBLE_MUST_BE_SELF`, server-refused).
+- `GET /admin/users` and `GET /admin/levels` answer 403 for her, so `GET /me/event-staff-options` (whom may I name) and `GET /me/event-scope-options` (Administrative Groups she teaches, §4.4c, bounded by R91) exist; nothing widened (rule O: a smaller question, never a wider permission).
 
-**Scope, never a roster** (§20 rule 22): branch populations resolved against live
-Enrollments at read time. No Enrollment is mutated, no Session duplicated, no
-per-student row created — each asserted rather than trusted.
+### Audience dimensions combine — in every read (R169 §6)
 
-**One resolver, or none of it works.** `audienceForSession` is composed by the
-personal calendar, the roster, the notification recipients, the audit count and
-the Quran occurrence arm. A cross-branch `OR` written independently in one
-service is the failure the revision exists to prevent: honoured by notifications
-and not by the calendar leaves a beneficiary told about a class she cannot see.
-
-> **The Quran arm was the proof of that, by being missing** (fixed 2026-08-20).
-> This list already named it while `studentsTaughtBy` still read
-> `audienceWhere(session.schedule)` — the schedule's *inherited* audience — so a
-> مؤطِّرة teaching a combined Quran lesson could not log the visiting branch's
-> memorisation. **A consumer named in a docstring is not a consumer.** The arm
-> now covers the regular مؤطِّرة as well as the one-off cover, and stays bound to
-> the date, so the next ordinary occurrence narrows again on its own. See
-> [Quran progress](quran-progress.md).
-
-**Whole-Level only, and the rest is refused rather than invented.** In the other
-two modes the branch is carried by the target itself, so a branch list has no
-meaning; the write refuses it and the action is not offered. Whether combining
-Groups or Circles across branches means anything is an **open Owner question**.
-
-**The counterpart is never guessed.** Two branches' schedules are structurally
-independent — nothing identifies *the corresponding lesson* — so the platform
-does not cancel the other branch's occurrence. The administrator combines the
-audience and then cancels the counterpart explicitly, through the flow that
-already asks whether to tell people.
-
-## An Event is not a class, and being assigned to one is its own news (R93)
-
-`EventStaff` (R71) and `CourseScheduleStaff` (R91) are separate concepts and
-must stay separate — §20 rule 22. Nothing about event staffing touches teaching
-authority, and nothing here is effective-dated.
-
-**A مؤطرة staffs the event she answers for, and only that.** She may name the
-assistants; she may not make anybody else responsible, and the server refuses
-it (`RESPONSIBLE_MUST_BE_SELF`) rather than the interface hiding it. Admin reach
-is unchanged.
-
-**Two narrow reads exist because the grant would otherwise be unreachable.**
-`GET /admin/users` and `GET /admin/levels` both answer **403** for her, so her
-assistants control and her scope selector were empty and she could fill the whole
-form before finding out. `GET /me/event-staff-options` answers *whom may I name
-here*; `GET /me/event-scope-options` answers *what may I address this to* — the
-Administrative Groups she teaches, through §4.4c and bounded by R91's effective
-staffing. **Neither widens anything**: the admin endpoints still refuse her.
-
-> **The standing rule this is the third instance of:** when a screen cannot
-> work, the fix is a *smaller question*, never a wider permission (rule O).
-
-### An activity's audience dimensions combine — in every read (R169 §6)
-
-*Branch B1* with *Level Y* is the people in both at once; two branches are either; a dimension left
-alone is «الكل» and narrows nothing. One rule, five readers, and they now agree:
+Branch B1 + Level Y = both at once; two branches = either; an untouched dimension is «الكل».
 
 | Reader | Where | Since |
 |---|---|---|
-| who is notified, who is expected (attendance) | `eventAudienceWhere` — ONE enrolment must satisfy every named kind | R82 |
-| her personal calendar | `personalFilters`, the event arm (`dimensionMatch`) | R140 |
-| a مؤطِّرة's view of a PRIVATE activity | `visibilityFilter`, the teacher arm (`reaches`) — each named dimension must reach her teaching scope | **R169 §6** (it unioned) |
-| «the calendar of this Level / Category / group» | `readCalendar`'s scope filters — through the taxonomy's own relations, so another Category's activity stays absent | **R169 §6** (only `branch_id` read so) |
-| the form | `ActivitySection` — «الكل» when untouched, and how the choices combine once one is made | **R169 §6** (it said the dimensions union) |
+| notified / expected (attendance) | `eventAudienceWhere` — ONE enrolment satisfies every named kind | R82 |
+| personal calendar | `personalFilters`, event arm (`dimensionMatch`) | R140 |
+| مؤطِّرة's view of a PRIVATE activity | `visibilityFilter`, teacher arm (`reaches`) — each dimension must reach her scope | R169 §6 (it unioned) |
+| calendar of a Level / Category / group | `readCalendar` scope filters via taxonomy relations | R169 §6 (only `branch_id` read so) |
+| the form | `ActivitySection` — «الكل» untouched, combination once chosen | R169 §6 (it said union) |
 
-Two things are deliberately NOT this rule. **The activities she STAFFS are hers whatever their
-scope** (R71.2) — that union is about *reach* (staffed ∪ scope), not about dimensions. And a
-**class's حلقة unions with its other filters** (§4.4c: a circle is already Level-locked) — an
-activity has no حلقة dimension at all.
+- Not this rule: activities she STAFFS are hers whatever their scope (R71.2, staffed ∪ scope); a class's حلقة unions with its other filters (§4.4c) — an activity has no حلقة dimension.
 
 ### The assignment notice
 
 | | |
 |---|---|
-| `event_created` | this activity is happening — to the people it is **for**, and **optional** (R82.5) |
-| `event_staff_assigned` | **you are working on this** — to the person named, and **automatic** |
+| `event_created` | it is happening — to the people it is for, optional (R82.5) |
+| `event_staff_assigned` | you are working on this — to the person named, automatic |
 
-Announcing an assignment as `event_created` would tell her the association is
-holding a celebration: true, and not the thing she has to act on.
+- Only the newly assigned (in force vs submitted); a title edit tells nobody; removed then re-added = newly assigned (returns unread to the top); actor excluded (R78.3); Admin naming an assistant tells her as a مؤطرة does.
 
-**Only the newly assigned are told** — the difference between the staffing in
-force and the staffing submitted — so an edit to the title tells nobody again. A
-person removed and later re-added **is** newly assigned: her row was withdrawn in
-between, so the notice returns unread to the top rather than duplicating. The
-actor is excluded (R78.3), and **the rule is about being assigned, not about who
-assigns** — an Admin naming an assistant tells her exactly as a مؤطرة does.
+## Invariants — why not in SQL
 
-## Where the invariants are enforced, and why not in SQL
-
-`assertStaffIntervals` in
-[`course-schedule.service.ts`](../../backend/src/services/course-schedule.service.ts)
-holds the schedule's staffing rows `FOR UPDATE` (TD-15.2's existing pattern) and
-then checks:
-
-1. at most one **main** مؤطِّرة active on any date;
-2. no overlapping periods for the same person on one schedule;
-3. every period intersects the schedule's own life — **refused, never clipped**.
-
-PostgreSQL could express (1) as `EXCLUDE USING gist`, but that needs
-`btree_gist`, which §3.1's deployment does not install and TD-13 does not list.
-R91 declines the extension dependency and takes the lock instead. **The lock is
-what makes two administrators racing impossible**: the second transaction blocks
-and then sees the first's rows.
+`assertStaffIntervals` in [`course-schedule.service.ts`](../../backend/src/services/course-schedule.service.ts) holds the schedule's staffing rows `FOR UPDATE` (TD-15.2) and checks: (1) at most one main مؤطِّرة per date; (2) no overlapping periods for one person on one schedule; (3) every period intersects the schedule's life — refused, never clipped.
+- `EXCLUDE USING gist` needs `btree_gist`, not installed by §3.1 nor listed in TD-13; the lock serialises racing administrators.
 
 ## Who may assert a capability (Owner, 2026-08-30)
 
-The table at the top is unchanged and is the point of this section: capability answers
-**never**. What changed is only *who writes it*.
-
-R88.2 reserved the whole teaching profile to the administration — *"a مؤطِّرة may not edit
-her own, because who may assert their own availability, and whether the administration may
-then rely on it, is a separate decision the Owner has not taken."* R106 took the availability
-half. The Owner has now taken the other: on `/teacher/availability` a مؤطِّرة edits her own
-declared **Subjects** and **Categories** too.
-
-**Nothing about authority moves.** She writes `TeacherSubjectCapability` and
-`TeacherCategoryCapability`; teaching authority is an **assignment** —
-`CourseScheduleStaff` / `SessionStaff`, resolved through `studentsTaughtBy` — and neither
-self-service route touches either table. A مؤطِّرة who declares every Subject on the platform
-still reaches no student, no class and no grade sheet, which is asserted directly rather than
-argued: the HTTP suite declares two Subjects and a Category and then finds `/quran-students`
-empty and `/admin/users` refused.
-
-Three properties hold the grant where it is:
-
-- **No `{id}` in the route.** `PUT /me/teaching-profile/capabilities` takes its subject from
-  the token, so there is nowhere in the request to name another person — construction, not a
-  check that could be forgotten.
-- **Two routes, not one widened one.** Capabilities and availability each replace only the
-  half their path names, and each schema is `.strict()` against the other's field. A page
-  holding a stale copy of one half cannot erase it, and a forged body cannot make one
-  endpoint do the other's job.
-- **`self_service: true` in the audit.** R88.2's open question was whether the administration
-  may *rely* on a self-asserted declaration. That stays answerable only if the record says who
-  asserted it.
-
-The validation is shared with the administrative writer — a retired Subject is refused
-(`UNKNOWN_SUBJECT`), never silently dropped — and the two screens render the **same**
-`CapabilitiesEditor`, so the pair cannot drift.
-
-**Note for the Document Owner:** SRS R88.2's refusal is superseded by this instruction. The
-SRS is not edited here; a revision recording the change is the Owner's call.
+- Only the writer changed: R88.2 reserved the profile to administration, R106 opened availability, the Owner now opens declared Subjects and Categories on `/teacher/availability`.
+- Self-service writes `TeacherSubjectCapability` / `TeacherCategoryCapability` only; the HTTP suite declares two Subjects and a Category and finds `/quran-students` empty, `/admin/users` refused.
+- No `{id}` in `PUT /me/teaching-profile/capabilities` (subject from the token); two routes each replacing their half, `.strict()` against the other's field; `self_service: true` in the audit (R88.2's reliance question stays answerable).
+- Validation shared with the administrative writer (retired Subject → `UNKNOWN_SUBJECT`); both screens render the same `CapabilitiesEditor`.
+- Document Owner: R88.2's refusal is superseded by this instruction; the SRS is not edited here.
 
 ## The guards
 
-| Guard | What it pins |
+| Guard | Pins |
 |---|---|
 | [`policies/effective-staffing.test.ts`](../../backend/src/policies/effective-staffing.test.ts) | inclusive bounds · open ends · touching = overlapping · single-day periods · schedule-life containment |
-| [`controllers/effective-staffing.http.integration.test.ts`](../../backend/src/controllers/effective-staffing.http.integration.test.ts) | migration compatibility · all three interval refusals · **two rows for one person** · per-occurrence materialization · roster/marker/calendar boundaries · assistant parity · the occurrence override · R90 conflict clean-up · R88 untouched · concurrency |
-| [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | the replacement driven as Admin, Safa, Amina and an assistant: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
-| [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | blank date = open-ended, converted once at the wire · many assistants · one person on several rows · each refusal in Arabic |
-| [`controllers/session-audience.http.integration.test.ts`](../../backend/src/controllers/session-audience.http.integration.test.ts) | **R92** — inherited audience unchanged · both branches included · unrelated excluded · venue unmoved · next occurrence untouched · clearing restores · notifications follow the actual audience · staffing × audience independent · no Enrollment mutated, no Session duplicated · refusals and version conflict |
-| [`components/scheduling/session-audience.test.ts`](../../frontend/src/components/scheduling/session-audience.test.ts) | **R92** — seeded with the inherited branch (replacement said unambiguously) · venue as text, never a control · action offered only where the server accepts it · roster shown, not inferred · `dirty` passed |
-| [`services/quran-entry.integration.test.ts`](../../backend/src/services/quran-entry.integration.test.ts) | **R91 × R92 × R73** — whole-Level, Group and Circle rosters · assistant parity · an unrelated Subject and an R88 declaration granting nothing · dated authority both ways · the one-off cover · a combined occurrence reached and then NOT permanently widened |
-| [`scripts/dev/browser/verify-quran-entry.mjs`](../../scripts/dev/browser/verify-quran-entry.mjs) | the same matrix driven through real screens as ten identities, ending at the beneficiary's own حفظي |
-| [`scripts/dev/browser/verify-cross-branch.mjs`](../../scripts/dev/browser/verify-cross-branch.mjs) | **R91 × R92** — six identities: the Admin combines it, both beneficiaries share it, the unrelated one does not, the covering مؤطِّرة has it and the schedule's does not, cancelling tells exactly the right people, and next week is normal on both dimensions |
+| [`controllers/effective-staffing.http.integration.test.ts`](../../backend/src/controllers/effective-staffing.http.integration.test.ts) | migration compatibility · three interval refusals · two rows for one person · per-occurrence materialization · roster/marker/calendar boundaries · assistant parity · occurrence override · R90 conflict clean-up · R88 untouched · concurrency |
+| [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | Admin, Safa, Amina, assistant: dated rows, Safa twice, per-date occurrences, four answers at one moment, handover leaves the past alone |
+| [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | blank date = open-ended, converted once at the wire · many assistants · one person on several rows · Arabic refusals |
+| [`controllers/session-audience.http.integration.test.ts`](../../backend/src/controllers/session-audience.http.integration.test.ts) | R92: inherited unchanged · both branches · unrelated excluded · venue unmoved · next occurrence untouched · clearing restores · notifications follow the audience · staffing × audience independent · nothing mutated or duplicated · refusals, version conflict |
+| [`components/scheduling/session-audience.test.ts`](../../frontend/src/components/scheduling/session-audience.test.ts) | R92: seeded with the inherited branch · venue as text · action only where the server accepts · roster shown, not inferred · `dirty` passed |
+| [`services/quran-entry.integration.test.ts`](../../backend/src/services/quran-entry.integration.test.ts) | R91 × R92 × R73: whole-Level/Group/Circle rosters · assistant parity · unrelated Subject and R88 declaration grant nothing · dated authority both ways · one-off cover · combined occurrence not permanently widened |
+| [`scripts/dev/browser/verify-quran-entry.mjs`](../../scripts/dev/browser/verify-quran-entry.mjs) | the same matrix as ten identities, ending at حفظي |
+| [`scripts/dev/browser/verify-cross-branch.mjs`](../../scripts/dev/browser/verify-cross-branch.mjs) | R91 × R92, six identities: Admin combines, both beneficiaries share, unrelated does not, covering مؤطِّرة has it, the schedule's does not, cancelling tells the right people, next week normal |

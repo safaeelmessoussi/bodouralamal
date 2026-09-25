@@ -2,28 +2,14 @@
 
 # CNDP filing packet and the Arabic privacy notice — DRAFT for the Owner's review
 
-**Status:** drafted 2026-09-22 under SRS Revision 170 §13 (the Owner: *«do the CNDP filing and
-supply the Arabic privacy notice text, and I'll recheck them»*). **Nothing has been filed and no
-legal text has been activated.** Every fact below marked `VERIFIED` is read from the repository at
-this date; every field marked `[OWNER INPUT]` or `[PROVIDER EVIDENCE]` is one only the Owner, the
-association's signatory or the hosting provider can supply, and the packet cannot be submitted
-until each is filled — **outside Git**, never in this file. The filing regime (declaration F211
-versus prior authorization F112, the Article 12 exemption, F115, F118) remains a
-`LEGAL/CNDP CONFIRMATION` per the [readiness audit](personal-data-audit.md#filing-regime-and-transfer-decision);
-this document prepares the answers for whichever route the adviser confirms.
-
-This page cites the audit and the [personal-data map](../development/personal-data-map.md)
-rather than restating their reasoning; where a statement here and one there disagree, the
-repository is the truth and this page is the defect.
-
----
+- Drafted 2026-09-22 under R170 §13 (the Owner: *«do the CNDP filing and supply the Arabic privacy notice text, and I'll recheck them»*). Nothing has been filed; no legal text activated.
+- `VERIFIED` = read from the repository at that date; `[OWNER INPUT]` / `[PROVIDER EVIDENCE]` = supplied only by the Owner, signatory or host, outside Git; the packet cannot be submitted until each is filled.
+- The regime (F211 vs F112, Article 12 exemption, F115, F118) remains a `LEGAL/CNDP CONFIRMATION` per the [readiness audit](personal-data-audit.md#filing-regime-and-transfer-decision); this page prepares answers for whichever route is confirmed.
+- Cites the audit and the [personal-data map](../development/personal-data-map.md) rather than restating them; on disagreement the repository is the truth and this page the defect.
 
 ## Part A — Answers for the CNDP declaration form (F211 structure)
 
-The CNDP's normal declaration asks, in order, for the controller, the processing, the data, the
-people, the recipients, the retention, the security measures, the rights procedure and any
-transfer. The French below is what goes on the form; the Arabic notice in Part B says the same
-things to the people concerned.
+The form asks, in order: controller, processing, data, people, recipients, retention, security, rights, transfer. The French goes on the form; the Arabic notice (Part B) says the same to the people concerned.
 
 ### A.1 Responsable du traitement
 
@@ -109,14 +95,9 @@ Hébergement, base de données, stockage et média : Maroc (`[PROVIDER EVIDENCE]
 l'authentification transite par Google : `[OWNER INPUT]` + `LEGAL/CNDP CONFIRMATION` (F118 si
 requis). Aucun autre flux sortant.
 
----
-
 ## Part B — The Arabic privacy notice (text for `/privacy`)
 
-**To be reviewed, completed where `[…]` appears, and activated by the Owner as a `LegalDocument`
-of kind `privacy` (SRS R138) — never installed by an engineering task.** It states only what the
-platform does today. Sections marked ◆ change with Revision 170 and did not exist in earlier
-drafts.
+To be reviewed, completed where `[…]` appears, and activated by the Owner as a `LegalDocument` of kind `privacy` (R138), never by an engineering task. It states only what the platform does today; ◆ marks sections new with R170.
 
 > # سياسة الخصوصية وحماية المعطيات الشخصية
 >
@@ -192,25 +173,11 @@ drafts.
 >
 > **الإصدار:** [التاريخ] — [رقم الإصدار].
 
-### What is deliberately NOT in the notice
+- Deliberately NOT in the notice: any CNDP approval number or date before one exists; erasure from backups faster than rotation (R133 (6)); any sentence implying the consent gate forces privacy (R170 §3 made it a warning); any collection not performed (health, family situation, home address, guardianship documents — R170 §12).
 
-- No claim of CNDP approval, number or date until one exists — the bracket stays a bracket.
-- No promise of erasure from backups faster than the rotation allows (R133 (6)).
-- No sentence implying the consent gate forces privacy — R170 §3 made it a warning, and a notice
-  that said otherwise would misdescribe what the platform does.
-- No collection it does not perform (health, family situation, home address, guardianship
-  documents — R170 §12).
-
----
-
-## Part C — What remains, in one list
-
-1. `[OWNER INPUT]` — A.1 (controller, signatory, contact), A.7's response delay, the notice's
-   bracketed fields.
-2. `[PROVIDER EVIDENCE]` — Hostoweb's written confirmation for A.4/A.8.
-3. `LEGAL/CNDP CONFIRMATION` — F211 vs F112, Article 12 exemption, F115, F118 (Google), the
-   qualification of Quran-progress data. The adviser reads Part A as prepared answers.
-4. The Owner activates Part B as the `privacy` `LegalDocument` (and reconciles the registration
-   `LegalConsentText` with the [draft paragraphs](../development/personal-data-map.md#the-draft-paragraphs)),
-   then verifies anonymous rendering at `/privacy` on Staging.
+## Part C — What remains
+1. `[OWNER INPUT]`: A.1 (controller, signatory, contact), A.7's response delay, the notice's bracketed fields.
+2. `[PROVIDER EVIDENCE]`: Hostoweb's written confirmation for A.4/A.8.
+3. `LEGAL/CNDP CONFIRMATION`: F211 vs F112, Article 12 exemption, F115, F118 (Google), qualification of Quran-progress data; the adviser reads Part A as prepared answers.
+4. The Owner activates Part B as the `privacy` `LegalDocument`, reconciles the registration `LegalConsentText` with the [draft paragraphs](../development/personal-data-map.md#the-draft-paragraphs), then verifies anonymous rendering at `/privacy` on Staging.
 5. Only then: assemble the packet privately and file. This task filed nothing.

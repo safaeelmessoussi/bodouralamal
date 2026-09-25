@@ -2,724 +2,270 @@
 
 # Personal Data & CNDP Readiness Audit
 
-**Historical audit:** 2026-08-11, before R62. The current preparation addendum below
-supersedes historical inventory/filing suggestions, not the preserved evidence.
+Historical audit of 2026-08-11 (pre-R62), retained as provenance; the 2026-09-13 preparation below supersedes its inventory/filing suggestions, not its evidence. Followed by the [data-collection decision](data-collection-decision.md).
 
 ## Current filing preparation — 2026-09-13
 
-> **2026-09-22 (R170 §13):** the declaration's answers and the full Arabic privacy-notice text are
-> prepared in [cndp-filing-and-privacy-notice.md](cndp-filing-and-privacy-notice.md) for the
-> Owner's review; the regime and transfer determinations below still stand as open.
-
-**Preparation only; not legal advice, filing, receipt or approval.** Reconciled
-2026-09-13 against repository HEAD `4e43697` — H1–H6 and H3 closed locally, the
-`docker-compose.storage.yml` deploy fix applied, hosted CI green — superseding the
-earlier review taken from B8 commit `45cf1f0` plus the then-uncommitted HIGH
-fixes; nothing in this reconciliation pass changed the annex's substance, since
-H3 (explicit manual exam opening) adds an authorization/audit event, not a new
-personal-data category, and the deploy fix touched only Compose file wiring. No
-live legal document, account, provider console or Production host was read or
-changed. Owner/legal review must settle the filing regime and supply the
-missing facts.
-
-**Label legend, used throughout this section:** `VERIFIED FROM REPOSITORY` —
-confirmed by reading current source/config, not asserted; `OWNER INPUT
-REQUIRED` — a decision or fact only the Owner (or an authorized signatory) can
-supply; `PROVIDER EVIDENCE REQUIRED` — a fact Hostoweb (or another
-subprocessor) must supply in writing, not inferable from marketing or brand
-nationality; `LEGAL/CNDP CONFIRMATION REQUIRED` — a determination that needs a
-qualified adviser or the CNDP itself; `MUST COMPLETE BEFORE PRODUCTION` — real
-beneficiary data must not be introduced until this item closes. A row may carry
-more than one tag.
-
-**CNDP primary sources, verified live on 2026-09-13** (all returned HTTP 200 at
-that access date): [notification guidance](https://www.cndp.ma/notifier-un-traitement/)
-lists exactly the declaration/authorization forms this document cites —
-**F214** (déclaration simplifiée), **F211** (déclaration normale), **F113**
-(autorisation simplifiée), **F112** (autorisation normale), **F118** (transfert
-à l'étranger), and **F115** (désignation du responsable de traitement, a
-related registry filing this document does not yet address — `LEGAL/CNDP
-CONFIRMATION REQUIRED`, add to the packet if the signatory determines it
-applies); [procedures](https://www.cndp.ma/procedures-de-notification-process/);
-[website conformity](https://www.cndp.ma/conformite-des-sites-web/); [Law
-09-08 text](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf). Re-verify before
-actual submission — a live source can change between this access date and
-filing.
+- 2026-09-22 (R170 §13): the declaration's answers and the full Arabic privacy notice are prepared in [cndp-filing-and-privacy-notice.md](cndp-filing-and-privacy-notice.md) for Owner review; the regime and transfer determinations below stay open.
+- Preparation only: not legal advice, filing, receipt or approval. Reconciled 2026-09-13 against HEAD `4e43697` (H1–H6 and H3 closed locally, `docker-compose.storage.yml` deploy fix, hosted CI green), superseding the review from B8 commit `45cf1f0`; H3 (`POST /assessments/{id}/open`, explicit manual exam opening) is an authorization/audit event, not a data category. No live legal document, account, provider console or Production host was read or changed.
+- Labels: `VERIFIED FROM REPOSITORY` (read from source/config) · `OWNER INPUT REQUIRED` · `PROVIDER EVIDENCE REQUIRED` (Hostoweb or subprocessor, in writing; brand nationality proves nothing) · `LEGAL/CNDP CONFIRMATION REQUIRED` · `MUST COMPLETE BEFORE PRODUCTION` (no real beneficiary data until closed).
+- CNDP sources verified live 2026-09-13 (HTTP 200): [notification guidance](https://www.cndp.ma/notifier-un-traitement/) listing **F214** (déclaration simplifiée), **F211** (déclaration normale), **F113** (autorisation simplifiée), **F112** (autorisation normale), **F118** (transfert à l'étranger), **F115** (désignation du responsable de traitement — not yet addressed, `LEGAL/CNDP CONFIRMATION REQUIRED`); [procedures](https://www.cndp.ma/procedures-de-notification-process/); [website conformity](https://www.cndp.ma/conformite-des-sites-web/); [Law 09-08](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf). Re-verify before submission.
 
 ### Current processing annex
 
-**`VERIFIED FROM REPOSITORY`** — every row below is read from current source,
-schema and configuration, not asserted from memory or an older audit.
+`VERIFIED FROM REPOSITORY` — read from current source, schema and configuration.
 
 | Purpose / people | Verified implementation and material limits |
 |---|---|
-| Accounts, registration, staff/guardian/beneficiary relationships | `User`, `Identity`, roles, memberships, applications and `FamilyLink`; split names, contact, sex and **beneficiary DOB**. DOB is required by the current model, unlike the historical audit below. Turning 18 does not automatically grant independent control: the explicit self-managed claim/approval transition remains required (R132) |
-| Educational administration | Enrollment, attendance, Quran progress, exams, answers and grades; assigned staff/audience scope, not a public learner directory. Required historical records survive account de-identification under structural IDs, which must not be described as guaranteed anonymous data. A manual remote exam is now opened by an explicit, audited teacher/administrator action (H3, `POST /assessments/{id}/open`) rather than a timer — an authorization/audit-trail change, not a new personal-data category |
-| Recordings and publications | `EducationalContent`, Session links and optional online recording ingest. Public/private/hidden placement, fresh authorization and media-consent safeguarding apply. Public publication is a disclosure; the filing must cover it, not just internal storage. H6 retagging remediation passed real-stack acceptance |
-| Security/accountability | Local refresh state, OAuth binding, consent/legal versions and structural audit. Authentication audit retention is 12 months; business audit/consent history is retained according to TD-8/TD-14. Free-text settings/reasons outside the specific R141 rejection minimization still require the recorded policy decisions, not a generic scrubber |
-| Erasure and recovery | R133/B2 exact-generation User Trash deadline, then de-identification with retained required history; B7 removes claim rationale and authorized historical rejection-audit copies. Monthly encrypted backup, at most two generations after verified rotation, no per-account archive rewrite or deletion replay. A restored point may contain later-erased data; reconcile before reopening access under an authorized incident decision |
-| Hosting and authentication | B1 SeaweedFS + PostgreSQL on a Moroccan host; B8 encrypted backups temporarily on that same VPS. Google OAuth requests `openid email`, verifies identity/email, and refresh is local. Google interaction still involves identity/network data and potential foreign processing. Optional LiveKit configuration must not silently activate an unreviewed foreign media processor |
+| Accounts, registration, staff/guardian/beneficiary relationships | `User`, `Identity`, roles, memberships, applications, `FamilyLink`; split names, contact, sex, beneficiary DOB (required, unlike the historical audit). Turning 18 grants nothing automatically: the explicit self-managed claim/approval remains (R132) |
+| Educational administration | Enrollment, attendance, Quran progress, exams, answers, grades; assigned staff/audience scope, no public learner directory. Required history survives de-identification under structural IDs (not guaranteed anonymous). Manual remote exam opening is an explicit audited action (H3), not a timer |
+| Recordings and publications | `EducationalContent`, Session links, optional online recording ingest; public/private/hidden placement, fresh authorization, media-consent safeguarding. Public publication is a disclosure the filing must cover. H6 retagging remediation passed real-stack acceptance |
+| Security/accountability | Local refresh state, OAuth binding, consent/legal versions, structural audit. Authentication audit retained 12 months; business audit/consent history per TD-8/TD-14. Free-text settings/reasons outside the R141 rejection minimization still need recorded policy decisions, not a generic scrubber |
+| Erasure and recovery | R133/B2 exact-generation User Trash deadline, then de-identification with retained history; B7 removes claim rationale and authorized historical rejection-audit copies. Monthly encrypted backup, at most two generations after verified rotation, no per-account archive rewrite or deletion replay; a restored point may hold later-erased data: reconcile before reopening access under an authorized incident decision |
+| Hosting and authentication | B1 SeaweedFS + PostgreSQL on a Moroccan host; B8 encrypted backups temporarily on the same VPS. Google OAuth requests `openid email`, verifies identity/email; refresh is local; Google still involves identity/network data and potential foreign processing. Optional LiveKit must not silently activate an unreviewed foreign media processor |
 
-Sources: [schema](../../backend/prisma/schema.prisma),
-[identity/access](../architecture/identity-and-access.md),
-[OAuth implementation](../../backend/src/lib/oauth.ts),
-[storage](../architecture/storage.md), [recovery consequences](../operations/resilience.md).
-There is no `StudentSocialProfile`, `User.notes`, generic health/CIN collection or
-implicit birthday-based control transfer to resurrect from the older tables below.
+Sources: [schema](../../backend/prisma/schema.prisma), [identity/access](../architecture/identity-and-access.md), [OAuth](../../backend/src/lib/oauth.ts), [storage](../architecture/storage.md), [recovery](../operations/resilience.md). No `StudentSocialProfile`, `User.notes`, generic health/CIN collection or birthday-based control transfer exists today.
 
 ### Filing regime and transfer decision
 
-The CNDP lists normal declaration **F211**, prior authorization **F112**, and
-foreign transfer **F118**. Ordinary declaration is not a safe blanket conclusion
-here: Quran participation/progress may reveal religious convictions (**inference
-requiring review**). The Article 12(1)(a) nonprofit exemption is conditional, not
-"all associations are exempt": qualifying purpose, members/regular contacts and
-limits on third-party disclosure/express consent must all be evidenced. Confirm
-the association's actual status and public-recording practices before choosing.
-See [CNDP notification guidance](https://www.cndp.ma/notifier-un-traitement/) and
-[Law 09-08, Articles 1 and 12](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf).
-
-**`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED` — filing regime,
-`MUST COMPLETE BEFORE PRODUCTION`:** authorized signatory/legal adviser to
-confirm F211 versus F112 and any applicable exemption, including minors, Quran
-progress, recordings and retained accountability evidence. Do not assume F214/F113
-simplification applies. No application has been submitted by this task.
-
-**`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED` — Google/other
-transfers, `MUST COMPLETE BEFORE PRODUCTION`:** document actual recipient legal
-entities, destination countries, processor/controller roles, contractual basis and
-transfer safeguards. Moroccan database hosting does not answer this question.
-Prepare F118 alongside the base-processing file if applicable; the CNDP says
-transfer authorization depends on approval of the underlying processing. No
-adequacy status or Google-specific exemption is presumed.
-See [CNDP procedures](https://www.cndp.ma/procedures-de-notification-process/).
+- CNDP lists F211 (normal declaration), F112 (prior authorization), F118 (foreign transfer). Ordinary declaration is not a safe blanket: Quran participation/progress may reveal religious convictions (inference requiring review). The Article 12(1)(a) nonprofit exemption is conditional: qualifying purpose, members/regular contacts and limits on third-party disclosure/express consent must all be evidenced. See [notification guidance](https://www.cndp.ma/notifier-un-traitement/), [Law 09-08 Art. 1 and 12](https://www.cndp.ma/images/lois/Loi-09-08-Fr.pdf).
+- `OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION` — regime: signatory/adviser confirms F211 vs F112 and any exemption (minors, Quran progress, recordings, retained accountability evidence); do not assume F214/F113; nothing has been submitted.
+- Same tags — transfers: document actual recipient legal entities, countries, processor/controller roles, contractual basis and safeguards for Google/others; Moroccan hosting does not answer it; prepare F118 with the base file if applicable (transfer authorization depends on approval of the underlying processing); no adequacy status or Google exemption presumed. See [procedures](https://www.cndp.ma/procedures-de-notification-process/).
 
 ### Submission packet — fill privately, never in Git
 
-| Material | Ready engineering input / missing Owner input |
+| Material | Ready input / missing input |
 |---|---|
-| Responsible controller and signatory | **`OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** exact registered association name, status, address, registration evidence, signatory authority and contact for rights. Keep statutes/identity documents and completed forms outside Git |
-| Processing purpose / categories / recipients | **`VERIFIED FROM REPOSITORY`** — use the current annex above; confirm real processing volumes, staff audiences, public media and optional online teaching. Do not reuse the old audit's "no DOB" or withdrawn health fields |
-| Collection notices and consent proof | Produce synthetic screenshots of the accepted release's forms; attach approved processing/media wording, privacy and terms versions. **`OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** authorized final Arabic wording and actual activation evidence |
-| Retention justification | **`VERIFIED FROM REPOSITORY`** for the mechanism — R133/B2/B7, educational/consent/audit history and monthly two-generation backup. Two generations is not a promise of erasure within two months during failed backups/verification; failures must be attended and escalated. **`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`:** legal justification/approval for retained historical evidence, plus unresolved free-text rules |
-| Hosting/subcontracting | **`PROVIDER EVIDENCE REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** Hostoweb contract, actual Moroccan data-center location, subcontractors/support access, snapshots/replicas/backups and incident terms, in writing from Hostoweb. Marketing/brand nationality does not prove data residence, and this cannot be supplied by engineering |
-| Security annex | **`VERIFIED FROM REPOSITORY`** — Branch/Teacher scope, exact public-object DB gate, private signed access, encryption/escrow, bounded logs, worker/retirement alarms and restore proof. H1–H6 and H3 are closed locally (see [deployment readiness](../operations/deployment-readiness.md)); B1's object store and B8's backup are engineering-complete but **not host-installed** — state the same-VPS total-loss limitation honestly regardless |
-| Transfer annex and filing evidence | **`OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`:** F118 facts/basis if applicable and, later, actual receipts/approvals. No invented numbers, signatures, dates, provider commitments or proof of filing |
+| Responsible controller and signatory | `OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`: registered name, status, address, registration evidence, signatory authority, rights contact; statutes/identity documents and forms outside Git |
+| Purpose / categories / recipients | `VERIFIED FROM REPOSITORY`: the annex above; confirm real volumes, staff audiences, public media, optional online teaching; never the old audit's "no DOB" or withdrawn health fields |
+| Collection notices and consent proof | Synthetic screenshots of the accepted release's forms; approved processing/media wording, privacy and terms versions. `OWNER INPUT REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`: final Arabic wording and activation evidence |
+| Retention justification | `VERIFIED FROM REPOSITORY` for the mechanism (R133/B2/B7, educational/consent/audit history, monthly two-generation backup; two generations is no promise of erasure within two months during failed backups — failures escalate). `OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`: legal justification for retained history and free-text rules |
+| Hosting/subcontracting | `PROVIDER EVIDENCE REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`: Hostoweb contract, actual Moroccan data-center location, subcontractors/support access, snapshots/replicas/backups, incident terms, in writing; engineering cannot supply this |
+| Security annex | `VERIFIED FROM REPOSITORY`: Branch/Teacher scope, exact public-object DB gate, private signed access, encryption/escrow, bounded logs, worker/retirement alarms, restore proof; H1–H6 and H3 closed locally ([deployment readiness](../operations/deployment-readiness.md)); B1 object store and B8 backup engineering-complete, not host-installed; state the same-VPS total-loss limitation |
+| Transfer annex and filing evidence | `OWNER INPUT REQUIRED` + `LEGAL/CNDP CONFIRMATION REQUIRED`, `MUST COMPLETE BEFORE PRODUCTION`: F118 facts/basis if applicable, later actual receipts/approvals; no invented numbers, signatures, dates, commitments or proof |
 
-CNDP procedure materials require notices/consent or other basis, relevant
-subcontracting confidentiality evidence and signatory authority. The public site
-must explain controller, purposes, recipients, obligatory/optional fields and
-rights/contact, with actual CNDP references when issued:
-[CNDP website conformity](https://www.cndp.ma/conformite-des-sites-web/).
+- CNDP procedure requires notices/consent or another basis, subcontracting confidentiality evidence and signatory authority; the public site must state controller, purposes, recipients, obligatory/optional fields and rights/contact, with CNDP references once issued ([website conformity](https://www.cndp.ma/conformite-des-sites-web/)).
 
 ### Public-text release check
+- Since R138 `/privacy` and `/terms` render activated `LegalDocument` rows, not hardcoded text; the Production seed invents none; registration uses versioned `LegalConsentText`. Source review cannot show what is activated live: before real users, export/review the approved versions privately, match every annex claim, verify anonymous rendering and the registration consent snapshot. No legal text is activated by this task; follow the [release checklist](../operations/deployment-readiness.md#ordered-release-checklist).
 
-Since R138, `/privacy` and `/terms` show activated `LegalDocument` rows, **not** the
-old hardcoded text. Production seed invents neither; missing configuration is
-explicit. Registration uses separately versioned `LegalConsentText`. Source review
-cannot establish what the Owner has activated on a live environment. Before real
-users, export/review the actual approved versions privately and match every annex
-claim above; then verify anonymous rendering and the registration consent snapshot.
-No legal text is activated by this engineering task. Follow the single
-[release checklist](../operations/deployment-readiness.md#ordered-release-checklist).
-
-### Shortest Owner/legal/provider checklist to close this package
-
-Every engineering-side fact above is already `VERIFIED FROM REPOSITORY`. What
-remains is entirely external and cannot be produced by this task:
-
-1. **`OWNER`** — confirm the association's exact registered name, status,
-   address, registration evidence and an authorized signatory.
-2. **`OWNER` + `LEGAL/CNDP`** — instruct a qualified adviser (or the CNDP
-   directly) to determine the filing route: **F211** (normal declaration) vs.
-   **F112** (prior authorization), whether the Article 12(1)(a) nonprofit
-   exemption genuinely applies, and whether **F115** (responsible-party
-   registration) is separately required. Do not pre-select a form without
-   this confirmation.
-3. **`OWNER` + `LEGAL/CNDP`** — document Google's actual recipient
-   entity/country/role and decide, with the adviser, whether **F118**
-   (transfer authorization) must accompany the base filing.
-4. **`PROVIDER`** — obtain written Hostoweb confirmation of the exact
-   Moroccan data-center location, subcontractors with access, and
-   backup/incident terms (see the [provider-acceptance matrix](../operations/provider-acceptance.md)
-   if present, or the release checklist's provider step).
-5. **`OWNER`** — approve and activate the final Arabic `/privacy`, `/terms`
-   and registration-consent wording as live `LegalDocument`/`LegalConsentText`
-   rows, then re-verify anonymous rendering.
-6. **`OWNER` + `LEGAL/CNDP`** — approve the retention/erasure justification
-   (R133/B2/B7, monthly two-generation same-VPS backup) in writing before
-   real beneficiary data exists.
-7. Only after 1–6: assemble the populated packet privately (never in Git) and
-   file with the CNDP. This task neither selects a final form nor submits
-   anything.
+### Owner/legal/provider checklist
+1. `OWNER`: registered name, status, address, registration evidence, authorized signatory.
+2. `OWNER` + `LEGAL/CNDP`: filing route F211 vs F112, whether Article 12(1)(a) applies, whether F115 is separately required; no form pre-selected.
+3. `OWNER` + `LEGAL/CNDP`: Google's recipient entity/country/role and whether F118 accompanies the base filing.
+4. `PROVIDER`: written Hostoweb confirmation of data-center location, subcontractors with access, backup/incident terms ([provider-acceptance matrix](../operations/provider-acceptance.md) or the release checklist's provider step).
+5. `OWNER`: approve and activate final Arabic `/privacy`, `/terms` and registration-consent rows; re-verify anonymous rendering.
+6. `OWNER` + `LEGAL/CNDP`: written approval of retention/erasure (R133/B2/B7, monthly two-generation same-VPS backup) before real data exists.
+7. Only then assemble the packet privately and file; this task selects no form and submits nothing.
 
 ## Historical audit — retained provenance
 
-> ## ⚠️ THIS IS A DATED AUDIT, NOT THE CURRENT INVENTORY
->
-> **`StudentSocialProfile` no longer exists.** Its removal is the decision this
-> audit argued for: on **2026-09-02** the Document Owner withdrew the capability
-> entirely (**SRS Revision 120**), and migration
-> `20260902200000_drop_student_social_profile` dropped the table behind a guard
-> that refuses a non-empty one. **Localhost and Staging both held 0 rows;
-> Production is not deployed.**
->
-> **The platform collects no health, medical or social-case-file data.** Section
-> A.2 below, and every *LEGAL REVIEW* item derived from it, is **RESOLVED BY
-> REMOVAL** and is retained only as the reasoning that led there. Read it as
-> history; do not read it as an inventory of what is processed today.
->
-> The policy the Owner recorded with the decision: *the platform does not
-> collect categories of personal data that are not necessary for the
-> association's current operational purposes.*
->
-> **A second removal followed on 2026-09-02 (SRS Revision 121).** `User.notes` —
-> the 2 000-character free-text field this audit flagged for **LEGAL REVIEW** at
-> §A.1 and §G.3 — **no longer exists**, dropped by
-> `20260902220000_drop_user_notes` behind a guard that refuses a non-blank
-> value. Localhost held 0 values across 73 users and Staging 0 across 14. The
-> registration form no longer offers it. In the same revision the **Google OAuth
-> scope was reduced to `openid email`**; the `profile` scope this audit recorded
-> at §H.1 as requested-but-unused is no longer requested at all.
->
-> The principle recorded with it: *the platform does not provide generic
-> free-text collection fields without a defined operational purpose. A
-> personal-data field must have a specific, documented purpose.*
->
-> **No legal conclusion is stated or implied by either removal** — whether
-> ordinary declaration suffices, how Quran progress is classified, and what the
-> Google transfer requires all remain open compliance questions.
-**Status:** audit for the Document Owner. No code, schema, or SRS was changed.
-**Followed by:** [the data-collection decision document](data-collection-decision.md),
-which turns these findings into a recommended profile per person type.
+- DATED AUDIT, NOT THE CURRENT INVENTORY. `StudentSocialProfile` was withdrawn 2026-09-02 (R120; migration `20260902200000_drop_student_social_profile`, guard refuses a non-empty table; localhost and Staging held 0 rows; Production not deployed). Section A.2 and every derived LEGAL REVIEW item is RESOLVED BY REMOVAL. Owner policy: no categories of personal data unnecessary for current operational purposes.
+- `User.notes` (2 000-char free text, §A.1/§G.3) was dropped the same day (R121; `20260902220000_drop_user_notes`, guard refuses a non-blank value; localhost 0 of 73 users, Staging 0 of 14); the form no longer offers it; Google OAuth scope reduced to `openid email` (the unused `profile` scope of §H.1 is gone). Principle: no generic free-text field without a documented purpose.
+- Neither removal states a legal conclusion: declaration vs authorization, Quran-progress classification and the Google transfer remain open.
+- Audit for the Document Owner; no code, schema or SRS changed. Tags: **[SRS]** cited · **[CODE]** verified in code · **[INFER]** reasoning, not authority · **[CONFIRM]** needs the CNDP or a Moroccan privacy lawyer. Law 09-08 is understood to distinguish declaration from prior authorization (sensitive categories, national ID, file interconnection, transfers to non-adequate countries); article numbers unverified. A declaration does not license collection: each field must be necessary and proportionate to a defined purpose; merely useful fields are OPTIONAL or DO NOT COLLECT.
 
----
+### A. Data inventory (verified against `prisma/schema.prisma`)
 
-## How to read the claims in this document
+**A.1 `User`**
 
-Every material statement is tagged, because mixing these four is how a
-compliance document becomes confidently wrong:
+| Field | Person | Purpose | Necessary? | Req/Opt | Access | Sensitive? | Action |
+|---|---|---|---|---|---|---|---|
+| `nameArabic` (+ parts) | all | Identify | Yes | Required | staff; self | No | KEEP |
+| `nameFrench` (+ parts) | all | Bilingual records | Marginal | Optional | staff; self | No | OPTIONAL |
+| `nickname` | all | What a person is called | Yes | Optional | staff; self | No | KEEP |
+| `publicDisplayName` | all | Public identity (§20 r21) | Yes | Derived | public | No | KEEP |
+| `phone` | adult/parent/staff | Contact | Yes | Optional | staff; self | No | KEEP; never a child's (G.2) |
+| `qrRef` | all | Scannable reference (R96) | Yes | Required | staff; self | External correlate | KEEP; rotate at final de-identification |
+| `referenceCode` | beneficiaries | Spoken short id (R62) | Yes | Optional | staff; self | External correlate | KEEP; clear at final de-identification |
+| `sex` | all | §4.4b restricted Levels | Yes [SRS] | Required | staff | [CONFIRM] | KEEP |
+| `notes` | all | Free-text note | No defined purpose | Optional | staff | 2000 chars of anything | LEGAL REVIEW (I.1); removed R121 |
+| `preProvisionedEmail` | staff | Account claiming (§4.1b) | Yes | Optional | staff | No | KEEP |
+| `accountStatus` | all | TD-1 lifecycle | Yes | Required | staff; self | No | KEEP |
+| `intendedBranchId` | applicant | Routing (R39) | Yes | Optional | staff | No | KEEP |
+| `intendedCategoryId`, `schoolingStage`, `requestedRole` | applicant | Approval context | Yes | Optional | staff | No | KEEP until decided; clear at final de-identification |
+| `*Normalized` | all | Arabic search | Yes | Derived | server only, not in the API | No | KEEP |
 
-| Tag | Means |
-|---|---|
-| **[SRS]** | The specification says this. Quoted or cited. |
-| **[CODE]** | I verified it in the running codebase. Reproducible. |
-| **[INFER]** | My engineering/compliance reasoning. Not authority. |
-| **[CONFIRM]** | **Requires the CNDP or a Moroccan privacy lawyer.** I am not one. |
+- Every field above reaches the API except `*Normalized`; every field applies to minors except `phone` and `preProvisionedEmail`.
+- [CODE] at audit date: no date of birth, CIN/national ID, photo or geolocation in the schema (DOB later required, R130).
+- [CODE] R111 de-identification is an allow-list: the tombstone keeps `id`, `sex`, lifecycle, beneficiary status, record age; clears composed and split names, contact/public identity, registration-request metadata, notes, spoken/QR identifiers and every credential/planning satellite; the Trash snapshot is deleted in the same transaction.
 
-**On the legal framework specifically.** My understanding is that Law 09-08
-distinguishes ordinary processing (declaration to the CNDP) from processing
-requiring **prior authorization** — which I understand to include sensitive
-categories, use of the national identity number, interconnection of files, and
-transfers to countries the CNDP has not recognised as adequate. **I have not
-verified article numbers or current CNDP practice, and this document cites
-none.** Every point where the distinction matters is tagged **[CONFIRM]**.
-
-**A principle this audit applies throughout:** a declaration does not license
-collection. Each field must be *necessary and proportionate to a defined
-purpose*. Fields that are merely useful are marked OPTIONAL or DO NOT COLLECT.
-
----
-
-# A. Current data inventory
-
-Verified against `prisma/schema.prisma` and the services that read it.
-
-## A.1 `User` — every person on the platform
-
-| Field | Person | Purpose | Necessary? | Req/Opt | Access | API? | Minor? | Sensitive? | Action |
-|---|---|---|---|---|---|---|---|---|---|
-| `nameArabic` (+ first/last parts) | all | Identify a person | Yes | Required | staff; self | Yes | Yes, for children | No | **KEEP** |
-| `nameFrench` (+ parts) | all | Bilingual records | Marginal | Optional | staff; self | Yes | Yes | No | **OPTIONAL** |
-| `nickname` | all | What a person is called | Yes | Optional | staff; self | Yes | Yes | No | **KEEP** |
-| `publicDisplayName` | all | Resolved public identity (§20 r21) | Yes | Derived | public | Yes | Yes | No | **KEEP** |
-| `phone` | adult/parent/staff | Contact | Yes | Optional | staff; self | Yes | **Should never be a child's** | No | **KEEP** — see G.2 |
-| `qrRef` | all | Stable scannable person reference (R96) | Yes | Required | staff; self | Yes | Yes | External correlate | **KEEP while active; rotate at final de-identification** |
-| `referenceCode` | beneficiaries | Spoken short identifier (R62) | Yes | Optional | staff; self | Yes | Yes | External correlate | **KEEP while active; clear at final de-identification** |
-| `sex` | all | §4.4b sex-restricted Levels | Yes **[SRS]** | Required | staff | Yes | Yes | **[CONFIRM]** | **KEEP** |
-| `notes` | all | Free-text admin note | **No defined purpose** | Optional | staff | Yes | Yes | 2000 chars of anything | **LEGAL REVIEW** — see I.1 |
-| `preProvisionedEmail` | staff | Account claiming (§4.1b) | Yes | Optional | staff | Yes | No | No | **KEEP** |
-| `accountStatus` | all | TD-1 lifecycle | Yes | Required | staff; self | Yes | Yes | No | **KEEP** |
-| `intendedBranchId` | applicant | Routing an application (R39) | Yes | Optional | staff | Yes | Yes | No | **KEEP** |
-| `intendedCategoryId`, `schoolingStage`, `requestedRole` | applicant | Approval context | Yes | Optional | staff | Yes | Yes | No | **KEEP until decided; clear at final de-identification** |
-| `*Normalized` | all | Arabic search | Yes | Derived | server only | **No** | Yes | No | **KEEP** |
-
-**[CODE]** There is **no date of birth, no CIN/national ID, no photo field, and
-no geolocation** anywhere in the schema. That is a strong starting position and
-should be defended.
-
-**[CODE] R111 de-identification is an allow-list, not a display rename.** The preserved User
-tombstone keeps `id`, `sex`, lifecycle, beneficiary status and record age. It clears both
-composed and split names, contact/public identity, registration-request metadata, free-text
-notes, spoken/QR identifiers and every credential/planning satellite. Its recoverable Trash
-snapshot is deleted in that same transaction; otherwise the original PII would survive the
-operation in JSONB.
-
-## A.2 `StudentSocialProfile` — ~~the highest-risk table~~ **REMOVED**
-
-> **RESOLVED BY REMOVAL (SRS R120, 2026-09-02).** Every field below is gone from
-> the platform — table, model, routes, permissions and audit actions. The
-> question this section called *"the single most important legal question in
-> this audit"* was answered by not collecting the data at all. The analysis is
-> kept because it is the argument that produced the decision.
+**A.2 `StudentSocialProfile` — REMOVED (R120)**, analysis kept as the argument that produced the decision.
 
 | Field | Purpose | Necessary? | Sensitive? | Action |
 |---|---|---|---|---|
-| `healthCondition` | Safeguarding | **[CONFIRM]** | **Health data — almost certainly a special category** | **LEGAL REVIEW** |
-| `familySituation` | Safeguarding | **[CONFIRM]** | Unbounded free text; may capture judicial/social data | **LEGAL REVIEW** |
-| `homeAddress` | Safeguarding | Questionable | Locates a minor | **LEGAL REVIEW** |
-| `siblingsCount` | Social context | **No** | Low | **DO NOT COLLECT** |
-| `fatherName`, `motherName` | Family identification | Partly | Third-party data | **OPTIONAL** |
-| `fatherProfession`, `motherProfession` | Social context | **No** | Socio-economic profiling | **DO NOT COLLECT** |
+| `healthCondition` | Safeguarding | [CONFIRM] | Health data, almost certainly special category | LEGAL REVIEW |
+| `familySituation` | Safeguarding | [CONFIRM] | Unbounded free text; judicial/social data | LEGAL REVIEW |
+| `homeAddress` | Safeguarding | Questionable | Locates a minor | LEGAL REVIEW |
+| `siblingsCount` | Social context | No | Low | DO NOT COLLECT |
+| `fatherName`, `motherName` | Family identification | Partly | Third-party data | OPTIONAL |
+| `fatherProfession`, `motherProfession` | Social context | No | Socio-economic profiling | DO NOT COLLECT |
 
-**[CODE] The access controls here are the strongest in the platform** and were
-built deliberately: read *and* write restricted to Super Admin, branch-scoped
-Admin, and the student's own assigned teachers; **never students, never
-guardians including the child's own parents** (BR-16, R28); both reads and
-writes audited (`socialprofile.view` / `socialprofile.update`); out-of-scope
-answers `404` not `403` so a response cannot confirm a record exists.
+- [CODE] access was the platform's strictest: read and write by Super Admin, branch-scoped Admin and assigned teachers only; never students or guardians (BR-16, R28); both audited (`socialprofile.view` / `socialprofile.update`); out of scope `404`, not `403`.
+- [INFER] the field list, not the controls, was the problem: 2000-char `healthCondition` invites a diagnosis ([CONFIRM] whether that alone forces prior authorization); `siblingsCount` and `*Profession` were read by no business logic.
 
-**[INFER] The controls are excellent; the field list is the problem.**
-`healthCondition` as unbounded free text (2000 chars) invites a teacher to write
-a diagnosis, a medication, or a disability. **[CONFIRM]** Whether this alone
-moves the processing into a prior-authorization regime is the single most
-important legal question in this audit.
-
-**[INFER]** `siblingsCount` and both `*Profession` fields have no purpose the
-platform acts on. I searched: **no business logic reads them** — they are
-displayed and nothing more. That is collection without purpose.
-
-## A.3 Educational data
+**A.3 Educational data**
 
 | Data | Model | Purpose | Necessary? | Minor? | Action |
 |---|---|---|---|---|---|
-| Level / Category / Group membership | `Enrollment`, `StudentTeachingGroup` | Educational administration | Yes | Yes | **KEEP** |
-| Level completion attested by the administration, and its certificate number and dates (SRS Revision 167 §3) | `LevelCompletionMark` | Educational administration — the association's record that she completed a Level, and the certificate she may print. No free text; `requirements_met` is a boolean; the certificate page is rendered in her own browser and **no certificate file is generated, stored or sent** | Yes | Yes | **KEEP** |
-| A MARK that her stored date of birth is not her date of birth (SRS Revision 169 §9) | `User.birthDateIsPlaceholder` | The Owner's decision that every beneficiary carries a date: where none was ever recorded the platform stores the fixed 1900-01-01 **marked as a placeholder**. It is NOT personal data about her — it says only «not recorded» — it is never sent to any screen as a date, no rule reads it as an age, and it is replaced once by the real date. De-identification clears it with the date | Yes | Yes | **KEEP** |
-| The roles a registration asked for, each with its decision (SRS Revision 168 §1) | `RoleRequest` | Admission — what she asked the association for (`student · guardian · teaching · administration`), whether each was approved or declined, by whom and when. `first_time` is one boolean; `decline_reason` is operator-facing (≤500), never shown raw to her, and the same discipline as every §5.6 reason applies: a decision, never a judgement about a person. **A request and never an authority.** Goes with the person | Yes | No — a minor never registers herself (R62) | **KEEP** |
-| The memorisation circles a first-time مستفيدة ranked (SRS Revision 168 §1) | `CirclePreference` | Placement — which scheduled حلقات suit her, in her order; read by the approver beside the placement control. Ids and a rank only, no free text. Goes with the person | Yes | No | **KEEP** |
-| Quran progress (surah, ayah range) | `QuranProgressLog` | Core educational purpose | Yes | Yes | **KEEP** |
-| Grades (integer basis points) | `Grade` | Assessment | Yes | Yes | **KEEP** |
-| `Grade.overrideReason` | free text | Accountability for an override | Yes | Yes | **KEEP** — bound the length |
-| Exam submissions | `StudentExamSubmission` | Assessment | Yes | Yes | **KEEP** |
-| **Assessment answers (R124)** | `StudentExamAnswer`, `StudentExamAnswerOption` | Assessment | Yes | Yes | **KEEP** — what a beneficiary wrote in her own words, and which choices she made. Replaces the `answers` jsonb column, which held the same data less legibly |
-| `Session.cancellationReason` | free text | Operational record | Yes | No | **KEEP** |
+| Level / Category / Group membership | `Enrollment`, `StudentTeachingGroup` | Educational administration | Yes | Yes | KEEP |
+| Level completion, certificate number and dates (R167 §3) | `LevelCompletionMark` | Her completion record and printable certificate; no free text; `requirements_met` boolean; no certificate file generated, stored or sent | Yes | Yes | KEEP |
+| Placeholder mark on the birth date (R169 §9) | `User.birthDateIsPlaceholder` | Unrecorded dates store the fixed 1900-01-01, marked; means only «not recorded»; never shown as a date or read as an age; replaced once by the real date; cleared at de-identification | Yes | Yes | KEEP |
+| Roles asked for and their decisions (R168 §1) | `RoleRequest` | `student · guardian · teaching · administration`, approved/declined, by whom, when; `first_time` boolean; `decline_reason` operator-facing (≤500), never shown raw, a decision not a judgement; a request, never an authority | Yes | No (a minor never registers herself, R62) | KEEP |
+| Circles a first-time مستفيدة ranked (R168 §1) | `CirclePreference` | Placement; ids and rank only | Yes | No | KEEP |
+| Quran progress (surah, ayah range) | `QuranProgressLog` | Core educational purpose | Yes | Yes | KEEP |
+| Grades (integer basis points) | `Grade` | Assessment | Yes | Yes | KEEP |
+| `Grade.overrideReason` | free text | Override accountability | Yes | Yes | KEEP; bound the length |
+| Exam submissions | `StudentExamSubmission` | Assessment | Yes | Yes | KEEP |
+| Assessment answers (R124) | `StudentExamAnswer`, `StudentExamAnswerOption` | Her own words and choices; replaces the `answers` jsonb column | Yes | Yes | KEEP |
+| `Session.cancellationReason` | free text | Operational record | Yes | No | KEEP |
 
-**[CODE] There is no attendance model.** `grep "model Attendance"` returns
-nothing. If attendance is planned, it is a new purpose (see E).
+- [CODE] at audit date no attendance model existed (a new purpose, E); attendance is now §4.7 (R123).
+- R124, where an answer never appears: `AuditLog` (`assessment.save`, `assessment.submit`, `assessment.question.*` carry ids, kind, count; never an answer, prompt, option label or title; guard refuses copied identity, the free-text rule is asserted in `assessment.integration.test.ts`); `Trash` (only a removed question and its options, staff text, §20 rule 11; removal refused once anybody submitted; the retired `questions` blob snapshot is a column, not an answer); notifications (none in v1); logs (TD-14 forbids request bodies).
 
-### R124 — where an answer must never appear
-
-Four surfaces, named because each is a place free text has reached by accident
-on other projects and this one has a mechanical guard for only the first:
-
-* **`AuditLog`** — `assessment.save`, `assessment.submit`, `assessment.question.*`
-  carry ids, a kind and a **count**. Never an answer, never a prompt, never an
-  option label, never a title. The repository's minimisation guard refuses a
-  copied identity outright; the free-text rule it cannot detect is asserted
-  directly in `assessment.integration.test.ts`.
-* **`Trash`** — one path writes one, and it holds **no student answer**:
-  removing a question snapshots the question and its options, because that is
-  text a member of staff wrote and Trash is what lets a deletion be undone
-  (§20 rule 11). Removal is refused once anybody has submitted, so an answer can
-  never be attached to what is snapshotted. The migration's snapshot of the
-  retired `questions` blob is the same kind of thing — a column being removed,
-  not a person's answer.
-* **Notifications** — none is sent for an assessment in v1.
-* **Logs** — TD-14 already forbids request bodies on these paths, and no
-  assessment endpoint logs one.
-
-**A question and an option label are personal data too**, in the weaker sense
-that they are free text a member of staff wrote. They are kept out of the log on
-the same rule, because *«what did the paper ask»* is not a question the audit
-trail exists to answer.
-
-## A.4 Authentication, audit and security
+**A.4 Authentication, audit and security**
 
 | Data | Where | Retention | Action |
 |---|---|---|---|
-| Google `providerSubjectId`, `email` | `UserIdentity` | Life of account | **KEEP** |
-| `tokenHash` | `RefreshToken` | Purged past expiry **[CODE]** | **KEEP** |
-| `AuditLog.detail` (JSON) | `AuditLog` | 12 months for an **enumerated** auth allowlist only; everything else **indefinite** **[CODE]** | **KEEP** — see I.2 |
-| `ConsentRecord` | its own table | Indefinite | **KEEP** |
+| Google `providerSubjectId`, `email` | `UserIdentity` | Life of account | KEEP |
+| `tokenHash` | `RefreshToken` | Purged past expiry [CODE] | KEEP |
+| `AuditLog.detail` (JSON) | `AuditLog` | 12 months for an enumerated auth allowlist; everything else indefinite [CODE] | KEEP (I.2) |
+| `ConsentRecord` | own table | Indefinite | KEEP |
 
-**[CODE] Audit detail is minimised at its shared repository boundary.** Profile
-and catalogue updates log **field names only, never copied values**. Staff
-pre-provisioning records the target User id and
-`identity_channel = pre_provisioned`, never the mailbox. Content lifecycle rows
-use non-reversible exact-coordinate ids instead of filename-derived object keys;
-the exact actionable key stays in the governed content/Trash/job record. The
-recursive repository guard refuses copied names, contacts, titles, labels,
-filenames and exact locators before the domain transaction commits, while its
-unit test and the CI source guard pin the boundary.
+- [CODE] audit detail minimised at the repository boundary: updates log field names only; pre-provisioning logs the target User id and `identity_channel = pre_provisioned`, never the mailbox; content rows use non-reversible exact-coordinate ids (the key stays in the content/Trash/job record); the recursive guard refuses copied names, contacts, titles, labels, filenames, locators before commit; unit test + CI source guard pin it.
+- [CODE] logs carry no identity coordinates: Nginx makes the correlation id, logs no URI/client address; Express logs a route template / `<unmatched>` and fixed error text; raw database/storage messages excluded. TD-8 identity-email closed by R170 §18 (user id only); exact-storage-key reconciliation stays an Owner item in `TASKS.md`, stricter no-PII behaviour meanwhile. TD-8-required reasons and old/new setting values are not sanitized; their access/retention is a separate Owner decision.
+- [CODE] `consent_gate.override`, `grade.passfail_override`, `settings.change`, `trash.permanent_delete` are excluded from the purge allowlist, retained indefinitely.
 
-**[CODE] Operational logs take no public identity coordinates.** Nginx creates
-the correlation id and logs no URI or client address; Express logs a route
-template / `<unmatched>` and fixed internal-error text. Raw database/storage
-exception messages are excluded because they may contain SQL, credentials or
-filename-derived keys. TD-8's contradictory identity-email and exact-storage-key
-instructions remain explicit Document Owner reconciliations in `TASKS.md`, with
-the stricter no-PII behavior retained meanwhile. TD-8-required reasons,
-justifications and old/new setting values are not silently sanitized; their
-access/retention or structured-reason policy is a separate Owner decision.
+**A.5 Files and storage**
+- [CODE] uploads: PDF and audio only; video excluded by design (`file-types.ts`); images not accepted.
+- [INFER] audio of a child reciting is personal data with voice characteristics; not biometric identification as used (no matching); [CONFIRM] heightened treatment for minors' voice recordings.
+- [SRS] `media_release` is a distinct `ConsentType` from `data_processing`.
 
-**[CODE]** Security events (`consent_gate.override`, `grade.passfail_override`,
-`settings.change`, `trash.permanent_delete`) are **deliberately excluded** from
-the purge allowlist and retained indefinitely.
-
-## A.5 Files and storage
-
-**[CODE]** Accepted uploads: **PDF and audio only**. Video is *excluded by
-design* — `file-types.ts` states that accepting `video/*` would be a decision
-nobody made. Images are not accepted either.
-
-**[INFER]** Audio of a child reciting is still personal data, and plausibly
-carries voice characteristics. It is **not** biometric identification as the
-platform uses it (no matching, no identification), but **[CONFIRM]** whether
-voice recordings of minors attract heightened treatment.
-
-**[SRS]** `media_release` consent exists as a distinct `ConsentType`, separate
-from `data_processing` — the right structure.
-
-## A.6 Third parties and hosting
+**A.6 Third parties and hosting**
 
 | Party | Data | Location | Status |
 |---|---|---|---|
-| **Google OAuth** | `openid email profile` **[CODE]** | Foreign | **[CONFIRM]** — see H.1 |
-| **SeaweedFS (object storage)** | All uploads | Self-hosted, same VPS **[SRS]** | OK |
-| **PostgreSQL** | Everything | Self-hosted, same VPS **[SRS]** | OK |
-| Analytics / telemetry | — | — | **[CODE] None. No analytics, no Sentry, no tag manager.** |
-| Email / SMS | — | — | **[CODE] None exists.** No notification channel is built |
-| Third-party AI | — | — | **[CODE] None.** |
+| Google OAuth | `openid email profile` at audit date [CODE]; `openid email` since R121 | Foreign | [CONFIRM] (H.1) |
+| SeaweedFS (object storage) | All uploads | Self-hosted, same VPS [SRS] | OK |
+| PostgreSQL | Everything | Self-hosted, same VPS [SRS] | OK |
+| Analytics / telemetry | — | — | [CODE] none: no analytics, Sentry or tag manager |
+| Email / SMS | — | — | [CODE] none; no notification channel built |
+| Third-party AI | — | — | [CODE] none |
 
-**[SRS] §2.2 already requires Moroccan hosting** and states that every
-non-Moroccan tier — **Local Development, Preview (Vercel) and Staging** (§19.0,
-Revision 104) — **must never contain real beneficiary data: fixture data
-only**. This is a specified architectural control, not an aspiration.
+- [SRS] §2.2 requires Moroccan hosting; Local Development, Preview (Vercel) and Staging (§19.0, R104) hold fixture data only — a specified control.
 
----
-
-# B. Planned R62 data inventory
+### B. Planned R62 data inventory
 
 | Field | Person | Purpose | Necessary? | Notes |
 |---|---|---|---|---|
-| Child first/last Arabic name | **minor** | Identify the child | Yes | Already exists |
-| Child `sex` | **minor** | §4.4b Level restriction | Yes **[SRS]** | Already exists |
-| Parent–child relationship | parent + minor | `FamilyLink` authorization record | Yes | Already exists |
+| Child first/last Arabic name | minor | Identify the child | Yes | Exists |
+| Child `sex` | minor | §4.4b restriction | Yes [SRS] | Exists |
+| Parent–child relationship | parent + minor | `FamilyLink` authorization record | Yes | Exists |
 | `ChildApplication` envelope + `decisionReason` | parent + minor | Approval workflow | Yes | New table |
-| **Proposed: date of birth** | **minor** | Duplicate detection | **See D.1** | **Not in the schema today** |
+| Proposed date of birth | minor | Duplicate detection | See D.1 | Not in the schema then |
 
-**[INFER] R62 adds no new *category* of personal data** — it restructures the
-workflow around data already collected. The one exception is the duplicate-match
-problem, which is where a birth date was proposed. That proposal is where the
-compliance risk enters, and it is addressed in D.1.
+- [INFER] R62 adds no new category; the duplicate-match proposal (birth date) is where risk enters (D.1).
 
----
-
-# C. Recommended additional data worth collecting
-
-Ranked by *purpose served ÷ risk added*.
+### C. Recommended additional data (purpose ÷ risk)
 
 | Field | Purpose | Why proportionate | Action |
 |---|---|---|---|
-| **Emergency contact** (name, phone, relationship) | Safeguarding — a child is unwell or unaccompanied | A concrete, defensible need. Currently **absent**, which is arguably a *safeguarding gap* | **KEEP** — collect for minors only |
-| **Attendance** (present/absent/late per session) | Educational administration | Core to a teaching institution | **KEEP** — as a purpose of its own (E) |
-| **Guardian relationship type** (mother/father/legal guardian) | Clarifies who may act | Small, bounded enum | **OPTIONAL** |
-| **Preferred contact language** | Communication | Trivial risk | **OPTIONAL** |
-| **Certificates / achievements** | Recognition | Derived from grades already held | **OPTIONAL** |
+| Emergency contact (name, phone, relationship) | Safeguarding: a child unwell or unaccompanied | Concrete need; absence is a safeguarding gap | KEEP, minors only |
+| Attendance (present/absent/late per session) | Educational administration | Core to teaching | KEEP as its own purpose (E) |
+| Guardian relationship type (mother/father/legal guardian) | Who may act | Bounded enum | OPTIONAL |
+| Preferred contact language | Communication | Trivial risk | OPTIONAL |
+| Certificates / achievements | Recognition | Derived from held grades | OPTIONAL |
 
-**[INFER]** Emergency contact is the one genuine gap. A platform holding
-minors' educational records with **no** way to reach someone in an incident is a
-weakness, not a privacy virtue.
-
----
-
-# D. Data to explicitly avoid collecting
+### D. Data to avoid collecting
 
 | Field | Why not | Action |
 |---|---|---|
-| **CIN / national ID** | **[CONFIRM]** my understanding is that national-identifier processing may require **prior authorization** rather than declaration. It would also become the platform's most attractive breach target, and it serves **no purpose the platform acts on** | **DO NOT COLLECT** |
-| **Date of birth** — *if collected only for duplicate matching* | Solves the problem badly (siblings, twins, data-entry error) and adds a precise identifier for every minor | **DO NOT COLLECT for that purpose.** See D.1 |
-| **Biometrics** (face, fingerprint, voiceprint-as-identifier) | Special category; no purpose here | **DO NOT COLLECT** |
-| **Religious affiliation or conviction** | Special category. **[INFER]** For a Quran institute this is *inferable from enrolment itself* — which is precisely why it must never be recorded as a field | **DO NOT COLLECT** |
-| **Political opinions, ethnicity, trade-union membership** | Special category; no purpose | **DO NOT COLLECT** |
-| **Geolocation** | No purpose | **DO NOT COLLECT** |
-| **Photos/video of students** | Currently excluded by design **[CODE]**. Re-introducing needs `media_release` consent *and* a retention rule | **DO NOT COLLECT** without an explicit decision |
-| **Parents' professions, siblings count** | Already present; no logic reads them | **DELETE** — see I.1 |
-| **Free-text health details** | See A.2 | **LEGAL REVIEW before R62** |
+| CIN / national ID | [CONFIRM] may require prior authorization; top breach target; no purpose acted on | DO NOT COLLECT |
+| Date of birth for duplicate matching only | Solves it badly (siblings, twins, entry error); precise identifier per minor | DO NOT COLLECT for that purpose (D.1) |
+| Biometrics | Special category; no purpose | DO NOT COLLECT |
+| Religious affiliation or conviction | Special category; inferable from enrolment itself, so never a field | DO NOT COLLECT |
+| Political opinions, ethnicity, trade-union membership | Special category; no purpose | DO NOT COLLECT |
+| Geolocation | No purpose | DO NOT COLLECT |
+| Photos/video of students | Excluded by design [CODE]; reintroduction needs `media_release` consent and a retention rule | DO NOT COLLECT without explicit decision |
+| Parents' professions, siblings count | No logic read them | DELETE (I.1) — done by R120 |
+| Free-text health details | A.2 | LEGAL REVIEW before R62 — resolved by removal |
 
-## D.1 The duplicate-matching problem, restated as a privacy question
+- D.1: keep human-resolved (admin-chosen candidate) duplicate matching; no birth date for deduplication — hundreds of permanent identifiers to save minutes a few times a year; a birth date for another purpose (age-appropriate placement) is a separate decision.
 
-R62 needs to decide *"is this child already registered?"*. My earlier engineering
-recommendation was an **admin-resolved match from proposed candidates**.
+### E. Processing-purpose matrix ([INFER] structure; declare purposes separately)
 
-**That recommendation is also the privacy-correct one.** Adding a birth date for
-every minor in order to automate a decision an administrator makes a handful of
-times a year is disproportionate: it creates a permanent precise identifier for
-hundreds of children to save a few minutes of staff time.
-
-**[INFER] Recommendation: keep human-resolved matching. Do not add a birth
-date for deduplication.** If a birth date is later wanted for a *different*
-stated purpose — age-appropriate Level placement, for instance — that is a
-separate decision, judged on its own merits.
-
----
-
-# E. Processing-purpose matrix
-
-Purposes should be declared **separately**, because they have different data,
-audiences and retention. **[INFER]** — this structure is my proposal.
-
-| # | Purpose | Data categories | Lawful basis **[CONFIRM]** | Retention **[CONFIRM]** |
+| # | Purpose | Data categories | Lawful basis [CONFIRM] | Retention |
 |---|---|---|---|---|
-| 1 | **Account & authentication** | Identity, Google subject, tokens | Contract / consent | Life of account |
-| 2 | **Registration & membership** | Names, sex, **date of birth** (R130), phone, branch, application status | Contract / consent | Life of membership; **a REJECTED application: 12 months** *(R131)* |
-| 3 | **Parent–child relationship** | `FamilyLink`, guardian identity | Legal representation of a minor | Until the link is withdrawn **or an approved self-managed claim ends it** *(R132)* — **not** automatically at majority |
-| 4 | **Educational administration** | Level, group, subject, schedule | Contract | **10 years after last educational activity** *(R131)* |
-| 5 | **Attendance** *(new)* | Presence per session | Contract | **10 years after last educational activity** *(R131)* |
-| 6 | **Assessment** | Grades, exam submissions | Contract | **10 years after last educational activity** *(R131)* |
-| 7 | **Quran progress** | Surah/ayah coverage | Contract | **10 years after last educational activity** *(R131)* |
-| 8 | **Communication** *(none built)* | Contact details, preferences | Consent | Until withdrawn |
-| 9 | **Safeguarding** | Social profile, emergency contact | **[CONFIRM] — likely the most constrained** | Strictly limited |
-| 10 | **Security & audit** | Actor, action, timestamp, no values | Legal obligation / legitimate interest | 12 months, security events longer |
-| 11 | **File & document management** | Uploads, metadata | Contract / consent | Until deletion + 90 days |
-| 12 | **Platform operation** | Technical logs | Legitimate interest | Short |
+| 1 | Account & authentication | Identity, Google subject, tokens | Contract / consent | Life of account |
+| 2 | Registration & membership | Names, sex, date of birth (R130), phone, branch, application status | Contract / consent | Life of membership; a REJECTED application 12 months (R131) |
+| 3 | Parent–child relationship | `FamilyLink`, guardian identity | Legal representation of a minor | Until withdrawn or an approved self-managed claim ends it (R132); never automatically at majority |
+| 4 | Educational administration | Level, group, subject, schedule | Contract | 10 years after last educational activity (R131) |
+| 5 | Attendance | Presence per session | Contract | 10 years after last educational activity (R131) |
+| 6 | Assessment | Grades, exam submissions | Contract | 10 years after last educational activity (R131) |
+| 7 | Quran progress | Surah/ayah coverage | Contract | 10 years after last educational activity (R131) |
+| 8 | Communication (none built) | Contact details, preferences | Consent | Until withdrawn |
+| 9 | Safeguarding | Social profile, emergency contact | [CONFIRM], likely the most constrained | Strictly limited [CONFIRM] |
+| 10 | Security & audit | Actor, action, timestamp, no values | Legal obligation / legitimate interest | 12 months, security events longer |
+| 11 | File & document management | Uploads, metadata | Contract / consent | Until deletion + 90 days |
+| 12 | Platform operation | Technical logs | Legitimate interest | Short [CONFIRM] |
 
-**The Retention column is no longer entirely `[CONFIRM]` (updated 2026-09-04).**
-R131 settled purposes 2 and 4–7 and R132 settled purpose 3. **The ten years are
-the association's own purpose-based policy and are not CNDP-prescribed**; the
-reasoning, the definition of *last educational activity* and the computation live
-in [the personal-data map](../development/personal-data-map.md) and are not
-restated here. The remaining `[CONFIRM]`s are genuinely open.
+- Retention updated 2026-09-04: R131 settled purposes 2 and 4–7, R132 purpose 3; the ten years are the association's own purpose-based policy, not CNDP-prescribed; definition of *last educational activity* and the computation: [personal-data map](../development/personal-data-map.md).
+- Row 3: guardian authority never lapses by itself on an eighteenth birthday; the transition is an approved claim.
+- Purpose 9 is declared separately and narrowly, never bundled into educational administration.
 
-**Row 3 was the one worth catching.** *«Until majority or unlink»* implied that
-guardian authority lapses by itself on an eighteenth birthday. It does not, and
-must not: the transition is an **approved claim**, never an automatic one, and a
-birthday that silently revoked a guardian's access would strand a beneficiary who
-had asked for nothing.
+### F. Questions for the CNDP / a lawyer (all [CONFIRM])
+1. Does free-text `healthCondition` force prior authorization? (resolved by removal)
+2. Do `familySituation` and `homeAddress` for minors attract the same treatment? (resolved by removal)
+3. Is Google OAuth (identity data to a US provider) a transfer requiring authorization; is the destination adequate? §2.2 mandates Moroccan hosting; authentication is the one flow that structurally leaves.
+4. Are audio recordings of minors ordinary personal data?
+5. Retention and majority: answered by the Owner (R131 ten years from last educational activity; R132 nothing happens at majority, she may claim her account); open: any externally required minimum/maximum.
+6. Must parents' rectification/erasure over a child's record be a feature?
+7. Must the notice be in Arabic and consent per purpose? (schema already separates `media_release` / `data_processing`)
+8. Is a CNDP declaration already filed, covering E?
 
-**[INFER] Purpose 9 (safeguarding) should be declared separately and narrowly.**
-Bundling minors' health and family circumstances into "educational
-administration" would understate what is held.
+### G. Minor-specific risks
+- G.1 [SRS] minors have no login; every access path is an authorization path, widened by R62.
+- G.2 [CODE] `phone` exists on `User` for children too; [INFER] constrain that a `User` reached only via `FamilyLink` carries no phone.
+- G.3 [CODE] `registration.service.ts:282` wrote `input.child.notes` (`VarChar(2000)`, no purpose, no reader) — removed by R121.
+- G.4 social-profile access was correct; its contents were the exposure — removed by R120.
+- G.5 [CODE] `resolveActingStudent` is sound; approval is the security boundary (a mis-approved link grants a stranger a child's record); the approval screen must show enough to decide; approvals are audited.
+- G.6 multi-parent linking undefined ([SRS] silent; schema permits two parents per child); custody disputes make it a safeguarding question — decision required.
 
----
+### H. Third-party and hosting risks
+- H.1 [CODE] Google OAuth is the only foreign flow; no Google API beyond token exchange; minors never authenticate, so a child's identity never reaches Google — state it in the declaration.
+- H.2 [CODE] no analytics, error tracking, email provider or AI service; preserve as a rule — any addition is a new processor and transfer question.
+- H.3 [SRS] §2.2 forbids real data in every non-Moroccan tier. Preview (Vercel) stores nothing (MSW mocks). Staging (R104) has since 2026-08-25 a real PostgreSQL and MinIO on a VPS in France, permissible only as fixture-only, held by: the fixtures seed refusing `NODE_ENV=production`; production dumps never leaving Moroccan infrastructure and the development database never copied into Staging (§20 rule 18); Staging holding no production credential. [INFER] residual risk is procedural (nothing stops a manual `pg_restore`); a technical barrier is recommended.
+- H.4 [SRS] backups: nightly `pg_dump` plus volume backups, `restic` over SSH offsite to a second Moroccan location, RPO ≤ 24 h, RTO < 1 h, tested restore as a launch requirement; both locations inside Morocco (BR-18). Open: no retention period for backup copies, so an erased record may persist; [CONFIRM] backup retention vs erasure.
 
-# F. Declaration vs authorization vs transfer — the questions to ask
-
-**All [CONFIRM]. I am not answering these; I am framing them precisely.**
-
-1. Does the free-text **`healthCondition`** field move this processing into a
-   prior-authorization regime? *(The single most consequential question here.)*
-2. Do **`familySituation`** and **`homeAddress`** for minors attract the same
-   treatment?
-3. Does **Google OAuth** — identity data leaving Morocco to a US provider —
-   constitute a transfer requiring authorization, and does the CNDP recognise
-   the destination as adequate? **[SRS] §2.2 mandates Moroccan hosting for
-   personal data; authentication is the one flow that structurally leaves.**
-4. Are **audio recordings of minors** ordinary personal data or something more?
-5. ~~What retention periods are **required or permitted** for a minor's
-   educational record, and what must happen at majority?~~ **Answered by the
-   Owner** (R131, R132): ten years from last educational activity, and at
-   majority nothing happens by itself — she may *claim* her account. The
-   question that remains is the narrower one it contained: whether any
-   **externally required** minimum or maximum overrides the association's own
-   period.
-6. Do parents have a **right to rectification/erasure** over a child's record
-   that the platform must implement as a feature?
-7. Must the **privacy notice** be provided in Arabic, and must consent be
-   recorded per purpose rather than globally? *(The schema already supports
-   per-purpose consent — `media_release` vs `data_processing`.)*
-8. Is a **CNDP declaration already filed** for this association, and does it
-   cover the purposes in E?
-
----
-
-# G. Minor-specific risks
-
-**G.1 — The platform is minor-heavy by design.** **[SRS]** Minors have no login;
-they exist only as records reached through an approved parent. Every access path
-is therefore an *authorization* path, and R62 widens it.
-
-**G.2 — A child's `phone` must never be populated.** **[CODE]** The column
-exists on `User` and applies to children as much as adults; nothing prevents it.
-**[INFER] Recommend a constraint or a validated rule** that a `User` reached
-only via `FamilyLink` carries no phone of their own.
-
-**G.3 — free-text `notes` is collected about children at registration.**
-**[CODE]** `registration.service.ts:282` writes `input.child.notes`, and the
-registration form renders a notes field. It is `VarChar(2000)` — capped, but
-capped at 2000 characters of *anything*, with no stated purpose and no business
-logic reading it. This is where a diagnosis, a custody arrangement or a family
-circumstance will eventually be written by someone acting entirely in good
-faith, about a minor, in a field nobody classified.
-
-**G.4 — Social-profile access is correct; its *contents* are the exposure.**
-The safeguard is strong. The risk is that the fields invite recording more than
-is needed.
-
-**G.5 — R62 makes one parent's approval the gate to a child's whole record.**
-`resolveActingStudent` is sound **[CODE]**, but the *approval* step becomes the
-security boundary. A mis-approved link grants a stranger a child's full record.
-**[INFER] The admin approval screen must show enough to make that decision
-deliberately**, and every approval is already audited.
-
-**G.6 — Multi-parent linking is undefined.** **[SRS]** silent; the schema
-permits two parents linked to one child. In separation or custody disputes this
-is a real safeguarding question. **Decision required.**
-
----
-
-# H. Third-party and hosting risks
-
-**H.1 — Google OAuth is the only foreign flow. [CODE]** Scope is
-`openid email profile` — minimal, and no Google API is called beyond token
-exchange. **[INFER]** Only adult/parent/staff accounts authenticate; **minors
-never do**, so a child's identity does not reach Google. That is a meaningful
-mitigation and should be stated in the declaration.
-
-**H.2 — No analytics, no error tracking, no email provider, no AI service.
-[CODE]** Verified absent. This is unusually clean and is worth *preserving as a
-rule*: any addition is a new processor and a new transfer question.
-
-**H.3 — Non-Moroccan tiers. [SRS]** §2.2 prohibits real data in all of them.
-**Preview** (Vercel) stores nothing at all: it runs on MSW mocks and calls no
-backend, so there is no transfer to assess.
-
-**Staging** (Revision 104) is the one that changed, and it deserves naming
-plainly: since 2026-08-25 there is a **real PostgreSQL database and a real MinIO
-instance on a VPS in France**. That is a genuine non-Moroccan data store, and it
-is permissible **only** because the tier is fixture-only. Three controls hold
-that, and the first is mechanical:
-
-1. **The fixtures seed refuses to run under `NODE_ENV=production`** — the same
-   guard, in the other direction.
-2. **Production dumps never leave Moroccan infrastructure**, and **the
-   development database and its objects are never copied into Staging** — a
-   developer's database is not fixture data (§20 rule 18).
-3. Staging holds no credential that can reach a production database; it has its
-   own generated secrets and its own storage.
-
-**[INFER] The residual risk is procedural, not architectural**: nothing
-mechanically stops a human running `pg_restore` of a production dump onto the
-Staging VPS. The recommended control is unchanged in kind — a technical barrier
-rather than only a rule — and it is now worth more, because Staging has a
-database to restore *into*.
-
-**H.4 — Backups are specified and Morocco-resident.** **[SRS]**
-`operations/resilience.md` defines nightly `pg_dump` plus volume backups,
-replicated **offsite to a second Moroccan location** via `restic` over SSH, RPO
-≤ 24h, RTO < 1h, with a documented and periodically tested restore as a launch
-requirement — and states explicitly that *"both locations are inside Morocco,
-because backups are personal data and BR-18 makes no exception for them."*
-
-**I initially recorded this as a gap and was wrong**; the policy exists and is
-better than most. **[INFER] The remaining question is not location but
-lifetime**: the document sets no *retention* period for backup copies, so a
-record erased in production may persist in backups indefinitely. **[CONFIRM]**
-how backup retention interacts with an erasure obligation.
-
----
-
-# I. Missing privacy and security controls
+### I. Missing controls
 
 | # | Gap | Severity | Recommendation |
 |---|---|---|---|
-| **I.1** | `siblingsCount`, `fatherProfession`, `motherProfession` — **verified stored and returned, never read by any logic** **[CODE]**; plus `User.notes` free text collected about children | **High** | Delete the three; give `notes` a stated purpose or remove it from the child form |
-| **I.2** | **No automatic retention job runs.** `content.quarantine-purge` processes exact obligations but R59.4 keeps age-based destruction Owner-gated; R111's separate three-day account de-identification is ratified but absent from TD-7 and from the worker **[CODE]** | **High** | Deliberate Super Admin account/content purge works; the Document Owner must add the account queue to TD-7 before implementation, and separately decide automatic content destruction |
-| **I.3** | Privacy and terms pages now exist and describe the implemented account-deletion boundary **[CODE]**; legal entity/registration/CNDP details remain visibly marked as required | **High** | Association/legal review must supply the marked launch details |
-| **I.4** | **No data-subject access/export path** | Medium | A parent cannot obtain their child's record |
-| **I.5** | Backup **retention** period unset — an erased record may survive in backups indefinitely | Medium | See H.4. The policy itself exists and is sound |
-| **I.6** | **No emergency contact** | Medium | Safeguarding gap (C) |
-| **I.7** | `data_processing` consent exists but is **not enforced as a gate** on registration **[CONFIRM]** | Medium | Verify the flow records it before processing begins |
-| **I.8** | ~~No documented minimisation rule for audit `detail`~~ **Resolved in code/docs/CI:** personal values stay on their governed entity; audit detail uses ids, structural coordinates and changed field names. The TD-8 identity-email contradiction is **closed by SRS Revision 170 §18 (2026-09-22): user id only, and the grid now says so**; free-text reasons left the audit for the record that owns them the same day | Low | Keep `check-no-pii-logs.sh` and the hostile-value behavior regressions green |
+| I.1 | `siblingsCount`, `fatherProfession`, `motherProfession` stored, returned, read by no logic [CODE]; `User.notes` about children | High | Delete the three; purpose or removal for `notes` — done (R120, R121) |
+| I.2 | No automatic retention job: `content.quarantine-purge` handles exact obligations, R59.4 keeps age-based destruction Owner-gated; R111's three-day de-identification ratified but absent from TD-7 and the worker [CODE] | High | Manual Super Admin purge works; Owner adds the account queue to TD-7 before implementation and decides automatic content destruction |
+| I.3 | Privacy/terms pages exist and describe account deletion [CODE]; legal entity/registration/CNDP details marked as required | High | Association/legal review supplies them |
+| I.4 | No data-subject access/export path | Medium | A parent cannot obtain a child's record |
+| I.5 | Backup retention unset | Medium | H.4 |
+| I.6 | No emergency contact | Medium | C |
+| I.7 | `data_processing` consent not enforced as a registration gate [CONFIRM] | Medium | Verify it is recorded before processing |
+| I.8 | ~~No minimisation rule for audit `detail`~~ resolved in code/docs/CI: values stay on the governed entity, audit uses ids, coordinates, field names; identity-email closed by R170 §18 (user id only); free-text reasons left the audit for the owning record | Low | Keep `check-no-pii-logs.sh` and hostile-value regressions green |
 
----
+### J. Recommended registration forms (collect what a purpose needs, when needed)
 
-# J. Recommended registration forms
+| Person | Required | Optional | Not collected |
+|---|---|---|---|
+| Adult student | Arabic first + last name · sex · phone · branch · `data_processing` consent | French name · nickname | CIN, birth date, address, profession, health |
+| Child (via parent) | Arabic first + last name · sex · relationship to requester; separately, own `media_release` consent | nickname | phone, CIN, birth date, address, health, siblings, parents' professions |
+| Parent | Arabic first + last name · phone · `data_processing` consent; emergency contact name + phone if not the parent | French name · preferred contact language | — |
+| Teacher / staff | Arabic first + last name · phone · email (Google) · branch | French name · nickname | CIN, birth date, address, marital status, photo |
 
-**Principle: collect what a defined purpose needs, at the moment it is needed.**
+### K. Proposed minimal profile model
+- `User`: identity (Arabic first/last, optional French, nickname, `publicDisplayName`); contact `phone` (adults and staff only); `sex`; `accountStatus`, `intendedBranchId`; `notes` removed.
+- `MinorSafeguarding` (renamed, narrowed `StudentSocialProfile`): `emergencyContactName/Phone/Relation`; `accessibilityNeeds` as bounded enum + short note, not a diagnosis ([CONFIRM] whether it replaces `healthCondition`); `siblingsCount` and professions removed; `healthCondition`, `familySituation`, `homeAddress` legal review.
+- `FamilyLink` unchanged + `relationshipType` (mother | father | legal_guardian).
 
-### Adult student
-Required: first + last name (Arabic) · sex · phone · branch · `data_processing`
-consent
-Optional: name (French) · nickname
-**Not collected:** CIN, birth date, address, profession, health
-
-### Child (via parent)
-Required: first + last name (Arabic) · sex · relationship to requester
-Optional: nickname
-**Not collected:** phone, CIN, birth date, address, health, siblings, parents'
-professions
-*Separately, with its own explicit consent:* `media_release`
-
-### Parent
-Required: first + last name (Arabic) · phone · `data_processing` consent
-Optional: name (French) · preferred contact language
-**Plus, for the child's safety:** emergency contact name + phone *(if not the
-parent themselves)*
-
-### Teacher / staff
-Required: first + last name (Arabic) · phone · email (via Google) · branch
-Optional: name (French) · nickname
-**Not collected:** CIN, birth date, address, marital status, photo
-
----
-
-# K. Proposed minimal-but-complete profile model
-
-```
-User
-  identity      first/last Arabic · optional French · nickname · publicDisplayName
-  contact       phone            (adults and staff only — never a child)
-  attributes    sex              (§4.4b Level restriction)
-  lifecycle     accountStatus · intendedBranchId
-  ── removed ── notes
-
-MinorSafeguarding                (renamed from StudentSocialProfile, narrowed)
-  emergencyContactName · emergencyContactPhone · emergencyContactRelation
-  accessibilityNeeds             (bounded enum + short note — NOT a diagnosis)
-  ── removed ── siblingsCount, fatherProfession, motherProfession
-  ── legal review ── healthCondition, familySituation, homeAddress
-
-FamilyLink                       (unchanged — already the authorization record)
-  + relationshipType             (mother | father | legal_guardian)
-```
-
-**[INFER]** `accessibilityNeeds` as a bounded enum plus a short note is the
-proportionate way to serve the real teaching need — *"this child needs to sit at
-the front"* — **without recording a medical diagnosis**. Whether it fully
-replaces `healthCondition` is **[CONFIRM]**.
-
----
-
-# L. Prioritised plan
-
-**Before R62 — blocking**
-1. **[CONFIRM]** Legal review of `healthCondition`, `familySituation`,
-   `homeAddress` for minors. This determines the regime.
-2. Decide the three no-purpose fields (I.1) — my recommendation: delete.
-3. Write the privacy notice (I.3), Arabic, per purpose.
-4. Confirm the CNDP declaration status and whether E's purposes are covered.
-
-**With R62**
-5. Human-resolved duplicate matching; **no birth date** (D.1).
-6. `relationshipType` on `FamilyLink`.
-7. Decide multi-parent linking (G.6).
-8. Emergency contact for minors (C, I.6).
-
-**Soon after**
-9. Build the retention job (I.2) — currently nothing is ever deleted.
-10. Data-subject export (I.4).
-11. Backup **retention** period, and how erasure propagates to backups (H.4, I.5).
-12. Constraint preventing a child's `phone` (G.2).
-13. Audit-detail minimisation rule + guard (I.8).
-
----
-
-## What I did not do
-
-I did not interpret Moroccan law, cite articles, or conclude whether this
-processing needs declaration or authorization. Every such point is **[CONFIRM]**
-and needs the CNDP or a Moroccan privacy lawyer. What I can state with
-confidence is what the system holds, where it goes, who reads it, and which
-fields serve no purpose — and those are in A, D and I.
+### L. Prioritised plan
+- Before R62 (blocking): legal review of `healthCondition`/`familySituation`/`homeAddress` [CONFIRM]; delete the three no-purpose fields (I.1); Arabic per-purpose privacy notice (I.3); confirm CNDP declaration status and E coverage.
+- With R62: human-resolved matching, no birth date (D.1); `relationshipType`; multi-parent decision (G.6); emergency contact (C, I.6).
+- Soon after: retention job (I.2); data-subject export (I.4); backup retention and erasure propagation (H.4, I.5); child-`phone` constraint (G.2); audit-detail minimisation guard (I.8).
+- Not done by the audit: no interpretation of Moroccan law, no articles cited, no declaration/authorization conclusion; A, D and I state what the system holds, where it goes, who reads it and which fields serve no purpose.

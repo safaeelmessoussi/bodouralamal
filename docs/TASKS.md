@@ -13,7 +13,8 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D3 | Expose `tracks_quran_progress` on `GET /admin/subjects`; `GET /quran-students` for a beneficiary: refuse vs empty | R73/R87 |
 | D4 | «حالة النظام» position in الإدارة (appended last; hers to move) | R105 menu order |
 | D5 | Honorific «الأستاذة» as an editable setting vs the constant | `lib/item-title.ts` (R172 §12) |
-| D6 | Codex questions still open: audit identity e-mail; exact storage-key wording; R111 3-day purge job — confirm which remain | R170 §18 closed the free-text one |
+| D6 | Codex questions still open: exact storage-key wording; R111 3-day purge job (audit identity e-mail closed by R170 §18) | personal-data-audit A.4 |
+| D8 | `business-rules.md` has two `### BR-20` headings (Global reach · Seeded-not-immutable) — which number is which? | reference/business-rules.md |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
 
 ## Owner tasks — data and legal (not code)
@@ -48,7 +49,6 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | E5 | Restate `verify-assessment-library.sh` against R136's source/occurrence split (stale, 24/31) | S |
 | E6 | `verify-backup-restore.sh` into hosted CI; integration/backup stacks off ephemeral host ports (55438, 58083, 59005, 59006) | S |
 | E7 | «حالة النظام»: backup freshness + certificate expiry via a host-published status file (blocked on D7) | M |
-| E8 | Handbook token pass, tiers 2–3: `ux-architecture.md`, `testing.md`, `qa-inventory.md`, `architecture/*` (≤40 % of current bytes, one page per commit) | L |
 | E9 | `admin-modules.test.ts` «every ready module has a screen» failed once in a full run (dynamic import), passed alone and on re-run — make it order-independent | S |
 
 ## Launch gate (§18/§19 — when go-live is lifted)

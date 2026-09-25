@@ -2,415 +2,121 @@
 
 # Data-Collection Decision Document
 
-**Date:** 2026-08-11 · **Companion to:** [the personal-data audit](personal-data-audit.md)
-**Status:** for the Document Owner's decision. Nothing implemented; R62 still paused.
+- Date 2026-08-11 · companion to the [personal-data audit](personal-data-audit.md) · followed by the [R62 design decisions](r62-design-decisions.md) · for the Owner's decision; nothing implemented, R62 paused at the time.
+- SUPERSEDED IN PART: this proposed *narrowing* the case file (`StudentSupport` / `MinorSafeguarding`); on 2026-09-02 the Owner withdrew it entirely (R120: no surface ever collected it; no categories not operationally needed). The platform collects no health, medical or social-case-file data; proposals on `healthCondition`, `familySituation`, `homeAddress`, `siblingsCount`, parents' names/professions are moot, kept as the reasoning trail.
+- Tags: **[SRS]** · **[CODE]** verified · **[INFER]** reasoning · **[CONFIRM]** needs the CNDP or a Moroccan privacy lawyer.
+- Premise rejected: "we are filing anyway, so collect everything useful now". A declaration describes processing, it does not authorise collection (proportionality per field per purpose, [CONFIRM]); every field is a permanent liability (backups, exports, audit, breaches); adding a field later is cheap here (forward-only migrations), removing a populated one is not. Default: collect what a defined purpose consumes today.
 
-> ## ⚠️ SUPERSEDED IN PART — `StudentSocialProfile` WAS REMOVED, NOT NARROWED
->
-> This document proposed **narrowing** the case file (a renamed `StudentSupport`
-> / `MinorSafeguarding` table with fewer fields). The Document Owner took the
-> stronger decision on **2026-09-02**: the capability is **withdrawn entirely**
-> (**SRS Revision 120**), because no product surface ever collected the data and
-> the association does not collect categories it does not operationally need.
->
-> **The platform collects no health, medical or social-case-file data.** Every
-> proposal below concerning `healthCondition`, `familySituation`, `homeAddress`,
-> `siblingsCount` or the parents' names and professions is **moot**. Retained as
-> the reasoning trail, not as a plan.
+## 1. The four profiles
 
-**Followed by:** [the R62 design decisions](r62-design-decisions.md), which
-resolve the architectural questions once these data choices are settled.
+**1.1 Adult student** — not collected: CIN, date of birth, address, profession, marital status, photo, emergency contact (an adult is her own contact).
 
-Tags carry the same meaning as in the audit: **[SRS]** the specification says
-so · **[CODE]** verified in the codebase · **[INFER]** my reasoning · **[CONFIRM]**
-needs the CNDP or a Moroccan privacy lawyer.
-
----
-
-## The premise this document argues against
-
-> *"We are completing the CNDP formalities anyway, so let us collect everything
-> useful now rather than adding fields later."*
-
-The instinct — decide once, properly, at the start — is right, and this document
-serves it. But the conclusion does not follow, for three reasons that are
-engineering facts rather than legal opinions:
-
-1. **A declaration describes processing; it does not authorise collection.**
-   Proportionality is assessed per field, per purpose. **[CONFIRM]**
-2. **Every field is a permanent liability.** It appears in backups, exports,
-   audit trails and breaches. A field never collected needs no retention rule,
-   no access control, and no erasure path.
-3. **Adding a field later is cheap here.** **[CODE]** This codebase has added
-   columns repeatedly with forward-only migrations, no data loss, and a
-   revision each time. *Removing* a field once populated is the expensive
-   direction — the data already exists in backups.
-
-**[INFER] So the correct default is: collect what a defined purpose consumes
-today, and design the schema so tomorrow's field is easy to add.** That is a
-different discipline from collecting everything now, and it costs less.
-
----
-
-# 1. The four profiles
-
-## 1.1 Adult student
-
-| Field | Necessary or useful? | Who reads it | Risk | Retention | Verdict |
+| Field | Necessary or useful? | Reads | Risk | Retention | Verdict |
 |---|---|---|---|---|---|
-| First + last name (Arabic) | **Necessary** — identifies the person | staff, self | Ordinary | Life of record | **A — KEEP** |
-| `sex` | **Necessary** **[SRS]** — §4.4b Level restriction is a real rule the code enforces | staff | **[CONFIRM]** — see B.1 | Life | **B — KEEP** |
-| `phone` | **Necessary** — the only contact channel that exists **[CODE]** (no email or SMS system is built) | staff, self | Ordinary | Life | **A — KEEP** |
-| Name (French) | Useful — bilingual certificates | staff, self | Ordinary | Life | **A — OPTIONAL** |
-| `nickname` | Useful — what a person is actually called | staff, self | Ordinary | Life | **A — OPTIONAL** |
-| Branch (intended) | **Necessary** — routes the application | staff | Ordinary | Until decided | **A — KEEP** |
-| `data_processing` consent | **Necessary** | staff, self | — | Indefinite | **A — KEEP** |
+| First + last name (Arabic) | Necessary | staff, self | Ordinary | Life of record | A — KEEP |
+| `sex` | Necessary [SRS] §4.4b, enforced | staff | [CONFIRM] B.1 | Life | B — KEEP |
+| `phone` | Necessary; the only contact channel [CODE] (no email/SMS built) | staff, self | Ordinary | Life | A — KEEP |
+| Name (French) | Useful; bilingual certificates | staff, self | Ordinary | Life | A — OPTIONAL |
+| `nickname` | Useful | staff, self | Ordinary | Life | A — OPTIONAL |
+| Branch (intended) | Necessary; routes the application | staff | Ordinary | Until decided | A — KEEP |
+| `data_processing` consent | Necessary | staff, self | — | Indefinite | A — KEEP |
 
-**Not collected:** CIN, date of birth, address, profession, marital status,
-photo, emergency contact *(an adult is their own emergency contact; see 2.4)*.
+**1.2 Minor student** — the narrowest profile.
 
-## 1.2 Minor student
-
-The narrowest profile in the platform, deliberately.
-
-| Field | Necessary or useful? | Who reads it | Risk | Retention | Verdict |
+| Field | Necessary or useful? | Reads | Risk | Retention | Verdict |
 |---|---|---|---|---|---|
-| First + last name (Arabic) | **Necessary** | staff, linked parent | Minor's data | Life of record | **A — KEEP** |
-| `sex` | **Necessary** **[SRS]** §4.4b | staff | **[CONFIRM]** B.1 | Life | **B — KEEP** |
-| `nickname` | Useful — teachers call children by it | staff, linked parent | Ordinary | Life | **A — OPTIONAL** |
-| **Student reference code** | **Necessary** — see §3 | staff, linked parent | **None — carries no personal data** | Life | **A — ADD** |
-| Guardian relationship type | **Necessary** — who may act for this child | staff | Ordinary | Life of link | **A — ADD** |
-| **Emergency contact** (name, phone, relation) | **Necessary** — safeguarding | staff | Third-party data | Life | **B — ADD**, see 2.4 |
-| **`phone`** | **Never** | — | — | — | **C — must be impossible**, see B.4 |
-| Date of birth | See §2.1 | — | — | — | **REJECT** |
-| Home address | See B.2 | — | — | — | **B — LEGAL REVIEW** |
+| First + last name (Arabic) | Necessary | staff, linked parent | Minor's data | Life of record | A — KEEP |
+| `sex` | Necessary [SRS] §4.4b | staff | [CONFIRM] B.1 | Life | B — KEEP |
+| `nickname` | Useful; teachers use it | staff, linked parent | Ordinary | Life | A — OPTIONAL |
+| Student reference code | Necessary (§3) | staff, linked parent | None; no personal data | Life | A — ADD |
+| Guardian relationship type | Necessary; who may act | staff | Ordinary | Life of link | A — ADD |
+| Emergency contact (name, phone, relation) | Necessary; safeguarding | staff | Third-party data | Life | B — ADD (2.4) |
+| `phone` | Never | — | — | — | C — must be impossible (B.4) |
+| Date of birth | §2.1 | — | — | — | REJECT |
+| Home address | B.2 | — | — | — | B — LEGAL REVIEW |
 
-## 1.3 Parent / legal guardian
+**1.3 Parent / legal guardian** — the platform holds a *claim* of guardianship, not proof; [CONFIRM] whether documentation must be verified and a check recorded (a boolean and date, never a scan).
 
-| Field | Necessary or useful? | Who reads it | Risk | Retention | Verdict |
+| Field | Necessary or useful? | Reads | Risk | Retention | Verdict |
 |---|---|---|---|---|---|
-| First + last name (Arabic) | **Necessary** | staff, self | Ordinary | Life | **A — KEEP** |
-| `phone` | **Necessary** — the contact of record for a minor | staff, self | Ordinary | Life | **A — KEEP** |
-| Google identity (email) | **Necessary** — the login **[SRS]** | server | Ordinary | Life | **A — KEEP** |
-| Relationship to each child | **Necessary** — mother / father / legal guardian | staff | Ordinary | Life of link | **A — ADD** |
-| Name (French) | Useful | staff, self | Ordinary | Life | **A — OPTIONAL** |
-| Preferred contact language | Useful *once a messaging channel exists* | staff | Ordinary | Life | **A — DEFER** |
-| Profession | **No purpose** | — | Socio-economic profiling | — | **C — DO NOT COLLECT** |
-| CIN | **No purpose** | — | See C.1 | — | **C — DO NOT COLLECT** |
+| First + last name (Arabic) | Necessary | staff, self | Ordinary | Life | A — KEEP |
+| `phone` | Necessary; contact of record for a minor | staff, self | Ordinary | Life | A — KEEP |
+| Google identity (email) | Necessary; the login [SRS] | server | Ordinary | Life | A — KEEP |
+| Relationship to each child | Necessary; mother / father / legal guardian | staff | Ordinary | Life of link | A — ADD |
+| Name (French) | Useful | staff, self | Ordinary | Life | A — OPTIONAL |
+| Preferred contact language | Useful once a messaging channel exists | staff | Ordinary | Life | A — DEFER |
+| Profession | No purpose | — | Socio-economic profiling | — | C — DO NOT COLLECT |
+| CIN | No purpose | — | C.1 | — | C — DO NOT COLLECT |
 
-**[INFER] A note on "legal guardian".** The platform will hold a *claim* of
-guardianship, not proof of it. **[CONFIRM]** whether the association must verify
-guardianship documentation, and whether the platform must record that a check
-occurred *(a boolean and a date — not a scan of the document)*.
+**1.4 Staff / teacher** — HR data (contracts, diplomas, salary, CIN) is a different processing, audience and retention; keep the staff profile to what teaching needs.
 
-## 1.4 Staff / teacher
-
-| Field | Necessary or useful? | Who reads it | Risk | Retention | Verdict |
+| Field | Necessary or useful? | Reads | Risk | Retention | Verdict |
 |---|---|---|---|---|---|
-| First + last name (Arabic) | **Necessary** | staff, self | Ordinary | Employment + statutory | **A — KEEP** |
-| `phone` | **Necessary** — operational contact | staff, self | Ordinary | Employment | **A — KEEP** |
-| Google identity | **Necessary** — the login | server | Ordinary | Employment | **A — KEEP** |
-| `preProvisionedEmail` | **Necessary** **[SRS]** §4.1b account claiming | staff | Ordinary | Life | **A — KEEP** |
-| Branch assignment | **Necessary** — the authorization scope | staff | Ordinary | Employment | **A — KEEP** |
-| `sex` | Useful — §4.4b applies to staffing female-only Levels **[CONFIRM]** whether it does | staff | **[CONFIRM]** | Employment | **B — CONFIRM** |
-| Qualifications, CV, diplomas | Useful to the association | — | Employment data | — | **B — OUT OF SCOPE**, see below |
-| CIN | **No purpose in this platform** | — | C.1 | — | **C — DO NOT COLLECT** |
+| First + last name (Arabic) | Necessary | staff, self | Ordinary | Employment + statutory | A — KEEP |
+| `phone` | Necessary; operational contact | staff, self | Ordinary | Employment | A — KEEP |
+| Google identity | Necessary; the login | server | Ordinary | Employment | A — KEEP |
+| `preProvisionedEmail` | Necessary [SRS] §4.1b | staff | Ordinary | Life | A — KEEP |
+| Branch assignment | Necessary; authorization scope | staff | Ordinary | Employment | A — KEEP |
+| `sex` | Useful if §4.4b applies to staffing female-only Levels [CONFIRM] | staff | [CONFIRM] | Employment | B — CONFIRM |
+| Qualifications, CV, diplomas | Useful to the association | — | Employment data | — | B — OUT OF SCOPE |
+| CIN | No purpose here | — | C.1 | — | C — DO NOT COLLECT |
 
-**[INFER] HR data does not belong in this platform.** Contracts, diplomas,
-salary and CIN are employment processing with a different purpose, a different
-audience and a different retention period. Putting them here would merge two
-processings into one system and one breach radius. **Recommend: keep the
-platform's staff profile to what *teaching* needs.**
+## 2. The proposed fields
 
----
+- **2.1 Date of birth — revised after the Owner's clarification (2026-08-11).** The earlier REJECT ("no code consumes an age") was incomplete: the purpose lived in practice. The programs map approximately to schooling stage (الطفل: a year before primary through primary; اليافعون: middle and high school; الكبار: after high school); age is only approximate (an older girl still in high school may join the teens program, or when the admin considers it appropriate); placement stays administrative. Collect the signal, not the proxy: `schoolingStage` enum `pre_primary · primary · middle · high · post_secondary · not_in_school` — answers "which program" directly, handles the edge case, low identifying power, no civil-registry lookup, ages out naturally. [CODE] `Category` was chosen freely at registration with no supporting information. Birth year only if stage proves insufficient, never pre-emptively. Full date of birth: superseded for placement; rejected for deduplication (siblings, twins, typos; §3); [CONFIRM] certificates, the one open purpose.
+- **2.2 Birth city — REJECT**: no purpose; combined with a name it is strongly identifying (civil-status documents).
+- **2.3 Home address — LEGAL REVIEW (B)**: locates a minor; transport planning and home visits do not exist [CODE]; not for minors absent a stated need, and then held against the family.
+- **2.4 Emergency contact — ADD (B)**: the one genuine gap; name, phone, relationship; minors only; default to the linked parent, collect a second contact only when offered; [CONFIRM] notice owed to the contact person.
+- **2.5 Accessibility needs — ADD, redesigned (B)**: replaces `healthCondition` with an accommodation, not a diagnosis: `accessibilityNeeds enum[] seating · extra_time · large_print · hearing_support · mobility_access · other`; `accessibilityNote VarChar(200)` labelled "what helps this student learn"; discourages, does not prevent, a medical entry — [CONFIRM] whether it suffices.
+- **2.6 Schooling stage — REVERSED: ADD** (§2.1); the error: judging purpose by what the code consumed; a purpose in staff practice is still a purpose.
+- **2.7 Phone — KEEP for adults, forbid for minors** (B.4).
 
-# 2. The proposed fields, judged individually
+## 3. Distinguishing children with the same name (two «محمد العلوي» in one branch)
+- 3.1 The parent is the discriminator [CODE]: a minor exists only through a `FamilyLink`, so screens show «محمد العلوي — ابن فاطمة الزهراء»; zero cost.
+- 3.2 A student reference code (e.g. `ط-4821`): a pronounceable row id, no personal data, printable, speakable in public; adopt.
+- 3.3 Birth year, one integer, only if 3.1 and 3.2 prove insufficient. Rejected: a national identifier or birth date for every child.
 
-## 2.1 Date of birth — **REVISED after the Owner's clarification**
-
-**My earlier verdict was REJECT, on the ground that no code consumes an age.
-That reasoning was incomplete, and the Owner has supplied what was missing.**
-
-**The stated purpose (Owner, 2026-08-11):** the institute's three programs map
-to *schooling stage*, approximately —
-
-| Category | Who it is for |
-|---|---|
-| الطفل | One year before first primary, through primary school |
-| اليافعون | Middle and high school |
-| الكبار | After high school |
-
-**"Age is only approximate."** The Owner's own example: *a girl older than the
-usual high-school age can still be accepted into the teens program if she is
-still in high school, or if the admin considers it appropriate.* Placement
-remains an explicit administrative decision.
-
-### That example is the argument against date of birth, not for it
-
-**[INFER] It shows age is a proxy — and an unreliable one — for the variable
-that actually decides placement: what stage of schooling the student is in.**
-The Categories are *defined* by schooling stage. Age merely correlates with it,
-and the Owner has given a concrete case where the correlation breaks.
-
-**So collect the signal, not its proxy.**
-
-### Recommendation: add `schoolingStage`, not date of birth
-
-```
-schoolingStage : enum   pre_primary · primary · middle · high ·
-                        post_secondary · not_in_school
-```
-
-| | Date of birth | Schooling stage |
-|---|---|---|
-| Answers "which program?" | Indirectly, unreliably | **Directly** |
-| Handles the Owner's edge case | **No** — flags her as an adult | **Yes** — "high" |
-| Identifying power | Precise, permanent, matches civil records | Low; a current status |
-| Civil-registry lookup | Possible in combination | **No** |
-| Ages out | Never — permanent | Naturally, as status changes |
-
-**[INFER]** Schooling stage is *better for the institute and less risky at the
-same time*. That combination is rare enough to be worth acting on.
-
-**[CODE]** No such field exists today, and `Category` is chosen freely at
-registration with no supporting information at all — so this also gives the
-administrator something to decide *with*, which is the Owner's stated need.
-
-### Birth year — available, not recommended yet
-
-If administrators later report that schooling stage alone is insufficient, a
-**birth year** is the proportionate next step: one integer, useless for identity
-lookup, enough to distinguish a 9-year-old from a 15-year-old.
-
-**[INFER] Do not add it pre-emptively.** Ship schooling stage; add a year only if
-a real placement decision proves impossible without one.
-
-### Full date of birth — still not recommended
-
-* **For placement** — superseded by schooling stage.
-* **For deduplication** — rejected earlier and unchanged: siblings, twins and
-  typos defeat it, and §3 solves the problem without it.
-* **For certificates** — **[CONFIRM]** the one open purpose. If certificates
-  must state a birth date, that is a genuine need and changes this answer *for
-  that purpose only*.
-
-**Correction recorded plainly:** my first verdict rested on "no code consumes
-it", which was true but not the whole question. The purpose existed in the
-institute's practice and not in the code. The verdict survives — but for a
-better reason, and with a field the earlier document wrongly dismissed (§2.6).
-
-## 2.2 Birth city — **REJECT**
-
-No purpose in the platform. **[INFER]** It appears on Moroccan identity and
-civil-status documents, so in combination with a name it is strongly
-identifying while serving nothing here.
-
-## 2.3 Home address — **LEGAL REVIEW (B)**
-
-Already present on `StudentSocialProfile`. It **locates a minor**. The only
-purposes I can construct are transport planning and home visits — **neither
-exists in the platform** **[CODE]**.
-
-**[INFER] Recommendation: do not collect for minors** unless the association
-has a stated operational need, and then hold it against *the family* rather than
-the child.
-
-## 2.4 Emergency contact — **ADD (B)**
-
-The one genuine gap. **[CODE]** A platform holding minors' records with no way
-to reach an adult in an incident is a safeguarding weakness, not a privacy
-virtue.
-
-* Three fields: name, phone, relationship.
-* **For minors only.** An adult student is their own contact.
-* **[INFER]** Default it to the linked parent, so most families enter nothing.
-  Collect a *second* contact only where the family offers one.
-* Third-party personal data — **[CONFIRM]** what notice the contact person is
-  owed when a parent supplies their number.
-
-## 2.5 Accessibility needs — **ADD, redesigned (B)**
-
-**[INFER] This is the field that should replace `healthCondition`.**
-
-The real teaching need is *"this child needs to sit at the front"* or *"give her
-extra time"*. That is an **educational accommodation**, not a diagnosis. A free
-text box invites the diagnosis; a bounded list does not.
-
-```
-accessibilityNeeds : enum[]   seating · extra_time · large_print ·
-                              hearing_support · mobility_access · other
-accessibilityNote  : VarChar(200)   — an accommodation, never a condition
-```
-
-**[INFER]** 200 characters and a label saying *"what helps this student learn"*
-is a design that discourages a medical entry. It does not prevent one, which is
-why **[CONFIRM]** is still needed on whether this suffices.
-
-## 2.6 Education level (schooling stage) — **REVERSED: ADD**
-
-**I rejected this earlier as having "no purpose". That was wrong**, and the
-Owner's clarification is what shows it: schooling stage is precisely how the
-institute decides which program a student belongs in. See §2.1.
-
-**[INFER]** The error is worth naming: I judged purpose by what the *code*
-consumed, and a purpose that lives in staff practice but not yet in code is
-still a purpose. Asking would have found it.
-
-## 2.7 Phone — **KEEP for adults, forbid for minors**
-
-See B.4.
-
----
-
-# 3. Distinguishing children with the same name
-
-The problem is real: two «محمد العلوي» in one branch. The wrong answer is a
-national identifier or a birth date for every child.
-
-**[INFER] Three mechanisms, in order of preference — the first two cost no new
-personal data at all.**
-
-### 3.1 The parent is already the discriminator
-
-**[CODE]** A minor exists *only* through a `FamilyLink`. Every screen that shows
-a child can show *«محمد العلوي — ابن فاطمة الزهراء»*. Two same-named children
-sharing the same parent is vanishingly rare, and if it happens the family knows
-which is which.
-
-**Cost: zero.** The data is already held for another purpose.
-
-### 3.2 A student reference code
-
-A short, human-readable, platform-generated identifier — `ط-4821`.
-
-* **Carries no personal data.** It is a row id made pronounceable.
-* Solves the desk problem, the phone-call problem and the paper-list problem.
-* Printable on a card; a parent can quote it without stating a name aloud.
-* **[INFER]** This is what institutions actually use, and it is *more* privacy-
-  protective than a name, because it can be spoken in public.
-
-**Recommendation: adopt.** It is the single best value-for-risk field in this
-document.
-
-### 3.3 Birth year — only if 3.1 and 3.2 prove insufficient
-
-One integer. Distinguishes peers, is useless for identity theft, and cannot be
-used to look someone up in a civil registry.
-
-**[INFER] Do not add it pre-emptively.** Ship 3.1 and 3.2, and add this only if
-staff report a real collision the first two could not resolve.
-
----
-
-# 4. Verdicts on the existing fields
+## 4. Verdicts on the existing fields
 
 | Field | Finding | Verdict |
 |---|---|---|
-| `siblings_count` | **[CODE]** stored, returned in a DTO, **read by no business logic**. Collection without purpose | **REMOVE** |
-| `father_profession` | Same. Socio-economic profiling with no consumer | **REMOVE** |
-| `mother_profession` | Same | **REMOVE** |
-| `father_name`, `mother_name` | Partly redundant — `FamilyLink` already names the parent, with an approval trail. These are free-text *claims* about third parties | **REDESIGN** — derive from `FamilyLink`; keep a field only for a parent who has no account |
-| `User.notes` (free text, 2000 chars) | **[CODE]** collected about **children** at registration; no stated purpose; staff-visible. This is where a diagnosis or a custody arrangement will be written in good faith | **REDESIGN** — remove from the child form; on staff records rename to a purpose-named field or delete |
-| `healthCondition` | See 2.5 | **REPLACE** with accessibility needs — **[CONFIRM]** |
-| `familySituation` | Unbounded free text about a minor's family. **[INFER]** The safeguarding need is real; the design is not — this will hold judicial and social data nobody classified | **LEGAL REVIEW** before R62 |
-| `homeAddress` | See 2.3 | **LEGAL REVIEW** |
+| `siblings_count` | [CODE] stored, returned in a DTO, read by no business logic | REMOVE |
+| `father_profession` | Same; socio-economic profiling | REMOVE |
+| `mother_profession` | Same | REMOVE |
+| `father_name`, `mother_name` | Redundant with `FamilyLink` (approval trail); free-text claims about third parties | REDESIGN: derive from `FamilyLink`; a field only for a parent with no account |
+| `User.notes` (2000 chars) | [CODE] collected about children at registration; no purpose; where a diagnosis or custody note will be written in good faith | REDESIGN: remove from the child form; on staff records rename to a purpose or delete |
+| `healthCondition` | 2.5 | REPLACE with accessibility needs [CONFIRM] |
+| `familySituation` | Unbounded free text about a minor's family; the need is real, the design is not | LEGAL REVIEW before R62 |
+| `homeAddress` | 2.3 | LEGAL REVIEW |
 
-**[INFER] On removing the three no-purpose fields:** they are already deployed.
-Removal is a forward-only migration plus a decision about existing values — and
-**[CONFIRM]** whether the backups holding them must also be addressed.
+- Removing the three no-purpose fields is a forward-only migration plus a decision on existing values; [CONFIRM] whether backups holding them must be addressed.
 
----
+## 5. The three tiers
+- **A — ordinary, proportionate, collect:** names (Arabic, optionally French) · nickname · phone (adults and staff) · branch · Google identity · educational stage, Levels, groups · attendance (when built) · grades · Quran progress · consent records · student reference code · guardian relationship type.
+- **B — collect with care:** `sex` [CONFIRM] (necessary for §4.4b, a protected characteristic) · emergency contact (third-party data) · accessibility needs (never a diagnosis) · audio recordings of minors [CONFIRM] · `familySituation` and `homeAddress` (legal review before R62) · staff `sex` [CONFIRM].
+- **C — not without explicit legal validation:** CIN / national ID · full date of birth · birth city · biometrics · religious affiliation or conviction · political opinion, ethnicity, union membership · free-text health conditions · parents' professions · geolocation · photos and video of students · a child's own phone · staff HR records (CV, diplomas, salary, contract).
+- C.1 CIN: [CONFIRM] may attract prior authorization; serves no purpose the platform acts on; makes the database a more attractive target; never, unless a law obliges the association — and then in the system holding that obligation.
 
-# 5. The three tiers
+## 6. The recommended model
+- `User`: `firstNameArabic`, `lastNameArabic` required; `firstNameFrench`, `lastNameFrench`, `nickname` optional; `publicDisplayName` derived (§20 r21); `sex` (§4.4b, [CONFIRM]); `phone` adults and staff only; `referenceCode` new, generated, no personal data; `accountStatus`, `intendedBranchId`; `preProvisionedEmail` staff only; `notes` removed.
+- `FamilyLink` (the authorization record) + `relationshipType` mother | father | legal_guardian; + `guardianshipVerifiedAt` [CONFIRM], a date, never a document.
+- `StudentSupport` (replaces `StudentSocialProfile`, narrowed — the name is the cheapest control): `emergencyContactName/Phone/Relation`; `accessibilityNeeds enum[]`; `accessibilityNote VarChar(200)`; removed `siblingsCount`, `fatherProfession`, `motherProfession`, `fatherName`, `motherName`; legal review `familySituation`, `homeAddress`, `healthCondition`.
 
-### A — Ordinary personal data, proportionate, collect
-Names (Arabic, optionally French) · nickname · phone *(adults and staff)* ·
-branch · Google identity · educational stage, Levels, groups · attendance
-*(when built)* · grades · Quran progress · consent records · **student reference
-code** · **guardian relationship type**
+## 7. Decisions required before R62
 
-### B — Needs particular attention, collect with care
-`sex` **[CONFIRM]** — necessary for §4.4b, but a protected characteristic ·
-**emergency contact** — third-party data · **accessibility needs** — must not
-become a diagnosis · audio recordings of minors **[CONFIRM]** · `familySituation`
-and `homeAddress` — **legal review before R62** · staff `sex` **[CONFIRM]**
-
-### C — Do not collect without explicit legal validation
-CIN / national ID · full date of birth · birth city · biometrics · religious
-affiliation or conviction · political opinion, ethnicity, union membership ·
-health conditions and diagnoses as free text · parents' professions ·
-geolocation · photos and video of students · a child's own phone · staff HR
-records (CV, diplomas, salary, contract)
-
-**C.1 — On CIN specifically.** **[CONFIRM]** my understanding is that processing
-the national identity number may attract **prior authorization** rather than
-ordinary declaration. Independently of that: it serves **no purpose this
-platform acts on**, and it would make the database materially more attractive to
-attack. **Recommendation: never, unless a law obliges the association to record
-it — and then in the system that has that obligation, not this one.**
-
----
-
-# 6. The recommended model
-
-```
-User
-  firstNameArabic, lastNameArabic          required
-  firstNameFrench, lastNameFrench          optional
-  nickname                                 optional
-  publicDisplayName                        derived (§20 r21)
-  sex                                      §4.4b            [CONFIRM]
-  phone                                    adults and staff ONLY
-  referenceCode                            NEW — generated, no personal data
-  accountStatus, intendedBranchId          lifecycle
-  preProvisionedEmail                      staff only
-  ── REMOVED ── notes
-
-FamilyLink                                  the authorization record
-  + relationshipType                       mother | father | legal_guardian
-  + guardianshipVerifiedAt                 [CONFIRM] — a date, never a document
-
-StudentSupport            (replaces StudentSocialProfile, narrowed)
-  emergencyContactName, emergencyContactPhone, emergencyContactRelation
-  accessibilityNeeds  enum[]
-  accessibilityNote   VarChar(200)
-  ── REMOVED ── siblingsCount, fatherProfession, motherProfession,
-                fatherName, motherName
-  ── LEGAL REVIEW ── familySituation, homeAddress, healthCondition
-```
-
-**[INFER] Renaming the table matters.** *Social profile* invites social-work
-content. *Student support* names what the association actually does with it, and
-a name is the cheapest control a schema has.
-
----
-
-# 7. Decisions required before R62
-
-| # | Decision | Blocking? | My recommendation |
+| # | Decision | Blocking? | Recommendation |
 |---|---|---|---|
-| 1 | `healthCondition`, `familySituation`, `homeAddress` for minors — legal review | **Yes** | Replace the first with accessibility needs; drop the other two unless a stated operational need exists |
-| 2 | Remove `siblings_count`, `father_profession`, `mother_profession` | **Yes** — R62 touches this table | Remove |
-| 3 | Remove free-text `notes` from the child registration form | **Yes** | Remove |
-| 4 | Adopt the **student reference code** | **Yes** — it is the answer to child identification | Adopt |
-| 5 | Add **emergency contact** for minors | No, but soon | Add |
-| 6 | Add `relationshipType` to `FamilyLink` | **Yes** — R62 creates these rows | Add |
-| 7 | Date of birth | **Yes** — settle it so it is not revisited | Do not collect |
-| 8 | Multi-parent linking | **Yes** — R62 defines the workflow | Decide explicitly |
-| 9 | Is a CNDP declaration filed, and does it cover the twelve purposes? | **Yes** | — |
-| 10 | Privacy notice, in Arabic, per purpose | **Yes** — R62 widens collection | Write before R62 ships |
+| 1 | `healthCondition`, `familySituation`, `homeAddress` for minors: legal review | Yes | Replace the first with accessibility needs; drop the other two absent a stated need |
+| 2 | Remove `siblings_count`, `father_profession`, `mother_profession` | Yes (R62 touches the table) | Remove |
+| 3 | Remove free-text `notes` from the child form | Yes | Remove |
+| 4 | Adopt the student reference code | Yes (the answer to child identification) | Adopt |
+| 5 | Emergency contact for minors | No, but soon | Add |
+| 6 | `relationshipType` on `FamilyLink` | Yes (R62 creates the rows) | Add |
+| 7 | Date of birth | Yes (settle it) | Do not collect |
+| 8 | Multi-parent linking | Yes (R62 defines the workflow) | Decide explicitly |
+| 9 | Is a CNDP declaration filed covering the twelve purposes? | Yes | — |
+| 10 | Arabic per-purpose privacy notice | Yes (R62 widens collection) | Write before R62 ships |
 | 11 | Staff HR data in this platform | No | Keep out |
 | 12 | Backup retention vs erasure | No | Settle after R62 |
 
----
-
-## What I am not telling you
-
-I have not concluded whether any of this needs declaration or authorization,
-whether `sex` is a protected characteristic under Moroccan law, or what
-retention the law requires for a minor's educational record. Those are
-**[CONFIRM]** and belong to the CNDP or a Moroccan privacy lawyer.
-
-What I can tell you with confidence is which fields the code actually consumes,
-which are dead weight, and which design choices make an over-collection likely
-later. Those are §2, §4 and §6.
+- Not concluded: declaration vs authorization, whether `sex` is a protected characteristic under Moroccan law, legally required retention for a minor's record — all [CONFIRM]. Stated: which fields the code consumes, which are dead weight, which designs invite over-collection (§2, §4, §6).

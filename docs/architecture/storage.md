@@ -2,520 +2,128 @@
 
 # Storage
 
-Localhost, Staging and Production all use the same self-hosted SeaweedFS model, defined once
-in `docker-compose.yml` (Owner decision, 2026-09-20 — see
-[§ one model for every tier](#one-seaweedfs-model-for-every-tier-owner-decision-2026-09-20)
-below). There is no longer a separate storage overlay file for any tier to include or omit, and
-no tier runs real MinIO. Service/DNS and TD-13 `MINIO_*` names remain compatibility names, not a
-vendor assertion. Selection and rollout boundaries are recorded below.
-
-> **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
-> recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
-> consent-forced public → private `content.bucket-migrate` arm are built and tested. Bounded
-> abandoned-upload GC, exact replacement/deletion retirement and general visibility placement
-> are also implemented. Automatic 90-day destruction still requires the separate Owner policy;
-> this object-store change does not authorize it.
+- One self-hosted SeaweedFS model for Localhost, Staging and Production, defined once in `docker-compose.yml` (Owner, 2026-09-20); no per-tier storage overlay; no tier runs real MinIO; service/DNS and TD-13 `MINIO_*` names are compatibility names, not a vendor assertion.
+- Built: Nginx proxy, upload/replace/delete, permission-checked private mint, recording ingestion, durable R99 staging cleanup, consent re-evaluation, bounded abandoned-upload GC, exact replacement/deletion retirement, general visibility placement.
+- NOT built: automatic 90-day destruction — needs the separate Owner policy below; the object-store change does not authorize it.
 
 ## OWNER DECISION REQUIRED — OBJECT STORE
 
-Historical heading retained for existing links. **Resolved, 2026-09-20:** the Owner selected
-SeaweedFS 4.46 as the single object-store implementation for Localhost, Staging and Production
-alike, explicitly authorizing destruction of the then-existing Localhost/Staging MinIO data as
-part of that unification (see
-[§ one model for every tier](#one-seaweedfs-model-for-every-tier-owner-decision-2026-09-20)).
-Production's own go-live remains a separate, still-open decision — this resolved which storage
-implementation Production will run when that happens, not that it has happened.
+Heading kept for links. **Resolved 2026-09-20:** SeaweedFS 4.46 for every tier; the Owner authorized destroying the then-existing Localhost/Staging MinIO data. Production go-live stays a separate, open decision: this fixed which store Production will run, not that it runs.
 
 ### B1 candidate verification checkpoint
 
-The Owner authorized engineering selection/evaluation of a maintained replacement
-on the planned single Moroccan VPS. **SeaweedFS 4.46 is the selected B1 replacement.**
-As of 2026-09-20 it is authorized and running as the object store for Localhost and Staging, and
-is the implementation Production will run once Production's own separate go-live is authorized.
-Its [official release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.46)
-was published on 2026-09-08; the [security policy](https://github.com/seaweedfs/seaweedfs/security)
-targets the latest release. Upstream's [single-node guide](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini)
-documents the all-in-one process and credential-enabled S3 access. The candidate
-pin is `chrislusf/seaweedfs:4.46@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62`.
-This is maintenance evidence, not a claim that the software has no vulnerabilities.
-Garage's [own compatibility matrix](https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/)
-reports no S3 bucket-policy API, making it a larger integration change here.
+| Evidence | Fact |
+|---|---|
+| Selection | SeaweedFS 4.46 is the B1 replacement; live on Localhost and Staging since 2026-09-20 |
+| Upstream | [Release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.46) 2026-09-08; [security policy](https://github.com/seaweedfs/seaweedfs/security) targets the latest release; [single-node guide](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini); maintenance evidence, not a no-vulnerability claim |
+| Pin | `chrislusf/seaweedfs:4.46@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62` |
+| Rejected | Garage: [no S3 bucket-policy API](https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/) |
+| Compose | `minio`/`minio-init` keep `minio:9000` and TD-13 names; new `${COMPOSE_PROJECT_NAME}_seaweedfs-data` volume, never a MinIO-format mount; `volume.nocopy`; backups resolve the physical name from Compose labels and keep the logical `minio-data` manifest coordinate; telemetry, Admin UI, WebDAV, Iceberg/Lance, embedded IAM disabled; no host port beyond Local Development's loopback remap |
+| Overlay retired | `docker-compose.storage.yml` (Production-only) switched a tier's backend whenever a `-f` chain included it (once, against Staging); folded into `docker-compose.yml` 2026-09-20 |
+| Acceptance | Liveness is not acceptance: the API checks authenticated access to all three buckets; the one-shot initializer (exact API image SDK, no vendor CLI, not at API startup) checks policies and refuses versioning/lifecycle/Object Lock drift; public policy = `GetObject` on `public/*` only; private and recording-staging have no anonymous policy; repeat init accepts only equivalent singleton Action/Resource serialization |
+| Probe | Passed. SDK checksum defaults put CRC32(empty) into bodyless presigned PUTs → `BadDigest`; fixed by requiring checksums on the public-origin presigning client only; internal writes keep optional checksums; completion hashes the whole stream; truncated input fails at transport or as `VALIDATION_FAILED`/`OBJECT_CHANGED_DURING_STREAM`; tests: short body, transport error, absent DB/canonical state, cleaned server staging, retained browser staging, same-capability retry |
+| Smithy | Node chunked encoder awaited its checksum promise only on stream `end`; the shared internal client returns the same rejecting promise (no suppression, invented digest or disabled checksums); unit + real-stack tests require a refusal with no unhandled rejection |
 
-`docker-compose.yml`'s own `minio`/`minio-init` services preserve `minio:9000` and TD-13 setting
-names to avoid a wire-contract rewrite, but use a **new `${COMPOSE_PROJECT_NAME}_seaweedfs-data`
-physical volume**, never a MinIO-format mount. `volume.nocopy` prevents image scaffolding
-from populating an empty restore target. Backup tools resolve the physical name from Compose
-labels, preserving the logical `minio-data` recovery manifest coordinate. The service disables
-telemetry, Admin UI, WebDAV, Iceberg/Lance endpoints and embedded IAM. No storage host port is added
-beyond Local Development's own loopback-bound port remap. There used to be a separate
-`docker-compose.storage.yml` overlay that only Production's compose graph included — that split
-was itself the accidental-activation risk found and retired on 2026-09-20 (any command whose
-`-f` chain happened to include that file silently switched a tier's storage backend, which is
-exactly what happened once, against Staging); folding the definition directly into
-`docker-compose.yml` removes the file an invocation could wrongly include or omit.
-Container liveness is not acceptance: the API still checks authenticated access
-to all three buckets. The explicit initializer checks policies and refuses
-versioning/lifecycle/Object Lock drift rather than silently clearing it. Public policy permits
-only `GetObject` on `public/*`; private and recording-staging buckets have no anonymous policy.
-Repeat initialization accepts S3's equivalent singleton Action/Resource serialization, not
-additional grants or conditions. The one-shot initializer uses the exact API image's SDK;
-it does not require a vendor administration CLI or run from ordinary API startup.
-
-The isolated bucket probe passed. The first real-edge run found that optional
-SDK checksum defaults put CRC32(empty) into bodyless presigned PUT requests;
-SeaweedFS rejected nonempty browser payloads with `BadDigest`. Restricting only
-the **public-origin presigning client** to required checksums fixes this; internal
-server writes retain optional checksum calculation and completion still hashes
-the entire accepted stream. Truncated input may fail at transport level or reach
-`VALIDATION_FAILED/OBJECT_CHANGED_DURING_STREAM`; both refuse publication. Tests now cover
-short-body and explicit transport-error paths, absent DB/canonical state, cleaned server
-staging, retained browser staging and a successful same-capability retry of the original bytes.
-
-The explicit source-error regression also exposed Smithy's Node chunked encoder awaiting its
-checksum promise only on stream `end`, leaving a rejection unobserved when the source errors.
-The shared internal client observes that rejection and returns the **same rejecting promise**;
-it does not suppress pipeline errors, invent a digest or disable checksums. Unit and real-stack
-coverage require the error to remain a refusal without an unhandled rejection.
 See [B1 verification](../development/testing.md#b1-seaweedfs-compatibility-and-recovery).
 
-### One SeaweedFS model for every tier (Owner decision, 2026-09-20)
+### One model for every tier
 
-The Owner explicitly authorized discarding the Localhost and Staging MinIO data that existed at
-the time and recreating both tiers' object storage on SeaweedFS, so that Localhost, Staging and
-Production all run the identical model defined once in `docker-compose.yml`. This was a
-one-time, Owner-authorized destructive migration for Localhost/Staging specifically — it is not
-a general policy that future storage changes may discard data, and it does not itself authorize
-Production's go-live (that remains separate; Production holds no data yet regardless). No
-object-by-object copy, checksum comparison or rollback retention was built for the
-Localhost/Staging side of this change, because the Owner's authorization made that engineering
-unnecessary; Production's own eventual first launch still has nothing to migrate either, by the
-same "fresh Production" reasoning this section always carried. Never mount a raw legacy MinIO
-volume as SeaweedFS — the two are not interchangeable at the volume level, which is exactly why
-this was a recreate, not an in-place upgrade.
+- The Localhost/Staging recreate was a one-time Owner-authorized destructive migration, not a policy for future changes and not a Production go-live (Production holds no data); no object copy, checksum comparison or rollback retention was built for it.
+- Never mount a raw MinIO volume as SeaweedFS; only an identical store/version may restore its raw volume; cross-vendor migration uses S3 bytes/metadata.
+- `minio/minio:RELEASE.2025-09-07T16-13-09Z` retired everywhere: [GHSA-hv4r-mvr4-25vw](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw) affects that final OSS line, fixed only in AIStor.
+- Vendor residency, support, administration, backup and commercial evidence: [provider acceptance matrix](../operations/provider-acceptance.md); this page owns the technical contract and regression suite.
+- Safe replacements: (1) a patched, supported MinIO AIStor release; (2) another maintained self-hosted S3-compatible store on approved Moroccan infrastructure; (3) a managed S3-compatible service only with Owner + legal review of Moroccan residency, backup location, contractual controls and cost. AIStor-first was the earlier recommendation; the selection is SeaweedFS.
+- Any replacement must support path-style SigV4 presigning via same-origin `/storage` (exact non-default Host port included), ranged GET/HEAD, PUT, copy, delete, conditional reads/copies, object metadata, object-atomic writes, idempotent deletion, the three bucket policy shapes, the AWS SDK client, internal-only networking, authenticated `HeadBucket` on all three buckets, Moroccan primary and backup residency. `/healthz` uses those bucket checks with the real credentials, not `/minio/health/live`.
+- Versioning disabled: the immutable-key model stores no version IDs; `DeleteObject` must retire the named bytes, never leave a noncurrent version or delete marker. No provider lifecycle rule may expire, rewrite, tier or auto-destroy canonical, quarantine or staging objects; Object Lock must not block an authorised exact-key purge; proven from the vendor's real admin API. Enabling versioning later needs an explicit design (version coordinates, deletion, restore, legal erasure).
+- Acceptance rerun per replacement/update: three buckets exist, authenticated `HeadBucket`, versioning disabled, no unapproved lifecycle/Object Lock, truthful container healthcheck; then `nginx -t`/`nginx -T`, signed private PUT/GET proxy round trip, signed public-staging PUT + unsigned-read denials, canonical public GET/HEAD and method/root denial matrix, full B-01 safeguarding suite, B-02 placement, B-03 immutable finalization/replacement, R99 ingestion, old-key retirement, deletion/replacement race and ambiguous-storage recovery, upload/quarantine retention jobs, object-store health/readiness, backup/restore drill. Never approve Production from an API-compatibility claim alone.
 
-The legacy `minio/minio:RELEASE.2025-09-07T16-13-09Z` image is retired everywhere as of this
-decision — no tier runs it. MinIO's
-[GHSA-hv4r-mvr4-25vw advisory](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw)
-states that this final OSS line is affected and identifies a fix only in the maintained AIStor
-release line; this was the original reason no tier may launch on it, and it is now moot for all
-three rather than only for Production.
+## Two buckets
 
-Collect each vendor's residency, support, administration, backup and commercial evidence through
-the single [Moroccan-provider acceptance matrix](../operations/provider-acceptance.md). This page
-owns the technical object-store contract and regression suite; the procurement matrix does not
-replace either.
-
-Safe replacement categories are:
-
-1. a currently patched, supported MinIO AIStor release;
-2. another maintained self-hosted S3-compatible object store deployed on approved Moroccan
-   infrastructure; or
-3. a maintained managed S3-compatible service only if the Owner and legal review establish
-   Moroccan data residency, backup location, contractual controls and acceptable cost.
-
-The earlier recommendation was to evaluate AIStor first, subject to licensing/support approval.
-The subsequent Owner-authorized self-hosted selection above is SeaweedFS, with disposable
-compatibility proof rather than copying real objects. Any future replacement must
-support path-style SigV4 presigning through the same-origin `/storage` prefix (including an
-exact non-default Host port), ranged GET and HEAD, PUT, copy, delete, conditional reads/copies,
-object metadata, object-atomic writes, idempotent deletion, the three existing bucket policy
-shapes, the AWS SDK client, internal-only networking, authenticated `HeadBucket` for all three
-required buckets, and Moroccan primary and backup residency. The application `/healthz` now
-uses those S3 bucket checks with the same credentials as real work; it no longer depends on
-MinIO's private `/minio/health/live` URL. Container liveness, explicit initialization and the
-raw-volume format are vendor integration points; only an identical store/version may restore
-its raw volume. Cross-vendor migration uses S3 bytes/metadata, never raw-volume reuse.
-
-Bucket versioning, lifecycle and retention defaults are part of acceptance, not harmless
-provider settings. The current immutable-key model expects **versioning disabled**: it does not
-store object version IDs, and `DeleteObject` must retire the named bytes rather than leave a
-noncurrent version or delete marker that the purge contract cannot address. No provider
-lifecycle rule may expire canonical or quarantine objects, rewrite them, transition them to an
-unreadable tier, or automatically destroy staging/quarantine data; the existing bounded jobs
-own those decisions, and automatic quarantine destruction still requires the Owner decision
-below. Object Lock/retention must not silently prevent an authorised exact-key purge. A proposed
-vendor must prove these bucket settings from its real administrative API as well as passing the
-application behavior suite. Enabling versioning later requires an explicit design for exact
-version coordinates, deletion, restore and legal erasure; it is not a deployment toggle.
-
-For each future accepted replacement/update, first prove all three buckets exist,
-authenticated `HeadBucket` succeeds, versioning is disabled, no unapproved lifecycle/Object
-Lock rule exists, and the replacement container's own healthcheck is truthful. Then rerun:
-`nginx -t` and `nginx -T`;
-the real signed private PUT/GET proxy round trip; signed public-staging PUT plus unsigned-read
-denials; the canonical public exact-coordinate GET/HEAD and method/root denial matrix; the
-complete B-01 safeguarding suite; B-02 placement and B-03 immutable finalization/replacement;
-R99 recording ingestion; old-key retirement, deletion/replacement race and ambiguous-storage
-recovery cases; upload/quarantine retention jobs; object-store health/readiness; and the
-backup/restore drill. Do not approve Production from an API-compatibility claim alone.
-
-## Two buckets, and the boundary between them
-
-| Bucket | Holds | Served how |
+| Bucket | Holds | Served |
 |---|---|---|
-| **public** | Canonical content whose visibility is `public`, plus disposable browser-upload staging | Canonical stable URLs pass an exact live-row authorization subrequest; staging is write-only at the public origin |
-| **private** | All `private` and `hidden` content, **plus every group recording under a consent restriction** | **Never** a stable URL. Every read is a short-lived presigned URL minted after a server-side permission check |
+| **public** | Canonical `public` content plus disposable browser-upload staging | Stable URLs pass an exact live-row authorization subrequest; staging is write-only at the public origin |
+| **private** | All `private`/`hidden` content plus every group recording under a consent restriction | Never a stable URL; every read is a short-lived presigned URL minted after a server-side permission check |
 
-**Visibility is never encoded in the storage key.** The bucket carries it. That is what
-makes a visibility change a physical move rather than a rename, and it is why a key can
-safely be immutable.
-
-### One authority for placement
-
-`EducationalContent.visibility` is the domain fact; `storage_bucket` is its physical
-consequence. New uploads validate the requested/default visibility on the server and derive
-the bucket from it. A replacement inherits the existing row's visibility — it changes the
-file under R53/TD-9, not the visibility state under TD-1 — so neither an omitted value, a
-Category default, nor a manipulated replacement request can select a different bucket.
-Completion checks the signed ticket against that authoritative visibility again and discards
-a contradictory object before any database write. The second check matters across deployments:
-an already-issued ticket remains valid for up to two hours.
-
-There is deliberately no literal-bucket `CHECK` on `educational_content`. A visibility
-transition is asynchronous copy–verify–delete, and a check changing visibility first would
-claim privacy while anonymous bytes still exist. General visibility editing uses the placement
-intent/adoption path with unique destination keys and durable loser retirement. *(Until SRS
-Revision 170 §3 this paragraph also described the consent-forced pending state,
-`consent_forced_private = true` with `visibility = public`; the Owner retired the forcing, and
-that flag is never written again.)*
-
-The public bucket's anonymous S3 policy is not the production access boundary. The S3 service is
-network-internal; Nginx is the only published object origin. Every canonical public GET/HEAD
-asks the API whether one undeleted row still names that exact key as public/public. A
-committed visibility change, replacement or deletion therefore closes the stable public origin
-immediately even while object retirement is still pending (R170 §3: the consent warning is
-not a gate here). The
-external method allowlist is deliberately smaller than the S3 API: canonical paths admit
-database-gated GET/HEAD and SigV4 PUT only; `public/staging/` admits SigV4 PUT only, with
-GET/HEAD sent to the unavailable page. Nginx refuses every other method before MinIO, so an
-anonymous S3 Select POST, multipart/control operation or WebDAV-shaped request cannot turn
-the download policy into a second read or mutation path. PUT remains delegated to MinIO's
-signature check, preserving current staging uploads and still-live pre-R103 canonical
-capabilities until their one-hour expiry. Current code never mints a browser write to a
-canonical key, and legacy replacements are still refused at completion when their ticket
-lacks the required compare-and-swap version.
-
-As retained defence in depth, every Nginx path that can proxy to
-the object store shares one filter rejecting the advisory-named
-`STREAMING-UNSIGNED-PAYLOAD-TRAILER` content-hash mode before upstream. It does not match the
-signed streaming mode or ordinary presigned GET/PUT requests. This is not a substitute for a
-supported patched object store, and verification deliberately asserts the defensive boundary
-without constructing or replaying an exploit.
-
-`/storage/public` and `/storage/public/` are bucket coordinates, not object coordinates, and
-are denied by exact Nginx locations with or without query parameters. They are never
-redirected: forwarding a `?list-type=2` query to another storage path would merely relocate
-the bucket-listing exposure. Nginx's normalized location matching still selects these public
-rules for duplicate or encoded separators, while the read authorizer receives the original
-URI and therefore refuses any alternate spelling that is not the exact current DB
-coordinate.
+- Visibility is never encoded in the key; the bucket carries it, so a visibility change is a physical move and keys stay immutable.
+- `EducationalContent.visibility` is the domain fact, `storage_bucket` its consequence: new uploads validate visibility server-side and derive the bucket; a replacement inherits the row's visibility (R53/TD-9); completion re-checks the ticket against the authoritative visibility and discards a contradictory object before any DB write (a ticket stays valid up to two hours).
+- No literal-bucket `CHECK` on `educational_content`: a visibility transition is asynchronous copy–verify–delete via the placement intent/adoption path with unique destination keys and durable loser retirement. The consent-forced pending state (`consent_forced_private = true` with `visibility = public`) was retired by R170 §3; the flag is never written again.
+- The anonymous S3 policy is not the boundary: S3 is network-internal, Nginx the only published origin; every canonical public GET/HEAD asks the API whether one undeleted row names that exact key as public/public, so a committed visibility change, replacement or deletion closes the origin at once (R170 §3: the consent warning is not a gate).
+- Method allowlist: canonical paths admit DB-gated GET/HEAD and SigV4 PUT only; `public/staging/` admits SigV4 PUT only (GET/HEAD → unavailable page); every other method is refused before the store. PUT stays delegated to the store's signature check; current code never mints a browser write to a canonical key; legacy replacements without a compare-and-swap version are refused at completion.
+- Every proxying path rejects the `STREAMING-UNSIGNED-PAYLOAD-TRAILER` content-hash mode before upstream (not signed streaming or ordinary presigned GET/PUT); defence in depth, verified without replaying an exploit.
+- `/storage/public` and `/storage/public/` are bucket coordinates: denied by exact locations with or without query, never redirected (`?list-type=2` would relocate the listing); normalized matching still selects these rules for duplicate/encoded separators; the read authorizer sees the original URI and refuses any spelling but the exact DB coordinate.
 
 ### Visibility changes move the object
 
-Switching public content to private migrates the object to the private bucket and removes
-the old public key. Anyone following a stale cached link gets a **friendly platform error
-page** — *"This content's access has changed"* — implemented as an Nginx error-page mapping
-on storage 403/404 responses.
-
-**Never a raw XML S3 error.** A beneficiary following an old WhatsApp link should not meet
-`<Error><Code>NoSuchKey</Code>`.
-
-The migration runs as a background job (copy, full SHA-256 verify, delete — idempotent,
-restart-safe). Object storage cannot join a database transaction, so the move is eventually
-consistent. During the pending interval the consent flag closes both application reads and
-the only published storage origin; only the network-internal public-bucket copy remains until
-the worker retires it. The final transaction deletes that source before the row may say
-`private`. A delete-succeeded/DB-rollback retry proves the already-copied private bytes from
-their server-written SHA-256 before completing the row transition.
+- Public → private copies to the private bucket and removes the old public key; a stale link gets the friendly Nginx error page («This content's access has changed») on storage 403/404, never raw S3 XML.
+- Background job: copy, full SHA-256 verify, delete; idempotent, restart-safe, eventually consistent; the pending interval closes application reads and the published origin; the final transaction deletes the source before the row may say `private`; a delete-succeeded/DB-rollback retry proves the copied bytes from their server-written SHA-256.
 
 ## Presigned URLs
 
 | Operation | TTL | Notes |
 |---|---|---|
-| **GET** (public bucket) | 10 minutes | Minted anonymously only for a live public, non-consent-restricted public-bucket row; the public Nginx origin re-authorizes the exact current coordinate when the bytes are read |
-| **GET** (private bucket) | 10 minutes | Minted only after the permission check, **including child context** where the requester is a parent |
-| **PUT** (single-shot upload) | 1 hour | Initiated-but-never-completed uploads collected after 48 hours |
+| GET public | 10 min | Anonymous mint only for a live public, non-consent-restricted public-bucket row; the origin re-authorizes the exact coordinate on read |
+| GET private | 10 min | Only after the permission check, including child context for a parent |
+| PUT single-shot | 1 hour | Never-completed uploads collected after 48 h |
 
-Previews use **the same mint path** as downloads. There is no separate preview endpoint and
-no relaxed permission for thumbnails — an obvious-looking shortcut that would create a
-second, weaker access path to the same objects.
-
-`GET /content/{id}/download-url` is optionally authenticated. Anonymous callers
-receive only the same public tier as `GET /library`; an active authenticated
-caller is re-read through TD-12 and may receive the private tier already granted
-by §4.9. The library frontend sends its current token when one exists, so a link
-from a private Session does not accidentally downgrade the reader to anonymous.
-
-### Signatures through the proxy
-
-This is the piece that breaks silently if done carelessly.
-
-Presigned URLs are generated **against the public storage origin**, so the signature matches
-exactly what the browser sends through the proxy. The `/storage/` location must:
-
-- strip the `/storage` prefix when forwarding to MinIO, and
-- **rewrite the `Host` header consistently with the endpoint the signature was computed
-  for, including any non-default port.** The proxy uses the exact incoming HTTP Host rather
-  than Nginx's normalized host value.
-
-Any mismatch between signed host/path and proxied host/path yields
-`SignatureDoesNotMatch` — an error that looks like a credentials problem and is not.
-
-A signed PUT plus signed GET round trip **through the proxy** is a mandatory acceptance
-test, and it passes today. Verifying by talking to MinIO directly proves nothing: direct
-access is the one path production never uses.
+- Previews use the same mint path as downloads: no preview endpoint, no relaxed thumbnail permission.
+- `GET /content/{id}/download-url` is optionally authenticated: anonymous → the `GET /library` public tier; an active authenticated caller is re-read through TD-12 and may get the §4.9 private tier; the library frontend sends its token when it has one.
+- Presigned URLs are generated against the public storage origin; `/storage/` strips the prefix and rewrites `Host` to the exact incoming HTTP Host (non-default port included), never Nginx's normalized host; a mismatch yields `SignatureDoesNotMatch` (looks like credentials, is not). A signed PUT + GET round trip through the proxy is a mandatory acceptance test; direct store access proves nothing.
 
 ## Uploads
 
-MVP uploads are **single-shot presigned PUT to a disposable staging key**, followed by a
-server-controlled immutable finalization.
+Single-shot presigned PUT to a disposable staging key, then server-controlled immutable finalization.
 
-```
-POST /uploads/initiate
-  { filename, size, mime, content_meta }
-  → branch scope validated HERE (a teacher passing "global" is refused)
-  → per-user quota checked and incremented, under a row lock, in one transaction
-  → PUT capability addresses staging/content/... — never the future content key
-  → public-bucket staging accepts the signed PUT but is never anonymously readable
-  → { upload_id, key, put_url }
-
-  browser PUTs directly to storage through the proxy, with progress
-
-POST /uploads/{upload_id}/complete
-  → HEAD verifies size against the declared value and the caps
-  → server opens one full staging GET (ETag conditional only as an ordinary race optimization)
-  → prefix held until magic validation; exact length + SHA-256 cover the complete stream
-  → mismatch → object deleted, no record created, 409 VALIDATION_FAILED
-  → exact accepted stream is PUT into unique private staging/server-finalization/...
-  → canonical 32-hex identity derives from finalization id + accepted SHA-256
-  → server-owned object is streamed to canonical PUT and re-hashed end to end
-  → server-finalization object deleted best-effort; browser never had its key or authority
-  → row + mandatory audit commit together (create, or compare-and-swap replacement)
-  → client staging key deleted last; a cleanup miss cannot mutate the accepted bytes
-
-POST /uploads/{upload_id}/abort
-  → deletes only unreferenced staging; best-effort because upload.gc owns abandonment
-```
-
-The original PUT remains valid for its one-hour TTL; object stores cannot revoke one URL in
-isolation. That capability is harmless after completion because it can recreate or replace
-only the staging key. The database always names the distinct canonical key, for which the
-browser was never given write authority.
-
-The canonical version segment is the first 128 bits (32 hex characters) of
-`SHA-256("upload-finalization-sha256-v1" || NUL || finalization_id || NUL || content_sha256)`.
-The full accepted SHA-256 is written to mandatory audit detail and canonical object metadata;
-an existing retry candidate is read and checked against that full digest. The 128-bit path
-component has negligible collision probability at this application's scale while keeping the
-existing layout compact. MinIO's plaintext single-part PUT ETag is MD5, so it is explicitly
-**not byte identity**. `If-Match` can reject an ordinary overwrite between HEAD and GET, but
-no hash/key/publication decision trusts it.
-
-The private server-finalization object resolves the otherwise unavoidable key-order problem:
-the content digest is not known until the stream ends, yet the destination key includes it.
-Buffering up to 100 MB in memory was rejected. Reopening the client-writable key after hashing
-would recreate the TOCTOU. Instead, one already-open source response is validated and hashed
-while becoming an unguessable server-only object; canonical PUT reads only that immutable
-source and re-hashes it. A real equal-size/equal-MD5 PDF collision test overwrites client
-staging after the source read opens and proves MinIO finishes that request from one stable
-snapshot; canonical bytes and audit SHA-256 remain the accepted snapshot.
+- `POST /uploads/initiate` `{ filename, size, mime, content_meta }`: branch scope validated here (a teacher passing "global" is refused); per-user quota checked and incremented under a row lock in one transaction; the PUT capability addresses `staging/content/...`, never the future content key; public staging accepts the signed PUT but is never anonymously readable; returns `{ upload_id, key, put_url }`; the browser PUTs through the proxy with progress.
+- `POST /uploads/{upload_id}/complete`: HEAD verifies size against declaration and caps; one full staging GET (ETag conditional as a race optimization only); prefix held until magic validation; exact length + SHA-256 over the stream; mismatch → object deleted, no record, `409 VALIDATION_FAILED`; accepted stream PUT into unique private `staging/server-finalization/...`; canonical 32-hex identity from finalization id + accepted SHA-256; server-owned object streamed to canonical PUT and re-hashed; server-finalization object deleted best-effort (the browser never had its key); row + mandatory audit commit together (create or compare-and-swap replacement); client staging key deleted last.
+- `POST /uploads/{upload_id}/abort`: deletes only unreferenced staging, best-effort; `upload.gc` owns abandonment.
+- The original PUT stays valid for its hour (unrevocable) and can only recreate the staging key; the DB names the distinct canonical key the browser never had write authority for.
+- Version segment = first 128 bits (32 hex) of `SHA-256("upload-finalization-sha256-v1" || NUL || finalization_id || NUL || content_sha256)`; the full SHA-256 goes to mandatory audit detail and object metadata and a retry candidate is checked against it. Single-part PUT ETag is MD5, not byte identity; `If-Match` never decides hash, key or publication.
+- The private server-finalization object solves the key-order problem (digest unknown until stream end). Rejected: buffering up to 100 MB in memory; reopening the client-writable key after hashing (TOCTOU). An equal-size/equal-MD5 PDF collision test overwrites client staging after the source read opens and proves one stable snapshot.
+- The server streams, never buffers: memory bounded by stream chunks plus the 512-byte validation window; browser uploads only (50/100 MB); R99's 500 MB object is a storage-side copy.
+- Declared content type is not trusted; magic bytes are.
 
 ### `upload_id` is a signed ticket, not a database row
 
-**§7 defines no pending-upload entity.** Something has to carry phase one's decisions into
-phase two, and the two candidates were a new table or a signed token. The table was rejected:
-inventing an entity is a schema decision the specification never took, and a table that records
-uploads can disagree with the bucket that holds them, creating a reconciliation problem where
-there was none. The ticket carries the state instead, and `upload.gc` (TD-7) then reaps
-*objects* older than 48 h that no content row claims — which is the thing that actually needs
-collecting, and is true whether or not any bookkeeping row ever existed.
+- §7 defines no pending-upload entity; a table was rejected (a schema decision the SRS never took, plus a bucket/table reconciliation problem); `upload.gc` (TD-7) reaps objects older than 48 h that no content row claims.
+- Daily collector: browser staging in `public` and `private`, server-finalization staging in `private`; ≤ 250 objects per job, continuation enqueued transactionally as another pg-boss job; cutoff fixed for the run; an object exactly 48 h old or lacking `LastModified` is retained; `recordings-staging` excluded (R100 gives each provider object an exact ingestion retry).
+- The ticket binds every `/initiate` decision: caller, staging key, bucket, finalization identity, declared size and type, §4.9 scope fields, and for a replacement the observed target version. Title and description are deliberately unbound (free text; keeps the ticket a few hundred bytes as a URL path segment).
+- Signing key derived from `JWT_SIGNING_KEY` by HKDF under its own label: the TD-13 separation between token classes without a new variable.
 
-The daily collector scans exactly three scopes: browser staging in `public` and `private`, and
-server-finalization staging in `private`. One job reads at most 250 objects and transactionally
-enqueues the opaque continuation as another pg-boss job, so a large backlog converges without
-making one worker execution unbounded. The cutoff is fixed for the complete pagination run;
-an object exactly 48 hours old is retained, and a missing `LastModified` is retained rather
-than guessed. `recordings-staging` is deliberately excluded because R100 gives each provider
-object an exact ingestion retry rather than an age-based collector.
+### Replacement (R53)
 
-**The ticket binds every authorization decision taken at `/initiate`** — caller, staging key,
-bucket, finalization identity, declared size and type, and the §4.9 scope fields. A replacement
-also binds the target version it observed. Without that binding, a Teacher could
-initiate inside their own branch and complete into the Global scope, and the check at phase one
-would be decorative. **Title and description are deliberately not bound**: they are free text no
-authorization turns on, and keeping them out holds the ticket to a few hundred bytes, which
-matters because it travels as a URL path segment.
-
-Its signing key is derived from `JWT_SIGNING_KEY` by HKDF under its own label. That is the
-separation TD-13 requires between token classes — an upload ticket and an access token must
-never be interchangeable — obtained without adding a configuration variable TD-13 does not list.
-
-### Replacement extends this flow rather than getting a route (R53)
-
-`content_meta.replaces_content_id` targets an existing record: the same two phases run, and
-completion updates that row instead of creating one. A replacement **is** an upload — it needs
-the same presigned PUT, whitelist, cap, magic-byte verification and quota — so a second route
-would be this flow written twice, and the copy that drifts still passes its own tests.
-Resolving the target at `/initiate` also means an unauthorized replacement is refused **before**
-a URL is minted. The target row's visibility also determines the replacement bucket. The
-generic upload payload may carry `visibility`, but on a replacement it is not a second write
-surface: the record keeps its authoritative value, and completion refuses any older or
-contradictory ticket before updating its storage coordinates.
-
-Publication is optimistic and exact: the replacement update matches the observed version,
-bucket and old canonical key, increments the version once, and writes `content.replace` in
-the same transaction. Competing tickets therefore cannot both publish or quarantine one
-another's object. The loser removes only its own SHA-derived canonical candidate; a same-
-ticket retry recognizes the committed finalization audit and converges without another
-version bump. If same-ticket readers accepted different stable client-staging snapshots,
-the mandatory audit identifies the one winner and the loser removes only its distinct key.
-
-Audit evidence identifies those exact coordinates by SHA-256 of
-`bucket + NUL + key`; it never copies the filename-derived key into the
-indefinitely retained `AuditLog`. Exact old keys remain in the content/Trash and
-transactional pg-boss records that must act on them. For a current finalization,
-the signed finalization id plus accepted full content SHA-256 deterministically
-rebuilds the canonical key on retry. Rows written by older releases retain a
-read-only exact-key compatibility fallback.
-
-An outstanding replacement ticket that has `replaces` but no `replaces_version` is a pre-B-03
-grant with no authoritative compare-and-swap observation. Completion rejects it with
-`VERSION_CONFLICT` / `REPLACEMENT_REINITIATION_REQUIRED`, discards its unreferenced upload
-object where safe, and leaves the existing content untouched. Reloading today's version was
-rejected because it would silently give an old ticket authority it never carried.
-
-**The server streams but never buffers the whole file.** Memory is bounded by storage stream
-chunks plus the first 512-byte validation window. This is deliberately limited to browser
-uploads under the existing 50/100 MB caps; R99's 500 MB provider object remains a storage-side
-copy and does not enter the process.
-
-**Declared content type is not trusted.** Magic bytes are, which is the only check that
-survives a renamed file.
+- `content_meta.replaces_content_id` runs the same two phases and updates the row; no second route. The target is resolved at `/initiate`, so an unauthorized replacement is refused before a URL is minted; the target row's visibility decides the bucket; a payload `visibility` is not a second write surface.
+- Publication is optimistic and exact: match observed version, bucket and old canonical key; increment version once; `content.replace` in the same transaction; the loser removes only its own SHA-derived candidate; a same-ticket retry converges on the finalization audit without another bump.
+- Audit identifies coordinates by SHA-256 of `bucket + NUL + key`, never the filename-derived key; exact old keys stay in content/Trash and pg-boss records; finalization id + full SHA-256 rebuild the canonical key on retry; older rows keep a read-only exact-key fallback.
+- A ticket with `replaces` but no `replaces_version` (pre-B-03) is rejected at completion with `VERSION_CONFLICT` / `REPLACEMENT_REINITIATION_REQUIRED`, its unreferenced object discarded where safe; reloading today's version was rejected.
 
 ### Finalization failure boundaries
 
-Storage PUTs are object-atomic: a failed or short streamed request never becomes a complete
-canonical object. Source read, magic, length or hash failure publishes no row. A failed
-server-finalization or canonical PUT leaves the client staging object available for the same
-ticket to retry; the per-attempt private object is deleted best-effort. If the canonical PUT
-succeeds and the database/audit transaction fails, completion removes that unreferenced
-candidate only after the database can prove no matching publication committed. An ambiguous
-commit or cleanup outage may therefore leave an unreachable canonical or staging object for
-future `upload.gc`; it may not leave a row naming incomplete bytes.
-
-After publication, client-staging deletion is best-effort and duplicate completion uses the
-mandatory finalization audit before touching it. A retained PUT can recreate only that
-unreferenced client key. Neither post-commit cleanup failure nor later staging mutation can
-change the canonical coordinate or bytes.
+- PUTs are object-atomic; source read, magic, length or hash failure publishes no row; a failed server-finalization or canonical PUT leaves client staging for the same ticket to retry (per-attempt private object deleted best-effort).
+- Canonical PUT succeeded, DB/audit failed → the candidate is removed only after the DB proves no matching publication committed; an ambiguous commit or cleanup outage may leave an unreachable object for `upload.gc`, never a row naming incomplete bytes.
+- After publication, client-staging deletion is best-effort; duplicate completion consults the finalization audit first; no cleanup failure or later staging mutation can change the canonical coordinate or bytes.
 
 ### Limits
 
 | | Cap | Accepted types |
 |---|---|---|
-| Audio | **100 MB** | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
-| Documents, slides, images | **50 MB** | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
-| Video | — | **Not accepted at `/uploads/*`.** §4.9's *"Video remains excluded entirely"* remains in force for the route it was written about, and R99.12's `origin` marker does not widen it: the whitelist check does not consult that field |
-| Video, **ingested class recording** | **500 MB** | `video/mp4`, reachable **only** by `session-recording-ingest` (R99.8). What R99 admits is a **provenance** — an object the platform produced by recording a class it authorised — not a file type. The cap is larger because a three-hour صوت وصورة lesson is legitimately bigger than a voice memo, and bounded for the same disk-budget reason Revision 18 gave |
+| Audio | 100 MB | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
+| Documents, slides, images | 50 MB | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
+| Video | — | Not accepted at `/uploads/*` (§4.9 «Video remains excluded entirely»); R99.12's `origin` marker does not widen it |
+| Ingested class recording | 500 MB | `video/mp4`, reachable only by `session-recording-ingest` (R99.8): a provenance, not a file type; bounded for R18's disk-budget reason |
 
-## What a recording IS — the product meaning (Owner, 2026-09-02; SRS R120)
+- Video's absence is a rule: the library client maps `video/*` for presentation only; accepting video is a Document Owner decision and SRS revision (§20 rule 16).
+- Magic-byte check is a predicate per type, not a prefix table: RIFF real type at offset 8 (WAV vs WebP), MP4 `ftyp` at offset 4, MP3 = ID3 tag or eleven-bit frame sync (`FF` alone would admit every JPEG); OOXML types are ZIP archives, checked for consistency with the declaration.
+- 100 MB (down from 500 MB) is over six hours at 32 kbps mono; it bounds failed-upload blast radius, VPS disk and the Nginx body limit.
+- Resumable multipart is deferred: a failed upload restarts from zero (accepted risk; mitigations: progress + retry UI, stable-connection guidance, the cap; phone recordings are typically 10–30 MB); first post-MVP storage item; the key structure already fits.
 
-A recording on this platform is **a مؤطِّرة recording herself giving or
-explaining a lesson**, voluntarily and on purpose:
+### What a recording IS (Owner 2026-09-02, R120)
 
-* **MVP** — her own **voice**, made with her phone's native voice recorder and
-  uploaded, or produced by the online-class egress path.
-* **Post-MVP** — her own **video**, doing the same.
-
-**The platform does not record a classroom and does not record beneficiaries.**
-Teacher-authored lesson material must not be described as classroom capture, as
-surveillance, or as inherently containing a student's voice or image.
-
-**No technical safeguard prevents a microphone or camera from capturing somebody
-else, and none is claimed here.** BR-2's consent gate is the answer to that
-possibility: it governs **publication and access**, forcing any recording
-attached to a Session private while any student in that Session's audience lacks
-`media_release` consent. That mechanism is unchanged by this clarification.
-
-**Photographs and video from association events and parties are a separate
-scenario** and are not this pipeline. Such media is intended for publication only
-where the required consent has been obtained from identifiable people in it, or
-from a parent or legal representative where applicable. No surface implements
-that today.
-
-The internal names — `SessionRecording`, the `session-recording` queue, the
-`recordings-staging` bucket — are **kept deliberately**. Renaming them would be
-churn; what needed correcting is the product meaning, which is stated here.
-
-**Video's absence is a rule, not an omission.** The library client maps `video/*` for
-*presentation*, because that list answers a different question — how a stored thing is shown,
-rather than what may be stored. Accepting video is a Document Owner decision and an SRS
-revision (§20 rule 16), not an implementation detail.
-
-**The magic-byte check is a predicate per type, not a prefix table**, because three of the
-signatures are not prefixes: RIFF containers carry their real type at offset 8 (so WAV and WebP
-are distinguishable, which a four-byte test would not manage), MP4 carries `ftyp` at offset 4,
-and MP3 is either an ID3 tag or an eleven-bit frame sync — and matching `FF` alone would admit
-every JPEG as audio. The three OOXML types are ZIP archives and are indistinguishable at this
-depth, so the check there is *consistent with the declaration*, which is what a 512-byte window
-can honestly assert.
-
-100 MB was reduced from 500 MB: at 32 kbps mono speech that is over six hours of recording,
-and the smaller cap shrinks three things at once — the blast radius of a failed single-shot
-upload, the VPS disk budget, and the Nginx body limit.
-
-### Why single-shot, and what it costs
-
-Resumable multipart uploads are deferred. **A failed upload restarts from zero** — recorded
-as an accepted risk, with mitigations rather than denial:
-
-- Upload progress and a clear retry affordance in the UI
-- Guidance to upload on stable connections and split long sessions
-- The 100 MB cap, and the reality that phone voice recordings are typically 10–30 MB
-
-Multipart resume is the **first** post-MVP storage item, and the key structure is already
-compatible — it is a drop-in change to the upload path only.
+- A مؤطِّرة recording herself giving or explaining a lesson, voluntarily: MVP her own voice (phone recorder or online-class egress); post-MVP her own video.
+- The platform does not record a classroom or beneficiaries; never describe teacher material as classroom capture or surveillance. No technical safeguard prevents a microphone or camera from capturing somebody else, and none is claimed; BR-2's consent mechanism governs publication and access.
+- Event/party photographs and video are a separate scenario (consent from identifiable people or their parent/legal representative); no surface implements it today.
+- `SessionRecording`, the `session-recording` queue and the `recordings-staging` bucket keep their names deliberately.
 
 ## Keys
-
-### Exact retirement authority (B4/B5)
-
-Visibility moves mint a fresh immutable destination key per attempt; they never
-reuse a destination another request can adopt. A `StorageRetirement` placement
-intent commits before the copy. Publication and cleanup serialize on the Content
-row then that intent, so a completed cleanup cannot subsequently be adopted. The
-winning transaction resolves its intent and commits the exact old-coordinate
-retirement. Failures leave an actionable obligation, not a guessed object scan.
-The same-bucket metadata path remains copy-free.
-
-Each placement intent starts with `copy_settled = false`, durably **before** any
-write. Its destination has one possible writer: a single-attempt internal COPY
-client, with SDK retries disabled for this operation only. A request failure,
-process death or database lock loss cannot prove that remote COPY stopped.
-An absent object therefore leaves the intent pending as `COPY_OUTCOME_UNKNOWN`;
-neither elapsed time nor repeated absence clears its locator.
-
-Settlement requires positive evidence: the original callback finished without
-dispatching a COPY, that COPY returned success, or a later HEAD observes its
-unique destination. This relies on the store's atomic single-object COPY and
-strong read-after-write semantics, not a cancellation assumption. The observed
-settlement is committed **before** deletion, so a lost delete response can safely
-converge on a later absent-object retry. Publication still adopts under the
-Content/intent locks; cleanup rechecks canonical authority after settlement.
-Retrying publication always creates a new intent/key, never resends the old COPY.
-
-The one-attempt setting follows the [SDK retry contract](https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html);
-the storage requirement is the [atomic CopyObject contract](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html).
-It does not select a new vendor. An unknown write that never appears remains an
-actionable operational record, not falsely completed work. See the
-[deterministic race proof](../development/testing.md#b4b5b6-storage-retirement-and-event-scope-2026-09-12).
-
-The domain record, not pg-boss history, owns required retirement after replacement,
-deletion or purge. Pending records retain the exact operational locator needed to
-act; completed records clear that locator and retain structural identifiers and a
-coordinate digest. Neither filenames nor raw keys are copied into audit detail or
-new job payloads. See [background jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation)
-for retries, legacy import and reconciliation. This is not permission to inspect
-or delete unclassified objects on an existing host.
 
 ```
 content/{content_id}/{version-segment}/{original-filename-slugified}.{ext}
@@ -524,240 +132,80 @@ staging/server-finalization/{content_id}/{unguessable-nonce}
 quarantine/{content_id}/…                    (soft-deleted objects)
 ```
 
-Three properties, each load-bearing:
+- A collision-resistant hash segment defeats browser/proxy/CDN caching collisions on re-upload: 128 bits from the signed finalization identity + full content SHA-256 for browser uploads; R99 ingestion keeps its 8-hex retry-stable identity; both server-generated, never client-writable.
+- Keys are immutable: a replacement gets a new key, the DB reference moves, the old object is quarantined; a cached old URL can never mask a newer upload (why the structure survived the multipart deferral).
+- Filenames are slugified (Arabic via transliteration); the display name lives in the DB.
 
-**A short collision-resistant hash segment** defeats browser, proxy, and CDN caching
-collisions when a file with the same name is re-uploaded. Ordinary upload finalization uses
-128 bits derived from its signed finalization identity and the full accepted content SHA-256;
-R99 ingestion retains its 8-hex retry-stable recording identity. Both canonical forms are
-server-generated and never client-writable. The full browser-upload SHA-256 remains in audit
-detail and object metadata even though the path uses its domain-separated 128-bit derivative.
+### Exact retirement authority (B4/B5)
 
-**Keys are immutable once written.** Replacing a file on an existing record generates a
-*new* key with a new hash segment and updates the database reference; the old object is
-quarantined. A cached URL of the old object can therefore **never mask a newer upload** —
-which is the actual bug this design prevents, and it is the reason the key structure was
-retained unchanged even after multipart uploads were deferred.
-
-**Original filenames are slugified**, with Arabic preserved via a transliteration slug and
-the display name stored in the database.
+- Visibility moves mint a fresh immutable destination key per attempt; a `StorageRetirement` placement intent commits before the copy; publication and cleanup serialize on the Content row then the intent, so a completed cleanup cannot be adopted; the winner resolves its intent and commits the exact old-coordinate retirement; failures leave an actionable obligation, never a guessed scan; the same-bucket metadata path is copy-free.
+- Each intent starts `copy_settled = false` durably before any write; its destination has one writer, a single-attempt internal COPY client with SDK retries disabled for this operation only ([SDK retry contract](https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html)); an absent object leaves the intent `COPY_OUTCOME_UNKNOWN`; neither time nor repeated absence clears its locator.
+- Settlement needs positive evidence (callback finished without a COPY, COPY success, or a later HEAD sees the unique destination), relying on [atomic CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html) and strong read-after-write; settlement commits before deletion; retrying publication always creates a new intent/key; not a vendor selection ([race proof](../development/testing.md#b4b5b6-storage-retirement-and-event-scope-2026-09-12)).
+- The domain record, not pg-boss history, owns retirement after replacement, deletion or purge: pending records keep the exact locator; completed ones keep structural ids and a coordinate digest; no filenames or raw keys in audit detail or new payloads ([background jobs](background-jobs.md#storage-lifecycle-jobs--bounded-sweep-versus-exact-obligation)); not permission to inspect or delete unclassified objects on an existing host.
 
 ## Consent gating
 
-The storage-facing half of [`BR-2`](../reference/business-rules.md#br-2) — **a warning since SRS
-Revision 170 §3 (the Owner, 2026-09-21), no longer a gate on storage.**
+The storage half of [BR-2](../reference/business-rules.md#br-2): a **warning since R170 §3 (Owner, 2026-09-21), no longer a gate on storage**.
+- One beneficiary in a Session's resolved audience without effective media consent warns every recording linked to it (`media_consent_missing`); a recording shared by Sessions is warned by the union; nothing is forced.
+- Continuously maintained: re-evaluated on roster/Teaching Group changes, consent changes, recording upload/import/replacement, Session-content link changes, R92 occurrence-audience changes; live occurrences stay covered after their schedule is soft-deleted; startup scans live links in bounded batches; every path enqueues the same full-current-state job. The metadata path re-evaluates on adding or removing the recording marker under the same ordered Session anchors; a graph that grows during acquisition refuses the transaction.
+- Withdrawn by R170 §3: `content.bucket-migrate`'s consent arm, consent-grounds retirement of a public recording's old object, the `consent_forced_private = false` library conjunct, the download-URL mint and the Nginx auth subrequest. A public recording is served when `visibility = public` and the key is current. `consent_forced_private` stays in the schema, never written; the migration moved every `true` onto the warning and completed pending obligations with code `withdrawn_r170`.
+- Staff only: `GET /library` projects `media_consent_missing` for staff, `null` otherwise; `GET /calendar/sessions/{id}` answers `audience_media_consent_missing` for staff (the audience checked BEFORE recording), `null` otherwise.
+- A zero-person audience warns nothing; the first non-consenting addition raises it, a later grant clears it.
 
-> If a Session's resolved audience has **even one** beneficiary without effective media
-> consent, every recording linked to that Session is **warned** (`media_consent_missing`). A
-> recording shared by Sessions is warned by the union of those audiences. Nothing is forced.
-
-This is still a **continuously maintained fact**, not an upload-time check. Re-evaluation is
-triggered by roster/Teaching Group membership changes, consent changes, recording
-upload/import/replacement, Session-content link changes and R92 occurrence-audience changes;
-retained live occurrences remain covered after their recurring schedule is soft-deleted, and
-startup scans live recording links in bounded batches. Every path enqueues the same
-full-current-state job for the affected occurrence. The metadata path also re-evaluates when
-adding **or removing** the recording marker, under the same ordered Session anchors, and a graph
-that grows during acquisition refuses the transaction rather than evaluating unlocked audiences.
-
-**What storage no longer does (withdrawn by R170 §3):** the public→private consent migration
-(`content.bucket-migrate`'s consent arm), the retirement of a public recording's old object on
-consent grounds at replacement/deletion, the `consent_forced_private = false` conjunct in the
-library predicate, the download-URL mint and the Nginx auth subrequest. A public recording is
-served by the stable public origin exactly when its row says `visibility = public` and its key is
-the current one — the same rule as every other public item. The flag `consent_forced_private`
-stays in the schema, never written; the migration moved every `true` onto the warning and
-completed pending consent obligations with the code `withdrawn_r170`.
-
-**Who reads the warning:** staff, and nobody else. `GET /library` projects
-`media_consent_missing` for a staff caller and `null` otherwise; `GET /calendar/sessions/{id}`
-answers `audience_media_consent_missing` for staff — the class's audience checked BEFORE
-anything is recorded — and `null` otherwise. It is a fact about a child, told to the people who
-decide the visibility.
-
-One edge case that reads like a bug and is not: a Session with a **zero-person resolved
-audience** has no non-consenting beneficiary, so nothing is warned; the first audience mutation
-adding a non-consenting beneficiary raises the warning, and a later grant clears it.
-
-> [Business processes](../overview/business-processes.md#the-session-consent-gate) ·
-> [Background jobs](background-jobs.md)
+[Business processes](../overview/business-processes.md#the-session-consent-gate) · [Background jobs](background-jobs.md)
 
 ## Global scope is a privilege
 
-Content with no branch appears in the *"Global / بدون فرع"* container across every branch.
+- No-branch content appears in «Global / بدون فرع» across every branch; only Admins and Super Admins may assign it; teachers are locked to branches in their own scope (group assignments); a teacher upload with a null or out-of-scope branch is refused ([BR-20](../reference/business-rules.md#br-20)).
 
-**Only Admins and Super Admins may assign it.** Teachers are locked to branches within their
-own assigned scope, resolved through their group assignments. A teacher upload with a null
-or out-of-scope branch is refused.
+## Framing and Nginx for `/storage/`
 
-This prevents a single-branch teacher from accidentally publishing a file platform-wide
-([`BR-20`](../reference/business-rules.md#br-20)).
-
-## Why stored objects allow same-origin framing
-
-`/storage/` responses carry `frame-ancestors 'self'`; **everything else keeps
-`'none'`.**
-
-`frame-ancestors` applies to the response *being framed*. Inherited from the
-server-level CSP, `'none'` forbade **any** page — including our own — from
-embedding a stored object, so §14.6's inline PDF preview rendered blank while the
-identical URL opened correctly in a tab and `<audio>` played fine. Those two work
-because a top-level navigation is not framing and media loading is governed by
-`media-src`; only the `<iframe>` was affected, which is what made it look like a
-viewer bug.
-
-**§3.1 scopes its CSP to *client responses*** and names only media/img/connect
-sources for `/storage/`. It never asks stored objects to refuse framing — that
-was an artefact of `add_header` inheritance, and it contradicted §14.6.
-
-**Clickjacking protection is unchanged**: that threat is a hostile page framing
-*our interface*, and the app shell still answers `frame-ancestors 'none'`. This
-says only that our origin may embed its own documents.
-
-One nginx trap worth knowing: **`add_header` in a location replaces the inherited
-set entirely**, so the storage block restates `X-Content-Type-Options` too —
-declaring only the CSP would have silently dropped `nosniff` from every stored
-object.
-
-## Nginx directives that decide whether uploads work
-
-Scoped to `/storage/` only:
-
-```nginx
-client_max_body_size      110m;   # default is 1 MB → every upload dies at 413
-proxy_request_buffering   off;    # default spools the whole body to disk first
-```
-
-The API location stays at `2m`. **Never raise the body limit globally to "fix" uploads.**
+- `/storage/` responses carry `frame-ancestors 'self'`; everything else keeps `'none'` (§3.1 scopes its CSP to client responses; the inherited `'none'` blanked §14.6's inline PDF preview; the app shell stays `'none'`, so clickjacking protection is unchanged).
+- `add_header` in a location replaces the inherited set, so the storage block restates `X-Content-Type-Options` (`nosniff`).
+- `/storage/` only: `client_max_body_size 110m` (default 1 MB → 413) and `proxy_request_buffering off`; the API location stays `2m`; never raise the body limit globally.
 
 ## Deletion and quarantine
 
-`DELETE /content/{id}` (R53) soft-deletes the row, writes a `Trash` snapshot, and moves the
-object to a **quarantine prefix**, pending the 90-day window.
-
-Replacement and soft deletion commit an exact old-coordinate quarantine obligation in the
-same PostgreSQL transaction as the row/audit change. The request still attempts the
-copy-before-delete transition immediately, but that is only the fast path: storage failure or
-an ambiguous delete response leaves the pg-boss job to retry. The job derives no coordinate
-from the current row. It can therefore move only the immutable old key named at commit time,
-never a replacement's newer canonical bytes.
-
-**Two authorised paths lead out of quarantine, but only the deliberate one is active.**
-
-* **A Super Admin purge** (R59.1) — `DELETE /admin/trash/{id}` destroys the row and
-  commits an exact storage-retirement job **inside the same transaction**. The worker deletes
-  both possible leftovers — the derived quarantine key and exact old canonical key — and
-  propagates every storage failure so TD-7 retry/terminal observability applies. If the queue
-  is absent, database destruction rolls back. A duplicate or a retry after an ambiguous
-  response is safe because S3 deletion is idempotent and content UUID/version keys are never
-  reused. A quarantine worker that finishes after permanent deletion rechecks row existence
-  and retires both old coordinates again, so the stale job cannot leave a newly copied
-  quarantine object behind.
-* **The automatic `content.quarantine-purge` age arm** — which Revisions 52 and 53 both name as the
-  enforcement of BR-15's window. R59.4 requires an Owner decision before automatic
-  Production destruction. The queue and worker now exist for the exact non-destructive
-  quarantine transitions and deliberate R59.1 purges above, but **nothing reads
-  `purge_after` and the queue is not scheduled for age-based destruction**.
+- `DELETE /content/{id}` (R53) soft-deletes the row, writes a `Trash` snapshot and moves the object to a quarantine prefix pending the 90-day window; moved, not destroyed (a session recording cannot be re-made).
+- Replacement and soft deletion commit an exact old-coordinate quarantine obligation in the row/audit transaction; the immediate copy-before-delete is only the fast path; the pg-boss job derives no coordinate from the current row, so it moves only the immutable old key. Copy precedes delete; a fast-path failure does not fail the committed request; missing source after an ambiguous delete is converged success; a malformed or out-of-prefix coordinate is refused before storage.
+- Super Admin purge (R59.1): `DELETE /admin/trash/{id}` destroys the row and commits an exact storage-retirement job in the same transaction (queue absent → rollback); the worker deletes the derived quarantine key and the exact old canonical key, propagating failures for TD-7 retry; S3 deletion is idempotent and UUID/version keys are never reused; a quarantine worker finishing after purge rechecks row existence and retires both coordinates again.
+- Automatic `content.quarantine-purge` age arm (BR-15, R52/R53): NOT active — nothing reads `purge_after`, the queue is not scheduled for age-based destruction; R59.4 requires an Owner decision first.
 
 ### OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION
 
-Decide whether to activate BR-15's automatic 90-day destruction, which entity plans it may
-apply, and the operational/legal approval gate. Until that decision, expired Trash rows and
-their quarantine objects remain retained unless a Super Admin invokes the existing audited
-manual purge. Recommendation: enable only after the supported object-store decision, the
-off-host backup target/retention decision, and a Production-scale restore drill are complete;
-then test exact due-date selection, dependency refusal, audit retention, crash/retry, and
-restore-versus-purge serialization before scheduling the destructive scan.
-
-**The object is moved rather than destroyed, and that is the whole point.** A deletion that
-removed the file immediately would make BR-15's window a promise the platform keeps for every
-entity except the one where the data is largest and least reproducible — a session recording
-cannot be re-made.
-
-**The copy precedes the delete**, so a failure between the two leaves a duplicate rather than
-nothing. A quarantine fast-path failure does not fail the already-committed request, but it is
-no longer swallowed as the only record of work: the exact job was committed first and retries
-the transition. Missing source after an ambiguous delete is converged success; a malformed or
-out-of-prefix coordinate is refused before storage.
+- Decide whether to activate BR-15's automatic 90-day destruction, which entity plans it covers, and the operational/legal approval gate; until then expired Trash rows and quarantine objects are retained unless a Super Admin runs the audited manual purge.
+- Recommendation: only after the off-host backup target/retention decision and a Production-scale restore drill; then test exact due-date selection, dependency refusal, audit retention, crash/retry and restore-versus-purge serialization before scheduling.
 
 ## The third bucket: `recordings-staging` (R99)
 
-A bucket the platform **owns and does not serve**. The provider's recording facility writes
-its output there and nothing else ever reads it except the ingestion job. Anonymous access is
-denied exactly as it is on `private`.
-
-**It is integration state, not storage.** R99.13 is explicit that a provider URL is never
-exposed as the content asset, never stored as one and never handed to a client: its lifetime
-is not the association's to control, and a library item pointing at it would rot silently.
-`session-recording-ingest` ([background jobs](background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح))
-verifies the object, copies it **server-side** into the ordinary content bucket under an
-ordinary TD-9 key, and only then is there anything for a reader to find.
-
-Staging deletion is attempted only after the canonical object and relation commit. A
-transient delete failure leaves the content available and fails the existing ingest job so
-pg-boss retains a durable retry. That retry reads `educational_content_id` first, skips every
-ingest write and deletes only the staging bucket/key stored on the same recording. Missing
-objects are success under S3 delete semantics; canonical and unrelated staging keys are never
-cleanup targets. This exact post-commit obligation is separate from the age-based
-`upload.gc` collector for abandoned browser uploads.
-
-After that copy an ingested recording is **indistinguishable from any other library object** —
-same key structure, same presigned mint, same quarantine path, same consent gate. That is the
-point: R99 admits a *provenance*, and provenance is recorded in `EducationalContent.origin`,
-not in where the bytes live.
+- Owned, never served; the provider writes there and only the ingestion job reads it; anonymous access denied as on `private`.
+- Integration state, not storage (R99.13): a provider URL is never exposed, stored or handed to a client. [`session-recording-ingest`](background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح) verifies the object and copies it server-side into the content bucket under an ordinary TD-9 key; provenance is `EducationalContent.origin`; afterwards the recording is indistinguishable from any library object (key, mint, quarantine, consent).
+- Staging deletion only after the canonical object and relation commit; a transient delete failure keeps the content available and fails the ingest job for a durable retry, which reads `educational_content_id` first, skips ingest writes and deletes only the staging bucket/key stored on the recording; missing objects are success; canonical and unrelated staging keys are never cleanup targets; separate from `upload.gc`.
 
 ### The shared object verifier
 
-`lib/object-verification.ts` makes TD-9's assertions about **an object**, not about an upload
-ticket. It was written inside `content.service.ts` against `UploadTicketClaims`, which was
-correct while a browser was the only way bytes reached a bucket; R99's ingestion has to make
-the same assertions about an object no ticket describes.
-
-The two callers differ in exactly three policy places, and each difference is deliberate:
+`lib/object-verification.ts` asserts TD-9 about an object, not an upload ticket (formerly in `content.service.ts` against `UploadTicketClaims`). One whitelist behind two doors: signature table, cap table and sniffer shared; only reachability differs.
 
 | | `/uploads/*` complete | `session-recording-ingest` |
 |---|---|---|
-| **Admissible types** | `isUploadableMime` — **`video/*` refused** (§4.9, R99.8) | `isIngestibleMime` — plus TD-9's `video/mp4` row, 500 MB |
-| **Declared size** | must match exactly — the browser declared it at `/initiate` | `null`; the platform declared none, and failing a good recording over a provider's rounding protects nothing |
-| **On refusal** | the object is **deleted at once** (TD-9 delete-on-mismatch) | the staging object is **kept**, so a corrected one can be retried (R99.14) |
-
-**There is one whitelist, behind two doors.** The signature table, the cap table and the
-sniffer are shared; only the reachability predicates differ. A second list is how `video/mp4`
-would eventually become uploadable by accident.
+| Admissible types | `isUploadableMime`, `video/*` refused (§4.9, R99.8) | `isIngestibleMime`, plus `video/mp4` at 500 MB |
+| Declared size | Must match exactly | `null`; the platform declared none |
+| On refusal | Object deleted at once (TD-9) | Staging object kept for a corrected retry (R99.14) |
 
 ### Server-side object primitives
 
-`statObject` · `readObjectHead` · `openObjectRead` · `putObjectStream` · `copyObject` ·
-`deleteObject`, all on the internal client. The stream primitives are bounded-memory; the
-metadata/copy/delete primitives are **O(1) in the object's size**. The R99 primitive that
-matters is `copyObject`: S3 and MinIO perform the copy *inside* the storage service, so a 500 MB recording never enters this process. The
-obvious `GetObject` → buffer → `PutObject` would put half a gigabyte through a container pinned
-at `--max-old-space-size=768` (TD-13) for every concurrent ingestion, on a 4 GB VPS (§2.4).
-That is not a tuning problem; it is the wrong mechanism.
-
-`CopySource` is **URI-encoded**. The private copy this replaced built it by interpolation, and
-a TD-9 key carries a transliterated slug of a filename a person chose.
-
-Upload completion uses the strict stat variant: only an actual 404 means absent; a storage
-outage is never reinterpreted as permission to overwrite. R103 then uses full-stream SHA-256
-and the private server-finalization source described above. R99 retains the ranged verifier:
-its HEAD and magic-byte read share an ETag, so an ordinary provider overwrite between those
-operations is refused. Its later verification-to-copy step is still pinned only by that
-storage ETag; because R99 gives no client a writable capability this is outside B-03, but
-stronger source pinning remains a separate hardening observation rather than being silently
-folded into the browser-upload pipeline.
+- `statObject` · `readObjectHead` · `openObjectRead` · `putObjectStream` · `copyObject` · `deleteObject` on the internal client; stream primitives bounded-memory; metadata/copy/delete O(1) in object size.
+- `copyObject` copies inside the storage service, so a 500 MB recording never enters a process pinned at `--max-old-space-size=768` (TD-13) on a 4 GB VPS (§2.4); GET → buffer → PUT was rejected. `CopySource` is URI-encoded.
+- Upload completion uses the strict stat variant: only an actual 404 means absent; an outage is never permission to overwrite. R103 uses full-stream SHA-256 and the server-finalization source. R99 keeps the ranged verifier: HEAD and magic read share an ETag, so a provider overwrite between them is refused; its verification-to-copy step is pinned only by that ETag — outside B-03 (no client has a writable capability), a separate hardening observation.
 
 ## File preview behaviour
 
 | Type | Behaviour |
 |---|---|
-| PDF | Inline browser preview plus download |
-| Audio | Embedded native `<audio>` player plus download |
-| Video | Native `<video controls>` plus download — which is what makes an ingested صوت وصورة recording playable with no new component (R99) |
-| Images | Thumbnail in lists; click opens a lightbox, plus download |
-| Office files | **Download only** — no in-browser rendering in the MVP |
+| PDF | Inline preview plus download |
+| Audio | Native `<audio>` plus download |
+| Video | Native `<video controls>` plus download (ingested صوت وصورة recordings, R99) |
+| Images | Thumbnail in lists; lightbox on click; download |
+| Office files | Download only; no in-browser rendering in the MVP |
 
----
-
-**Next:** [Background jobs](background-jobs.md) · **Related:**
-[Security](security.md#storage), [System overview](system-overview.md#the-storage-proxy-and-signatures)
+**Next:** [Background jobs](background-jobs.md) · **Related:** [Security](security.md#storage), [System overview](system-overview.md#the-storage-proxy-and-signatures)
