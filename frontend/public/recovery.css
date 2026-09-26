@@ -1,0 +1,93 @@
+/*
+ * The recovery pages' only stylesheet (R175 §5).
+ *
+ * WHY IT IS NOT PART OF THE DESIGN SYSTEM, AND MUST NOT BECOME PART OF IT.
+ * The two pages that load it — `/clear-cache` and the TD-16 maintenance
+ * interstitial — are the ones that render when the application cannot. One is
+ * in the act of discarding this origin's caches, the other answers when the API
+ * is unreachable, so neither may depend on `styles.css`, on a content-hashed
+ * asset, or on a self-hosted font file whose name changes every build. It
+ * therefore restates a handful of values instead of importing tokens, which is
+ * the one place in this repository where that is correct rather than drift.
+ *
+ * The values below are copied from `frontend/src/styles/tokens/primitives.css`
+ * (`--brand-green-950/-700/-50`, `--neutral-700`, `--neutral-0`). If the palette
+ * moves, this file does not follow automatically — nothing breaks, the recovery
+ * pages simply go on wearing the previous emerald. Fonts are a system Arabic
+ * stack, never 'Readex Pro': asking for a face that is not there costs a
+ * failed request on a page whose whole purpose is to work when things do not.
+ *
+ * `frontend/public/` is copied verbatim into the build, so this is served by
+ * the ordinary `location /` with its CSP, nosniff and HSTS — which is also why
+ * these pages can be styled at all: `style-src 'self'` admits a stylesheet from
+ * this origin and refuses the inline <style> block these pages used to carry.
+ */
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  box-sizing: border-box;
+  background: #f0f7f3;
+  color: #35453d;
+  font-family: 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+main {
+  width: 100%;
+  max-width: 30rem;
+  background: #ffffff;
+  border: 1px solid #c5e3d2;
+  border-radius: 14px;
+  padding: 2rem 1.75rem;
+  text-align: center;
+  /* A single soft emerald shadow, the same idea as the application's cards. */
+  box-shadow: 0 10px 30px -18px rgba(4, 38, 26, 0.45);
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  line-height: 1.4;
+  color: #04261a;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+a {
+  display: inline-block;
+  /* 48 px of target, the comfortable floor the rest of the platform keeps. */
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #0f5d41;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+a:hover,
+a:focus-visible {
+  background: #04261a;
+}
+
+a:focus-visible {
+  outline: 3px solid #43ad7d;
+  outline-offset: 2px;
+}

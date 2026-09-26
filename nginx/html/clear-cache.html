@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>تحديث ذاكرة المتصفح</title>
+    <link rel="stylesheet" href="/recovery.css" />
   </head>
   <body>
     <!--
@@ -19,11 +20,13 @@
       server was correct on the wire and the visitor still saw the old site,
       which is unfalsifiable from the server side and unfixable from it too.
 
-      Deliberately unstyled and script-free: the CSP served here forbids inline
-      script and inline style like everywhere else (§3.1), and a recovery page
-      must render when the cache it is about to discard cannot be trusted.
-      Arabic-only, matching the launch locale (§6), and outside the i18n catalog
-      because no application JavaScript runs on this page.
+      Script-free, and styled only by `/recovery.css` — a plain file in the
+      build, not a content-hashed asset, because this page is in the act of
+      discarding the cache that would hold one. The CSP here forbids inline
+      style exactly as it does everywhere else (§3.1), which is why the styling
+      is a linked stylesheet rather than a <style> block. Arabic-only, matching
+      the launch locale (§6), and outside the i18n catalog because no
+      application JavaScript runs on this page.
     -->
     <main>
       <h1>تم تحديث ذاكرة المتصفح</h1>

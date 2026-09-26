@@ -96,7 +96,13 @@ function beginGoogleLogin(identity: { email: string; providerSubjectId: string }
   } as unknown as Request;
   const append = vi.fn();
   const redirect = vi.fn();
-  const res = { append, redirect } as unknown as Response;
+  // `set` carries R175 §5's `no-store`. The stub owes the handler every method
+  // it calls: without it the controller throws `res.set is not a function`
+  // INSIDE the transaction under test, and five tests then reported the wrong
+  // failure — a rollback assertion «got res.set is not a function» rather than
+  // the forced audit error it was provoking.
+  const set = vi.fn();
+  const res = { append, redirect, set } as unknown as Response;
   const fetchImpl = vi.fn(async () => ({
     ok: true,
     json: async () => ({ id_token: 'verified-by-test-boundary' }),
