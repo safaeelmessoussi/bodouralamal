@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>تحديث ذاكرة المتصفح</title>
+  </head>
+  <body>
+    <!--
+      R175 §5 — the one-visit origin reset. The response that carries this page
+      also carries `Clear-Site-Data`, so the browser discards everything it had
+      stored for this origin: the HTTP cache, CacheStorage, localStorage and any
+      service worker registered here.
+
+      IT EXISTS BECAUSE A DIFFERENT SITE ONCE ANSWERED THIS DOMAIN. When
+      bodouralamal.com moved to this platform, browsers that had visited the
+      previous site kept serving its pages from their own cache for addresses
+      the previous site had answered — /api/v1/auth/google among them. The
+      server was correct on the wire and the visitor still saw the old site,
+      which is unfalsifiable from the server side and unfixable from it too.
+
+      Deliberately unstyled and script-free: the CSP served here forbids inline
+      script and inline style like everywhere else (§3.1), and a recovery page
+      must render when the cache it is about to discard cannot be trusted.
+      Arabic-only, matching the launch locale (§6), and outside the i18n catalog
+      because no application JavaScript runs on this page.
+    -->
+    <main>
+      <h1>تم تحديث ذاكرة المتصفح</h1>
+      <p>
+        حذف المتصفح كل الملفات التي كان يخزّنها لهذا الموقع. عد إلى الصفحة
+        الرئيسية للمتابعة.
+      </p>
+      <p><a href="/">الصفحة الرئيسية</a></p>
+    </main>
+  </body>
+</html>

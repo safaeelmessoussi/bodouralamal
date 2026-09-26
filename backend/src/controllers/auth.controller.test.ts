@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { FLOW_STATE_COOKIE, sealFlowState } from '../lib/oauth.js';
-import { oauthCallback } from './auth.controller.js';
+import { oauthCallback, startOAuth } from './auth.controller.js';
 
 const CONFIG: AppConfig = {
   DATABASE_URL: 'postgresql://unused:unused@127.0.0.1:1/unused',
@@ -56,7 +56,8 @@ describe('Google OAuth callback identity boundary', () => {
     } as unknown as Request;
     const append = vi.fn();
     const redirect = vi.fn();
-    const res = { append, redirect } as unknown as Response;
+    const set = vi.fn();
+    const res = { append, redirect, set } as unknown as Response;
     const prisma = new Proxy(
       {},
       {
@@ -77,5 +78,49 @@ describe('Google OAuth callback identity boundary', () => {
       'Set-Cookie',
       expect.stringContaining(`${FLOW_STATE_COOKIE}=; Max-Age=0`),
     );
+  });
+});
+
+/**
+ * R175 §5 — neither redirect may be stored.
+ *
+ * The entry redirect carries a one-time `state` and the flow cookie that must
+ * match it; the callback's redirect reports one exchange. A reused response
+ * would present a dead flow, and the symptom — a login that fails with
+ * `state_mismatch` for no visible reason — reads as a server fault.
+ */
+describe('Google OAuth redirects are never stored', () => {
+  it('sends no-store when beginning the flow', async () => {
+    const set = vi.fn();
+    const redirect = vi.fn();
+    const req = { header: vi.fn(() => undefined) } as unknown as Request;
+    const res = { append: vi.fn(), redirect, set } as unknown as Response;
+    const prisma = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('an anonymous visitor must not reach the database');
+        },
+      },
+    ) as PrismaClient;
+
+    await startOAuth(prisma, CONFIG)(req, res);
+
+    expect(set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(redirect).toHaveBeenCalledWith(302, expect.stringContaining('accounts.google.com'));
+  });
+
+  it('sends no-store when reporting the outcome', async () => {
+    const set = vi.fn();
+    const req = {
+      query: { error: 'access_denied' },
+      header: vi.fn(() => undefined),
+      requestId: 'request-2',
+    } as unknown as Request;
+    const res = { append: vi.fn(), redirect: vi.fn(), set } as unknown as Response;
+
+    await oauthCallback({} as PrismaClient, CONFIG)(req, res);
+
+    expect(set).toHaveBeenCalledWith('Cache-Control', 'no-store');
   });
 });

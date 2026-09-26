@@ -99,6 +99,16 @@ describe('an anonymous visitor — unchanged', () => {
     expect(cookieNamed(res.headers, FLOW_STATE_COOKIE)).not.toBeNull();
   });
 
+  /**
+   * R175 §5 — on the wire, not just in the handler. A stored copy of this
+   * redirect would carry a one-time `state` whose flow cookie is long gone, so
+   * the reuse surfaces as `state_mismatch` on a login nobody mistyped.
+   */
+  it('is marked never-store', async () => {
+    const res = await getGoogle();
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('a garbage cookie is treated exactly like no cookie at all', async () => {
     // Hashes to nothing the DB has ever stored — the "stale/forged credential"
     // case, distinct from a genuinely live session.

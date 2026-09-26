@@ -91,8 +91,10 @@ Allowed while a screen's endpoints are unspecified; not licence to invent a cont
 |---|---|---|
 | `index.html` and every SPA route | `no-cache` | Revalidate before reuse; ETag → `304`; a deploy takes effect immediately |
 | `/assets/*` | `public, max-age=31536000, immutable` | The filename changes whenever the bytes do |
+| `/api/v1/auth/google` and its callback | `no-store` | R175 §5 — one-time `state`; a reused copy fails as `state_mismatch` |
+| `/clear-cache` | `no-store` + `Clear-Site-Data: "cache", "storage"` | R175 §5 — one-visit origin reset; see [runbooks](../operations/runbooks.md#a-visitor-still-sees-the-previous-website) |
 
-Rule: a content-hashed asset may be cached forever; the document naming it never (without it, heuristic caching ran the whole old bundle after a deploy).
+Rule: a content-hashed asset may be cached forever; the document naming it never (without it, heuristic caching ran the whole old bundle after a deploy). `Clear-Site-Data` stays on its own URL rather than the shell, or every ordinary visit would re-download the bundle (§2.2).
 
 ### The router must never return nothing
 

@@ -53,6 +53,20 @@ function loginError(config: AppConfig, key: string): string {
   return `${config.PUBLIC_BASE_URL}/login?error=${key}`;
 }
 
+/**
+ * R175 §5 — a redirect in an authentication flow is never reusable.
+ *
+ * Every one of these responses belongs to a single attempt: the entry redirect
+ * carries a one-time `state` and sets the flow cookie beside it, and the
+ * callback's redirect reports the outcome of one exchange. A 302 is not
+ * heuristically cacheable, so nothing was storing them — this states the rule on
+ * the wire instead of relying on that default, which covers neither an
+ * intermediary that ignores it nor a browser reusing the response on back.
+ */
+function neverCache(res: Response): void {
+  res.set('Cache-Control', 'no-store');
+}
+
 function setRefreshCookie(res: Response, rawToken: string): void {
   res.append(
     'Set-Cookie',
@@ -78,6 +92,7 @@ function setRefreshCookie(res: Response, rawToken: string): void {
  */
 export function startOAuth(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
+    neverCache(res);
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
     if (presented) {
       const route = await resolveExistingSession(prisma, {
@@ -126,6 +141,7 @@ export function oauthCallback(
   exchangeDependencies: OAuthExchangeDependencies = {},
 ) {
   return async (req: Request, res: Response): Promise<void> => {
+    neverCache(res);
     // The flow cookie is single-use whatever happens next.
     res.append('Set-Cookie', clearCookie(FLOW_STATE_COOKIE, FLOW_COOKIE_PATH));
 

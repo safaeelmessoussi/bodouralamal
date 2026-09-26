@@ -161,6 +161,30 @@ They **must remain distinct from each other.**
 
 Logs carry the user id, never a name ([no PII in logs](observability.md#no-pii-in-logs)).
 
+## A visitor still sees the previous website
+
+bodouralamal.com answered a different site before this platform did (a Firebase
+app). A browser that visited it holds cached documents for addresses **that site**
+answered and this one does not serve as documents — `/api/v1/auth/google` most
+visibly, where the old page then runs its own scripts and talks to its own
+database, which looks like our server sending them there. It is not:
+
+```bash
+# Prove the server first — it answers correctly even while a browser does not.
+curl -sI https://bodouralamal.com/api/v1/auth/google | head -3   # 302 → accounts.google.com
+```
+
+1. If `curl` is right and the browser is not, the copy is **in that browser**.
+2. Send the person to **`https://bodouralamal.com/clear-cache`** once. The
+   response discards the origin's HTTP cache, CacheStorage, `localStorage` and
+   any service worker; cookies are deliberately kept, so nobody is signed out.
+3. Confirm: DevTools → Network → **Doc** filter → reload. The first row's **Size**
+   must not read `(disk cache)`, and **Remote Address** must be `92.222.65.141`.
+
+Not a DNS problem, and not fixable by changing the Google OAuth client — the
+client id decides which Google project authenticates, not which site the browser
+drew from its own cache. → [cache headers](../architecture/frontend.md#cache-headers).
+
 ## Checking whether a job is stuck
 
 ```bash
