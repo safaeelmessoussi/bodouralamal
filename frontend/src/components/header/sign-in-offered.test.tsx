@@ -45,8 +45,22 @@ describe('the shared sign-in control follows the deployment', () => {
 
   it('renders nothing before the answer arrives, so it never flashes into view', () => {
     // A control that appears and then vanishes is the one thing worse than a
-    // control that is there: it tells a reader the door exists.
+    // control that is there: it tells a reader the door exists. Found on the
+    // live site on 2026-09-26, in the seconds an API restart takes.
     expect(render(null)).toBe('');
+  });
+
+  it('renders nothing when the question could not be answered at all', async () => {
+    // The adapter reports `null` rather than guessing «offered»: when the API
+    // is unreachable, sign-in could not have worked anyway.
+    const { fetchSiteConfig } = await import('../../adapters/site-config.js');
+    const original = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('offline'))) as typeof fetch;
+    try {
+      expect(await fetchSiteConfig()).toBeNull();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
 

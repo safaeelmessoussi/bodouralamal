@@ -97,7 +97,9 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     let cancelled = false;
     void (async () => {
       const site = await fetchSiteConfig();
-      if (!cancelled) setSignInOffered(site.sign_in_offered);
+      // Unanswered stays `null`, and nothing is offered on an unanswered
+      // question — see the adapter.
+      if (!cancelled) setSignInOffered(site?.sign_in_offered ?? null);
     })();
     return () => {
       cancelled = true;
