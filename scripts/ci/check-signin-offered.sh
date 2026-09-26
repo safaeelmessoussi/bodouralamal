@@ -29,8 +29,11 @@ grep -q "signInOffered" "$BUTTON" || {
   fail=1
 }
 
-# 2 · Nobody else links to the OAuth entry.
-offenders="$(grep -rl "/api/v1/auth/google" frontend/src --include='*.tsx' --include='*.ts' \
+# 2 · Nobody else LINKS to the OAuth entry. A quoted string literal is a link;
+#     prose that merely names the path (this file, and the adapter's own
+#     explanation) is not — matching the bare path flagged both on its first
+#     run, which is a guard testing its own comments.
+offenders="$(grep -rlE "[\"']/api/v1/auth/google[\"']" frontend/src --include='*.tsx' --include='*.ts' \
   | grep -v "^${BUTTON}$" | grep -v "^${LOGIN_PAGE}$" | grep -v "^${REGISTER_PAGE}$" \
   | grep -v '\.test\.' || true)"
 if [ -n "$offenders" ]; then
