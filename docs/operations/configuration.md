@@ -20,7 +20,7 @@ The SRS table is **the single authoritative list**; `.env.example` is generated 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL, for Prisma and the job queue |
-| `GOOGLE_CLIENT_ID` | OAuth client |
+| `GOOGLE_CLIENT_ID` | OAuth client — **stays in the Google Cloud project it was issued from; that project must not be deleted** ([why](#the-oauth-clients-project-is-load-bearing)) |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 | `JWT_SIGNING_KEY` | Access-token signing; rotatable |
 | `ONBOARDING_TOKEN_KEY` | Onboarding-token signing — **distinct** from the JWT key |
@@ -65,6 +65,26 @@ Provisioning checklist, **not a command to provision this workspace**. Derived f
 ### Secret rotation and installation, at a glance
 
 Every value is generated independently (`openssl rand -base64 48` unless noted), written directly into the private `.env`/`infra.env`/root-only recovery config, installed only on the target host. Placeholders are format examples, never usable values.
+
+### The OAuth client's project is load-bearing
+
+Google's subject id (`sub`) is **scoped to the Google Cloud project** that issued
+the client, and every account is keyed on it — `user_identity(provider,
+provider_subject_id)`. Moving the client to another project is therefore an
+account migration, never a configuration change:
+
+- A user with no `pre_provisioned_email` resolves to nothing and meets the
+  registration form as a stranger; the existing account becomes unreachable.
+- A user who has one tries to bind a second active identity for the same
+  address, which `user_identity_provider_email_active_key` (unique on
+  `(provider, email) WHERE is_active`) refuses — that person is locked out.
+
+Doing it safely means copying each active identity's email into its user's
+`pre_provisioned_email`, retiring the identity rows, then swapping the client —
+an SRS revision and a one-time script, because retiring an identity otherwise
+means a user was deleted (TD-5). **Owner decision, 2026-09-26 (R175 §6): the
+client stays in the project that issued it, and that project is not to be
+deleted even though the site it was created for is retired.**
 
 | Variable | Secret? | Generation | Restart required |
 |---|---|---|---|
