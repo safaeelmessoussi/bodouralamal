@@ -202,6 +202,11 @@ const EXEMPT = new Set([
   // names nobody, and the sign-in and registration screens need it BEFORE there
   // is an account at all — so it is public, stated here on purpose.
   "/clock",
+  // R175 §2: whether THIS deployment offers «تسجيل الدخول». It describes the
+  // deployment and never the caller — no personal data, no cookie, no session
+  // read — and the public chrome needs it before there is an account at all,
+  // exactly as `/clock` does. Public, stated here on purpose.
+  "/site-config",
   // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
   // exactly like the calendar grid it is opened from. A Pending account sees a
   // public session's existence and details, and never its private recordings —
