@@ -1,8 +1,8 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 174 (2026-09-25); see the revision ledger below.
-**Revision date:** 2026-09-25
+**Status:** Final MVP Blueprint — current Revision 175 (2026-09-26); see the revision ledger below.
+**Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
 
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R173):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 174** (2026-09-25).
+**Revision ledger (R1–R175):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 175** (2026-09-26).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 

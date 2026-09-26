@@ -467,6 +467,9 @@ DELETE /quran-logs/{id}                       # TD-3.6, §4.5
 # §11 counts, or name the one act that should hand a job id to a person.
 GET /jobs/{id}                                # TD-3.7; no endpoint issues a job_id (see above)
 
+# ── Deployment-level configuration (R175 §2)
+GET /site-config                              # R175 §2; public, anonymous — is «تسجيل الدخول» offered on this deployment
+
 # ── Observability (TD-14)
 GET /healthz                                  # TD-14, §19.1 step 8
 GET /internal/storage/public-authorize        # §3.1 storage proxy, §4.1a/BR-2, TD-4.9; Nginx internal auth subrequest only

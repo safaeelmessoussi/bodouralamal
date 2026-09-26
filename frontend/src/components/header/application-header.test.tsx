@@ -18,7 +18,7 @@ import { ApplicationHeader } from './application-header.js';
 function render(state: 'anonymous' | 'authenticated', me: Me | null): string {
   return renderToStaticMarkup(
     <SessionContext.Provider
-      value={{ status: state, me, accessToken: null, setAccessToken: () => undefined }}
+      value={{ status: state, me, accessToken: null, setAccessToken: () => undefined, signInOffered: true }}
     >
       {/* The switcher reads the active role from context now — rendering the
           header without the provider throws, which is the point: a control that

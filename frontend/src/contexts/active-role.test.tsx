@@ -55,7 +55,7 @@ function observe(
 
   renderToStaticMarkup(
     <SessionContext.Provider
-      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined }}
+      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined, signInOffered: true }}
     >
       <ActiveRoleProvider>
         <Probe />

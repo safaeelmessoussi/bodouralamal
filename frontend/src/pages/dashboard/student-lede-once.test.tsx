@@ -61,7 +61,7 @@ const me: Me = {
 function render(body: React.ReactNode): string {
   return renderToStaticMarkup(
     <SessionContext.Provider
-      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined }}
+      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined, signInOffered: true }}
     >
       <ActiveRoleProvider>
         <ActiveChildProvider>

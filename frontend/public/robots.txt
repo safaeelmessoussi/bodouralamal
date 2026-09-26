@@ -1,0 +1,9 @@
+# جمعية بذور الأمل — the public calendar and the educational library are meant
+# to be found. The two doors that are not announced in this phase (R175 §2) are
+# not advertised to crawlers either; they remain open and unchanged for anyone
+# who has the link.
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /api/

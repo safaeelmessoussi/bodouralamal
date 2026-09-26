@@ -24,7 +24,7 @@ import LANDING_SOURCE from './landing.tsx?raw';
 function render(state: 'anonymous' | 'authenticated', me: Me | null): string {
   return renderToStaticMarkup(
     <SessionContext.Provider
-      value={{ status: state, me, accessToken: null, setAccessToken: () => undefined }}
+      value={{ status: state, me, accessToken: null, setAccessToken: () => undefined, signInOffered: true }}
     >
       <ActiveRoleProvider>
         <Hero />

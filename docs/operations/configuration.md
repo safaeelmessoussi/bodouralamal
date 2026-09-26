@@ -39,6 +39,7 @@ The SRS table is **the single authoritative list**; `.env.example` is generated 
 | Variable | When |
 |---|---|
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_SEX` | **Platform Owner bootstrap only** (below) |
+| `SIGN_IN_OFFERED` | `true`/`false` — does the public chrome offer «تسجيل الدخول»? **Absent = offered.** `false` only on the temporary Production tier (R175 §2) |
 | `BACKUP_TARGET_SSH` | Production-only nonempty legacy setting; B8 temporarily permits `/var/lib/bodour-backups/bodour`. Host backup paths/key/floor are root-only [operator configuration](recovery.md#before-enabling-anything-on-an-authorized-host), not the API |
 | `LIVEKIT_URL` / `LIVEKIT_API_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_NODE_IP` | **Self-hosted media server (R164) — required on Staging and Production; preflight refuses a release without them.** `LIVEKIT_URL` = the deployment's own origin (`wss://<domain>`; Localhost `ws://localhost`) since signalling is proxied as `/rtc`. `LIVEKIT_API_URL` = `http://livekit:7880` always. Key pair read by API, media server AND recorder; secret dedicated, ≥ 32 bytes (`openssl rand -hex 32`). `LIVEKIT_NODE_IP` = host public IPv4, read by Compose, stated so no public STUN is asked (empty on Localhost). Application group is all-or-none: half-configured refuses boot; none set → media actions fail closed, rest serves. [Deployment detail](../development/online-class-provider.md#how-it-is-deployed-srs-revision-164) |
 

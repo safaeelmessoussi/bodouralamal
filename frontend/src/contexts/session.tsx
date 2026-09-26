@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+
+import { fetchSiteConfig } from '../adapters/site-config.js';
 import {
   ACCESS_TTL_MS,
   RENEW_AHEAD_MS,
@@ -60,6 +62,12 @@ export interface Me {
 
 interface SessionState {
   status: 'loading' | 'anonymous' | 'authenticated';
+  /**
+   * R175 §2 — whether this deployment offers «تسجيل الدخول» on its public
+   * chrome. `null` until the answer arrives, so the control never flashes
+   * into view on a deployment that does not offer it.
+   */
+  signInOffered: boolean | null;
   me: Me | null;
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
@@ -81,6 +89,20 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [status, setStatus] = useState<SessionState['status']>('loading');
+  const [signInOffered, setSignInOffered] = useState<boolean | null>(null);
+
+  // R175 §2 — one public, anonymous read about the DEPLOYMENT (no cookie, no
+  // personal data), in parallel with the session check below.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const site = await fetchSiteConfig();
+      if (!cancelled) setSignInOffered(site.sign_in_offered);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // The OAuth callback delivers the token in the URL fragment, which browsers
   // never send to a server (TD-12). Read it once, then strip it from the bar so
@@ -152,8 +174,8 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   }, [status]);
 
   const value = useMemo<SessionState>(
-    () => ({ status, me, accessToken, setAccessToken }),
-    [status, me, accessToken],
+    () => ({ status, me, accessToken, setAccessToken, signInOffered }),
+    [status, me, accessToken, signInOffered],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

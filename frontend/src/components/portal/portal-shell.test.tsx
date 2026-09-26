@@ -46,7 +46,7 @@ const me: Me = {
 function render(): string {
   return renderToStaticMarkup(
     <SessionContext.Provider
-      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined }}
+      value={{ status: 'authenticated', me, accessToken: null, setAccessToken: () => undefined, signInOffered: true }}
     >
       <ActiveRoleProvider>
         <ActiveChildProvider>
@@ -82,6 +82,7 @@ function renderPortal(node: ReactNode, meOverrides: Partial<Me>, pathname: strin
         me: { ...me, ...meOverrides },
         accessToken: null,
         setAccessToken: () => undefined,
+        signInOffered: true,
       }}
     >
       <ActiveRoleProvider>

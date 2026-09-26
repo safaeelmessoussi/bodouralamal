@@ -34,6 +34,7 @@ function render(links: { id: string; display_name: string }[]): string {
         me: me(links),
         accessToken: null,
         setAccessToken: () => undefined,
+        signInOffered: true,
       }}
     >
       <ActiveRoleProvider>

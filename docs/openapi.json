@@ -2195,6 +2195,27 @@
         }
       }
     },
+    "/site-config": {
+      "get": {
+        "summary": "What the public chrome may offer on this deployment",
+        "description": "R175 §2 (Document Owner, 2026-09-26). **Public, anonymous, no personal data, no cookie, no session read** — it describes the DEPLOYMENT, not the caller, which is what lets a tier promise a reader that nothing about them is stored. Answers `{ sign_in_offered }`: whether the shared «تسجيل الدخول» control renders in the header, the mobile menu and the landing hero. `false` on the temporary Production tier, where the association publishes a public calendar and a public library while registration is **not yet announced**. **Nothing else changes when it is false:** `/login`, `/register`, `POST /registrations` and the whole OAuth flow behave exactly as documented, the `/login` page keeps its own control, and the Owner signs in through `/api/v1/auth/google`. Driven by the `SIGN_IN_OFFERED` host variable; **absent means offered**, so a tier that says nothing behaves as the platform always has. `no-store`, so flipping the flag takes effect on the next load.",
+        "responses": {
+          "200": {
+            "description": "The deployment-level flags a public page needs before it paints."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clock": {
       "get": {
         "summary": "Morocco’s official time, as this platform knows it",

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { roleHomePath } from '../../lib/role-home.js';
 import { Button, ButtonLink } from '../ui/button.js';
@@ -14,6 +15,23 @@ import { Button, ButtonLink } from '../ui/button.js';
  * redirect to Google, so an SPA route change would never leave the origin.
  */
 export function SignInButton({ block = false }: { block?: boolean }): ReactNode {
+  /**
+   * **R175 §2 — a deployment may not OFFER the way in, while the way in stays
+   * open.** The temporary Production tier publishes a public calendar and a
+   * public library while registration is not yet announced (the Owner,
+   * 2026-09-26), so this shared control renders nowhere: the header, the
+   * mobile menu and the landing hero all go through it.
+   *
+   * Nothing else changes. `/login` keeps its own control (the Owner's choice,
+   * and it is where an OAuth failure lands with its retry), `/register` and
+   * `POST /registrations` are untouched, and the Owner signs in through
+   * `/api/v1/auth/google` directly.
+   *
+   * `null` is «not answered yet» and renders nothing, so the control cannot
+   * flash into view on a deployment that does not offer it.
+   */
+  const { signInOffered } = useSession();
+  if (signInOffered !== true) return null;
   return (
     <ButtonLink href="/api/v1/auth/google" variant="primary" block={block}>
       {t('nav.login')}

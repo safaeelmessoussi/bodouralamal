@@ -839,7 +839,7 @@ describe('the dialog’s exam-availability action (R136)', () => {
     const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const html = renderToStaticMarkup(
       <SessionContext.Provider
-        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined, signInOffered: true }}
       >
         <EventDetailsDialog
           occurrence={examOccurrence({ id: 'exam-1', available_from: past })}
@@ -901,7 +901,7 @@ describe('the dialog’s exam-availability action (R136)', () => {
     const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const html = renderToStaticMarkup(
       <SessionContext.Provider
-        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined, signInOffered: true }}
       >
         <EventDetailsDialog
           occurrence={examOccurrence({ date: '2020-01-01', end_time: '10:30', available_from: past })}
@@ -918,7 +918,7 @@ describe('the dialog’s exam-availability action (R136)', () => {
   it('past its own end time, a student: offers «عرض الاختبار» to the SAME paper, by id', () => {
     const html = renderToStaticMarkup(
       <SessionContext.Provider
-        value={{ status: 'authenticated', me: studentMe, accessToken: 'tok', setAccessToken: () => undefined }}
+        value={{ status: 'authenticated', me: studentMe, accessToken: 'tok', setAccessToken: () => undefined, signInOffered: true }}
       >
         <ActiveRoleProvider>
           <EventDetailsDialog
@@ -944,7 +944,7 @@ describe('the dialog’s exam-availability action (R136)', () => {
     };
     const html = renderToStaticMarkup(
       <SessionContext.Provider
-        value={{ status: 'authenticated', me: staffMe, accessToken: 'tok', setAccessToken: () => undefined }}
+        value={{ status: 'authenticated', me: staffMe, accessToken: 'tok', setAccessToken: () => undefined, signInOffered: true }}
       >
         <ActiveRoleProvider>
           <EventDetailsDialog
@@ -963,7 +963,7 @@ describe('the dialog’s exam-availability action (R136)', () => {
     const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const html = renderToStaticMarkup(
       <SessionContext.Provider
-        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined }}
+        value={{ status: 'authenticated', me: null, accessToken: 'tok', setAccessToken: () => undefined, signInOffered: true }}
       >
         <EventDetailsDialog
           occurrence={examOccurrence({ id: 'exam-3', available_from: past })}

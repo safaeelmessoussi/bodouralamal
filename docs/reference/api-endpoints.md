@@ -68,6 +68,7 @@ R116 adds no route; automatic notices join the domain writes:
 | `GET` | `/calendar/sessions/{id}` | 🌐 Dialog data `{ occurrence, notes, recordings, linked_content, suggested_recording_name }` at the caller's tier (never a public session's private recordings); not a frontend page route |
 | `GET` | `/calendar/bootstrap` | 🌐 Calendar reference data only, one read; cached 5 min + strong ETag; `?category_id=` narrows only the Level list (§4.4); unknown id → empty list |
 | `GET` | `/clock` | 🌐 Morocco's current offset (R167 §2): `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }`; cacheable five minutes |
+| `GET` | `/site-config` | R175 §2 — `{ sign_in_offered }`. Public, anonymous, no personal data, no cookie, `no-store`. Driven by `SIGN_IN_OFFERED`; absent means offered |
 | `GET` | `/branches` | 🌐 Landing directory: id, name, address, phone, email, opening hours, map link, display order; never version, operational start date, timestamps |
 
 - `/clock` reads the HOST zone file (a decree needs no release); `source` is `host-zoneinfo` or `icu-fallback` (file unreadable, and says so); the browser formats with this offset, not its own zone data; `next_change_at` names only a real offset change.

@@ -33,6 +33,7 @@ import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as schedulingTypes from './controllers/scheduling-type.controller.js';
 import * as clock from './controllers/clock.controller.js';
+import * as siteConfig from './controllers/site-config.controller.js';
 import * as scopeOptions from './controllers/scope-options.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
@@ -332,6 +333,9 @@ export function createApp(
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
   // R167 §2 — Morocco's current official offset, from the host's zone database.
   api.get('/clock', clock.read());
+  // R175 §2 — what the public chrome may offer on THIS deployment. Public,
+  // anonymous, no personal data, no cookie.
+  api.get('/site-config', siteConfig.read(config));
 
   api.get('/branches', publicBranches.list(prisma));
   // NEW N — §5.1's partners section. Public and unauthenticated, exactly as the

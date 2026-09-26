@@ -18,6 +18,20 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D9 | «المحتوى التعليمي» grouped «per Surah» (item 8, 2026-09-25): content carries no Surah in the model (§4.9); add `EducationalContent ↔ Surah`? | R174 §3 |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
 
+## Temporary Production at `bodouralamal.com` (R175 — OVH, outside Morocco)
+
+Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the sign-in button comes back, registration is announced.
+
+| # | Item | Who |
+|---|---|---|
+| P1 | DNS + Google redirect URI/origin for the new domain | **done** (Owner, 2026-09-26) |
+| P2 | Certificate (`bodouralamal.com`, `www`, `staging` during the transition), `server_name`, `PUBLIC_BASE_URL`, `STORAGE_BASE_URL` | engineering |
+| P3 | Production overlay **carrying the memory ceilings** (the production overlay has none; the 4 GB box depends on them) | engineering |
+| P4 | Backup schedule + first recovery point on the host — this tier holds the only copy of what is published | engineering |
+| P5 | Publish سياسة الخصوصية and شروط الاستعمال (version 1) with the association's contact filled in | **Owner** |
+| P6 | Disk: upgrade the OVH range before recordings accumulate (OVH grows storage by range, not in place) | Owner, later |
+| P7 | No Staging gate while this lasts: `develop` → CI → this host, pre-deploy dump is the rollback | standing |
+
 ## Owner tasks — data and legal (not code)
 
 | # | Task | Where |
@@ -36,7 +50,7 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | U3 | «إدارة التسجيلات» → mark a Level → certificate; as the مستفيدة «شهاداتي» → PDF; «تثبيت التطبيق» from a phone |
 | U4 | Register with a second Google account ticking several roles → «البتّ في الصفات المطلوبة»; «طلب صفة إضافية» from «حسابي» |
 | U5 | «القاعات» capacity → schedule in that room; class with Level/group/circle all «الكل»; delete + restore a حلقة from «سلة المحذوفات»; «مستويات أخرى ينتمي إليها» |
-| U6 | R173/R174 on her phone: hero, sign-in sheet, the bell beside the burger, «حلقات المواد» + dialog, «حفظي», «المحتوى التعليمي» with its filters |
+| U6 | R173/R174/R175 on her phone (sign-in offered nowhere; `/api/v1/auth/google` is the way in): hero, sign-in sheet, the bell beside the burger, «حلقات المواد» + dialog, «حفظي», «المحتوى التعليمي» with its filters |
 | U7 | QA with a real dual-role (parent + staff) account: §4.3 follows the active role |
 
 ## Engineering owed (no Production host needed)

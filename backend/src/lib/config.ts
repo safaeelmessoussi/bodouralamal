@@ -77,6 +77,19 @@ const envSchema = z.object({
   PUBLIC_BASE_URL: z.string().min(1),
   STORAGE_BASE_URL: z.string().min(1),
   SUPER_ADMIN_EMAIL: blankAsAbsent(z.string().min(1).optional()),
+  /**
+   * **R175 §2 — is «تسجيل الدخول» offered on the public chrome?**
+   *
+   * `false` on the temporary Production tier, where the association publishes
+   * a public calendar and a public library while registration is not yet
+   * announced (the Owner, 2026-09-26). Nothing else changes: `/login`,
+   * `/register` and the whole OAuth flow stay exactly as they are, and the
+   * Owner signs in through `/api/v1/auth/google` directly.
+   *
+   * Absent means **offered** — the platform's own behaviour, so a tier that
+   * says nothing behaves as it always has.
+   */
+  SIGN_IN_OFFERED: blankAsAbsent(z.enum(['true', 'false']).optional()),
   NODE_ENV: z.enum(['production', 'development', 'test']),
   BACKUP_TARGET_SSH: blankAsAbsent(z.string().min(1).optional()),
   /**
