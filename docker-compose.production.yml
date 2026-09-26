@@ -1,16 +1,64 @@
-# Production-only overlay (SRS §19.1).
+# Production tier overlay (SRS §19.1, R104).
 #
-# The checked-in template deliberately defaults to Development for safe local
-# fixture work. A Production host must not depend on an operator remembering to
-# change that line: this overlay makes the runtime tier structural.
-#
-# Object storage needs NO overlay here any more: `docker-compose.yml` already
-# defines the one SeaweedFS model Localhost, Staging and Production all share
-# (Owner decision, 2026-09-20). `docker-compose.release.yml` selects the
-# exact-commit `minio-init` image for both Staging and Production alike. This
-# file contains no secret.
-
+# R175 §4 — **the ceilings travel with the tier.** They used to live only in
+# the staging overlay, which is where the 4 GB OVH host has been running; a
+# tier switch that dropped them would let one container take the box down.
+# They are sized for a 4 GB host and are raised WITH the host, never silently.
 services:
   api:
+    # Staging is fixture-only and this is the value that permits its fixture
+    # seed. No security policy branches on NODE_ENV (§19.0).
     environment:
       NODE_ENV: production
+    mem_limit: 1024m
+    memswap_limit: 1536m
+
+  db:
+    mem_limit: 768m
+    memswap_limit: 1024m
+
+  minio:
+    mem_limit: 768m
+    memswap_limit: 1024m
+
+  nginx:
+    mem_limit: 96m
+    memswap_limit: 128m
+
+  # One-shot; it exits immediately after creating buckets and policies. Runs
+  # the API's own Node/AWS-SDK image now (previously the tiny static `mc`
+  # client), so the ceiling is sized for a short-lived Node process rather
+  # than a static Go binary.
+  minio-init:
+    mem_limit: 256m
+
+  certbot:
+    mem_limit: 128m
+
+  # ── Online classes on a 2-vCPU / 3.7-GiB host (SRS Revision 164) ───────────
+  #
+  # MEASURED on 2026-09-20 with the whole stack confined to two cores: one 720p
+  # room recording peaks at ~1.9 cores and ~700 MiB and still lands as true
+  # 30 fps (888 frames in 29.6 s); an audio-only one settles at ~0.3 core and
+  # ~360 MiB; the entire stack peaks at 1.33 GiB while a video records.
+  #
+  # So this host records ONE thing at a time, and the API is slow while that one
+  # thing is a video — acceptable for a test tier, and stated rather than hidden.
+  # These ceilings now SUM past the RAM this host has (they are caps, not
+  # reservations); real use is a third of that, and the 4-GiB swap is the net.
+  livekit:
+    mem_limit: 256m
+    memswap_limit: 384m
+
+  redis:
+    mem_limit: 64m
+
+  livekit-egress:
+    mem_limit: 1280m
+    memswap_limit: 2048m
+    environment:
+      # Below the general 2.0 because this host HAS only two cores, and Egress
+      # admits a recording only while at least this many are idle. 1.5 admits one
+      # video recording and refuses a second, which is the protection wanted.
+      EGRESS_VIDEO_CPU_COST: "1.5"
+      EGRESS_AUDIO_CPU_COST: "0.5"

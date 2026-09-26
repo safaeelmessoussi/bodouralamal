@@ -16,6 +16,12 @@
 #   bash scripts/deploy/enable-tls.sh staging.bodouralamal.com staging
 #   bash scripts/deploy/enable-tls.sh bodouralamal.com production
 #
+# R175 §4 — further names served by the SAME certificate may follow the tier,
+# so one block can serve `bodouralamal.com`, `www.` and, during the transition
+# to the Moroccan host, `staging.`:
+#   bash scripts/deploy/enable-tls.sh bodouralamal.com production www.bodouralamal.com staging.bodouralamal.com
+# The certificate paths always come from the FIRST name (certbot's --cert-name).
+#
 # Re-running is safe and is the intended way to recover a half-applied state.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -61,8 +67,18 @@ if ! "${compose[@]}" exec -T nginx test -f "$LIVE" 2>/dev/null; then
 fi
 
 # ── Step 2: the TLS server block, from the committed template ───────────────
-sed "s/__DOMAIN__/$DOMAIN/g" nginx/conf.d/tls.conf.example > nginx/conf.d/tls.conf
-echo "wrote nginx/conf.d/tls.conf for $DOMAIN"
+SERVER_NAMES="$DOMAIN"
+for extra in "${@:3}"; do
+  [[ "$extra" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] || {
+    echo "FAIL: '$extra' is not a domain name." >&2
+    exit 2
+  }
+  SERVER_NAMES="$SERVER_NAMES $extra"
+done
+
+sed -e "s/server_name __DOMAIN__;/server_name $SERVER_NAMES;/" -e "s/__DOMAIN__/$DOMAIN/g" \
+  nginx/conf.d/tls.conf.example > nginx/conf.d/tls.conf
+echo "wrote nginx/conf.d/tls.conf for $SERVER_NAMES (certificate: $DOMAIN)"
 
 # RECREATE, never restart. `nginx/nginx.conf` is a SINGLE-FILE bind mount, and
 # Docker resolves those to the inode present at container start. `git pull` and
