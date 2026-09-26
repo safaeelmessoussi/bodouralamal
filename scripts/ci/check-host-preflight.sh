@@ -163,6 +163,8 @@ for invariant in \
   "the media server must not discover its address through an external STUN service" \
   "the media server must name only a dead port on this host as its STUN server, never a third party and never the media port" \
   "MIN_CPUS_PRODUCTION=4" \
+  "BODOUR_TIER_RECORDS must be yes or no" \
+  "recording is NOT supported here" \
   "persistent volume catalogue differs from the recovery-point contract" \
   "docker manifest inspect"; do
   grep -Fq "$invariant" "$preflight" || fail "preflight lost invariant: $invariant"

@@ -316,9 +316,28 @@ main() {
   version_at_least "$compose_version" "$MIN_COMPOSE_VERSION" ||
     fail "Docker Compose $MIN_COMPOSE_VERSION or newer is required (found $compose_version)"
 
-  local cpus minimum_cpus
+  # **The four-CPU floor is about RECORDING, so the tier is asked rather than
+  # assumed** (R175 §1). `MIN_CPUS_PRODUCTION=4` stands: one 720p recording
+  # measures 1.7–1.9 cores continuously (R164 §5), so a Production host that
+  # records classes needs them. A tier that records NOTHING — the temporary
+  # public-reading Production the Owner authorised on 2026-09-26 — declares it
+  # with `BODOUR_TIER_RECORDS=no`, and the declaration is printed, not
+  # swallowed: a host that cannot record must never be discovered to be one
+  # while a class is waiting. Absent means it records, which is every ordinary
+  # Production host.
+  local cpus minimum_cpus records
   cpus="$(nproc)"
-  if [[ "$tier" == production ]]; then minimum_cpus="$MIN_CPUS_PRODUCTION"; else minimum_cpus="$MIN_CPUS_STAGING"; fi
+  records="${BODOUR_TIER_RECORDS:-yes}"
+  [[ "$records" == 'yes' || "$records" == 'no' ]] ||
+    fail 'BODOUR_TIER_RECORDS must be yes or no'
+  if [[ "$tier" == production && "$records" == 'no' ]]; then
+    minimum_cpus="$MIN_CPUS_STAGING"
+    printf 'host-preflight: NOTE — this tier declares it records no online class (BODOUR_TIER_RECORDS=no); the %s-CPU recording floor is not applied and recording is NOT supported here\n' "$MIN_CPUS_PRODUCTION"
+  elif [[ "$tier" == production ]]; then
+    minimum_cpus="$MIN_CPUS_PRODUCTION"
+  else
+    minimum_cpus="$MIN_CPUS_STAGING"
+  fi
   [[ "$cpus" =~ ^[0-9]+$ && "$cpus" -ge "$minimum_cpus" ]] ||
     fail "host has ${cpus:-unknown} CPU(s); a $tier host recording online classes needs at least $minimum_cpus"
 
