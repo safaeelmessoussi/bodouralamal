@@ -27,7 +27,6 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | P1 | DNS + Google redirect URI/origin for the new domain | **done** (Owner, 2026-09-26) |
 | P2 | Certificate (`bodouralamal.com`, `www`, `staging` during the transition), `server_name`, `PUBLIC_BASE_URL`, `STORAGE_BASE_URL` | **done** (R175 §4; expires 2026-12-25) |
 | P3 | Production overlay **carrying the memory ceilings** (the production overlay has none; the 4 GB box depends on them) | **done** (R175 §4) |
-| P4 | Backup schedule + first recovery point on the host — this tier holds the only copy of what is published | engineering — repository, password and `/etc/bodour-recovery.env` exist; **timers not installed, no recovery point yet** |
 | P5 | Publish سياسة الخصوصية and شروط الاستعمال (version 1) with the association's contact filled in | **Owner** |
 | P6 | Disk: upgrade the OVH range before recordings accumulate (OVH grows storage by range, not in place) | Owner, later |
 | P7 | No Staging gate while this lasts: `develop` → CI → this host, pre-deploy dump is the rollback | standing |
