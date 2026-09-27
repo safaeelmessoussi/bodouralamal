@@ -84,7 +84,9 @@ Doing it safely means copying each active identity's email into its user's
 an SRS revision and a one-time script, because retiring an identity otherwise
 means a user was deleted (TD-5). **Owner decision, 2026-09-26 (R175 §6): the
 client stays in the project that issued it, and that project is not to be
-deleted even though the site it was created for is retired.**
+deleted.** It is *not* the retired website's project (`seeds-of-hope-51cb7`
+holds no OAuth client) — the client-id prefix is its project **number**, and
+`https://console.cloud.google.com/apis/credentials?project=<that number>` opens it.
 
 | Variable | Secret? | Generation | Restart required |
 |---|---|---|---|
