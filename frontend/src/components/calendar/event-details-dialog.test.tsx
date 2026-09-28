@@ -29,3 +29,24 @@ describe('the public calendar cannot offer staff management actions', () => {
     );
   });
 });
+
+/**
+ * R176 §3 (Owner-reported, 2026-09-28) — the dialog names the group and the
+ * circle a class is for, on the same footing as its Category and Level, and
+ * stops repeating one of them a line below as «المعنيون». Source-pinned for
+ * the same reason as above: the rendering is a `dt`/`dd` pair per dimension,
+ * and what matters is that each dimension has its own row.
+ */
+describe('the dialog names all five dimensions', () => {
+  it('renders a row for the groups and one for the circles, from the plural fields', () => {
+    expect(source).toContain("t('calendar.detailsGroup')");
+    expect(source).toContain("t('calendar.detailsCircle')");
+    expect(source).toContain('occurrence?.administrative_group_names');
+    expect(source).toContain('occurrence?.teaching_group_names');
+  });
+
+  it('shows «المعنيون» only when it says something no dimension row already does', () => {
+    expect(source).toContain('audienceAlreadyNamed.has(occurrence.audience_label)');
+    expect(source).not.toContain('<dd>{occurrence.audience_label}</dd>');
+  });
+});

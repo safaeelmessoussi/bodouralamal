@@ -64,9 +64,9 @@ R116 adds no route; automatic notices join the domain writes:
 
 | | Path | Audience · semantics |
 |---|---|---|
-| `GET` | `/calendar` | 🌐 Occurrences at the caller's tier; optional token, invalid/Pending/role-less callers get public only; self-sufficient; uncached |
+| `GET` | `/calendar` | 🌐 Occurrences at the caller's tier; optional token, invalid/Pending/role-less callers get public only; self-sufficient; uncached; `surah_id` (R176 §4) narrows to classes/sittings |
 | `GET` | `/calendar/sessions/{id}` | 🌐 Dialog data `{ occurrence, notes, recordings, linked_content, suggested_recording_name }` at the caller's tier (never a public session's private recordings); not a frontend page route |
-| `GET` | `/calendar/bootstrap` | 🌐 Calendar reference data only, one read; cached 5 min + strong ETag; `?category_id=` narrows only the Level list (§4.4); unknown id → empty list |
+| `GET` | `/calendar/bootstrap` | 🌐 Calendar reference data only, one read; cached 5 min + strong ETag; `?category_id=` narrows only the Level list (§4.4); unknown id → empty list; `surahs` (all 114) since R176 §4 |
 | `GET` | `/clock` | 🌐 Morocco's current offset (R167 §2): `{ now, zone, utc_offset_minutes, in_force_since, next_change_at, source }`; cacheable five minutes |
 | `GET` | `/site-config` | R175 §2 — `{ sign_in_offered }`. Public, anonymous, no personal data, no cookie, `no-store`. Driven by `SIGN_IN_OFFERED`; absent means offered |
 | `GET` | `/branches` | 🌐 Landing directory: id, name, address, phone, email, opening hours, map link, display order; never version, operational start date, timestamps |

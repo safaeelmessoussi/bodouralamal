@@ -1991,7 +1991,11 @@ export function SchedulingDialog({
       if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
       if (roomId === '') return t('scheduling.invalid.room');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
-      if (canAssignStaff && supervisorId === '') return t('scheduling.invalid.supervisor');
+      // R176 §1 — the supervisor is OPTIONAL. This form used to refuse an
+      // Admin's sitting without one, a rule that lived only here: the server,
+      // the schema and `ExamStaff` (a join row, zero of which is a valid state)
+      // never required it, and a sitting without a supervisor simply composes
+      // its title without a name (`examTitle`). A مؤطِّرة was already exempt.
       return null;
     }
     if (type === 'activity' || type === 'holiday') {

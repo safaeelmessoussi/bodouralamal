@@ -47,6 +47,8 @@ export type CalendarFilterField =
   | 'subjectId'
   | 'groupId'
   | 'circleId'
+  /** R176 §4 — a Surah; classes and sittings answer it, an activity never. */
+  | 'surahId'
   | 'type';
 
 export type CalendarFilterValues = Partial<Record<CalendarFilterField, string>>;
@@ -61,6 +63,7 @@ const PARAM: Record<CalendarFilterField, string> = {
   // was corrected — the same spelling is used here.
   groupId: 'administrative_group_id',
   circleId: 'teaching_group_id',
+  surahId: 'surah_id',
   type: 'type',
 };
 

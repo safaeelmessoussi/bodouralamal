@@ -100,6 +100,8 @@ export function read(prisma: PrismaClient) {
           name: s.name,
           display_order: s.displayOrder,
         })),
+        // R176 §4 — see the note on `surahs` in the service.
+        surahs: bootstrap.surahs,
         // R110's catalogue — see the note on `schedulingTypes` in the service.
         scheduling_types: bootstrap.schedulingTypes.map((t) => ({
           id: t.id,

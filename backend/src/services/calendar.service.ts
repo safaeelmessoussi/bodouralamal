@@ -86,6 +86,13 @@ export interface CalendarQuery {
    */
   teachingGroupId?: string;
   /**
+   * **R176 §4 — one Surah (R165).** A class is about the Surahs it names, an
+   * occurrence about its own when it has any (R165 §5), a sitting about one;
+   * an activity is about none, so this narrows to classes and sittings,
+   * exactly as `subjectId` does — a filter a kind cannot satisfy excludes it.
+   */
+  surahId?: number;
+  /**
    * R84 — `session`, `event` or `exam`: **the storage taxonomy**, and the
    * platform's own words for what it schedules are `schedulingTypeId` below.
    * Kept because deep links carry it.
@@ -221,6 +228,19 @@ export interface Occurrence {
   categoryNames: string[];
   levelIds: string[];
   levelNames: string[];
+  /**
+   * **R176 §3 — the group and circle dimensions, on the same footing.** A
+   * `multi_dimension` class names its audience along FIVE dimensions
+   * (R155/R163), an activity along four (§4.4 — no circle), an exam along a
+   * Level and at most one group (R58). The dialog showed Category and Level
+   * and had nothing to show for the other two, because the payload never
+   * carried them: the group's name reached the client only inside
+   * `audienceLabel`, as an opaque string. Empty when the kind cannot name one.
+   */
+  administrativeGroupIds: string[];
+  administrativeGroupNames: string[];
+  teachingGroupIds: string[];
+  teachingGroupNames: string[];
   /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
    *  verbatim and implement no fallback. */
   instructors: { id: string; displayName: string }[];
@@ -495,6 +515,7 @@ const SESSION_OCCURRENCE_INCLUDE = {
       },
       administrativeGroup: {
         select: {
+          id: true,
           name: true,
           level: {
             select: {
@@ -507,6 +528,7 @@ const SESSION_OCCURRENCE_INCLUDE = {
       },
       teachingGroup: {
         select: {
+          id: true,
           name: true,
           level: {
             select: {
@@ -517,13 +539,108 @@ const SESSION_OCCURRENCE_INCLUDE = {
           },
         },
       },
+      // **R176 §3/§4 — the FIVE dimensions of a `multi_dimension` class.**
+      // Only the three legacy single-target relations above were read, and a
+      // class an administrator creates today (R163 §5) has all three NULL:
+      // its audience lives in these joins. So every such class rendered with
+      // no Category, no Level and no audience, and was dropped by every
+      // Category/Level/group/circle filter — the calendar of «النساء» showed
+      // none of the women's classes. Dimensions INTERSECT and an empty one
+      // is «الكل» (R169 §6), exactly as the event side already reads them.
+      categoryScopes: { select: { category: { select: { id: true, name: true } } } },
+      levelScopes: {
+        select: { level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } } },
+      },
+      administrativeGroupScopes: {
+        select: { administrativeGroup: { select: { id: true, name: true } } },
+      },
+      teachingGroupScopes: { select: { teachingGroup: { select: { id: true, name: true } } } },
     },
   },
+  // R92 — this occurrence's OWN audience, when one was set for this date; it
+  // replaces the class's along every dimension it names, like its own Subject
+  // and Surahs above.
+  audienceCategories: { select: { category: { select: { id: true, name: true } } } },
+  audienceLevels: {
+    select: { level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } } },
+  },
+  audienceAdministrativeGroups: {
+    select: { administrativeGroup: { select: { id: true, name: true } } },
+  },
+  audienceTeachingGroups: { select: { teachingGroup: { select: { id: true, name: true } } } },
 } as const;
 
 type SessionWithOccurrenceData = Prisma.SessionGetPayload<{
   include: typeof SESSION_OCCURRENCE_INCLUDE;
 }>;
+
+/** A named row of one scope dimension, whichever join it came from. */
+interface NamedRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * **R176 §3 — what a Session is for, along all five dimensions.**
+ *
+ * One answer for every teaching mode: a legacy single-target class yields the
+ * one Level (and group or circle) its mode names; a `multi_dimension` class
+ * yields its joins; and an occurrence with its own R92 audience yields THAT,
+ * because for this date it is the truth. Categories are the ones named
+ * directly plus the ones every named Level belongs to, so a class addressed to
+ * «المستوى الثاني» is a class of the Category that Level is in.
+ */
+function sessionAudience(session: SessionWithOccurrenceData): {
+  categories: NamedRef[];
+  levels: NamedRef[];
+  groups: NamedRef[];
+  circles: NamedRef[];
+} {
+  const sch = session.schedule;
+  const overridden =
+    session.audienceCategories.length > 0 ||
+    session.audienceLevels.length > 0 ||
+    session.audienceAdministrativeGroups.length > 0 ||
+    session.audienceTeachingGroups.length > 0;
+  const legacyLevel = sch.level ?? sch.administrativeGroup?.level ?? sch.teachingGroup?.level ?? null;
+
+  const levels: (NamedRef & { category: NamedRef })[] = overridden
+    ? session.audienceLevels.map((r) => r.level)
+    : sch.teachingMode === 'multi_dimension'
+      ? sch.levelScopes.map((r) => r.level)
+      : legacyLevel
+        ? [legacyLevel]
+        : [];
+  const namedCategories: NamedRef[] = overridden
+    ? session.audienceCategories.map((r) => r.category)
+    : sch.teachingMode === 'multi_dimension'
+      ? sch.categoryScopes.map((r) => r.category)
+      : [];
+  const groups: NamedRef[] = overridden
+    ? session.audienceAdministrativeGroups.map((r) => r.administrativeGroup)
+    : sch.teachingMode === 'multi_dimension'
+      ? sch.administrativeGroupScopes.map((r) => r.administrativeGroup)
+      : sch.administrativeGroup
+        ? [{ id: sch.administrativeGroup.id, name: sch.administrativeGroup.name }]
+        : [];
+  const circles: NamedRef[] = overridden
+    ? session.audienceTeachingGroups.map((r) => r.teachingGroup)
+    : sch.teachingMode === 'multi_dimension'
+      ? sch.teachingGroupScopes.map((r) => r.teachingGroup)
+      : sch.teachingGroup
+        ? [{ id: sch.teachingGroup.id, name: sch.teachingGroup.name }]
+        : [];
+
+  const categories = new Map<string, NamedRef>();
+  for (const c of namedCategories) categories.set(c.id, c);
+  for (const l of levels) categories.set(l.category.id, l.category);
+  return {
+    categories: [...categories.values()],
+    levels: levels.map(({ id, name }) => ({ id, name })),
+    groups,
+    circles,
+  };
+}
 
 /** The single Session → `Occurrence` mapping. */
 function sessionOccurrence(
@@ -531,11 +648,11 @@ function sessionOccurrence(
   monthStarts: readonly MonthStart[],
 ): Occurrence {
   const sch = session.schedule;
-  const level =
-    sch.level ??
-    sch.administrativeGroup?.level ??
-    sch.teachingGroup?.level ??
-    null;
+  // R176 §3 — every dimension, whichever mode or override provides it; the
+  // singular fields below keep answering «the first one», as R139 laid down.
+  const audience = sessionAudience(session);
+  const level = audience.levels[0] ?? null;
+  const category = audience.categories[0] ?? null;
   // **Codex review, 2026-09-20 — the occurrence's own Subject override
   // (Revision 161) wins over the schedule's**, exactly as every other
   // per-occurrence override already does (room, delivery, visibility). A
@@ -591,10 +708,13 @@ function sessionOccurrence(
     subjectId: subject.id,
     subjectName: subject.name,
     teachingMode: sch.teachingMode,
+    // The most specific single name, as before — now from the same five-way
+    // answer, so a `multi_dimension` class has one too.
     audienceLabel:
-      sch.administrativeGroup?.name ??
-      sch.teachingGroup?.name ??
+      audience.groups[0]?.name ??
+      audience.circles[0]?.name ??
       level?.name ??
+      category?.name ??
       null,
     status: session.status,
     // R136 clause 16/17 — the access gate is an Exam fact only.
@@ -607,20 +727,23 @@ function sessionOccurrence(
     roomName: session.room?.name ?? null,
     deliveryMode: session.deliveryMode,
     onlineMediaMode: session.onlineMediaMode,
-    categoryId: level?.category.id ?? null,
-    categoryName: level?.category.name ?? null,
+    categoryId: category?.id ?? null,
+    categoryName: category?.name ?? null,
     levelId: level?.id ?? null,
     levelName: level?.name ?? null,
-    // A Session always resolves exactly one branch and (through its
-    // schedule's teaching mode) at most one Level — R139's plural fields are
-    // single-element/empty here, never a second source for what `branchId`/
-    // `levelId` above already answer.
+    // A Session resolves exactly one branch (`RecurringCourseSchedule.branchId`
+    // is mandatory); along the other dimensions a `multi_dimension` class may
+    // name several (R155), so R139's plural fields carry them all here too.
     branchIds: [sch.branchId],
     branchNames: [sch.branch.name],
-    categoryIds: level ? [level.category.id] : [],
-    categoryNames: level ? [level.category.name] : [],
-    levelIds: level ? [level.id] : [],
-    levelNames: level ? [level.name] : [],
+    categoryIds: audience.categories.map((c) => c.id),
+    categoryNames: audience.categories.map((c) => c.name),
+    levelIds: audience.levels.map((l) => l.id),
+    levelNames: audience.levels.map((l) => l.name),
+    administrativeGroupIds: audience.groups.map((g) => g.id),
+    administrativeGroupNames: audience.groups.map((g) => g.name),
+    teachingGroupIds: audience.circles.map((c) => c.id),
+    teachingGroupNames: audience.circles.map((c) => c.name),
     // From the session's OWN snapshot, never the schedule's (Revision 43.4).
     instructors: session.staff.map((assignment) => ({
       id: assignment.user.id,
@@ -1154,6 +1277,132 @@ export async function personalCalendarOptions(
   };
 }
 
+/**
+ * **R176 §4 — which classes a Category/Level/group/circle filter admits.**
+ *
+ * Owner-reported (2026-09-28): the calendar of «النساء» showed none of the
+ * women's classes. The filter read only the three legacy single-target columns
+ * (`levelId`/`administrativeGroupId`/`teachingGroupId`), and a class an
+ * administrator creates today is `multi_dimension` (R163 §5) — all three NULL,
+ * its audience in the five joins — so every such class was dropped, by every
+ * one of these filters. The event side had been corrected on 2026-09-21
+ * (R169 §6, above in `readCalendar`); this is the same reading for a class:
+ * **dimensions intersect, and an empty dimension is «الكل»**, asked through the
+ * taxonomy's own relations, so a class addressed to «المستوى الثاني» is in the
+ * calendar of its Category and a class for «الكل» is in everyone's.
+ *
+ * A legacy-mode class keeps its one target: the arms that read it are the
+ * ones this replaced, unchanged in meaning, now beside the joins instead of
+ * instead of them. Returned as AND-ed clauses; empty when nothing was asked.
+ */
+function scheduleAudienceFilters(query: CalendarQuery): Prisma.RecurringCourseScheduleWhereInput[] {
+  type Joins = "categoryScopes" | "levelScopes" | "administrativeGroupScopes" | "teachingGroupScopes";
+  const open = (field: Joins): Prisma.RecurringCourseScheduleWhereInput => ({ [field]: { none: {} } });
+  const multi = (
+    ...dimensions: Prisma.RecurringCourseScheduleWhereInput[]
+  ): Prisma.RecurringCourseScheduleWhereInput => ({ teachingMode: "multi_dimension", AND: dimensions });
+
+  const filters: Prisma.RecurringCourseScheduleWhereInput[] = [];
+  if (query.categoryId) {
+    const categoryId = query.categoryId;
+    filters.push({
+      OR: [
+        { level: { categoryId } },
+        { administrativeGroup: { level: { categoryId } } },
+        { teachingGroup: { level: { categoryId } } },
+        multi(
+          { OR: [open("categoryScopes"), { categoryScopes: { some: { categoryId } } }] },
+          { OR: [open("levelScopes"), { levelScopes: { some: { level: { categoryId } } } }] },
+          {
+            OR: [
+              open("administrativeGroupScopes"),
+              { administrativeGroupScopes: { some: { administrativeGroup: { level: { categoryId } } } } },
+            ],
+          },
+          {
+            OR: [
+              open("teachingGroupScopes"),
+              { teachingGroupScopes: { some: { teachingGroup: { level: { categoryId } } } } },
+            ],
+          },
+        ),
+      ],
+    });
+  }
+  if (query.levelId) {
+    const levelId = query.levelId;
+    filters.push({
+      OR: [
+        { levelId },
+        { administrativeGroup: { levelId } },
+        { teachingGroup: { levelId } },
+        multi(
+          { OR: [open("levelScopes"), { levelScopes: { some: { levelId } } }] },
+          {
+            OR: [
+              open("categoryScopes"),
+              { categoryScopes: { some: { category: { levels: { some: { id: levelId } } } } } },
+            ],
+          },
+          {
+            OR: [
+              open("administrativeGroupScopes"),
+              { administrativeGroupScopes: { some: { administrativeGroup: { levelId } } } },
+            ],
+          },
+          {
+            OR: [open("teachingGroupScopes"), { teachingGroupScopes: { some: { teachingGroup: { levelId } } } }],
+          },
+        ),
+      ],
+    });
+  }
+  if (query.administrativeGroupId) {
+    const id = query.administrativeGroupId;
+    // A circle is orthogonal to a group (a student may be in both), so the
+    // circle dimension does not narrow a group's calendar.
+    filters.push({
+      OR: [
+        { administrativeGroupId: id },
+        multi(
+          { OR: [open("administrativeGroupScopes"), { administrativeGroupScopes: { some: { administrativeGroupId: id } } }] },
+          {
+            OR: [
+              open("levelScopes"),
+              { levelScopes: { some: { level: { administrativeGroups: { some: { id } } } } } },
+            ],
+          },
+          {
+            OR: [
+              open("categoryScopes"),
+              { categoryScopes: { some: { category: { levels: { some: { administrativeGroups: { some: { id } } } } } } } },
+            ],
+          },
+        ),
+      ],
+    });
+  }
+  if (query.teachingGroupId) {
+    const id = query.teachingGroupId;
+    filters.push({
+      OR: [
+        { teachingGroupId: id },
+        multi(
+          { OR: [open("teachingGroupScopes"), { teachingGroupScopes: { some: { teachingGroupId: id } } }] },
+          { OR: [open("levelScopes"), { levelScopes: { some: { level: { teachingGroups: { some: { id } } } } } }] },
+          {
+            OR: [
+              open("categoryScopes"),
+              { categoryScopes: { some: { category: { levels: { some: { teachingGroups: { some: { id } } } } } } } },
+            ],
+          },
+        ),
+      ],
+    });
+  }
+  return filters;
+}
+
 export async function readCalendar(
   prisma: PrismaClient,
   actor: CalendarActor | null,
@@ -1317,6 +1566,8 @@ export async function readCalendar(
     query.teacherId !== undefined ||
     // R84 — a circle is a teaching concept an Event does not carry.
     query.teachingGroupId !== undefined ||
+    // R176 §4 — nor is a Surah (R165 gave them to classes and sittings).
+    query.surahId !== undefined ||
     query.kind === "session";
 
   const events =
@@ -1356,6 +1607,10 @@ export async function readCalendar(
             },
             levelScopes: {
               select: { level: { select: { id: true, name: true } } },
+            },
+            // R176 §3 — the fourth join, never projected before.
+            administrativeGroupScopes: {
+              select: { administrativeGroup: { select: { id: true, name: true } } },
             },
           },
         });
@@ -1403,6 +1658,11 @@ export async function readCalendar(
         categoryNames: event.categoryScopes.map((s) => s.category.name),
         levelIds: event.levelScopes.map((s) => s.level.id),
         levelNames: event.levelScopes.map((s) => s.level.name),
+        administrativeGroupIds: event.administrativeGroupScopes.map((s) => s.administrativeGroup.id),
+        administrativeGroupNames: event.administrativeGroupScopes.map((s) => s.administrativeGroup.name),
+        // §7 — an Event has no circle arm; nothing to invent here.
+        teachingGroupIds: [],
+        teachingGroupNames: [],
         // An Event is the exception layer (§4.4); it has no room and no
         // instructor of its own.
         roomName: null,
@@ -1464,6 +1724,8 @@ export async function readCalendar(
             ...(query.branchId ? { branchId: query.branchId } : {}),
             ...(query.levelId ? { levelId: query.levelId } : {}),
             ...(query.subjectId ? { subjectId: query.subjectId } : {}),
+            // R176 §4 — a sitting is about one Surah (R165 §5), or none.
+            ...(query.surahId !== undefined ? { surahId: query.surahId } : {}),
             ...(query.academicYearId
               ? { academicYearId: query.academicYearId }
               : {}),
@@ -1489,11 +1751,11 @@ export async function readCalendar(
             subject: { select: { id: true, name: true } },
             branch: { select: { id: true, name: true } },
             room: { select: { name: true } },
-            administrativeGroup: { select: { name: true } },
+            administrativeGroup: { select: { id: true, name: true } },
             // R136 — the two arms `administrativeGroup`/`level` never named:
             // a `teaching_group` target has its own group to show rather than
             // falling back to the whole Level's name.
-            teachingGroup: { select: { name: true } },
+            teachingGroup: { select: { id: true, name: true } },
             schedulingType: {
               select: { id: true, name: true, structuralKind: true, attendanceMode: true },
             },
@@ -1577,6 +1839,12 @@ export async function readCalendar(
       categoryNames: [exam.level.category.name],
       levelIds: [exam.levelId],
       levelNames: [exam.level.name],
+      // R176 §3 — R58: a sitting names at most one group, and NULL is the whole
+      // Level; R136 lets it name one circle instead.
+      administrativeGroupIds: exam.administrativeGroup ? [exam.administrativeGroup.id] : [],
+      administrativeGroupNames: exam.administrativeGroup ? [exam.administrativeGroup.name] : [],
+      teachingGroupIds: exam.teachingGroup ? [exam.teachingGroup.id] : [],
+      teachingGroupNames: exam.teachingGroup ? [exam.teachingGroup.name] : [],
       subjectId: exam.subjectId,
       subjectName: exam.subject?.name ?? null,
       teachingMode: null,
@@ -1698,21 +1966,7 @@ export async function readCalendar(
         schedule: {
           deletedAt: null,
           ...(query.branchId ? { branchId: query.branchId } : {}),
-          ...(query.levelId
-            ? {
-                OR: [
-                  { levelId: query.levelId },
-                  { administrativeGroup: { levelId: query.levelId } },
-                  { teachingGroup: { levelId: query.levelId } },
-                ],
-              }
-            : {}),
-          ...(query.administrativeGroupId
-            ? { administrativeGroupId: query.administrativeGroupId }
-            : {}),
-          ...(query.teachingGroupId
-            ? { teachingGroupId: query.teachingGroupId }
-            : {}),
+          AND: scheduleAudienceFilters(query),
           ...(query.academicYearId
             ? { academicYearId: query.academicYearId }
             : {}),
@@ -1723,6 +1977,27 @@ export async function readCalendar(
         // removed from the schedule should not lose the ones they actually took.
         ...(query.teacherId
           ? { staff: { some: { userId: query.teacherId, deletedAt: null } } }
+          : {}),
+        // **R176 §4 — the Surah filter reads exactly what the occurrence shows.**
+        // `sessionOccurrence` renders the occurrence's OWN Surahs when it has
+        // any, else the class's — and those only while the Subject taught
+        // works by Surah (an occurrence retaught as فقه does not inherit
+        // Quran Surahs). The predicate is the same rule, so nothing is listed
+        // under a Surah that its dialog would not name.
+        ...(query.surahId !== undefined
+          ? {
+              OR: [
+                { surahs: { some: { surahId: query.surahId } } },
+                {
+                  surahs: { none: {} },
+                  schedule: { surahs: { some: { surahId: query.surahId } } },
+                  OR: [
+                    { subjectId: null, schedule: { subject: { requiresSurahs: true } } },
+                    { subject: { requiresSurahs: true } },
+                  ],
+                },
+              ],
+            }
           : {}),
       },
       include: SESSION_OCCURRENCE_INCLUDE,
@@ -1739,21 +2014,10 @@ export async function readCalendar(
         ? await filterSessionsByPersonalAudience(prisma, actor.userId, sessions)
         : sessions;
 
-    for (const session of sessionsForActor) {
-      const sch = session.schedule;
-      const level =
-        sch.level ??
-        sch.administrativeGroup?.level ??
-        sch.teachingGroup?.level ??
-        null;
-      // The category filter is applied here rather than in the query: a
-      // schedule reaches its level through one of three different relations
-      // depending on its teaching mode, and Prisma cannot express "whichever of
-      // these is non-null" as a single filter.
-      if (query.categoryId && level?.category.id !== query.categoryId) continue;
-
-      out.push(sessionOccurrence(session, monthStarts));
-    }
+    // R176 §4 — the Category filter used to be applied here, in JS, reading
+    // only the legacy Level; it now lives in `scheduleAudienceFilters` with the
+    // other four, where a `multi_dimension` class can answer it.
+    for (const session of sessionsForActor) out.push(sessionOccurrence(session, monthStarts));
   }
 
   await flagAttendanceAuthority(prisma, actor, out);

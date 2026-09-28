@@ -114,6 +114,25 @@ export function EventDetailsDialog({
             category_name: occurrence.category_name,
           })
         : undefined;
+  // R176 §3 — the group and circle dimensions, named exactly like the two
+  // above. An occurrence for «الكل» on a dimension carries nothing there and
+  // gets no row: an empty row would read as a fact.
+  const groups = (occurrence?.administrative_group_names ?? []).join('، ') || undefined;
+  const circles = (occurrence?.teaching_group_names ?? []).join('، ') || undefined;
+  // «المعنيون» was the ONE line that used to name who a class is for. Now
+  // that each dimension has its own row, it is shown only when it says
+  // something none of them does — an exam's «حصة محددة», for instance —
+  // rather than repeating the group's name a line below it.
+  const audienceAlreadyNamed = new Set([
+    ...(occurrence?.administrative_group_names ?? []),
+    ...(occurrence?.teaching_group_names ?? []),
+    ...(occurrence?.level_names ?? []),
+    ...(occurrence?.category_names ?? []),
+  ]);
+  const audience =
+    occurrence?.audience_label && !audienceAlreadyNamed.has(occurrence.audience_label)
+      ? occurrence.audience_label
+      : undefined;
 
   return (
     <Dialog
@@ -217,11 +236,18 @@ export function EventDetailsDialog({
               </>
             ) : null}
 
+            {groups ? (
+              <><dt>{t('calendar.detailsGroup')}</dt><dd>{groups}</dd></>
+            ) : null}
+            {circles ? (
+              <><dt>{t('calendar.detailsCircle')}</dt><dd>{circles}</dd></>
+            ) : null}
+
             {occurrence.subject_name ? (
               <><dt>{t('calendar.table.subject')}</dt><dd>{occurrence.subject_name}</dd></>
             ) : null}
-            {occurrence.audience_label ? (
-              <><dt>{t('calendar.table.audience')}</dt><dd>{occurrence.audience_label}</dd></>
+            {audience ? (
+              <><dt>{t('calendar.table.audience')}</dt><dd>{audience}</dd></>
             ) : null}
             {occurrence.status === 'cancelled' ? (
               <><dt>{t('calendar.detailsStatus')}</dt><dd role="status">{t('calendar.cancelled')}</dd></>

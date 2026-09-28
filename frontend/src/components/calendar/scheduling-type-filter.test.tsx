@@ -30,6 +30,7 @@ const bootstrap = (
     levels: [],
     branches: [],
     subjects: [],
+    surahs: [],
     scheduling_types: types,
   }) as CalendarBootstrap;
 

@@ -48,6 +48,8 @@ const querySchema = z.object({
   include_cancelled: z.literal('true').optional(),
   /** R84 — the Teaching Circle (Sessions only; see `CalendarQuery`). */
   teaching_group_id: z.uuid().optional(),
+  /** R176 §4 — a Surah number; classes and sittings only (see `CalendarQuery`). */
+  surah_id: z.coerce.number().int().min(1).max(114).optional(),
   /**
    * R84 — the STORAGE taxonomy. Retained because deep links carry it and
    * because it is still the honest answer for a row recording no catalogue
@@ -106,6 +108,7 @@ export function read(prisma: PrismaClient) {
         ...(q.teacher_id ? { teacherId: q.teacher_id } : {}),
         ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
         ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
+        ...(q.surah_id !== undefined ? { surahId: q.surah_id } : {}),
         ...(q.type ? { kind: q.type } : {}),
         ...(q.scheduling_type_id
           ? { schedulingTypeId: q.scheduling_type_id }
@@ -204,6 +207,11 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     category_names: o.categoryNames,
     level_ids: o.levelIds,
     level_names: o.levelNames,
+    // R176 §3 — the group and circle dimensions, beside the three above.
+    administrative_group_ids: o.administrativeGroupIds,
+    administrative_group_names: o.administrativeGroupNames,
+    teaching_group_ids: o.teachingGroupIds,
+    teaching_group_names: o.teachingGroupNames,
     subject_id: o.subjectId,
     subject_name: o.subjectName,
     teaching_mode: o.teachingMode,
@@ -326,6 +334,7 @@ export function readMine(prisma: PrismaClient) {
         ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
         ...(q.administrative_group_id ? { administrativeGroupId: q.administrative_group_id } : {}),
         ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
+        ...(q.surah_id !== undefined ? { surahId: q.surah_id } : {}),
         ...(q.type ? { kind: q.type } : {}),
         ...(q.scheduling_type_id
           ? { schedulingTypeId: q.scheduling_type_id }

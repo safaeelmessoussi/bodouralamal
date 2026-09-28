@@ -72,7 +72,7 @@ type Load =
  * control, and the page stays the same for everybody — a filter narrows what a
  * visitor sees of the public timetable; it never personalises it.
  */
-const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'type'] as const;
+const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'surahId', 'type'] as const;
 
 export function CalendarPage(): ReactNode {
   const { accessToken, status: sessionStatus } = useSession();
@@ -97,6 +97,8 @@ export function CalendarPage(): ReactNode {
   const levelId = filters.value.levelId ?? null;
   /** المادة — read here so it is both SENT and in the effect's dependencies. */
   const subjectId = filters.value.subjectId ?? null;
+  /** السورة (R176 §4) — the same rule: read here, sent, and a dependency. */
+  const surahId = filters.value.surahId ?? null;
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [bootstrapBusy, setBootstrapBusy] = useState(true);
@@ -170,6 +172,7 @@ export function CalendarPage(): ReactNode {
           categoryId,
           levelId,
           subjectId,
+          surahId,
           // R110 — a catalogue id or, from an older link, a storage word.
           ...schedulingTypeQuery(filters.value.type ?? null),
         });
@@ -193,7 +196,7 @@ export function CalendarPage(): ReactNode {
    * the same silent-filter failure `sort` had on طلبات الانضمام: the control
    * looks alive and the results simply never move.
    */
-  }, [from, to, branchId, categoryId, levelId, subjectId, filters.value.type, accessToken]);
+  }, [from, to, branchId, categoryId, levelId, subjectId, surahId, filters.value.type, accessToken]);
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 
@@ -283,6 +286,7 @@ export function CalendarPage(): ReactNode {
                   filters={filters}
                   branches={branches}
                   subjects={bootstrap?.subjects ?? []}
+                  surahs={bootstrap?.surahs ?? []}
                   categories={bootstrap?.categories ?? []}
                   levels={bootstrap?.levels ?? []}
                   levelsBusy={bootstrapBusy}

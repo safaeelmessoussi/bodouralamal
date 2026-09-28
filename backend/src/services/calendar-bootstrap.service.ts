@@ -61,6 +61,15 @@ export interface CalendarBootstrap {
    */
   subjects: { id: string; name: string; displayOrder: number | null }[];
   /**
+   * **R176 §4 — the Surahs the calendar's السورة filter offers**: all 114, in
+   * the Quran's own order. Public for the same reason `subjects` is: every
+   * occurrence already carries `surah_names`, so the list adds no fact a
+   * visitor could not read off the timetable. A whole list rather than the
+   * month's, like every other list here, so the dropdown never changes shape
+   * under the reader as she moves between months.
+   */
+  surahs: { id: number; name: string }[];
+  /**
    * **The live SchedulingType catalogue the calendar's النوع filter offers**
    * (R110, Owner 2026-09-02).
    *
@@ -121,7 +130,7 @@ export async function calendarBootstrap(
   // resolution walks BACK to the month containing a date, so a day early in
   // `from`'s month belongs to a month that began before it.
   const margin = 40 * MS_PER_DAY;
-  const [monthStartRows, categories, levels, branches, subjects, schedulingTypes] = await Promise.all([
+  const [monthStartRows, categories, levels, branches, subjects, schedulingTypes, surahRows] = await Promise.all([
     prisma.hijriMonthStart.findMany({
       where: {
         deletedAt: null,
@@ -162,6 +171,7 @@ export async function calendarBootstrap(
          catalogue is explicitly ordered by the administration (R110). */
       orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     }),
+    prisma.quranSurah.findMany({ select: { surahId: true, nameArabic: true }, orderBy: { surahId: 'asc' } }),
   ]);
 
   const starts: MonthStart[] = sortMonthStarts(monthStartRows);
@@ -214,5 +224,6 @@ export async function calendarBootstrap(
     branches,
     subjects,
     schedulingTypes,
+    surahs: surahRows.map((s) => ({ id: s.surahId, name: s.nameArabic })),
   };
 }

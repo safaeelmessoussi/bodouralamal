@@ -34,6 +34,7 @@ export function CalendarFilters({
   subjects,
   groups,
   circles,
+  surahs,
   types,
   levelsBusy = false,
 }: {
@@ -50,6 +51,8 @@ export function CalendarFilters({
   subjects?: { id: string; name: string }[];
   groups?: { id: string; name: string }[];
   circles?: { id: string; name: string }[];
+  /** R176 §4 — the 114 Surahs, from the bootstrap, in the Quran's order. */
+  surahs?: { id: number; name: string }[];
   /** The event/session kinds this surface distinguishes, already labelled. */
   types?: { value: string; label: string }[];
   levelsBusy?: boolean;
@@ -121,6 +124,18 @@ export function CalendarFilters({
           options={[
             { value: '', label: t('calendar.filters.all') },
             ...(circles ?? []).map((c) => ({ value: c.id, label: c.name })),
+          ]}
+        />
+      ) : null}
+
+      {has('surahId') ? (
+        <SelectField
+          label={t('calendar.filters.surah')}
+          value={value('surahId') ?? ''}
+          onChange={(v) => filters.set('surahId', v || null)}
+          options={[
+            { value: '', label: t('calendar.filters.all') },
+            ...(surahs ?? []).map((s) => ({ value: String(s.id), label: s.name })),
           ]}
         />
       ) : null}

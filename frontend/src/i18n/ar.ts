@@ -541,6 +541,8 @@ export const ar = {
       retiredType: 'نوع لم يعد مستعملًا',
       group: 'المجموعة',
       circle: 'الحلقة',
+      // R176 §4 — a class or a sitting is about a Surah; an activity is not.
+      surah: 'السورة',
     },
     previousMonth: 'الشهر السابق',
     nextMonth: 'الشهر التالي',
@@ -578,6 +580,9 @@ export const ar = {
     detailsRoom: 'القاعة',
     detailsCategory: 'الفئة',
     detailsLevel: 'المستوى',
+    // R176 §3 — the two dimensions the dialog could not name before.
+    detailsGroup: 'المجموعة',
+    detailsCircle: 'الحلقة',
     detailsRecurrence: 'التكرار',
     detailsInstructors: 'المؤطِّرات',
     // Owner-reported, 2026-09-16 — an exam's own staff, named apart from
@@ -1579,7 +1584,8 @@ export const ar = {
       // والفرق مقصود: «لا يوجد ما تختارين» ليس «اختاري».
       noScopeForYou:
         'لا توجد مجموعة مسندة إليكِ لإنشاء نشاط فيها. تواصلي مع الإدارة لإسناد مجموعة.',
-      supervisor: 'اختاري المؤطرة المسؤولة عن الاختبار.',
+      // R176 §1 — «اختاري المؤطرة المسؤولة عن الاختبار.» was withdrawn: the
+      // supervisor is optional, and the form no longer refuses without one.
     },
     // R82.5 — الإشعار اختياري ويُقرَّر بعد الحفظ: التغيير محفوظ في الحالتين.
     notify: {

@@ -39,6 +39,10 @@ interface Row {
   category_names: string[];
   level_ids: string[];
   level_names: string[];
+  administrative_group_ids: string[];
+  administrative_group_names: string[];
+  teaching_group_ids: string[];
+  teaching_group_names: string[];
 }
 interface Body {
   error?: { code?: string };
@@ -407,6 +411,9 @@ const OCCURRENCE_KEYS = [
   // that have a sheet and offer NOTHING on a عطلة, without a request per
   // occurrence anybody merely looked at. Exactly the reason `delivery_mode` is
   // here, and exactly the failure the comment above describes.
+  // R176 §3 — the group and circle dimensions, beside category/level below.
+  "administrative_group_ids",
+  "administrative_group_names",
   "attendance_marking",
   "attendance_mode",
   "audience_label",
@@ -457,6 +464,8 @@ const OCCURRENCE_KEYS = [
   "supervisors",
   // SRS Revision 165 §2 — the Surah(s) a class or an exam is about.
   "surah_names",
+  "teaching_group_ids",
+  "teaching_group_names",
   "teaching_mode",
   "title",
   // SRS Revision 163 §3 — advisory: may THIS reader open the attendance sheet.

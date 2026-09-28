@@ -115,6 +115,16 @@ export interface Occurrence {
   category_names: string[];
   level_ids: string[];
   level_names: string[];
+  /**
+   * R176 §3 — the group and circle dimensions, beside the three above, so the
+   * dialog can name who a class is for along all five; empty where the kind
+   * cannot name one (an activity has no circle). Optional while a server
+   * older than this field could still answer.
+   */
+  administrative_group_ids?: string[];
+  administrative_group_names?: string[];
+  teaching_group_ids?: string[];
+  teaching_group_names?: string[];
   /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
      no lifecycle, so these are null for it rather than invented. */
   subject_id: string | null;
@@ -187,6 +197,8 @@ export interface CalendarQuery {
   subjectId?: string | null;
   groupId?: string | null;
   circleId?: string | null;
+  /** R176 §4 — a Surah number, as the URL carries it. */
+  surahId?: string | null;
   kind?: string | null;
   /**
    * **R110 (Owner, 2026-09-02) — the catalogue filter**, and what the النوع
@@ -247,6 +259,7 @@ function calendarParams(query: CalendarQuery): URLSearchParams {
   if (query.subjectId) params.set('subject_id', query.subjectId);
   if (query.groupId) params.set('administrative_group_id', query.groupId);
   if (query.circleId) params.set('teaching_group_id', query.circleId);
+  if (query.surahId) params.set('surah_id', query.surahId);
   // The contract names it `type`; the client calls it `kind` because `type` is
   // taken. The rename happens here, at the boundary, and nowhere else.
   if (query.kind) params.set('type', query.kind);
@@ -356,6 +369,8 @@ export interface CalendarBootstrap {
   branches: BranchRef[];
   /** R84 — the Subjects the public calendar filters by. */
   subjects: { id: string; name: string; display_order: number | null }[];
+  /** R176 §4 — all 114 Surahs, in order, for the السورة filter. */
+  surahs: { id: number; name: string }[];
   /** R110 — the live catalogue the النوع filter offers (see the service). */
   scheduling_types: {
     id: string;
