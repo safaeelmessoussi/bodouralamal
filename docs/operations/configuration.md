@@ -87,6 +87,9 @@ client stays in the project that issued it, and that project is not to be
 deleted.** It is *not* the retired website's project (`seeds-of-hope-51cb7`
 holds no OAuth client) — the client-id prefix is its project **number**, and
 `https://console.cloud.google.com/apis/credentials?project=<that number>` opens it.
+Today that is project **«Bodour Al Amal - Staging»** (`bodour-al-amal-staging`),
+client **«Bodour Al Amal - Staging Web»**, and it signs Production in — the name
+is history, not a tier.
 
 | Variable | Secret? | Generation | Restart required |
 |---|---|---|---|
