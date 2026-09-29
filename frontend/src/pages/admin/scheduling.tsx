@@ -61,6 +61,7 @@ import {
 } from '../../components/scheduling/surahs.js';
 import { composeTitlePreview } from '../../components/scheduling/title-preview.js';
 import { weekdayOf } from '../../lib/format-date.js';
+import { describeScheduleConflict } from '../../lib/schedule-conflict.js';
 import {
   initialMediaMode,
   type DeliveryMode,
@@ -2387,7 +2388,8 @@ export function SchedulingDialog({
       // room or a person is already committed on a materialized date, which is
       // a different remedy from any other refusal.
       if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
-        setNotice(t('admin.schedules.clash'));
+        // R179 §11 — named: which room or person, on which occurrence, when.
+        setNotice(describeScheduleConflict(error.details));
       } else if (
         error instanceof ApiError &&
         // **R91's interval invariants, in the administrator's words.** The

@@ -42,6 +42,8 @@ import {
   scheduleLevelIds,
 } from "../policies/roster-resolution.js";
 import { scheduleTitles, sessionTitles } from "./class-title.js";
+import { publicDisplayName } from "../lib/display-name.js";
+import { wallClockHHMM } from "../lib/item-title.js";
 import * as audit from "../repositories/audit.repository.js";
 import * as trash from "../repositories/trash.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
@@ -515,6 +517,16 @@ export interface ScheduleConflict {
   scheduleId: string;
   /** The person or room both classes want. */
   resourceId: string;
+  /**
+   * R179 §11 (Owner-reported, 2026-09-29) — said in words: the room's name or
+   * the person's public display name, the other occurrence's composed title
+   * and its clock window, so the refusal names WHAT is booked instead of
+   * «القاعة أو أحد المؤطرين».
+   */
+  resourceName: string | null;
+  title: string | null;
+  startTime: string | null;
+  endTime: string | null;
 }
 
 /**
@@ -793,6 +805,15 @@ export async function findConflicts(
       // A cancelled class frees its room: TD-1 keeps the row so the
       // cancellation is visible, but it no longer occupies anything.
       status: { not: "cancelled" },
+      // **R179 §11 (Owner-reported, 2026-09-29) — a class in the Trash books
+      // nothing.** Deleting a class keeps its future PROTECTED occurrences
+      // (an edited one, one with attendance or content — R43.6) live under the
+      // tombstoned schedule; every calendar hides them (`schedule.deletedAt`),
+      // so they were an invisible booking that refused a room «nobody uses».
+      // A restore asks this same check over the span coming back
+      // (`restoreScheduleSessions`), so nothing is double-booked by releasing
+      // them here.
+      schedule: { deletedAt: null },
       ...(excludeScheduleId ? { scheduleId: { not: excludeScheduleId } } : {}),
       ...(excludeSessionIds && excludeSessionIds.length > 0
         ? { id: { notIn: excludeSessionIds } }
@@ -834,7 +855,7 @@ export async function findConflicts(
     },
   });
 
-  const out: ScheduleConflict[] = [];
+  const out: Omit<ScheduleConflict, "resourceName" | "title">[] = [];
   for (const s of clashes) {
     if (
       !timesOverlap(
@@ -846,6 +867,8 @@ export async function findConflicts(
     )
       continue;
     const date = s.date.toISOString().slice(0, 10);
+    const startTime = wallClockHHMM(s.startTime);
+    const endTime = wallClockHHMM(s.endTime);
 
     if (candidate.roomId !== null && s.roomId === candidate.roomId) {
       out.push({
@@ -854,6 +877,8 @@ export async function findConflicts(
         sessionId: s.id,
         scheduleId: s.scheduleId,
         resourceId: candidate.roomId,
+        startTime,
+        endTime,
       });
     }
     const busy = new Set<string>(s.staff.map((t) => t.userId));
@@ -868,10 +893,35 @@ export async function findConflicts(
         sessionId: s.id,
         scheduleId: s.scheduleId,
         resourceId: userId,
+        startTime,
+        endTime,
       });
     }
   }
-  return out;
+  if (out.length === 0) return [];
+
+  // R179 §11 — the names, read once for the whole list.
+  const roomIds = [...new Set(out.filter((c) => c.kind === "room").map((c) => c.resourceId))];
+  const userIds = [...new Set(out.filter((c) => c.kind !== "room").map((c) => c.resourceId))];
+  const [rooms, people, titles] = await Promise.all([
+    roomIds.length === 0
+      ? []
+      : tx.room.findMany({ where: { id: { in: roomIds } }, select: { id: true, name: true } }),
+    userIds.length === 0
+      ? []
+      : tx.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, nameArabic: true, publicDisplayName: true },
+        }),
+    sessionTitles(tx, [...new Set(out.map((c) => c.sessionId))]),
+  ]);
+  const roomName = new Map(rooms.map((r) => [r.id, r.name]));
+  const personName = new Map(people.map((p) => [p.id, publicDisplayName(p)]));
+  return out.map((c) => ({
+    ...c,
+    resourceName: (c.kind === "room" ? roomName.get(c.resourceId) : personName.get(c.resourceId)) ?? null,
+    title: titles.get(c.sessionId) ?? null,
+  }));
 }
 
 /** TD-3.8: conflicts are a coded 409 naming what clashed, never a 500. */

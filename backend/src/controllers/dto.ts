@@ -888,6 +888,12 @@ export interface ScheduleConflictDto {
   schedule_id: string;
   /** The person or room both classes want. */
   resource_id: string;
+  /** R179 §11 — in words: the room's name or the person's display name, the
+   *  other occurrence's title and its clock window. */
+  resource_name: string | null;
+  title: string | null;
+  start_time: string | null;
+  end_time: string | null;
 }
 
 export function scheduleConflictDto(row: {
@@ -896,6 +902,10 @@ export function scheduleConflictDto(row: {
   sessionId: string;
   scheduleId: string;
   resourceId: string;
+  resourceName: string | null;
+  title: string | null;
+  startTime: string | null;
+  endTime: string | null;
 }): ScheduleConflictDto {
   return {
     kind: row.kind,
@@ -903,6 +913,10 @@ export function scheduleConflictDto(row: {
     session_id: row.sessionId,
     schedule_id: row.scheduleId,
     resource_id: row.resourceId,
+    resource_name: row.resourceName,
+    title: row.title,
+    start_time: row.startTime,
+    end_time: row.endTime,
   };
 }
 

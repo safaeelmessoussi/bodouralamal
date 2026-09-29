@@ -19,6 +19,7 @@ import {
 } from "./course-schedule.service.js";
 import { runMaterialization } from "./session-materialize.service.js";
 import { deleteOwnAccount } from "./account-deletion.service.js";
+import { restoreEntry } from "./trash.service.js";
 import {
   cancelSession,
   linkContent,
@@ -165,6 +166,8 @@ async function cleanup(): Promise<void> {
   await prisma.administrativeGroup.deleteMany({ where: { branch: tagged } });
   await prisma.levelSubject.deleteMany({ where: { subject: tagged } });
   await prisma.trash.deleteMany({ where: { deletedBy: taggedPerson } });
+  // R179 §11's restore test grants the actor a live role; a failed run must not leave it.
+  await prisma.userBranchRole.deleteMany({ where: { user: taggedPerson } });
   await prisma.auditLog.deleteMany({ where: { actor: taggedPerson } });
   await prisma.user.deleteMany({ where: taggedPerson });
   await prisma.subject.deleteMany({ where: tagged });
@@ -1051,6 +1054,70 @@ describe("deleting a schedule (TD-5)", () => {
     });
     expect(survivor?.deletedAt).toBeNull();
     expect(survivor?.status).toBe("held");
+  });
+});
+
+/**
+ * **R179 §11 (Owner-reported, 2026-09-29) — a class in the Trash books
+ * nothing.** Deleting a class keeps its future PROTECTED occurrences live
+ * under the tombstoned schedule (R43.6); every calendar hides them, so they
+ * refused a room «nobody uses». They no longer count — and a restore still
+ * asks its own conflict check over the span coming back.
+ */
+describe("R179 §11 — a class in the Trash books nothing", () => {
+  it("a deleted class's retained future session no longer blocks the room or the teacher — and a restore still refuses once it was booked", async () => {
+    const teacher = await person("الأستاذة المحذوفة حصتها");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: teacher, position: "teacher" }] }),
+      NOW,
+    );
+    // A manual edit protects the occurrence: deletion keeps it live.
+    const kept = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day("2026-06-23") },
+    });
+    await overrideSession(prisma, superAdmin(), kept.id, { roomId: roomB, version: kept.version });
+    await deleteCourseSchedule(prisma, superAdmin(), id, NOW);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: kept.id } })).deletedAt).toBeNull();
+
+    // The same room, the same teacher, the same hour on that date: free now.
+    const booked = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ roomId: roomB, staff: [{ userId: teacher, position: "teacher" }] }),
+      NOW,
+    );
+    expect(await prisma.session.count({ where: { scheduleId: booked.id, date: day("2026-06-23"), deletedAt: null } })).toBe(1);
+
+    // …and bringing the deleted class back is refused, in words that name the clash.
+    // The Trash asks for a LIVE Super Admin role (TD-2), which the test actor
+    // has only here (`Restrict`, so it is removed again below).
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: "super_admin" } });
+    const grant = await prisma.userBranchRole.create({ data: { userId: actorUserId, roleId: role.id } });
+    const entry = await prisma.trash.findFirstOrThrow({ where: { targetEntity: "RecurringCourseSchedule", targetId: id } });
+    const err = await failure(() => restoreEntry(prisma, { ...superAdmin(), activeRole: "super_admin" }, entry.id));
+    await prisma.userBranchRole.delete({ where: { id: grant.id } });
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+    const first = (err.details?.["conflicts"] as { kind: string; resourceName: string | null; title: string | null; startTime: string | null }[])[0]!;
+    expect(["room", "teacher"]).toContain(first.kind);
+    expect(first.resourceName).not.toBeNull();
+    expect(first.title).not.toBeNull();
+    expect(first.startTime).toBe("15:00");
+  });
+
+  it("names the clash: the room, the other occurrence's title and its window (R179 §11)", async () => {
+    await createCourseSchedule(prisma, superAdmin(), baseInput({ roomId: roomB }), NOW);
+    const err = await failure(() =>
+      createCourseSchedule(prisma, superAdmin(), baseInput({ roomId: roomB }), NOW),
+    );
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+    const first = (err.details?.["conflicts"] as { kind: string; resourceName: string | null; title: string | null; startTime: string | null; endTime: string | null }[])[0]!;
+    expect(first.kind).toBe("room");
+    expect(first.resourceName).toBe((await prisma.room.findUniqueOrThrow({ where: { id: roomB } })).name);
+    expect(first.title).toContain(`${TAG}`);
+    expect(first.startTime).toBe("15:00");
+    expect(first.endTime).toBe("17:00");
   });
 });
 

@@ -20,7 +20,7 @@ Canonical catalogue; every service uses exactly these identifiers; extensible on
 | 409 | `STATE_CONFLICT` | Transition the state machine forbids; onboarding-token replay; `details.reason` discriminates (below) | Branch on `reason`; else "already handled", refresh |
 | 409 | `VERSION_CONFLICT` | Optimistic-lock mismatch on a staff-edited entity | "Changed by someone else"; reload, re-apply |
 | 409 | `DUPLICATE` | Unique-constraint race loser; a duplicate staff-created family link (status to a non-owner would leak existence) | Treat as already created |
-| 409 | `SCHEDULE_CONFLICT` | Room, teacher or assistant already committed for an overlapping session (§4.4), against materialized sessions | Name the clash (`details`: resource, date); offer to move one |
+| 409 | `SCHEDULE_CONFLICT` | Room, teacher or assistant already committed for an overlapping session (§4.4), against materialized sessions of LIVE classes (a class in the Trash books nothing, R179 §11) | Say it: `details.conflicts[]` carries `kind`, `date`, `resourceName`, the other occurrence's `title`, `startTime`/`endTime` (`lib/schedule-conflict.ts` words it) |
 | 409 | ~~`CAPACITY_FULL`~~ | Retired by R43: BR-23 capacity refuses nothing; unraisable, removed from TD-3.8 | — |
 | 409 | `SINGLE_SUBMISSION_FINAL` | Resume on a single-submission exam | Explain the policy |
 | 409 | `UPLOAD_INCOMPLETE` | Completion on a missing or partial object | Retry from the start |

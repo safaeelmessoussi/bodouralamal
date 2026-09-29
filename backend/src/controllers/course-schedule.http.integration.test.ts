@@ -89,10 +89,15 @@ const MATERIALIZATION_KEYS = [
 ];
 const CONFLICT_KEYS = [
   "date",
+  "end_time",
   "kind",
   "resource_id",
+  // R179 §11 — the clash in words: who or what, on which occurrence, when.
+  "resource_name",
   "schedule_id",
   "session_id",
+  "start_time",
+  "title",
 ];
 
 interface Res {

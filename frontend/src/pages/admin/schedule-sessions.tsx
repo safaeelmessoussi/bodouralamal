@@ -57,6 +57,7 @@ import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
+import { describeScheduleConflict } from '../../lib/schedule-conflict.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { VisibilityField } from '../../components/scheduling/visibility-field.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
@@ -518,6 +519,11 @@ export function ScheduleSessionsPage({
       if (reason === 'SESSION_HAS_EXAM') {
         // R172 §9 — stays open and explains, the rule every blocked deletion follows.
         setDeleteBlocked(t('admin.sessions.deleteBlockedExam'));
+        return;
+      }
+      if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
+        // R179 §11 — named: which room or person, on which occurrence, when.
+        setNotice(describeScheduleConflict(error.details));
         return;
       }
       setNotice(
