@@ -16,6 +16,7 @@ import {
 import { t } from '../../i18n/index.js';
 import { CalendarFilters } from './calendar-filters.js';
 import { CalendarGrid } from './calendar-grid.js';
+import { hiddenChipParts } from './chip-parts.js';
 import { CalendarHeader } from './calendar-header.js';
 import { DayEventsDialog } from './day-events-dialog.js';
 import { EventDetailsDialog } from './event-details-dialog.js';
@@ -224,6 +225,8 @@ export function PersonalCalendar({
             status={state}
             emptyMessage={t('calendar.mineEmpty')}
             onRetry={() => void load()}
+            // R179 §6 — what the filters fix is left off every chip.
+            hiddenChipParts={hiddenChipParts(filters.value)}
           />
         ) : catalogList ? (
           catalogList

@@ -138,6 +138,10 @@ export interface Occurrence {
    * older than this field could still answer.
    */
   audience_name?: string | null;
+  /** R179 §6 — who leads, bare: a class's teacher on that date, a sitting's
+   *  supervisor; `null` for an activity or nobody assigned. Optional while a
+   *  server older than this field could still answer. */
+  lead_name?: string | null;
   teaching_mode: string | null;
   /** Who the class is *for*: the group's name, or the Level's, by mode. */
   audience_label: string | null;

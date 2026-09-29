@@ -4,6 +4,7 @@ import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { toIsoDate } from '../../lib/dates.js';
 import { t } from '../../i18n/index.js';
 import { EventChip } from './event-chip.js';
+import type { ChipPart } from './chip-parts.js';
 
 /**
  * One day in the month grid, carrying **both calendars**.
@@ -32,6 +33,7 @@ export function CalendarDayCell({
   date,
   hijri,
   occurrences,
+  hiddenChipParts,
   isToday,
   isSelected,
   onSelect,
@@ -40,6 +42,8 @@ export function CalendarDayCell({
   date: Date | null;
   hijri: HijriDay | null;
   occurrences: Occurrence[];
+  /** R179 §6 — the chip parts the surface's filters already say. */
+  hiddenChipParts?: ReadonlySet<ChipPart>;
   isToday: boolean;
   isSelected: boolean;
   onSelect: (date: Date) => void;
@@ -95,7 +99,11 @@ export function CalendarDayCell({
           <ul className="cal-day__events">
             {occurrences.map((occurrence) => (
               <li key={`${occurrence.kind}-${occurrence.id}-${occurrence.date}`}>
-                <EventChip occurrence={occurrence} onOpen={onOpenEvent} />
+                <EventChip
+                  occurrence={occurrence}
+                  onOpen={onOpenEvent}
+                  {...(hiddenChipParts ? { hidden: hiddenChipParts } : {})}
+                />
               </li>
             ))}
           </ul>

@@ -36,6 +36,7 @@ import {
 } from '../../components/scheduling/manual-edits-dialog.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
+import { hiddenChipParts } from '../../components/calendar/chip-parts.js';
 import { CalendarHeader } from '../../components/calendar/calendar-header.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
 import { EventDetailsDialog } from '../../components/calendar/event-details-dialog.js';
@@ -989,6 +990,8 @@ function CalendarView({
         onOpenEvent={setOpenEvent}
         status={calendarStatus}
         onRetry={() => setMonth((value) => new Date(value))}
+        // R179 §6 — what the filters fix is left off every chip.
+        hiddenChipParts={hiddenChipParts(filters.value)}
       />
 
       <DayEventsDialog

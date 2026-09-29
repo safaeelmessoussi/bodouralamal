@@ -267,6 +267,13 @@ export interface Occurrence {
    * every activity.
    */
   audienceName: string | null;
+  /**
+   * R179 §6 — who leads: a class's teacher on that date (R91), a sitting's
+   * supervisor, `null` for an activity and where nobody is assigned. The bare
+   * display name (§7's invariant, resolved here); the composed title carries
+   * it with the honorific, the month cell shows it as is.
+   */
+  leadName: string | null;
   teachingMode: string | null;
   /**
    * **Who the class is for**, in one string the calendar can render without a
@@ -724,6 +731,7 @@ function sessionOccurrence(
     subjectId: subject.id,
     subjectName: subject.name,
     audienceName: audienceWord,
+    leadName: lead === undefined ? null : publicDisplayName(lead.user),
     teachingMode: sch.teachingMode,
     // The most specific single name, as before — now from the same five-way
     // answer, so a `multi_dimension` class has one too.
@@ -1652,6 +1660,7 @@ export async function readCalendar(
         subjectId: null,
         subjectName: null,
         audienceName: null,
+        leadName: null,
         teachingMode: null,
         audienceLabel: null,
         status: null,
@@ -1783,8 +1792,10 @@ export async function readCalendar(
             staff: {
               where: { deletedAt: null },
               select: {
+                position: true,
                 user: { select: { id: true, publicDisplayName: true, nameArabic: true } },
               },
+              orderBy: { createdAt: 'asc' },
             },
           },
         });
@@ -1869,6 +1880,11 @@ export async function readCalendar(
       subjectName: exam.subject?.name ?? null,
       // The sitting's one group or circle, in the word `examTitle` uses.
       audienceName: audienceTitle(exam.teachingGroup?.name ?? null, exam.administrativeGroup?.name ?? null),
+      // The first supervisor, as `examTitle` names one.
+      leadName: (() => {
+        const supervisor = exam.staff.find((assignment) => assignment.position === 'supervisor');
+        return supervisor === undefined ? null : publicDisplayName(supervisor.user);
+      })(),
       teachingMode: null,
       /**
        * **R136 — the two arms this label always knew (a named Administrative

@@ -9,6 +9,7 @@ import {
   type Occurrence,
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
+import { hiddenChipParts } from '../components/calendar/chip-parts.js';
 import { CalendarHeader } from '../components/calendar/calendar-header.js';
 import { OccurrenceTable } from '../components/calendar/occurrence-table.js';
 import {
@@ -312,6 +313,8 @@ export function CalendarPage(): ReactNode {
                   onOpenEvent={setOpenEvent}
                   status={load.kind}
                   onRetry={() => setMonth(new Date(month))}
+                  // R179 §6 — what the filters fix is left off every chip.
+                  hiddenChipParts={hiddenChipParts(filters.value)}
                 />
               ) : (
                 /* **The same occurrences, as a table** (R84). No second fetch

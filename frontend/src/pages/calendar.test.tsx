@@ -144,7 +144,8 @@ describe('the month grid renders', () => {
   it('places the occurrence on its own day and nowhere else', () => {
     expect(html).toContain('حلقة تحفيظ');
     expect(html.split('class="event-chip__title"').length - 1).toBe(1);
-    expect(html).toContain('class="event-chip__title">حلقة تحفيظ</span>');
+    // R179 §6 — the time opens the line, then the words.
+    expect(html).toContain('</time> حلقة تحفيظ</span>');
   });
 
   it('marks today and the selection distinctly', () => {
@@ -596,51 +597,82 @@ describe('event details', () => {
     expect(html).not.toContain('<button');
   });
 
-  it('leads with the title and puts the time after it', () => {
+  it('opens with the time, inline, and the words follow (R179 §6)', () => {
     const html = renderToStaticMarkup(<EventChip occurrence={occurrence()} />);
-    expect(html.indexOf('event-chip__title')).toBeLessThan(html.indexOf('event-chip__time'));
+    expect(html).toMatch(/class="event-chip__title"><time class="event-chip__time" dir="ltr">\d\d:\d\d<\/time> حلقة تحفيظ/);
   });
 
   /**
-   * **R179 §1 (Owner, 2026-09-29) — the circle on its own line, whole.** The
-   * title «أحكام التجويد — الحلقة 1» was cut at «الحلقة…» on one line; the
-   * chip now shows the Subject and the circle word as two lines, no «—»,
-   * from the fields the server sends apart. Nothing else changes for a chip
-   * whose server does not send the word, or whose kind has none.
+   * **R179 §1/§6 (Owner, 2026-09-29) — everything the occurrence brings, in
+   * one wrapping text, whole.** The one-line chip once cut «أحكام التجويد —
+   * الحلقة…»; the chip now leads with the Subject and follows with the Surah,
+   * the circle, the Level, who leads and the branch, each after « — », from
+   * the fields the server sends apart — and leaves out whatever the surface's
+   * filters already say.
    */
-  it('shows a class\'s Subject and its circle as two lines, without the dash', () => {
+  it('names a class by its Subject, then its Surah, circle, Level, teacher and branch', () => {
     const html = renderToStaticMarkup(
       <EventChip
         occurrence={occurrence({
+          start_time: null,
           title: 'أحكام التجويد — الحلقة 1',
           subject_name: 'أحكام التجويد',
+          surah_names: ['الفاتحة'],
           audience_name: 'الحلقة 1',
+          level_name: 'وميض الأمل',
+          level_names: ['وميض الأمل'],
+          lead_name: 'فاطمة بوخبزى',
+          branch_name: 'مقر أمرشيش',
+          branch_names: ['مقر أمرشيش'],
         })}
       />,
     );
-    expect(html).toContain('class="event-chip__title">أحكام التجويد</span>');
-    expect(html).toContain('class="event-chip__audience">الحلقة 1</span>');
-    expect(html).not.toContain('أحكام التجويد — الحلقة 1</span>');
+    expect(html).toContain('class="event-chip__title">أحكام التجويد<span class="event-chip__detail"> — سورة الفاتحة</span>');
+    expect(html).toContain('<span class="event-chip__detail"> — الحلقة 1</span>');
+    expect(html).toContain('<span class="event-chip__detail"> — وميض الأمل</span>');
+    expect(html).toContain('<span class="event-chip__detail"> — فاطمة بوخبزى</span>');
+    expect(html).toContain('<span class="event-chip__detail"> — مقر أمرشيش</span>');
+    expect(html).not.toContain('event-chip__audience');
   });
 
-  it('keeps the one-line title for a class with no group or circle, and for every other kind', () => {
+  it('leaves out what the filters already say — the branch under a branch filter, the Subject under a Subject filter', () => {
+    const row = occurrence({
+      start_time: null,
+      subject_name: 'أحكام التجويد',
+      audience_name: 'الحلقة 1',
+      branch_name: 'مقر أمرشيش',
+      branch_names: ['مقر أمرشيش'],
+    });
+    const byBranch = renderToStaticMarkup(<EventChip occurrence={row} hidden={new Set(['branch'])} />);
+    expect(byBranch).not.toContain('مقر أمرشيش');
+    expect(byBranch).toContain('الحلقة 1');
+    const bySubject = renderToStaticMarkup(<EventChip occurrence={row} hidden={new Set(['subject'])} />);
+    expect(bySubject).toContain('class="event-chip__title">الحلقة 1<span');
+    expect(bySubject).not.toContain('أحكام التجويد');
+  });
+
+  it('a chip with nothing else to say keeps its title; an exam leads with its type word', () => {
     const bare = renderToStaticMarkup(
-      <EventChip occurrence={occurrence({ subject_name: 'حفظ القرآن', audience_name: null })} />,
+      <EventChip occurrence={occurrence({ start_time: null, subject_name: null, audience_name: null, branch_name: null, branch_names: [], level_name: null, level_names: [] })} />,
     );
     expect(bare).toContain('class="event-chip__title">حلقة تحفيظ</span>');
-    expect(bare).not.toContain('event-chip__audience');
     const exam = renderToStaticMarkup(
       <EventChip
         occurrence={occurrence({
+          start_time: null,
           kind: 'exam',
           title: 'اختبار — تفسير القرآن — الحلقة 1',
+          scheduling_type_name: 'اختبار',
           subject_name: 'تفسير القرآن',
           audience_name: 'الحلقة 1',
+          branch_name: null,
+          branch_names: [],
+          level_name: null,
+          level_names: [],
         })}
       />,
     );
-    expect(exam).toContain('class="event-chip__title">اختبار — تفسير القرآن — الحلقة 1</span>');
-    expect(exam).not.toContain('event-chip__audience');
+    expect(exam).toContain('class="event-chip__title">اختبار<span class="event-chip__detail"> — تفسير القرآن</span><span class="event-chip__detail"> — الحلقة 1</span></span>');
   });
 
   it('the dialog renders nothing until an event is chosen', () => {

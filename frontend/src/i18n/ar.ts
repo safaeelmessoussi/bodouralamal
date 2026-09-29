@@ -570,6 +570,8 @@ export const ar = {
     eventCount: 'عدد الأنشطة',
     kindExam: 'اختبار',
     kindSession: 'حصة',
+    // المراجعة 179 §6 — السورة على بطاقة الشهر، بالكلمة نفسها التي يركّب بها الخادم العنوان.
+    chipSurah: 'سورة {surah}',
     kindEvent: 'نشاط',
     hijriUnavailable: 'لم يُسجَّل التاريخ الهجري لهذا الشهر بعد.',
     detailsTitle: 'تفاصيل النشاط',

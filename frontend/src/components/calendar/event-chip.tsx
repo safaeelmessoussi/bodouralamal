@@ -4,6 +4,9 @@ import type { Occurrence } from '../../adapters/calendar.js';
 import { OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
 import { deliveryLabel } from '../scheduling/delivery.js';
+import { chipText, type ChipPart } from './chip-parts.js';
+
+const NOTHING_HIDDEN: ReadonlySet<ChipPart> = new Set();
 
 /**
  * One occurrence, at its smallest — used inside a day cell and in the day panel.
@@ -19,16 +22,18 @@ import { deliveryLabel } from '../scheduling/delivery.js';
 export function EventChip({
   occurrence,
   onOpen,
+  hidden = NOTHING_HIDDEN,
 }: {
   occurrence: Occurrence;
   onOpen?: (occurrence: Occurrence) => void;
+  /** R179 §6 — the parts the surface's active filters already say (`hiddenChipParts`). */
+  hidden?: ReadonlySet<ChipPart>;
 }): ReactNode {
   // The label is announced to assistive technology, so an exam is identifiable
   // without relying on the colour that marks it.
   const kindKey = OCCURRENCE_KIND_LABEL[occurrence.kind];
-  // Title first, time second — the priority order that matters when a cell is
-  // scanned. The time sits beside the title's first line; since R179 §1 the
-  // title itself takes as many lines as it needs (the row grows with it).
+  // The time opens the line and the words follow, taking as many lines as
+  // they need (R179 §1/§6; the row grows with them).
   /**
    * **R97 — online is marked; in-person is not** (§18).
    *
@@ -62,34 +67,43 @@ export function EventChip({
     holiday && occurrence.scheduling_type_name ? occurrence.scheduling_type_name : t(kindKey);
 
   /**
-   * **R179 §1 (Owner, 2026-09-29) — everything the cell shows is readable
-   * without opening it.** A class's `title` is «Subject — الحلقة 1» (R178 §5),
-   * and on one line it was cut to «أحكام التجويد — الحلقة…» — which named the
-   * circle and then hid its number. The Subject and the circle now sit on
-   * two lines of their own, no «—» between them, and the title WRAPS instead
-   * of ending in an ellipsis (`calendar.css`). The server sends the audience
-   * word apart (`audience_name`); a class from a server without it keeps its
-   * one-line title, still wrapped, never cut.
+   * **R179 §1/§6 (Owner, 2026-09-29) — everything the cell shows is readable
+   * without opening it, and it shows everything the occurrence brings.** The
+   * one-line chip once cut «أحكام التجويد — الحلقة…»; now the Subject, its
+   * Surah, the circle or group, the Level, who leads and the branch flow in
+   * one text that WRAPS only when a line is full (`calendar.css`), each after
+   * « — » as the composed title spells them, and never ends in an ellipsis.
+   * What the surface's filters already say is left out (`chipText`): under
+   * «الفرع: مقر أمرشيش» no chip repeats the branch.
    */
-  const audience =
-    occurrence.kind === 'session' && occurrence.audience_name ? occurrence.audience_name : null;
-  const head =
-    audience !== null && occurrence.subject_name ? occurrence.subject_name : occurrence.title;
+  const text = chipText(occurrence, hidden);
 
   const inner = (
     <>
-      <span className="event-chip__title">{head}</span>
-      {audience !== null ? <span className="event-chip__audience">{audience}</span> : null}
+      <span className="event-chip__title">
+        {/* The time OPENS the line (R179 §6): inline, so a wrapped chip keeps
+            its full width for the words instead of reserving a column for a
+            five-character clock. `dir="ltr"` so the value is not reordered by
+            the RTL context. Hidden on a phone (`calendar.css`). */}
+        {occurrence.start_time ? (
+          <>
+            <time className="event-chip__time" dir="ltr">
+              {occurrence.start_time}
+            </time>{' '}
+          </>
+        ) : null}
+        {text.head}
+        {text.details.map((detail, index) => (
+          <span key={`${index}-${detail}`} className="event-chip__detail">
+            {' — '}
+            {detail}
+          </span>
+        ))}
+      </span>
       {holiday && occurrence.scheduling_type_name ? (
         <span className="event-chip__tag">{occurrence.scheduling_type_name}</span>
       ) : null}
       {online ? <span className="event-chip__delivery">{online}</span> : null}
-      {occurrence.start_time ? (
-        // `dir="ltr"` so a clock value is not reordered by the RTL context.
-        <time className="event-chip__time" dir="ltr">
-          {occurrence.start_time}
-        </time>
-      ) : null}
     </>
   );
 

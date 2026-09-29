@@ -445,6 +445,8 @@ const OCCURRENCE_KEYS = [
   // what a chip shows, and for a class that is its Subject.
   "item_title",
   "kind",
+  // R179 §6 — who leads (teacher / supervisor), bare, for the month cell.
+  "lead_name",
   "level_id",
   "level_ids",
   "level_name",
