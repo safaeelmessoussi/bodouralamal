@@ -55,7 +55,8 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - `DataTable` derives the blocks itself and a blocked handle is disabled and explained, never hidden: `sorted` (visible order is not the business one) · `paged` (the server takes the exact live set) · `scope` (`Level` and `AdministrativeGroup` order within a parent, §2.2).
 
 ### Which tables sort, and which deliberately do not
-- Server-side wherever it exists (R76.1): a sortable column is an endpoint contract.
+- Server-side wherever the list is paged (R76.1): a sortable column is an endpoint contract (`sortKey`).
+- Local, exact, wherever the table holds the whole collection (R177 §6): an unpaged `DataTable` sorts the rows on screen by any column backed by a row field (or a `sortValue`), Arabic collation, empties last, stable. Never on a paged table, and **never on a drag-to-reorder table** — its order is the point, so those show no header sorting at all.
 
 | Sorts | Fields |
 |---|---|

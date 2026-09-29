@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
 import { Button } from './button.js';
@@ -45,6 +45,17 @@ export interface Column<T> {
    * the API rather than sorting by something unintended.
    */
   sortKey?: string;
+  /**
+   * **R177 §6 — the value a LOCAL sort compares**, for a table that holds the
+   * whole collection. Where `sortKey` names an endpoint field the server
+   * sorts (a paged list can only be sorted there); where a table is unpaged
+   * the rows on screen ARE the collection, and sorting them here is exact.
+   * Absent, the row's own field under `key` is used when it is a primitive —
+   * so most reference tables sort by every plain column without saying so —
+   * and a computed cell offers no sort unless it states what to compare.
+   * Never offered on a drag-to-reorder table (Owner): its order is the point.
+   */
+  sortValue?: (row: T) => string | number | boolean | null | undefined;
 }
 
 /** The active sort, as the page holds it and the server receives it. */
@@ -179,7 +190,14 @@ export function DataTable<T>({
   const ordered = orderActions(actions);
 
   const reorder = useReorder(rows, rowKey, onReorder ?? undefined, sort !== null, pagination?.total, onReorder !== null);
-  const displayed = reorder.rows;
+  // R177 §6 — a local sort exists only where it is exact (the whole collection
+  // is on screen) and honest (no manual order to contradict).
+  const localSortable = pagination === undefined && onReorder === undefined;
+  const [localSort, setLocalSort] = useState<SortState | null>(null);
+  const displayed = useMemo(
+    () => (localSortable && localSort ? sortLocally(reorder.rows, columns, localSort) : reorder.rows),
+    [localSortable, localSort, reorder.rows, columns],
+  );
   const showGrip = onReorder !== undefined;
 
   return (
@@ -216,7 +234,11 @@ export function DataTable<T>({
                      * reach the control inside it.
                      */
                     aria-sort={
-                      column.sortKey && sort?.by === column.sortKey
+                      localSortable && localSort?.by === column.key
+                        ? localSort.dir === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : column.sortKey && sort?.by === column.sortKey
                         ? sort.dir === 'asc'
                           ? 'ascending'
                           : 'descending'
@@ -225,7 +247,12 @@ export function DataTable<T>({
                           : undefined
                     }
                   >
-                    {renderHeader(column, sort, onSort)}
+                    {renderHeader(column, sort, onSort, {
+                      offered: localSortable && offersLocalSort(column, rows),
+                      active: localSort,
+                      onToggle: setLocalSort,
+                      reorderable: onReorder !== undefined,
+                    })}
                   </th>
                 ))}
                 {hasActions ? (
@@ -583,6 +610,54 @@ function ReorderStatus({
   );
 }
 
+/** The comparator a column's local sort uses: its own, else the row's field. */
+function localSortValue<T>(column: Column<T>): (row: T) => string | number | boolean | null | undefined {
+  if (column.sortValue) return column.sortValue;
+  return (row: T) => {
+    const value = (row as Record<string, unknown>)[column.key];
+    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null
+      ? value
+      : undefined;
+  };
+}
+
+/** A column offers a local sort when it states a comparator, or when some row
+ *  actually carries a primitive under its key — a computed cell with no field
+ *  behind it offers none. */
+function offersLocalSort<T>(column: Column<T>, rows: readonly T[]): boolean {
+  if (column.sortValue) return true;
+  const read = localSortValue(column);
+  return rows.some((row) => read(row) !== undefined);
+}
+
+const ARABIC = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
+
+/**
+ * A stable sort of the rows on screen (R177 §6). Empty values sort last in
+ * either direction, so a reader looking for «what has one» finds it first.
+ */
+export function sortLocally<T>(rows: readonly T[], columns: readonly Column<T>[], by: SortState): T[] {
+  const column = columns.find((c) => c.key === by.by);
+  if (!column) return [...rows];
+  const read = localSortValue(column);
+  // A column offering no comparator for a row (a computed cell with no field
+  // under its key) leaves the row where it was.
+  const keyed = rows.map((row, index) => ({ row, index, value: read(row) }));
+  const dir = by.dir === 'asc' ? 1 : -1;
+  keyed.sort((a, b) => {
+    const empty = (v: unknown): boolean => v === null || v === undefined || v === '';
+    if (empty(a.value) && empty(b.value)) return a.index - b.index;
+    if (empty(a.value)) return 1;
+    if (empty(b.value)) return -1;
+    let cmp: number;
+    if (typeof a.value === 'number' && typeof b.value === 'number') cmp = a.value - b.value;
+    else if (typeof a.value === 'boolean' && typeof b.value === 'boolean') cmp = Number(a.value) - Number(b.value);
+    else cmp = ARABIC.compare(String(a.value), String(b.value));
+    return cmp !== 0 ? cmp * dir : a.index - b.index;
+  });
+  return keyed.map((k) => k.row);
+}
+
 /**
  * A header cell's contents: the sort control where the column offers one, and
  * plain text where it does not.
@@ -594,7 +669,27 @@ function renderHeader<T>(
   column: Column<T>,
   sort: SortState | null,
   onSort: ((next: SortState | null) => void) | undefined,
+  local: {
+    offered: boolean;
+    active: SortState | null;
+    onToggle: (next: SortState | null) => void;
+    reorderable: boolean;
+  },
 ): ReactNode {
+  // R177 §6 (Owner) — a drag-to-reorder table offers NO header sorting: its
+  // order is chosen by hand, and a header that re-sorts it would contradict
+  // the one thing the table is for.
+  if (local.reorderable) return column.header;
+  if (local.offered && column.sortKey === undefined) {
+    const active = local.active !== null && local.active.by === column.key ? local.active.dir : null;
+    return (
+      <SortHeader
+        label={column.header}
+        active={active}
+        onToggle={() => local.onToggle({ by: column.key, dir: active === 'asc' ? 'desc' : 'asc' })}
+      />
+    );
+  }
   const by = column.sortKey;
   if (by === undefined || onSort === undefined) return column.header;
   const active = sort !== null && sort.by === by ? sort.dir : null;
@@ -745,3 +840,6 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps): 
     </nav>
   );
 }
+
+/** Exported for the comparator's own test; application code uses `DataTable`. */
+export const sortLocallyForTest = sortLocally;

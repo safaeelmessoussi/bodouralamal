@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ConfirmDialog } from './confirm-dialog.js';
-import { DataTable, orderActions, type Column, type SortState } from './data-table.js';
+import { DataTable, orderActions, sortLocallyForTest, type Column, type SortState } from './data-table.js';
 import { t } from '../../i18n/index.js';
 import { SearchInput, TextArea, TextField } from './field.js';
 
@@ -514,5 +514,57 @@ describe('manual ordering — the drag gesture and its states (R76.8)', () => {
     );
     const cells = (html: string): number => (html.match(/class="skeleton"/g) ?? []).length;
     expect(cells(withGrip)).toBe(cells(without) + 5);
+  });
+});
+
+/**
+ * R177 §6 (Owner, 2026-09-29) — every table sorts by its headers, except a
+ * drag-to-reorder one. A table holding the whole collection sorts exactly on
+ * the rows on screen; a paged one still sorts through the server (`sortKey`).
+ */
+describe('local sorting of an unpaged table (R177 §6)', () => {
+  interface Person {
+    id: string;
+    name: string;
+    seats: number | null;
+  }
+  const people: Person[] = [
+    { id: '1', name: 'ياسمين', seats: 3 },
+    { id: '2', name: 'أمل', seats: null },
+    { id: '3', name: 'بشرى', seats: 1 },
+  ];
+  const columns: Column<Person>[] = [
+    { key: 'name', header: 'الاسم', cell: (r) => r.name },
+    { key: 'seats', header: 'المقاعد', cell: (r) => r.seats ?? '—', numeric: true },
+    { key: 'note', header: 'ملاحظة', cell: () => 'x' },
+  ];
+  const render = (extra: Record<string, unknown> = {}): string =>
+    renderToStaticMarkup(
+      <DataTable caption="ج" columns={columns} rows={people} rowKey={(r) => r.id} status="ready" {...extra} />,
+    );
+
+  it('offers a header button for every column backed by a row field, and none for a computed cell', () => {
+    const html = render();
+    expect(html.match(/datatable__sort"/g)?.length).toBe(2);
+  });
+
+  it('offers no header sorting at all on a drag-to-reorder table', () => {
+    const html = render({ onReorder: async () => undefined });
+    expect(html).not.toContain('datatable__sort"');
+  });
+
+  it('offers none on a paged table either — the server sorts those (sortKey)', () => {
+    const html = render({ pagination: { page: 1, pageSize: 20, total: 40, onPage: () => undefined } });
+    expect(html).not.toContain('datatable__sort"');
+  });
+
+  it('sorts the rows on screen in Arabic order, empties last, and the actions stay put', () => {
+    // The comparator itself: a static render cannot press the button.
+    const asc = sortLocallyForTest(people, columns, { by: 'name', dir: 'asc' }).map((p) => p.name);
+    expect(asc).toEqual(['أمل', 'بشرى', 'ياسمين']);
+    const seatsDesc = sortLocallyForTest(people, columns, { by: 'seats', dir: 'desc' }).map((p) => p.id);
+    expect(seatsDesc).toEqual(['1', '3', '2']);
+    const seatsAsc = sortLocallyForTest(people, columns, { by: 'seats', dir: 'asc' }).map((p) => p.id);
+    expect(seatsAsc).toEqual(['3', '1', '2']);
   });
 });
