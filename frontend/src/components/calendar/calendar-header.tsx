@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import type { GregorianMonthRef, HijriMonthRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
@@ -76,7 +76,6 @@ export function CalendarHeader({
    */
   filters?: ReactNode;
 }): ReactNode {
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
   return (
     <div className="cal-header">
@@ -112,26 +111,15 @@ export function CalendarHeader({
         </div>
       </div>
 
+      {/* R177 §4 (Owner, 2026-09-29) — the filters are on screen on every
+          width; the phone toggle «تصفية الجدول» is gone. A control that hides
+          the filters is one more tap between a visitor and the answer, and
+          the compact two-column row below costs less height than the toggle
+          plus the open row did. */}
       {filters ? (
-        <>
-          <button
-            type="button"
-            className="cal-filter-toggle link-button"
-            aria-expanded={filtersOpen}
-            aria-controls={filtersId}
-            onClick={() => setFiltersOpen((value) => !value)}
-          >
-            {t('calendar.filtersLabel')}
-          </button>
-          <div
-            id={filtersId}
-            className={`cal-header__filters${filtersOpen ? ' is-expanded' : ''}`}
-            role="group"
-            aria-label={t('calendar.filtersLabel')}
-          >
-            {filters}
-          </div>
-        </>
+        <div id={filtersId} className="cal-header__filters" role="group" aria-label={t('calendar.filtersLabel')}>
+          {filters}
+        </div>
       ) : null}
     </div>
   );

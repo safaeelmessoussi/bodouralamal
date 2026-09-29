@@ -698,6 +698,16 @@ describe("مقرر الحفظ is Super Admin to write and Admin to read (R26, M4
     expect(listed.body.data?.map((row) => row["surah_id"])).toContain(SURAH);
   });
 
+  it("R177 §5 — a PUT of a Surah the Level already has is the end state asked for: 204, not 409, and no second row", async () => {
+    // It answered DUPLICATE, which the editor met whenever its read of the
+    // syllabus had been incomplete (a rate-limited read rendered as «no
+    // Surahs», then every Surah the Level already had was "added" back).
+    expect((await call2("PUT", `/admin/levels/${levelId}/surahs/${SURAH}`, superAdmin)).status).toBe(204);
+    expect((await call2("PUT", `/admin/levels/${levelId}/surahs/${SURAH}`, superAdmin)).status).toBe(204);
+    const listed = await call(`/admin/levels/${levelId}/surahs`, superAdmin);
+    expect(listed.body.data?.filter((row) => row["surah_id"] === SURAH)).toHaveLength(1);
+  });
+
   it("REFUSES an Admin the write, and leaves the syllabus exactly as it was", async () => {
     // The assertion that matters is the second one. A 403 that had already
     // written the row would still be a 403.

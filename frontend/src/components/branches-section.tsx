@@ -44,7 +44,6 @@ export function BranchesSection(): ReactNode {
     <section id="branches" className="section section--tint" aria-labelledby="branches-title">
       <Container>
         <div className="section__head">
-          <span className="eyebrow">{t('branches.eyebrow')}</span>
           <h2 id="branches-title" className="section__title">
             {t('branches.title')}
           </h2>

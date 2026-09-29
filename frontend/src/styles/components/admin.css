@@ -450,9 +450,10 @@
    pages keeps its own narrower measure. */
 .admin__head .lede {
   max-inline-size: var(--measure-lede);
-  /* `pretty` keeps the last line from being a single short word where the
-     browser supports it, and is ignored where it does not. */
-  text-wrap: pretty;
+  /* R177 §1 — `balance` gives a two-line lede two lines of similar length;
+     `pretty` only kept the last line from being a single word. Ignored where
+     unsupported. */
+  text-wrap: balance;
 }
 
 /* R69 — the trail above the heading. Quieter than the title it sits on: it

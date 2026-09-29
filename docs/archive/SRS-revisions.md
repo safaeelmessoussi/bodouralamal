@@ -5,6 +5,18 @@
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
 
+**Revision 177 (Document Owner decisions of 2026-09-29 — seven items on the public face and the tables, from her own use of bodouralamal.com):** **§1–§5 BUILT; §6–§7 in progress.**
+
+**§1 — A LEDE BREAKS INTO LINES OF SIMILAR LENGTH.** «كل الدروس والتسجيلات والملفات، مرتّبة بالفئة ثم المستوى ثم السنة الدراسية والفرع / والمادة. صفّي بما يناسبك.» — a full line and a three-word tail, everywhere a lede wraps. `text-wrap: pretty` only kept the last line from being a single word; every lede (`.lede`, the hero's, the back office's) now uses `balance`, so two lines are two lines of similar length. The measure itself stays: a lede on a wide screen is meant to be read, not stretched.
+
+**§2 — THE EYEBROWS «برامجنا» · «أين تجدنا» · «شركاؤنا» ARE WITHDRAWN, AND «الجدول الزمني» IS A HEADLINE.** Each repeated the title beneath it; the Owner wants the platform concise. The calendar's page title was a small saffron eyebrow under which the month read as the heading; it now wears the same headline «المحتوى التعليمي» does, and the month title is the second line, one step smaller.
+
+**§3 — THE HERO LEDE.** «المتابعة التربوية» left out until the platform offers it; «الاجتماعي», «إلى» and the joined «و» corrected: «منصة تعليمية تجمع البرامج والدروس في مجالات العلم والثقافة والمجتمع، وتهدف إلى تعزيز التنمية المستدامة والتقدم الاجتماعي، وتفتح أبوابها للكبار واليافعين والأطفال.»
+
+**§4 — THE CALENDAR'S FILTERS ARE ON SCREEN ON EVERY WIDTH.** The phone toggle «تصفية الجدول» is gone; the six filters sit two to a row at their 44 px floor, the head's rhythm is tightened, and the page title, the month, the controls, the filters and the first week share the first screen of a 390 px phone (rendered and measured, document width 390).
+
+**§5 — «مقرر الحفظ»: A `429` AND A `409` THAT WERE ONE DEFECT.** The page read one syllabus per Level with `Promise.all`; past twenty Levels that exceeds the edge's burst (TD-13), the last reads were answered `RATE_LIMITED` and, caught into `[]`, **rendered as Levels with no Surahs**. Editing such a Level then `PUT` every Surah it already had, which answered `DUPLICATE`. Two corrections: the reads run four at a time and a failed read is a failed page (§14.4), never a wrong syllabus shown as fact; and `PUT /admin/levels/{id}/surahs/{n}` states an end state — one that already holds is `204`, nothing written, nothing audited.
+
 **Revision 176 (Document Owner decisions of 2026-09-28 — four items on scheduling and the calendar, from her own use of bodouralamal.com):** **BUILT.**
 
 **§1 — THE EXAM SUPERVISOR IS OPTIONAL.** «اختاري المؤطرة المسؤولة عن الاختبار.» refused an Admin's sitting without one — a rule that lived in one line of the form and nowhere else: `ExamStaff` is a join row of which zero is a valid state, the schemas take `staff` optionally, the service reads `input.staff ?? []`, and a sitting without a supervisor simply composes its title without a name. A مؤطِّرة was already exempt (she is substituted as her own lead). The line and its message are withdrawn; nothing server-side changed, because nothing there ever required it.

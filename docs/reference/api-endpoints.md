@@ -163,6 +163,7 @@ Writes 👤; Admins read within scope; Teachers have no access (reference data r
 | `PATCH` | `/admin/categories/order` | 👤 `{ ids }` |
 | `PATCH` | `/admin/subjects/order` | 👤 `{ ids }` |
 | `PATCH` | `/admin/levels/order` | 👤 `{ within: categoryId, ids }`, one Category's Levels |
+| `GET` · `PUT` `DELETE` | `/admin/levels/{id}/surahs` · `/admin/levels/{id}/surahs/{n}` | 🔒 read · 👤 write (R26): a Level's syllabus of Surahs; `PUT` is idempotent since R177 §5 (already there → 204, no write, no audit) |
 
 - `POST /admin/levels` creates the Level *and* its first Administrative Group (TD-4.6b) in one transaction, hence takes a `branch_id` the Level never stores; a `branch_id` column would break `entire_level` mode (§4.4c).
 

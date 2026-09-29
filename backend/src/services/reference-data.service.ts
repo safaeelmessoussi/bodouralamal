@@ -696,7 +696,13 @@ export async function assignSurahToLevel(
     const existing = await tx.levelSurah.findFirst({ where: { levelId, surahId } });
     if (existing) {
       if (existing.deletedAt === null) {
-        throw new AppError('DUPLICATE', 'that surah is already in this level');
+        // **R177 §5 (Owner-reported, 2026-09-29) — a PUT states an end state,
+        // and this one already holds.** It answered `409 DUPLICATE`, which the
+        // editor met whenever its read of the syllabus had been incomplete
+        // (a rate-limited read rendered as «no Surahs», then every Surah the
+        // Level already had was "added" back). Nothing changes, so nothing is
+        // audited: the syllabus is exactly what was asked for.
+        return;
       }
       // Revived rather than re-inserted: the unique pair still occupies the row,
       // so an insert would be refused — the reconciliation `ExamStaff` uses.

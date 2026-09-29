@@ -69,6 +69,8 @@
   font-size: var(--font-size-md);
   line-height: 1.7;
   max-width: 44ch;
+  /* R177 §1 — lines of similar length, never a long line and a short tail. */
+  text-wrap: balance;
 }
 .hero__actions {
   display: flex;

@@ -57,7 +57,6 @@ export function PartnersSection(): ReactNode {
     <section id="partners" className="section" aria-labelledby="partners-title">
       <Container>
         <div className="section__head">
-          <span className="eyebrow">{t('partners.eyebrow')}</span>
           <h2 id="partners-title" className="section__title">
             {t('partners.title')}
           </h2>

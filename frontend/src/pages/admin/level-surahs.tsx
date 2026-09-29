@@ -11,6 +11,7 @@ import {
   type LevelSurahRef,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { mapWithConcurrency } from '../../lib/concurrency.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import {
   DataTable,
@@ -88,16 +89,15 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
         listLevels(accessToken),
         listCategories(accessToken).catch(() => [] as Category[]),
       ]);
-      // One syllabus read per Level, in parallel. The association has a few
-      // dozen Levels and each read is a small join, so this is one round of
-      // requests rather than the per-student-per-Surah resolution completion
-      // needs — which is why that one stays behind an action.
-      const withSurahs = await Promise.all(
-        levels.map(async (level) => ({
-          level,
-          surahs: await listLevelSurahs(level.id, accessToken).catch(() => [] as LevelSurahRef[]),
-        })),
-      );
+      // One syllabus read per Level, **four at a time** (R177 §5): all at
+      // once exceeded the edge's burst past twenty Levels, and a read caught
+      // into `[]` rendered a Level as having NO Surahs — which the editor then
+      // "added" back one by one. A failed read is now a failed page (§14.4's
+      // error state, with retry), never a wrong syllabus shown as fact.
+      const withSurahs = await mapWithConcurrency(levels, 4, async (level) => ({
+        level,
+        surahs: await listLevelSurahs(level.id, accessToken),
+      }));
       setRows(withSurahs);
       setCategories(categoryList);
       setStatus('ready');

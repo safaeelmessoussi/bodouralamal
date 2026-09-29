@@ -50,7 +50,6 @@ export function ProgramsSection(): ReactNode {
     <section id="programs" className="section" aria-labelledby="programs-title">
       <Container>
         <div className="section__head">
-          <span className="eyebrow">{t('programs.eyebrow')}</span>
           <h2 id="programs-title" className="section__title">
             {t('programs.title')}
           </h2>

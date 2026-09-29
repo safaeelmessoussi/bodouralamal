@@ -25,24 +25,23 @@
   margin-inline: auto;
 }
 
-/* The page's reading order, top to bottom: what month → how to move → what to
-   filter → the grid. Generous vertical rhythm between the three, so each reads
-   as its own step rather than one dense control block. */
+/* The page's reading order, top to bottom: which page → what month → how to
+   move → what to filter → the grid. R177 §2 (Owner, 2026-09-29): the page
+   title is the same headline «المحتوى التعليمي» wears — it used to be a small
+   saffron eyebrow beneath which the month title looked like the heading — and
+   the rhythm is tightened (R177 §4) so the filters and the first rows of the
+   grid share the first screen on a phone. */
 .cal-page__head {
   display: grid;
-  justify-items: center;
-  gap: var(--space-4);
-  text-align: center;
-  margin-block-end: var(--space-10);
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
 }
-/* The page label is an eyebrow, not the headline. The MONTH is what a visitor
-   came to read, so the dual title takes the visual weight and this recedes —
-   while remaining a real `<h1>`, because the page still needs a heading. */
 .cal-page__eyebrow {
-  font-size: var(--font-size-xs);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-accent);
+  line-height: var(--line-height-tight);
+  color: var(--color-primary-strong);
 }
 
 /* ── The dual-calendar title ─────────────────────────────────────────────────
@@ -53,9 +52,10 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   font-family: var(--font-family-display);
-  font-size: var(--font-size-xl);
+  /* Below the page title now (R177 §2): the month is the second line. */
+  font-size: var(--font-size-lg);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-tight);
@@ -96,8 +96,8 @@
  */
 .cal-header {
   display: grid;
-  gap: var(--space-4);
-  margin-block-end: var(--space-5);
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
 }
 .cal-header__bar {
   display: grid;
@@ -123,18 +123,20 @@
   gap: var(--space-3);
   align-items: end;
 }
-.cal-filter-toggle {
-  display: none;
-}
 
 /* The view choice remains explicit on every screen. A narrow viewport changes
    the arrangement of controls, never the selected calendar representation. */
 @media (width < 48rem) {
-  .cal-filter-toggle {
-    display: block;
+  /* R177 §4 — always on screen, two to a row: six selects stacked full-width
+     pushed the grid off the first screen, and hiding them behind a toggle was
+     the previous answer. Each control keeps its 44 px floor. */
+  .cal-header__filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-3);
   }
-  .cal-header__filters:not(.is-expanded) {
-    display: none;
+  .cal-header__filters > * {
+    min-width: 0;
   }
   .cal-header__bar {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

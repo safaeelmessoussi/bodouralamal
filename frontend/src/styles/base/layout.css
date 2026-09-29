@@ -85,7 +85,10 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-md);
   line-height: 1.65;
-  text-wrap: pretty;
+  /* R177 §1 (Owner, 2026-09-29) — a lede that needs two lines gets two lines
+     of similar length, never a full line and a three-word tail: `pretty`
+     only avoids a single-word orphan. */
+  text-wrap: balance;
 }
 
 .muted {
