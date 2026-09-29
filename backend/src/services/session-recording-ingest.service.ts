@@ -134,7 +134,7 @@ const RECORDING_INCLUDE = {
       // and Surahs where it has them (else the class's), and who led it.
       subject: { select: { name: true } },
       surahs: {
-        select: { surah: { select: { nameArabic: true } } },
+        select: { surah: { select: { surahId: true, nameArabic: true } } },
         orderBy: { surahId: "asc" },
       },
       staff: {
@@ -147,7 +147,7 @@ const RECORDING_INCLUDE = {
         include: {
           schedulingType: { select: { name: true } },
           surahs: {
-            select: { surah: { select: { nameArabic: true } } },
+            select: { surah: { select: { surahId: true, nameArabic: true } } },
             orderBy: { surahId: "asc" },
           },
           subject: { select: { id: true, name: true } },
@@ -362,6 +362,12 @@ export async function ingestRecording(
      */
     const session = recording.session;
     const lead = session.staff[0]?.user ?? null;
+    // R177 §7 — a recording of a class about ONE Surah is about that Surah;
+    // a date about several, or none, is filed under none rather than a guess.
+    const shownSurahs = (session.surahs.length > 0 ? session.surahs : session.schedule.surahs).map(
+      (row) => row.surah.surahId,
+    );
+    const surahId = shownSurahs.length === 1 ? shownSurahs[0]! : null;
     const title = nextRecordingName(
       sessionRecordingBaseName({
         typeName: session.schedule.schedulingType?.name ?? null,
@@ -390,6 +396,7 @@ export async function ingestRecording(
           : {}),
         subjectId: recording.session.schedule.subjectId,
         academicYearId: recording.session.schedule.academicYearId,
+        surahId,
         // §4.9's Global scope is a deliberate act; a recording belongs to the
         // branch whose class produced it.
         branchId: recording.session.schedule.branchId,

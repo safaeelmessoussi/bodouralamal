@@ -290,7 +290,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 
 | | Path | Audience · semantics |
 |---|---|---|
-| `GET` | `/library` | 🌐 `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?whole_category=` `?page=`; paginated (TD-10); `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99, `null` without a Subject); items carry `additional_levels[]` (R169 §10) |
+| `GET` | `/library` | 🌐 `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?whole_category=` `?page=`; paginated (TD-10); `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99, `null` without a Subject); items carry `additional_levels[]` (R169 §10) ; `?surah_id=`, `surah_id`/`surah_name` per item (R177 §7) |
 
 - `whole_category` (R167 §5, «كل مستويات الفئة»): addressed to EVERY Level of its Category, `level_id` only where filed; a private one is readable by a member of ANY Level of that Category and nobody else; `?level_id=` returns that Level's items AND its Category's whole-category ones; `?whole_category=true|false` isolates either; the ingest sets it for a class addressing every live Level of exactly one Category; staff set it via `PATCH /content/{id}`.
 - R169 §10: `PATCH /content/{id}` `additional_level_ids` REPLACES the other Levels, each a live Level teaching its Subject, never the home (`LEVEL_IS_HOME`); a recording is filed under the first Level addressed and names the rest unless whole-category.

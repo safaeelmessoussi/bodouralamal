@@ -88,6 +88,7 @@ async function clear(): Promise<void> {
   await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
+  await prisma.levelSurah.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.level.deleteMany({ where: { id: { in: levels } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -246,6 +247,25 @@ describe("the Level/Subject pairing the screen must respect (R43)", () => {
       const res = await initiate(payload({ subject_id: subject }));
       expect(res.body.error?.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
     }
+  });
+});
+
+describe("R177 §7 — a Surah on an upload, decided at the boundary", () => {
+  it("refuses a Surah on a Subject not taught by Surah, and says which rule", async () => {
+    const res = await initiate(payload({ surah_id: 112 }));
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("SURAHS_NOT_APPLICABLE");
+  });
+
+  it("accepts a Surah in the Level's syllabus, refuses one outside it", async () => {
+    await prisma.subject.update({ where: { id: taughtSubjectId }, data: { requiresSurahs: true } });
+    await prisma.levelSurah.create({ data: { levelId, surahId: 112 } });
+
+    expect((await initiate(payload({ surah_id: 112 }))).status).toBe(201);
+    const outside = await initiate(payload({ surah_id: 113 }));
+    expect(outside.status).toBe(400);
+    // An item about no Surah is the ordinary state even for a Quran Subject.
+    expect((await initiate(payload())).status).toBe(201);
   });
 });
 

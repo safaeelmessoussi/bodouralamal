@@ -83,6 +83,9 @@ export interface UploadTicketClaims {
   /** R172 §1 — filed for the WHOLE Category of `level_id` (R167 §5's
    *  `whole_category`), decided at initiation like everything else here. */
   whole_category?: boolean;
+  /** R177 §7 — the one Surah the item is about, decided and checked at
+   *  initiation like every other scope fact; absent means none. */
+  surah_id?: number;
   /** Set when this upload replaces the file on an existing content record
    *  (TD-9: a new key, the old object quarantined, never an overwrite). */
   replaces?: string;

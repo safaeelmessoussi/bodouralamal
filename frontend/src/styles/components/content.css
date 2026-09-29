@@ -498,6 +498,21 @@
   font-weight: 700;
   color: var(--color-accent);
 }
+/* R177 §7 — a Surah's items under the Subject: one step in from the Subject
+   line, the Surah named in the primary ink so it reads as a heading of its
+   own rather than a second badge. */
+.content-surah {
+  margin-block-start: var(--space-3);
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-primary-line);
+}
+.content-surah__title {
+  max-width: none;
+  margin-block-end: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
 /* On a phone seven stacked filters pushed the shelves below the fold (Staging,
    2026-09-25): two per row, the search across both, and the content is one
    thumb-scroll away. */

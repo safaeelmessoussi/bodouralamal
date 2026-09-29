@@ -147,6 +147,9 @@ export interface LibraryEntry {
   branch_name: string | null;
   subject_id: string;
   subject_name: string | null;
+  /** R177 §7 — the one Surah the item is about, or none. */
+  surah_id: number | null;
+  surah_name: string | null;
 }
 
 /**
@@ -192,6 +195,8 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
         branch_name: row.branch_name,
         subject_id: row.subject_id,
         subject_name: row.subject_name,
+        surah_id: row.surah_id ?? null,
+        surah_name: row.surah_name ?? null,
       });
     }
   }
@@ -343,6 +348,9 @@ interface LibraryItemWire {
   subject_name: string;
   academic_year_label: string;
   branch_name: string | null;
+  /** R177 §7 — the one Surah, or none; optional while a server older than it could answer. */
+  surah_id?: number | null;
+  surah_name?: string | null;
 }
 
 /**

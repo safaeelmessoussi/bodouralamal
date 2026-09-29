@@ -64,6 +64,8 @@ export interface LibraryFilters extends PageParams {
   levelId?: string;
   academicYearId?: string;
   subjectId?: string;
+  /** R177 §7 — items about ONE Surah (1–114). */
+  surahId?: number;
   /** R167 §5 — only (or never) the items addressed to a whole Category. */
   wholeCategory?: boolean;
   sortBy?: string | undefined;
@@ -189,6 +191,9 @@ export interface LibraryItem {
   academicYearLabel: string;
   /** `null` is **Global / بدون فرع** (§4.9, BR-20), not unknown. */
   branchName: string | null;
+  /** R177 §7 — the one Surah the item is about, or none. */
+  surahId: number | null;
+  surahName: string | null;
 }
 
 /** Staff — Admin, Super Admin or Teacher — are the only ones §4.9 shows `hidden` to. */
@@ -392,6 +397,8 @@ export async function listLibrary(
     );
   }
   if (filters.subjectId) conditions.push(Prisma.sql`c."subject_id" = ${filters.subjectId}::uuid`);
+  // R177 §7 — items about that Surah; an item about none never matches.
+  if (filters.surahId !== undefined) conditions.push(Prisma.sql`c."surah_id" = ${filters.surahId}`);
   if (filters.wholeCategory !== undefined) {
     conditions.push(Prisma.sql`c."whole_category" = ${filters.wholeCategory}`);
   }
@@ -463,8 +470,11 @@ export async function listLibrary(
              cat."name"                  AS "categoryName",
              s."name"                    AS "subjectName",
              y."label"                   AS "academicYearLabel",
-             b."name"                    AS "branchName"
+             b."name"                    AS "branchName",
+             c."surah_id"                AS "surahId",
+             q."name_arabic"             AS "surahName"
       FROM "educational_content" c
+      LEFT JOIN "quran_surah" q ON q."surah_id" = c."surah_id"
       JOIN "level" l          ON l."id"  = c."level_id"
       JOIN "category" cat     ON cat."id" = l."category_id"
       JOIN "subject" s        ON s."id"  = c."subject_id"

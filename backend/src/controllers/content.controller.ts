@@ -44,6 +44,9 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
             : { categoryId: body.content_meta.category_id ?? '' }),
           subjectId: body.content_meta.subject_id,
           academicYearId: body.content_meta.academic_year_id,
+          ...(body.content_meta.surah_id !== undefined && body.content_meta.surah_id !== null
+            ? { surahId: body.content_meta.surah_id }
+            : {}),
           branchId: body.content_meta.branch_id,
           ...(body.content_meta.visibility ? { visibility: body.content_meta.visibility } : {}),
           ...(body.content_meta.origin ? { origin: body.content_meta.origin } : {}),
@@ -93,6 +96,8 @@ const updateContentSchema = z
     visibility: z.enum(['public', 'private', 'hidden']).optional(),
     // R99.12's marker — «هذا تسجيل حصة». Same enum the upload ticket carries.
     origin: z.enum(['uploaded', 'session_recording']).optional(),
+    // R177 §7 — the one Surah; `null` clears it, absent leaves it alone.
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
     // R167 §5 — «كل مستويات الفئة»: addressed to every Level of its Category.
     whole_category: z.boolean().optional(),
     // R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` stays its
@@ -113,6 +118,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       subject_id?: string;
       visibility?: 'public' | 'private' | 'hidden';
       origin?: 'uploaded' | 'session_recording';
+      surah_id?: number | null;
       whole_category?: boolean;
       additional_level_ids?: string[];
     };
@@ -135,6 +141,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
         ...(body.origin !== undefined ? { origin: body.origin } : {}),
         ...(body.whole_category !== undefined ? { wholeCategory: body.whole_category } : {}),
+        ...(body.surah_id !== undefined ? { surahId: body.surah_id } : {}),
         ...(body.additional_level_ids !== undefined
           ? { additionalLevelIds: body.additional_level_ids }
           : {}),

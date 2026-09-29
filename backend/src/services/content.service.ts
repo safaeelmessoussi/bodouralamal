@@ -32,7 +32,7 @@ import { issueUploadTicket, verifyUploadTicket, type UploadTicketClaims } from '
 import { resolveActingStudent } from '../middleware/child-context.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
-import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
+import { assertSubjectTaughtAtLevel, resolveSurahs } from '../policies/curriculum.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -240,6 +240,8 @@ export interface InitiateInput {
     /** R99.12 — *this is a class recording*, stated at the boundary. Defaults to
      *  `uploaded`, and never widens what may be uploaded. */
     origin?: ContentOrigin;
+    /** R177 §7 — the one Surah the item is about; checked here, bound into the ticket. */
+    surahId?: number;
     /** TD-9: replacing a file mints a NEW key and quarantines the old object. */
     replacesContentId?: string;
   };
@@ -330,6 +332,18 @@ export async function initiateUpload(
   // `LevelSubject` and, since R172 §1, `CategorySubject` (not restated here).
   await assertSubjectTaughtAtLevel(prisma, levelId, input.meta.subjectId);
 
+  // R177 §7 — a Surah is admissible only when the Subject works by Surah and
+  // it is in the syllabus of a Level the item is filed under: the one policy
+  // every other Surah write uses (`resolveSurahs`), asked only when one is
+  // named — an item about no Surah is the ordinary state.
+  if (input.meta.surahId !== undefined) {
+    await resolveSurahs(prisma, {
+      subjectId: input.meta.subjectId,
+      levelIds: await filedLevelIds(prisma, levelId, wholeCategory),
+      surahIds: [input.meta.surahId],
+    });
+  }
+
   const year = await prisma.academicYear.findFirst({
     where: { id: input.meta.academicYearId, deletedAt: null },
     select: { id: true },
@@ -386,6 +400,7 @@ export async function initiateUpload(
       visibility,
       origin: input.meta.origin ?? 'uploaded',
       ...(wholeCategory ? { whole_category: true } : {}),
+      ...(input.meta.surahId !== undefined ? { surah_id: input.meta.surahId } : {}),
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
     },
@@ -770,6 +785,8 @@ async function createContentFromFinalization(
         subjectId: claims.subject_id,
         academicYearId: claims.academic_year_id,
         branchId: claims.branch_id,
+        // R177 §7 — decided at initiation, like every other fact here.
+        surahId: claims.surah_id ?? null,
         storageBucket: claims.bucket,
         storageKey: canonicalKey,
         originalFilename: claims.filename,
@@ -1215,6 +1232,8 @@ export interface ContentMetadataPatch {
   /** R167 §5 — addressed to EVERY Level of its Level's Category. A scope
    *  statement only: the file, its bucket and its tier are untouched. */
   wholeCategory?: boolean;
+  /** R177 §7 — the one Surah; `null` clears it, absent leaves it alone. */
+  surahId?: number | null;
   /** R169 §10 — the item's OTHER Levels; replaces the set. */
   additionalLevelIds?: string[];
 }
@@ -1307,10 +1326,30 @@ export async function updateContentMetadata(
    */
   const placed = await prisma.educationalContent.findUniqueOrThrow({
     where: { id: contentId },
-    select: { levelId: true, subjectId: true, additionalLevels: { select: { levelId: true } } },
+    select: {
+      levelId: true,
+      subjectId: true,
+      wholeCategory: true,
+      surahId: true,
+      additionalLevels: { select: { levelId: true } },
+    },
   });
   const homeLevelId = patch.levelId ?? placed.levelId;
   const subjectId = patch.subjectId ?? placed.subjectId;
+  // R177 §7 — the Surah the row WILL carry, re-checked whenever it, the
+  // Subject or the home Level moves: a فقه lesson cannot keep a Surah, and a
+  // Surah outside the new Level's syllabus is refused in words (`resolveSurahs`).
+  const surahId = patch.surahId === undefined ? placed.surahId : patch.surahId;
+  if (
+    surahId !== null &&
+    (patch.surahId !== undefined || patch.subjectId !== undefined || patch.levelId !== undefined)
+  ) {
+    await resolveSurahs(prisma, {
+      subjectId,
+      levelIds: await filedLevelIds(prisma, homeLevelId, patch.wholeCategory ?? placed.wholeCategory),
+      surahIds: [surahId],
+    });
+  }
   // Codex review, 2026-09-22 — the pairing initiation checks (`SUBJECT_NOT_AT_LEVEL`)
   // is re-checked whenever an edit moves either half of it: a Subject change
   // must still be taught at the home Level AND at every additional Level the
@@ -1392,6 +1431,7 @@ export async function updateContentMetadata(
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+          ...(patch.surahId !== undefined ? { surahId: patch.surahId } : {}),
           ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
           ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
@@ -1452,6 +1492,7 @@ export async function updateContentMetadata(
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
+          ...(patch.surahId !== undefined ? { surahId: patch.surahId } : {}),
           visibility: nextVisibility as never,
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
           ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
@@ -1684,4 +1725,20 @@ export async function mintDownloadUrl(
     filename,
   );
   return { url, expiresIn: PRESIGN_TTL_SECONDS.get };
+}
+
+/**
+ * R177 §7 — the Levels an item is filed under: its home Level, or every live
+ * Level of the home Level's Category when it is addressed to the whole
+ * Category (R167 §5). What a Surah on the item is checked against.
+ */
+async function filedLevelIds(prisma: PrismaClient, homeLevelId: string, wholeCategory: boolean): Promise<string[]> {
+  if (!wholeCategory) return [homeLevelId];
+  const home = await prisma.level.findFirst({ where: { id: homeLevelId }, select: { categoryId: true } });
+  if (!home) return [homeLevelId];
+  const rows = await prisma.level.findMany({
+    where: { categoryId: home.categoryId, deletedAt: null },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
 }

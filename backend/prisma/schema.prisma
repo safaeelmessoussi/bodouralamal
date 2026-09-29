@@ -3190,6 +3190,8 @@ model QuranSurah {
   /// R165 §2 — the classes and single occurrences that are about this Surah.
   courseSchedules CourseScheduleSurah[]
   sessions        SessionSurah[]
+  /// R177 §7 — the educational contents that are about this Surah.
+  contents        EducationalContent[]
 
   @@map("quran_surah")
 }
@@ -3810,6 +3812,13 @@ model EducationalContent {
 
   academicYearId String       @map("academic_year_id") @db.Uuid
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  /// R177 §7 (D9) — the ONE Surah this item is about, or none. Admissible only
+  /// when the Subject works by Surah and the Surah is in the syllabus of a
+  /// Level the item is filed under (`resolveSurahs`); the library groups and
+  /// filters by it. Partial index in the migration SQL.
+  surahId Int?        @map("surah_id")
+  surah   QuranSurah? @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
 
   /// Immutable hash-segmented key (TD-9). Replacing a file mints a NEW key and
   /// quarantines the old object — keys are never reused or overwritten

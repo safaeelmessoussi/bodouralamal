@@ -3590,6 +3590,10 @@ export const ar = {
     size: { kb: 'كيلوبايت', mb: 'ميغابايت' },
     upload: {
       action: 'رفع ملف',
+      // R177 §7 — سورة واحدة اختيارية، تُعرض فقط لمادة تُدرَّس بالسور.
+      surah: 'السورة',
+      surahHint: 'اختياري: إن كان المحتوى عن سورة واحدة، تُجمَّع به في «المحتوى التعليمي».',
+      noSurah: 'بدون سورة محددة',
       file: 'الملف',
       title: 'العنوان',
       description: 'الوصف',
@@ -3659,6 +3663,8 @@ export const ar = {
     all: 'الكل',
     noSubject: 'بدون مادة',
     subjectGroupLabel: 'المادة: {subject}',
+    // R177 §7 — عنوان مجموعة السورة داخل المادة.
+    surahGroupLabel: 'سورة {surah}',
     itemCount: '{n} عنصرًا',
     previewTitle: 'معاينة المحتوى',
     previewError: 'تعذّر تحميل المعاينة.',

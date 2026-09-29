@@ -32,6 +32,7 @@ import { api, ApiError } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
 import { Badge } from '../components/ui/badge.js';
 import { GLOBAL } from '../components/content/content-scope-fields.js';
+import { subjectWorksBySurah, surahChoices } from '../components/scheduling/surahs.js';
 
 /**
  * The content library management screen — `/admin/content` (§5.6) and
@@ -93,10 +94,13 @@ function ContentEditDialog({
   busy,
   onCancel,
   onSave,
+  facts,
 }: {
   row: LibraryRow;
   levels: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
+  /** R177 §7 — which Subjects work by Surah and each Level's syllabus. */
+  facts: Parameters<typeof subjectWorksBySurah>[0] & Parameters<typeof surahChoices>[0];
   busy: boolean;
   onCancel: () => void;
   onSave: (patch: {
@@ -107,6 +111,7 @@ function ContentEditDialog({
     isRecording: boolean;
     wholeCategory: boolean;
     additionalLevelIds: string[];
+    surahId: number | null;
   }) => void;
 }): ReactNode {
   const pristine = {
@@ -116,6 +121,8 @@ function ContentEditDialog({
     visibility: row.visibility,
     isRecording: row.origin === 'session_recording',
     wholeCategory: row.whole_category,
+    // R177 §7 — hydrated from the row, like everything else here.
+    surahId: row.surah_id ?? null,
     // R169 §10 — the item's OTHER Levels, hydrated from the row.
     additionalLevelIds: (row.additional_levels ?? []).map((level) => level.id),
   };
@@ -157,9 +164,27 @@ function ContentEditDialog({
       <SelectField
         label={t('content.col.subject')}
         value={form.subjectId}
-        onChange={(v) => setForm((f) => ({ ...f, subjectId: v }))}
+        onChange={(v) => setForm((f) => ({ ...f, subjectId: v, surahId: subjectWorksBySurah(facts, v) ? f.surahId : null }))}
         options={subjects}
       />
+
+      {/* R177 §7 — one Surah, optional, only for a Subject taught by Surah,
+          from the syllabus of the Levels the item is filed under. */}
+      {subjectWorksBySurah(facts, form.subjectId) ? (
+        <SelectField
+          label={t('content.upload.surah')}
+          value={form.surahId === null ? '' : String(form.surahId)}
+          onChange={(v) => setForm((f) => ({ ...f, surahId: v === '' ? null : Number(v) }))}
+          hint={t('content.upload.surahHint')}
+          options={[
+            { value: '', label: t('content.upload.noSurah') },
+            ...surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).map((s) => ({
+              value: String(s.id),
+              label: s.name,
+            })),
+          ]}
+        />
+      ) : null}
 
       {/* The shared control, so the three tiers read identically wherever they
           are chosen — and the server still decides (rule O). */}
@@ -248,6 +273,9 @@ interface LibraryRow {
   subject_name: string;
   academic_year_label: string;
   branch_name: string | null;
+  /** R177 §7 — the one Surah the item is about, or none. */
+  surah_id?: number | null;
+  surah_name?: string | null;
 }
 
 /** `null` branch is the Global scope (§4.9) and needs a value a `<select>` can
@@ -474,6 +502,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     isRecording: boolean;
     wholeCategory: boolean;
     additionalLevelIds: string[];
+    surahId: number | null;
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -497,6 +526,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           ...(patch.wholeCategory !== editing.whole_category
             ? { whole_category: patch.wholeCategory }
             : {}),
+          // R177 §7 — sent only when it changed; `null` clears it.
+          ...(patch.surahId !== (editing.surah_id ?? null) ? { surah_id: patch.surahId } : {}),
           // R169 §10 — sent only when the SET changed, like every field here.
           // «كل مستويات الفئة» makes naming Levels redundant, so it clears them.
           ...additionalLevelsPatch(editing, patch),
@@ -679,6 +710,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           row={editing}
           levels={scope.options.levelId}
           subjects={scope.options.subjectId}
+          facts={scope}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(patch) => void confirmEdit(patch)}

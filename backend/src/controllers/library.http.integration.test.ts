@@ -75,6 +75,9 @@ const ITEM_KEYS = [
   "size_bytes",
   "subject_id",
   "subject_name",
+  // R177 §7 — the one Surah the item is about, or none.
+  "surah_id",
+  "surah_name",
   "title",
   "visibility",
   // R167 §5 — addressed to every Level of its Category.
@@ -153,6 +156,8 @@ async function content(
     levelId?: string;
     forced?: boolean;
     wholeCategory?: boolean;
+    /** R177 §7 — the one Surah the item is about. */
+    surahId?: number;
   } = {},
 ): Promise<string> {
   const row = await prisma.educationalContent.create({
@@ -163,6 +168,7 @@ async function content(
       academicYearId,
       branchId: over.branchId === undefined ? branchA : over.branchId,
       visibility: (over.visibility ?? "public") as never,
+      surahId: over.surahId ?? null,
       mediaConsentMissing: over.forced ?? false,
       wholeCategory: over.wholeCategory ?? false,
       storageBucket: "content",
@@ -539,6 +545,26 @@ describe("signing in REORDERS and never unlocks (TD-3.13, §5.2)", () => {
 });
 
 describe("the filter set is identical for everyone (§5.2)", () => {
+  it("R177 §7 — filters by Surah, and each item says which one it is about", async () => {
+    const about112 = await content("عن الإخلاص", { surahId: 112 });
+    const aboutNone = await content("بلا سورة");
+
+    const res = await call(`${scoped}${academicYearId}&surah_id=112`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data!.map((r) => r["id"]);
+    expect(ids).toContain(about112);
+    expect(ids).not.toContain(aboutNone);
+    const item = res.body.data!.find((r) => r["id"] === about112)!;
+    expect(item["surah_id"]).toBe(112);
+    expect(typeof item["surah_name"]).toBe("string");
+
+    // Every item carries the pair; an item about none says so honestly.
+    const all = await call(`${scoped}${academicYearId}`);
+    const none = all.body.data!.find((r) => r["id"] === aboutNone)!;
+    expect(none["surah_id"]).toBeNull();
+    expect(none["surah_name"]).toBeNull();
+  });
+
   it("filters by level, subject, academic year and category", async () => {
     const byLevel = await call(
       `${MINE}${otherLevelId}&academic_year_id=${academicYearId}`,

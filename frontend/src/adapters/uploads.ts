@@ -30,6 +30,8 @@ export interface UploadMeta {
    *  may choose, never a stand-in for "not set". */
   branch_id: string | null;
   visibility?: 'public' | 'private' | 'hidden';
+  /** R177 §7 — the one Surah the item is about (1–114); absent means none. */
+  surah_id?: number;
   /**
    * **R99.12 — *this is a class recording*, stated at the boundary.**
    *
@@ -130,6 +132,8 @@ export interface ContentMetadataPatch {
   visibility?: 'public' | 'private' | 'hidden';
   /** R99.12's marker — «هذا تسجيل حصة». No storage meaning. */
   origin?: 'uploaded' | 'session_recording';
+  /** R177 §7 — the one Surah; `null` clears it. */
+  surah_id?: number | null;
   /** R167 §5 — addressed to every Level of its Level's Category. */
   whole_category?: boolean;
   /** R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` is its

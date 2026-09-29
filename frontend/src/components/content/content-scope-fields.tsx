@@ -4,6 +4,7 @@ import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { useScopeOptions, wholeCategoryOf, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
 import { Feedback } from '../ui/feedback.js';
 import { SelectField } from '../ui/field.js';
+import { subjectWorksBySurah, surahChoices } from '../scheduling/surahs.js';
 import { t } from '../../i18n/index.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
 
@@ -59,7 +60,7 @@ export function useContentScope({
   token: string | null;
   mayAssignGlobal: boolean;
   /** Seed values, normally the page's current filters. Read **once**, at mount. */
-  initial: Partial<ScopeValue>;
+  initial: Partial<ScopeValue> & { surahId?: number | null };
   /**
    * Replacement (R53) keeps the record and swaps only the object, so its scope
    * and visibility are the row's. Still **rendered — disabled rather than
@@ -85,6 +86,10 @@ export function useContentScope({
 
   const { levelId, subjectId, academicYearId, branchId } = scope.value;
   const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? null);
+  // R177 §7 — the one Surah the item is about. Offered only while the Subject
+  // works by Surah, from the syllabus of the Level(s) the item is filed under;
+  // cleared the moment either changes so nothing inadmissible is submitted.
+  const [surahId, setSurahId] = useState<number | null>(initial.surahId ?? null);
   const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
   const categoryDefault = scope.defaultVisibility;
 
@@ -106,6 +111,24 @@ export function useContentScope({
   // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
   // whole Category, with no Level chosen: `category_id` travels instead.
   const wholeOf = wholeCategoryOf(levelId);
+  const asksSurah = subjectId !== '' && subjectWorksBySurah(scope, subjectId);
+  const filedLevelIds = useMemo(
+    () =>
+      wholeOf === null
+        ? levelId === '' ? [] : [levelId]
+        : Object.entries(scope.levelCategoryIds)
+            .filter(([, categoryId]) => categoryId === wholeOf)
+            .map(([id]) => id),
+    [wholeOf, levelId, scope.levelCategoryIds],
+  );
+  const surahOffered = useMemo(
+    () => new Set(surahChoices(scope, filedLevelIds).map((s) => s.id)),
+    [scope.levelSurahIds, scope.surahNames, filedLevelIds],
+  );
+  useEffect(() => {
+    if (locked) return;
+    if (surahId !== null && (!asksSurah || !surahOffered.has(surahId))) setSurahId(null);
+  }, [locked, asksSurah, surahOffered, surahId]);
   const meta = useMemo<UploadMeta>(
     () => ({
       ...(wholeOf === null ? { level_id: levelId } : { category_id: wholeOf }),
@@ -115,8 +138,9 @@ export function useContentScope({
       ...(visibility === null || locked
         ? {}
         : { visibility: visibility as 'public' | 'private' | 'hidden' }),
+      ...(surahId !== null && asksSurah ? { surah_id: surahId } : {}),
     }),
-    [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked],
+    [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked, surahId, asksSurah],
   );
 
   const problem = scope.wholeCategoryTeachesNothing
@@ -147,6 +171,20 @@ export function useContentScope({
           الفئة» is chosen for a Category taught nothing whole: the person is
           choosing the scope now, not saving later. */}
       {scope.wholeCategoryTeachesNothing ? <Feedback>{t('scope.assignWholeCategorySubjectsHint')}</Feedback> : null}
+
+      {/* R177 §7 — one Surah, optional, only for a Subject taught by Surah. */}
+      {asksSurah && !locked ? (
+        <SelectField
+          label={t('content.upload.surah')}
+          value={surahId === null ? '' : String(surahId)}
+          onChange={(next: string) => setSurahId(next === '' ? null : Number(next))}
+          hint={t('content.upload.surahHint')}
+          options={[
+            { value: '', label: t('content.upload.noSurah') },
+            ...surahChoices(scope, filedLevelIds).map((s) => ({ value: String(s.id), label: s.name })),
+          ]}
+        />
+      ) : null}
 
       <SelectField
         label={t('content.col.visibility')}

@@ -1098,6 +1098,9 @@ export interface LibraryItemDto {
   /** `null` is **Global / بدون فرع**, not unknown — it renders as its own
    *  container (§4.9, BR-20). */
   branch_name: string | null;
+  /** R177 §7 — the one Surah, or none. */
+  surah_id: number | null;
+  surah_name: string | null;
 }
 
 /**
@@ -1136,6 +1139,8 @@ export function libraryItemDto(row: {
   subjectName: string;
   academicYearLabel: string;
   branchName: string | null;
+  surahId: number | null;
+  surahName: string | null;
 }): LibraryItemDto {
   return {
     id: row.id,
@@ -1166,6 +1171,9 @@ export function libraryItemDto(row: {
     subject_name: row.subjectName,
     academic_year_label: row.academicYearLabel,
     branch_name: row.branchName,
+    // R177 §7 — the one Surah the item is about, or none.
+    surah_id: row.surahId,
+    surah_name: row.surahName,
   };
 }
 

@@ -114,10 +114,12 @@ interface LibraryFilter {
   yearId: string;
   branchId: string;
   subjectId: string;
+  /** R177 §7 — items about one Surah; `''` is «الكل». */
+  surahId: string;
   kind: string;
   query: string;
 }
-const NO_FILTER: LibraryFilter = { categoryId: '', shelfKey: '', yearId: '', branchId: '', subjectId: '', kind: '', query: '' };
+const NO_FILTER: LibraryFilter = { categoryId: '', shelfKey: '', yearId: '', branchId: '', subjectId: '', surahId: '', kind: '', query: '' };
 const GLOBAL_BRANCH = '__global__';
 const NO_SUBJECT = '__none__';
 
@@ -160,7 +162,9 @@ function LibraryView({
     const years = new Map<string, string>();
     const branches = new Map<string, string>();
     const subjects = new Map<string, string>();
+    const surahs = new Map<string, string>();
     for (const e of entries) {
+      if (e.surah_id !== null) surahs.set(String(e.surah_id), e.surah_name ?? String(e.surah_id));
       cats.set(e.category_id, e.category_name);
       shelves.set(e.shelf_key, {
         // The shared label owns the «{Category} — {Level}» format (rule D).
@@ -182,6 +186,8 @@ function LibraryView({
       years: [...years].sort((a, b) => b[1].localeCompare(a[1])),
       branches: [...branches].sort(byName),
       subjects: [...subjects].sort(byName),
+      // Mushaf order, never alphabetical: a reader knows where البقرة is.
+      surahs: [...surahs].sort((a, b) => Number(a[0]) - Number(b[0])),
     };
   }, [entries, filter.categoryId]);
 
@@ -194,6 +200,7 @@ function LibraryView({
         (filter.yearId === '' || e.academic_year_id === filter.yearId) &&
         (filter.branchId === '' || (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId) &&
         (filter.subjectId === '' || (e.subject_id || NO_SUBJECT) === filter.subjectId) &&
+        (filter.surahId === '' || String(e.surah_id ?? '') === filter.surahId) &&
         (filter.kind === '' || e.item.kind === filter.kind) &&
         (q === '' || normalizeArabic(e.item.title).includes(q) || normalizeArabic(e.item.description ?? '').includes(q)),
     );
@@ -202,7 +209,10 @@ function LibraryView({
   // Category → shelf (the Category's own shelf first) → year (newest first)
   // → branch (بدون فرع first) → subject → items.
   const tree = useMemo(() => {
-    type SubjectG = { key: string; name: string; items: ContentItem[] };
+    // R177 §7 — within a Subject, the items about one Surah stand under it,
+    // in Mushaf order; those about none come first, unlabelled.
+    type SurahG = { id: number; name: string; items: ContentItem[] };
+    type SubjectG = { key: string; name: string; items: ContentItem[]; surahs: SurahG[] };
     type BranchG = { key: string; name: string; subjects: SubjectG[] };
     type YearG = { id: string; label: string; branches: BranchG[] };
     type ShelfG = { key: string; kind: 'level' | 'whole_category'; name: string; years: YearG[]; count: number };
@@ -225,8 +235,13 @@ function LibraryView({
       if (!branch) year.branches.push((branch = { key: bkey, name: e.branch_name ?? t('content.globalScope'), subjects: [] }));
       const skey = e.subject_id || NO_SUBJECT;
       let subject = branch.subjects.find((x) => x.key === skey);
-      if (!subject) branch.subjects.push((subject = { key: skey, name: e.subject_name ?? t('content.noSubject'), items: [] }));
-      subject.items.push(e.item);
+      if (!subject) branch.subjects.push((subject = { key: skey, name: e.subject_name ?? t('content.noSubject'), items: [], surahs: [] }));
+      if (e.surah_id === null) subject.items.push(e.item);
+      else {
+        let surah = subject.surahs.find((x) => x.id === e.surah_id);
+        if (!surah) subject.surahs.push((surah = { id: e.surah_id, name: e.surah_name ?? String(e.surah_id), items: [] }));
+        surah.items.push(e.item);
+      }
     }
     const out = [...cats.values()].sort((a, b) => categoryRank(a.name) - categoryRank(b.name));
     for (const cat of out) {
@@ -235,7 +250,10 @@ function LibraryView({
         shelf.years.sort((a, b) => b.label.localeCompare(a.label));
         for (const year of shelf.years) {
           year.branches.sort((a, b) => Number(b.key === GLOBAL_BRANCH) - Number(a.key === GLOBAL_BRANCH) || a.name.localeCompare(b.name, 'ar'));
-          for (const branch of year.branches) branch.subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+          for (const branch of year.branches) {
+            branch.subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+            for (const subject of branch.subjects) subject.surahs.sort((a, b) => a.id - b.id);
+          }
         }
       }
     }
@@ -285,6 +303,7 @@ function LibraryView({
         {select('yearId', t('content.yearLabel'), options.years)}
         {select('branchId', t('content.branchLabel'), options.branches)}
         {select('subjectId', t('content.subjectLabel'), options.subjects)}
+        {select('surahId', t('content.upload.surah'), options.surahs)}
         {select(
           'kind',
           t('content.typeLabel'),
@@ -322,11 +341,26 @@ function LibraryView({
                       {branch.subjects.map((subject) => (
                         <div key={subject.key} className="content-subject">
                           <p className="content-subject__title">{t('content.subjectGroupLabel').replace('{subject}', subject.name)}</p>
-                          <ul className="content-list">
-                            {subject.items.map((item) => (
-                              <ContentCard key={item.id} item={item} onOpen={setOpen} />
-                            ))}
-                          </ul>
+                          {subject.items.length > 0 ? (
+                            <ul className="content-list">
+                              {subject.items.map((item) => (
+                                <ContentCard key={item.id} item={item} onOpen={setOpen} />
+                              ))}
+                            </ul>
+                          ) : null}
+                          {/* R177 §7 — the items about one Surah, under its name. */}
+                          {subject.surahs.map((surah) => (
+                            <div key={surah.id} className="content-surah">
+                              <p className="content-surah__title">
+                                {t('content.surahGroupLabel').replace('{surah}', surah.name)}
+                              </p>
+                              <ul className="content-list">
+                                {surah.items.map((item) => (
+                                  <ContentCard key={item.id} item={item} onOpen={setOpen} />
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </section>

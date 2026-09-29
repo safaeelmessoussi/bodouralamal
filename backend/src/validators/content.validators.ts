@@ -61,6 +61,8 @@ export const initiateUploadSchema = z
          * check does not consult this field.
          */
         origin: z.enum(['uploaded', 'session_recording']).optional(),
+        /** R177 §7 — the one Surah this item is about (1–114), or none. */
+        surah_id: z.number().int().min(1).max(114).nullable().optional(),
         /** TD-9 replacement: a new key for an existing record, never an overwrite. */
         replaces_content_id: uuid.optional(),
       })
