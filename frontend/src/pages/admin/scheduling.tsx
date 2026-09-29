@@ -36,7 +36,7 @@ import {
 } from '../../components/scheduling/manual-edits-dialog.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
-import { hiddenChipParts } from '../../components/calendar/chip-parts.js';
+import { chipTaxonomy, hiddenChipParts, type ChipTaxonomy } from '../../components/calendar/chip-parts.js';
 import { CalendarHeader } from '../../components/calendar/calendar-header.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
 import { EventDetailsDialog } from '../../components/calendar/event-details-dialog.js';
@@ -737,6 +737,11 @@ export function SchedulingPage(): ReactNode {
           filters={filters}
           filterRow={filterRow}
           token={accessToken}
+          // R179 §9 — from the list's own scope options (every Level, every Category).
+          taxonomy={chipTaxonomy(
+            Object.entries(listScope.levelCategoryIds).map(([id, category_id]) => ({ id, category_id })),
+            listScope.options.categoryId.map((o) => ({ id: o.value, name: o.label })),
+          )}
         />
       )}
 
@@ -873,6 +878,7 @@ function CalendarView({
   filters,
   filterRow,
   token,
+  taxonomy,
 }: {
   /**
    * **The caller's own credential — this view read the calendar ANONYMOUSLY**
@@ -890,6 +896,8 @@ function CalendarView({
   filters: CalendarFilterState;
   /** The rendered row, so both views show the identical controls (R84). */
   filterRow: ReactNode;
+  /** R179 §9 — the page's taxonomy, for a whole-Category audience on a chip. */
+  taxonomy: ChipTaxonomy;
 }): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
@@ -992,6 +1000,8 @@ function CalendarView({
         onRetry={() => setMonth((value) => new Date(value))}
         // R179 §6 — what the filters fix is left off every chip.
         hiddenChipParts={hiddenChipParts(filters.value)}
+        // R179 §9 — the page's own taxonomy (every Level, every Category).
+        chipTaxonomy={taxonomy}
       />
 
       <DayEventsDialog
@@ -2083,7 +2093,11 @@ export function SchedulingDialog({
        */
       if (mode === 'multi_dimension') {
         // Nothing to pre-check: every combination of the five filters is valid.
-      } else {
+      } else if (!editing) {
+        // R179 §8 — on EDIT the single target is frozen and never sent, and a
+        // circle-targeted class (`teaching_group`, from before R163 §5) has no
+        // control to fill here: asking would refuse every edit of it with
+        // «اختاري الحلقة المعنية.» (met on Localhost, 2026-09-29).
         if (scope.value.levelId === '') return t('scheduling.invalid.level');
         if (targetId === '') return t('scheduling.invalid.target');
       }

@@ -627,11 +627,11 @@ describe('event details', () => {
         })}
       />,
     );
-    expect(html).toContain('class="event-chip__title">أحكام التجويد<span class="event-chip__detail"> — سورة الفاتحة</span>');
-    expect(html).toContain('<span class="event-chip__detail"> — الحلقة 1</span>');
-    expect(html).toContain('<span class="event-chip__detail"> — وميض الأمل</span>');
-    expect(html).toContain('<span class="event-chip__detail"> — فاطمة بوخبزى</span>');
-    expect(html).toContain('<span class="event-chip__detail"> — مقر أمرشيش</span>');
+    expect(html).toContain('class="event-chip__title">أحكام التجويد<span class="event-chip__detail event-chip__detail--surah"> — سورة الفاتحة</span>');
+    expect(html).toContain('<span class="event-chip__detail event-chip__detail--audience"> — الحلقة 1</span>');
+    expect(html).toContain('<span class="event-chip__detail event-chip__detail--level"> — وميض الأمل</span>');
+    expect(html).toContain('<span class="event-chip__detail event-chip__detail--lead"> — فاطمة بوخبزى</span>');
+    expect(html).toContain('<span class="event-chip__detail event-chip__detail--branch"> — مقر أمرشيش</span>');
     expect(html).not.toContain('event-chip__audience');
   });
 
@@ -672,7 +672,7 @@ describe('event details', () => {
         })}
       />,
     );
-    expect(exam).toContain('class="event-chip__title">اختبار<span class="event-chip__detail"> — تفسير القرآن</span><span class="event-chip__detail"> — الحلقة 1</span></span>');
+    expect(exam).toContain('class="event-chip__title">اختبار<span class="event-chip__detail event-chip__detail--subject"> — تفسير القرآن</span><span class="event-chip__detail event-chip__detail--audience"> — الحلقة 1</span></span>');
   });
 
   it('the dialog renders nothing until an event is chosen', () => {

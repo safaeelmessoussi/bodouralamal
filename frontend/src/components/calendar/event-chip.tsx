@@ -4,7 +4,7 @@ import type { Occurrence } from '../../adapters/calendar.js';
 import { OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
 import { deliveryLabel } from '../scheduling/delivery.js';
-import { chipText, type ChipPart } from './chip-parts.js';
+import { chipText, type ChipPart, type ChipTaxonomy } from './chip-parts.js';
 
 const NOTHING_HIDDEN: ReadonlySet<ChipPart> = new Set();
 
@@ -23,11 +23,14 @@ export function EventChip({
   occurrence,
   onOpen,
   hidden = NOTHING_HIDDEN,
+  taxonomy,
 }: {
   occurrence: Occurrence;
   onOpen?: (occurrence: Occurrence) => void;
   /** R179 §6 — the parts the surface's active filters already say (`hiddenChipParts`). */
   hidden?: ReadonlySet<ChipPart>;
+  /** R179 §9 — so a whole-Category audience reads as the Category (`chipTaxonomy`). */
+  taxonomy?: ChipTaxonomy;
 }): ReactNode {
   // The label is announced to assistive technology, so an exam is identifiable
   // without relying on the colour that marks it.
@@ -76,7 +79,7 @@ export function EventChip({
    * What the surface's filters already say is left out (`chipText`): under
    * «الفرع: مقر أمرشيش» no chip repeats the branch.
    */
-  const text = chipText(occurrence, hidden);
+  const text = chipText(occurrence, hidden, taxonomy);
 
   const inner = (
     <>
@@ -93,10 +96,12 @@ export function EventChip({
           </>
         ) : null}
         {text.head}
+        {/* `--{part}` lets a phone keep the essentials and leave the Surah
+            and the teacher to the dialog (R179 §10, `calendar.css`). */}
         {text.details.map((detail, index) => (
-          <span key={`${index}-${detail}`} className="event-chip__detail">
+          <span key={`${index}-${detail.text}`} className={`event-chip__detail event-chip__detail--${detail.part}`}>
             {' — '}
-            {detail}
+            {detail.text}
           </span>
         ))}
       </span>

@@ -17,7 +17,39 @@ import { t } from '../../i18n/index.js';
  * audience word and the lead are `audience_name`/`lead_name`); this module only
  * decides which of them to show.
  */
-export type ChipPart = 'kind' | 'subject' | 'surah' | 'audience' | 'level' | 'lead' | 'branch';
+export type ChipPart =
+  | 'kind'
+  | 'subject'
+  | 'surah'
+  | 'audience'
+  | 'category'
+  | 'level'
+  | 'lead'
+  | 'branch';
+
+/**
+ * R179 §9 — what a surface knows of the taxonomy, so a class addressed to
+ * EVERY Level of a Category reads as the Category («المرأة») rather than as
+ * the list of its Levels. Built once per surface from the same list its
+ * filters offer (`chipTaxonomy`); absent, Levels are listed as they come.
+ */
+export interface ChipTaxonomy {
+  levelsOfCategory: ReadonlyMap<string, ReadonlySet<string>>;
+  categoryNames: ReadonlyMap<string, string>;
+}
+
+export function chipTaxonomy(
+  levels: readonly { id: string; category_id: string }[],
+  categories: readonly { id: string; name: string }[],
+): ChipTaxonomy {
+  const levelsOfCategory = new Map<string, Set<string>>();
+  for (const level of levels) {
+    const set = levelsOfCategory.get(level.category_id) ?? new Set<string>();
+    set.add(level.id);
+    levelsOfCategory.set(level.category_id, set);
+  }
+  return { levelsOfCategory, categoryNames: new Map(categories.map((c) => [c.id, c.name])) };
+}
 
 /** Filter values as every surface's hook holds them: `''`/`undefined` = «الكل». */
 export interface ChipFilterValues {
@@ -35,7 +67,9 @@ export interface ChipFilterValues {
 export function hiddenChipParts(values: ChipFilterValues): ReadonlySet<ChipPart> {
   const hidden = new Set<ChipPart>();
   if (values.branchId) hidden.add('branch');
-  if (values.levelId) hidden.add('level');
+  // A fixed Level fixes its Category too; a fixed Category leaves the Level open.
+  if (values.levelId) hidden.add('level').add('category');
+  if (values.categoryId) hidden.add('category');
   if (values.subjectId) hidden.add('subject');
   if (values.surahId) hidden.add('surah');
   if (values.groupId || values.circleId) hidden.add('audience');
@@ -43,11 +77,64 @@ export function hiddenChipParts(values: ChipFilterValues): ReadonlySet<ChipPart>
   return hidden;
 }
 
+export interface ChipDetail {
+  part: ChipPart;
+  text: string;
+}
+
 export interface ChipText {
   /** The first, heavier part — what the occurrence IS. */
   head: string;
-  /** The rest, in reading order, each shown after « — ». */
-  details: string[];
+  /** The rest, in reading order, each shown after « — »; `part` lets a
+   *  narrow screen keep the essentials (R179 §10). */
+  details: ChipDetail[];
+}
+
+/**
+ * The audience by Category and Level: every Category whose Levels the
+ * occurrence covers WHOLE is named once, in place of those Levels; the other
+ * Levels are listed by name; a Category named with no Level at all (an
+ * activity scoped to «المرأة») is named as such.
+ */
+function audienceByLevel(
+  occurrence: Occurrence,
+  taxonomy: ChipTaxonomy | undefined,
+): { categories: string[]; levels: string[] } {
+  const levelIds = occurrence.level_ids ?? [];
+  const levelNames = occurrence.level_names?.length
+    ? occurrence.level_names
+    : occurrence.level_name
+      ? [occurrence.level_name]
+      : [];
+  const categoryIds = occurrence.category_ids ?? [];
+  const categoryNames = occurrence.category_names ?? [];
+  if (levelIds.length === 0) {
+    return { categories: levelNames.length === 0 ? categoryNames : [], levels: levelNames };
+  }
+  const covered = new Set<string>();
+  const categories: string[] = [];
+  if (taxonomy) {
+    const candidates = new Set([
+      ...categoryIds,
+      ...levelIds.flatMap((id) =>
+        [...taxonomy.levelsOfCategory.entries()].filter(([, set]) => set.has(id)).map(([c]) => c),
+      ),
+    ]);
+    for (const categoryId of candidates) {
+      const all = taxonomy.levelsOfCategory.get(categoryId);
+      if (!all || all.size === 0 || ![...all].every((id) => levelIds.includes(id))) continue;
+      categories.push(
+        taxonomy.categoryNames.get(categoryId) ??
+          categoryNames[categoryIds.indexOf(categoryId)] ??
+          '',
+      );
+      for (const id of all) covered.add(id);
+    }
+  }
+  const levels = levelIds
+    .map((id, index) => (covered.has(id) ? null : (levelNames[index] ?? null)))
+    .filter((name): name is string => name !== null && name !== '');
+  return { categories: categories.filter((name) => name !== ''), levels };
 }
 
 /**
@@ -56,13 +143,17 @@ export interface ChipText {
  * an activity with its own title. An activity has no Subject, Surah, circle or
  * teacher, so only its Level(s) and branch(es) follow its title.
  */
-export function chipText(occurrence: Occurrence, hidden: ReadonlySet<ChipPart>): ChipText {
+export function chipText(
+  occurrence: Occurrence,
+  hidden: ReadonlySet<ChipPart>,
+  taxonomy?: ChipTaxonomy,
+): ChipText {
   const show = (part: ChipPart): boolean => !hidden.has(part);
-  const levels = occurrence.level_names?.length
-    ? occurrence.level_names
-    : occurrence.level_name
-      ? [occurrence.level_name]
-      : [];
+  const audience = audienceByLevel(occurrence, taxonomy);
+  const byLevel: ChipDetail[] = [
+    ...audience.categories.map((text) => ({ part: 'category' as const, text })),
+    ...audience.levels.map((text) => ({ part: 'level' as const, text })),
+  ];
   const branches = occurrence.branch_names?.length
     ? occurrence.branch_names
     : occurrence.branch_name
@@ -76,8 +167,8 @@ export function chipText(occurrence: Occurrence, hidden: ReadonlySet<ChipPart>):
     return {
       head: occurrence.title,
       details: [
-        ...(show('level') ? levels : []),
-        ...(show('branch') ? branches : []),
+        ...byLevel.filter((row) => show(row.part)),
+        ...(show('branch') ? branches.map((text) => ({ part: 'branch' as const, text })) : []),
       ],
     };
   }
@@ -92,15 +183,15 @@ export function chipText(occurrence: Occurrence, hidden: ReadonlySet<ChipPart>):
     { part: 'subject', text: subject },
     ...surahs.map((text) => ({ part: 'surah' as const, text })),
     { part: 'audience', text: occurrence.audience_name ?? null },
-    ...levels.map((text) => ({ part: 'level' as const, text })),
+    ...byLevel,
     { part: 'lead', text: occurrence.lead_name ?? null },
     ...branches.map((text) => ({ part: 'branch' as const, text })),
   ];
-  const shown = ordered
-    .filter((row): row is { part: ChipPart; text: string } => row.text !== null && row.text !== '' && show(row.part))
-    .map((row) => row.text);
+  const shown = ordered.filter(
+    (row): row is ChipDetail => row.text !== null && row.text !== '' && show(row.part),
+  );
   // Nothing left to lead with (every part filtered away, or a server without
   // these fields): the composed title still names the occurrence.
   if (shown.length === 0) return { head: occurrence.title, details: [] };
-  return { head: shown[0]!, details: shown.slice(1) };
+  return { head: shown[0]!.text, details: shown.slice(1) };
 }

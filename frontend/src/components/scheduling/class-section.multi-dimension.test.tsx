@@ -287,6 +287,11 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     expect(homeBranchOf({ branchIds: [] }, { permitted: [] })).toBe('');
   });
 
+  it('R179 §8 — never prunes the seeded Levels before the Level list has arrived (an edit kept its Level; the untouched form is not dirty)', () => {
+    expect(FILTERS).toContain('if (!active || !scope.ready) return;\n    const offered = new Set(levelChoices.map((o) => o.value));');
+    expect(FILTERS).toContain('}, [active, scope.ready, levelChoices, levelIds, setLevelIds]);');
+  });
+
   it('never clears the Level while a chosen group\'s own Level is still unknown', () => {
     // The «from this date onward» editor opens on a group-targeted class with a
     // Subject already chosen; an empty Level pushed before the groups arrive

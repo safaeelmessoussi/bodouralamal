@@ -16,7 +16,7 @@ import {
 import { t } from '../../i18n/index.js';
 import { CalendarFilters } from './calendar-filters.js';
 import { CalendarGrid } from './calendar-grid.js';
-import { hiddenChipParts } from './chip-parts.js';
+import { chipTaxonomy, hiddenChipParts } from './chip-parts.js';
 import { CalendarHeader } from './calendar-header.js';
 import { DayEventsDialog } from './day-events-dialog.js';
 import { EventDetailsDialog } from './event-details-dialog.js';
@@ -227,6 +227,10 @@ export function PersonalCalendar({
             onRetry={() => void load()}
             // R179 §6 — what the filters fix is left off every chip.
             hiddenChipParts={hiddenChipParts(filters.value)}
+            // R179 §9 — the association's whole taxonomy (the bootstrap), never
+            // her own narrowed list: «all Levels of a Category» is a fact about
+            // the Category, not about what she may filter by.
+            chipTaxonomy={chipTaxonomy(bootstrap?.levels ?? [], bootstrap?.categories ?? [])}
           />
         ) : catalogList ? (
           catalogList

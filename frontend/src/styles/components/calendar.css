@@ -736,6 +736,14 @@ tr:last-child .cal-cell {
   .event-chip__tag {
     display: none;
   }
+  /* R179 §10 (Owner, 2026-09-29) — a phone keeps the essentials: the Subject,
+     the Level or Category, the circle/group and the branch; the Surah and the
+     teacher wait in the dialog, exactly as the time and delivery already do
+     at this width. */
+  .event-chip__detail--surah,
+  .event-chip__detail--lead {
+    display: none;
+  }
   /**
    * **R138 item 14 — density from wrapping, not from truncating one line.**
    *

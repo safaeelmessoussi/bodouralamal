@@ -1169,6 +1169,31 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
     expect(future.staff.map((x) => x.userId)).toEqual([replacement]);
   });
 
+  it("R179 §7 — removing EVERY teacher through the edit reaches every future, untouched session", async () => {
+    const original = await person("الأستاذة الأولى");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: "teacher" }] }),
+      NOW,
+    );
+    const before = await prisma.sessionStaff.count({
+      where: { session: { scheduleId: id }, deletedAt: null },
+    });
+    expect(before).toBeGreaterThan(0);
+
+    // The form sends `staff: []` when the last row is deleted (Owner, 2026-09-29).
+    const result = await updateCourseSchedule(prisma, superAdmin(), id, { staff: [], version: 0 }, NOW);
+    expect(result.materialized.resynced).toBeGreaterThan(0);
+
+    const live = await prisma.sessionStaff.count({
+      where: { session: { scheduleId: id, date: { gte: day("2026-06-01") } }, deletedAt: null },
+    });
+    expect(live).toBe(0);
+    const scheduleStaff = await prisma.courseScheduleStaff.count({ where: { scheduleId: id, deletedAt: null } });
+    expect(scheduleStaff).toBe(0);
+  });
+
   it("an OVERRIDDEN future session is NOT re-synced", async () => {
     const original = await person("الأستاذة الأولى");
     const { id } = await createCourseSchedule(

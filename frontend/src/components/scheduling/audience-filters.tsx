@@ -203,11 +203,20 @@ export function useAudienceFilters({
 
   // A choice its parent no longer offers is dropped rather than submitted
   // unseen — the picker would otherwise send a group the reader cannot see.
+  //
+  // **R179 §8 (Owner-reported, 2026-09-29) — never against a list that has
+  // not arrived.** This ran on mount, before `/me/scope-options` answered,
+  // against an EMPTY Level list — so a class opened for edit lost the Level
+  // it was seeded with (R176 §2): the form read «مستويات: الكل», was dirty
+  // before anybody touched it (the close-without-saving prompt on an untouched
+  // form), and a save re-sent `dimensions` without the Level, widening the
+  // class to its whole Category. `scope.ready` is the same guard the scope
+  // hook's own rule 2 uses; the two rosters below already wait for theirs.
   useEffect(() => {
-    if (!active) return;
+    if (!active || !scope.ready) return;
     const offered = new Set(levelChoices.map((o) => o.value));
     if (levelIds.some((id) => !offered.has(id))) setLevelIds(levelIds.filter((id) => offered.has(id)));
-  }, [active, levelChoices, levelIds, setLevelIds]);
+  }, [active, scope.ready, levelChoices, levelIds, setLevelIds]);
   useEffect(() => {
     if (!active || allGroups.length === 0) return;
     const offered = new Set(groupChoices.map((g) => g.id));

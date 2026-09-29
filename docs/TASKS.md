@@ -17,6 +17,7 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D8 | `business-rules.md` has two `### BR-20` headings (Global reach · Seeded-not-immutable) — which number is which? | reference/business-rules.md |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
 | D13 | TD-13 general burst (20) is met by a quick back-office tour; the client now retries a read once. Widen the burst for the back office (e.g. 60 at the same 120/min)? | R178 §3 |
+| D14 | Staffing removed on «تعديل العنصر» stayed on some sessions (item 1, 2026-09-29): the server rewrites every future un-protected session (pinned). Which class/sessions were they (the «الحماية» column says why)? Should a staffing change also rewrite PAST sessions, and manually-edited/attended ones without the R138 prompt? Recommendation: keep §4.4 — history stays as delivered. | R179 §7 |
 | D10 | «تعديل العنصر» for an activity (item 2, 2026-09-28): a circle and a Surah on an *activity* would be new domain relationships (§7 — Event has no circle arm, no Surah); add `EventTeachingGroup`/`EventSurah`, or keep them class-only as built? | R176 §2 |
 
 ## Temporary Production at `bodouralamal.com` (R175 — OVH, outside Morocco)
