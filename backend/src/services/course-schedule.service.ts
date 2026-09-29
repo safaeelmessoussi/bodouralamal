@@ -900,17 +900,19 @@ export async function findConflicts(
   }
   if (out.length === 0) return [];
 
-  // R179 §11 — the names, read once for the whole list.
+  // R179 §11 — the names, read once for the whole list. A room or a person
+  // in the Trash is left unnamed (`null`), and the form falls back to its
+  // generic sentence: a tombstone is not a name to publish.
   const roomIds = [...new Set(out.filter((c) => c.kind === "room").map((c) => c.resourceId))];
   const userIds = [...new Set(out.filter((c) => c.kind !== "room").map((c) => c.resourceId))];
   const [rooms, people, titles] = await Promise.all([
     roomIds.length === 0
       ? []
-      : tx.room.findMany({ where: { id: { in: roomIds } }, select: { id: true, name: true } }),
+      : tx.room.findMany({ where: { id: { in: roomIds }, deletedAt: null }, select: { id: true, name: true } }),
     userIds.length === 0
       ? []
       : tx.user.findMany({
-          where: { id: { in: userIds } },
+          where: { id: { in: userIds }, deletedAt: null },
           select: { id: true, nameArabic: true, publicDisplayName: true },
         }),
     sessionTitles(tx, [...new Set(out.map((c) => c.sessionId))]),
