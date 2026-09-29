@@ -610,15 +610,16 @@ describe("the filter set is identical for everyone (§5.2)", () => {
     );
     const named = String(withSubject.body["suggested_recording_name"]);
     // The Subject opens it (no «تسجيل صوتي» type word, R172 §12)…
-    expect(named.startsWith(`${TAG} مادة`)).toBe(true);
+    // R178 §4 — a recording's name says it is one, ahead of the class's title.
+    expect(named.startsWith(`تسجيل صوتي — ${TAG} مادة`)).toBe(true);
     // …the person recording, honoured, by her display name (§20 rule 12)…
     expect(named).toContain(`${TEACHER_HONORIFIC} ${TAG} أستاذة`);
     // …and the association's date and time close it (TD-11), like a class recording.
-    expect(named).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(named).toMatch(/ \d{1,2} \S+ \d{4} \d{2}:\d{2}$/);
 
     const withoutSubject = await call(`${scoped}${academicYearId}`, teacherToken);
     const bare = String(withoutSubject.body["suggested_recording_name"]);
-    expect(bare.startsWith(`${TEACHER_HONORIFIC} ${TAG} أستاذة`)).toBe(true);
+    expect(bare.startsWith(`تسجيل صوتي — ${TEACHER_HONORIFIC} ${TAG} أستاذة`)).toBe(true);
     expect(bare).not.toContain(`${TAG} مادة`);
 
     // Nobody signed in records nothing: no name for nobody.

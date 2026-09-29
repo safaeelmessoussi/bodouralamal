@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
+import { arabicCalendarDate } from "../lib/item-title.js";
 import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
@@ -454,7 +455,8 @@ describe("PATCH is a field edit, not a second entrance to the state machine", ()
       .toISOString()
       .slice(0, 10);
     expect(typeof res.body.title).toBe("string");
-    expect(res.body.title as string).toContain(date);
+    // R178 §4 — the date reads «الأربعاء 21 أكتوبر 2026», not its ISO form.
+    expect(res.body.title as string).toContain(arabicCalendarDate(date));
   });
 
   it("R166 §3 — a typed title is REFUSED at the boundary, never accepted and dropped", async () => {

@@ -95,6 +95,14 @@ export function arabicWeekday(iso: string | null): string | null {
   return date ? WEEKDAYS_AR[date.getUTCDay()]! : null;
 }
 
+const WEEKDAY_ENUM = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+/** The recurrence rule's own weekday name (`weekdays[0]`), in Arabic — for a
+ *  repeating class whose anchor date is not recorded. */
+export function arabicWeekdayOf(weekday: string | null | undefined): string | null {
+  const index = WEEKDAY_ENUM.indexOf((weekday ?? '') as (typeof WEEKDAY_ENUM)[number]);
+  return index === -1 ? null : WEEKDAYS_AR[index]!;
+}
+
 /**
  * **The word before a teacher's name, everywhere a title carries one** (the
  * Owner, 2026-09-23 — SRS Revision 172 §12): «محاضرة — دورة علوم القرآن —

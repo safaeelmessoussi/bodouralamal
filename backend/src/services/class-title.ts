@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { publicDisplayName } from '../lib/display-name.js';
-import { arabicWeekday, audienceTitle, calendarDateIso, composeItemTitle, wallClockHHMM } from '../lib/item-title.js';
+import { arabicWeekday, arabicWeekdayOf, audienceTitle, calendarDateIso, composeItemTitle, wallClockHHMM } from '../lib/item-title.js';
 
 /**
  * **What a class and each of its occurrences is CALLED, read from what the rows
@@ -40,6 +40,7 @@ export async function scheduleTitles(
       startTime: true,
       recurrence: true,
       anchorDate: true,
+      weekdays: true,
       schedulingType: { select: { name: true } },
       subject: { select: { name: true } },
       surahs: SURAH_NAMES,
@@ -74,7 +75,10 @@ export async function scheduleTitles(
           leadName: lead === null ? null : publicDisplayName(lead),
           date: row.recurrence === 'none' ? calendarDateIso(row.anchorDate) : null,
           // R178 §4 — a repeating class names its first occurrence's weekday.
-          weekday: row.recurrence === 'none' ? null : arabicWeekday(calendarDateIso(row.anchorDate)),
+          weekday:
+            row.recurrence === 'none'
+              ? null
+              : (arabicWeekday(calendarDateIso(row.anchorDate)) ?? arabicWeekdayOf(row.weekdays[0])),
           time: wallClockHHMM(row.startTime),
         }),
       ];

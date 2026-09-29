@@ -227,7 +227,9 @@ const read = (over: Record<string, unknown> = {}) =>
   readCalendar(prisma, viewer(), { ...RANGE, ...over } as never).then(mine);
 
 const titles = async (over: Record<string, unknown> = {}): Promise<string[]> =>
-  (await read(over)).map((o) => o.title.replace(`${TAG} `, '')).sort();
+  // R178 §5 — a class's chip title names its group/circle too; its Subject is
+  // the stable name a test identifies it by.
+  (await read(over)).map((o) => (o.kind === 'session' ? (o.subjectName ?? o.title) : o.title).replace(`${TAG} `, '')).sort();
 
 /* ── 1. Two catalogue rows of ONE structural kind ───────────────────────── */
 
@@ -278,7 +280,7 @@ describe('every occurrence says which catalogue row it is', () => {
 
   it('carries the type on a class and on a sitting too', async () => {
     const rows = await read();
-    expect(rows.find((o) => o.title.endsWith(CLASS_TYPED))?.schedulingTypeId).toBe(
+    expect(rows.find((o) => o.kind === 'session' && (o.subjectName ?? '').endsWith(CLASS_TYPED))?.schedulingTypeId).toBe(
       ids['حصة دراسية'],
     );
     expect(rows.find((o) => o.title.endsWith('امتحان'))?.schedulingTypeId).toBe(ids['اختبار']);
@@ -303,7 +305,7 @@ describe('a row that predates the catalogue', () => {
   });
 
   it('reports its type as null rather than inventing one', async () => {
-    const row = (await read()).find((o) => o.title.endsWith(CLASS_LEGACY));
+    const row = (await read()).find((o) => o.kind === 'session' && (o.subjectName ?? '').endsWith(CLASS_LEGACY));
     expect(row?.schedulingTypeId).toBeNull();
     expect(row?.structuralKind).toBeNull();
   });
