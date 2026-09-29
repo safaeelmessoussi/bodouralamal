@@ -129,10 +129,19 @@ try {
   await width(320);
   await evaluate("document.querySelector('dialog[open] .dialog__close')?.click()");
   check('canonical dialog closes', await waitFor("!document.querySelector('dialog[open]')"));
-  check('phone filter toggle is visible', await evaluate("getComputedStyle(document.querySelector('.cal-filter-toggle')).display !== 'none'"));
-  await evaluate("document.querySelector('.cal-filter-toggle').click()");
-  check('phone filters expand and remain within the document', await waitFor("getComputedStyle(document.querySelector('.cal-header__filters')).display !== 'none'") && await overflow());
-  await evaluate("document.querySelector('.cal-filter-toggle').click()");
+  // R177 §4 — no toggle: the filters are on screen at every width, two to a
+  // row on a phone, each at its 44 px floor, and nothing overflows.
+  check('phone filters are on screen without a toggle', await evaluate("!document.querySelector('.cal-filter-toggle') && getComputedStyle(document.querySelector('.cal-header__filters')).display !== 'none'"));
+  check('phone filters sit two to a row within the document', await evaluate(`(() => {
+    const row = document.querySelector('.cal-header__filters'); if (!row) return false;
+    const fields = [...row.children]; if (fields.length < 2) return false;
+    const [a, b] = fields.map(f => f.getBoundingClientRect());
+    return Math.abs(a.top - b.top) < 2 && fields.every(f => f.querySelector('select, button')?.getBoundingClientRect().height >= 44);
+  })()`) && await overflow());
+  // E4 — the toggle clicks that used to sit here gave the close a moment to
+  // settle; without them the next click raced the dialog's close once on the
+  // runner. Settle explicitly rather than by accident.
+  await pause(300);
   const occurrenceSelector = '.cal-grid .event-chip--interactive';
   const occurrenceReady = await waitFor(`!!document.querySelector(${JSON.stringify(occurrenceSelector)})`);
   check('calendar occurrence control is available', occurrenceReady);
