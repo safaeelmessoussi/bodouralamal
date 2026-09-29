@@ -51,7 +51,7 @@ export function schedule(prisma: PrismaClient) {
               ...(b.bare.description === undefined ? {} : { description: b.bare.description }),
               levelId: b.bare.level_id,
               subjectId: b.bare.subject_id,
-              academicYearId: b.bare.academic_year_id,
+              ...(b.bare.academic_year_id !== undefined ? { academicYearId: b.bare.academic_year_id } : {}),
             },
           }),
     });

@@ -2020,7 +2020,6 @@ export function SchedulingDialog({
           if (scope.value.levelId === '') return t('scheduling.invalid.level');
           if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
           if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
-          if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
         }
       }
       if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
@@ -2094,7 +2093,8 @@ export function SchedulingDialog({
       // next step (R43, R55).
       if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
       if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
-      if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      // R178 §6(a) — «السنة الدراسية» is no longer asked: the server derives it
+      // from the start date (a period covering it, else the current year).
       if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.surahs');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
       // A weekday-set pattern IS its days (§4.4) — an empty set produces a

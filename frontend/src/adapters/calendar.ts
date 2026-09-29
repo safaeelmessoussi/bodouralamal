@@ -125,6 +125,8 @@ export interface Occurrence {
   administrative_group_names?: string[];
   teaching_group_ids?: string[];
   teaching_group_names?: string[];
+  /** R178 §6(b) — the Surah numbers behind `surah_names`. */
+  surah_ids?: number[];
   /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
      no lifecycle, so these are null for it rather than invented. */
   subject_id: string | null;

@@ -876,7 +876,9 @@ export async function saveSchedulingItem(
             }
           : {}),
         branch_id: input.branchId!,
-        academic_year_id: input.academicYearId!,
+        // R178 §6(a) — the year is DERIVED from the start date by the server;
+        // sent only when a caller still names one.
+        ...(input.academicYearId ? { academic_year_id: input.academicYearId } : {}),
         start_time: input.startTime ?? '',
         end_time: input.endTime ?? '',
         recurrence: input.recurrence,
@@ -1065,7 +1067,8 @@ export async function saveSchedulingItem(
                 ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
                 level_id: input.levelId!,
                 subject_id: input.subjectId!,
-                academic_year_id: input.academicYearId!,
+                // R178 §6(a) — derived from the sitting's date by the server.
+                ...(input.academicYearId ? { academic_year_id: input.academicYearId } : {}),
               },
             }),
       },

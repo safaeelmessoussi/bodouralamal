@@ -172,9 +172,10 @@ export function ClassSection({
 
       <ScopeSelectors
         scope={scope}
-        fields={['subjectId', 'academicYearId']}
+        // R178 §6(a) — the year is derived from the start date, never asked.
+        fields={['subjectId']}
         mode="form"
-        locked={locked ? ['subjectId', 'academicYearId'] : []}
+        locked={locked ? ['subjectId'] : []}
       />
       {surahs ?? null}
 

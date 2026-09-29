@@ -47,6 +47,7 @@ import * as trash from "../repositories/trash.repository.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 import { updateWithVersion } from "../repositories/optimistic-lock.js";
 import type { Actor } from "../policies/actor.js";
+import { academicYearForDate } from "../policies/academic-year.js";
 import {
   protectionReasons,
   SELECT_PROTECTABLE,
@@ -501,7 +502,8 @@ export interface CourseScheduleInput {
    * «مقرر الحفظ» of a Level the class addresses (`resolveSurahs`).
    */
   surahIds?: number[];
-  academicYearId: string;
+  /** R178 §6(a) — absent, derived from `anchorDate` (`academicYearForDate`). */
+  academicYearId?: string;
   staff?: ScheduleStaffInput[];
 }
 
@@ -927,6 +929,9 @@ export async function createCourseSchedule(
   const horizon = await horizonFor(prisma, now);
 
   return prisma.$transaction(async (tx) => {
+    // R178 §6(a) — the year follows the start date unless the caller named one.
+    const academicYearId =
+      input.academicYearId ?? (await academicYearForDate(tx, input.anchorDate ?? now));
     const subject = await tx.subject.findFirst({
       where: { id: input.subjectId, deletedAt: null },
       select: { id: true },
@@ -1083,7 +1088,7 @@ export async function createCourseSchedule(
         monthOfYear: input.monthOfYear ?? null,
         anchorDate: input.anchorDate ?? null,
         effectiveUntil: input.effectiveUntil ?? null,
-        academicYearId: input.academicYearId,
+        academicYearId,
         schedulingTypeId: input.schedulingTypeId ?? null,
         ...(input.attendanceMarking === undefined
           ? {}

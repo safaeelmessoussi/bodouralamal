@@ -77,6 +77,8 @@ export function SessionMaterialsDialog({
    */
   const [suggestedName, setSuggestedName] = useState('');
   const [occurrenceTitle, setOccurrenceTitle] = useState('');
+  const [occurrenceItemTitle, setOccurrenceItemTitle] = useState('');
+  const [occurrenceSurahId, setOccurrenceSurahId] = useState<number | null>(null);
   /** R170 §3 — a warning, read before recording; never a lock. */
   const [consentWarning, setConsentWarning] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,6 +95,12 @@ export function SessionMaterialsDialog({
     setRecordings(page.recordings);
     setSuggestedName(page.suggested_recording_name);
     setOccurrenceTitle(page.occurrence.title);
+    // R178 §6(b) — what this occurrence is about: its composed title becomes a
+    // file's proposed title, and its one Surah (R177 §7) files the material
+    // under the same Surah; a date about several is filed under none.
+    setOccurrenceItemTitle(page.occurrence.item_title ?? '');
+    const ids = page.occurrence.surah_ids ?? [];
+    setOccurrenceSurahId(ids.length === 1 ? (ids[0] ?? null) : null);
     setConsentWarning(page.audience_media_consent_missing === true);
     // The candidates are the library items in this session's own Level and
     // Subject — the ones a teacher would plausibly attach. A full library list
@@ -213,7 +221,10 @@ export function SessionMaterialsDialog({
             subject_id: scope.subjectId,
             academic_year_id: scope.academicYearId,
             branch_id: scope.branchId,
+            ...(occurrenceSurahId === null ? {} : { surah_id: occurrenceSurahId }),
           }}
+          // R178 §6(b) — a file attached to this occurrence is named as it is.
+          suggestedTitle={occurrenceItemTitle}
           token={token}
           submitLabel={t('content.upload.action')}
           onCancel={() => setUploading(false)}
@@ -266,6 +277,7 @@ export function SessionMaterialsDialog({
             subject_id: scope.subjectId,
             academic_year_id: scope.academicYearId,
             branch_id: scope.branchId,
+            ...(occurrenceSurahId === null ? {} : { surah_id: occurrenceSurahId }),
           }}
           token={token}
           // R75.6 — composed by the server from this occurrence and numbered

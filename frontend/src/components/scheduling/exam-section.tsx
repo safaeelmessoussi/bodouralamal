@@ -484,14 +484,14 @@ export function ExamSection({
               fields={
                 hasSource
                   ? ['branchId']
-                  : ['branchId', 'levelId', 'subjectId', 'academicYearId']
+                  : ['branchId', 'levelId', 'subjectId']
               }
               mode="form"
               locked={
                 locked
                   ? hasSource
                     ? ['branchId']
-                    : ['branchId', 'levelId', 'subjectId', 'academicYearId']
+                    : ['branchId', 'levelId', 'subjectId']
                   : []
               }
             />

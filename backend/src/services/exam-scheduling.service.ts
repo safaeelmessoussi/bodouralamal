@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { resolveSurahs } from '../policies/curriculum.js';
+import { academicYearForDate } from '../policies/academic-year.js';
 import { examTitle } from './class-title.js';
 import { wallClockInstant } from '../lib/wall-clock.js';
 import type { Actor } from '../policies/actor.js';
@@ -101,7 +102,8 @@ export interface ScheduleExamInput {
     description?: string | null;
     levelId: string;
     subjectId: string;
-    academicYearId: string;
+    /** R178 §6(a) — absent, derived from the sitting's date. */
+    academicYearId?: string;
   };
   /**
    * R165 §2 — **the Surah this sitting examines** (`Exam.surah_id`). Required
@@ -240,6 +242,8 @@ export async function scheduleExam(
         ...(input.date === undefined ? {} : { date: input.date }),
       });
       resolvedDate = target.date;
+      // R178 §6(a) — the year follows the sitting's date unless the caller named one.
+      const bareAcademicYearId = bare.academicYearId ?? (await academicYearForDate(tx, target.date));
       occurrence = await tx.exam.create({
         data: {
           mode: 'physical',
@@ -251,7 +255,7 @@ export async function scheduleExam(
           maxGrade: bare.maxGrade ?? BARE_DEFAULT_MAX_GRADE,
           levelId: bare.levelId,
           subjectId: bare.subjectId,
-          academicYearId: bare.academicYearId,
+          academicYearId: bareAcademicYearId,
           targetKind: input.target.kind as never,
           administrativeGroupId: target.administrativeGroupId,
           sessionId: target.sessionId,
@@ -264,7 +268,7 @@ export async function scheduleExam(
       });
       resolvedLevelId = bare.levelId;
       resolvedSubjectId = bare.subjectId;
-      resolvedAcademicYearId = bare.academicYearId;
+      resolvedAcademicYearId = bareAcademicYearId;
       resolvedAdministrativeGroupId = target.administrativeGroupId;
     }
 

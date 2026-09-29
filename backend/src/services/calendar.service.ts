@@ -6,10 +6,7 @@ import type {
 import { AppError } from "../lib/errors.js";
 import { subjectsTaughtAt } from "../policies/curriculum.js";
 import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
-import {
-  nextRecordingName,
-  recordingBaseName,
-} from "../lib/recording-name.js";
+import { nextRecordingName, RECORDING_PREFIX, RECORDING_TITLE_LIMIT } from "../lib/recording-name.js";
 import { publicDisplayName } from "../lib/display-name.js";
 import { audienceTitle, composeItemTitle } from "../lib/item-title.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
@@ -241,6 +238,10 @@ export interface Occurrence {
   administrativeGroupNames: string[];
   teachingGroupIds: string[];
   teachingGroupNames: string[];
+  /** R178 §6(b) — the Surah numbers behind `surahNames`, so a file or a
+   *  recording attached from the occurrence dialog is filed under the same
+   *  Surah (R177 §7) without matching a name (§4.4b). */
+  surahIds: number[];
   /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
    *  verbatim and implement no fallback. */
   instructors: { id: string; displayName: string }[];
@@ -662,9 +663,9 @@ function sessionOccurrence(
   // Codex review, 2026-09-22 — the class's Surahs are inherited ONLY while
   // the Subject taught works by Surah: an occurrence retaught as فقه must not
   // wear the class's Quran Surahs. Its own rows, when it has any, still win.
-  const surahNames = (
-    session.surahs.length > 0 ? session.surahs : subject.requiresSurahs ? sch.surahs : []
-  ).map((row) => row.surah.nameArabic);
+  const shownSurahs = session.surahs.length > 0 ? session.surahs : subject.requiresSurahs ? sch.surahs : [];
+  const surahNames = shownSurahs.map((row) => row.surah.nameArabic);
+  const surahIds = shownSurahs.map((row) => row.surah.surahId);
   const lead = session.staff.find((person) => person.position === "teacher");
   // R178 §4/§5 — the group or circle the class is for, in its title and on its
   // chip: «أحكام التجويد — الحلقة 1» says which of the three Tuesday classes
@@ -697,6 +698,7 @@ function sessionOccurrence(
       time: hhmm(session.startTime),
     }),
     surahNames,
+    surahIds,
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -1637,6 +1639,7 @@ export async function readCalendar(
         viewerMayMarkAttendance: false,
         itemTitle: event.title,
         surahNames: [],
+        surahIds: [],
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -1743,7 +1746,7 @@ export async function readCalendar(
           },
           include: {
             // R165 §2 — the one Surah this sitting examines, by name.
-            surah: { select: { nameArabic: true } },
+            surah: { select: { surahId: true, nameArabic: true } },
             // The category NAME travels with its id, as it does for a session: an id
             // with no name is unreadable on a grid, and the filter chip beside the
             // calendar is drawn from exactly this pair (R55.1).
@@ -1812,6 +1815,7 @@ export async function readCalendar(
       title: exam.title,
       itemTitle: exam.title,
       surahNames: exam.surah ? [exam.surah.nameArabic] : [],
+      surahIds: exam.surah ? [exam.surah.surahId] : [],
       date: iso(exam.date),
       startTime: hhmm(exam.startTime),
       endTime: hhmm(exam.endTime),
@@ -2552,12 +2556,24 @@ export async function readSessionPage(
      */
     recordings: items.filter((c) => c.origin === "session_recording"),
     linkedContent: items.filter((c) => c.origin !== "session_recording"),
+    // R178 §4 — a recording is named as a recording of THIS occurrence: the
+    // composed title behind «تسجيل صوتي», numbered against what is already
+    // linked (R75.6). The older «title — note — date» form gave a browser
+    // recording a name no other title on the platform shares.
     suggestedRecordingName: nextRecordingName(
-      recordingBaseName({
-        title: occurrence.title,
-        description: occurrence.description,
-        date: occurrence.date,
-      }),
+      composeItemTitle(
+        {
+          prefix: RECORDING_PREFIX.audio,
+          typeName: occurrence.schedulingTypeName,
+          subjectName: occurrence.subjectName,
+          surahNames: occurrence.surahNames,
+          audienceName: audienceTitle(occurrence.teachingGroupNames[0] ?? null, occurrence.administrativeGroupNames[0] ?? null),
+          leadName: occurrence.instructors[0]?.displayName ?? null,
+          date: occurrence.date,
+          time: occurrence.startTime,
+        },
+        RECORDING_TITLE_LIMIT,
+      ),
       items.map((c) => c.title),
     ),
     audienceMediaConsentMissing:

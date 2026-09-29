@@ -463,6 +463,7 @@ const OCCURRENCE_KEYS = [
   // Session/Event (`Occurrence.supervisors`'s own docstring).
   "supervisors",
   // SRS Revision 165 §2 — the Surah(s) a class or an exam is about.
+  "surah_ids",
   "surah_names",
   "teaching_group_ids",
   "teaching_group_names",

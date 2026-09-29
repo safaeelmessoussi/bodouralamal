@@ -1680,3 +1680,35 @@ describe("R176 §2 — a multi_dimension class is re-addressed IN PLACE", () => 
     expect(res.body.error?.details?.["reason"]).toBe("DIMENSIONS_REQUIRE_MULTI_DIMENSION");
   });
 });
+
+describe("R178 §6(a) — the academic year is derived from the start date, never asked", () => {
+  it("files a class under the year whose period covers its start date; under the current year when none does", async () => {
+    // A second, NON-current year with a period covering the class's start date.
+    const other = await prisma.academicYear.create({ data: { label: "2031-2032", isCurrent: false } });
+    const period = await prisma.academicPeriod.create({
+      data: { academicYearId: other.id, sequence: 1, startDate: new Date("2031-09-01T00:00:00.000Z"), endDate: new Date("2032-06-30T00:00:00.000Z") },
+    });
+    try {
+      const body = scheduleBody({ staff: [], anchor_date: "2031-10-07" }) as Record<string, unknown>;
+      delete body["academic_year_id"];
+      const covered = await call("POST", "/admin/course-schedules", superAdmin, body);
+      expect(covered.status, JSON.stringify(covered.body)).toBe(201);
+      expect((covered.body.schedule as { academic_year_id: string }).academic_year_id).toBe(other.id);
+
+      // A start date no period covers (the seeds enter periods for this year
+      // and the next): the current year answers.
+      const uncoveredBody = scheduleBody({ staff: [], anchor_date: "2090-03-07" }) as Record<string, unknown>;
+      delete uncoveredBody["academic_year_id"];
+      const uncovered = await call("POST", "/admin/course-schedules", superAdmin, uncoveredBody);
+      expect(uncovered.status, JSON.stringify(uncovered.body)).toBe(201);
+      // The suite's own year is deliberately NOT the live one; the fallback is
+      // whatever the database marks current.
+      const current = await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true, deletedAt: null }, select: { id: true } });
+      expect((uncovered.body.schedule as { academic_year_id: string }).academic_year_id).toBe(current.id);
+    } finally {
+      await prisma.recurringCourseSchedule.updateMany({ where: { academicYearId: { in: [other.id] } }, data: { academicYearId } });
+      await prisma.academicPeriod.delete({ where: { id: period.id } });
+      await prisma.academicYear.delete({ where: { id: other.id } });
+    }
+  });
+});

@@ -268,7 +268,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
     expect(html).not.toContain(`>${ar.scope.academicYear}<`);
   });
 
-  it('with no source chosen, Level/Subject/Year still render exactly as before', () => {
+  it('with no source chosen, Level and Subject still render; the year is derived (R178 §6a)', () => {
     const html = renderToStaticMarkup(
       <ExamSection
         {...(baseProps as unknown as ExamSectionProps)}
@@ -278,7 +278,8 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
     );
     expect(html).toContain(`>${ar.scope.level}<`);
     expect(html).toContain(`>${ar.scope.subject}<`);
-    expect(html).toContain(`>${ar.scope.academicYear}<`);
+    // R178 §6(a) — «السنة الدراسية» is derived from the sitting's date, not asked.
+    expect(html).not.toContain(`>${ar.scope.academicYear}<`);
   });
 
   it('the maximum is asked again at creation (Owner-reported, 2026-09-15 — brought back), pre-filled with 20', () => {

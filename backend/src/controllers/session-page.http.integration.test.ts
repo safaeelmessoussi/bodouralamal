@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
+import { arabicCalendarDate } from "../lib/item-title.js";
 import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
@@ -479,11 +480,11 @@ describe("recordings and linked_content are disjoint", () => {
       ...res.body.linked_content!,
     ].map((c) => c["title"]);
     expect(titles).not.toContain(suggested);
-    // Composed from the occurrence, not invented: the class's own name and the
-    // date of this occurrence are both in it.
-    expect(String(suggested)).toContain(
-      String(res.body.occurrence!["date"]),
-    );
+    // Composed from the occurrence, not invented (R178 §4): a recording of THIS
+    // occurrence — its composed title behind «تسجيل صوتي», its date as a person
+    // says it.
+    expect(String(suggested).startsWith("تسجيل صوتي — ")).toBe(true);
+    expect(String(suggested)).toContain(arabicCalendarDate(String(res.body.occurrence!["date"])));
   });
 
   it("each item carries exactly the four fields TD-3.4 names", async () => {

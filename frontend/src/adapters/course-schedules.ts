@@ -277,7 +277,9 @@ export interface CourseScheduleInput {
   anchor_date?: string | null;
   /** R50's bound, on the contract since R55. Omitted or null is open-ended. */
   effective_until?: string | null;
-  academic_year_id: string;
+  /** R178 §6(a) — optional: absent, the server derives it from `anchor_date`
+   *  (the period covering it, else the current year). */
+  academic_year_id?: string;
   /**
    * §4.4c — **one primary teacher and any number of assistants**, one table and
    * one rule. An assistant's reach over students is identical to a teacher's;

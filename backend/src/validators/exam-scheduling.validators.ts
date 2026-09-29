@@ -62,7 +62,8 @@ const bare = z
     description: z.string().trim().max(2000).nullable().optional(),
     level_id: uuid,
     subject_id: uuid,
-    academic_year_id: uuid,
+    /** R178 §6(a) — optional: absent, derived from the sitting's date. */
+    academic_year_id: uuid.optional(),
   })
   .strict()
   .optional();

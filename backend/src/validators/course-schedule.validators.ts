@@ -264,7 +264,9 @@ export const createCourseScheduleSchema = z
      * nothing — the Category decides that, server-side.
      */
     attendance_marking: z.enum(['staff_only', 'self_or_staff']).optional(),
-    academic_year_id: uuid,
+    /** R178 §6(a) — optional: absent, the year is derived from `anchor_date`
+     *  (the period covering it, else the current year). */
+    academic_year_id: uuid.optional(),
     staff: staff.optional(),
   })
   .strict()

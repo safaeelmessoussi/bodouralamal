@@ -102,7 +102,8 @@ export function create(prisma: PrismaClient) {
         startTime: body.start_time,
         endTime: body.end_time,
         recurrence: body.recurrence,
-        academicYearId: body.academic_year_id,
+        // R178 §6(a) — absent, the service derives it from the start date.
+        ...(body.academic_year_id !== undefined ? { academicYearId: body.academic_year_id } : {}),
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
         // R97 — delivery travels as sent; the service resolves the three
         // columns through `policies/delivery.ts`.

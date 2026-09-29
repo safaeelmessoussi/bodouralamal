@@ -16,8 +16,6 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D6 | Codex questions still open: exact storage-key wording; R111 3-day purge job (audit identity e-mail closed by R170 §18) | personal-data-audit A.4 |
 | D8 | `business-rules.md` has two `### BR-20` headings (Global reach · Seeded-not-immutable) — which number is which? | reference/business-rules.md |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
-| D11 | Drop «السنة الدراسية» from the class/exam forms and derive it server-side from the start date (period → year, else current)? Recommended yes | R178 §6(a) |
-| D12 | Attach a recording/file to a class from its occurrence dialog («سجّلي / ارفعي لهذه الحصة», pre-filled) vs a Session dropdown in the content forms? Recommended the dialog action alone | R178 §6(b) |
 | D13 | TD-13 general burst (20) is met by a quick back-office tour; the client now retries a read once. Widen the burst for the back office (e.g. 60 at the same 120/min)? | R178 §3 |
 | D10 | «تعديل العنصر» for an activity (item 2, 2026-09-28): a circle and a Surah on an *activity* would be new domain relationships (§7 — Event has no circle arm, no Surah); add `EventTeachingGroup`/`EventSurah`, or keep them class-only as built? | R176 §2 |
 

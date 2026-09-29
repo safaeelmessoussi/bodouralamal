@@ -269,7 +269,8 @@ export interface ScheduleExamInput {
     description?: string | null;
     level_id: string;
     subject_id: string;
-    academic_year_id: string;
+    /** R178 §6(a) — optional: absent, derived from the sitting's date. */
+    academic_year_id?: string;
   };
 }
 
