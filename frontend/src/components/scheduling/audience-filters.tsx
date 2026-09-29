@@ -39,19 +39,29 @@ export interface AudienceSetters {
   setTeachingGroupIds: (next: string[]) => void;
 }
 
-/** A group is a roster at a premises (§4.4c); a circle is a Subject at a Level
- *  and spans branches, so it carries none and is narrowed by Level alone. */
+/** A group is a roster at a premises (§4.4c); a circle is a Subject's split at
+ *  a Level and, since R172 §15, records the branch it was created in — `null`
+ *  on one from before the column, which then answers no branch filter (the
+ *  same rule «حلقات المواد» applies). */
 interface Roster {
   id: string;
   name: string;
   levelId: string;
   branchId: string | null;
+  /** Circles only — what tells two «1»s apart (R179 §4). */
+  subjectName?: string;
+  branchName?: string | null;
 }
 
 export interface AudienceChoices {
   levels: { id: string; name: string }[];
   groups: { id: string; name: string }[];
-  circles: { id: string; name: string }[];
+  /**
+   * `name` is the circle's own («1»), which the composed title reads («الحلقة
+   * 1»); `label` is what the picker shows — the name, its Subject, and its
+   * branch once the circles on offer span more than one (R179 §4).
+   */
+  circles: { id: string; name: string; label: string }[];
   /**
    * SRS Revision 165 §2 — **the Levels the selection actually addresses**: the
    * ones chosen, plus the Level of every chosen group and circle (the server's
@@ -99,10 +109,20 @@ export function useAudienceFilters({
         ),
       )
       .catch(() => setAllGroups([]));
+    // R179 §4 (Owner-reported, 2026-09-29) — the circle's OWN branch, which
+    // this read as `null` since before R172 §15 gave circles one: every branch's
+    // circles were offered under «مقر أمرشيش», and as bare «1», «1».
     void fetchAllPages((page) => listCircles(token, page, {}, null, 100))
       .then((rows) =>
         setAllCircles(
-          rows.map((c) => ({ id: c.id, name: c.name, levelId: c.level_id, branchId: null })),
+          rows.map((c) => ({
+            id: c.id,
+            name: c.name,
+            levelId: c.level_id,
+            branchId: c.branch_id ?? null,
+            subjectName: c.subject_name,
+            branchName: c.branch_name,
+          })),
         ),
       )
       .catch(() => setAllCircles([]));
@@ -136,11 +156,24 @@ export function useAudienceFilters({
   const withinFilters = useCallback(
     (row: Roster) =>
       (levelsInPlay === null || levelsInPlay.has(row.levelId)) &&
-      (branchIds.length === 0 || row.branchId === null || branchIds.includes(row.branchId)),
+      (branchIds.length === 0 || (row.branchId !== null && branchIds.includes(row.branchId))),
     [levelsInPlay, branchIds],
   );
   const groupChoices = useMemo(() => allGroups.filter(withinFilters), [allGroups, withinFilters]);
   const circleChoices = useMemo(() => allCircles.filter(withinFilters), [allCircles, withinFilters]);
+  // Named with the branch only once the circles on offer span more than one —
+  // the rule the rooms already follow (R165 §6); the Subject always, because a
+  // Level's «1» of أحكام التجويد and its «1» of حفظ القرآن are different rosters.
+  const circleLabels = useMemo(() => {
+    const spansBranches = new Set(circleChoices.map((c) => c.branchId ?? '')).size > 1;
+    return circleChoices.map((c) => ({
+      id: c.id,
+      name: c.name,
+      label: [c.name, c.subjectName, spansBranches ? c.branchName : null]
+        .filter((part): part is string => typeof part === 'string' && part !== '')
+        .join(' — '),
+    }));
+  }, [circleChoices]);
 
   // A choice its parent no longer offers is dropped rather than submitted
   // unseen — the picker would otherwise send a group the reader cannot see.
@@ -202,7 +235,7 @@ export function useAudienceFilters({
   return {
     levels: levelChoices.map((o) => ({ id: o.value, name: o.label })),
     groups: groupChoices.map((g) => ({ id: g.id, name: g.name })),
-    circles: circleChoices.map((c) => ({ id: c.id, name: c.name })),
+    circles: circleLabels,
     levelIdsInPlay,
   };
 }
@@ -315,7 +348,7 @@ export function AudienceFilters({
         label={t('admin.calendar.scopeCircle')}
         selected={selection.teachingGroupIds}
         onChange={setters.setTeachingGroupIds}
-        options={asOptions(choices.circles)}
+        options={choices.circles.map((c) => ({ value: c.id, label: c.label }))}
         emptyLabel={t('common.all')}
       />
       {/* R169 §7 — «الكل» on Level, group AND circle is a real answer now, and

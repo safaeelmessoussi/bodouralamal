@@ -82,7 +82,12 @@ const CHOICES = [
 const audienceOf = (teachingGroupIds: string[] = []) => ({
   selection: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], teachingGroupIds },
   setters: SETTERS,
-  choices: { levels: CHOICES, groups: CHOICES, circles: CHOICES, levelIdsInPlay: [] },
+  choices: {
+    levels: CHOICES,
+    groups: CHOICES,
+    circles: CHOICES.map((c) => ({ ...c, label: c.name })),
+    levelIdsInPlay: [],
+  },
 });
 const emptyAudience = audienceOf();
 
@@ -245,8 +250,20 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     expect(FILTERS).toContain('fetchAllPages((page) => listCircles(token, page, {}, null, 100))');
     expect(FILTERS).toContain('categoryIds.includes(scope.levelCategoryIds[o.value]');
     expect(FILTERS).toContain('setGroupIds(groupIds.filter((id) => offered.has(id)))');
-    // A circle spans branches (Subject + Level only), so a branch never hides it.
-    expect(FILTERS).toContain('row.branchId === null || branchIds.includes(row.branchId)');
+    // R179 §4 (Owner-reported, 2026-09-29) — a circle has a branch since R172
+    // §15, and the picker read it as `null`, so «مقر أمرشيش» offered every
+    // branch's circles. Its own branch now, and a circle from before the
+    // column answers no branch filter — the rule «حلقات المواد» applies.
+    expect(FILTERS).toContain('branchId: c.branch_id ?? null,');
+    expect(FILTERS).toContain("(row.branchId !== null && branchIds.includes(row.branchId))");
+    expect(FILTERS).not.toContain('branchId: null }');
+  });
+
+  it('R179 §4 — a circle is named by its Subject, and by its branch once the offer spans more than one', () => {
+    // The picker shows `label`; the composed title keeps reading `name` («الحلقة 1»).
+    expect(FILTERS).toContain("[c.name, c.subjectName, spansBranches ? c.branchName : null]");
+    expect(FILTERS).toContain("options={choices.circles.map((c) => ({ value: c.id, label: c.label }))}");
+    expect(SCHEDULING_SOURCE).toContain("`الحلقة ${audienceChoices.circles.find((c) => teachingGroupIds.includes(c.id))!.name}`");
   });
 
   it('derives the class\'s own branch from what she already said, in one fixed order', () => {

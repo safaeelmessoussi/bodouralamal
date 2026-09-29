@@ -133,6 +133,7 @@ Atomic components: title, navigation, filter toolbar, three filter selects, grid
 - Absence renders as absence: an unrecorded Hijri month shows no number (slot reserved); no recorded month → Hijri title side and divider omitted; a field not sent is absent from the details dialog.
 - The Hijri title side has no fallback; the Gregorian side falls back to the displayed month (client state, same i18n list as the dialogs).
 - `aria-live="polite"` is on the title (tested).
+- The class form's five audience filters (`scheduling/audience-filters.tsx`) narrow child from parent: a group and a circle by the Levels and branches in play — a circle by its own branch since R179 §4 (R172 §15's column; one with none answers no branch filter), shown as «name — Subject[ — branch]» while the title reads the bare name.
 - The event chip shows everything it carries, whole (R179 §1): the title wraps (no ellipsis, no line clamp on any width; the row grows), a class's Subject on the first line beside the time and its group/circle word (`audience_name`, sent apart by the server) on a line of its own with no «—»; the composed `title` stays for the list view, the day dialog and the accessible name; chip type 0.82 rem on a laptop, 0.78 rem on a phone.
 - Day click → day-programme dialog (replaced a panel under the grid); event click → record dialog.
 - A category change re-requests the bootstrap with `category_id` and the server returns that category's levels (§4.4); the level selector has no category prop; the page resets the level.
